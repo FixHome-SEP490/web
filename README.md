@@ -66,9 +66,24 @@ npm run dev
 
 See [.env.example](.env.example) for configuration.
 
+## Quality Checks
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
 ## Related Repositories
 
 - [Backend API](https://github.com/FixHome-SEP490/Backend-FixHome)
 - [Mobile](https://github.com/FixHome-SEP490/Mobi-FixHome)
 - [AI Service](https://github.com/FixHome-SEP490/AI-FixHome)
 - [Project Documentation](https://github.com/FixHome-SEP490/Docs-FixHome)
+
+## Engineering Governance
+
+Before any change, read [AGENTS.md](AGENTS.md) and the repository-specific
+[AI Technical Guide](docs/AI-TECHNICAL-GUIDE.md). The independent CI workflow enforces every quality
+command listed above.
