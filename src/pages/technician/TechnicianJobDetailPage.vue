@@ -22,7 +22,7 @@ import {
   FhCostBreakdown,
   FhMoney,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type QuotationItemPayload } from '../../api/orders.api';
 
 const route = useRoute();
 const router = useRouter();
@@ -48,7 +48,7 @@ const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 
 // Quotation Items Form (D-02 Standard)
-const quotationItems = ref([
+const quotationItems = ref<QuotationItemPayload[]>([
   { type: 'LABOR', description: 'Công thông tắc máng thoát nước và xịt rửa', quantity: 1, unitPrice: 180000 },
   { type: 'PARTS', description: 'Đoạn ống thoát mềm bảo ôn 1.5m', quantity: 1, unitPrice: 120000 },
 ]);
@@ -89,8 +89,11 @@ const loadJob = async () => {
       const settlement = await ordersApi.getCashSettlement(jobId);
       if (settlement) {
         cashSettled.value = true;
-        cashSettlementStatus.value = settlement.status;
-        declaredCashAmount.value = Number(settlement.declaredAmount);
+        cashSettlementStatus.value = String(settlement.status || 'pending_confirmation') as
+          | 'pending_confirmation'
+          | 'confirmed'
+          | 'disputed';
+        declaredCashAmount.value = Number(settlement.declaredAmount || 0);
       }
     } catch {
       // Ignored
@@ -131,8 +134,8 @@ const handleEnRoute = async () => {
     isEnRoute.value = true;
     if (job.value) job.value.status = 'EN_ROUTE';
     actionMessage.value = { type: 'success', text: 'Đã cập nhật: Đang trên đường tới nhà khách!' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể chuyển trạng thái đang di chuyển' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể chuyển trạng thái đang di chuyển' };
   } finally {
     actionLoading.value = false;
   }
@@ -162,8 +165,8 @@ const handleCheckIn = async () => {
     await ordersApi.checkIn(jobId, coords);
     gpsCheckedIn.value = true;
     actionMessage.value = { type: 'success', text: 'Check-in GPS thành công! Đã ghi nhận tọa độ hiện trường.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Check-in thất bại hoặc ngoài bán kính cho phép.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Check-in thất bại hoặc ngoài bán kính cho phép.' };
   } finally {
     actionLoading.value = false;
   }
@@ -181,8 +184,8 @@ const handleUploadBefore = async () => {
     });
     beforePhotoUploaded.value = true;
     actionMessage.value = { type: 'success', text: 'Tải ảnh BEFORE thành công! Đã mở khoá lập báo giá.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể lưu ảnh hiện trạng.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể lưu ảnh hiện trạng.' };
   } finally {
     actionLoading.value = false;
   }
@@ -202,8 +205,8 @@ const handleSubmitQuotation = async () => {
     await ordersApi.submitQuotation(jobId, items);
     quotationSubmitted.value = true;
     actionMessage.value = { type: 'success', text: 'Đã gửi báo giá tới khách hàng! Chờ khách duyệt.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể gửi báo giá.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi báo giá.' };
   } finally {
     actionLoading.value = false;
   }
@@ -216,8 +219,8 @@ const handleStartRepair = async () => {
     await ordersApi.startRepair(jobId);
     if (job.value) job.value.status = 'UNDER_REPAIR';
     actionMessage.value = { type: 'success', text: 'Bắt đầu sửa chữa! Trạng thái: UNDER_REPAIR' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Chưa thể bắt đầu sửa chữa.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Chưa thể bắt đầu sửa chữa.' };
   } finally {
     actionLoading.value = false;
   }
@@ -235,8 +238,8 @@ const handleUploadAfter = async () => {
     });
     afterPhotoUploaded.value = true;
     actionMessage.value = { type: 'success', text: 'Tải ảnh AFTER thành công! Đã mở khoá hoàn tất đơn.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể lưu ảnh nghiệm thu.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể lưu ảnh nghiệm thu.' };
   } finally {
     actionLoading.value = false;
   }
@@ -255,8 +258,8 @@ const handleCompleteOrder = async () => {
     if (job.value) job.value.status = 'COMPLETED';
     actionMessage.value = { type: 'success', text: 'Hoàn tất đơn sửa chữa! Hoá đơn và bảo hành điện tử đã được tạo.' };
     await loadJob();
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể hoàn tất đơn sửa chữa.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể hoàn tất đơn sửa chữa.' };
   } finally {
     actionLoading.value = false;
   }
@@ -275,13 +278,16 @@ const handleDeclareCash = async () => {
       technicianNotes: technicianCashNotes.value,
     });
     cashSettled.value = true;
-    cashSettlementStatus.value = res.status || 'pending_confirmation';
+    cashSettlementStatus.value = String(res.status || 'pending_confirmation') as
+      | 'pending_confirmation'
+      | 'confirmed'
+      | 'disputed';
     actionMessage.value = {
       type: 'success',
       text: 'Đã gửi khai báo thu tiền mặt! Chờ khách hàng bấm xác nhận trên ứng dụng.',
     };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể khai báo thu tiền mặt.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể khai báo thu tiền mặt.' };
   } finally {
     actionLoading.value = false;
   }

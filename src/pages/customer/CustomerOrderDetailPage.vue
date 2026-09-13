@@ -30,7 +30,7 @@ const orderId = route.params.id as string;
 const loading = ref(true);
 const actionLoading = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
-const invoice = ref<any>(null);
+const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 // Modals
@@ -78,7 +78,13 @@ const loadOrder = async () => {
     try {
       const settlement = await ordersApi.getCashSettlement(orderId);
       if (settlement) {
-        cashSettlement.value = settlement;
+        cashSettlement.value = settlement as unknown as {
+          id: string;
+          declaredAmount: number;
+          confirmedAmount?: number;
+          status: 'pending_confirmation' | 'confirmed' | 'disputed';
+          technicianNotes?: string;
+        };
       }
     } catch {
       // Ignore
@@ -97,8 +103,8 @@ const handleApproveQuotation = async () => {
     }
     quotationApproved.value = true;
     actionMessage.value = { type: 'success', text: 'Đã phê duyệt báo giá! Kỹ thuật viên sẽ tiến hành sửa chữa ngay.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể duyệt báo giá.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể duyệt báo giá.' };
   } finally {
     actionLoading.value = false;
   }
@@ -112,8 +118,8 @@ const handleRejectQuotation = async () => {
       await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
     }
     actionMessage.value = { type: 'success', text: 'Đã từ chối báo giá của kỹ thuật viên.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể từ chối báo giá.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể từ chối báo giá.' };
   } finally {
     actionLoading.value = false;
   }
@@ -143,8 +149,8 @@ const handleConfirmCashPayment = async (agreed: boolean) => {
         text: 'Đã ghi nhận khiếu nại số tiền mặt! Quản lý FixHome sẽ kiểm tra và đối soát ngay.',
       };
     }
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể xử lý xác nhận tiền mặt.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể xử lý xác nhận tiền mặt.' };
   } finally {
     actionLoading.value = false;
   }
@@ -168,8 +174,8 @@ const confirmPayment = async () => {
       type: 'success',
       text: 'Thanh toán online thành công! Hoá đơn và bảo hành điện tử đã được kích hoạt.',
     };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Thanh toán thất bại.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Thanh toán thất bại.' };
   } finally {
     actionLoading.value = false;
   }
@@ -184,8 +190,8 @@ const confirmCancel = async () => {
     }
     showCancelModal.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu huỷ đơn thành công.' };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể huỷ đơn.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể huỷ đơn.' };
   } finally {
     actionLoading.value = false;
   }
@@ -205,8 +211,8 @@ const handleCreateWarrantyClaim = async () => {
       type: 'success',
       text: 'Đã gửi yêu cầu bảo hành điện tử thành công! Kỹ thuật viên sẽ liên hệ lại.',
     };
-  } catch (err: any) {
-    actionMessage.value = { type: 'error', text: err?.message || 'Không thể gửi yêu cầu bảo hành.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu bảo hành.' };
   } finally {
     actionLoading.value = false;
   }

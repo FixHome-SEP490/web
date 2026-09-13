@@ -77,13 +77,33 @@ export interface WarrantyItem {
   technicianName: string;
 }
 
+export interface ApiResponse<T = unknown> {
+  data?: T;
+  message?: string;
+  statusCode?: number;
+}
+
+export interface QuotationItemPayload {
+  type: 'LABOR' | 'PARTS';
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal?: number;
+  warrantyDays?: number;
+}
+
 export const ordersApi = {
   // ── Queries ──
 
   async getCustomerOrders(): Promise<ServiceOrderItem[]> {
     try {
-      const res = await apiClient.get<any>('/service-orders/my');
-      return res.data?.data || res.data || [];
+      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders/my');
+      const payload = res.data;
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
+        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
+      }
+      return [];
     } catch {
       return [
         {
@@ -129,8 +149,13 @@ export const ordersApi = {
 
   async getTechnicianJobs(): Promise<ServiceOrderItem[]> {
     try {
-      const res = await apiClient.get<any>('/service-orders/my');
-      return res.data?.data || res.data || [];
+      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders/my');
+      const payload = res.data;
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
+        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
+      }
+      return [];
     } catch {
       return [
         {
@@ -155,10 +180,15 @@ export const ordersApi = {
 
   async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> {
     try {
-      const res = await apiClient.get<any>('/service-orders', {
+      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders', {
         params: { status: statusFilter },
       });
-      return res.data?.data || res.data || [];
+      const payload = res.data;
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
+        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
+      }
+      return [];
     } catch {
       return [];
     }
@@ -166,9 +196,14 @@ export const ordersApi = {
 
   async getOrder(id: string): Promise<ServiceOrderItem> {
     try {
-      const res = await apiClient.get<any>(`/service-orders/${id}`);
-      const data = res.data?.data || res.data;
-      if (data) return data;
+      const res = await apiClient.get<ApiResponse<ServiceOrderItem> | ServiceOrderItem>(`/service-orders/${id}`);
+      const payload = res.data;
+      if (payload && 'id' in payload && (payload as ServiceOrderItem).id) {
+        return payload as ServiceOrderItem;
+      }
+      if (payload && 'data' in payload && (payload as ApiResponse<ServiceOrderItem>).data) {
+        return (payload as ApiResponse<ServiceOrderItem>).data as ServiceOrderItem;
+      }
     } catch {
       // Fallback
     }
@@ -178,67 +213,67 @@ export const ordersApi = {
 
   // ── Spec v1.2: Order Execution & Lifecycle Transitions ──
 
-  async enRoute(orderId: string): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/en-route`);
-    return res.data?.data || res.data;
+  async enRoute(orderId: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/en-route`);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   async checkIn(
     orderId: string,
     coords: { lat: number; lng: number; accuracyMeters?: number },
-  ): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/check-in`, {
+  ): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/check-in`, {
       lat: coords.lat,
       lng: coords.lng,
       accuracyMeters: coords.accuracyMeters ?? 20,
     });
-    return res.data?.data || res.data;
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async startRepair(orderId: string): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/start`);
-    return res.data?.data || res.data;
+  async startRepair(orderId: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/start`);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   async uploadEvidence(
     orderId: string,
     body: { phase: 'BEFORE' | 'AFTER'; mediaUrl: string; caption?: string },
-  ): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/evidence`, body);
-    return res.data?.data || res.data;
+  ): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, body);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   async completeRepair(
     orderId: string,
     body?: { completionNote?: string },
-  ): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/complete`, body || {});
-    return res.data?.data || res.data;
+  ): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/complete`, body || {});
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async cancelOrder(orderId: string, reason: string): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/cancel`, { reason });
-    return res.data?.data || res.data;
+  async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cancel`, { reason });
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   // ── Quotations ──
 
-  async submitQuotation(orderId: string, items: any[]): Promise<any> {
-    const res = await apiClient.post('/quotations', {
+  async submitQuotation(orderId: string, items: QuotationItemPayload[]): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>('/quotations', {
       serviceOrderId: orderId,
       items,
     });
-    return res.data?.data || res.data;
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async approveQuotation(quotationId: string): Promise<any> {
-    const res = await apiClient.post(`/quotations/${quotationId}/approve`);
-    return res.data?.data || res.data;
+  async approveQuotation(quotationId: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/quotations/${quotationId}/approve`);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async rejectQuotation(quotationId: string, reason?: string): Promise<any> {
-    const res = await apiClient.post(`/quotations/${quotationId}/reject`, { reason });
-    return res.data?.data || res.data;
+  async rejectQuotation(quotationId: string, reason?: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/quotations/${quotationId}/reject`, { reason });
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   // ── Spec v1.2: Cash Settlement Dual-Confirmation ──
@@ -246,29 +281,29 @@ export const ordersApi = {
   async declareCashSettlement(
     orderId: string,
     body: { declaredAmount: number; technicianNotes?: string; receiptEvidenceUrl?: string },
-  ): Promise<any> {
-    const res = await apiClient.post(
+  ): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(
       `/service-orders/${orderId}/cash-settlement/declare`,
       body,
     );
-    return res.data?.data || res.data;
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   async confirmCashSettlement(
     orderId: string,
     body: { agreed: boolean; disputeReason?: string; confirmedAmount?: number },
-  ): Promise<any> {
-    const res = await apiClient.post(
+  ): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(
       `/service-orders/${orderId}/cash-settlement/confirm`,
       body,
     );
-    return res.data?.data || res.data;
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async getCashSettlement(orderId: string): Promise<any> {
+  async getCashSettlement(orderId: string): Promise<Record<string, unknown> | null> {
     try {
-      const res = await apiClient.get(`/service-orders/${orderId}/cash-settlement`);
-      return res.data?.data || res.data;
+      const res = await apiClient.get<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cash-settlement`);
+      return (res.data?.data || res.data || null) as Record<string, unknown> | null;
     } catch {
       return null;
     }
@@ -276,14 +311,14 @@ export const ordersApi = {
 
   // ── Invoice & Warranties ──
 
-  async getInvoice(orderId: string): Promise<any> {
-    const res = await apiClient.get(`/service-orders/${orderId}/invoice`);
-    return res.data?.data || res.data;
+  async getInvoice(orderId: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.get<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/invoice`);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async payInvoice(invoiceId: string): Promise<any> {
-    const res = await apiClient.post(`/invoices/${invoiceId}/pay`);
-    return res.data?.data || res.data;
+  async payInvoice(invoiceId: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/invoices/${invoiceId}/pay`);
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
   async getWarranties(): Promise<WarrantyItem[]> {
@@ -301,10 +336,10 @@ export const ordersApi = {
     ];
   },
 
-  async createWarrantyClaim(orderId: string, description: string): Promise<any> {
-    const res = await apiClient.post(`/service-orders/${orderId}/warranty-claims`, {
+  async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {
+    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/warranty-claims`, {
       description,
     });
-    return res.data?.data || res.data;
+    return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 };
