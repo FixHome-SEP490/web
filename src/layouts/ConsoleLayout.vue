@@ -12,10 +12,6 @@ import {
   ShieldAlert,
   FolderKanban,
   Sliders,
-  Cpu,
-  FileText,
-  Activity,
-  MapPin,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -26,32 +22,32 @@ const route = useRoute();
 const authStore = useAuthStore();
 const isCollapsed = ref(false);
 
-const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
+const isAdmin = computed(() => authStore.userRole === 'ADMIN');
+const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
 
 const navigation = computed(() => [
   {
-    group: 'Vận hành (Operations)',
+    group: 'Vận hành & hỗ trợ',
     items: [
       { label: 'Tổng quan vận hành', path: '/console', icon: LayoutDashboard },
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
-      { label: 'Điều phối & Ghép thợ', path: '/console/matching', icon: UserCheck },
-      { label: 'Kỹ thuật viên & Duyệt', path: '/console/technicians', icon: Users },
-      { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
-      { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
-      { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
-      { label: 'Khu vực hoạt động', path: '/console/service-areas', icon: MapPin },
+      ...(isServiceManager.value
+        ? [
+            { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
+            { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
+          ]
+        : []),
     ],
   },
   ...(isAdmin.value
     ? [
         {
-          group: 'Quản trị hệ thống (Admin)',
+          group: 'Quản trị & governance',
           items: [
+            { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
+            { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
-            { label: 'Giám sát AI chẩn đoán', path: '/console/admin/ai-monitor', icon: Cpu },
-            { label: 'Nhật ký kiểm toán', path: '/console/admin/audit', icon: FileText },
-            { label: 'Sức khoẻ hệ thống', path: '/console/admin/system', icon: Activity },
           ],
         },
       ]
