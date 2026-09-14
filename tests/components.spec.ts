@@ -1,10 +1,12 @@
 // tests/components.spec.ts
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { h } from 'vue';
 import FhButton from '../src/components/FhButton.vue';
 import FhStatusPill from '../src/components/FhStatusPill.vue';
 import FhMoney from '../src/components/FhMoney.vue';
 import FhCostBreakdown from '../src/components/FhCostBreakdown.vue';
+import FhTable from '../src/components/FhTable.vue';
 
 describe('FixHome Base Components', () => {
   describe('FhButton', () => {
@@ -44,6 +46,37 @@ describe('FixHome Base Components', () => {
       expect(wrapper.text()).toContain('Hoàn thành');
       expect(wrapper.classes()).toContain('bg-success-50');
       expect(wrapper.classes()).toContain('text-success-600');
+    });
+
+    it('maps canonical VERIFIED to a verification label', () => {
+      const wrapper = mount(FhStatusPill, {
+        props: { status: 'VERIFIED' },
+      });
+      expect(wrapper.text()).toContain('Đã xác minh');
+      expect(wrapper.classes()).toContain('bg-success-50');
+    });
+  });
+
+  describe('FhTable', () => {
+    const tableProps = {
+      columns: [
+        { key: 'modern', label: 'Modern' },
+        { key: 'legacy', label: 'Legacy' },
+      ],
+      rows: [{ modern: 'one', legacy: 'two' }],
+    };
+
+    it('supports both cell-key and cell(key) slot conventions', () => {
+      const wrapper = mount(FhTable, {
+        props: tableProps,
+        slots: {
+          'cell-modern': ({ value }) => h('strong', `modern:${String(value)}`),
+          'cell(legacy)': ({ value }) => h('strong', `legacy:${String(value)}`),
+        },
+      });
+
+      expect(wrapper.text()).toContain('modern:one');
+      expect(wrapper.text()).toContain('legacy:two');
     });
   });
 

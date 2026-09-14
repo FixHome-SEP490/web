@@ -57,6 +57,20 @@ const statusConfig = computed(() => {
         dot: 'bg-ink-400',
         defaultLabel: 'Đã huỷ',
       };
+    case 'VERIFIED':
+      return {
+        bg: 'bg-success-50',
+        text: 'text-success-600',
+        dot: 'bg-success-600',
+        defaultLabel: 'Đã xác minh',
+      };
+    case 'REJECTED':
+      return {
+        bg: 'bg-danger-50',
+        text: 'text-danger-600',
+        dot: 'bg-danger-600',
+        defaultLabel: 'Từ chối',
+      };
     case 'PENDING_APPROVAL':
       return {
         bg: 'bg-warning-50',
@@ -65,12 +79,25 @@ const statusConfig = computed(() => {
         defaultLabel: 'Chờ duyệt',
       };
     case 'SUSPENDED':
+      return {
+        bg: 'bg-danger-50',
+        text: 'text-danger-600',
+        dot: 'bg-danger-600',
+        defaultLabel: 'Tạm đình chỉ',
+      };
     case 'LOCKED':
       return {
         bg: 'bg-danger-50',
         text: 'text-danger-600',
         dot: 'bg-danger-600',
-        defaultLabel: 'Đang bị khoá',
+        defaultLabel: 'Đã khoá',
+      };
+    case 'PENDING_VERIFICATION':
+      return {
+        bg: 'bg-warning-50',
+        text: 'text-warning-600',
+        dot: 'bg-warning-600',
+        defaultLabel: 'Chờ xác minh',
       };
     case 'ACTIVE':
     case 'APPROVED':

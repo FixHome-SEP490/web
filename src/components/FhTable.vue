@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="TRow extends object">
 import { Loader2 } from 'lucide-vue-next';
 
 export interface TableColumn {
@@ -10,7 +10,7 @@ export interface TableColumn {
 
 interface Props {
   columns: TableColumn[];
-  rows: Record<string, unknown>[];
+  rows: TRow[];
   loading?: boolean;
   emptyText?: string;
 }
@@ -19,6 +19,13 @@ withDefaults(defineProps<Props>(), {
   loading: false,
   emptyText: 'Không có dữ liệu',
 });
+
+defineSlots<{
+  [name: string]: (props: { row: TRow; value: TRow[keyof TRow] }) => unknown;
+}>();
+
+const getCellValue = (row: TRow, key: string): TRow[keyof TRow] =>
+  (row as Record<string, TRow[keyof TRow]>)[key];
 </script>
 
 <template>
@@ -72,8 +79,10 @@ withDefaults(defineProps<Props>(), {
               col.align === 'right' ? 'text-right font-num' : col.align === 'center' ? 'text-center' : 'text-left',
             ]"
           >
-            <slot :name="`cell(${col.key})`" :row="row" :value="row[col.key]">
-              {{ row[col.key] }}
+            <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col.key)">
+              <slot :name="`cell(${col.key})`" :row="row" :value="getCellValue(row, col.key)">
+                {{ getCellValue(row, col.key) }}
+              </slot>
             </slot>
           </td>
         </tr>
