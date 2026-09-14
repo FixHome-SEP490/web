@@ -2,7 +2,6 @@
 import { useRouter } from 'vue-router';
 import {
   KanbanSquare,
-  UserCheck,
   AlertTriangle,
   ArrowRight,
 } from 'lucide-vue-next';
@@ -38,9 +37,9 @@ const pendingOrders = [
     id: 'ord-03',
     code: 'FH-20260913-0003',
     customer: 'Lê Thị Mai (Q.3)',
-    technician: 'Chưa chỉ định',
+    technician: 'Phạm Minh Đức',
     service: 'Sửa rò rỉ đường ống nước',
-    status: 'PENDING_CONFIRMATION',
+    status: 'ACCEPTED',
   },
   {
     id: 'ord-04',
@@ -62,15 +61,11 @@ const pendingOrders = [
           Bảng điều khiển vận hành FixHome
         </h1>
         <p class="text-sm text-ink-500">
-          Giám sát trạng thái 6 state đơn hàng, điều phối thợ và xử lý vi phạm trong ngày.
+          Giám sát 5 trạng thái ServiceOrder chuẩn và xử lý các trường hợp ngoại lệ trong ngày.
         </p>
       </div>
 
       <div class="flex items-center gap-3">
-        <FhButton variant="secondary" size="md" @click="router.push('/console/matching')">
-          <UserCheck :size="16" />
-          Điều phối thợ
-        </FhButton>
         <FhButton variant="primary" size="md" @click="router.push('/console/orders')">
           <KanbanSquare :size="16" />
           Xem Kanban Board
@@ -115,11 +110,8 @@ const pendingOrders = [
       <AlertTriangle :size="20" class="text-warning-600 shrink-0 mt-0.5" />
       <div class="space-y-0.5 text-xs text-warning-900">
         <p class="font-bold">Cảnh báo vận hành khu vực:</p>
-        <p>Có 1 đơn hàng #FH-20260913-0003 tại Quận 3 chưa có thợ nhận sau 10 phút. Hệ thống đề xuất Service Manager can thiệp điều phối thủ công.</p>
+        <p>Có 1 Booking tại Quận 3 chưa được xử lý sau 10 phút. Service Manager cần kiểm tra và tiếp nhận nếu đã hết normal recovery.</p>
       </div>
-      <FhButton variant="secondary" size="sm" class="ml-auto shrink-0 bg-white" @click="router.push('/console/matching')">
-        Can thiệp ngay
-      </FhButton>
     </div>
 
     <!-- Active Orders Management Table -->
