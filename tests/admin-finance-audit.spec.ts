@@ -188,7 +188,19 @@ describe('ConsoleOrderDetail read-only regression', () => {
     expect(source).toContain('chỉ đọc');
     expect(source).toContain('/console/support');
     expect(source).toContain('/console/cancellations');
-    expect(source).toContain('ordersApi.getOrder');
+    expect(source).toContain('consoleOrderContextApi.getConsoleOrderContext');
+  });
+
+  it.each([
+    'ordersApi',
+    'getCustomerOrders',
+    'customerName',
+    'customerPhone',
+    'serviceName',
+    'addressSummary',
+    'order.technician',
+  ])('renders no mock-backed order claim %s', (artifact) => {
+    expect(source).not.toContain(artifact);
   });
 
   it('keeps console-order-detail accessible to SERVICE_MANAGER + ADMIN', () => {

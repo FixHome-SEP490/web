@@ -3,9 +3,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
-  MapPin,
   Calendar,
-  User,
   LifeBuoy,
 } from 'lucide-vue-next';
 import {
@@ -17,7 +15,7 @@ import {
   FhTimeline,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/console-order-context.api';
 import { useAuthStore } from '../../stores/auth';
 
 const route = useRoute();
@@ -28,7 +26,7 @@ const orderId = route.params.id as string;
 
 const loading = ref(true);
 const loadError = ref('');
-const order = ref<ServiceOrderItem | null>(null);
+const order = ref<ConsoleOrderContext | null>(null);
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -43,7 +41,9 @@ const loadOrder = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    order.value = await ordersApi.getOrder(orderId);
+    // Real API only: validation/network failures surface as an error state.
+    // This page never falls back to local or mock order data.
+    order.value = await consoleOrderContextApi.getConsoleOrderContext(orderId);
   } catch (reason) {
     order.value = null;
     loadError.value = getErrorMessage(reason, 'Không thể tải chi tiết đơn hàng từ Backend.');
@@ -123,22 +123,20 @@ const timelineSteps = computed<TimelineStep[]>(() => {
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div class="space-y-1.5">
-              <div class="font-bold text-sm text-ink-900">{{ order.serviceName }}</div>
-              <div class="text-ink-600 flex items-center gap-1">
-                <MapPin :size="13" class="text-brand-600 shrink-0" /> {{ order.addressSummary }}
-              </div>
+              <div class="font-bold text-sm text-ink-900 font-mono">Booking: {{ order.bookingId }}</div>
               <div class="text-ink-500 flex items-center gap-1">
-                <Calendar :size="13" /> Hẹn: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}
+                <Calendar :size="13" />
+                <span v-if="order.scheduledAt">Hẹn: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}</span>
+                <span v-else class="italic">Backend chưa trả về lịch hẹn cho đơn này.</span>
               </div>
             </div>
 
             <div class="space-y-1.5 sm:text-right">
-              <div class="font-semibold text-ink-900 flex items-center gap-1 sm:justify-end">
-                <User :size="13" class="text-ink-400" /> Khách: {{ order.customerName }}
+              <div class="text-ink-500">
+                Tạo lúc: {{ order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN') : '—' }}
               </div>
-              <div class="text-ink-500 font-mono">{{ order.customerPhone }}</div>
-              <div v-if="order.technician" class="text-brand-700 font-semibold pt-1">
-                Thợ: {{ order.technician.fullName }} ({{ order.technician.phoneNumber }})
+              <div class="text-ink-500">
+                Cập nhật: {{ order.updatedAt ? new Date(order.updatedAt).toLocaleString('vi-VN') : '—' }}
               </div>
             </div>
           </div>
