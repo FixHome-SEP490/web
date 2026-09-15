@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Star,
@@ -22,7 +22,7 @@ import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
 
 const route = useRoute();
 const router = useRouter();
-const bookingId = (route.params.id as string) || 'bk-829102';
+const bookingId = route.params.id as string;
 
 const loading = ref(true);
 const sending = ref(false);
@@ -31,12 +31,35 @@ const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
 const viewedTech = ref<TechnicianCandidate | null>(null);
 
+const matchingMessage = ref('');
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+let disposed = false;
+const refreshMatching = async () => {
+  if (disposed) return;
+  try {
+    const booking = await bookingsApi.getBooking(bookingId);
+    inviteSent.value = booking.status === 'MATCHING';
+    if (booking.status === 'MATCHED' && booking.serviceOrderId) {
+      await router.replace('/app/orders/' + booking.serviceOrderId);
+      return;
+    }
+    matchingMessage.value = booking.status === 'MATCHING' ? 'Đang chờ thợ xác nhận. Lời mời được gửi lần lượt.' : booking.status === 'CLOSED' ? 'Chưa có thợ nhận việc. Bạn có thể chọn lại danh sách hoặc đổi lịch.' : booking.status === 'CANCELLED' ? 'Yêu cầu đã hủy.' : '';
+  } catch {
+    matchingMessage.value = 'Chưa tải được trạng thái. Hệ thống sẽ thử lại.';
+  } finally {
+    if (!disposed) pollTimer = setTimeout(refreshMatching, 10000);
+  }
+};
+onUnmounted(() => { disposed = true; if (pollTimer) clearTimeout(pollTimer); });
 onMounted(async () => {
   try {
     const list = await bookingsApi.getCandidates(bookingId);
     candidates.value = list;
+    await refreshMatching();
     // Preselect top 3 by default
     selectedIds.value = list.slice(0, 3).map((c) => c.id);
+  } catch {
+    matchingMessage.value = 'Không tải được danh sách thợ. Vui lòng tải lại trang.';
   } finally {
     loading.value = false;
   }
@@ -63,9 +86,7 @@ const handleSendShortlist = async () => {
   try {
     await bookingsApi.sendShortlist(bookingId, selectedIds.value);
     inviteSent.value = true;
-    setTimeout(() => {
-      router.push('/app/orders');
-    }, 2500);
+    matchingMessage.value = 'Đang chờ thợ xác nhận. Lời mời được gửi lần lượt.';
   } catch {
     alert('Không thể gửi lời mời. Vui lòng thử lại.');
   } finally {
@@ -114,6 +135,7 @@ const selectedCount = computed(() => selectedIds.value.length);
       </div>
     </div>
 
+    <p v-if="matchingMessage" role="status" class="p-3 rounded border border-brand-200 text-sm">{{ matchingMessage }}</p>
     <!-- Candidate List -->
     <div v-if="loading" class="text-center py-16 text-ink-400">
       Đang tải danh sách thợ phù hợp...
@@ -276,20 +298,6 @@ const selectedCount = computed(() => selectedIds.value.length);
       </div>
     </div>
 
-    <!-- Success Feedback Modal -->
-    <div
-      v-if="inviteSent"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 text-center space-y-4 shadow-2xl">
-        <CheckCircle2 :size="48" class="text-success-600 mx-auto" />
-        <h3 class="text-lg font-bold text-ink-900">Đã gửi lời mời thành công!</h3>
-        <p class="text-xs text-ink-600 leading-relaxed">
-          Lời mời đang được chuyển tới {{ selectedCount }} kỹ thuật viên. Đang chuyển hướng bạn tới trang quản lý đơn...
-        </p>
-      </div>
-    </div>
-
     <!-- Floating Sticky Action Bar -->
     <div class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 p-3.5 shadow-lg">
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4">
@@ -300,11 +308,11 @@ const selectedCount = computed(() => selectedIds.value.length);
         <FhButton
           variant="primary"
           size="md"
-          :disabled="selectedCount === 0"
+          :disabled="selectedCount === 0 || inviteSent"
           :loading="sending"
           @click="handleSendShortlist"
         >
-          <Send :size="15" class="mr-1.5" /> Gửi lời mời đồng thời
+          <Send :size="15" class="mr-1.5" /> Gửi danh sách ưu tiên
         </FhButton>
       </div>
     </div>

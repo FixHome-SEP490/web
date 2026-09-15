@@ -5,6 +5,7 @@ import { unwrap } from './response';
 export interface BookingItem {
   id: string;
   customerId: string;
+  serviceOrderId?: string;
   serviceId: string;
   serviceName?: string;
   addressId: string;

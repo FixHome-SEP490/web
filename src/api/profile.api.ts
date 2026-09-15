@@ -55,6 +55,8 @@ export const profileApi = {
     ward?: string;
     district: string;
     province: string;
+    lat?: number;
+    lng?: number;
     isDefault?: boolean;
   }): Promise<UserAddress> {
     const res = await apiClient.post<UserAddress>('/me/addresses', dto);

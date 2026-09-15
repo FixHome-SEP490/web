@@ -17,7 +17,6 @@ import {
 } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
-import { ordersApi } from '../../api/orders.api';
 import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
 
 const route = useRoute();
@@ -91,6 +90,10 @@ onMounted(async () => {
     addresses.value = addrs;
     if (route.query.rebookFrom) {
       const previous = await bookingsApi.getBooking(String(route.query.rebookFrom));
+      const category = cats.find(cat => cat.services?.some(service => service.id === previous.serviceId));
+      if (!category) throw new Error("Historical service is no longer available");
+      selectedCategoryId.value = category.id;
+      services.value = category.services ?? [];
       selectedServiceId.value = previous.serviceId;
       description.value = previous.description;
       quantity.value = previous.quantity ?? 1;
@@ -163,7 +166,7 @@ const createAndFindTech = async () => {
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
     };
-    const booking = route.query.rebookFrom ? await ordersApi.rebook(String(route.query.rebookFrom), { preferredStartAt: payload.preferredStartAt, preferredEndAt: payload.preferredEndAt, quantity: payload.quantity, problemDescription: payload.description }) : await bookingsApi.createBooking(payload);
+    const booking = await bookingsApi.createBooking(payload);
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch {
     window.alert('Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
@@ -247,7 +250,7 @@ const createAndFindTech = async () => {
                 </span>
               </div>
               <div class="text-xs font-bold text-brand-700 font-num">
-                <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" /> / {{ selectedService?.unit || 'thiết bị' }}
+                <FhMoney :amount="selectedService?.fixedPrice ?? 0" /> / {{ selectedService?.unit || 'thiết bị' }}
               </div>
             </div>
             <p v-if="selectedService?.scopeDescription" class="text-[11px] text-ink-600">
@@ -272,7 +275,7 @@ const createAndFindTech = async () => {
                   +
                 </button>
                 <div class="ml-2 font-bold text-brand-700 font-num">
-                  = <FhMoney :amount="(selectedService?.fixedPrice || selectedService?.basePrice || 0) * quantity" />
+                  = <FhMoney :amount="(selectedService?.fixedPrice ?? 0) * quantity" />
                 </div>
               </div>
             </div>

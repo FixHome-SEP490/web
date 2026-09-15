@@ -57,6 +57,7 @@ const showWarrantyClaimModal = ref(false);
 const showCompletionModal = ref(false);
 const warrantyClaimDescription = ref('');
 const quotationApproved = ref(false);
+const selectedWarrantyIds = ref<string[]>([]);
 
 // Cash Settlement State
 const cashSettlement = ref<{
@@ -140,7 +141,7 @@ const handleApproveQuotation = async () => {
     actionLoading.value = true;
     actionMessage.value = null;
     if (order.value?.quotation?.id) {
-      await ordersApi.approveQuotation(order.value.quotation.id);
+      await ordersApi.approveQuotation(order.value.quotation.id, selectedWarrantyIds.value.filter(id => order.value?.quotation?.items.some(item => item.id === id)));
     }
     quotationApproved.value = true;
     actionMessage.value = { type: 'success', text: 'Đã phê duyệt báo giá! Kỹ thuật viên sẽ tiến hành sửa chữa ngay.' };
@@ -194,7 +195,7 @@ const handleDecideAdditionalCost = async (requestId: string, action: 'APPROVE' |
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    await ordersApi.decideAdditionalCost(requestId, action);
+    await ordersApi.decideAdditionalCost(requestId, action, selectedWarrantyIds.value.filter(id => additionalCosts.value.find(cost => cost.id === requestId)?.items.some(item => item.id === id)));
     actionMessage.value = {
       type: 'success',
       text: action === 'APPROVE' ? 'Đã duyệt chi phí phát sinh!' : 'Đã từ chối chi phí phát sinh.',
@@ -246,21 +247,19 @@ const handleConfirmCashPayment = async (agreed: boolean) => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    await ordersApi.confirmCashSettlement(orderId, {
+    const result = await ordersApi.confirmCashSettlement(orderId, {
       agreed,
       disputeReason: agreed ? undefined : disputeReason.value,
     });
 
-    if (agreed) {
-      if (order.value) order.value.paymentStatus = 'PAID';
-      if (cashSettlement.value) cashSettlement.value.status = 'confirmed';
+    if (result.status === 'confirmed') {
       actionMessage.value = {
         type: 'success',
         text: 'Đã xác nhận thanh toán tiền mặt thành công! Hoá đơn và bảo hành điện tử đã kích hoạt.',
       };
       await loadOrder();
     } else {
-      if (cashSettlement.value) cashSettlement.value.status = 'disputed';
+      await loadOrder();
       showDisputeModal.value = false;
       actionMessage.value = {
         type: 'success',
@@ -542,6 +541,13 @@ const handleCreateWarrantyClaim = async () => {
               </div>
             </div>
 
+            <div v-if="ac.status === 'pending_approval'" class="text-xs space-y-2">
+              <label v-for="item in ac.items.filter(item => item.partWarrantyOption === 'paid_warranty')" :key="item.id" class="block">
+                <input v-model="selectedWarrantyIds" type="checkbox" :value="item.id" />
+                Mua bảo hành {{ item.description }}: {{ item.warrantyTermDays }} ngày — <FhMoney :amount="Number(item.warrantyFee || 0)" />
+                <span class="block text-ink-500">Không chọn: không kèm bảo hành linh kiện.</span>
+              </label>
+            </div>
             <!-- Decision Actions -->
             <div
               v-if="ac.status === 'PENDING_APPROVAL' || ac.status === 'pending_approval' || ac.status === 'PENDING' || ac.status === 'pending'"
@@ -660,6 +666,11 @@ const handleCreateWarrantyClaim = async () => {
                 >
                   <td class="p-2.5 font-medium text-ink-900">
                     {{ item.description }}
+                    <label v-if="item.id && item.partWarrantyOption === 'paid_warranty' && !quotationApproved" class="block mt-2 text-xs">
+                      <input v-model="selectedWarrantyIds" type="checkbox" :value="item.id" />
+                      Mua bảo hành {{ item.warrantyTermDays }} ngày: <FhMoney :amount="Number(item.warrantyFee || 0)" />
+                      <span class="block text-ink-500">Không chọn: linh kiện thợ cung cấp không kèm bảo hành.</span>
+                    </label>
                     <span v-if="item.warrantyDays" class="block text-[10px] text-success-600 font-semibold">
                       ✓ Bảo hành {{ item.warrantyDays }} ngày
                     </span>
