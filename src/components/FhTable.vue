@@ -1,6 +1,5 @@
-<script setup lang="ts" generic="T extends object">
+<script setup lang="ts" generic="TRow extends object">
 import { Loader2 } from 'lucide-vue-next';
-import { useSlots } from 'vue';
 
 export interface TableColumn {
   key: string;
@@ -11,7 +10,7 @@ export interface TableColumn {
 
 interface Props {
   columns: TableColumn[];
-  rows: T[];
+  rows: TRow[];
   loading?: boolean;
   emptyText?: string;
   rowClass?: string;
@@ -24,17 +23,15 @@ withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  (e: 'row-click', row: T): void;
+  (e: 'row-click', row: TRow): void;
 }>();
 
-const slots = useSlots();
+defineSlots<{
+  [name: string]: (props: { row: TRow; value: unknown }) => unknown;
+}>();
 
-const getSlotName = (key: string): string => {
-  // Support both cell-{key} and cell({key}) patterns
-  if (slots[`cell-${key}`]) return `cell-${key}`;
-  if (slots[`cell(${key})`]) return `cell(${key})`;
-  return `cell-${key}`;
-};
+const getCellValue = (row: TRow, key: string): unknown =>
+  (row as Record<string, unknown>)[key];
 </script>
 
 <template>
@@ -90,8 +87,10 @@ const getSlotName = (key: string): string => {
               col.align === 'right' ? 'text-right font-num' : col.align === 'center' ? 'text-center' : 'text-left',
             ]"
           >
-            <slot :name="getSlotName(col.key)" :row="row" :value="row[col.key as keyof T]">
-              {{ row[col.key as keyof T] }}
+            <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col.key)">
+              <slot :name="`cell(${col.key})`" :row="row" :value="getCellValue(row, col.key)">
+                {{ getCellValue(row, col.key) }}
+              </slot>
             </slot>
           </td>
         </tr>
@@ -99,4 +98,3 @@ const getSlotName = (key: string): string => {
     </table>
   </div>
 </template>
-

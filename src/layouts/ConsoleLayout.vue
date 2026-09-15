@@ -11,14 +11,14 @@ import {
   Ban,
   ShieldAlert,
   FolderKanban,
+  Package,
   Sliders,
-  Cpu,
-  FileText,
-  Activity,
-  MapPin,
+  LifeBuoy,
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Receipt,
+  ScrollText,
 } from 'lucide-vue-next';
 
 const router = useRouter();
@@ -26,32 +26,36 @@ const route = useRoute();
 const authStore = useAuthStore();
 const isCollapsed = ref(false);
 
-const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
+const isAdmin = computed(() => authStore.userRole === 'ADMIN');
+const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
 
 const navigation = computed(() => [
   {
-    group: 'Vận hành (Operations)',
+    group: 'Vận hành & hỗ trợ',
     items: [
       { label: 'Tổng quan vận hành', path: '/console', icon: LayoutDashboard },
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
-      { label: 'Điều phối & Ghép thợ', path: '/console/matching', icon: UserCheck },
-      { label: 'Kỹ thuật viên & Duyệt', path: '/console/technicians', icon: Users },
-      { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
-      { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
-      { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
-      { label: 'Khu vực hoạt động', path: '/console/service-areas', icon: MapPin },
+        ...(isServiceManager.value
+        ? [
+            { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
+            { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
+            { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
+          ]
+        : []),
     ],
   },
   ...(isAdmin.value
     ? [
         {
-          group: 'Quản trị hệ thống (Admin)',
+          group: 'Quản trị & governance',
           items: [
+            { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
+            { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
+            { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
-            { label: 'Giám sát AI chẩn đoán', path: '/console/admin/ai-monitor', icon: Cpu },
-            { label: 'Nhật ký kiểm toán', path: '/console/admin/audit', icon: FileText },
-            { label: 'Sức khoẻ hệ thống', path: '/console/admin/system', icon: Activity },
+            { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
+            { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },
       ]
@@ -110,7 +114,7 @@ const handleLogout = async () => {
               :to="item.path"
               class="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors group"
               :class="[
-                route.path === item.path
+                route.path === item.path || (item.path !== '/console' && route.path.startsWith(`${item.path}/`))
                   ? 'bg-brand-600 text-white font-medium shadow-sm'
                   : 'text-ink-300 hover:bg-ink-800 hover:text-white',
               ]"

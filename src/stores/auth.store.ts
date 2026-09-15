@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { UserInfo, UserRole, LoginRequest, RegisterRequest } from '../types';
 import { authApi } from '../api/auth.api';
+import { getHttpStatus, registerAuthSessionInvalidator } from '../api/client';
 
 export const useAuthStore = defineStore('auth', () => {
   const savedUser = localStorage.getItem('user');
@@ -22,6 +23,16 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value);
   const userRole = computed(() => user.value?.role?.toUpperCase() ?? null);
   const permissions = computed(() => user.value?.permissions ?? []);
+
+  function clearSession() {
+    token.value = null;
+    user.value = null;
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+  }
+
+  registerAuthSessionInvalidator(clearSession);
 
   // Actions
   function setAuth(accessToken: string, userInfo: UserInfo, refreshToken?: string) {
@@ -63,22 +74,15 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = profile;
       localStorage.setItem('user', JSON.stringify(profile));
       return profile;
-    } catch (err: unknown) {
-      const error = err as { response?: { status?: number } };
-      // Only logout if token is truly rejected by server (401)
-      if (error?.response?.status === 401) {
-        logout();
-      }
+    } catch (error) {
+      if (getHttpStatus(error) === 401) clearSession();
+      else throw error;
       return null;
     }
   }
 
   async function logout() {
-    token.value = null;
-    user.value = null;
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
+    clearSession();
     try {
       await authApi.logout();
     } catch {

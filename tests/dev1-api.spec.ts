@@ -20,8 +20,11 @@ describe('DEV1 client contracts', () => {
     await expect(bookingsApi.getMyBookings()).rejects.toThrow('Service unavailable');
   });
   it('keeps paginated catalog metadata for DEV2 consumers', async () => {
-    const response = { data: [{ id: 'service' }], meta: { total: 42 } };
-    vi.mocked(apiClient.get).mockResolvedValue({ data: response });
+    const meta = { page: 1, limit: 10, total: 42, totalPages: 5 };
+    const response = { data: [{ id: 'service' } as any], meta };
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { success: true, statusCode: 200, message: 'OK', data: response.data, meta },
+    });
     expect(await catalogApi.getAdminServices()).toEqual(response);
   });
   it('calls the canonical start route and sends explicit paid warranty selections', async () => {

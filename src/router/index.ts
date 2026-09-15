@@ -2,6 +2,8 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { authGuard } from './guards';
 
+const AUTH_SESSION_INVALIDATED_EVENT = 'fixhome:auth-session-invalidated';
+
 const routes: RouteRecordRaw[] = [
   // ---- 1. Public Routes (PublicLayout) ----
   {
@@ -209,61 +211,97 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'console-dashboard',
         component: () => import('../pages/console/ConsoleDashboard.vue'),
-        meta: { title: 'Bảng điều khiển vận hành' },
+        meta: { title: 'Bảng điều khiển vận hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'orders',
         name: 'console-orders',
         component: () => import('../pages/console/ConsoleOrdersPage.vue'),
-        meta: { title: 'Board đơn sửa chữa' },
+        meta: { title: 'Board đơn sửa chữa', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'orders/:id',
         name: 'console-order-detail',
         component: () => import('../pages/console/ConsoleOrderDetailPage.vue'),
-        meta: { title: 'Chi tiết & Can thiệp đơn' },
+        meta: { title: 'Chi tiết & Can thiệp đơn', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        meta: { title: 'Thẩm định Kỹ thuật viên' },
+        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['ADMIN'] },
       },
       {
         path: 'cancellations',
         name: 'console-cancellations',
         component: () => import('../pages/console/ConsoleCancellationsPage.vue'),
-        meta: { title: 'Huỷ đơn & Khiếu nại' },
+        meta: { title: 'Huỷ đơn & Khiếu nại', roles: ['SERVICE_MANAGER'] },
       },
       {
         path: 'strikes',
         name: 'console-strikes',
         component: () => import('../pages/console/ConsoleStrikesPage.vue'),
-        meta: { title: 'Vi phạm & Đình chỉ' },
+        meta: { title: 'Vi phạm & Đình chỉ', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'support',
+        name: 'support-queue',
+        component: () => import('../pages/console/SupportQueuePage.vue'),
+        meta: { title: 'Hàng đợi hỗ trợ', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'support/cash/:id',
+        name: 'support-cash-detail',
+        component: () => import('../pages/console/SupportCashDetailPage.vue'),
+        meta: { title: 'Tranh chấp tiền mặt', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'support/:id',
+        name: 'support-detail',
+        component: () => import('../pages/console/SupportDetailPage.vue'),
+        meta: { title: 'Chi tiết hỗ trợ', roles: ['SERVICE_MANAGER'] },
       },
       {
         path: 'catalog',
         name: 'console-catalog',
         component: () => import('../pages/console/CatalogManagementPage.vue'),
-        meta: { title: 'Quản lý Danh mục & Dịch vụ' },
+        meta: { title: 'Quản lý Danh mục & Dịch vụ', roles: ['ADMIN'] },
       },
       {
         path: 'service-areas',
         name: 'console-service-areas',
         component: () => import('../pages/console/ServiceAreasPage.vue'),
-        meta: { title: 'Khu vực hoạt động' },
+        meta: { title: 'Khu vực hoạt động', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
-        meta: { title: 'Quản lý người dùng' },
+        meta: { title: 'Quản lý người dùng', roles: ['ADMIN'] },
       },
       {
         path: 'admin/config',
         name: 'admin-config',
         component: () => import('../pages/console/admin/AdminConfigPage.vue'),
-        meta: { title: 'Cấu hình hệ thống (24)' },
+        meta: { title: 'Cấu hình hệ thống (24)', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/parts',
+        name: 'admin-parts',
+        component: () => import('../pages/console/admin/AdminPartsPage.vue'),
+        meta: { title: 'Danh mục linh kiện', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/platform-dues',
+        name: 'admin-platform-dues',
+        component: () => import('../pages/console/admin/AdminPlatformDuesPage.vue'),
+        meta: { title: 'Công nợ Platform', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/audit-logs',
+        name: 'admin-audit-logs',
+        component: () => import('../pages/console/admin/AdminAuditLogsPage.vue'),
+        meta: { title: 'Nhật ký kiểm toán', roles: ['ADMIN'] },
       },
     ],
   },
@@ -293,5 +331,14 @@ const router = createRouter({
 });
 
 router.beforeEach(authGuard);
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(AUTH_SESSION_INVALIDATED_EVENT, () => {
+    const currentRoute = router.currentRoute.value;
+    if (currentRoute.meta.requiresAuth && currentRoute.name !== 'login') {
+      void router.push({ path: '/login', query: { redirect: currentRoute.fullPath } });
+    }
+  });
+}
 
 export default router;

@@ -17,6 +17,10 @@ const loading = ref(true);
 const orders = ref<ServiceOrderItem[]>([]);
 const searchQuery = ref('');
 const statusFilter = ref('ALL');
+const serviceOrderStates = ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED', 'CANCELLED'] as const;
+
+const isCanonicalServiceOrderState = (status: string) =>
+  serviceOrderStates.includes(status.toUpperCase() as (typeof serviceOrderStates)[number]);
 
 onMounted(async () => {
   try {
@@ -29,7 +33,8 @@ onMounted(async () => {
 
 const filteredOrders = computed(() => {
   return orders.value.filter((o) => {
-    const matchStatus = statusFilter.value === 'ALL' || o.status === statusFilter.value;
+    if (!isCanonicalServiceOrderState(String(o.status))) return false;
+    const matchStatus = statusFilter.value === 'ALL' || o.status.toUpperCase() === statusFilter.value;
     const matchSearch =
       !searchQuery.value ||
       o.code.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
@@ -47,10 +52,10 @@ const filteredOrders = computed(() => {
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <KanbanSquare class="text-brand-600" :size="24" />
-          Board Điều phối & Quản lý Đơn sửa chữa
+          Board đơn sửa chữa & hỗ trợ ngoại lệ
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Giám sát toàn bộ chu trình State Machine của đơn từ tiếp nhận, ghép thợ, khảo sát đến nghiệm thu.
+          Giám sát ServiceOrder theo lifecycle chuẩn và chuyển các trường hợp bất thường sang hỗ trợ.
         </p>
       </div>
 
