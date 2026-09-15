@@ -1,6 +1,7 @@
 // src/router/guards.ts
 import type { NavigationGuardNext, RouteLocationNormalized } from 'vue-router';
 import { useAuthStore } from '../stores';
+import { getHttpStatus } from '../api/client';
 
 export async function authGuard(
   to: RouteLocationNormalized,
@@ -11,7 +12,12 @@ export async function authGuard(
 
   // If token exists in storage but profile not yet in memory, fetch it
   if (authStore.token && !authStore.user) {
-    await authStore.fetchProfile();
+    try {
+      await authStore.fetchProfile();
+    } catch (error) {
+      if (getHttpStatus(error) === 403) return next('/403');
+      return next(false);
+    }
   }
 
   // 1. Guest only pages (login, register)

@@ -2,6 +2,8 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { authGuard } from './guards';
 
+const AUTH_SESSION_INVALIDATED_EVENT = 'fixhome:auth-session-invalidated';
+
 const routes: RouteRecordRaw[] = [
   // ---- 1. Public Routes (PublicLayout) ----
   {
@@ -305,5 +307,14 @@ const router = createRouter({
 });
 
 router.beforeEach(authGuard);
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(AUTH_SESSION_INVALIDATED_EVENT, () => {
+    const currentRoute = router.currentRoute.value;
+    if (currentRoute.meta.requiresAuth && currentRoute.name !== 'login') {
+      void router.push({ path: '/login', query: { redirect: currentRoute.fullPath } });
+    }
+  });
+}
 
 export default router;

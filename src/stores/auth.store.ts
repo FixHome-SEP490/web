@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { UserInfo, UserRole, LoginRequest, RegisterRequest } from '../types';
 import { authApi } from '../api/auth.api';
+import { getHttpStatus, registerAuthSessionInvalidator } from '../api/client';
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -14,6 +15,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value);
   const userRole = computed(() => user.value?.role?.toUpperCase() ?? null);
   const permissions = computed(() => user.value?.permissions ?? []);
+
+  function clearSession() {
+    token.value = null;
+    user.value = null;
+    localStorage.removeItem('access_token');
+  }
+
+  registerAuthSessionInvalidator(clearSession);
 
   // Actions
   function setAuth(accessToken: string, userInfo: UserInfo) {
@@ -50,16 +59,15 @@ export const useAuthStore = defineStore('auth', () => {
       const profile = await authApi.getProfile();
       user.value = profile;
       return profile;
-    } catch {
-      logout();
+    } catch (error) {
+      if (getHttpStatus(error) === 401) clearSession();
+      else throw error;
       return null;
     }
   }
 
   async function logout() {
-    token.value = null;
-    user.value = null;
-    localStorage.removeItem('access_token');
+    clearSession();
     try {
       await authApi.logout();
     } catch {
