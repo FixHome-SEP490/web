@@ -218,6 +218,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Vi phạm & Đình chỉ', roles: ['SERVICE_MANAGER'] },
       },
       {
+        path: 'support',
+        name: 'support-queue',
+        component: () => import('../pages/console/SupportQueuePage.vue'),
+        meta: { title: 'Hàng đợi hỗ trợ', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'support/cash/:id',
+        name: 'support-cash-detail',
+        component: () => import('../pages/console/SupportCashDetailPage.vue'),
+        meta: { title: 'Tranh chấp tiền mặt', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'support/:id',
+        name: 'support-detail',
+        component: () => import('../pages/console/SupportDetailPage.vue'),
+        meta: { title: 'Chi tiết hỗ trợ', roles: ['SERVICE_MANAGER'] },
+      },
+      {
         path: 'catalog',
         name: 'console-catalog',
         component: () => import('../pages/console/CatalogManagementPage.vue'),

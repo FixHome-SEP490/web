@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Package,
   Sliders,
+  LifeBuoy,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -32,8 +33,9 @@ const navigation = computed(() => [
     items: [
       { label: 'Tổng quan vận hành', path: '/console', icon: LayoutDashboard },
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
-      ...(isServiceManager.value
+        ...(isServiceManager.value
         ? [
+            { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
             { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
             { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
           ]
@@ -108,7 +110,7 @@ const handleLogout = async () => {
               :to="item.path"
               class="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors group"
               :class="[
-                route.path === item.path
+                route.path === item.path || (item.path !== '/console' && route.path.startsWith(`${item.path}/`))
                   ? 'bg-brand-600 text-white font-medium shadow-sm'
                   : 'text-ink-300 hover:bg-ink-800 hover:text-white',
               ]"
