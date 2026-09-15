@@ -41,6 +41,7 @@ export interface CreateBookingDto {
   quantity?: number;
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   mediaUrls?: string[];
+  aiDiagnosisId?: string;
 }
 
 export interface TechnicianCandidate {
@@ -60,12 +61,22 @@ export interface TechnicianCandidate {
 }
 
 export interface DiagnosisResult {
-  possibleIssues: string[];
-  possibleCauses: string[];
-  suggestedPriceMin: number;
-  suggestedPriceMax: number;
+  id?: string;
+  possibleProblems?: string[];
+  possibleCauses?: string[];
+  urgency?: 'LOW' | 'MEDIUM' | 'HIGH' | 'NORMAL' | 'EMERGENCY';
+  estimatedCostMin?: number;
+  estimatedCostMax?: number;
+  suggestedServiceId?: string | null;
+  suggestedServiceName?: string | null;
+  suggestedSkill?: string | null;
+  troubleshooting?: string[];
   confidence: number;
-  urgency?: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
+  isFallback?: boolean;
+  disclaimer?: string;
+  possibleIssues?: string[];
+  suggestedPriceMin?: number;
+  suggestedPriceMax?: number;
   recommendedActions?: string[];
 }
 
@@ -80,14 +91,28 @@ export interface InvitationItem {
   expiresAt: string;
 }
 
-type RawBooking = BookingItem & { service?: { name: string }; serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt: string };
-const normalizeBooking = (booking: RawBooking): BookingItem => ({ ...booking, serviceName: booking.serviceNameSnapshot || booking.service?.name, addressSummary: booking.addressTextSnapshot, preferredAt: booking.preferredStartAt, status: booking.status.toUpperCase() as BookingItem['status'], urgency: booking.urgency.toUpperCase() as BookingItem['urgency'] });
+type RawBooking = BookingItem & {
+  service?: { name: string };
+  serviceNameSnapshot?: string;
+  addressTextSnapshot?: string;
+  preferredStartAt: string;
+  media?: { url: string }[];
+};
+
+const normalizeBooking = (booking: RawBooking): BookingItem => ({
+  ...booking,
+  serviceName: booking.serviceNameSnapshot || booking.service?.name,
+  addressSummary: booking.addressTextSnapshot,
+  preferredAt: booking.preferredStartAt,
+  status: booking.status.toUpperCase() as BookingItem['status'],
+  urgency: booking.urgency.toUpperCase() as BookingItem['urgency'],
+  mediaUrls: booking.mediaUrls?.length ? booking.mediaUrls : (booking.media?.map(m => m.url) || []),
+});
 
 export const bookingsApi = {
   async createBooking(dto: CreateBookingDto): Promise<BookingItem> {
     const urgency = { LOW: 'low', NORMAL: 'medium', HIGH: 'high', EMERGENCY: 'critical' }[dto.urgency];
     const body = { ...dto };
-    delete body.mediaUrls;
     return normalizeBooking(unwrap<RawBooking>((await apiClient.post('/bookings', { ...body, urgency })).data));
   },
   async getMyBookings(): Promise<BookingItem[]> {
@@ -96,7 +121,13 @@ export const bookingsApi = {
   async getBooking(id: string): Promise<BookingItem> {
     return normalizeBooking(unwrap<RawBooking>((await apiClient.get('/bookings/'+id)).data));
   },
-  async diagnoseAI(dto: { description: string; serviceId?: string }): Promise<DiagnosisResult> {
+  async diagnoseAI(dto: {
+    description: string;
+    serviceId?: string;
+    imageUrl?: string;
+    images?: string[];
+    categoryHint?: string;
+  }): Promise<DiagnosisResult> {
     return unwrap<DiagnosisResult>((await apiClient.post('/ai/diagnoses', dto)).data);
   },
   async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> {

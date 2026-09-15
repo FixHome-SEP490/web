@@ -254,16 +254,16 @@ const selectedCount = computed(() => selectedIds.value.length);
             <div class="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
               <span class="text-emerald-600 block text-[11px]">Điểm tin cậy:</span>
               <span class="font-bold text-emerald-900 text-sm flex items-center gap-1 mt-0.5">
-                <ShieldCheck :size="14" /> {{ viewedTech.reliabilityScore || 98 }}% hoàn thành
+                <ShieldCheck :size="14" /> {{ viewedTech.reliabilityScore ? viewedTech.reliabilityScore + '%' : 'Đang cập nhật' }}
               </span>
             </div>
           </div>
 
-          <div class="p-3 bg-ink-50 rounded border border-ink-200 space-y-1">
-            <span class="text-ink-500 font-medium">Khoảng cách & Thời gian:</span>
+          <div v-if="viewedTech.distanceKm != null" class="p-3 bg-ink-50 rounded border border-ink-200 space-y-1">
+            <span class="text-ink-500 font-medium">Khoảng cách:</span>
             <div class="text-ink-900 font-semibold flex items-center gap-2">
               <MapPin :size="14" class="text-brand-600" />
-              Cách bạn ~{{ viewedTech.distanceKm || 2.5 }} km (dự kiến đến sau 20-30 phút)
+              Cách bạn ~{{ viewedTech.distanceKm }} km
             </div>
           </div>
 
@@ -272,8 +272,8 @@ const selectedCount = computed(() => selectedIds.value.length);
             <div class="text-base font-bold font-num text-brand-700">
               <FhMoney :amount="viewedTech.listedLaborPrice" />
             </div>
-            <span class="text-[10px] text-ink-400 block">
-              * Cam kết bảo hành kỹ thuật tiêu chuẩn {{ viewedTech.typicalWarrantyDays || 90 }} ngày.
+            <span v-if="viewedTech.typicalWarrantyDays" class="text-[10px] text-ink-400 block">
+              * Cam kết bảo hành kỹ thuật tiêu chuẩn {{ viewedTech.typicalWarrantyDays }} ngày.
             </span>
           </div>
 

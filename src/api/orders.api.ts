@@ -153,7 +153,7 @@ export const ordersApi = {
   async confirmCashSettlement(id: string, body: { agreed: boolean; disputeReason?: string; confirmedAmount?: number }) { return post('/service-orders/'+id+'/cash-settlement/confirm', body); },
   async getCashSettlement(id: string): Promise<Record<string, unknown> | null> { return get('/service-orders/'+id+'/cash-settlement'); },
   async getInvoice(id: string): Promise<Record<string, unknown>> { return (await get<Record<string, unknown> | null>('/service-orders/'+id+'/invoice')) ?? {}; },
-  async payInvoice(id: string) { return post('/invoices/'+id+'/pay'); },
+  async payInvoice(id: string, paymentMethod = 'VNPAY_SANDBOX') { return post('/invoices/'+id+'/pay', { paymentMethod }); },
   async getWarranties(): Promise<WarrantyItem[]> {
     const orders = await this.getCustomerOrders();
     const coverages = await Promise.all(orders.filter(o=>o.status==='COMPLETED').map(async order => (await get<WarrantyItem[]>('/service-orders/'+order.id+'/warranties')).map(w => ({ ...w, orderCode: order.code, serviceName: order.serviceName, technicianName: order.technician?.fullName ?? '', status: w.status.toUpperCase() as WarrantyItem['status'] }))));

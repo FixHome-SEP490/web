@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -59,6 +59,25 @@ const warrantyClaimDescription = ref('');
 const quotationApproved = ref(false);
 const selectedWarrantyIds = ref<string[]>([]);
 
+// Financial computed breakdowns per Section 10 & 22
+const laborItems = computed(() => (order.value?.quotation?.items ?? []).filter(i => i.type === 'LABOR'));
+const fixHomePartItems = computed(() => (order.value?.quotation?.items ?? []).filter(i => (i.type === 'PARTS' || (i.type as string) === 'PARTS_EQUIPMENT') && (i.partSource === 'FIXHOME' || i.partSource === 'fixhome')));
+const externalPartItems = computed(() => (order.value?.quotation?.items ?? []).filter(i => (i.type === 'PARTS' || (i.type as string) === 'PARTS_EQUIPMENT') && (i.partSource === 'TECHNICIAN' || i.partSource === 'technician')));
+
+const fixHomePartsCost = computed(() => fixHomePartItems.value.reduce((sum, i) => sum + Number(i.lineTotal || 0), 0));
+const externalPartsCost = computed(() => externalPartItems.value.reduce((sum, i) => sum + Number(i.lineTotal || 0), 0));
+const laborCost = computed(() => laborItems.value.reduce((sum, i) => sum + Number(i.lineTotal || 0), 0));
+const assuranceFeeCost = computed(() => {
+  return externalPartItems.value
+    .filter(i => Boolean(i.id && selectedWarrantyIds.value.includes(i.id)))
+    .reduce((sum, i) => sum + Number(i.warrantyFee || 50000), 0);
+});
+const grandTotalComputed = computed(() => {
+  if (!order.value) return 0;
+  if (!order.value.quotation) return order.value.grandTotal;
+  return laborCost.value + fixHomePartsCost.value + externalPartsCost.value + assuranceFeeCost.value;
+});
+
 // Cash Settlement State
 const cashSettlement = ref<{
   id: string;
@@ -66,6 +85,7 @@ const cashSettlement = ref<{
   confirmedAmount?: number;
   status: 'pending_confirmation' | 'confirmed' | 'disputed';
   technicianNotes?: string;
+  receiptEvidenceUrl?: string;
 } | null>(null);
 
 const disputeReason = ref('');
@@ -591,6 +611,18 @@ const handleCreateWarrantyClaim = async () => {
             {{ cashSettlement.technicianNotes ? `(Ghi chú: ${cashSettlement.technicianNotes})` : '' }}
           </p>
 
+          <!-- Receipt Evidence Image Preview per Section 12 -->
+          <div v-if="cashSettlement.receiptEvidenceUrl" class="p-3 bg-white rounded border border-ink-200 space-y-1.5">
+            <span class="text-[11px] font-semibold text-ink-700 block">Ảnh biên nhận / xác minh tiền mặt do thợ tải lên:</span>
+            <a :href="cashSettlement.receiptEvidenceUrl" target="_blank" rel="noopener noreferrer" class="inline-block">
+              <img
+                :src="cashSettlement.receiptEvidenceUrl"
+                alt="Biên nhận tiền mặt"
+                class="max-h-48 rounded object-cover border border-ink-200 hover:opacity-90 transition-opacity"
+              />
+            </a>
+          </div>
+
           <div class="flex flex-wrap items-center gap-2 pt-1">
             <FhButton
               variant="primary"
@@ -651,8 +683,8 @@ const handleCreateWarrantyClaim = async () => {
             <table class="w-full text-left">
               <thead class="bg-ink-50 text-ink-500 font-semibold border-b border-ink-200 text-[11px]">
                 <tr>
-                  <th class="p-2.5">Khoản mục</th>
-                  <th class="p-2.5">Loại & Nguồn</th>
+                  <th class="p-2.5">Khoản mục & Bảo hành</th>
+                  <th class="p-2.5">Loại & Nguồn linh kiện</th>
                   <th class="p-2.5 text-center">SL</th>
                   <th class="p-2.5 text-right">Đơn giá</th>
                   <th class="p-2.5 text-right">Thành tiền</th>
@@ -665,30 +697,64 @@ const handleCreateWarrantyClaim = async () => {
                   class="hover:bg-ink-50/50"
                 >
                   <td class="p-2.5 font-medium text-ink-900">
-                    {{ item.description }}
-                    <label v-if="item.id && item.partWarrantyOption === 'paid_warranty' && !quotationApproved" class="block mt-2 text-xs">
-                      <input v-model="selectedWarrantyIds" type="checkbox" :value="item.id" />
-                      Mua bảo hành {{ item.warrantyTermDays }} ngày: <FhMoney :amount="Number(item.warrantyFee || 0)" />
-                      <span class="block text-ink-500">Không chọn: linh kiện thợ cung cấp không kèm bảo hành.</span>
-                    </label>
-                    <span v-if="item.warrantyDays" class="block text-[10px] text-success-600 font-semibold">
-                      ✓ Bảo hành {{ item.warrantyDays }} ngày
-                    </span>
+                    <div>{{ item.description }}</div>
+
+                    <!-- FixHome Part Warranty Info per Section 9.1 -->
+                    <div
+                      v-if="(item as any).partSource === 'FIXHOME' || (item as any).partSource === 'fixhome'"
+                      class="mt-1 text-[11px] text-emerald-700 font-semibold flex items-center gap-1"
+                    >
+                      <ShieldCheck :size="13" class="text-emerald-600 shrink-0" />
+                      <span>Bảo hành chính hãng FixHome: {{ (item as any).warrantyDaysSnapshot || item.warrantyDays || 90 }} ngày (1 đổi 1)</span>
+                    </div>
+
+                    <!-- Technician External Part Assurance Option per Section 9.2 & 10 -->
+                    <div
+                      v-else-if="item.type !== 'LABOR' && ((item as any).partSource === 'TECHNICIAN' || (item as any).partSource === 'technician')"
+                      class="mt-1.5"
+                    >
+                      <div v-if="!quotationApproved" class="p-2 rounded bg-amber-50/80 border border-amber-200 text-xs">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                          <input
+                            v-if="item.id"
+                            v-model="selectedWarrantyIds"
+                            type="checkbox"
+                            :value="item.id"
+                            class="mt-0.5 rounded text-brand-600 focus:ring-brand-500"
+                          />
+                          <div>
+                            <span class="font-bold text-ink-900 text-xs">
+                              Gói đảm bảo linh kiện ngoài (External Part Assurance): +<FhMoney :amount="Number((item as any).warrantyFee || 50000)" />
+                            </span>
+                            <p class="text-[11px] text-ink-600 mt-0.5 leading-relaxed">
+                              Khi có vấn đề phát sinh trong 30 ngày, FixHome sẽ liên hệ và điều phối kỹ thuật viên đã thực hiện đơn quay lại kiểm tra.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      <div
+                        v-else-if="Boolean(item.id && selectedWarrantyIds.includes(item.id)) || (item as any).partWarrantyOption === 'paid_warranty'"
+                        class="text-[11px] text-emerald-700 font-semibold flex items-center gap-1"
+                      >
+                        <ShieldCheck :size="13" class="text-emerald-600" />
+                        <span>Đã đăng ký Gói đảm bảo linh kiện ngoài (30 ngày)</span>
+                      </div>
+                      <div v-else class="text-[11px] text-ink-400">
+                        Không đăng ký gói đảm bảo linh kiện ngoài
+                      </div>
+                    </div>
                   </td>
+
                   <td class="p-2.5 space-y-1">
                     <span
                       class="px-1.5 py-0.5 rounded text-[10px] font-bold"
-                      :class="item.type === 'LABOR' ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-700'"
+                      :class="item.type === 'LABOR' ? 'bg-brand-50 text-brand-700' : ((item as any).partSource === 'FIXHOME' || (item as any).partSource === 'fixhome' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200')"
                     >
-                      {{ item.type === 'LABOR' ? 'Tiền công' : 'Linh kiện' }}
-                    </span>
-                    <span
-                      v-if="item.type === 'PARTS'"
-                      class="block text-[10px] font-semibold text-ink-500"
-                    >
-                      Nguồn: {{ (item as any).partSource === 'FIXHOME' || (item as any).partSource === 'fixhome' ? 'Kho FixHome' : 'Kỹ thuật viên' }}
+                      {{ item.type === 'LABOR' ? 'Tiền công' : ((item as any).partSource === 'FIXHOME' || (item as any).partSource === 'fixhome' ? 'Linh kiện FixHome' : 'Linh kiện ngoài (Thợ mua)') }}
                     </span>
                   </td>
+
                   <td class="p-2.5 text-center font-num">{{ item.quantity }}</td>
                   <td class="p-2.5 text-right font-num text-ink-600">
                     <FhMoney :amount="item.unitPrice" />
@@ -701,12 +767,36 @@ const handleCreateWarrantyClaim = async () => {
             </table>
           </div>
 
+          <!-- Section 10 Financial Breakdown Table -->
+          <div class="p-3.5 bg-ink-50 rounded-[var(--radius-sm)] border border-ink-200 space-y-2 text-xs">
+            <div class="flex justify-between text-ink-700">
+              <span>Tiền công thợ (Labor):</span>
+              <span class="font-num font-semibold"><FhMoney :amount="laborCost" /></span>
+            </div>
+            <div v-if="fixHomePartsCost > 0" class="flex justify-between text-ink-700">
+              <span>Linh kiện FixHome (Chính hãng):</span>
+              <span class="font-num font-semibold"><FhMoney :amount="fixHomePartsCost" /></span>
+            </div>
+            <div v-if="externalPartsCost > 0" class="flex justify-between text-ink-700">
+              <span>Linh kiện Kỹ thuật viên mua ngoài:</span>
+              <span class="font-num font-semibold"><FhMoney :amount="externalPartsCost" /></span>
+            </div>
+            <div v-if="assuranceFeeCost > 0" class="flex justify-between text-amber-800 font-medium">
+              <span>Gói đảm bảo linh kiện ngoài (External Part Assurance):</span>
+              <span class="font-num font-semibold">+<FhMoney :amount="assuranceFeeCost" /></span>
+            </div>
+            <div class="pt-2 border-t border-ink-200 flex justify-between font-bold text-sm text-brand-900">
+              <span>Tổng chi phí báo giá (Total):</span>
+              <span class="font-num text-brand-700 text-base"><FhMoney :amount="grandTotalComputed" /></span>
+            </div>
+          </div>
+
           <!-- Total Footer -->
           <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-ink-100">
             <div>
-              <span class="text-xs text-ink-500">Tổng chi phí thanh toán:</span>
-              <div class="text-xl font-bold font-num text-brand-700">
-                <FhMoney :amount="order.grandTotal" />
+              <span class="text-xs text-ink-500">Trạng thái báo giá:</span>
+              <div class="font-bold text-xs" :class="quotationApproved ? 'text-emerald-700' : 'text-amber-700'">
+                {{ quotationApproved ? 'Đã được bạn phê duyệt' : 'Chờ bạn phê duyệt để bắt đầu sửa' }}
               </div>
             </div>
 
