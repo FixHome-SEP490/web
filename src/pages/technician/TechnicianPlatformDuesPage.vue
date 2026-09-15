@@ -32,7 +32,6 @@ interface DueItem {
 
 const router = useRouter();
 const loading = ref(true);
-const payingId = ref<string | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const dues = ref<DueItem[]>([]);
 const totalDue = ref<number>(0);
@@ -58,23 +57,10 @@ const loadDues = async () => {
 };
 
 const handlePay = async (due: DueItem) => {
-  try {
-    payingId.value = due.id;
-    actionMessage.value = null;
-    await ordersApi.payCommissionDue(due.id, 'VNPAY_SANDBOX');
-    actionMessage.value = {
-      type: 'success',
-      text: 'Thanh toán công nợ thành công! Tài khoản của bạn đã được kích hoạt nhận việc mới.',
-    };
-    await loadDues();
-  } catch (err) {
-    actionMessage.value = {
-      type: 'error',
-      text: (err as Error)?.message || 'Thanh toán thất bại, vui lòng thử lại',
-    };
-  } finally {
-    payingId.value = null;
-  }
+  actionMessage.value = {
+    type: 'success',
+    text: `Cổng nộp công nợ trực tuyến đang được nâng cấp bảo mật. Vui lòng đối soát và chuyển khoản theo số tiền ${new Intl.NumberFormat('vi-VN').format(due.dueAmount)} đ tới Quản lý dịch vụ FixHome.`,
+  };
 };
 </script>
 
@@ -85,7 +71,7 @@ const handlePay = async (due: DueItem) => {
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <CreditCard class="text-brand-600" :size="24" />
-          Công nợ Nền tảng (PlatformDue)
+          Công nợ FixHome
         </h1>
         <p class="text-xs text-ink-500 mt-1">
           Theo dõi và quyết toán phí hoa hồng dịch vụ (10% công thợ) & hoàn tiền linh kiện FixHome sau các đơn thu tiền mặt.
@@ -186,12 +172,11 @@ const handlePay = async (due: DueItem) => {
           <div class="flex justify-end">
             <FhButton
               v-if="String(row.status).toUpperCase() === 'PENDING'"
-              variant="primary"
+              variant="secondary"
               size="sm"
-              :loading="payingId === row.id"
               @click="handlePay(row)"
             >
-              Thanh toán ngay
+              Hướng dẫn quyết toán
             </FhButton>
             <span v-else class="text-xs text-success-600 font-semibold flex items-center gap-1">
               <CheckCircle2 :size="14" /> Đã quyết toán

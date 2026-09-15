@@ -27,7 +27,7 @@ const toggleAvailability = async () => {
   try {
     isAvailable.value = !isAvailable.value;
     await techniciansApi.updateProfile({ isAvailable: isAvailable.value });
-  } catch (err) {
+  } catch {
     isAvailable.value = !isAvailable.value;
   }
 };
@@ -205,8 +205,38 @@ const handleLogout = async () => {
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
       <router-view />
     </main>
+
+    <!-- Mobile Bottom Navigation Bar (Task 19) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-ink-200 shadow-[var(--shadow-e3)] py-1.5 px-2 flex items-center justify-around text-[10px] font-medium text-ink-600">
+      <router-link to="/tech" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold" exact-active-class="text-brand-600 font-bold">
+        <Wrench :size="18" />
+        <span>Tổng quan</span>
+      </router-link>
+      <router-link to="/tech/invitations" class="relative flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Inbox :size="18" />
+        <span
+          v-if="invitationCount > 0"
+          class="absolute top-0 right-1 w-3.5 h-3.5 bg-danger-600 text-white font-num text-[9px] font-bold rounded-full flex items-center justify-center leading-none"
+        >
+          {{ invitationCount }}
+        </span>
+        <span>Lời mời</span>
+      </router-link>
+      <router-link to="/tech/jobs" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Briefcase :size="18" />
+        <span>Công việc</span>
+      </router-link>
+      <router-link to="/tech/schedule" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Calendar :size="18" />
+        <span>Lịch</span>
+      </router-link>
+      <router-link to="/tech/profile" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <User :size="18" />
+        <span>Hồ sơ</span>
+      </router-link>
+    </nav>
   </div>
 </template>

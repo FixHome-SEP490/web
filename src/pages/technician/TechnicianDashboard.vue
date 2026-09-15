@@ -70,7 +70,7 @@ const handleDeclineInvitation = async () => {
     await bookingsApi.respondInvitation(dashboard.value.latestInvitation.id, 'DECLINE');
     await loadDashboard();
   } catch (err) {
-    alert((err as Error)?.message || 'Không thể từ chối lời mời.');
+    error.value = (err as Error)?.message || 'Không thể từ chối lời mời. Vui lòng thử lại.';
   } finally {
     actionLoading.value = false;
   }

@@ -32,7 +32,7 @@ const loadVerification = async () => {
     loading.value = true;
     error.value = null;
     verification.value = await techniciansApi.getVerification();
-  } catch (err) {
+  } catch {
     // If not submitted yet, API might return 404 or empty
     verification.value = { status: 'NOT_SUBMITTED' };
   } finally {

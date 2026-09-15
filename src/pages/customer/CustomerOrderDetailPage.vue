@@ -14,6 +14,7 @@ import {
   Star,
   RotateCcw,
   FileCheck,
+  Clock,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -27,6 +28,7 @@ import {
   type EvidenceItem,
 } from '../../components';
 import { ordersApi, type CostRequest, type ReviewItem, type ServiceOrderItem } from '../../api/orders.api';
+import { bookingsApi } from '../../api/bookings.api';
 
 const route = useRoute();
 const router = useRouter();
@@ -55,9 +57,80 @@ const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const showCompletionModal = ref(false);
+const showRescheduleModal = ref(false);
+const rescheduleDate = ref('');
+const rescheduleStartTime = ref('08:00');
+const rescheduleEndTime = ref('10:00');
 const warrantyClaimDescription = ref('');
 const quotationApproved = ref(false);
 const selectedWarrantyIds = ref<string[]>([]);
+
+// Real Order Timeline (Task 15)
+const computedTimelineSteps = computed(() => {
+  if (!order.value) return [];
+  const historyList = order.value.timeline || [];
+  const statusToTimeMap: Record<string, { time: string; reason?: string; actor?: string }> = {};
+
+  for (const h of historyList) {
+    if (h.timestamp) {
+      const d = new Date(h.timestamp);
+      const timeStr = !isNaN(d.getTime())
+        ? `${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+        : '';
+      statusToTimeMap[h.status] = { time: timeStr, reason: h.title, actor: h.actor };
+    }
+  }
+
+  const currentStatus = String(order.value.status).toUpperCase();
+  const isAccepted = ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED'].includes(currentStatus);
+  const isEnRoute = ['EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED'].includes(currentStatus);
+  const isUnderRepair = ['UNDER_REPAIR', 'COMPLETED'].includes(currentStatus);
+  const isCompleted = currentStatus === 'COMPLETED';
+
+  // Created time
+  const createdDate = order.value.createdAt ? new Date(order.value.createdAt) : null;
+  const createdTimeStr = createdDate && !isNaN(createdDate.getTime())
+    ? `${createdDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${createdDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    : '';
+
+  return [
+    {
+      key: '1',
+      label: 'Tiếp nhận yêu cầu',
+      note: 'Đơn được tạo trên hệ thống',
+      timestamp: createdTimeStr || undefined,
+      completed: true,
+    },
+    {
+      key: '2',
+      label: 'Kỹ thuật viên nhận việc',
+      note: order.value.technician?.fullName ? `Thợ ${order.value.technician.fullName} đã nhận đơn` : 'Đã điều phối thợ',
+      timestamp: statusToTimeMap['ACCEPTED']?.time,
+      completed: isAccepted,
+    },
+    {
+      key: '3',
+      label: 'Đang di chuyển',
+      note: 'Thợ đang trên đường tới địa chỉ của bạn',
+      timestamp: statusToTimeMap['EN_ROUTE']?.time,
+      completed: isEnRoute,
+    },
+    {
+      key: '4',
+      label: 'Đang sửa chữa',
+      note: 'Thợ đã check-in xác thực vị trí và khảo sát thiết bị',
+      timestamp: statusToTimeMap['UNDER_REPAIR']?.time,
+      completed: isUnderRepair,
+    },
+    {
+      key: '5',
+      label: 'Hoàn tất & Nghiệm thu',
+      note: 'Nghiệm thu sau sửa chữa và kích hoạt bảo hành điện tử',
+      timestamp: statusToTimeMap['COMPLETED']?.time,
+      completed: isCompleted,
+    },
+  ];
+});
 
 // Financial computed breakdowns per Section 10 & 22
 const laborItems = computed(() => (order.value?.quotation?.items ?? []).filter(i => i.type === 'LABOR'));
@@ -298,22 +371,45 @@ const handlePay = () => {
 };
 
 const confirmPayment = async () => {
+  showPaymentModal.value = false;
+  actionMessage.value = {
+    type: 'success',
+    text: 'Cổng thanh toán điện tử trực tuyến đang được tích hợp chính thức. Quý khách vui lòng nghiệm thu thiết bị và thanh toán tiền mặt trực tiếp cho kỹ thuật viên sau khi hoàn thành sửa chữa (hệ thống sẽ áp dụng xác nhận 2 chiều Dual-Confirmation).',
+  };
+};
+
+const handleReschedule = async () => {
+  if (!rescheduleDate.value) {
+    actionMessage.value = { type: 'error', text: 'Vui lòng chọn ngày muốn hẹn lại!' };
+    return;
+  }
+  const startAt = new Date(`${rescheduleDate.value}T${rescheduleStartTime.value}:00`);
+  const endAt = new Date(`${rescheduleDate.value}T${rescheduleEndTime.value}:00`);
+  if (startAt >= endAt) {
+    actionMessage.value = { type: 'error', text: 'Giờ bắt đầu phải trước giờ kết thúc!' };
+    return;
+  }
+  if (startAt <= new Date()) {
+    actionMessage.value = { type: 'error', text: 'Thời gian hẹn phải ở thời điểm tương lai!' };
+    return;
+  }
   try {
     actionLoading.value = true;
-    if (invoice.value?.id) {
-      await ordersApi.payInvoice(invoice.value.id);
-    }
-    if (order.value) {
-      order.value.paymentStatus = 'PAID';
-    }
-    showPaymentModal.value = false;
+    actionMessage.value = null;
+    const bookingId = order.value?.bookingId;
+    if (!bookingId) throw new Error('Không tìm thấy thông tin đặt lịch của đơn hàng.');
+    await bookingsApi.reschedule(bookingId, startAt.toISOString(), endAt.toISOString());
+    showRescheduleModal.value = false;
     actionMessage.value = {
       type: 'success',
-      text: 'Thanh toán online thành công! Hoá đơn và bảo hành điện tử đã được kích hoạt.',
+      text: 'Đổi lịch hẹn dịch vụ thành công! Hệ thống đã cập nhật thời gian phục vụ mới.',
     };
     await loadOrder();
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Thanh toán thất bại.' };
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể đổi lịch hẹn. Vui lòng kiểm tra lại thời gian.',
+    };
   } finally {
     actionLoading.value = false;
   }
@@ -402,14 +498,38 @@ const handleCreateWarrantyClaim = async () => {
           Yêu cầu bảo hành
         </FhButton>
 
-        <!-- Cancel Order -->
+        <!-- Reschedule Button (Task 03) -->
         <FhButton
-          v-if="order && order.status !== 'COMPLETED' && order.status !== 'completed' && order.status !== 'CANCELLED' && order.status !== 'cancelled'"
+          v-if="order && ['ACCEPTED', 'EN_ROUTE', 'accepted', 'en_route'].includes(order.status)"
+          variant="secondary"
+          size="sm"
+          :disabled="actionLoading"
+          @click="showRescheduleModal = true"
+        >
+          <Clock :size="14" class="mr-1 text-brand-600" />
+          Đổi lịch hẹn
+        </FhButton>
+
+        <!-- Cancel Order (Task 16) -->
+        <FhButton
+          v-if="order && ['ACCEPTED', 'EN_ROUTE', 'accepted', 'en_route'].includes(order.status)"
           variant="danger"
           size="sm"
+          :disabled="actionLoading"
           @click="showCancelModal = true"
         >
           Huỷ đơn
+        </FhButton>
+
+        <!-- Support Request when in Under Repair (Task 16) -->
+        <FhButton
+          v-else-if="order && ['UNDER_REPAIR', 'under_repair'].includes(order.status)"
+          variant="secondary"
+          size="sm"
+          @click="actionMessage = { type: 'error', text: 'Đơn hàng đang trong quá trình sửa chữa. Nếu cần hỗ trợ khẩn cấp hoặc xử lý sự cố phát sinh, vui lòng liên hệ Tổng đài CSKH FixHome để được can thiệp kịp thời.' }"
+        >
+          <Phone :size="14" class="mr-1 text-ink-600" />
+          Yêu cầu hỗ trợ
         </FhButton>
       </div>
     </div>
@@ -648,25 +768,17 @@ const handleCreateWarrantyClaim = async () => {
       </FhCard>
 
       <!-- Status Timeline (FhTimeline) -->
-      <FhCard title="Tiến trình thực hiện (Canonical State Machine)">
-        <FhTimeline
-          :steps="[
-            { key: '1', label: 'Tiếp nhận yêu cầu', note: 'Đơn được tạo trên hệ thống', timestamp: '08:30', completed: true },
-            { key: '2', label: 'Ghép kỹ thuật viên', note: order.technician?.fullName ? `Thợ ${order.technician.fullName} đã nhận đơn` : 'Đã ghép thợ', timestamp: '08:45', completed: true },
-            { key: '3', label: 'Đang di chuyển (En Route)', note: 'Thợ đang trên đường tới nhà', timestamp: '09:00', completed: order.status !== 'ACCEPTED' && order.status !== 'accepted' },
-            { key: '4', label: 'Đang sửa chữa (Under Repair)', note: 'Thợ đã check-in GPS và khảo sát', timestamp: '09:20', completed: order.status === 'UNDER_REPAIR' || order.status === 'under_repair' || order.status === 'COMPLETED' || order.status === 'completed' },
-            { key: '5', label: 'Hoàn tất & Nghiệm thu', note: 'Nghiệm thu sau sửa và kích hoạt bảo hành', completed: order.status === 'COMPLETED' || order.status === 'completed' },
-          ]"
-        />
+      <FhCard title="Tiến trình thực hiện dịch vụ">
+        <FhTimeline :steps="computedTimelineSteps" />
       </FhCard>
 
-      <!-- Spec v1.4 D1-11: Evidence Gallery Card -->
-      <FhCard title="Hình ảnh Bằng chứng Sửa chữa (Evidence Audit)">
+      <!-- Evidence Gallery Card -->
+      <FhCard title="Hình ảnh nghiệm thu sửa chữa">
         <FhEvidenceGallery :evidence="evidences" />
       </FhCard>
 
-      <!-- Quotation & D-02 Cost Breakdown Card -->
-      <FhCard title="Báo giá chi tiết & Nguồn linh kiện (D1-13 & D1-14 Standard)">
+      <!-- Quotation & Cost Breakdown Card -->
+      <FhCard title="Báo giá chi tiết & Nguồn linh kiện">
         <template #action>
           <span class="text-xs font-semibold text-brand-700">Tách riêng Công & Nguồn phụ tùng</span>
         </template>
@@ -822,12 +934,12 @@ const handleCreateWarrantyClaim = async () => {
 
               <FhButton
                 v-else-if="order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid'"
-                variant="primary"
+                variant="secondary"
                 size="md"
                 :disabled="actionLoading"
                 @click="handlePay"
               >
-                Thanh toán Online (<FhMoney :amount="order.grandTotal" />)
+                Thông tin thanh toán (<FhMoney :amount="order.grandTotal" />)
               </FhButton>
             </div>
           </div>
@@ -995,7 +1107,7 @@ const handleCreateWarrantyClaim = async () => {
       </div>
     </div>
 
-    <!-- Payment Modal -->
+    <!-- Payment Info Modal (Task 01) -->
     <div
       v-if="showPaymentModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
@@ -1003,31 +1115,102 @@ const handleCreateWarrantyClaim = async () => {
       <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
         <div class="text-center space-y-2">
           <ShieldCheck :size="40" class="text-brand-600 mx-auto" />
-          <h3 class="text-lg font-bold text-ink-900">Thanh toán Đơn hàng</h3>
-          <p class="text-xs text-ink-500">
-            Cổng thanh toán điện tử FixHome (VNPay / Thẻ ngân hàng).
+          <h3 class="text-lg font-bold text-ink-900">Phương thức Thanh toán</h3>
+          <p class="text-xs text-ink-500 leading-relaxed">
+            Hệ thống áp dụng phương thức <strong>Thanh toán tiền mặt trực tiếp</strong> kèm xác nhận 2 chiều (Dual-Confirmation). Cổng thanh toán trực tuyến VNPay đang trong giai đoạn tích hợp chính thức.
           </p>
         </div>
 
         <div class="p-3 rounded bg-ink-50 text-center">
-          <div class="text-xs text-ink-400">Số tiền cần thanh toán:</div>
+          <div class="text-xs text-ink-400">Tổng số tiền cần thanh toán:</div>
           <div class="text-2xl font-bold font-num text-brand-700">
             <FhMoney :amount="order?.grandTotal ?? 0" />
           </div>
         </div>
 
+        <div class="p-3 bg-brand-50/60 rounded text-xs text-brand-900 space-y-1">
+          <div class="font-semibold flex items-center gap-1.5">
+            <CheckCircle2 :size="14" class="text-brand-600 shrink-0" />
+            Quy trình nghiệm thu & trả phí:
+          </div>
+          <ol class="list-decimal list-inside text-[11px] text-ink-600 space-y-0.5">
+            <li>Nghiệm thu thiết bị hoạt động bình thường sau khi thợ sửa xong.</li>
+            <li>Giao tiền mặt cho kỹ thuật viên theo số tiền trên hóa đơn.</li>
+            <li>Thợ xác nhận đã thu → Hệ thống hiển thị thông báo để bạn bấm xác nhận kích hoạt bảo hành điện tử.</li>
+          </ol>
+        </div>
+
         <div class="flex gap-2 pt-2">
-          <FhButton variant="ghost" size="md" class="flex-1" @click="showPaymentModal = false">
+          <FhButton variant="primary" size="md" class="w-full" @click="confirmPayment">
+            Đã hiểu
+          </FhButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reschedule Modal (Task 03) -->
+    <div
+      v-if="showRescheduleModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
+        <div class="space-y-1">
+          <h3 class="text-base font-bold text-ink-900 flex items-center gap-2">
+            <Clock :size="18" class="text-brand-600" /> Đổi lịch hẹn dịch vụ
+          </h3>
+          <p class="text-xs text-ink-500">
+            Chọn khung giờ mong muốn mới. Thợ phụ trách sẽ nhận được lịch cập nhật ngay lập tức.
+          </p>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold text-ink-700 mb-1">Ngày hẹn mới:</label>
+            <input
+              v-model="rescheduleDate"
+              type="date"
+              class="w-full p-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1">Từ giờ:</label>
+              <input
+                v-model="rescheduleStartTime"
+                type="time"
+                class="w-full p-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+              />
+            </div>
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1">Đến giờ:</label>
+              <input
+                v-model="rescheduleEndTime"
+                type="time"
+                class="w-full p-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2 border-t border-ink-100">
+          <FhButton
+            variant="ghost"
+            size="sm"
+            class="flex-1"
+            :disabled="actionLoading"
+            @click="showRescheduleModal = false"
+          >
             Đóng
           </FhButton>
           <FhButton
             variant="primary"
-            size="md"
+            size="sm"
             class="flex-1"
-            :disabled="actionLoading"
-            @click="confirmPayment"
+            :loading="actionLoading"
+            @click="handleReschedule"
           >
-            Xác nhận thanh toán
+            Xác nhận đổi lịch
           </FhButton>
         </div>
       </div>

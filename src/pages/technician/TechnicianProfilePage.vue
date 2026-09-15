@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   MapPin,
@@ -16,13 +16,13 @@ import {
   FhButton,
   FhSkeleton,
 } from '../../components';
-import { useAuthStore } from '../../stores/auth';
 import {
   techniciansApi,
   type TechnicianProfileData,
   type TechnicianSkillItem,
   type TechnicianServiceAreaItem,
 } from '../../api/technicians.api';
+import { useAuthStore } from '../../stores/auth';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -40,9 +40,63 @@ const editBio = ref('');
 const editYearsExperience = ref(0);
 const editIsAvailable = ref(true);
 
-// Add service area form
+// Standardized Service Areas (Task 18)
+const STANDARDIZED_AREAS: Record<string, { name: string; districts: Array<{ code: string; name: string }> }> = {
+  HCM: {
+    name: 'TP. Hồ Chí Minh',
+    districts: [
+      { code: '760', name: 'Quận 1' },
+      { code: '770', name: 'Quận 3' },
+      { code: '773', name: 'Quận 4' },
+      { code: '774', name: 'Quận 5' },
+      { code: '775', name: 'Quận 6' },
+      { code: '778', name: 'Quận 7' },
+      { code: '776', name: 'Quận 8' },
+      { code: '769', name: 'TP. Thủ Đức' },
+      { code: '771', name: 'Quận 10' },
+      { code: '772', name: 'Quận 11' },
+      { code: '761', name: 'Quận 12' },
+      { code: '764', name: 'Quận Gò Vấp' },
+      { code: '765', name: 'Quận Bình Thạnh' },
+      { code: '766', name: 'Quận Tân Bình' },
+      { code: '767', name: 'Quận Tân Phú' },
+      { code: '768', name: 'Quận Phú Nhuận' },
+      { code: '777', name: 'Quận Bình Tân' },
+      { code: '783', name: 'Huyện Củ Chi' },
+      { code: '784', name: 'Huyện Hóc Môn' },
+      { code: '785', name: 'Huyện Bình Chánh' },
+      { code: '786', name: 'Huyện Nhà Bè' },
+      { code: '787', name: 'Huyện Cần Giờ' },
+    ],
+  },
+  HN: {
+    name: 'Hà Nội',
+    districts: [
+      { code: '001', name: 'Quận Ba Đình' },
+      { code: '002', name: 'Quận Hoàn Kiếm' },
+      { code: '003', name: 'Quận Tây Hồ' },
+      { code: '004', name: 'Quận Long Biên' },
+      { code: '005', name: 'Quận Cầu Giấy' },
+      { code: '006', name: 'Quận Đống Đa' },
+      { code: '007', name: 'Quận Hai Bà Trưng' },
+      { code: '008', name: 'Quận Hoàng Mai' },
+      { code: '009', name: 'Quận Thanh Xuân' },
+      { code: '016', name: 'Quận Nam Từ Liêm' },
+      { code: '019', name: 'Quận Bắc Từ Liêm' },
+      { code: '021', name: 'Quận Hà Đông' },
+    ],
+  },
+};
+
 const newProvinceCode = ref('HCM');
+const availableDistricts = computed(() => {
+  return STANDARDIZED_AREAS[newProvinceCode.value]?.districts || [];
+});
 const newDistrictCode = ref('Quận 1');
+
+const onProvinceChange = () => {
+  newDistrictCode.value = availableDistricts.value[0]?.name || '';
+};
 
 const loadProfileData = async () => {
   try {
@@ -317,22 +371,24 @@ const handleRemoveArea = async (districtCode: string) => {
           </template>
 
           <div class="space-y-4 text-xs">
-            <!-- Add Area Form -->
+            <!-- Add Area Form (Task 18: Standardized Service Areas) -->
             <div class="flex gap-2">
               <select
                 v-model="newProvinceCode"
                 class="h-8 px-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+                @change="onProvinceChange"
               >
-                <option value="HCM">TP. HCM</option>
+                <option value="HCM">TP. Hồ Chí Minh</option>
                 <option value="HN">Hà Nội</option>
-                <option value="DN">Đà Nẵng</option>
               </select>
-              <input
+              <select
                 v-model="newDistrictCode"
-                type="text"
-                placeholder="Nhập tên quận/huyện..."
-                class="flex-1 h-8 px-2 border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
-              />
+                class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+              >
+                <option v-for="d in availableDistricts" :key="d.code" :value="d.name">
+                  {{ d.name }}
+                </option>
+              </select>
               <FhButton variant="primary" size="sm" :disabled="actionLoading" @click="handleAddArea">
                 <Plus :size="14" /> Thêm
               </FhButton>

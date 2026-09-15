@@ -84,6 +84,8 @@ export interface ServiceOrderItem {
 
 export interface WarrantyItem {
   id: string;
+  orderId?: string;
+  serviceOrderId?: string;
   orderCode: string;
   serviceName: string;
   itemDescription: string;
@@ -161,7 +163,7 @@ export const ordersApi = {
   async payInvoice(id: string, paymentMethod = 'VNPAY_SANDBOX') { return post('/invoices/'+id+'/pay', { paymentMethod }); },
   async getWarranties(): Promise<WarrantyItem[]> {
     const orders = await this.getCustomerOrders();
-    const coverages = await Promise.all(orders.filter(o=>o.status==='COMPLETED').map(async order => (await get<WarrantyItem[]>('/service-orders/'+order.id+'/warranties')).map(w => ({ ...w, orderCode: order.code, serviceName: order.serviceName, technicianName: order.technician?.fullName ?? '', status: w.status.toUpperCase() as WarrantyItem['status'] }))));
+    const coverages = await Promise.all(orders.filter(o=>o.status==='COMPLETED').map(async order => (await get<WarrantyItem[]>('/service-orders/'+order.id+'/warranties')).map(w => ({ ...w, orderId: order.id, serviceOrderId: order.id, orderCode: order.code, serviceName: order.serviceName, technicianName: order.technician?.fullName ?? '', status: w.status.toUpperCase() as WarrantyItem['status'] }))));
     return coverages.flat();
   },
   async getCommissionDues(): Promise<{ data: Array<{ id: string; serviceOrderId: string; dueAmount: number; laborTotalSnapshot: number; commissionRateSnapshot: number; status: 'PENDING' | 'PAID' | 'pending' | 'paid'; createdAt: string; paidAt?: string; serviceOrder?: { code: string } }>; totalDue: number }> {
@@ -175,5 +177,8 @@ export const ordersApi = {
     const res = await apiClient.get('/parts', { params: { serviceId, search } });
     return unwrap<Array<{ id: string; code: string; name: string; serviceId?: string; price: number; warrantyDays: number; warrantyPolicy: string; description?: string }>>(res.data);
   },
-  async createWarrantyClaim(id: string, description: string) { return post('/service-orders/'+id+'/warranty-claims', { description }); },
+  async createWarrantyClaim(id: string, body: { description: string } | string) {
+    const description = typeof body === 'string' ? body : body.description;
+    return post('/service-orders/'+id+'/warranty-claims', { description });
+  },
 };

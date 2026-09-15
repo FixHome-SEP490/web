@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Layers,
   X,
+  Ban,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -444,6 +445,40 @@ const handleSubmitAdditionalCost = async () => {
     actionLoading.value = false;
   }
 };
+
+// Task 05: Technician Withdraw / Trả đơn
+const showWithdrawModal = ref(false);
+const withdrawReason = ref('');
+
+const handleWithdrawOrder = async () => {
+  if (!withdrawReason.value.trim()) {
+    actionMessage.value = {
+      type: 'error',
+      text: 'Vui lòng nhập lý do rút khỏi đơn / trả đơn để hệ thống điều phối thợ khác.',
+    };
+    return;
+  }
+  try {
+    actionLoading.value = true;
+    actionMessage.value = null;
+    await ordersApi.cancelOrder(jobId, withdrawReason.value.trim());
+    showWithdrawModal.value = false;
+    actionMessage.value = {
+      type: 'success',
+      text: 'Đã trả đơn thành công. Hệ thống đang tiến hành điều phối kỹ thuật viên thay thế.',
+    };
+    setTimeout(() => {
+      router.push('/tech/jobs');
+    }, 1000);
+  } catch (err) {
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể trả đơn. Sau khi đã đến nơi hoặc đang sửa chữa, vui lòng liên hệ Quản lý dịch vụ.',
+    };
+  } finally {
+    actionLoading.value = false;
+  }
+};
 </script>
 
 <template>
@@ -493,6 +528,27 @@ const handleSubmitAdditionalCost = async () => {
               >
                 <Phone :size="13" /> {{ job.customerPhone }}
               </a>
+
+              <FhButton
+                v-if="!gpsCheckedIn && ['ACCEPTED', 'EN_ROUTE', 'accepted', 'en_route'].includes(job.status)"
+                variant="danger"
+                size="sm"
+                :disabled="actionLoading"
+                @click="showWithdrawModal = true"
+              >
+                <Ban :size="13" class="mr-1" />
+                Rút khỏi đơn / Trả đơn
+              </FhButton>
+
+              <FhButton
+                v-else-if="['UNDER_REPAIR', 'under_repair'].includes(job.status)"
+                variant="secondary"
+                size="sm"
+                @click="actionMessage = { type: 'error', text: 'Đơn hàng đang thực hiện sửa chữa. Nếu gặp sự cố bất khả kháng, vui lòng liên hệ Quản lý dịch vụ FixHome để được can thiệp xử lý ngoại lệ.' }"
+              >
+                <Phone :size="13" class="mr-1" />
+                Hỗ trợ ngoại lệ
+              </FhButton>
             </div>
           </div>
 
@@ -1058,6 +1114,52 @@ const handleSubmitAdditionalCost = async () => {
             @click="handleSubmitAdditionalCost"
           >
             Gửi đề xuất tới khách
+          </FhButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Withdraw Order Modal (Task 05) -->
+    <div
+      v-if="showWithdrawModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div class="space-y-1">
+          <h3 class="text-base font-bold text-danger-700 flex items-center gap-2">
+            <Ban :size="18" /> Rút khỏi đơn / Trả lại đơn nhận việc
+          </h3>
+          <p class="text-xs text-ink-500 leading-relaxed">
+            Chỉ áp dụng khi bạn gặp sự cố đột xuất trước khi đến địa chỉ khách hàng. Hệ thống sẽ tự động chuyển đơn sang kỹ thuật viên kế tiếp trong danh sách đề xuất.
+          </p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-ink-700">Lý do trả đơn (bắt buộc):</label>
+          <textarea
+            v-model="withdrawReason"
+            rows="3"
+            placeholder="Ví dụ: Xe hỏng đột xuất, có việc gia đình khẩn cấp..."
+            class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-danger-500"
+          ></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-ink-100">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="showWithdrawModal = false"
+          >
+            Đóng
+          </FhButton>
+          <FhButton
+            variant="danger"
+            size="sm"
+            :disabled="actionLoading"
+            @click="handleWithdrawOrder"
+          >
+            Xác nhận trả đơn
           </FhButton>
         </div>
       </div>

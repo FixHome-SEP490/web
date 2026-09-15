@@ -25,10 +25,17 @@ const invitations = ref<InvitationItem[]>([]);
 const responding = ref(false);
 const activeModalInvitation = ref<InvitationItem | null>(null);
 
+const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+
 onMounted(async () => {
   try {
     const list = await bookingsApi.getMyInvitations();
     invitations.value = list;
+  } catch (err) {
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể tải danh sách lời mời nhận việc.',
+    };
   } finally {
     loading.value = false;
   }
@@ -36,26 +43,46 @@ onMounted(async () => {
 
 const handleAccept = async (inv: InvitationItem) => {
   responding.value = true;
+  actionMessage.value = null;
   try {
     await bookingsApi.respondInvitation(inv.id, 'ACCEPT');
     activeModalInvitation.value = null;
-    alert('Nhận đơn thành công! Đang chuyển bạn đến workspace thực thi công việc.');
-    router.push('/tech/jobs');
-  } catch {
-    alert('Không thể nhận đơn (có thể đã có thợ khác nhận trước hoặc hết hạn).');
+    actionMessage.value = {
+      type: 'success',
+      text: 'Nhận đơn thành công! Đang chuyển bạn đến workspace thực thi công việc...',
+    };
+    setTimeout(() => {
+      router.push('/tech/jobs');
+    }, 800);
+  } catch (err) {
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể nhận đơn (có thể đã có thợ khác nhận trước hoặc hết hạn).',
+    };
   } finally {
     responding.value = false;
   }
 };
 
 const handleDecline = async (inv: InvitationItem) => {
+  responding.value = true;
+  actionMessage.value = null;
   try {
     await bookingsApi.respondInvitation(inv.id, 'DECLINE');
     invitations.value = invitations.value.filter((i) => i.id !== inv.id);
     activeModalInvitation.value = null;
-  } catch {
-    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
-    activeModalInvitation.value = null;
+    actionMessage.value = {
+      type: 'success',
+      text: 'Đã từ chối lời mời nhận việc thành công.',
+    };
+  } catch (err) {
+    // If decline API fails, DO NOT remove invitation from UI! Keep item and show error.
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể từ chối lời mời. Vui lòng kiểm tra kết nối mạng và thử lại.',
+    };
+  } finally {
+    responding.value = false;
   }
 };
 
@@ -85,6 +112,22 @@ const closeDetailModal = () => {
       <span class="text-xs font-bold font-num px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
         {{ invitations.length }} lời mời đang chờ
       </span>
+    </div>
+
+    <!-- Action / Error Message Banner -->
+    <div
+      v-if="actionMessage"
+      class="p-3 rounded-[var(--radius-sm)] text-xs font-medium flex items-center justify-between transition-all"
+      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border border-success-200' : 'bg-danger-50 text-danger-800 border border-danger-200'"
+    >
+      <div class="flex items-center gap-2">
+        <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
+        <AlertTriangle v-else :size="16" class="text-danger-600 shrink-0" />
+        <span>{{ actionMessage.text }}</span>
+      </div>
+      <button class="text-ink-400 hover:text-ink-700 ml-2" @click="actionMessage = null">
+        <X :size="14" />
+      </button>
     </div>
 
     <div v-if="loading" class="text-center py-16 text-ink-400">

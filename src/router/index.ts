@@ -127,6 +127,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/customer/CustomerProfilePage.vue'),
         meta: { title: 'Hồ sơ & Sổ địa chỉ' },
       },
+      {
+        path: 'notifications',
+        name: 'customer-notifications',
+        component: () => import('../pages/customer/CustomerNotificationsPage.vue'),
+        meta: { title: 'Thông báo' },
+      },
     ],
   },
 
