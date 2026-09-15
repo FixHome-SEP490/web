@@ -265,6 +265,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/console/admin/AdminPartsPage.vue'),
         meta: { title: 'Danh mục linh kiện', roles: ['ADMIN'] },
       },
+      {
+        path: 'admin/platform-dues',
+        name: 'admin-platform-dues',
+        component: () => import('../pages/console/admin/AdminPlatformDuesPage.vue'),
+        meta: { title: 'Công nợ Platform', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/audit-logs',
+        name: 'admin-audit-logs',
+        component: () => import('../pages/console/admin/AdminAuditLogsPage.vue'),
+        meta: { title: 'Nhật ký kiểm toán', roles: ['ADMIN'] },
+      },
     ],
   },
 

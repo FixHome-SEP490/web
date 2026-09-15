@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Receipt,
+  ScrollText,
 } from 'lucide-vue-next';
 
 const router = useRouter();
@@ -52,6 +54,8 @@ const navigation = computed(() => [
             { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
+            { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
+            { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },
       ]
