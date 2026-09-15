@@ -241,6 +241,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/console/admin/AdminConfigPage.vue'),
         meta: { title: 'Cấu hình hệ thống (24)', roles: ['ADMIN'] },
       },
+      {
+        path: 'admin/parts',
+        name: 'admin-parts',
+        component: () => import('../pages/console/admin/AdminPartsPage.vue'),
+        meta: { title: 'Danh mục linh kiện', roles: ['ADMIN'] },
+      },
     ],
   },
 

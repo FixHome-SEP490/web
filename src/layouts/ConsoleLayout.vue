@@ -11,6 +11,7 @@ import {
   Ban,
   ShieldAlert,
   FolderKanban,
+  Package,
   Sliders,
   ChevronLeft,
   ChevronRight,
@@ -46,6 +47,7 @@ const navigation = computed(() => [
           items: [
             { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
             { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
+            { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
           ],
