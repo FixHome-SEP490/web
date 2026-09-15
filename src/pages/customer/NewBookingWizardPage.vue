@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   Wrench,
   MapPin,
@@ -17,8 +17,10 @@ import {
 } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { ordersApi } from '../../api/orders.api';
 import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
 
+const route = useRoute();
 const router = useRouter();
 
 const step = ref(1);
@@ -32,12 +34,13 @@ const selectedServiceId = ref('');
 const description = ref('');
 const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
 const quantity = ref(1);
-const preferredTimeWindow = ref('08:00 - 12:00');
+const preferredEnd = ref('');
+const error = ref('');
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
-const preferredDate = ref('TODAY');
-const preferredTime = ref('EARLIEST');
+const preferredDate = ref('');
+
 
 // AI Diagnosis Result
 const aiResult = ref<DiagnosisResult | null>(null);
@@ -62,7 +65,23 @@ onMounted(async () => {
       profileApi.getAddresses(),
     ]);
     categories.value = cats;
-    if (cats.length > 0) {
+    const queryServiceId = route.query.serviceId as string;
+    let serviceSelected = false;
+
+    if (queryServiceId && cats.length > 0) {
+      for (const cat of cats) {
+        const found = cat.services?.find((s) => s.id === queryServiceId);
+        if (found) {
+          selectedCategoryId.value = cat.id;
+          services.value = cat.services ?? [];
+          selectedServiceId.value = found.id;
+          serviceSelected = true;
+          break;
+        }
+      }
+    }
+
+    if (!serviceSelected && cats.length > 0) {
       selectedCategoryId.value = cats[0].id;
       services.value = cats[0].services ?? [];
       if (services.value.length > 0) {
@@ -70,20 +89,17 @@ onMounted(async () => {
       }
     }
     addresses.value = addrs;
+    if (route.query.rebookFrom) {
+      const previous = await bookingsApi.getBooking(String(route.query.rebookFrom));
+      selectedServiceId.value = previous.serviceId;
+      description.value = previous.description;
+      quantity.value = previous.quantity ?? 1;
+    }
     const defAddr = addrs.find((a) => a.isDefault);
     if (defAddr) selectedAddressId.value = defAddr.id;
     else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
   } catch {
-    // Fallback if offline
-    categories.value = [
-      { id: 'cat-1', name: 'Điện lạnh', code: 'DIEN_LANH', sortOrder: 1, isActive: true },
-      { id: 'cat-2', name: 'Điện & Nước', code: 'DIEN_NUOC', sortOrder: 2, isActive: true },
-    ];
-    services.value = [
-      { id: 's1', categoryId: 'cat-1', name: 'Sửa điều hòa không mát / chảy nước', code: 'SUA_DH', estimatedMinutes: 60, isActive: true },
-    ];
-    selectedCategoryId.value = 'cat-1';
-    selectedServiceId.value = 's1';
+    error.value = 'Không tải được danh mục hoặc địa chỉ. Vui lòng tải lại trang.';
   }
 });
 
@@ -111,7 +127,7 @@ const goToStep2 = () => {
 };
 
 const goToStep3 = async () => {
-  if (!selectedAddressId.value && addresses.value.length > 0) {
+  if (!selectedAddressId.value) {
     window.alert('Vui lòng chọn địa chỉ sửa chữa.');
     return;
   }
@@ -124,30 +140,30 @@ const goToStep3 = async () => {
     });
     aiResult.value = res;
   } catch {
-    aiResult.value = {
-      possibleIssues: ['Lưới lọc bẩn hoặc thiếu gas'],
-      possibleCauses: ['Chưa bảo dưỡng hơn 6 tháng'],
-      suggestedPriceMin: 150000,
-      suggestedPriceMax: 350000,
-      confidence: 0.9,
-    };
+    aiResult.value = null;
+    error.value = 'AI hiện chưa khả dụng. Bạn vẫn có thể tiếp tục đặt dịch vụ thủ công.';
   } finally {
     loading.value = false;
   }
 };
 
 const createAndFindTech = async () => {
+  if (loading.value) return;
+  const start = new Date(preferredDate.value);
+  const end = new Date(preferredEnd.value);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start <= new Date() || end <= start) { error.value = 'Chọn thời gian bắt đầu trong tương lai và kết thúc sau thời gian bắt đầu.'; return; }
   loading.value = true;
   try {
-    const booking = await bookingsApi.createBooking({
+    const payload = {
       serviceId: selectedServiceId.value,
-      addressId: selectedAddressId.value || 'mock-addr',
+      addressId: selectedAddressId.value,
       description: description.value,
-      preferredAt: new Date().toISOString(),
-      preferredTimeWindow: preferredTimeWindow.value,
+      preferredStartAt: start.toISOString(),
+      preferredEndAt: end.toISOString(),
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
-    });
+    };
+    const booking = route.query.rebookFrom ? await ordersApi.rebook(String(route.query.rebookFrom), { preferredStartAt: payload.preferredStartAt, preferredEndAt: payload.preferredEndAt, quantity: payload.quantity, problemDescription: payload.description }) : await bookingsApi.createBooking(payload);
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch {
     window.alert('Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
@@ -159,6 +175,7 @@ const createAndFindTech = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-6">
+    <p v-if="error" role="alert" class="rounded border border-amber-300 bg-amber-50 p-3 text-sm">{{ error }}</p>
     <!-- Stepper Navigation Header -->
     <div class="bg-white rounded-[var(--radius-md)] border border-ink-200 p-4 shadow-[var(--shadow-e1)]">
       <div class="flex items-center justify-between text-xs font-semibold">
@@ -338,27 +355,12 @@ const createAndFindTech = async () => {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-ink-100">
             <div>
               <label class="block font-semibold text-ink-700 mb-1.5">Ngày hẹn</label>
-              <select
-                v-model="preferredDate"
-                class="w-full h-10 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-xs sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600"
-              >
-                <option value="TODAY">Hôm nay (Càng sớm càng tốt)</option>
-                <option value="TOMORROW">Ngày mai</option>
-                <option value="WEEKEND">Cuối tuần này</option>
-              </select>
+              <input v-model="preferredDate" type="datetime-local" class="w-full border border-ink-200 rounded p-2" aria-label="Bắt đầu khung giờ" />
             </div>
 
             <div>
               <label class="block font-semibold text-ink-700 mb-1.5">Khung giờ mong muốn</label>
-              <select
-                v-model="preferredTime"
-                class="w-full h-10 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-xs sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600"
-              >
-                <option value="EARLIEST">Sớm nhất (Thợ có mặt ngay)</option>
-                <option value="MORNING">Buổi sáng (08:00 – 12:00)</option>
-                <option value="AFTERNOON">Buổi chiều (13:30 – 17:30)</option>
-                <option value="EVENING">Buổi tối (18:00 – 20:30)</option>
-              </select>
+              <input v-model="preferredEnd" type="datetime-local" class="w-full border border-ink-200 rounded p-2" aria-label="Kết thúc khung giờ" />
             </div>
           </div>
         </div>

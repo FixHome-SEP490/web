@@ -1,5 +1,6 @@
 // src/api/orders.api.ts
 import apiClient from './client';
+import { unwrap } from './response';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -20,6 +21,12 @@ export interface ServiceOrderItem {
   code: string;
   bookingId: string;
   serviceName: string;
+  pricingMode?: string;
+  completionRequestedAt?: string;
+  customerConfirmed?: boolean;
+  arrivalVerified?: boolean;
+  beforeEvidenceCount?: number;
+  afterEvidenceCount?: number;
   status: CanonicalOrderStatus;
   customerName: string;
   customerPhone: string;
@@ -45,10 +52,15 @@ export interface ServiceOrderItem {
   }[];
   quotation?: {
     id: string;
-    status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'approved' | 'draft' | 'pending';
+    status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED' | 'approved' | 'draft' | 'pending';
     laborTotal: number;
     partsTotal: number;
     items: {
+      id?: string;
+      partSource?: string;
+      partWarrantyOption?: string;
+      warrantyFee?: number;
+      warrantyTermDays?: number;
       type: 'LABOR' | 'PARTS';
       description: string;
       quantity: number;
@@ -90,256 +102,62 @@ export interface QuotationItemPayload {
   unitPrice: number;
   lineTotal?: number;
   warrantyDays?: number;
+  partSource?: 'FIXHOME' | 'TECHNICIAN' | 'fixhome' | 'technician';
+  partWarrantyOption?: 'no_warranty' | 'included' | 'paid_warranty';
+  warrantyFee?: number;
+  warrantyTermDays?: number;
 }
 
+export interface CostRequest {
+  id: string; serviceOrderId: string; status: string; reason: string; totalLaborDelta: number; totalPartsDelta: number; createdAt: string;
+  items: Array<QuotationItemPayload & { id: string; lineTotal: number }>;
+}
+export interface RepairHistoryItem { orderId: string; bookingId: string; code: string; status: string; serviceName?: string; technicianName?: string; laborTotal: number; partsTotal: number; grandTotal: number; completedAt?: string; cancelledAt?: string; }
+export interface ReviewItem { id: string; rating: number; comment?: string; createdAt?: string; }
+export interface EvidenceResponse { id: string; serviceOrderId: string; type: 'BEFORE' | 'AFTER' | 'ADDITIONAL'; mediaUrl: string; note?: string; capturedAt?: string; createdAt: string; }
+const get = async <T>(url: string): Promise<T> => unwrap<T>((await apiClient.get(url)).data);
+const post = async (url: string, body: unknown = {}): Promise<Record<string, unknown>> => unwrap((await apiClient.post(url,body)).data);
+const normalizeOrder = (order: ServiceOrderItem): ServiceOrderItem => ({ ...order, status: order.status.toUpperCase() as CanonicalOrderStatus, paymentStatus: order.paymentStatus.toUpperCase() as ServiceOrderItem['paymentStatus'], quotation: order.quotation ? { ...order.quotation, status: order.quotation.status.toUpperCase() as NonNullable<ServiceOrderItem['quotation']>['status'], items: order.quotation.items.map(item => ({ ...item, type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS' })) } : undefined });
+const wireItems = (items: QuotationItemPayload[]) => items.map(item => ({ type: item.type === 'LABOR' ? 'labor' : 'parts_equipment', description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, ...(item.type === 'LABOR' ? { warrantyDays: item.warrantyDays } : { partSource: item.partSource?.toLowerCase(), partWarrantyOption: item.partWarrantyOption ?? 'no_warranty', ...(item.partWarrantyOption === 'paid_warranty' ? { warrantyFee: item.warrantyFee, warrantyTermDays: item.warrantyTermDays } : {}) }) }));
 export const ordersApi = {
-  // ── Queries ──
-
-  async getCustomerOrders(): Promise<ServiceOrderItem[]> {
-    try {
-      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders/my');
-      const payload = res.data;
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
-        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
-      }
-      return [];
-    } catch {
-      return [
-        {
-          id: 'ord-101',
-          code: 'FH-20260913-0001',
-          bookingId: 'bk-829102',
-          serviceName: 'Sửa điều hòa không mát / chảy nước',
-          status: 'UNDER_REPAIR',
-          customerName: 'Hoàng Anh Tuấn',
-          customerPhone: '0988123456',
-          addressSummary: 'P.402 Sunrise Building, Cầu Giấy, Hà Nội',
-          scheduledAt: new Date(Date.now() - 3600000).toISOString(),
-          technician: {
-            id: 'tech-1',
-            fullName: 'Nguyễn Văn Hùng',
-            phoneNumber: '0912345678',
-            averageRating: 4.95,
-          },
-          laborTotal: 180000,
-          partsTotal: 120000,
-          grandTotal: 300000,
-          paymentStatus: 'UNPAID',
-          createdAt: new Date(Date.now() - 7200000).toISOString(),
-          timeline: [
-            { status: 'ACCEPTED', title: 'Thợ nhận đơn', timestamp: '08:45', actor: 'Hệ thống' },
-            { status: 'EN_ROUTE', title: 'Thợ bắt đầu di chuyển', timestamp: '09:00', actor: 'Kỹ thuật viên' },
-            { status: 'UNDER_REPAIR', title: 'Thợ đã check-in và bắt đầu sửa', timestamp: '09:35', actor: 'Kỹ thuật viên' },
-          ],
-          quotation: {
-            id: 'q-1',
-            status: 'ACCEPTED',
-            laborTotal: 180000,
-            partsTotal: 120000,
-            items: [
-              { type: 'LABOR', description: 'Công thông tắc máng thoát nước và vệ sinh lưới', quantity: 1, unitPrice: 180000, lineTotal: 180000 },
-              { type: 'PARTS', description: 'Thay đoạn ống thoát mềm bảo ôn 1.5m', quantity: 1, unitPrice: 120000, lineTotal: 120000, warrantyDays: 90 },
-            ],
-          },
-        },
-      ];
-    }
+  async getCustomerOrders(): Promise<ServiceOrderItem[]> { return (await get<ServiceOrderItem[]>('/service-orders/my')).map(normalizeOrder); },
+  async getTechnicianJobs(): Promise<ServiceOrderItem[]> { return (await get<ServiceOrderItem[]>('/service-orders/my')).map(normalizeOrder); },
+  async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const response = await apiClient.get('/service-orders', { params: { status: statusFilter?.toLowerCase() } }); return unwrap<ServiceOrderItem[]>(response.data).map(normalizeOrder); },
+  async getOrder(id: string): Promise<ServiceOrderItem> { return normalizeOrder(await get<ServiceOrderItem>('/service-orders/'+id)); },
+  async enRoute(id: string) { return post('/service-orders/'+id+'/en-route'); },
+  async checkIn(id: string, coords: { lat: number; lng: number; accuracyMeters?: number }) { return post('/service-orders/'+id+'/check-in', coords); },
+  async startRepair(id: string) { return post('/service-orders/'+id+'/start-repair'); },
+  async uploadEvidence(id: string, body: { phase: 'BEFORE' | 'AFTER'; file: File; caption?: string }) {
+    const form = new FormData();
+    form.append('type', body.phase.toLowerCase()); form.append('file', body.file);
+    if (body.caption) form.append('note', body.caption);
+    return unwrap((await apiClient.post('/service-orders/'+id+'/evidence', form, { headers: { 'Content-Type': undefined }, timeout: 30000 })).data);
   },
-
-  async getTechnicianJobs(): Promise<ServiceOrderItem[]> {
-    try {
-      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders/my');
-      const payload = res.data;
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
-        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
-      }
-      return [];
-    } catch {
-      return [
-        {
-          id: 'ord-101',
-          code: 'FH-20260913-0001',
-          bookingId: 'bk-829102',
-          serviceName: 'Sửa điều hòa không mát / chảy nước',
-          status: 'EN_ROUTE',
-          customerName: 'Nguyễn Thu Trang',
-          customerPhone: '0988654321',
-          addressSummary: 'P.402 Sunrise Building, Cầu Giấy, Hà Nội',
-          scheduledAt: new Date().toISOString(),
-          laborTotal: 180000,
-          partsTotal: 120000,
-          grandTotal: 300000,
-          paymentStatus: 'UNPAID',
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    }
-  },
-
-  async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> {
-    try {
-      const res = await apiClient.get<ApiResponse<ServiceOrderItem[]> | ServiceOrderItem[]>('/service-orders', {
-        params: { status: statusFilter },
-      });
-      const payload = res.data;
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray((payload as ApiResponse<ServiceOrderItem[]>).data)) {
-        return (payload as ApiResponse<ServiceOrderItem[]>).data || [];
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  },
-
-  async getOrder(id: string): Promise<ServiceOrderItem> {
-    try {
-      const res = await apiClient.get<ApiResponse<ServiceOrderItem> | ServiceOrderItem>(`/service-orders/${id}`);
-      const payload = res.data;
-      if (payload && 'id' in payload && (payload as ServiceOrderItem).id) {
-        return payload as ServiceOrderItem;
-      }
-      if (payload && 'data' in payload && (payload as ApiResponse<ServiceOrderItem>).data) {
-        return (payload as ApiResponse<ServiceOrderItem>).data as ServiceOrderItem;
-      }
-    } catch {
-      // Fallback
-    }
-    const list = await this.getCustomerOrders();
-    return list.find((o) => o.id === id || o.code === id) || list[0];
-  },
-
-  // ── Spec v1.2: Order Execution & Lifecycle Transitions ──
-
-  async enRoute(orderId: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/en-route`);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async checkIn(
-    orderId: string,
-    coords: { lat: number; lng: number; accuracyMeters?: number },
-  ): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/check-in`, {
-      lat: coords.lat,
-      lng: coords.lng,
-      accuracyMeters: coords.accuracyMeters ?? 20,
-    });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async startRepair(orderId: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/start`);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async uploadEvidence(
-    orderId: string,
-    body: { phase: 'BEFORE' | 'AFTER'; mediaUrl: string; caption?: string },
-  ): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, body);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async completeRepair(
-    orderId: string,
-    body?: { completionNote?: string },
-  ): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/complete`, body || {});
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cancel`, { reason });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  // ── Quotations ──
-
-  async submitQuotation(orderId: string, items: QuotationItemPayload[]): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>('/quotations', {
-      serviceOrderId: orderId,
-      items,
-    });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async approveQuotation(quotationId: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/quotations/${quotationId}/approve`);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async rejectQuotation(quotationId: string, reason?: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/quotations/${quotationId}/reject`, { reason });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  // ── Spec v1.2: Cash Settlement Dual-Confirmation ──
-
-  async declareCashSettlement(
-    orderId: string,
-    body: { declaredAmount: number; technicianNotes?: string; receiptEvidenceUrl?: string },
-  ): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(
-      `/service-orders/${orderId}/cash-settlement/declare`,
-      body,
-    );
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async confirmCashSettlement(
-    orderId: string,
-    body: { agreed: boolean; disputeReason?: string; confirmedAmount?: number },
-  ): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(
-      `/service-orders/${orderId}/cash-settlement/confirm`,
-      body,
-    );
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async getCashSettlement(orderId: string): Promise<Record<string, unknown> | null> {
-    try {
-      const res = await apiClient.get<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cash-settlement`);
-      return (res.data?.data || res.data || null) as Record<string, unknown> | null;
-    } catch {
-      return null;
-    }
-  },
-
-  // ── Invoice & Warranties ──
-
-  async getInvoice(orderId: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.get<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/invoice`);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
-  async payInvoice(invoiceId: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/invoices/${invoiceId}/pay`);
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
-
+  async requestCompletion(id: string, body?: { completionNote?: string }) { return post('/service-orders/'+id+'/request-completion', body); },
+  async confirmCompletion(id: string, body?: { feedback?: string; rating?: number; signatureUrl?: string }) { return post('/service-orders/'+id+'/confirm-completion', body); },
+  async completeRepair(id: string, body?: { completionNote?: string }) { return post('/service-orders/'+id+'/complete', body); },
+  async cancelOrder(id: string, reason: string) { return post('/service-orders/'+id+'/cancel', { reason }); },
+  async submitQuotation(id: string, items: QuotationItemPayload[], note?: string) { return post('/service-orders/'+id+'/quotations', { items: wireItems(items), note }); },
+  async approveQuotation(id: string, paidWarrantyItemIds: string[] = []) { return post('/quotations/'+id+'/decision', { action: 'APPROVE', paidWarrantyItemIds }); },
+  async rejectQuotation(id: string) { return post('/quotations/'+id+'/decision', { action: 'REJECT' }); },
+  async createAdditionalCost(id: string, body: { reason: string; items: QuotationItemPayload[] }) { return post('/service-orders/'+id+'/additional-costs', { reason: body.reason, items: wireItems(body.items) }); },
+  async getAdditionalCosts(id: string): Promise<CostRequest[]> { return get('/service-orders/'+id+'/additional-costs'); },
+  async decideAdditionalCost(id: string, action: 'APPROVE' | 'REJECT', paidWarrantyItemIds: string[] = []) { return post('/additional-costs/'+id+'/decision', { action, paidWarrantyItemIds }); },
+  async getEvidence(id: string): Promise<EvidenceResponse[]> { return (await get<EvidenceResponse[]>('/service-orders/'+id+'/evidence')).map(e => ({ ...e, type: e.type.toUpperCase() as EvidenceResponse['type'] })); },
+  async submitReview(id: string, body: { rating: number; comment?: string }) { return post('/service-orders/'+id+'/reviews', body); },
+  async getOrderReview(id: string): Promise<ReviewItem | null> { return get('/service-orders/'+id+'/reviews'); },
+  async getTechnicianReviews(id: string, page=1, pageSize=10): Promise<{ data: ReviewItem[]; total: number }> { const response = await apiClient.get('/technicians/'+id+'/reviews', { params: { page, pageSize } }); return { data: unwrap(response.data), total: response.data.meta?.total ?? 0 }; },
+  async rebook(id: string, body: { preferredStartAt: string; preferredEndAt: string; problemDescription?: string; quantity?: number }) { return post('/bookings/'+id+'/rebook', body); },
+  async getRepairHistory(page=1, pageSize=20): Promise<{ data: RepairHistoryItem[]; total: number }> { const response = await apiClient.get('/repair-history', { params: { page, pageSize } }); return { data: unwrap(response.data), total: response.data.meta?.total ?? 0 }; },
+  async declareCashSettlement(id: string, body: { declaredAmount: number; technicianNotes?: string; receiptEvidenceUrl?: string }) { return post('/service-orders/'+id+'/cash-settlement/declare', body); },
+  async confirmCashSettlement(id: string, body: { agreed: boolean; disputeReason?: string; confirmedAmount?: number }) { return post('/service-orders/'+id+'/cash-settlement/confirm', body); },
+  async getCashSettlement(id: string): Promise<Record<string, unknown> | null> { return get('/service-orders/'+id+'/cash-settlement'); },
+  async getInvoice(id: string): Promise<Record<string, unknown>> { return (await get<Record<string, unknown> | null>('/service-orders/'+id+'/invoice')) ?? {}; },
+  async payInvoice(id: string) { return post('/invoices/'+id+'/pay'); },
   async getWarranties(): Promise<WarrantyItem[]> {
-    return [
-      {
-        id: 'w-1',
-        orderCode: 'FH-20260913-0001',
-        serviceName: 'Sửa điều hòa rò nước',
-        itemDescription: 'Đoạn ống thoát mềm bảo ôn 1.5m',
-        startsAt: '2026-09-13',
-        expiresAt: '2026-12-13',
-        status: 'ACTIVE',
-        technicianName: 'Nguyễn Văn Hùng',
-      },
-    ];
+    const orders = await this.getCustomerOrders();
+    const coverages = await Promise.all(orders.filter(o=>o.status==='COMPLETED').map(async order => (await get<WarrantyItem[]>('/service-orders/'+order.id+'/warranties')).map(w => ({ ...w, orderCode: order.code, serviceName: order.serviceName, technicianName: order.technician?.fullName ?? '', status: w.status.toUpperCase() as WarrantyItem['status'] }))));
+    return coverages.flat();
   },
-
-  async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/warranty-claims`, {
-      description,
-    });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
-  },
+  async createWarrantyClaim(id: string, description: string) { return post('/service-orders/'+id+'/warranty-claims', { description }); },
 };

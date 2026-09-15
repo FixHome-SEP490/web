@@ -1,5 +1,6 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends object">
 import { Loader2 } from 'lucide-vue-next';
+import { useSlots } from 'vue';
 
 export interface TableColumn {
   key: string;
@@ -10,15 +11,30 @@ export interface TableColumn {
 
 interface Props {
   columns: TableColumn[];
-  rows: Record<string, unknown>[];
+  rows: T[];
   loading?: boolean;
   emptyText?: string;
+  rowClass?: string;
 }
 
 withDefaults(defineProps<Props>(), {
   loading: false,
   emptyText: 'Không có dữ liệu',
+  rowClass: '',
 });
+
+const emit = defineEmits<{
+  (e: 'row-click', row: T): void;
+}>();
+
+const slots = useSlots();
+
+const getSlotName = (key: string): string => {
+  // Support both cell-{key} and cell({key}) patterns
+  if (slots[`cell-${key}`]) return `cell-${key}`;
+  if (slots[`cell(${key})`]) return `cell(${key})`;
+  return `cell-${key}`;
+};
 </script>
 
 <template>
@@ -63,6 +79,8 @@ withDefaults(defineProps<Props>(), {
           v-else
           :key="rIdx"
           class="h-[56px] transition-colors duration-100 hover:bg-ink-25"
+          :class="rowClass"
+          @click="emit('row-click', row)"
         >
           <td
             v-for="col in columns"
@@ -72,8 +90,8 @@ withDefaults(defineProps<Props>(), {
               col.align === 'right' ? 'text-right font-num' : col.align === 'center' ? 'text-center' : 'text-left',
             ]"
           >
-            <slot :name="`cell(${col.key})`" :row="row" :value="row[col.key]">
-              {{ row[col.key] }}
+            <slot :name="getSlotName(col.key)" :row="row" :value="row[col.key as keyof T]">
+              {{ row[col.key as keyof T] }}
             </slot>
           </td>
         </tr>
@@ -81,3 +99,4 @@ withDefaults(defineProps<Props>(), {
     </table>
   </div>
 </template>
+

@@ -14,6 +14,8 @@ import {
   Navigation,
   DollarSign,
   AlertCircle,
+  Layers,
+  X,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -22,7 +24,7 @@ import {
   FhCostBreakdown,
   FhMoney,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type QuotationItemPayload } from '../../api/orders.api';
+import { ordersApi, type CostRequest, type ServiceOrderItem, type QuotationItemPayload } from '../../api/orders.api';
 
 const route = useRoute();
 const router = useRouter();
@@ -39,6 +41,7 @@ const gpsCheckedIn = ref(false);
 const beforePhotoUploaded = ref(false);
 const quotationSubmitted = ref(false);
 const afterPhotoUploaded = ref(false);
+const completionRequested = ref(false);
 const isCompleted = ref(false);
 
 // Cash Settlement State
@@ -47,13 +50,42 @@ const technicianCashNotes = ref('');
 const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 
-// Quotation Items Form (D-02 Standard)
-const quotationItems = ref<QuotationItemPayload[]>([
-  { type: 'LABOR', description: 'Công thông tắc máng thoát nước và xịt rửa', quantity: 1, unitPrice: 180000 },
-  { type: 'PARTS', description: 'Đoạn ống thoát mềm bảo ôn 1.5m', quantity: 1, unitPrice: 120000 },
+// Additional Costs State (Spec v1.4 D1-15)
+const additionalCosts = ref<CostRequest[]>([]);
+const isAddCostModalOpen = ref(false);
+const addCostReason = ref('');
+const addCostItems = ref<QuotationItemPayload[]>([
+  {
+    type: 'PARTS',
+    description: 'Vật tư phát sinh ngoài khảo sát ban đầu',
+    quantity: 1,
+    unitPrice: 150000,
+    partSource: 'TECHNICIAN',
+    partWarrantyOption: 'no_warranty',
+    warrantyTermDays: 30,
+  },
 ]);
 
-const warrantyDays = ref(90);
+// Quotation Items Form (D-02 Standard & BRX-052)
+const quotationItems = ref<QuotationItemPayload[]>([
+  {
+    type: 'LABOR',
+    description: 'Công thông tắc máng thoát nước và xịt rửa',
+    quantity: 1,
+    unitPrice: 180000,
+  },
+  {
+    type: 'PARTS',
+    description: 'Đoạn ống thoát mềm bảo ôn 1.5m',
+    quantity: 1,
+    unitPrice: 120000,
+    partSource: 'TECHNICIAN',
+    partWarrantyOption: 'no_warranty',
+    warrantyTermDays: 90,
+  },
+]);
+
+const defaultWarrantyDays = ref(90);
 
 onMounted(async () => {
   await loadJob();
@@ -65,18 +97,24 @@ const loadJob = async () => {
     const data = await ordersApi.getOrder(jobId);
     job.value = data;
 
+    gpsCheckedIn.value = Boolean(data.arrivalVerified);
+    beforePhotoUploaded.value = Boolean(data.beforeEvidenceCount);
+    afterPhotoUploaded.value = Boolean(data.afterEvidenceCount);
+    completionRequested.value = Boolean(data.completionRequestedAt);
+    quotationSubmitted.value = Boolean(data.quotation);
+    isCompleted.value = String(data.status).toUpperCase() === 'COMPLETED';
     const status = String(data.status).toUpperCase();
     if (status === 'EN_ROUTE') {
       isEnRoute.value = true;
     } else if (status === 'UNDER_REPAIR') {
       isEnRoute.value = true;
       gpsCheckedIn.value = true;
-      beforePhotoUploaded.value = true;
+      await loadJob();
     } else if (status === 'COMPLETED') {
       isEnRoute.value = true;
       gpsCheckedIn.value = true;
       beforePhotoUploaded.value = true;
-      afterPhotoUploaded.value = true;
+      await loadJob();
       isCompleted.value = true;
     }
 
@@ -84,7 +122,7 @@ const loadJob = async () => {
       declaredCashAmount.value = data.grandTotal;
     }
 
-    // Check cash settlement
+    // Load cash settlement
     try {
       const settlement = await ordersApi.getCashSettlement(jobId);
       if (settlement) {
@@ -98,6 +136,16 @@ const loadJob = async () => {
     } catch {
       // Ignored
     }
+
+    // Load additional costs (D1-15)
+    try {
+      const costs = await ordersApi.getAdditionalCosts(jobId);
+      additionalCosts.value = Array.isArray(costs) ? costs : [];
+    } catch {
+      additionalCosts.value = [];
+    }
+  } catch {
+    actionMessage.value = { type: 'error', text: 'Không tải được dữ liệu đơn. Vui lòng thử lại.' };
   } finally {
     loading.value = false;
   }
@@ -114,12 +162,25 @@ const partsTotal = () =>
     .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 
 const addItem = (type: 'LABOR' | 'PARTS') => {
-  quotationItems.value.push({
-    type,
-    description: type === 'LABOR' ? 'Hạng mục công kỹ thuật' : 'Tên linh kiện thay thế',
-    quantity: 1,
-    unitPrice: 50000,
-  });
+  if (type === 'LABOR') {
+    quotationItems.value.push({
+      type: 'LABOR',
+      description: 'Hạng mục công kỹ thuật',
+      quantity: 1,
+      unitPrice: 50000,
+    });
+  } else {
+    quotationItems.value.push({
+      type: 'PARTS',
+      description: 'Tên linh kiện thay thế',
+      quantity: 1,
+      unitPrice: 100000,
+      partSource: 'TECHNICIAN',
+      partWarrantyOption: 'no_warranty',
+      warrantyTermDays: 90,
+      warrantyFee: 0,
+    });
+  }
 };
 
 const removeItem = (idx: number) => {
@@ -132,7 +193,7 @@ const handleEnRoute = async () => {
     actionMessage.value = null;
     await ordersApi.enRoute(jobId);
     isEnRoute.value = true;
-    if (job.value) job.value.status = 'EN_ROUTE';
+    await loadJob();
     actionMessage.value = { type: 'success', text: 'Đã cập nhật: Đang trên đường tới nhà khách!' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể chuyển trạng thái đang di chuyển' };
@@ -146,24 +207,11 @@ const handleCheckIn = async () => {
     actionLoading.value = true;
     actionMessage.value = null;
 
-    let coords = { lat: 21.0285, lng: 105.8542, accuracyMeters: 25 };
-    if ('geolocation' in navigator) {
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000 });
-        });
-        coords = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyMeters: Math.round(pos.coords.accuracy || 20),
-        };
-      } catch {
-        // Fallback to sample coordinates
-      }
-    }
-
-    await ordersApi.checkIn(jobId, coords);
-    gpsCheckedIn.value = true;
+    if (!navigator.geolocation) throw new Error('Trình duyệt không hỗ trợ định vị.');
+    const pos = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true }));
+    const result = await ordersApi.checkIn(jobId, { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyMeters: pos.coords.accuracy });
+    if (result.result !== 'valid') throw new Error('GPS ngoài vùng phục vụ hoặc độ chính xác thấp. Hãy thử lại tại địa chỉ sửa chữa.');
+    await loadJob();
     actionMessage.value = { type: 'success', text: 'Check-in GPS thành công! Đã ghi nhận tọa độ hiện trường.' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Check-in thất bại hoặc ngoài bán kính cho phép.' };
@@ -172,14 +220,25 @@ const handleCheckIn = async () => {
   }
 };
 
+const selectEvidenceImage = () => new Promise<File | null>(resolve => {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/jpeg,image/png,image/webp';
+  input.setAttribute('capture', 'environment');
+  input.onchange = () => resolve(input.files?.[0] ?? null);
+  input.oncancel = () => resolve(null);
+  input.click();
+});
+
 const handleUploadBefore = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    const mediaUrl = 'https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=600&auto=format&fit=crop';
+    const file = await selectEvidenceImage();
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) throw new Error('Image must be at most 10 MB');
     await ordersApi.uploadEvidence(jobId, {
       phase: 'BEFORE',
-      mediaUrl,
+      file,
       caption: 'Ảnh hiện trạng lỗi trước khi sửa chữa',
     });
     beforePhotoUploaded.value = true;
@@ -200,7 +259,11 @@ const handleSubmitQuotation = async () => {
       description: i.description,
       quantity: i.quantity,
       unitPrice: i.unitPrice,
-      warrantyDays: i.type === 'PARTS' ? warrantyDays.value : undefined,
+      warrantyDays: i.type === 'PARTS' ? (i.warrantyTermDays || defaultWarrantyDays.value) : undefined,
+      partSource: i.type === 'PARTS' ? (i.partSource || 'TECHNICIAN') : undefined,
+      partWarrantyOption: i.type === 'PARTS' ? (i.partWarrantyOption || 'no_warranty') : undefined,
+      warrantyTermDays: i.type === 'PARTS' ? (i.warrantyTermDays || 90) : undefined,
+      warrantyFee: i.warrantyFee || 0,
     }));
     await ordersApi.submitQuotation(jobId, items);
     quotationSubmitted.value = true;
@@ -217,7 +280,7 @@ const handleStartRepair = async () => {
     actionLoading.value = true;
     actionMessage.value = null;
     await ordersApi.startRepair(jobId);
-    if (job.value) job.value.status = 'UNDER_REPAIR';
+    await loadJob();
     actionMessage.value = { type: 'success', text: 'Bắt đầu sửa chữa! Trạng thái: UNDER_REPAIR' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Chưa thể bắt đầu sửa chữa.' };
@@ -230,10 +293,12 @@ const handleUploadAfter = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    const mediaUrl = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=600&auto=format&fit=crop';
+    const file = await selectEvidenceImage();
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) throw new Error('Image must be at most 10 MB');
     await ordersApi.uploadEvidence(jobId, {
       phase: 'AFTER',
-      mediaUrl,
+      file,
       caption: 'Ảnh nghiệm thu sau khi hoàn tất sửa chữa',
     });
     afterPhotoUploaded.value = true;
@@ -245,6 +310,29 @@ const handleUploadAfter = async () => {
   }
 };
 
+// Two-step completion: Request completion from customer
+const handleRequestCompletion = async () => {
+  if (!afterPhotoUploaded.value) {
+    actionMessage.value = { type: 'error', text: 'Vui lòng chụp ảnh nghiệm thu AFTER trước khi gửi yêu cầu nghiệm thu!' };
+    return;
+  }
+  try {
+    actionLoading.value = true;
+    actionMessage.value = null;
+    await ordersApi.requestCompletion(jobId, { completionNote: 'Hoàn tất nghiệm thu kỹ thuật, chờ khách kiểm tra' });
+    completionRequested.value = true;
+    actionMessage.value = {
+      type: 'success',
+      text: 'Đã gửi yêu cầu nghiệm thu tới khách hàng! Chờ khách duyệt và đánh giá dịch vụ.',
+    };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu nghiệm thu.' };
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
+// Direct completion (fallback)
 const handleCompleteOrder = async () => {
   if (!afterPhotoUploaded.value) {
     actionMessage.value = { type: 'error', text: 'Vui lòng chụp ảnh nghiệm thu AFTER trước khi hoàn tất đơn!' };
@@ -255,8 +343,8 @@ const handleCompleteOrder = async () => {
     actionMessage.value = null;
     await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất nghiệm thu kỹ thuật' });
     isCompleted.value = true;
-    if (job.value) job.value.status = 'COMPLETED';
-    actionMessage.value = { type: 'success', text: 'Hoàn tất đơn sửa chữa! Hoá đơn và bảo hành điện tử đã được tạo.' };
+
+    actionMessage.value = { type: 'success', text: 'Hoàn tất đơn sửa chữa! Hoá đơn và bảo hành điện tử đã được kích hoạt.' };
     await loadJob();
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể hoàn tất đơn sửa chữa.' };
@@ -288,6 +376,48 @@ const handleDeclareCash = async () => {
     };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể khai báo thu tiền mặt.' };
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
+// Additional Costs Handlers
+const addAdditionalCostItem = (type: 'LABOR' | 'PARTS') => {
+  addCostItems.value.push({
+    type,
+    description: type === 'LABOR' ? 'Công phát sinh' : 'Linh kiện phát sinh',
+    quantity: 1,
+    unitPrice: 50000,
+    partSource: type === 'PARTS' ? 'TECHNICIAN' : undefined,
+  });
+};
+
+const removeAdditionalCostItem = (index: number) => {
+  addCostItems.value.splice(index, 1);
+};
+
+const handleSubmitAdditionalCost = async () => {
+  if (!addCostReason.value.trim()) {
+    actionMessage.value = { type: 'error', text: 'Vui lòng nhập lý do phát sinh chi phí!' };
+    return;
+  }
+  try {
+    actionLoading.value = true;
+    actionMessage.value = null;
+    await ordersApi.createAdditionalCost(jobId, {
+      reason: addCostReason.value.trim(),
+      items: addCostItems.value,
+    });
+    isAddCostModalOpen.value = false;
+    actionMessage.value = {
+      type: 'success',
+      text: 'Đã gửi đề xuất chi phí phát sinh cho khách hàng duyệt!',
+    };
+    // Refresh costs
+    const costs = await ordersApi.getAdditionalCosts(jobId);
+    additionalCosts.value = Array.isArray(costs) ? costs : [];
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi chi phí phát sinh.' };
   } finally {
     actionLoading.value = false;
   }
@@ -356,7 +486,7 @@ const handleDeclareCash = async () => {
 
       <!-- Workspace Workflow Stepper -->
       <div class="space-y-5">
-        <h3 class="text-base font-bold text-ink-900">Quy trình Thực thi Tiêu chuẩn (Spec v1.2)</h3>
+        <h3 class="text-base font-bold text-ink-900">Quy trình Thực thi Tiêu chuẩn (Spec v1.4)</h3>
 
         <!-- Phase 0: En Route -->
         <FhCard title="1. Khởi hành đến nhà khách (En Route)">
@@ -422,12 +552,12 @@ const handleDeclareCash = async () => {
           </div>
         </FhCard>
 
-        <!-- Phase 3: Quotation Submission (D-02 Standard) -->
-        <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)">
+        <!-- Phase 3: Quotation Submission (D-02 Standard & BRX-052) -->
+        <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard & Nguồn linh kiện)">
           <div class="space-y-4 text-xs">
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
-            <div class="space-y-2">
+            <div class="space-y-3">
               <div class="flex items-center justify-between font-semibold text-ink-700">
                 <span>Hạng mục chi phí:</span>
                 <div class="flex gap-2">
@@ -443,48 +573,105 @@ const handleDeclareCash = async () => {
                     class="text-[11px] text-ink-700 font-bold hover:underline flex items-center gap-1"
                     @click="addItem('PARTS')"
                   >
-                    <Plus :size="13" /> Thêm linh kiện
+                    <Plus :size="13" /> Thêm linh kiện / vật tư
                   </button>
                 </div>
               </div>
 
-              <div class="space-y-2">
+              <div class="space-y-3">
                 <div
                   v-for="(item, idx) in quotationItems"
                   :key="idx"
-                  class="p-2.5 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex items-center gap-2"
+                  class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2"
                 >
-                  <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
-                    :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-ink-200 text-ink-800'"
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                      :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-amber-100 text-amber-900'"
+                    >
+                      {{ item.type === 'LABOR' ? 'Công thợ' : 'Linh kiện' }}
+                    </span>
+
+                    <input
+                      v-model="item.description"
+                      type="text"
+                      placeholder="Mô tả công việc hoặc phụ tùng..."
+                      class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
+                    />
+
+                    <div class="flex items-center gap-1">
+                      <span class="text-[11px] text-ink-400">SL:</span>
+                      <input
+                        v-model.number="item.quantity"
+                        type="number"
+                        min="1"
+                        class="w-12 h-8 px-1.5 bg-white border border-ink-200 rounded text-xs text-center font-bold font-num"
+                      />
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                      <span class="text-[11px] text-ink-400">Đơn giá:</span>
+                      <input
+                        v-model.number="item.unitPrice"
+                        type="number"
+                        step="10000"
+                        class="w-28 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
+                      />
+                    </div>
+
+                    <button
+                      class="p-1 text-ink-400 hover:text-danger-500 rounded transition-colors"
+                      @click="removeItem(idx)"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
+
+                  <!-- Parts Extended Controls: Source & Warranty Options (Spec v1.4 BRX-052) -->
+                  <div
+                    v-if="item.type === 'PARTS'"
+                    class="pt-2 border-t border-ink-200/60 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]"
                   >
-                    {{ item.type === 'LABOR' ? 'Công' : 'Linh kiện' }}
-                  </span>
+                    <div>
+                      <label class="block text-ink-500 font-semibold mb-0.5">Nguồn gốc linh kiện:</label>
+                      <select
+                        v-model="item.partSource"
+                        class="w-full h-7 px-2 bg-white border border-ink-200 rounded text-[11px] font-medium"
+                      >
+                        <option value="FIXHOME" disabled>FixHome cấp (Bảo hành công ty)</option>
+                        <option value="TECHNICIAN">Thợ tự mang (Bảo hành cá nhân)</option>
+                      </select>
+                    </div>
 
-                  <input
-                    v-model="item.description"
-                    type="text"
-                    class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
-                  />
+                    <div>
+                      <label class="block text-ink-500 font-semibold mb-0.5">Chính sách bảo hành:</label>
+                      <select
+                        v-model="item.partWarrantyOption"
+                        class="w-full h-7 px-2 bg-white border border-ink-200 rounded text-[11px] font-medium"
+                      >
+                        <option value="paid_warranty">Bảo hành linh kiện</option>
+                        <option value="no_warranty">Không bảo hành</option>
+                      </select>
+                    </div>
 
-                  <input
-                    v-model.number="item.unitPrice"
-                    type="number"
-                    step="10000"
-                    class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
-                  />
-
-                  <button
-                    class="p-1 text-ink-400 hover:text-danger-500 rounded"
-                    @click="removeItem(idx)"
-                  >
-                    <Trash2 :size="14" />
-                  </button>
+                    <div v-if="item.partWarrantyOption !== 'no_warranty'">
+                      <label class="block text-ink-500 font-semibold mb-0.5">Thời hạn bảo hành:</label>
+                      <select
+                        v-model.number="item.warrantyTermDays"
+                        class="w-full h-7 px-2 bg-white border border-ink-200 rounded text-[11px] font-medium"
+                      >
+                        <option :value="30">30 ngày</option>
+                        <option :value="60">60 ngày</option>
+                        <option :value="90">90 ngày (Khuyến nghị)</option>
+                        <option :value="180">180 ngày (6 tháng)</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="pt-3 border-t border-ink-100 flex items-center justify-between">
+            <div class="pt-3 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
               <div class="text-xs">
                 <span class="text-ink-400">Tổng báo giá: </span>
                 <span class="font-bold text-brand-700 font-num text-sm">
@@ -496,7 +683,7 @@ const handleDeclareCash = async () => {
                 <FhButton
                   variant="secondary"
                   size="sm"
-                  :disabled="actionLoading"
+                  :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || (job.pricingMode !== 'fixed_price' && String(job.quotation?.status).toUpperCase() !== 'APPROVED')"
                   @click="handleStartRepair"
                 >
                   Bắt đầu sửa chữa (UNDER_REPAIR)
@@ -514,9 +701,55 @@ const handleDeclareCash = async () => {
           </div>
         </FhCard>
 
-        <!-- Phase 4: Evidence AFTER & Complete Repair -->
-        <FhCard title="5. Ảnh hoàn tất AFTER & Kích hoạt bảo hành điện tử">
+        <!-- Phase 3.5: Additional Costs Management (Spec v1.4 D1-15) -->
+        <FhCard title="4b. Chi phí phát sinh trong khi thi công (Additional Costs)">
+          <div class="space-y-3 text-xs">
+            <p class="text-ink-600">
+              Trường hợp phát sinh sự cố bất ngờ khi tháo lắp thiết bị, thợ có thể gửi đề xuất chi phí phát sinh kèm lý do kỹ thuật để khách hàng phê duyệt minh bạch.
+            </p>
+
+            <div v-if="additionalCosts.length > 0" class="space-y-2">
+              <div
+                v-for="c in additionalCosts"
+                :key="c.id"
+                class="p-3 bg-ink-50 rounded border border-ink-200 space-y-1"
+              >
+                <div class="flex items-center justify-between font-semibold">
+                  <span class="text-ink-900">Lý do: {{ c.reason }}</span>
+                  <span
+                    class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+                    :class="c.status === 'APPROVED' ? 'bg-success-100 text-success-800' : (c.status === 'REJECTED' ? 'bg-danger-100 text-danger-800' : 'bg-amber-100 text-amber-800')"
+                  >
+                    {{ c.status === 'APPROVED' ? 'Khách đã duyệt' : (c.status === 'REJECTED' ? 'Khách từ chối' : 'Chờ khách duyệt') }}
+                  </span>
+                </div>
+                <div class="text-[11px] text-ink-500 flex gap-4">
+                  <span>Công phát sinh: +<FhMoney :amount="c.totalLaborDelta || 0" /></span>
+                  <span>Phụ tùng phát sinh: +<FhMoney :amount="c.totalPartsDelta || 0" /></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-1">
+              <FhButton
+                variant="secondary"
+                size="sm"
+                :disabled="job.status !== 'UNDER_REPAIR' || actionLoading"
+                @click="isAddCostModalOpen = true"
+              >
+                <Layers :size="14" class="mr-1.5" /> Đề xuất chi phí phát sinh
+              </FhButton>
+            </div>
+          </div>
+        </FhCard>
+
+        <!-- Phase 4: Evidence AFTER & Two-Step Completion (Spec v1.4) -->
+        <FhCard title="5. Ảnh hoàn tất AFTER & Quy trình Nghiệm thu 2 bước">
           <div class="space-y-4 text-xs">
+            <p class="text-ink-600">
+              Chụp ảnh nghiệm thu hiện trường sạch sẽ sau sửa. Sau đó gửi yêu cầu nghiệm thu để khách hàng kiểm tra và bấm xác nhận hoàn tất.
+            </p>
+
             <div class="flex items-center gap-4">
               <div
                 class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
@@ -528,9 +761,9 @@ const handleDeclareCash = async () => {
               </div>
 
               <div class="flex-1 space-y-2">
-                <label class="block font-semibold text-ink-700">Thời hạn bảo hành linh kiện:</label>
+                <label class="block font-semibold text-ink-700">Thời hạn bảo hành linh kiện chuẩn:</label>
                 <select
-                  v-model.number="warrantyDays"
+                  v-model.number="defaultWarrantyDays"
                   class="h-9 px-3 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
                 >
                   <option :value="30">30 ngày (Tiêu chuẩn)</option>
@@ -541,25 +774,34 @@ const handleDeclareCash = async () => {
               </div>
             </div>
 
-            <div class="pt-4 border-t border-ink-100 flex justify-end">
+            <div class="pt-4 border-t border-ink-100 flex flex-wrap justify-end gap-2">
               <FhButton
-                variant="primary"
+                variant="secondary"
                 size="md"
                 :disabled="isCompleted || actionLoading"
                 @click="handleCompleteOrder"
               >
+                Hoàn tất trực tiếp
+              </FhButton>
+
+              <FhButton
+                variant="primary"
+                size="md"
+                :disabled="isCompleted || actionLoading"
+                @click="handleRequestCompletion"
+              >
                 <ShieldCheck :size="16" class="mr-1.5" />
-                {{ isCompleted ? 'Đơn hàng đã hoàn tất' : 'Xác nhận Hoàn tất & Kích hoạt bảo hành' }}
+                {{ completionRequested ? 'Đã gửi yêu cầu nghiệm thu (Chờ khách duyệt)' : (isCompleted ? 'Đơn hàng đã hoàn tất' : 'Yêu cầu Nghiệm thu (Gửi khách)') }}
               </FhButton>
             </div>
           </div>
         </FhCard>
 
-        <!-- Phase 5: Cash Dual Confirmation (Spec v1.2) -->
+        <!-- Phase 5: Cash Dual Confirmation (Spec v1.2 & v1.4) -->
         <FhCard title="6. Khai báo thu tiền mặt (Dual-Confirmation)">
           <div class="space-y-4 text-xs">
             <p class="text-ink-600">
-              Quy tắc Spec v1.2: Khi thu tiền mặt trực tiếp từ khách, thợ phải khai báo chính xác số tiền đã nhận. Khách hàng sẽ bấm xác nhận trên điện thoại để hoàn tất thanh toán và sinh công nợ hoa hồng 10% tiền công.
+              Quy tắc Spec v1.2/v1.4: Khi thu tiền mặt trực tiếp từ khách, thợ phải khai báo chính xác số tiền đã nhận. Khách hàng sẽ bấm xác nhận trên web/app để hoàn tất thanh toán và sinh công nợ hoa hồng FixHome.
             </p>
 
             <div v-if="cashSettled" class="p-3 bg-brand-50 rounded-lg border border-brand-200 space-y-1">
@@ -599,7 +841,7 @@ const handleDeclareCash = async () => {
                 <FhButton
                   variant="primary"
                   size="sm"
-                  :disabled="!isCompleted || actionLoading"
+                  :disabled="!completionRequested || isCompleted || actionLoading"
                   @click="handleDeclareCash"
                 >
                   <DollarSign :size="14" class="mr-1" />
@@ -609,6 +851,113 @@ const handleDeclareCash = async () => {
             </div>
           </div>
         </FhCard>
+      </div>
+    </div>
+
+    <!-- Additional Cost Modal -->
+    <div
+      v-if="isAddCostModalOpen"
+      class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm"
+    >
+      <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-ink-100 pb-3">
+          <h3 class="font-bold text-base text-ink-900 flex items-center gap-2">
+            <Layers :size="18" class="text-brand-600" />
+            Đề xuất Chi phí phát sinh (D1-15)
+          </h3>
+          <button
+            class="text-ink-400 hover:text-ink-600"
+            @click="isAddCostModalOpen = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold text-ink-700 mb-1">Lý do phát sinh:</label>
+            <textarea
+              v-model="addCostReason"
+              rows="2"
+              placeholder="VD: Dây điện chập cháy ngầm trong tường cần thay mới hoàn toàn..."
+              class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
+            ></textarea>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between font-semibold text-ink-700">
+              <span>Hạng mục phát sinh:</span>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="text-[11px] text-brand-600 font-bold hover:underline"
+                  @click="addAdditionalCostItem('LABOR')"
+                >
+                  + Thêm công
+                </button>
+                <button
+                  type="button"
+                  class="text-[11px] text-ink-700 font-bold hover:underline"
+                  @click="addAdditionalCostItem('PARTS')"
+                >
+                  + Thêm linh kiện
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-for="(item, idx) in addCostItems"
+              :key="idx"
+              class="p-2.5 bg-ink-50 rounded border border-ink-200 flex items-center gap-2"
+            >
+              <span
+                class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-amber-100 text-amber-800'"
+              >
+                {{ item.type === 'LABOR' ? 'Công' : 'Vật tư' }}
+              </span>
+
+              <input
+                v-model="item.description"
+                type="text"
+                placeholder="Tên hạng mục..."
+                class="flex-1 h-7 px-2 bg-white border border-ink-200 rounded text-xs"
+              />
+
+              <input
+                v-model.number="item.unitPrice"
+                type="number"
+                step="10000"
+                class="w-24 h-7 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
+              />
+
+              <button
+                class="p-1 text-ink-400 hover:text-danger-500 rounded"
+                @click="removeAdditionalCostItem(idx)"
+              >
+                <Trash2 :size="14" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-ink-100">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            @click="isAddCostModalOpen = false"
+          >
+            Hủy bỏ
+          </FhButton>
+          <FhButton
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="handleSubmitAdditionalCost"
+          >
+            Gửi đề xuất tới khách
+          </FhButton>
+        </div>
       </div>
     </div>
   </div>

@@ -81,9 +81,9 @@ const filteredOrders = computed(() => {
           class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
         >
           <option value="ALL">Tất cả trạng thái</option>
-          <option value="PENDING_MATCHING">Đang ghép thợ (PENDING_MATCHING)</option>
-          <option value="ASSIGNED">Đã gán thợ (ASSIGNED)</option>
-          <option value="IN_PROGRESS">Đang sửa chữa (IN_PROGRESS)</option>
+          <option value="ACCEPTED">Đã nhận đơn (ACCEPTED)</option>
+          <option value="EN_ROUTE">Đang di chuyển (EN_ROUTE)</option>
+          <option value="UNDER_REPAIR">Đang sửa chữa (UNDER_REPAIR)</option>
           <option value="COMPLETED">Hoàn tất (COMPLETED)</option>
           <option value="CANCELLED">Đã huỷ (CANCELLED)</option>
         </select>
@@ -103,6 +103,8 @@ const filteredOrders = computed(() => {
           { key: 'actions', label: 'Chi tiết', width: '90px' },
         ]"
         :rows="filteredOrders"
+        row-class="cursor-pointer hover:bg-ink-50/80 transition-colors"
+        @row-click="(row: ServiceOrderItem) => router.push(`/console/orders/${row.id}`)"
       >
         <template #cell-code="{ row }">
           <span class="font-mono text-xs font-bold text-ink-900">{{ row.code }}</span>

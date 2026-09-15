@@ -8,6 +8,9 @@ import {
   User,
   ShieldAlert,
   UserCheck,
+  CheckCircle2,
+  AlertCircle,
+  Image,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -32,6 +35,7 @@ const showReassignModal = ref(false);
 const showCancelModal = ref(false);
 const reassignTechId = ref('tech-2');
 const reassignReason = ref('Thợ bận sự cố đột xuất cần đổi người thay thế');
+const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 onMounted(async () => {
   try {
@@ -52,7 +56,7 @@ const handleReassign = () => {
     };
   }
   showReassignModal.value = false;
-  alert('Đã điều phối lại kỹ thuật viên thành công! Lịch sử can thiệp được lưu vào Audit Log.');
+  actionMessage.value = { type: 'success', text: 'Đã điều phối lại kỹ thuật viên thành công! Lịch sử can thiệp được lưu vào Audit Log.' };
 };
 
 const handleForceCancel = () => {
@@ -60,7 +64,7 @@ const handleForceCancel = () => {
     order.value.status = 'CANCELLED';
   }
   showCancelModal.value = false;
-  alert('Đã huỷ đơn cưỡng chế. Đơn chuyển vào mục giải quyết khiếu nại & bồi thường.');
+  actionMessage.value = { type: 'success', text: 'Đã huỷ đơn cưỡng chế. Đơn chuyển vào mục giải quyết khiếu nại & bồi thường.' };
 };
 </script>
 
@@ -83,6 +87,17 @@ const handleForceCancel = () => {
           <ShieldAlert :size="15" class="mr-1.5" /> Huỷ đơn can thiệp
         </FhButton>
       </div>
+    </div>
+
+    <!-- Alert / Action Banner -->
+    <div
+      v-if="actionMessage"
+      class="p-3.5 rounded-lg text-xs font-medium flex items-center gap-2"
+      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border border-success-200' : 'bg-danger-50 text-danger-800 border border-danger-200'"
+    >
+      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
+      <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
+      <span>{{ actionMessage.text }}</span>
     </div>
 
     <div v-if="loading" class="text-center py-16 text-ink-400">
@@ -169,6 +184,92 @@ const handleForceCancel = () => {
                 <FhMoney :amount="order.grandTotal" />
               </div>
             </div>
+          </div>
+        </div>
+      </FhCard>
+
+      <!-- Quotation Items Audit Table (P0-2) -->
+      <FhCard title="Chi tiết Báo giá (Quotation Items Audit)" v-if="order.quotation?.items?.length">
+        <template #action>
+          <span class="text-xs font-semibold text-brand-700">Phân tách Công & Phụ tùng (D-02)</span>
+        </template>
+
+        <div class="space-y-4 text-xs">
+          <div class="border border-ink-200 rounded-[var(--radius-sm)] overflow-hidden">
+            <table class="w-full text-left">
+              <thead class="bg-ink-50 text-ink-500 font-semibold border-b border-ink-200 text-[11px]">
+                <tr>
+                  <th class="p-2.5">Khoản mục</th>
+                  <th class="p-2.5">Loại</th>
+                  <th class="p-2.5 text-center">SL</th>
+                  <th class="p-2.5 text-right">Đơn giá</th>
+                  <th class="p-2.5 text-right">Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr
+                  v-for="item in order.quotation.items"
+                  :key="item.description"
+                  class="hover:bg-ink-50/50"
+                >
+                  <td class="p-2.5 font-medium text-ink-900">
+                    {{ item.description }}
+                    <span v-if="item.warrantyDays" class="block text-[10px] text-success-600 font-semibold">
+                      ✓ Bảo hành {{ item.warrantyDays }} ngày
+                    </span>
+                  </td>
+                  <td class="p-2.5">
+                    <span
+                      class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      :class="item.type === 'LABOR' ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-700'"
+                    >
+                      {{ item.type === 'LABOR' ? 'Tiền công' : 'Linh kiện' }}
+                    </span>
+                  </td>
+                  <td class="p-2.5 text-center font-num">{{ item.quantity }}</td>
+                  <td class="p-2.5 text-right font-num text-ink-600">
+                    <FhMoney :amount="item.unitPrice" />
+                  </td>
+                  <td class="p-2.5 text-right font-num font-bold text-ink-900">
+                    <FhMoney :amount="item.lineTotal" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Total Footer -->
+          <div class="flex items-center justify-between pt-3 border-t border-ink-100">
+            <div>
+              <span class="text-xs text-ink-500">Tổng giá trị báo giá:</span>
+              <div class="text-xl font-bold font-num text-brand-700">
+                <FhMoney :amount="order.grandTotal" />
+              </div>
+            </div>
+            <FhStatusPill
+              :status="order.quotation.status === 'ACCEPTED' || order.quotation.status === 'approved' ? 'COMPLETED' : 'PENDING'"
+              :label="order.quotation.status === 'ACCEPTED' || order.quotation.status === 'approved' ? 'ĐÃ DUYỆT' : order.quotation.status"
+            />
+          </div>
+        </div>
+      </FhCard>
+
+      <!-- Evidence Photos Gallery -->
+      <FhCard title="Bằng chứng Hiện trạng & Nghiệm thu (Evidence Photos)">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="space-y-1.5 text-center">
+            <div class="aspect-square rounded-[var(--radius-sm)] bg-ink-100 border-2 border-dashed border-ink-300 flex flex-col items-center justify-center gap-1 text-ink-400">
+              <Image :size="24" />
+              <span class="text-[10px] font-semibold">Ảnh BEFORE</span>
+            </div>
+            <span class="text-[10px] text-ink-500">Hiện trạng trước sửa</span>
+          </div>
+          <div class="space-y-1.5 text-center">
+            <div class="aspect-square rounded-[var(--radius-sm)] bg-ink-100 border-2 border-dashed border-ink-300 flex flex-col items-center justify-center gap-1 text-ink-400">
+              <Image :size="24" />
+              <span class="text-[10px] font-semibold">Ảnh AFTER</span>
+            </div>
+            <span class="text-[10px] text-ink-500">Nghiệm thu sau sửa</span>
           </div>
         </div>
       </FhCard>

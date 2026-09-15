@@ -1,5 +1,6 @@
 // src/api/catalog.api.ts
 import apiClient from './client';
+import { unwrap } from './response';
 
 export interface ServiceCategory {
   id: string;
@@ -38,34 +39,35 @@ export const catalogApi = {
   // Public Category endpoints
   async getCategories(onlyActive = true): Promise<ServiceCategory[]> {
     const res = await apiClient.get<ServiceCategory[]>('/categories');
-    const data = res.data;
-    return onlyActive ? data.filter((c) => c.isActive) : data;
+    const data = unwrap<ServiceCategory[]>(res.data);
+    const categories = onlyActive ? data.filter((c) => c.isActive) : data;
+    return Promise.all(categories.map(async category => ({ ...category, services: unwrap<ServiceCategory>((await apiClient.get(`/categories/${category.id}`)).data).services ?? [] })));
   },
 
   async getCategory(idOrSlug: string): Promise<ServiceCategory> {
     const res = await apiClient.get<ServiceCategory>(`/categories/${idOrSlug}`);
-    return res.data;
+    return unwrap(res.data);
   },
 
   // Admin Category endpoints
   async getAdminCategories(): Promise<ServiceCategory[]> {
     const res = await apiClient.get<ServiceCategory[]>('/admin/categories');
-    return res.data;
+    return unwrap(res.data);
   },
 
   async createCategory(dto: Partial<ServiceCategory>): Promise<ServiceCategory> {
     const res = await apiClient.post<ServiceCategory>('/admin/categories', dto);
-    return res.data;
+    return unwrap(res.data);
   },
 
   async updateCategory(id: string, dto: Partial<ServiceCategory>): Promise<ServiceCategory> {
     const res = await apiClient.patch<ServiceCategory>(`/admin/categories/${id}`, dto);
-    return res.data;
+    return unwrap(res.data);
   },
 
   async toggleCategoryStatus(id: string, isActive: boolean): Promise<ServiceCategory> {
     const res = await apiClient.patch<ServiceCategory>(`/admin/categories/${id}/status`, { isActive });
-    return res.data;
+    return unwrap(res.data);
   },
 
   // Public Service endpoints
@@ -81,7 +83,7 @@ export const catalogApi = {
 
   async getService(idOrSlug: string): Promise<ServiceItem> {
     const res = await apiClient.get<ServiceItem>(`/services/${idOrSlug}`);
-    return res.data;
+    return unwrap(res.data);
   },
 
   // Admin Service endpoints
@@ -98,16 +100,16 @@ export const catalogApi = {
 
   async createService(dto: Partial<ServiceItem>): Promise<ServiceItem> {
     const res = await apiClient.post<ServiceItem>('/admin/services', dto);
-    return res.data;
+    return unwrap(res.data);
   },
 
   async updateService(id: string, dto: Partial<ServiceItem>): Promise<ServiceItem> {
     const res = await apiClient.patch<ServiceItem>(`/admin/services/${id}`, dto);
-    return res.data;
+    return unwrap(res.data);
   },
 
   async toggleServiceStatus(id: string, isActive: boolean): Promise<ServiceItem> {
     const res = await apiClient.patch<ServiceItem>(`/admin/services/${id}/status`, { isActive });
-    return res.data;
+    return unwrap(res.data);
   },
 };
