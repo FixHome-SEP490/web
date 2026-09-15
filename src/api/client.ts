@@ -11,6 +11,35 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
+export const AUTH_SESSION_INVALIDATED_EVENT = 'fixhome:auth-session-invalidated';
+
+type AuthSessionInvalidator = () => void;
+
+let authSessionInvalidator: AuthSessionInvalidator | null = null;
+
+export function registerAuthSessionInvalidator(invalidator: AuthSessionInvalidator | null) {
+  authSessionInvalidator = invalidator;
+}
+
+export function getHttpStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('response' in error)) return undefined;
+
+  const response = (error as { response?: { status?: unknown } }).response;
+  return typeof response?.status === 'number' ? response.status : undefined;
+}
+
+function invalidateAuthSession() {
+  if (authSessionInvalidator) {
+    authSessionInvalidator();
+  } else {
+    localStorage.removeItem('access_token');
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_SESSION_INVALIDATED_EVENT));
+  }
+}
+
 // Request interceptor – attach JWT token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -27,10 +56,8 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // TODO: Handle token expiration – redirect to login or refresh token
-      localStorage.removeItem('access_token');
-      window.location.href = '/login';
+    if (getHttpStatus(error) === 401) {
+      invalidateAuthSession();
     }
     return Promise.reject(error);
   },

@@ -17,6 +17,8 @@ import {
 
 const activeTab = ref<'categories' | 'services'>('categories');
 const loading = ref(true);
+const error = ref('');
+const successMessage = ref('');
 
 const categories = ref<ServiceCategory[]>([]);
 const services = ref<ServiceItem[]>([]);
@@ -29,9 +31,11 @@ const selectedCategoryFilter = ref('ALL');
 const showCategoryModal = ref(false);
 const showServiceModal = ref(false);
 const showConfirmModal = ref(false);
+const confirmLoading = ref(false);
 const confirmAction = ref<(() => Promise<void>) | null>(null);
 const confirmTitle = ref('');
 const confirmMessage = ref('');
+const confirmSuccessMessage = ref('');
 
 // Category Form
 const categoryForm = ref<Partial<ServiceCategory>>({
@@ -65,6 +69,7 @@ const isEditingService = ref(false);
 
 const loadData = async () => {
   loading.value = true;
+  error.value = '';
   try {
     const [cats, svcs] = await Promise.all([
       catalogApi.getAdminCategories(),
@@ -72,42 +77,15 @@ const loadData = async () => {
     ]);
     categories.value = cats;
     services.value = svcs.data;
-  } catch {
-    // Fallback seed data if offline
-    categories.value = [
-      { id: '1', name: 'Điện lạnh', code: 'DIEN_LANH', slug: 'dien-lanh', iconKey: 'Snowflake', sortOrder: 1, isActive: true },
-      { id: '2', name: 'Điện nước', code: 'DIEN_NUOC', slug: 'dien-nuoc', iconKey: 'Zap', sortOrder: 2, isActive: true },
-      { id: '3', name: 'Thiết bị nhà bếp', code: 'BEP_GIA_DUNG', slug: 'thiet-bi-bep', iconKey: 'Utensils', sortOrder: 3, isActive: true },
-      { id: '4', name: 'Cửa & Khóa thông minh', code: 'KHOA_CUA', slug: 'khoa-cua', iconKey: 'Lock', sortOrder: 4, isActive: true },
-    ];
-    services.value = [
-      {
-        id: 's1',
-        categoryId: '1',
-        category: categories.value[0],
-        name: 'Sửa điều hòa không mát / chảy nước',
-        code: 'SUA_DIEU_HOA',
-        slug: 'sua-dieu-hoa',
-        basePrice: 150000,
-        minPrice: 100000,
-        maxPrice: 600000,
-        estimatedMinutes: 60,
-        isActive: true,
-      },
-      {
-        id: 's2',
-        categoryId: '2',
-        category: categories.value[1],
-        name: 'Sửa chập điện âm tường / nhảy Aptomat',
-        code: 'SUA_CHAP_DIEN',
-        slug: 'sua-chap-dien',
-        basePrice: 200000,
-        minPrice: 150000,
-        maxPrice: 800000,
-        estimatedMinutes: 90,
-        isActive: true,
-      },
-    ];
+  } catch (reason) {
+    if (typeof reason === 'object' && reason !== null && 'response' in reason) {
+      const response = (reason as { response?: { data?: { message?: unknown } } }).response;
+      error.value = typeof response?.data?.message === 'string'
+        ? response.data.message
+        : 'Không thể tải danh mục từ Backend.';
+    } else {
+      error.value = 'Không thể tải danh mục từ Backend.';
+    }
   } finally {
     loading.value = false;
   }
@@ -161,7 +139,12 @@ const openEditCategory = (cat: ServiceCategory) => {
 };
 
 const saveCategory = async () => {
-  if (!categoryForm.value.name || !categoryForm.value.code) return;
+  if (!categoryForm.value.name || !categoryForm.value.code) {
+    error.value = 'Tên và mã danh mục là bắt buộc.';
+    return;
+  }
+  error.value = '';
+  successMessage.value = '';
   try {
     if (isEditingCategory.value && categoryForm.value.id) {
       await catalogApi.updateCategory(categoryForm.value.id, categoryForm.value);
@@ -169,15 +152,17 @@ const saveCategory = async () => {
       await catalogApi.createCategory(categoryForm.value);
     }
     showCategoryModal.value = false;
+    successMessage.value = 'Đã lưu danh mục từ Backend.';
     await loadData();
-  } catch {
-    alert('Không thể lưu danh mục. Vui lòng kiểm tra mã hoặc quyền truy cập.');
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : 'Không thể lưu danh mục. Vui lòng kiểm tra mã hoặc quyền truy cập.';
   }
 };
 
 const triggerToggleCategory = (cat: ServiceCategory) => {
   confirmTitle.value = cat.isActive ? 'Tạm dừng danh mục' : 'Kích hoạt danh mục';
   confirmMessage.value = `Bạn có chắc muốn ${cat.isActive ? 'tạm dừng' : 'kích hoạt'} danh mục "${cat.name}"?`;
+  confirmSuccessMessage.value = `Đã ${cat.isActive ? 'tạm dừng' : 'kích hoạt'} danh mục từ Backend.`;
   confirmAction.value = async () => {
     await catalogApi.toggleCategoryStatus(cat.id, !cat.isActive);
     await loadData();
@@ -213,7 +198,12 @@ const openEditService = (svc: ServiceItem) => {
 };
 
 const saveService = async () => {
-  if (!serviceForm.value.name || !serviceForm.value.code || !serviceForm.value.categoryId) return;
+  if (!serviceForm.value.name || !serviceForm.value.code || !serviceForm.value.categoryId) {
+    error.value = 'Danh mục, tên và mã dịch vụ là bắt buộc.';
+    return;
+  }
+  error.value = '';
+  successMessage.value = '';
   try {
     if (isEditingService.value && serviceForm.value.id) {
       await catalogApi.updateService(serviceForm.value.id, serviceForm.value);
@@ -221,15 +211,17 @@ const saveService = async () => {
       await catalogApi.createService(serviceForm.value);
     }
     showServiceModal.value = false;
+    successMessage.value = 'Đã lưu dịch vụ từ Backend.';
     await loadData();
-  } catch {
-    alert('Không thể lưu dịch vụ. Vui lòng kiểm tra dữ liệu.');
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : 'Không thể lưu dịch vụ. Vui lòng kiểm tra dữ liệu.';
   }
 };
 
 const triggerToggleService = (svc: ServiceItem) => {
   confirmTitle.value = svc.isActive ? 'Tạm dừng dịch vụ' : 'Kích hoạt dịch vụ';
   confirmMessage.value = `Bạn có chắc muốn ${svc.isActive ? 'tạm dừng' : 'kích hoạt'} dịch vụ "${svc.name}"?`;
+  confirmSuccessMessage.value = `Đã ${svc.isActive ? 'tạm dừng' : 'kích hoạt'} dịch vụ từ Backend.`;
   confirmAction.value = async () => {
     await catalogApi.toggleServiceStatus(svc.id, !svc.isActive);
     await loadData();
@@ -238,10 +230,18 @@ const triggerToggleService = (svc: ServiceItem) => {
 };
 
 const handleConfirm = async () => {
-  if (confirmAction.value) {
+  if (!confirmAction.value || confirmLoading.value) return;
+  confirmLoading.value = true;
+  error.value = '';
+  try {
     await confirmAction.value();
+    successMessage.value = confirmSuccessMessage.value;
+    showConfirmModal.value = false;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : 'Không thể cập nhật trạng thái.';
+  } finally {
+    confirmLoading.value = false;
   }
-  showConfirmModal.value = false;
 };
 </script>
 
@@ -276,6 +276,22 @@ const handleConfirm = async () => {
           <Plus :size="16" class="mr-1.5" /> Thêm dịch vụ
         </FhButton>
       </div>
+    </div>
+
+    <div
+      v-if="error"
+      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      role="alert"
+    >
+      <span class="flex-1">{{ error }}</span>
+      <button class="font-semibold underline" type="button" @click="loadData">Thử lại</button>
+    </div>
+    <div
+      v-if="successMessage"
+      class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
+      role="status"
+    >
+      {{ successMessage }}
     </div>
 
     <!-- Tab Bar -->
@@ -345,6 +361,8 @@ const handleConfirm = async () => {
           { key: 'actions', label: 'Thao tác', width: '140px' },
         ]"
         :rows="filteredCategories"
+        :loading="loading"
+        :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Chưa có danh mục.'"
       >
         <template #cell-sortOrder="{ row }">
           <span class="font-num font-semibold text-xs text-ink-500">{{ row.sortOrder }}</span>
@@ -402,6 +420,8 @@ const handleConfirm = async () => {
           { key: 'actions', label: 'Thao tác', width: '130px' },
         ]"
         :rows="filteredServices"
+        :loading="loading"
+        :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Chưa có dịch vụ.'"
       >
         <template #cell-name="{ row }">
           <div class="font-semibold text-ink-900">{{ row.name }}</div>
@@ -699,6 +719,7 @@ const handleConfirm = async () => {
       :open="showConfirmModal"
       :title="confirmTitle"
       :consequence="confirmMessage"
+      :loading="confirmLoading"
       confirm-text="Xác nhận"
       cancel-text="Huỷ"
       @confirm="handleConfirm"

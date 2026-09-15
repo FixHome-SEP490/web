@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
-  MapPin,
   Calendar,
-  User,
-  ShieldAlert,
-  UserCheck,
+  LifeBuoy,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -16,52 +13,62 @@ import {
   FhCostBreakdown,
   FhMoney,
   FhTimeline,
-  FhConfirmDialog,
+  type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/console-order-context.api';
+import { useAuthStore } from '../../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
+const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
 const orderId = route.params.id as string;
 
 const loading = ref(true);
-const order = ref<ServiceOrderItem | null>(null);
+const loadError = ref('');
+const order = ref<ConsoleOrderContext | null>(null);
 
-// Modal state
-const showReassignModal = ref(false);
-const showCancelModal = ref(false);
-const reassignTechId = ref('tech-2');
-const reassignReason = ref('Thợ bận sự cố đột xuất cần đổi người thay thế');
+function getErrorMessage(reason: unknown, fallback: string): string {
+  if (typeof reason === 'object' && reason !== null && 'response' in reason) {
+    const response = (reason as { response?: { data?: { message?: unknown } } }).response;
+    if (typeof response?.data?.message === 'string') return response.data.message;
+  }
+  if (reason instanceof Error && reason.message) return reason.message;
+  return fallback;
+}
 
-onMounted(async () => {
+const loadOrder = async () => {
+  loading.value = true;
+  loadError.value = '';
   try {
-    const data = await ordersApi.getOrder(orderId);
-    order.value = data;
+    // Real API only: validation/network failures surface as an error state.
+    // This page never falls back to local or mock order data.
+    order.value = await consoleOrderContextApi.getConsoleOrderContext(orderId);
+  } catch (reason) {
+    order.value = null;
+    loadError.value = getErrorMessage(reason, 'Không thể tải chi tiết đơn hàng từ Backend.');
   } finally {
     loading.value = false;
   }
+};
+
+onMounted(() => {
+  void loadOrder();
 });
 
-const handleReassign = () => {
-  if (order.value) {
-    order.value.technician = {
-      id: 'tech-2',
-      fullName: 'Trần Đình Trọng (Thay thế)',
-      phoneNumber: '0922334455',
-      averageRating: 4.88,
-    };
-  }
-  showReassignModal.value = false;
-  alert('Đã điều phối lại kỹ thuật viên thành công! Lịch sử can thiệp được lưu vào Audit Log.');
-};
-
-const handleForceCancel = () => {
-  if (order.value) {
-    order.value.status = 'CANCELLED';
-  }
-  showCancelModal.value = false;
-  alert('Đã huỷ đơn cưỡng chế. Đơn chuyển vào mục giải quyết khiếu nại & bồi thường.');
-};
+// Render only the timeline entries actually returned by the Backend API.
+// No locally invented states or progression — an empty timeline is shown honestly.
+const timelineSteps = computed<TimelineStep[]>(() => {
+  const entries = order.value?.timeline ?? [];
+  return entries.map((entry, index) => ({
+    key: `${entry.status}-${index}`,
+    label: entry.title || entry.status,
+    timestamp: entry.timestamp,
+    actor: entry.actor,
+    completed: index < entries.length - 1,
+    current: index === entries.length - 1,
+  }));
+});
 </script>
 
 <template>
@@ -76,11 +83,8 @@ const handleForceCancel = () => {
       </button>
 
       <div class="flex items-center gap-3">
-        <FhButton variant="secondary" size="sm" @click="showReassignModal = true">
-          <UserCheck :size="15" class="mr-1.5" /> Điều phối lại thợ
-        </FhButton>
-        <FhButton variant="danger" size="sm" @click="showCancelModal = true">
-          <ShieldAlert :size="15" class="mr-1.5" /> Huỷ đơn can thiệp
+        <FhButton v-if="isServiceManager" variant="secondary" size="sm" @click="router.push('/console/support')">
+          <LifeBuoy :size="15" class="mr-1.5" /> Hàng đợi hỗ trợ
         </FhButton>
       </div>
     </div>
@@ -89,8 +93,17 @@ const handleForceCancel = () => {
       Đang tải chi tiết đơn hàng...
     </div>
 
+    <div
+      v-else-if="loadError"
+      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      role="alert"
+    >
+      <span class="flex-1">{{ loadError }}</span>
+      <button class="font-semibold underline" type="button" @click="loadOrder">Thử lại</button>
+    </div>
+
     <div v-else-if="order" class="space-y-6">
-      <!-- Order Overview Card -->
+      <!-- Order Overview Card (read-only operational context) -->
       <FhCard>
         <div class="space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 pb-3">
@@ -110,39 +123,32 @@ const handleForceCancel = () => {
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div class="space-y-1.5">
-              <div class="font-bold text-sm text-ink-900">{{ order.serviceName }}</div>
-              <div class="text-ink-600 flex items-center gap-1">
-                <MapPin :size="13" class="text-brand-600 shrink-0" /> {{ order.addressSummary }}
-              </div>
+              <div class="font-bold text-sm text-ink-900 font-mono">Booking: {{ order.bookingId }}</div>
               <div class="text-ink-500 flex items-center gap-1">
-                <Calendar :size="13" /> Hẹn: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}
+                <Calendar :size="13" />
+                <span v-if="order.scheduledAt">Hẹn: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}</span>
+                <span v-else class="italic">Backend chưa trả về lịch hẹn cho đơn này.</span>
               </div>
             </div>
 
             <div class="space-y-1.5 sm:text-right">
-              <div class="font-semibold text-ink-900 flex items-center gap-1 sm:justify-end">
-                <User :size="13" class="text-ink-400" /> Khách: {{ order.customerName }}
+              <div class="text-ink-500">
+                Tạo lúc: {{ order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN') : '—' }}
               </div>
-              <div class="text-ink-500 font-mono">{{ order.customerPhone }}</div>
-              <div v-if="order.technician" class="text-brand-700 font-semibold pt-1">
-                Thợ: {{ order.technician.fullName }} ({{ order.technician.phoneNumber }})
+              <div class="text-ink-500">
+                Cập nhật: {{ order.updatedAt ? new Date(order.updatedAt).toLocaleString('vi-VN') : '—' }}
               </div>
             </div>
           </div>
         </div>
       </FhCard>
 
-      <!-- Timeline History -->
-      <FhCard title="Lịch sử Chuyển trạng thái (Order Status History D-22)">
-        <FhTimeline
-          :steps="[
-            { key: '1', label: 'Tạo đơn hàng (PENDING_MATCHING)', note: 'Tạo bởi khách hàng', timestamp: '08:30:12', completed: true },
-            { key: '2', label: 'Gán kỹ thuật viên (ASSIGNED)', note: 'Nhận bởi thợ Nguyễn Văn Hùng', timestamp: '08:45:00', completed: true },
-            { key: '3', label: 'Thợ bắt đầu di chuyển (EN_ROUTE)', note: 'Cập nhật từ ứng dụng thợ', timestamp: '09:00:15', completed: true },
-            { key: '4', label: 'Check-in GPS hợp lệ (ARRIVED)', note: 'Bán kính 45m ≤ 200m geofence', timestamp: '09:20:40', completed: true },
-            { key: '5', label: 'Tiến hành sửa chữa (IN_PROGRESS)', note: 'Khách duyệt báo giá 300,000 đ', timestamp: '09:35:10', current: true },
-          ]"
-        />
+      <!-- Timeline History (API-backed only) -->
+      <FhCard title="Lịch sử chuyển trạng thái (theo dữ liệu Backend)">
+        <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
+        <p v-else class="text-xs text-ink-400 italic">
+          Backend không trả về mục lịch sử nào cho đơn này.
+        </p>
       </FhCard>
 
       <!-- Cost Audit & Breakdown -->
@@ -172,52 +178,24 @@ const handleForceCancel = () => {
           </div>
         </div>
       </FhCard>
+
+      <!-- Read-only notice + exception-handling navigation -->
+      <FhCard title="Ghi chú vận hành">
+        <p class="text-xs text-ink-500 leading-relaxed">
+          Trang này là ngữ cảnh vận hành chỉ đọc. Mọi chuyển trạng thái đơn, điều phối kỹ thuật viên
+          hay huỷ đơn đều do Backend điều phối theo luồng chuẩn; giao diện này không thực hiện các
+          can thiệp đó. Trường hợp ngoại lệ (tranh chấp, sự cố giữa ca, khiếu nại huỷ đơn) được xử lý
+          qua Hàng đợi hỗ trợ hoặc mục Huỷ đơn &amp; Khiếu nại theo quy trình Backend đã phê duyệt.
+        </p>
+        <div v-if="isServiceManager" class="flex flex-wrap gap-2 pt-3">
+          <FhButton variant="secondary" size="sm" @click="router.push('/console/support')">
+            Mở Hàng đợi hỗ trợ
+          </FhButton>
+          <FhButton variant="ghost" size="sm" @click="router.push('/console/cancellations')">
+            Huỷ đơn &amp; Khiếu nại
+          </FhButton>
+        </div>
+      </FhCard>
     </div>
-
-    <!-- Reassign Modal -->
-    <div
-      v-if="showReassignModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-4 text-xs">
-        <h3 class="text-base font-bold text-ink-900">Điều phối lại Kỹ thuật viên (Can thiệp SM)</h3>
-        <div>
-          <label class="block font-semibold text-ink-700 mb-1">Chọn thợ thay thế:</label>
-          <select
-            v-model="reassignTechId"
-            class="w-full h-9 px-3 bg-white border border-ink-200 rounded text-xs"
-          >
-            <option value="tech-2">Trần Đình Trọng (4.88 ★ - Cách 2.5km)</option>
-            <option value="tech-3">Lê Minh Tuấn (4.91 ★ - Cách 3.2km)</option>
-            <option value="tech-4">Phạm Quốc Bảo (4.85 ★ - Cách 4.1km)</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block font-semibold text-ink-700 mb-1">Lý do điều phối lại *</label>
-          <textarea
-            v-model="reassignReason"
-            rows="3"
-            class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-          ></textarea>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showReassignModal = false">Huỷ</FhButton>
-          <FhButton variant="primary" size="sm" @click="handleReassign">Xác nhận chuyển thợ</FhButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- Force Cancel Modal -->
-    <FhConfirmDialog
-      :open="showCancelModal"
-      title="Can thiệp Huỷ đơn cưỡng chế"
-      consequence="Hành động này sẽ ngắt trạng thái thực thi hiện tại và ghi nhận vi phạm kiểm toán đối với tài khoản."
-      confirm-text="Xác nhận huỷ"
-      cancel-text="Quay lại"
-      @confirm="handleForceCancel"
-      @cancel="showCancelModal = false"
-    />
   </div>
 </template>
