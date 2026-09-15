@@ -47,13 +47,57 @@ interface UpdateUserStatusPayload {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function invalid(message: string): never {
+  throw new Error(message);
+}
+
+function requiredString(value: unknown, message: string): string {
+  if (typeof value !== 'string' || !value.trim()) invalid(message);
+  return (value as string).trim();
+}
+
+// Strict outer envelope following the known runtime contract
+// `{ success: true, statusCode: number, message: string, data, meta? }`.
+// Raw arrays/objects are never accepted as success.
+function unwrapEnvelope(payload: unknown, message: string): { data: unknown; meta?: unknown } {
+  if (
+    !isRecord(payload) ||
+    payload.success !== true ||
+    typeof payload.statusCode !== 'number' ||
+    !Number.isInteger(payload.statusCode) ||
+    typeof payload.message !== 'string' ||
+    !('data' in payload)
+  ) {
+    invalid(message);
+  }
+  return { data: payload.data, meta: payload.meta };
+}
+
+function normalizePagination(payload: unknown): PaginationMeta {
+  if (!isRecord(payload)) invalid('Backend returned an invalid user pagination meta.');
+  const { page, limit, total, totalPages } = payload;
+  if (
+    ![page, limit, total, totalPages].every(
+      (value) => typeof value === 'number' && Number.isInteger(value),
+    ) ||
+    (page as number) < 1 ||
+    (limit as number) < 1 ||
+    (total as number) < 0 ||
+    (totalPages as number) < 0
+  ) {
+    invalid('Backend returned an invalid user pagination meta.');
+  }
+  return { page, limit, total, totalPages } as PaginationMeta;
 }
 
 function normalizeUser(payload: unknown): AdminUserRecord {
-  const user = isRecord(payload) ? payload : {};
-  const role = String(user.role ?? '').toLowerCase();
-  const status = String(user.status ?? '').toLowerCase();
+  if (!isRecord(payload)) invalid('Backend returned an invalid user response.');
+  const user = payload;
+  const role = typeof user.role === 'string' ? user.role.toLowerCase() : '';
+  const status = typeof user.status === 'string' ? user.status.toLowerCase() : '';
   if (!['customer', 'technician', 'service_manager', 'admin'].includes(role)) {
     throw new Error('Backend returned an unsupported user role.');
   }
@@ -61,9 +105,9 @@ function normalizeUser(payload: unknown): AdminUserRecord {
     throw new Error('Backend returned an unsupported user status.');
   }
   return {
-    id: String(user.id ?? ''),
-    email: String(user.email ?? ''),
-    fullName: String(user.fullName ?? ''),
+    id: requiredString(user.id, 'Backend returned a user without an id.'),
+    email: requiredString(user.email, 'Backend returned a user without an email.'),
+    fullName: requiredString(user.fullName, 'Backend returned a user without a full name.'),
     phoneNumber: user.phoneNumber == null ? null : String(user.phoneNumber),
     role: role as AdminUserRole,
     status: status as AdminUserStatus,
@@ -80,31 +124,19 @@ function normalizeUser(payload: unknown): AdminUserRecord {
 }
 
 function unwrapUsers(payload: unknown): AdminUsersResponse {
-  const outer = isRecord(payload) ? payload : {};
-  const candidate = Array.isArray(payload) ? payload : outer.data;
-  const dataSource = Array.isArray(candidate)
-    ? candidate
-    : isRecord(candidate) && Array.isArray(candidate.data)
-      ? candidate.data
-      : null;
-  if (!dataSource) throw new Error('Backend returned an invalid user list response.');
-  const metaSource =
-    isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : outer.meta;
-
-  const meta: PaginationMeta = {
-    page: Number(metaSource && isRecord(metaSource) ? metaSource.page : 1) || 1,
-    limit: Number(metaSource && isRecord(metaSource) ? metaSource.limit : dataSource.length) || dataSource.length,
-    total: Number(metaSource && isRecord(metaSource) ? metaSource.total : dataSource.length) || 0,
-    totalPages:
-      Number(metaSource && isRecord(metaSource) ? metaSource.totalPages : 1) || 1,
+  const envelope = unwrapEnvelope(payload, 'Backend returned an invalid user list response.');
+  if (!Array.isArray(envelope.data) || envelope.meta === undefined) {
+    invalid('Backend returned an invalid user list response.');
+  }
+  return {
+    data: (envelope.data as unknown[]).map(normalizeUser),
+    meta: normalizePagination(envelope.meta),
   };
-
-  return { data: dataSource.map(normalizeUser), meta };
 }
 
-function unwrapUser(payload: unknown): AdminUserRecord {
-  const outer = isRecord(payload) ? payload : {};
-  return normalizeUser(outer.data && isRecord(outer.data) ? outer.data : payload);
+function unwrapUser(payload: unknown, message: string): AdminUserRecord {
+  const envelope = unwrapEnvelope(payload, message);
+  return normalizeUser(envelope.data);
 }
 
 export const adminUsersApi = {
@@ -115,7 +147,7 @@ export const adminUsersApi = {
 
   async getUser(id: string): Promise<AdminUserRecord> {
     const response = await apiClient.get<unknown>(`/admin/users/${id}`);
-    return unwrapUser(response.data);
+    return unwrapUser(response.data, 'Backend returned an invalid user detail response.');
   },
 
   async updateStatus(
@@ -123,7 +155,7 @@ export const adminUsersApi = {
     payload: UpdateUserStatusPayload,
   ): Promise<AdminUserRecord> {
     const response = await apiClient.patch<unknown>(`/admin/users/${id}/status`, payload);
-    return unwrapUser(response.data);
+    return unwrapUser(response.data, 'Backend returned an invalid user status response.');
   },
 };
 

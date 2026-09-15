@@ -19,6 +19,9 @@ describe('Admin API adapters', () => {
   it('loads paginated users and preserves the Backend filter contract', async () => {
     apiClientMock.get.mockResolvedValueOnce({
       data: {
+        success: true,
+        statusCode: 200,
+        message: 'OK',
         data: [
           {
             id: 'user-1',
@@ -53,15 +56,20 @@ describe('Admin API adapters', () => {
   it('updates a user status through the server response', async () => {
     apiClientMock.patch.mockResolvedValueOnce({
       data: {
-        id: 'user-1',
-        email: 'tech@example.com',
-        fullName: 'Technician One',
-        phoneNumber: null,
-        role: 'technician',
-        status: 'locked',
-        isActive: false,
-        createdAt: '2026-09-15T00:00:00.000Z',
-        updatedAt: '2026-09-15T01:00:00.000Z',
+        success: true,
+        statusCode: 200,
+        message: 'OK',
+        data: {
+          id: 'user-1',
+          email: 'tech@example.com',
+          fullName: 'Technician One',
+          phoneNumber: null,
+          role: 'technician',
+          status: 'locked',
+          isActive: false,
+          createdAt: '2026-09-15T00:00:00.000Z',
+          updatedAt: '2026-09-15T01:00:00.000Z',
+        },
       },
     });
 
