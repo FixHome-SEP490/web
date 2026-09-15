@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -44,6 +44,14 @@ const afterPhotoUploaded = ref(false);
 const completionRequested = ref(false);
 const isCompleted = ref(false);
 
+// Catalog Parts for FixHome parts selection
+const catalogParts = ref<Array<{ id: string; code: string; name: string; price: number; warrantyDays: number; warrantyPolicy: string }>>([]);
+
+const isFixedPrice = computed(() => {
+  const mode = String(job.value?.pricingMode || '').toUpperCase();
+  return mode === 'FIXED_PRICE';
+});
+
 // Cash Settlement State
 const declaredCashAmount = ref<number>(0);
 const technicianCashNotes = ref('');
@@ -70,18 +78,9 @@ const addCostItems = ref<QuotationItemPayload[]>([
 const quotationItems = ref<QuotationItemPayload[]>([
   {
     type: 'LABOR',
-    description: 'Công thông tắc máng thoát nước và xịt rửa',
+    description: 'Công kiểm tra và sửa chữa',
     quantity: 1,
-    unitPrice: 180000,
-  },
-  {
-    type: 'PARTS',
-    description: 'Đoạn ống thoát mềm bảo ôn 1.5m',
-    quantity: 1,
-    unitPrice: 120000,
-    partSource: 'TECHNICIAN',
-    partWarrantyOption: 'no_warranty',
-    warrantyTermDays: 90,
+    unitPrice: 150000,
   },
 ]);
 
@@ -103,23 +102,32 @@ const loadJob = async () => {
     completionRequested.value = Boolean(data.completionRequestedAt);
     quotationSubmitted.value = Boolean(data.quotation);
     isCompleted.value = String(data.status).toUpperCase() === 'COMPLETED';
+
     const status = String(data.status).toUpperCase();
     if (status === 'EN_ROUTE') {
       isEnRoute.value = true;
     } else if (status === 'UNDER_REPAIR') {
       isEnRoute.value = true;
       gpsCheckedIn.value = true;
-      await loadJob();
+      beforePhotoUploaded.value = true;
     } else if (status === 'COMPLETED') {
       isEnRoute.value = true;
       gpsCheckedIn.value = true;
       beforePhotoUploaded.value = true;
-      await loadJob();
+      afterPhotoUploaded.value = true;
+      completionRequested.value = true;
       isCompleted.value = true;
     }
 
     if (data.grandTotal) {
       declaredCashAmount.value = data.grandTotal;
+    }
+
+    // Load FixHome catalog parts
+    try {
+      catalogParts.value = await ordersApi.getParts();
+    } catch {
+      catalogParts.value = [];
     }
 
     // Load cash settlement
@@ -250,6 +258,33 @@ const handleUploadBefore = async () => {
   }
 };
 
+const onPartSourceChange = (item: QuotationItemPayload) => {
+  if (item.partSource === 'FIXHOME') {
+    if (catalogParts.value.length > 0) {
+      const first = catalogParts.value[0];
+      item.partCatalogId = first.id;
+      item.description = first.name;
+      item.unitPrice = first.price;
+      item.warrantyTermDays = first.warrantyDays;
+      item.partWarrantyOption = 'included';
+    }
+  } else {
+    item.partCatalogId = undefined;
+    item.partWarrantyOption = 'no_warranty';
+  }
+};
+
+const onCatalogPartSelect = (item: QuotationItemPayload, partId: string) => {
+  const found = catalogParts.value.find(p => p.id === partId);
+  if (found) {
+    item.partCatalogId = found.id;
+    item.description = found.name;
+    item.unitPrice = found.price;
+    item.warrantyTermDays = found.warrantyDays;
+    item.partWarrantyOption = 'included';
+  }
+};
+
 const handleSubmitQuotation = async () => {
   try {
     actionLoading.value = true;
@@ -259,14 +294,16 @@ const handleSubmitQuotation = async () => {
       description: i.description,
       quantity: i.quantity,
       unitPrice: i.unitPrice,
+      partCatalogId: i.type === 'PARTS' && i.partSource === 'FIXHOME' ? i.partCatalogId : undefined,
       warrantyDays: i.type === 'PARTS' ? (i.warrantyTermDays || defaultWarrantyDays.value) : undefined,
       partSource: i.type === 'PARTS' ? (i.partSource || 'TECHNICIAN') : undefined,
-      partWarrantyOption: i.type === 'PARTS' ? (i.partWarrantyOption || 'no_warranty') : undefined,
+      partWarrantyOption: i.type === 'PARTS' ? (i.partSource === 'FIXHOME' ? 'included' : (i.partWarrantyOption || 'no_warranty')) : undefined,
       warrantyTermDays: i.type === 'PARTS' ? (i.warrantyTermDays || 90) : undefined,
       warrantyFee: i.warrantyFee || 0,
     }));
     await ordersApi.submitQuotation(jobId, items);
     quotationSubmitted.value = true;
+    await loadJob();
     actionMessage.value = { type: 'success', text: 'Đã gửi báo giá tới khách hàng! Chờ khách duyệt.' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi báo giá.' };
@@ -310,10 +347,15 @@ const handleUploadAfter = async () => {
   }
 };
 
-// Two-step completion: Request completion from customer
+// Two-step completion: Request completion from customer (Enforces Rule 18: No bypass direct completion)
 const handleRequestCompletion = async () => {
   if (!afterPhotoUploaded.value) {
     actionMessage.value = { type: 'error', text: 'Vui lòng chụp ảnh nghiệm thu AFTER trước khi gửi yêu cầu nghiệm thu!' };
+    return;
+  }
+  const hasPendingCost = additionalCosts.value.some(c => c.status === 'PENDING' || c.status === 'SUBMITTED');
+  if (hasPendingCost) {
+    actionMessage.value = { type: 'error', text: 'Còn đề xuất chi phí phát sinh đang chờ khách duyệt. Vui lòng đợi khách duyệt trước khi yêu cầu nghiệm thu!' };
     return;
   }
   try {
@@ -325,29 +367,9 @@ const handleRequestCompletion = async () => {
       type: 'success',
       text: 'Đã gửi yêu cầu nghiệm thu tới khách hàng! Chờ khách duyệt và đánh giá dịch vụ.',
     };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu nghiệm thu.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
-
-// Direct completion (fallback)
-const handleCompleteOrder = async () => {
-  if (!afterPhotoUploaded.value) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng chụp ảnh nghiệm thu AFTER trước khi hoàn tất đơn!' };
-    return;
-  }
-  try {
-    actionLoading.value = true;
-    actionMessage.value = null;
-    await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất nghiệm thu kỹ thuật' });
-    isCompleted.value = true;
-
-    actionMessage.value = { type: 'success', text: 'Hoàn tất đơn sửa chữa! Hoá đơn và bảo hành điện tử đã được kích hoạt.' };
     await loadJob();
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể hoàn tất đơn sửa chữa.' };
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu nghiệm thu.' };
   } finally {
     actionLoading.value = false;
   }
@@ -552,8 +574,65 @@ const handleSubmitAdditionalCost = async () => {
           </div>
         </FhCard>
 
-        <!-- Phase 3: Quotation Submission (D-02 Standard & BRX-052) -->
-        <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard & Nguồn linh kiện)">
+        <!-- Phase 3: FIXED_PRICE: Fixed Price Package Information Snapshot -->
+        <FhCard v-if="isFixedPrice" title="4. Chi tiết Gói Dịch vụ Cố định (FixHome Fixed Price)">
+          <div class="space-y-4 text-xs">
+            <div class="p-4 bg-brand-50/50 rounded-lg border border-brand-200 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-brand-700 bg-brand-100 px-2 py-0.5 rounded">
+                    Giá Cố Định Đã Snapshot
+                  </span>
+                  <h3 class="text-base font-bold text-ink-900 mt-1">{{ job.serviceName }}</h3>
+                </div>
+                <div class="text-right">
+                  <span class="text-[11px] text-ink-500 block">Tổng tiền dịch vụ:</span>
+                  <span class="text-lg font-bold font-num text-brand-700">
+                    <FhMoney :amount="(job.fixedUnitPrice || job.grandTotal || 0) * (job.quantity || 1)" />
+                  </span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-brand-200/60 text-xs">
+                <div>
+                  <span class="text-ink-500 block">Đơn giá niêm yết:</span>
+                  <span class="font-num font-bold text-ink-900">
+                    <FhMoney :amount="job.fixedUnitPrice || job.grandTotal || 0" />
+                  </span>
+                </div>
+                <div>
+                  <span class="text-ink-500 block">Số lượng:</span>
+                  <span class="font-num font-bold text-ink-900">{{ job.quantity || 1 }}</span>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                  <span class="text-ink-500 block">Phạm vi công việc cam kết:</span>
+                  <span class="text-ink-800 font-medium line-clamp-2">
+                    {{ job.scopeDescription || 'Theo tiêu chuẩn quy định của FixHome' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-ink-50 rounded border border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p class="text-ink-600 text-[11px] max-w-lg">
+                <strong>Quy tắc nghiệp vụ:</strong> Dịch vụ giá cố định đã được chốt và không cần lập báo giá gốc. Sau khi check-in GPS và chụp ảnh BEFORE, bạn có thể bắt đầu sửa chữa ngay. Nếu phát sinh ngoài phạm vi, hãy dùng mục "4b. Chi phí phát sinh" bên dưới.
+              </p>
+
+              <FhButton
+                variant="primary"
+                size="md"
+                :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || job.status === 'UNDER_REPAIR' || isCompleted"
+                @click="handleStartRepair"
+              >
+                <CheckCircle2 v-if="job.status === 'UNDER_REPAIR'" :size="15" class="mr-1.5 text-success-600" />
+                {{ job.status === 'UNDER_REPAIR' ? 'Đang trong trạng thái sửa chữa' : 'Bắt đầu sửa chữa (UNDER_REPAIR)' }}
+              </FhButton>
+            </div>
+          </div>
+        </FhCard>
+
+        <!-- Phase 3: INSPECTION_REQUIRED: Quotation Form -->
+        <FhCard v-else title="4. Lập báo giá Khảo sát (Inspection Required & Phụ tùng)">
           <div class="space-y-4 text-xs">
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
@@ -589,15 +668,26 @@ const handleSubmitAdditionalCost = async () => {
                       class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
                       :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-amber-100 text-amber-900'"
                     >
-                      {{ item.type === 'LABOR' ? 'Công thợ' : 'Linh kiện' }}
+                      {{ item.type === 'LABOR' ? 'Công thợ' : (item.partSource === 'FIXHOME' ? 'Linh kiện FixHome' : 'Linh kiện thợ') }}
                     </span>
 
                     <input
+                      v-if="item.type === 'LABOR' || item.partSource !== 'FIXHOME'"
                       v-model="item.description"
                       type="text"
                       placeholder="Mô tả công việc hoặc phụ tùng..."
                       class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
                     />
+                    <select
+                      v-else
+                      v-model="item.partCatalogId"
+                      class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-medium text-ink-900"
+                      @change="onCatalogPartSelect(item, item.partCatalogId!)"
+                    >
+                      <option v-for="part in catalogParts" :key="part.id" :value="part.id">
+                        {{ part.name }} ({{ Number(part.price).toLocaleString('vi-VN') }} ₫ - BH {{ part.warrantyDays }} ngày)
+                      </option>
+                    </select>
 
                     <div class="flex items-center gap-1">
                       <span class="text-[11px] text-ink-400">SL:</span>
@@ -612,11 +702,15 @@ const handleSubmitAdditionalCost = async () => {
                     <div class="flex items-center gap-1">
                       <span class="text-[11px] text-ink-400">Đơn giá:</span>
                       <input
+                        v-if="item.partSource !== 'FIXHOME'"
                         v-model.number="item.unitPrice"
                         type="number"
                         step="10000"
                         class="w-28 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
                       />
+                      <span v-else class="w-28 h-8 px-2 bg-ink-100 border border-ink-200 rounded text-xs font-num font-bold text-right flex items-center justify-end text-ink-800">
+                        <FhMoney :amount="item.unitPrice" />
+                      </span>
                     </div>
 
                     <button
@@ -637,24 +731,29 @@ const handleSubmitAdditionalCost = async () => {
                       <select
                         v-model="item.partSource"
                         class="w-full h-7 px-2 bg-white border border-ink-200 rounded text-[11px] font-medium"
+                        @change="onPartSourceChange(item)"
                       >
-                        <option value="FIXHOME" disabled>FixHome cấp (Bảo hành công ty)</option>
+                        <option value="FIXHOME">FixHome cấp (Bảo hành chính hãng)</option>
                         <option value="TECHNICIAN">Thợ tự mang (Bảo hành cá nhân)</option>
                       </select>
                     </div>
 
                     <div>
                       <label class="block text-ink-500 font-semibold mb-0.5">Chính sách bảo hành:</label>
+                      <span v-if="item.partSource === 'FIXHOME'" class="block h-7 px-2 py-1 bg-success-50 text-success-700 font-semibold rounded text-[11px] border border-success-200">
+                        Bảo hành FixHome ({{ item.warrantyTermDays || 90 }} ngày)
+                      </span>
                       <select
+                        v-else
                         v-model="item.partWarrantyOption"
                         class="w-full h-7 px-2 bg-white border border-ink-200 rounded text-[11px] font-medium"
                       >
-                        <option value="paid_warranty">Bảo hành linh kiện</option>
+                        <option value="paid_warranty">Bảo hành linh kiện (Có tính phí)</option>
                         <option value="no_warranty">Không bảo hành</option>
                       </select>
                     </div>
 
-                    <div v-if="item.partWarrantyOption !== 'no_warranty'">
+                    <div v-if="item.partSource !== 'FIXHOME' && item.partWarrantyOption !== 'no_warranty'">
                       <label class="block text-ink-500 font-semibold mb-0.5">Thời hạn bảo hành:</label>
                       <select
                         v-model.number="item.warrantyTermDays"
@@ -671,6 +770,18 @@ const handleSubmitAdditionalCost = async () => {
               </div>
             </div>
 
+            <!-- Quotation Approval Status Banner -->
+            <div v-if="job.quotation" class="p-3 rounded-lg border text-xs flex items-center justify-between"
+              :class="String(job.quotation?.status).toUpperCase() === 'APPROVED' ? 'bg-success-50 border-success-200 text-success-800' : (String(job.quotation?.status).toUpperCase() === 'REJECTED' ? 'bg-danger-50 border-danger-200 text-danger-800' : 'bg-warning-50 border-warning-200 text-warning-800')"
+            >
+              <div class="flex items-center gap-2">
+                <CheckCircle2 v-if="String(job.quotation?.status).toUpperCase() === 'APPROVED'" :size="16" class="text-success-600" />
+                <AlertCircle v-else :size="16" class="text-warning-600" />
+                <span>Trạng thái báo giá: <strong>{{ String(job.quotation?.status).toUpperCase() === 'APPROVED' ? 'Khách đã phê duyệt báo giá' : (String(job.quotation?.status).toUpperCase() === 'REJECTED' ? 'Khách từ chối báo giá' : 'Đang chờ khách duyệt') }}</strong></span>
+              </div>
+              <span class="font-bold font-num"><FhMoney :amount="job.quotation.laborTotal + job.quotation.partsTotal" /></span>
+            </div>
+
             <div class="pt-3 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
               <div class="text-xs">
                 <span class="text-ink-400">Tổng báo giá: </span>
@@ -683,7 +794,7 @@ const handleSubmitAdditionalCost = async () => {
                 <FhButton
                   variant="secondary"
                   size="sm"
-                  :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || (job.pricingMode !== 'fixed_price' && String(job.quotation?.status).toUpperCase() !== 'APPROVED')"
+                  :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || String(job.quotation?.status).toUpperCase() !== 'APPROVED'"
                   @click="handleStartRepair"
                 >
                   Bắt đầu sửa chữa (UNDER_REPAIR)
@@ -775,15 +886,6 @@ const handleSubmitAdditionalCost = async () => {
             </div>
 
             <div class="pt-4 border-t border-ink-100 flex flex-wrap justify-end gap-2">
-              <FhButton
-                variant="secondary"
-                size="md"
-                :disabled="isCompleted || actionLoading"
-                @click="handleCompleteOrder"
-              >
-                Hoàn tất trực tiếp
-              </FhButton>
-
               <FhButton
                 variant="primary"
                 size="md"

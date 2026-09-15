@@ -22,6 +22,10 @@ export interface ServiceOrderItem {
   bookingId: string;
   serviceName: string;
   pricingMode?: string;
+  fixedUnitPrice?: number;
+  quantity?: number;
+  scopeDescription?: string;
+  bookingDescription?: string;
   completionRequestedAt?: string;
   customerConfirmed?: boolean;
   arrivalVerified?: boolean;
@@ -101,6 +105,7 @@ export interface QuotationItemPayload {
   quantity: number;
   unitPrice: number;
   lineTotal?: number;
+  partCatalogId?: string;
   warrantyDays?: number;
   partSource?: 'FIXHOME' | 'TECHNICIAN' | 'fixhome' | 'technician';
   partWarrantyOption?: 'no_warranty' | 'included' | 'paid_warranty';
@@ -118,7 +123,7 @@ export interface EvidenceResponse { id: string; serviceOrderId: string; type: 'B
 const get = async <T>(url: string): Promise<T> => unwrap<T>((await apiClient.get(url)).data);
 const post = async (url: string, body: unknown = {}): Promise<Record<string, unknown>> => unwrap((await apiClient.post(url,body)).data);
 const normalizeOrder = (order: ServiceOrderItem): ServiceOrderItem => ({ ...order, status: order.status.toUpperCase() as CanonicalOrderStatus, paymentStatus: order.paymentStatus.toUpperCase() as ServiceOrderItem['paymentStatus'], quotation: order.quotation ? { ...order.quotation, status: order.quotation.status.toUpperCase() as NonNullable<ServiceOrderItem['quotation']>['status'], items: order.quotation.items.map(item => ({ ...item, type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS' })) } : undefined });
-const wireItems = (items: QuotationItemPayload[]) => items.map(item => ({ type: item.type === 'LABOR' ? 'labor' : 'parts_equipment', description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, ...(item.type === 'LABOR' ? { warrantyDays: item.warrantyDays } : { partSource: item.partSource?.toLowerCase(), partWarrantyOption: item.partWarrantyOption ?? 'no_warranty', ...(item.partWarrantyOption === 'paid_warranty' ? { warrantyFee: item.warrantyFee, warrantyTermDays: item.warrantyTermDays } : {}) }) }));
+const wireItems = (items: QuotationItemPayload[]) => items.map(item => ({ type: item.type === 'LABOR' ? 'labor' : 'parts_equipment', description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, ...(item.type === 'LABOR' ? { warrantyDays: item.warrantyDays } : { partSource: item.partSource?.toLowerCase(), partCatalogId: item.partCatalogId, partWarrantyOption: item.partWarrantyOption ?? 'no_warranty', ...(item.partWarrantyOption === 'paid_warranty' ? { warrantyFee: item.warrantyFee, warrantyTermDays: item.warrantyTermDays } : {}) }) }));
 export const ordersApi = {
   async getCustomerOrders(): Promise<ServiceOrderItem[]> { return (await get<ServiceOrderItem[]>('/service-orders/my')).map(normalizeOrder); },
   async getTechnicianJobs(): Promise<ServiceOrderItem[]> { return (await get<ServiceOrderItem[]>('/service-orders/my')).map(normalizeOrder); },
@@ -158,6 +163,17 @@ export const ordersApi = {
     const orders = await this.getCustomerOrders();
     const coverages = await Promise.all(orders.filter(o=>o.status==='COMPLETED').map(async order => (await get<WarrantyItem[]>('/service-orders/'+order.id+'/warranties')).map(w => ({ ...w, orderCode: order.code, serviceName: order.serviceName, technicianName: order.technician?.fullName ?? '', status: w.status.toUpperCase() as WarrantyItem['status'] }))));
     return coverages.flat();
+  },
+  async getCommissionDues(): Promise<{ data: Array<{ id: string; serviceOrderId: string; dueAmount: number; laborTotalSnapshot: number; commissionRateSnapshot: number; status: 'PENDING' | 'PAID' | 'pending' | 'paid'; createdAt: string; paidAt?: string; serviceOrder?: { code: string } }>; totalDue: number }> {
+    const res = await apiClient.get('/platform-dues/my');
+    return { data: unwrap(res.data), totalDue: res.data.meta?.totalDue ?? 0 };
+  },
+  async payCommissionDue(id: string, paymentMethod = 'VNPAY_SANDBOX') {
+    return post('/platform-dues/' + id + '/pay', { paymentMethod });
+  },
+  async getParts(serviceId?: string, search?: string) {
+    const res = await apiClient.get('/parts', { params: { serviceId, search } });
+    return unwrap<Array<{ id: string; code: string; name: string; serviceId?: string; price: number; warrantyDays: number; warrantyPolicy: string; description?: string }>>(res.data);
   },
   async createWarrantyClaim(id: string, description: string) { return post('/service-orders/'+id+'/warranty-claims', { description }); },
 };
