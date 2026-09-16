@@ -76,6 +76,7 @@ const showUploadForm = computed(
   () => !verification.value || verification.value.status === 'REJECTED',
 );
 const canSubmit = computed(() => slots.value.every((slot) => slot.file !== null));
+const hasAnySelection = computed(() => slots.value.some((slot) => slot.file !== null));
 
 const loadVerification = async () => {
   loading.value = true;
@@ -118,6 +119,15 @@ const applyFileToSlot = (key: KycSlot['key'], file: File) => {
 };
 
 const triggerPick = (key: 'front' | 'back') => pickInputs[key].value?.click();
+
+const resetSlots = () => {
+  for (const slot of slots.value) {
+    if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+    slot.file = null;
+    slot.previewUrl = null;
+  }
+  actionMessage.value = null;
+};
 
 const onFileSelected = (key: 'front' | 'back', event: Event) => {
   const input = event.target as HTMLInputElement;
@@ -326,7 +336,15 @@ const handleSubmit = async () => {
           Ảnh JPEG, PNG hoặc WebP, tối đa 10MB mỗi ảnh.
         </p>
 
-        <div class="mt-5 flex justify-end">
+        <div class="mt-5 flex justify-end gap-3">
+          <FhButton
+            v-if="hasAnySelection"
+            variant="secondary"
+            :disabled="submitting"
+            @click="resetSlots"
+          >
+            Chọn lại
+          </FhButton>
           <FhButton :disabled="!canSubmit" :loading="submitting" @click="handleSubmit">
             Nộp hồ sơ xác minh
           </FhButton>
