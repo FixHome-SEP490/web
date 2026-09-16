@@ -21,7 +21,19 @@ describe('DEV1 client contracts', () => {
   });
   it('keeps paginated catalog metadata for DEV2 consumers', async () => {
     const meta = { page: 1, limit: 10, total: 42, totalPages: 5 };
-    const response = { data: [{ id: 'service' } as any], meta };
+    const response = {
+      data: [
+        {
+          id: 'service',
+          categoryId: 'cat-1',
+          name: 'Service',
+          code: 'SVC',
+          estimatedMinutes: 30,
+          isActive: true,
+        },
+      ],
+      meta,
+    };
     vi.mocked(apiClient.get).mockResolvedValue({
       data: { success: true, statusCode: 200, message: 'OK', data: response.data, meta },
     });
