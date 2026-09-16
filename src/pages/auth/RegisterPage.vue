@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-vue-next';
 import { FhButton } from '../../components';
+import { toast } from 'vue-sonner';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -40,6 +41,7 @@ const handleRegister = async () => {
       phoneNumber: phoneNumber.value || undefined,
       password: password.value,
     });
+    toast.success('Đăng ký thành công!', { description: 'Chào mừng bạn đến với FixHome.' });
     router.push('/app');
   } catch (err: unknown) {
     const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
@@ -63,7 +65,7 @@ const handleRegister = async () => {
     <!-- Error Alert Box -->
     <div
       v-if="errorMessage"
-      class="p-3.5 rounded-[var(--radius-sm)] bg-danger-50 border border-danger-200 text-danger-800 text-sm flex items-start gap-2.5"
+      class="p-3.5 rounded-sm bg-danger-50 border border-danger-200 text-danger-800 text-sm flex items-start gap-2.5"
     >
       <AlertCircle :size="18" class="text-danger-600 shrink-0 mt-0.5" />
       <span>{{ errorMessage }}</span>
@@ -81,7 +83,7 @@ const handleRegister = async () => {
             type="text"
             required
             placeholder="Nguyễn Văn A"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <User class="absolute left-3.5 top-3 text-ink-400" :size="17" />
         </div>
@@ -98,7 +100,7 @@ const handleRegister = async () => {
             type="email"
             required
             placeholder="customer@example.com"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Mail class="absolute left-3.5 top-3 text-ink-400" :size="17" />
         </div>
@@ -114,7 +116,7 @@ const handleRegister = async () => {
             v-model="phoneNumber"
             type="tel"
             placeholder="0912345678"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Phone class="absolute left-3.5 top-3 text-ink-400" :size="17" />
         </div>
@@ -132,7 +134,7 @@ const handleRegister = async () => {
             required
             minlength="8"
             placeholder="••••••••"
-            class="w-full h-11 pl-10 pr-11 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-11 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Lock class="absolute left-3.5 top-3 text-ink-400" :size="17" />
           <button
@@ -156,7 +158,7 @@ const handleRegister = async () => {
             :type="showPassword ? 'text' : 'password'"
             required
             placeholder="••••••••"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Lock class="absolute left-3.5 top-3 text-ink-400" :size="17" />
         </div>

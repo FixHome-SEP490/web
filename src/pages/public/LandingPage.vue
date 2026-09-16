@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   Wrench,
   Zap,
@@ -20,6 +21,8 @@ import {
 } from '../../components';
 
 const router = useRouter();
+
+useSmoothScroll();
 
 const categories = [
   {
@@ -103,7 +106,7 @@ const steps = [
               <FhButton
                 variant="primary"
                 size="lg"
-                class="w-full sm:w-auto text-base shadow-[var(--shadow-e2)]"
+                class="w-full sm:w-auto text-base shadow-(--shadow-e2)"
                 @click="router.push('/register')"
               >
                 Đặt thợ ngay bây giờ
@@ -144,9 +147,9 @@ const steps = [
               <div class="absolute -top-10 -left-10 w-72 h-72 bg-brand-200/40 rounded-full blur-3xl pointer-events-none" />
               <div class="absolute -bottom-10 -right-10 w-72 h-72 bg-warning-200/40 rounded-full blur-3xl pointer-events-none" />
 
-              <FhCard padding="none" class="relative z-10 shadow-[var(--shadow-e3)]">
+              <FhCard padding="none" class="relative z-10 shadow-(--shadow-e3)">
                 <!-- Card Header -->
-                <div class="p-5 bg-gradient-to-r from-ink-900 to-ink-800 text-white flex items-center justify-between">
+                <div class="p-5 bg-linear-to-r from-ink-900 to-ink-800 text-white flex items-center justify-between">
                   <div>
                     <span class="text-[11px] font-semibold text-brand-400 uppercase tracking-wider">Đơn hàng mẫu #FH-8821</span>
                     <h3 class="text-base font-bold">Vệ sinh & Bơm ga máy lạnh Inverter</h3>
@@ -157,7 +160,7 @@ const steps = [
                 <!-- Card Content -->
                 <div class="p-5 space-y-4">
                   <!-- Technician Snippet -->
-                  <div class="flex items-center justify-between p-3 bg-ink-25 rounded-[var(--radius-sm)] border border-ink-100">
+                  <div class="flex items-center justify-between p-3 bg-ink-25 rounded-sm border border-ink-100">
                     <div class="flex items-center gap-3">
                       <div class="w-10 h-10 rounded-full bg-brand-600 text-white font-bold flex items-center justify-center">
                         TV
@@ -215,7 +218,7 @@ const steps = [
           @click="router.push('/services')"
         >
           <div class="space-y-3">
-            <div class="w-12 h-12 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 group-hover:bg-brand-600 group-hover:text-white transition-colors">
+            <div class="w-12 h-12 rounded-sm bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 group-hover:bg-brand-600 group-hover:text-white transition-colors">
               <component :is="cat.icon" :size="24" :stroke-width="1.75" />
             </div>
             <h3 class="text-base font-bold text-ink-900 group-hover:text-brand-600 transition-colors">
@@ -251,7 +254,7 @@ const steps = [
           <div
             v-for="step in steps"
             :key="step.num"
-            class="relative p-6 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e1)] space-y-3"
+            class="relative p-6 bg-white rounded-md border border-ink-200 shadow-(--shadow-e1) space-y-3"
           >
             <div class="font-num text-3xl font-bold text-brand-300">
               {{ step.num }}
@@ -269,7 +272,7 @@ const steps = [
 
     <!-- Bottom CTA Card -->
     <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-      <div class="bg-gradient-to-r from-brand-600 to-brand-700 rounded-[var(--radius-lg)] text-white p-8 sm:p-12 lg:p-16 flex flex-col md:flex-row items-center justify-between gap-8 shadow-[var(--shadow-e3)]">
+      <div class="bg-linear-to-r from-brand-600 to-brand-700 rounded-lg text-white p-8 sm:p-12 lg:p-16 flex flex-col md:flex-row items-center justify-between gap-8 shadow-(--shadow-e3)">
         <div class="space-y-3 max-w-xl text-center md:text-left">
           <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
             Bạn đang gặp sự cố thiết bị tại nhà?

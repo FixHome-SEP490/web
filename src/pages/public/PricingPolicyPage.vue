@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -8,6 +9,8 @@ import {
   FhCard,
   FhCostBreakdown,
 } from '../../components';
+
+useSmoothScroll();
 </script>
 
 <template>
@@ -24,8 +27,8 @@ import {
     </div>
 
     <!-- Rule Highlight Card -->
-    <div class="p-6 bg-brand-50 rounded-[var(--radius-lg)] border border-brand-200 flex flex-col sm:flex-row gap-5 items-start">
-      <div class="w-12 h-12 rounded-[var(--radius-sm)] bg-brand-600 text-white flex items-center justify-center shrink-0">
+    <div class="p-6 bg-brand-50 rounded-lg border border-brand-200 flex flex-col sm:flex-row gap-5 items-start">
+      <div class="w-12 h-12 rounded-sm bg-brand-600 text-white flex items-center justify-center shrink-0">
         <ShieldCheck :size="24" />
       </div>
       <div class="space-y-2 text-sm text-brand-950">
@@ -45,7 +48,7 @@ import {
         Dưới đây là bảng báo giá mẫu chuẩn mực hiển thị trên điện thoại của khách hàng trước khi bấm đồng ý:
       </p>
 
-      <FhCard class="max-w-lg mx-auto shadow-[var(--shadow-e2)] space-y-4">
+      <FhCard class="max-w-lg mx-auto shadow-(--shadow-e2) space-y-4">
         <div class="flex items-center justify-between pb-3 border-b border-ink-100">
           <div>
             <div class="text-xs font-num font-bold text-ink-500">MÃ ĐƠN: #FH-20260913-DEMO</div>

@@ -4,13 +4,13 @@ import { ShieldCheck, Wrench, CheckCircle2 } from 'lucide-vue-next';
 
 
 <template>
-  <div class="min-h-screen flex bg-ink-50">
-    <!-- Left Column: Authentication Form -->
-    <div class="flex-1 flex flex-col justify-between p-6 sm:p-10 md:p-12 lg:max-w-xl xl:max-w-2xl bg-white shadow-[var(--shadow-e1)] border-r border-ink-200">
+  <div class="min-h-screen flex lg:flex-row-reverse bg-ink-50">
+    <!-- Form Column -->
+    <div class="flex-1 flex flex-col justify-between p-6 sm:p-10 md:p-12 lg:max-w-xl xl:max-w-2xl bg-white shadow-(--shadow-e1) border-r lg:border-r-0 lg:border-l border-ink-200">
       <div>
         <!-- Brand Header -->
         <router-link to="/" class="inline-flex items-center gap-2.5 group">
-          <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white shadow-[var(--shadow-e1)] group-hover:bg-brand-700 transition-colors">
+          <div class="w-10 h-10 rounded-sm bg-brand-600 flex items-center justify-center text-white shadow-(--shadow-e1) group-hover:bg-brand-700 transition-colors">
             <Wrench :size="22" :stroke-width="2" />
           </div>
           <div>
@@ -36,7 +36,7 @@ import { ShieldCheck, Wrench, CheckCircle2 } from 'lucide-vue-next';
     </div>
 
     <!-- Right Column: Brand Feature Showcase (Desktop only) -->
-    <div class="hidden lg:flex flex-1 relative bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 text-white p-12 xl:p-16 flex-col justify-between overflow-hidden">
+    <div class="hidden lg:flex flex-1 relative bg-linear-to-br from-brand-600 via-brand-700 to-brand-900 text-white p-12 xl:p-16 flex-col justify-between overflow-hidden">
       <!-- Decorative Background Orbs -->
       <div class="absolute -right-20 -top-20 w-96 h-96 bg-brand-400/20 rounded-full blur-3xl pointer-events-none" />
       <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-brand-300/10 rounded-full blur-3xl pointer-events-none" />

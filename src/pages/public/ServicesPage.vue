@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search, Clock } from 'lucide-vue-next';
 
 import { FhButton, FhCard, FhMoney } from '../../components';
@@ -8,6 +9,8 @@ import { FhButton, FhCard, FhMoney } from '../../components';
 const router = useRouter();
 const selectedCategory = ref('ALL');
 const searchQuery = ref('');
+
+useSmoothScroll();
 
 const categories = [
   { id: 'ALL', name: 'Tất cả dịch vụ' },
