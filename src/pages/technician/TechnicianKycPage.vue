@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { Camera, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { Camera, CheckCircle2, AlertCircle, ShieldCheck, X } from 'lucide-vue-next';
 import { FhButton, FhCard, FhStatusPill } from '../../components';
 import {
   technicianVerificationApi,
@@ -23,7 +23,6 @@ interface KycSlot {
   documentType: KycDocumentType;
   label: string;
   hint: string;
-  capture?: 'user';
   file: File | null;
   previewUrl: string | null;
 }
@@ -49,8 +48,7 @@ const slots = ref<KycSlot[]>([
     key: 'face',
     documentType: 'face_photo',
     label: 'Ảnh chân dung',
-    hint: 'Bắt buộc chụp trực tiếp bằng camera',
-    capture: 'user',
+    hint: 'Bấm để mở camera chụp trực tiếp',
     file: null,
     previewUrl: null,
   },
@@ -58,17 +56,21 @@ const slots = ref<KycSlot[]>([
 
 const frontInput = ref<HTMLInputElement | null>(null);
 const backInput = ref<HTMLInputElement | null>(null);
-const faceInput = ref<HTMLInputElement | null>(null);
-const slotInputs: Record<KycSlot['key'], typeof frontInput> = {
-  front: frontInput,
-  back: backInput,
-  face: faceInput,
-};
+const pickInputs = { front: frontInput, back: backInput } as const;
 
 const loading = ref(true);
 const submitting = ref(false);
 const verification = ref<MyVerification | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+
+// Live camera capture for the face photo (input[capture] silently falls back
+// to a plain file picker on desktop browsers, so we drive getUserMedia
+// ourselves to guarantee the camera actually opens).
+const showCamera = ref(false);
+const cameraBusy = ref(false);
+const videoEl = ref<HTMLVideoElement | null>(null);
+const canvasEl = ref<HTMLCanvasElement | null>(null);
+let mediaStream: MediaStream | null = null;
 
 const showUploadForm = computed(
   () => !verification.value || verification.value.status === 'REJECTED',
@@ -90,15 +92,14 @@ const loadVerification = async () => {
 };
 
 onMounted(loadVerification);
+onUnmounted(() => stopCameraStream());
 
-const triggerPick = (key: KycSlot['key']) => slotInputs[key].value?.click();
+function stopCameraStream() {
+  mediaStream?.getTracks().forEach((track) => track.stop());
+  mediaStream = null;
+}
 
-const onFileSelected = (key: KycSlot['key'], event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-
+const applyFileToSlot = (key: KycSlot['key'], file: File) => {
   if (!ALLOWED_MIME_TYPES.includes(file.type as KycMimeType)) {
     actionMessage.value = { type: 'error', text: 'Chỉ nhận ảnh định dạng JPEG, PNG hoặc WebP.' };
     return;
@@ -114,6 +115,68 @@ const onFileSelected = (key: KycSlot['key'], event: Event) => {
   slot.file = file;
   slot.previewUrl = URL.createObjectURL(file);
   actionMessage.value = null;
+};
+
+const triggerPick = (key: 'front' | 'back') => pickInputs[key].value?.click();
+
+const onFileSelected = (key: 'front' | 'back', event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (file) applyFileToSlot(key, file);
+};
+
+const openCamera = async () => {
+  actionMessage.value = null;
+  cameraBusy.value = true;
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: false,
+    });
+    showCamera.value = true;
+    await nextTick();
+    if (videoEl.value) {
+      videoEl.value.srcObject = mediaStream;
+      await videoEl.value.play();
+    }
+  } catch {
+    actionMessage.value = {
+      type: 'error',
+      text: 'Không thể mở camera. Vui lòng cấp quyền truy cập camera cho trình duyệt và thử lại.',
+    };
+    stopCameraStream();
+  } finally {
+    cameraBusy.value = false;
+  }
+};
+
+const closeCamera = () => {
+  stopCameraStream();
+  showCamera.value = false;
+};
+
+const capturePhoto = () => {
+  const video = videoEl.value;
+  const canvas = canvasEl.value;
+  if (!video || !canvas || video.videoWidth === 0) return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(
+    (blob) => {
+      if (!blob) {
+        actionMessage.value = { type: 'error', text: 'Không thể chụp ảnh. Vui lòng thử lại.' };
+        return;
+      }
+      applyFileToSlot('face', new File([blob], 'face-capture.jpg', { type: 'image/jpeg' }));
+      closeCamera();
+    },
+    'image/jpeg',
+    0.92,
+  );
 };
 
 const uploadSlot = async (slot: KycSlot): Promise<SubmitDocumentPayload> => {
@@ -170,14 +233,6 @@ const handleSubmit = async () => {
       accept="image/jpeg,image/png,image/webp"
       class="hidden"
       @change="onFileSelected('back', $event)"
-    />
-    <input
-      ref="faceInput"
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-      capture="user"
-      class="hidden"
-      @change="onFileSelected('face', $event)"
     />
 
     <div>
@@ -248,7 +303,7 @@ const handleSubmit = async () => {
               type="button"
               class="w-full aspect-[4/3] rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors overflow-hidden"
               :class="slot.file ? 'border-success-500 bg-success-50/50' : 'border-ink-300 hover:border-brand-500 text-ink-500'"
-              @click="triggerPick(slot.key)"
+              @click="slot.key === 'face' ? openCamera() : triggerPick(slot.key)"
             >
               <img
                 v-if="slot.previewUrl"
@@ -258,7 +313,9 @@ const handleSubmit = async () => {
               />
               <template v-else>
                 <Camera :size="24" />
-                <span class="text-[10px] font-semibold px-2">{{ slot.hint }}</span>
+                <span class="text-[10px] font-semibold px-2">
+                  {{ slot.key === 'face' && cameraBusy ? 'Đang mở camera...' : slot.hint }}
+                </span>
               </template>
             </button>
             <p class="text-xs font-semibold text-ink-800">{{ slot.label }}</p>
@@ -276,5 +333,35 @@ const handleSubmit = async () => {
         </div>
       </FhCard>
     </template>
+
+    <!-- Live camera modal for the face photo -->
+    <div
+      v-if="showCamera"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-ink-900">Chụp ảnh chân dung</h3>
+          <button type="button" class="text-ink-400 hover:text-ink-700" @click="closeCamera">
+            <X :size="18" />
+          </button>
+        </div>
+
+        <video
+          ref="videoEl"
+          class="w-full aspect-[3/4] object-cover rounded-[var(--radius-sm)] bg-ink-950 scale-x-[-1]"
+          autoplay
+          playsinline
+          muted
+        />
+        <canvas ref="canvasEl" class="hidden" />
+
+        <p class="text-[11px] text-ink-500 text-center">
+          Giữ khuôn mặt trong khung hình, đủ ánh sáng rồi bấm chụp.
+        </p>
+
+        <FhButton block @click="capturePhoto">Chụp ảnh</FhButton>
+      </div>
+    </div>
   </div>
 </template>
