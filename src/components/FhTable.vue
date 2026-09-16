@@ -13,19 +13,25 @@ interface Props {
   rows: TRow[];
   loading?: boolean;
   emptyText?: string;
+  rowClass?: string;
 }
 
 withDefaults(defineProps<Props>(), {
   loading: false,
   emptyText: 'Không có dữ liệu',
+  rowClass: '',
 });
 
-defineSlots<{
-  [name: string]: (props: { row: TRow; value: TRow[keyof TRow] }) => unknown;
+const emit = defineEmits<{
+  (e: 'row-click', row: TRow): void;
 }>();
 
-const getCellValue = (row: TRow, key: string): TRow[keyof TRow] =>
-  (row as Record<string, TRow[keyof TRow]>)[key];
+defineSlots<{
+  [name: string]: (props: { row: TRow; value: unknown }) => unknown;
+}>();
+
+const getCellValue = (row: TRow, key: string): unknown =>
+  (row as Record<string, unknown>)[key];
 </script>
 
 <template>
@@ -70,6 +76,8 @@ const getCellValue = (row: TRow, key: string): TRow[keyof TRow] =>
           v-else
           :key="rIdx"
           class="h-[56px] transition-colors duration-100 hover:bg-ink-25"
+          :class="rowClass"
+          @click="emit('row-click', row)"
         >
           <td
             v-for="col in columns"

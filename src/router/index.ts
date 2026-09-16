@@ -129,6 +129,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/customer/CustomerProfilePage.vue'),
         meta: { title: 'Hồ sơ & Sổ địa chỉ' },
       },
+      {
+        path: 'notifications',
+        name: 'customer-notifications',
+        component: () => import('../pages/customer/CustomerNotificationsPage.vue'),
+        meta: { title: 'Thông báo' },
+      },
     ],
   },
 
@@ -167,6 +173,24 @@ const routes: RouteRecordRaw[] = [
         name: 'tech-earnings',
         component: () => import('../pages/technician/TechnicianEarningsPage.vue'),
         meta: { title: 'Báo cáo thu nhập' },
+      },
+      {
+        path: 'schedule',
+        name: 'technician-schedule',
+        component: () => import('../pages/technician/TechnicianSchedulePage.vue'),
+        meta: { title: 'Lịch làm việc & Nghỉ phép' },
+      },
+      {
+        path: 'platform-dues',
+        name: 'technician-platform-dues',
+        component: () => import('../pages/technician/TechnicianPlatformDuesPage.vue'),
+        meta: { title: 'Công nợ nền tảng (PlatformDue)' },
+      },
+      {
+        path: 'verification',
+        name: 'technician-verification',
+        component: () => import('../pages/technician/TechnicianVerificationPage.vue'),
+        meta: { title: 'Xác minh danh tính (KYC)' },
       },
       {
         path: 'profile',

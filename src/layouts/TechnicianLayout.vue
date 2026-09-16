@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import {
@@ -11,17 +11,43 @@ import {
   LogOut,
   User,
   ChevronDown,
+  CreditCard,
+  ShieldCheck,
 } from 'lucide-vue-next';
+import { bookingsApi } from '../api/bookings.api';
+import { techniciansApi } from '../api/technicians.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const isAvailable = ref(true);
 const avatarMenuOpen = ref(false);
-const invitationCount = ref(3); // Demo badge count
+const invitationCount = ref(0);
 
-const toggleAvailability = () => {
-  isAvailable.value = !isAvailable.value;
+const toggleAvailability = async () => {
+  try {
+    isAvailable.value = !isAvailable.value;
+    await techniciansApi.updateProfile({ isAvailable: isAvailable.value });
+  } catch {
+    isAvailable.value = !isAvailable.value;
+  }
 };
+
+const loadNavData = async () => {
+  try {
+    const [invitations, profile] = await Promise.all([
+      bookingsApi.getMyInvitations(),
+      techniciansApi.getProfile(),
+    ]);
+    invitationCount.value = invitations.filter((i) => i.status === 'PENDING').length;
+    isAvailable.value = profile.isAvailable;
+  } catch {
+    // Ignore initial navigation background error
+  }
+};
+
+onMounted(() => {
+  loadNavData();
+});
 
 const handleLogout = async () => {
   await authStore.logout();
@@ -47,7 +73,7 @@ const handleLogout = async () => {
           </router-link>
 
           <!-- Nav Items -->
-          <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-ink-700">
+          <nav class="hidden md:flex items-center gap-5 text-sm font-medium text-ink-700">
             <router-link
               to="/tech"
               class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
@@ -95,6 +121,14 @@ const handleLogout = async () => {
               <DollarSign :size="16" />
               Thu nhập
             </router-link>
+            <router-link
+              to="/tech/platform-dues"
+              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
+              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+            >
+              <CreditCard :size="16" />
+              Công nợ
+            </router-link>
           </nav>
         </div>
 
@@ -132,7 +166,7 @@ const handleLogout = async () => {
             <!-- Dropdown Menu -->
             <div
               v-if="avatarMenuOpen"
-              class="absolute right-0 mt-2 w-52 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e3)] py-2 z-50 divide-y divide-ink-100"
+              class="absolute right-0 mt-2 w-56 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e3)] py-2 z-50 divide-y divide-ink-100"
               @click="avatarMenuOpen = false"
             >
               <div class="px-4 py-2">
@@ -144,6 +178,14 @@ const handleLogout = async () => {
                 <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
                   <User :size="16" />
                   Hồ sơ thợ & Kỹ năng
+                </router-link>
+                <router-link to="/tech/verification" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
+                  <ShieldCheck :size="16" />
+                  Xác minh danh tính (KYC)
+                </router-link>
+                <router-link to="/tech/platform-dues" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
+                  <CreditCard :size="16" />
+                  Công nợ nền tảng
                 </router-link>
               </div>
 
@@ -163,8 +205,38 @@ const handleLogout = async () => {
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
       <router-view />
     </main>
+
+    <!-- Mobile Bottom Navigation Bar (Task 19) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-ink-200 shadow-[var(--shadow-e3)] py-1.5 px-2 flex items-center justify-around text-[10px] font-medium text-ink-600">
+      <router-link to="/tech" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold" exact-active-class="text-brand-600 font-bold">
+        <Wrench :size="18" />
+        <span>Tổng quan</span>
+      </router-link>
+      <router-link to="/tech/invitations" class="relative flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Inbox :size="18" />
+        <span
+          v-if="invitationCount > 0"
+          class="absolute top-0 right-1 w-3.5 h-3.5 bg-danger-600 text-white font-num text-[9px] font-bold rounded-full flex items-center justify-center leading-none"
+        >
+          {{ invitationCount }}
+        </span>
+        <span>Lời mời</span>
+      </router-link>
+      <router-link to="/tech/jobs" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Briefcase :size="18" />
+        <span>Công việc</span>
+      </router-link>
+      <router-link to="/tech/schedule" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <Calendar :size="18" />
+        <span>Lịch</span>
+      </router-link>
+      <router-link to="/tech/profile" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
+        <User :size="18" />
+        <span>Hồ sơ</span>
+      </router-link>
+    </nav>
   </div>
 </template>

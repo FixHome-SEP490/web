@@ -6,9 +6,17 @@ import { authApi } from '../api/auth.api';
 import { getHttpStatus, registerAuthSessionInvalidator } from '../api/client';
 
 export const useAuthStore = defineStore('auth', () => {
+  const savedUser = localStorage.getItem('user');
+  let initialUser: UserInfo | null = null;
+  try {
+    initialUser = savedUser ? JSON.parse(savedUser) : null;
+  } catch {
+    initialUser = null;
+  }
+
   // State
   const token = ref<string | null>(localStorage.getItem('access_token'));
-  const user = ref<UserInfo | null>(null);
+  const user = ref<UserInfo | null>(initialUser);
   const loading = ref<boolean>(false);
 
   // Getters
@@ -20,22 +28,28 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null;
     user.value = null;
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
   }
 
   registerAuthSessionInvalidator(clearSession);
 
   // Actions
-  function setAuth(accessToken: string, userInfo: UserInfo) {
+  function setAuth(accessToken: string, userInfo: UserInfo, refreshToken?: string) {
     token.value = accessToken;
     user.value = userInfo;
     localStorage.setItem('access_token', accessToken);
+    localStorage.setItem('user', JSON.stringify(userInfo));
+    if (refreshToken) {
+      localStorage.setItem('refresh_token', refreshToken);
+    }
   }
 
   async function login(credentials: LoginRequest) {
     loading.value = true;
     try {
       const response = await authApi.login(credentials);
-      setAuth(response.accessToken, response.user);
+      setAuth(response.accessToken, response.user, response.refreshToken);
       return response.user;
     } finally {
       loading.value = false;
@@ -46,7 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     try {
       const response = await authApi.register(data);
-      setAuth(response.accessToken, response.user);
+      setAuth(response.accessToken, response.user, response.refreshToken);
       return response.user;
     } finally {
       loading.value = false;
@@ -58,6 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const profile = await authApi.getProfile();
       user.value = profile;
+      localStorage.setItem('user', JSON.stringify(profile));
       return profile;
     } catch (error) {
       if (getHttpStatus(error) === 401) clearSession();
