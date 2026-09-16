@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Clock, ShieldCheck, CheckCircle2, ChevronRight, Star, ArrowLeft, Wrench } from 'lucide-vue-next';
 import { FhButton, FhCard, FhMoney, FhStatusPill } from '../../components';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
@@ -11,6 +12,8 @@ const slug = route.params.slug as string;
 
 const loading = ref(true);
 const service = ref<ServiceItem | null>(null);
+
+useSmoothScroll();
 
 // Fallback mock if backend is unavailable
 const fallbackService: ServiceItem = {
@@ -69,10 +72,10 @@ onMounted(async () => {
 
     <div v-if="service" class="space-y-8">
       <!-- Header Hero -->
-      <div class="bg-white rounded-[var(--radius-md)] border border-ink-200 p-6 sm:p-8 shadow-[var(--shadow-e1)] space-y-6">
+      <div class="bg-white rounded-md border border-ink-200 p-6 sm:p-8 shadow-(--shadow-e1) space-y-6">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-3">
-            <span class="w-12 h-12 rounded-[var(--radius-sm)] bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
+            <span class="w-12 h-12 rounded-sm bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
               <Wrench :size="24" />
             </span>
             <div>
@@ -122,7 +125,7 @@ onMounted(async () => {
       <FhCard title="Quy chuẩn chi phí minh bạch FixHome (D-02)">
         <div class="space-y-4 text-xs sm:text-sm text-ink-700 leading-relaxed">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="p-4 rounded-[var(--radius-sm)] bg-brand-50/60 border border-brand-200/60 space-y-2">
+            <div class="p-4 rounded-sm bg-brand-50/60 border border-brand-200/60 space-y-2">
               <h4 class="font-bold text-brand-900 flex items-center gap-1.5">
                 <CheckCircle2 :size="16" class="text-brand-600" /> Tiền công kỹ thuật (Labor)
               </h4>
@@ -131,7 +134,7 @@ onMounted(async () => {
               </p>
             </div>
 
-            <div class="p-4 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2">
+            <div class="p-4 rounded-sm bg-ink-50 border border-ink-200 space-y-2">
               <h4 class="font-bold text-ink-900 flex items-center gap-1.5">
                 <CheckCircle2 :size="16" class="text-ink-600" /> Tiền linh kiện thay thế (Parts)
               </h4>
@@ -144,7 +147,7 @@ onMounted(async () => {
       </FhCard>
 
       <!-- Booking CTA Box -->
-      <div class="p-6 rounded-[var(--radius-md)] bg-gradient-to-r from-brand-600 to-brand-700 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+      <div class="p-6 rounded-md bg-linear-to-r from-brand-600 to-brand-700 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
         <div>
           <h3 class="text-lg font-bold">Cần sửa chữa thiết bị này ngay?</h3>
           <p class="text-xs text-brand-100">

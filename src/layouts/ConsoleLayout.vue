@@ -73,13 +73,13 @@ const handleLogout = async () => {
     <!-- Left Sidebar: collapsible 240px / 72px per P6.1 -->
     <aside
       class="sticky top-0 h-screen z-30 bg-ink-900 text-white flex flex-col justify-between transition-all duration-200 shrink-0 select-none border-r border-ink-800"
-      :class="isCollapsed ? 'w-[72px]' : 'w-[240px]'"
+      :class="isCollapsed ? 'w-18' : 'w-60'"
     >
       <!-- Brand & Collapse Trigger -->
       <div>
         <div class="h-16 flex items-center px-4 border-b border-ink-800 justify-between">
           <router-link to="/console" class="flex items-center gap-2.5 overflow-hidden">
-            <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white shrink-0">
+            <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white shrink-0">
               <Wrench :size="20" />
             </div>
             <div v-if="!isCollapsed" class="whitespace-nowrap">
@@ -112,7 +112,7 @@ const handleLogout = async () => {
               v-for="item in group.items"
               :key="item.path"
               :to="item.path"
-              class="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors group"
+              class="flex items-center gap-3 px-3 py-2 rounded-sm text-sm transition-colors group"
               :class="[
                 route.path === item.path || (item.path !== '/console' && route.path.startsWith(`${item.path}/`))
                   ? 'bg-brand-600 text-white font-medium shadow-sm'
@@ -129,7 +129,7 @@ const handleLogout = async () => {
 
       <!-- User Profile & Logout at Bottom -->
       <div class="p-3 border-t border-ink-800 bg-ink-950/40">
-        <div class="flex items-center gap-2.5 px-2 py-1.5 rounded-[var(--radius-sm)] overflow-hidden">
+        <div class="flex items-center gap-2.5 px-2 py-1.5 rounded-sm overflow-hidden">
           <div class="w-8 h-8 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-xs shrink-0">
             {{ authStore.user?.fullName?.charAt(0) ?? 'A' }}
           </div>
@@ -152,7 +152,7 @@ const handleLogout = async () => {
     <!-- Main Workspace -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Topbar with Breadcrumbs per P6.1 -->
-      <header class="h-16 bg-white border-b border-ink-200 px-6 sm:px-8 flex items-center justify-between shadow-[var(--shadow-e1)]">
+      <header class="h-16 bg-white border-b border-ink-200 px-6 sm:px-8 flex items-center justify-between shadow-(--shadow-e1)">
         <!-- Breadcrumb / Route Title -->
         <div class="flex items-center gap-2 text-sm text-ink-500">
           <span class="font-medium text-ink-700">Console</span>
@@ -168,7 +168,7 @@ const handleLogout = async () => {
       </header>
 
       <!-- Main Content Container: max-width 1440px per P7.4 -->
-      <main class="flex-1 p-6 sm:p-8 max-w-[1440px] w-full mx-auto">
+      <main class="flex-1 p-6 sm:p-8 max-w-360 w-full mx-auto">
         <router-view />
       </main>
     </div>

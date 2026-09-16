@@ -1,3 +1,5 @@
+<script setup lang="ts">
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   ShieldCheck,
   DollarSign,
@@ -6,6 +8,9 @@ import {
   PhoneCall,
 } from 'lucide-vue-next';
 import { FhCard } from '../../components';
+
+useSmoothScroll();
+</script>
 
 
 <template>
@@ -23,7 +28,7 @@ import { FhCard } from '../../components';
     <!-- Benefits Grid -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
       <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
+        <div class="w-10 h-10 rounded-sm bg-brand-50 text-brand-600 flex items-center justify-center">
           <DollarSign :size="20" />
         </div>
         <h3 class="text-base font-bold text-ink-900">Thu nhập xứng đáng</h3>
@@ -33,7 +38,7 @@ import { FhCard } from '../../components';
       </FhCard>
 
       <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
+        <div class="w-10 h-10 rounded-sm bg-brand-50 text-brand-600 flex items-center justify-center">
           <Calendar :size="20" />
         </div>
         <h3 class="text-base font-bold text-ink-900">Chủ động thời gian</h3>
@@ -43,7 +48,7 @@ import { FhCard } from '../../components';
       </FhCard>
 
       <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
+        <div class="w-10 h-10 rounded-sm bg-brand-50 text-brand-600 flex items-center justify-center">
           <Award :size="20" />
         </div>
         <h3 class="text-base font-bold text-ink-900">Đánh giá công bằng</h3>
@@ -54,7 +59,7 @@ import { FhCard } from '../../components';
     </div>
 
     <!-- Verification Info per P4.3 -->
-    <div class="p-8 bg-ink-900 text-white rounded-[var(--radius-lg)] space-y-4">
+    <div class="p-8 bg-ink-900 text-white rounded-lg space-y-4">
       <div class="flex items-center gap-3">
         <ShieldCheck :size="24" class="text-brand-400" />
         <h3 class="text-lg font-bold">Quy trình gia nhập dành cho Kỹ thuật viên (P4.3)</h3>

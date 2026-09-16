@@ -32,12 +32,12 @@ const handleLogout = async () => {
 <template>
   <div class="min-h-screen flex flex-col bg-ink-50 text-ink-900">
     <!-- Top Navigation Bar per P6.1 -->
-    <header class="sticky top-0 z-30 bg-white border-b border-ink-200 shadow-[var(--shadow-e1)]">
+    <header class="sticky top-0 z-30 bg-white border-b border-ink-200 shadow-(--shadow-e1)">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <!-- Left: Logo + Tech Links -->
         <div class="flex items-center gap-8">
           <router-link to="/tech" class="inline-flex items-center gap-2">
-            <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white">
+            <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white">
               <Wrench :size="20" />
             </div>
             <div>
@@ -101,7 +101,7 @@ const handleLogout = async () => {
         <!-- Right Side: Availability Toggle per P6.1 + Avatar -->
         <div class="flex items-center gap-5">
           <!-- Availability Toggle -->
-          <div class="flex items-center gap-2 bg-ink-25 px-3 py-1.5 rounded-[var(--radius-sm)] border border-ink-200">
+          <div class="flex items-center gap-2 bg-ink-25 px-3 py-1.5 rounded-sm border border-ink-200">
             <button
               class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
               :class="isAvailable ? 'bg-success-600' : 'bg-ink-300'"
@@ -120,11 +120,12 @@ const handleLogout = async () => {
           <!-- Avatar Dropdown -->
           <div class="relative">
             <button
-              class="flex items-center gap-2 p-1.5 rounded-[var(--radius-sm)] hover:bg-ink-100 transition-colors"
+              class="flex items-center gap-2 p-1.5 rounded-sm hover:bg-ink-100 transition-colors"
               @click="avatarMenuOpen = !avatarMenuOpen"
             >
-              <div class="w-8 h-8 rounded-full bg-brand-600 text-white font-semibold flex items-center justify-center text-sm shadow-sm">
-                {{ authStore.user?.fullName?.charAt(0) ?? 'T' }}
+              <div class="w-8 h-8 rounded-full bg-brand-600 text-white font-semibold flex items-center justify-center text-sm shadow-sm overflow-hidden">
+                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
+                <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
               </div>
               <ChevronDown :size="16" class="text-ink-500" />
             </button>
@@ -132,7 +133,7 @@ const handleLogout = async () => {
             <!-- Dropdown Menu -->
             <div
               v-if="avatarMenuOpen"
-              class="absolute right-0 mt-2 w-52 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e3)] py-2 z-50 divide-y divide-ink-100"
+              class="absolute right-0 mt-2 w-52 bg-white rounded-md border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100"
               @click="avatarMenuOpen = false"
             >
               <div class="px-4 py-2">

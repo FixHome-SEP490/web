@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   Sparkles,
   MapPin,
@@ -10,6 +11,8 @@ import {
 import { FhButton, FhCard } from '../../components';
 
 const router = useRouter();
+
+useSmoothScroll();
 
 const steps = [
   {
@@ -59,7 +62,7 @@ const steps = [
         :key="s.step"
         class="flex flex-col sm:flex-row gap-6 p-6 sm:p-8 items-start"
       >
-        <div class="w-14 h-14 rounded-[var(--radius-md)] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
+        <div class="w-14 h-14 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
           <component :is="s.icon" :size="28" :stroke-width="1.75" />
         </div>
 

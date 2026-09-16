@@ -28,10 +28,14 @@ export interface UserProfile {
   permissions?: string[];
 }
 
+interface ApiResponse<T> {
+  data: T;
+}
+
 export const profileApi = {
   async getMe(): Promise<UserProfile> {
-    const res = await apiClient.get<UserProfile>('/me');
-    return res.data;
+    const res = await apiClient.get<ApiResponse<UserProfile> | UserProfile>('/me');
+    return 'data' in res.data ? (res.data as ApiResponse<UserProfile>).data : res.data;
   },
 
   async updateMe(dto: {
@@ -39,13 +43,13 @@ export const profileApi = {
     phoneNumber?: string;
     avatarUrl?: string;
   }): Promise<UserProfile> {
-    const res = await apiClient.patch<UserProfile>('/me', dto);
-    return res.data;
+    const res = await apiClient.patch<ApiResponse<UserProfile> | UserProfile>('/me', dto);
+    return 'data' in res.data ? (res.data as ApiResponse<UserProfile>).data : res.data;
   },
 
   async getAddresses(): Promise<UserAddress[]> {
-    const res = await apiClient.get<UserAddress[]>('/me/addresses');
-    return res.data;
+    const res = await apiClient.get<ApiResponse<UserAddress[]> | UserAddress[]>('/me/addresses');
+    return 'data' in res.data ? (res.data as ApiResponse<UserAddress[]>).data : res.data;
   },
 
   async createAddress(dto: {
@@ -56,8 +60,8 @@ export const profileApi = {
     province: string;
     isDefault?: boolean;
   }): Promise<UserAddress> {
-    const res = await apiClient.post<UserAddress>('/me/addresses', dto);
-    return res.data;
+    const res = await apiClient.post<ApiResponse<UserAddress> | UserAddress>('/me/addresses', dto);
+    return 'data' in res.data ? (res.data as ApiResponse<UserAddress>).data : res.data;
   },
 
   async updateAddress(
@@ -71,8 +75,8 @@ export const profileApi = {
       isDefault: boolean;
     }>,
   ): Promise<UserAddress> {
-    const res = await apiClient.patch<UserAddress>(`/me/addresses/${id}`, dto);
-    return res.data;
+    const res = await apiClient.patch<ApiResponse<UserAddress> | UserAddress>(`/me/addresses/${id}`, dto);
+    return 'data' in res.data ? (res.data as ApiResponse<UserAddress>).data : res.data;
   },
 
   async deleteAddress(id: string): Promise<void> {

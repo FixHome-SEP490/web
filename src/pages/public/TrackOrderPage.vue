@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search } from 'lucide-vue-next';
 
 import {
@@ -14,6 +15,8 @@ const orderCode = ref('');
 const phone = ref('');
 const searched = ref(false);
 const loading = ref(false);
+
+useSmoothScroll();
 
 const mockFoundOrder = ref<{
   code: string;
@@ -87,7 +90,7 @@ const handleTrack = () => {
     </div>
 
     <!-- Search Form Box -->
-    <FhCard class="space-y-4 shadow-[var(--shadow-e2)]">
+    <FhCard class="space-y-4 shadow-(--shadow-e2)">
       <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="handleTrack">
         <div>
           <label class="block text-xs font-semibold uppercase tracking-wider text-ink-700 mb-1">
@@ -98,7 +101,7 @@ const handleTrack = () => {
             type="text"
             required
             placeholder="Ví dụ: FH-20260913-0001"
-            class="w-full h-11 px-3 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] uppercase font-num placeholder:normal-case focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
+            class="w-full h-11 px-3 text-sm bg-white border border-ink-200 rounded-sm uppercase font-num focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
           />
         </div>
 
@@ -111,7 +114,7 @@ const handleTrack = () => {
             type="tel"
             required
             placeholder="Ví dụ: 0901234567"
-            class="w-full h-11 px-3 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
+            class="w-full h-11 px-3 text-sm bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
           />
         </div>
 

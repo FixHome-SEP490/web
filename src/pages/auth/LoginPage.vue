@@ -2,8 +2,9 @@
 import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Eye, EyeOff, Lock, Mail, AlertCircle, Sparkles } from 'lucide-vue-next';
+import { Eye, EyeOff, Lock, Mail, Sparkles } from 'lucide-vue-next';
 import { FhButton } from '../../components';
+import { toast } from 'vue-sonner';
 
 const router = useRouter();
 const route = useRoute();
@@ -49,6 +50,8 @@ const handleLogin = async () => {
       return;
     }
 
+    toast.success('Đăng nhập thành công!', { description: `Chào mừng ${user.fullName || 'bạn'} quay lại.` });
+
     const role = user.role?.toUpperCase();
     if (role === 'ADMIN' || role === 'SERVICE_MANAGER') {
       router.push('/console');
@@ -63,6 +66,7 @@ const handleLogin = async () => {
       error?.response?.data?.error?.message ||
       error?.response?.data?.message ||
       'Email/Số điện thoại hoặc mật khẩu không chính xác';
+    toast.error(errorMessage.value);
   }
 };
 </script>
@@ -74,15 +78,6 @@ const handleLogin = async () => {
       <p class="text-sm text-ink-500">
         Chào mừng bạn quay lại với FixHome. Vui lòng nhập thông tin xác thực.
       </p>
-    </div>
-
-    <!-- Error Alert Box -->
-    <div
-      v-if="errorMessage"
-      class="p-3.5 rounded-[var(--radius-sm)] bg-danger-50 border border-danger-200 text-danger-800 text-sm flex items-start gap-2.5"
-    >
-      <AlertCircle :size="18" class="text-danger-600 shrink-0 mt-0.5" />
-      <span>{{ errorMessage }}</span>
     </div>
 
     <form class="space-y-4" @submit.prevent="handleLogin">
@@ -97,7 +92,7 @@ const handleLogin = async () => {
             type="text"
             required
             placeholder="example@fixhome.vn hoặc 0901234567"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Mail class="absolute left-3.5 top-3 text-ink-400" :size="17" />
         </div>
@@ -122,7 +117,7 @@ const handleLogin = async () => {
             :type="showPassword ? 'text' : 'password'"
             required
             placeholder="••••••••"
-            class="w-full h-11 pl-10 pr-11 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-11 pl-10 pr-11 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
           />
           <Lock class="absolute left-3.5 top-3 text-ink-400" :size="17" />
           <button
@@ -167,7 +162,7 @@ const handleLogin = async () => {
           v-for="demo in demoAccounts"
           :key="demo.email"
           type="button"
-          class="px-2.5 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] bg-ink-100 hover:bg-brand-50 hover:text-brand-700 border border-ink-200 hover:border-brand-200 transition-colors text-left truncate"
+          class="px-2.5 py-1.5 text-xs font-medium rounded-sm bg-ink-100 hover:bg-brand-50 hover:text-brand-700 border border-ink-200 hover:border-brand-200 transition-colors text-left truncate"
           @click="fillDemo(demo.email)"
         >
           {{ demo.label }}
