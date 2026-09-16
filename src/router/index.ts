@@ -174,6 +174,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/technician/TechnicianProfilePage.vue'),
         meta: { title: 'Hồ sơ Kỹ thuật viên' },
       },
+      {
+        path: 'kyc',
+        name: 'tech-kyc',
+        component: () => import('../pages/technician/TechnicianKycPage.vue'),
+        meta: { title: 'Xác minh danh tính (KYC)' },
+      },
     ],
   },
 

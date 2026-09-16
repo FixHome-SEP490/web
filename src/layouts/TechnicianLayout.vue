@@ -10,6 +10,7 @@ import {
   Calendar,
   LogOut,
   User,
+  ShieldCheck,
   ChevronDown,
 } from 'lucide-vue-next';
 
@@ -144,6 +145,10 @@ const handleLogout = async () => {
                 <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
                   <User :size="16" />
                   Hồ sơ thợ & Kỹ năng
+                </router-link>
+                <router-link to="/tech/kyc" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
+                  <ShieldCheck :size="16" />
+                  Xác minh danh tính (KYC)
                 </router-link>
               </div>
 
