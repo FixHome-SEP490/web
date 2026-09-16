@@ -30,8 +30,8 @@ export interface UserProfile {
 
 export const profileApi = {
   async getMe(): Promise<UserProfile> {
-    const res = await apiClient.get<UserProfile>('/me');
-    return res.data;
+    const res = await apiClient.get<{ data: UserProfile }>('/me');
+    return res.data.data;
   },
 
   async updateMe(dto: {
@@ -39,13 +39,13 @@ export const profileApi = {
     phoneNumber?: string;
     avatarUrl?: string;
   }): Promise<UserProfile> {
-    const res = await apiClient.patch<UserProfile>('/me', dto);
-    return res.data;
+    const res = await apiClient.patch<{ data: UserProfile }>('/me', dto);
+    return res.data.data;
   },
 
   async getAddresses(): Promise<UserAddress[]> {
-    const res = await apiClient.get<UserAddress[]>('/me/addresses');
-    return res.data;
+    const res = await apiClient.get<{ data: UserAddress[] }>('/me/addresses');
+    return res.data.data;
   },
 
   async createAddress(dto: {
@@ -55,9 +55,11 @@ export const profileApi = {
     district: string;
     province: string;
     isDefault?: boolean;
+    lat?: number;
+    lng?: number;
   }): Promise<UserAddress> {
-    const res = await apiClient.post<UserAddress>('/me/addresses', dto);
-    return res.data;
+    const res = await apiClient.post<{ data: UserAddress }>('/me/addresses', dto);
+    return res.data.data;
   },
 
   async updateAddress(
@@ -71,8 +73,8 @@ export const profileApi = {
       isDefault: boolean;
     }>,
   ): Promise<UserAddress> {
-    const res = await apiClient.patch<UserAddress>(`/me/addresses/${id}`, dto);
-    return res.data;
+    const res = await apiClient.patch<{ data: UserAddress }>(`/me/addresses/${id}`, dto);
+    return res.data.data;
   },
 
   async deleteAddress(id: string): Promise<void> {

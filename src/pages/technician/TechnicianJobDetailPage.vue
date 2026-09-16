@@ -48,60 +48,46 @@ const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 
 // Quotation Items Form (D-02 Standard)
-const quotationItems = ref<QuotationItemPayload[]>([
-  { type: 'LABOR', description: 'Công thông tắc máng thoát nước và xịt rửa', quantity: 1, unitPrice: 180000 },
-  { type: 'PARTS', description: 'Đoạn ống thoát mềm bảo ôn 1.5m', quantity: 1, unitPrice: 120000 },
-]);
+const quotationItems = ref<QuotationItemPayload[]>([{type:'LABOR',description:'',quantity:1,unitPrice:0}]);
 
-const warrantyDays = ref(90);
+const completionRequested = ref(false);
+const beforeFile = ref<HTMLInputElement | null>(null);
+const afterFile = ref<HTMLInputElement | null>(null);
+async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', file?: File) {
+  if (!file) return;
+  actionLoading.value = true;
+  try {
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10*1024*1024) throw new Error('Invalid image');
+    await ordersApi.uploadEvidence(jobId,{phase,file});
+    await loadJob();
+    actionMessage.value = {type:'success',text:'Đã lưu ảnh bằng chứng.'};
+  } catch { actionMessage.value = {type:'error',text:'Chưa lưu được ảnh. Chọn JPEG, PNG hoặc WebP dưới 10 MB và thử lại.'}; }
+  finally { actionLoading.value = false; }
+}
 
 onMounted(async () => {
   await loadJob();
 });
 
 const loadJob = async () => {
-  try {
     loading.value = true;
-    const data = await ordersApi.getOrder(jobId);
-    job.value = data;
-
-    const status = String(data.status).toUpperCase();
-    if (status === 'EN_ROUTE') {
-      isEnRoute.value = true;
-    } else if (status === 'UNDER_REPAIR') {
-      isEnRoute.value = true;
-      gpsCheckedIn.value = true;
-      beforePhotoUploaded.value = true;
-    } else if (status === 'COMPLETED') {
-      isEnRoute.value = true;
-      gpsCheckedIn.value = true;
-      beforePhotoUploaded.value = true;
-      afterPhotoUploaded.value = true;
-      isCompleted.value = true;
-    }
-
-    if (data.grandTotal) {
-      declaredCashAmount.value = data.grandTotal;
-    }
-
-    // Check cash settlement
     try {
+      const data = await ordersApi.getOrder(jobId);
+      job.value = data;
+      isEnRoute.value = data.status !== 'ACCEPTED';
+      gpsCheckedIn.value = !!data.arrivalVerified;
+      beforePhotoUploaded.value = Number(data.beforeEvidenceCount) > 0;
+      afterPhotoUploaded.value = Number(data.afterEvidenceCount) > 0;
+      isCompleted.value = data.status === 'COMPLETED';
+      completionRequested.value = !!data.completionRequestedAt;
+      quotationSubmitted.value = !!data.quotation;
+      declaredCashAmount.value = Number(data.grandTotal);
       const settlement = await ordersApi.getCashSettlement(jobId);
-      if (settlement) {
-        cashSettled.value = true;
-        cashSettlementStatus.value = String(settlement.status || 'pending_confirmation') as
-          | 'pending_confirmation'
-          | 'confirmed'
-          | 'disputed';
-        declaredCashAmount.value = Number(settlement.declaredAmount || 0);
-      }
-    } catch {
-      // Ignored
-    }
-  } finally {
-    loading.value = false;
-  }
-};
+      cashSettled.value = !!settlement;
+      cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
+    } catch { actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'}; }
+    finally { loading.value = false; }
+  };
 
 const laborTotal = () =>
   quotationItems.value
@@ -118,7 +104,8 @@ const addItem = (type: 'LABOR' | 'PARTS') => {
     type,
     description: type === 'LABOR' ? 'Hạng mục công kỹ thuật' : 'Tên linh kiện thay thế',
     quantity: 1,
-    unitPrice: 50000,
+    unitPrice: 0,
+    ...(type === 'PARTS' ? {partSource: 'technician' as const, partWarrantyOption: 'no_warranty' as const} : {}),
   });
 };
 
@@ -142,75 +129,27 @@ const handleEnRoute = async () => {
 };
 
 const handleCheckIn = async () => {
-  try {
     actionLoading.value = true;
-    actionMessage.value = null;
+    try {
+      if (!navigator.geolocation) throw new Error('Thiết bị không hỗ trợ định vị.');
+      const position = await new Promise<GeolocationPosition>((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,{timeout:10000,enableHighAccuracy:true}));
+      const result = await ordersApi.checkIn(jobId,{lat:position.coords.latitude,lng:position.coords.longitude,accuracyMeters:position.coords.accuracy});
+      if (result.result !== 'valid') throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
+      gpsCheckedIn.value = true;
+      actionMessage.value = {type:'success',text:'Đã xác nhận vị trí đến nơi.'};
+    } catch { actionMessage.value = {type:'error',text:'Chưa xác nhận được vị trí. Hãy cấp quyền GPS và thử lại tại địa chỉ sửa chữa.'}; }
+    finally { actionLoading.value = false; }
+  };
 
-    let coords = { lat: 21.0285, lng: 105.8542, accuracyMeters: 25 };
-    if ('geolocation' in navigator) {
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000 });
-        });
-        coords = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyMeters: Math.round(pos.coords.accuracy || 20),
-        };
-      } catch {
-        // Fallback to sample coordinates
-      }
-    }
-
-    await ordersApi.checkIn(jobId, coords);
-    gpsCheckedIn.value = true;
-    actionMessage.value = { type: 'success', text: 'Check-in GPS thành công! Đã ghi nhận tọa độ hiện trường.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Check-in thất bại hoặc ngoài bán kính cho phép.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
-
-const handleUploadBefore = async () => {
-  try {
-    actionLoading.value = true;
-    actionMessage.value = null;
-    const mediaUrl = 'https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=600&auto=format&fit=crop';
-    await ordersApi.uploadEvidence(jobId, {
-      phase: 'BEFORE',
-      mediaUrl,
-      caption: 'Ảnh hiện trạng lỗi trước khi sửa chữa',
-    });
-    beforePhotoUploaded.value = true;
-    actionMessage.value = { type: 'success', text: 'Tải ảnh BEFORE thành công! Đã mở khoá lập báo giá.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể lưu ảnh hiện trạng.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
+const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files?.[0]);
 
 const handleSubmitQuotation = async () => {
-  try {
     actionLoading.value = true;
-    actionMessage.value = null;
-    const items = quotationItems.value.map((i) => ({
-      type: i.type,
-      description: i.description,
-      quantity: i.quantity,
-      unitPrice: i.unitPrice,
-      warrantyDays: i.type === 'PARTS' ? warrantyDays.value : undefined,
-    }));
-    await ordersApi.submitQuotation(jobId, items);
-    quotationSubmitted.value = true;
-    actionMessage.value = { type: 'success', text: 'Đã gửi báo giá tới khách hàng! Chờ khách duyệt.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi báo giá.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
+    try { await ordersApi.submitQuotation(jobId, quotationItems.value); quotationSubmitted.value = true;
+      actionMessage.value = {type:'success',text:'Đã gửi báo giá, chờ khách duyệt.'};
+    } catch { actionMessage.value = {type:'error',text:'Chưa gửi được báo giá. Kiểm tra nội dung, giá và trạng thái đơn.'}; }
+    finally { actionLoading.value = false; }
+  };
 
 const handleStartRepair = async () => {
   try {
@@ -226,44 +165,17 @@ const handleStartRepair = async () => {
   }
 };
 
-const handleUploadAfter = async () => {
-  try {
-    actionLoading.value = true;
-    actionMessage.value = null;
-    const mediaUrl = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=600&auto=format&fit=crop';
-    await ordersApi.uploadEvidence(jobId, {
-      phase: 'AFTER',
-      mediaUrl,
-      caption: 'Ảnh nghiệm thu sau khi hoàn tất sửa chữa',
-    });
-    afterPhotoUploaded.value = true;
-    actionMessage.value = { type: 'success', text: 'Tải ảnh AFTER thành công! Đã mở khoá hoàn tất đơn.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể lưu ảnh nghiệm thu.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
+const handleUploadAfter = async () => uploadSelectedEvidence('AFTER', afterFile.value?.files?.[0]);
 
 const handleCompleteOrder = async () => {
-  if (!afterPhotoUploaded.value) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng chụp ảnh nghiệm thu AFTER trước khi hoàn tất đơn!' };
-    return;
-  }
-  try {
     actionLoading.value = true;
-    actionMessage.value = null;
-    await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất nghiệm thu kỹ thuật' });
-    isCompleted.value = true;
-    if (job.value) job.value.status = 'COMPLETED';
-    actionMessage.value = { type: 'success', text: 'Hoàn tất đơn sửa chữa! Hoá đơn và bảo hành điện tử đã được tạo.' };
-    await loadJob();
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể hoàn tất đơn sửa chữa.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
+    try {
+      await ordersApi.completeRepair(jobId,{completionNote:'Hoàn tất công việc, đề nghị nghiệm thu'});
+      await loadJob();
+      actionMessage.value = {type:'success',text:'Đã yêu cầu nghiệm thu. Chờ khách xác nhận dịch vụ và thanh toán.'};
+    } catch { actionMessage.value = {type:'error',text:'Chưa thể yêu cầu nghiệm thu. Kiểm tra ảnh sau sửa và chi phí chờ duyệt.'}; }
+    finally { actionLoading.value = false; }
+  };
 
 const handleDeclareCash = async () => {
   if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
@@ -296,6 +208,8 @@ const handleDeclareCash = async () => {
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-16">
+    <input ref="beforeFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUploadBefore" />
+    <input ref="afterFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUploadAfter" />
     <!-- Top Navigation -->
     <div class="flex items-center justify-between">
       <button
@@ -521,23 +435,14 @@ const handleDeclareCash = async () => {
               <div
                 class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
                 :class="afterPhotoUploaded ? 'border-success-500 bg-success-50/50 text-success-700' : 'border-ink-300 hover:border-brand-500 text-ink-500'"
-                @click="handleUploadAfter"
+                @click="afterFile?.click()"
               >
                 <Camera :size="22" />
                 <span class="text-[10px] font-semibold">{{ afterPhotoUploaded ? 'Đã có ảnh' : 'Chụp ảnh sau sửa' }}</span>
               </div>
 
               <div class="flex-1 space-y-2">
-                <label class="block font-semibold text-ink-700">Thời hạn bảo hành linh kiện:</label>
-                <select
-                  v-model.number="warrantyDays"
-                  class="h-9 px-3 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-600"
-                >
-                  <option :value="30">30 ngày (Tiêu chuẩn)</option>
-                  <option :value="60">60 ngày</option>
-                  <option :value="90">90 ngày (Khuyến nghị)</option>
-                  <option :value="180">180 ngày (6 tháng)</option>
-                </select>
+                <p class="text-ink-600">Bảo hành theo báo giá đã duyệt. Linh kiện tự cung cấp ở biểu mẫu này không kèm bảo hành.</p>
               </div>
             </div>
 
@@ -545,11 +450,11 @@ const handleDeclareCash = async () => {
               <FhButton
                 variant="primary"
                 size="md"
-                :disabled="isCompleted || actionLoading"
+                :disabled="completionRequested || isCompleted || actionLoading"
                 @click="handleCompleteOrder"
               >
                 <ShieldCheck :size="16" class="mr-1.5" />
-                {{ isCompleted ? 'Đơn hàng đã hoàn tất' : 'Xác nhận Hoàn tất & Kích hoạt bảo hành' }}
+                {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã yêu cầu nghiệm thu' : 'Yêu cầu khách nghiệm thu' }}
               </FhButton>
             </div>
           </div>
@@ -599,7 +504,7 @@ const handleDeclareCash = async () => {
                 <FhButton
                   variant="primary"
                   size="sm"
-                  :disabled="!isCompleted || actionLoading"
+                  :disabled="!completionRequested || actionLoading"
                   @click="handleDeclareCash"
                 >
                   <DollarSign :size="14" class="mr-1" />

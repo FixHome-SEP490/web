@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { UserInfo, UserRole, LoginRequest, RegisterRequest } from '../types';
 import { authApi } from '../api/auth.api';
-import { getHttpStatus, registerAuthSessionInvalidator } from '../api/client';
+import { getHttpStatus, registerAuthSessionInvalidator, registerTokenRefreshed } from '../api/client';
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -20,9 +20,11 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null;
     user.value = null;
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
   }
 
   registerAuthSessionInvalidator(clearSession);
+  registerTokenRefreshed(value => { token.value = value; });
 
   // Actions
   function setAuth(accessToken: string, userInfo: UserInfo) {
@@ -35,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     try {
       const response = await authApi.login(credentials);
+      if (response.refreshToken) localStorage.setItem('refresh_token', response.refreshToken);
       setAuth(response.accessToken, response.user);
       return response.user;
     } finally {
@@ -46,6 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     try {
       const response = await authApi.register(data);
+      if (response.refreshToken) localStorage.setItem('refresh_token', response.refreshToken);
       setAuth(response.accessToken, response.user);
       return response.user;
     } finally {
@@ -67,11 +71,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    clearSession();
     try {
       await authApi.logout();
     } catch {
       // ignore network error on logout
+    } finally {
+      clearSession();
     }
   }
 

@@ -63,9 +63,7 @@ const loadOrder = async () => {
     order.value = data;
 
     const qStatus = String(data.quotation?.status || '').toUpperCase();
-    if (qStatus === 'ACCEPTED' || qStatus === 'APPROVED') {
-      quotationApproved.value = true;
-    }
+    quotationApproved.value = qStatus === 'ACCEPTED' || qStatus === 'APPROVED';
 
     // Try load invoice
     try {
@@ -89,6 +87,8 @@ const loadOrder = async () => {
     } catch {
       // Ignore
     }
+  } catch {
+    actionMessage.value = { type: 'error', text: 'Không thể tải đơn hàng. Vui lòng thử lại.' };
   } finally {
     loading.value = false;
   }
@@ -98,10 +98,9 @@ const handleApproveQuotation = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    if (order.value?.quotation?.id) {
-      await ordersApi.approveQuotation(order.value.quotation.id);
-    }
-    quotationApproved.value = true;
+    if (!order.value?.quotation?.id) throw new Error('Không có báo giá để duyệt.');
+    await ordersApi.approveQuotation(order.value.quotation.id);
+    await loadOrder();
     actionMessage.value = { type: 'success', text: 'Đã phê duyệt báo giá! Kỹ thuật viên sẽ tiến hành sửa chữa ngay.' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể duyệt báo giá.' };
@@ -114,9 +113,9 @@ const handleRejectQuotation = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    if (order.value?.quotation?.id) {
-      await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
-    }
+    if (!order.value?.quotation?.id) throw new Error('Không có báo giá để từ chối.');
+    await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
+    await loadOrder();
     actionMessage.value = { type: 'success', text: 'Đã từ chối báo giá của kỹ thuật viên.' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể từ chối báo giá.' };
@@ -132,14 +131,14 @@ const handleConfirmCashPayment = async (agreed: boolean) => {
     await ordersApi.confirmCashSettlement(orderId, {
       agreed,
       disputeReason: agreed ? undefined : disputeReason.value,
+      confirmedAmount: agreed ? Number(cashSettlement.value?.declaredAmount) : undefined,
     });
 
     if (agreed) {
-      if (order.value) order.value.paymentStatus = 'PAID';
-      if (cashSettlement.value) cashSettlement.value.status = 'confirmed';
+      await loadOrder();
       actionMessage.value = {
         type: 'success',
-        text: 'Đã xác nhận thanh toán tiền mặt thành công! Hoá đơn và bảo hành điện tử đã kích hoạt.',
+        text: 'Đã xác nhận thanh toán tiền mặt. Trạng thái đơn đã được cập nhật.',
       };
     } else {
       if (cashSettlement.value) cashSettlement.value.status = 'disputed';
@@ -163,16 +162,13 @@ const handlePay = () => {
 const confirmPayment = async () => {
   try {
     actionLoading.value = true;
-    if (invoice.value?.id) {
-      await ordersApi.payInvoice(invoice.value.id);
-    }
-    if (order.value) {
-      order.value.paymentStatus = 'PAID';
-    }
+    if (!invoice.value?.id) throw new Error('Chưa có hóa đơn để thanh toán.');
+    const payment = await ordersApi.payInvoice(invoice.value.id);
+    await loadOrder();
     showPaymentModal.value = false;
     actionMessage.value = {
       type: 'success',
-      text: 'Thanh toán online thành công! Hoá đơn và bảo hành điện tử đã được kích hoạt.',
+      text: payment.status === 'verified' ? 'Thanh toán đã được xác minh.' : 'Yêu cầu thanh toán đang chờ xác minh. Hóa đơn chưa được đánh dấu đã thanh toán.',
     };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Thanh toán thất bại.' };
@@ -217,10 +213,21 @@ const handleCreateWarrantyClaim = async () => {
     actionLoading.value = false;
   }
 };
+const confirmWork = async () => {
+  actionLoading.value = true;
+  try {
+    await ordersApi.confirmCompletion(orderId);
+    await loadOrder();
+    actionMessage.value = { type: 'success', text: 'Đã xác nhận nghiệm thu. Đơn hoàn tất khi thanh toán được xác nhận.' };
+  } catch {
+    actionMessage.value = { type: 'error', text: 'Chưa thể xác nhận nghiệm thu. Vui lòng thử lại.' };
+  } finally { actionLoading.value = false; }
+};
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-12">
+    <FhButton v-if="order?.completionRequestedAt && !order.customerConfirmed && order.status === 'UNDER_REPAIR'" :disabled="actionLoading" @click="confirmWork">Xác nhận nghiệm thu dịch vụ</FhButton>
     <!-- Breadcrumb & Back Button -->
     <div class="flex items-center justify-between">
       <button

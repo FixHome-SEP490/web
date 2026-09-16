@@ -36,6 +36,16 @@ const addressForm = ref({
 // Delete Confirmation
 const showDeleteConfirm = ref(false);
 const addressToDelete = ref<string | null>(null);
+const addressLat = ref<number | ''>('');
+const addressLng = ref<number | ''>('');
+
+const locateAddress = () => {
+  if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ định vị.');
+  navigator.geolocation.getCurrentPosition(position => {
+    addressLat.value = position.coords.latitude;
+    addressLng.value = position.coords.longitude;
+  }, () => alert('Không thể lấy vị trí. Hãy cấp quyền hoặc nhập tọa độ địa chỉ.'), { timeout: 10000 });
+};
 
 onMounted(async () => {
   if (authStore.user) {
@@ -92,6 +102,8 @@ const handleAddAddress = async () => {
   }
   try {
     await profileApi.createAddress({
+      lat: addressLat.value === '' ? undefined : Number(addressLat.value),
+      lng: addressLng.value === '' ? undefined : Number(addressLng.value),
       label: addressForm.value.label,
       line1: addressForm.value.line1,
       ward: addressForm.value.ward || undefined,
@@ -100,6 +112,8 @@ const handleAddAddress = async () => {
       isDefault: addressForm.value.isDefault,
     });
     showAddressModal.value = false;
+    addressLat.value = '';
+    addressLng.value = '';
     addressForm.value = {
       label: 'Nhà riêng',
       line1: '',
@@ -375,6 +389,14 @@ const confirmDelete = async () => {
             </select>
           </div>
 
+          <div class="space-y-2">
+            <p class="text-xs text-ink-600">Tọa độ nơi sửa chữa (cần để đặt lịch và xác nhận thợ đến nơi)</p>
+            <FhButton variant="ghost" size="sm" @click="locateAddress">Dùng vị trí hiện tại khi đang ở địa chỉ này</FhButton>
+            <div class="grid grid-cols-2 gap-2">
+              <input v-model.number="addressLat" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
+              <input v-model.number="addressLng" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
+            </div>
+          </div>
           <label class="flex items-center gap-2 cursor-pointer pt-1">
             <input
               v-model="addressForm.isDefault"

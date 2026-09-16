@@ -42,7 +42,7 @@ const handleDecline = async (inv: InvitationItem) => {
     await bookingsApi.respondInvitation(inv.id, 'DECLINE');
     invitations.value = invitations.value.filter((i) => i.id !== inv.id);
   } catch {
-    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+    alert('Chưa thể từ chối lời mời. Vui lòng thử lại.');
   }
 };
 </script>
