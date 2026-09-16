@@ -1,8 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../src/stores/auth.store'
 import { UserRole } from '../src/types'
-vi.mock('../src/api/auth.api', () => ({ authApi: { logout: vi.fn().mockResolvedValue(undefined) } }))
 
 describe('auth store', () => {
   beforeEach(() => {

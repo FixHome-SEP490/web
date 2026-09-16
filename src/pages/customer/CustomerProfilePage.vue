@@ -30,22 +30,9 @@ const addressForm = ref({
   ward: '',
   district: '',
   province: 'Hà Nội',
-  lat: undefined as number | undefined,
-  lng: undefined as number | undefined,
   isDefault: false,
 });
 
-const locating = ref(false);
-const locateRepairAddress = async () => {
-  locating.value = true;
-  try {
-    const pos = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 }));
-    if (pos.coords.accuracy > 100) throw new Error('GPS chưa đủ chính xác. Vui lòng thử lại tại địa chỉ sửa chữa.');
-    addressForm.value.lat = pos.coords.latitude;
-    addressForm.value.lng = pos.coords.longitude;
-  } catch (error) { alert(error instanceof Error ? error.message : 'Không lấy được vị trí. Hãy bật quyền GPS.'); }
-  finally { locating.value = false; }
-};
 // Delete Confirmation
 const showDeleteConfirm = ref(false);
 const addressToDelete = ref<string | null>(null);
@@ -110,8 +97,6 @@ const handleAddAddress = async () => {
       ward: addressForm.value.ward || undefined,
       district: addressForm.value.district,
       province: addressForm.value.province,
-      lat: addressForm.value.lat,
-      lng: addressForm.value.lng,
       isDefault: addressForm.value.isDefault,
     });
     showAddressModal.value = false;
@@ -121,8 +106,6 @@ const handleAddAddress = async () => {
       ward: '',
       district: '',
       province: 'Hà Nội',
-      lat: undefined as number | undefined,
-      lng: undefined as number | undefined,
       isDefault: false,
     };
     await loadAddresses();
@@ -392,11 +375,6 @@ const confirmDelete = async () => {
             </select>
           </div>
 
-          <div class="space-y-2 text-sm">
-            <p>Đứng tại địa chỉ sửa chữa để lưu vị trí check-in.</p>
-            <FhButton type="button" variant="secondary" :loading="locating" @click="locateRepairAddress">Lấy vị trí hiện tại</FhButton>
-            <p v-if="addressForm.lat != null" class="text-success-600">Đã ghi nhận tọa độ địa chỉ.</p>
-          </div>
           <label class="flex items-center gap-2 cursor-pointer pt-1">
             <input
               v-model="addressForm.isDefault"

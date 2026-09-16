@@ -1,26 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import {
   Wrench,
   CalendarPlus,
   ShieldAlert,
-  ShieldCheck,
   MapPin,
   Bell,
   User,
   LogOut,
   ChevronDown,
-  Layers,
 } from 'lucide-vue-next';
 import { FhButton } from '../components';
-import { notificationsApi } from '../api/notifications.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const avatarMenuOpen = ref(false);
-const unreadNotifs = ref(0);
 
 const isSuspended = computed<boolean>(() => {
   if (authStore.user?.status === 'SUSPENDED') return true;
@@ -28,18 +24,6 @@ const isSuspended = computed<boolean>(() => {
     return new Date(authStore.user.bookingSuspendedUntil) > new Date();
   }
   return false;
-});
-
-const loadUnreadCount = async () => {
-  try {
-    unreadNotifs.value = await notificationsApi.getUnreadCount();
-  } catch {
-    // ignore polling error
-  }
-};
-
-onMounted(() => {
-  loadUnreadCount();
 });
 
 const handleLogout = async () => {
@@ -95,23 +79,8 @@ const handleLogout = async () => {
           </nav>
         </div>
 
-        <!-- Right Side: Booking CTA + Notifications + Avatar Menu -->
-        <div class="flex items-center gap-3 sm:gap-4">
-          <!-- Notification Bell Button -->
-          <router-link
-            to="/app/notifications"
-            class="relative p-2 rounded-full text-ink-600 hover:text-brand-600 hover:bg-ink-100 transition-colors"
-            title="Thông báo"
-          >
-            <Bell :size="20" />
-            <span
-              v-if="unreadNotifs > 0"
-              class="absolute top-1 right-1 w-4 h-4 bg-brand-600 text-white font-num text-[10px] font-bold rounded-full flex items-center justify-center leading-none"
-            >
-              {{ unreadNotifs > 9 ? '9+' : unreadNotifs }}
-            </span>
-          </router-link>
-
+        <!-- Right Side: Booking CTA + Avatar Menu -->
+        <div class="flex items-center gap-4">
           <!-- Create Booking Button -->
           <FhButton
             variant="primary"
@@ -152,7 +121,7 @@ const handleLogout = async () => {
                   <User :size="16" />
                   Hồ sơ cá nhân
                 </router-link>
-                <router-link to="/app/profile?tab=addresses" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
+                <router-link to="/app/addresses" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
                   <MapPin :size="16" />
                   Sổ địa chỉ
                 </router-link>
@@ -193,34 +162,8 @@ const handleLogout = async () => {
     </div>
 
     <!-- Main Content: max-width 1120px per P6.1 -->
-    <main class="flex-1 max-w-[1120px] w-full mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
+    <main class="flex-1 max-w-[1120px] w-full mx-auto px-4 sm:px-6 py-8">
       <router-view />
     </main>
-
-    <!-- Mobile Bottom Navigation Bar (Task 19) -->
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-ink-200 shadow-[var(--shadow-e3)] py-1.5 px-2 flex items-center justify-around text-[10px] font-medium text-ink-600">
-      <router-link to="/app" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold" exact-active-class="text-brand-600 font-bold">
-        <Wrench :size="18" />
-        <span>Tổng quan</span>
-      </router-link>
-      <router-link to="/app/orders" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
-        <Layers :size="18" />
-        <span>Đơn của tôi</span>
-      </router-link>
-      <router-link to="/app/bookings/new" class="flex flex-col items-center gap-1 py-1 px-2 text-brand-700 font-bold">
-        <div class="w-8 h-8 -mt-3 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-md">
-          <CalendarPlus :size="18" />
-        </div>
-        <span>Đặt thợ</span>
-      </router-link>
-      <router-link to="/app/warranties" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
-        <ShieldCheck :size="18" />
-        <span>Bảo hành</span>
-      </router-link>
-      <router-link to="/app/profile" class="flex flex-col items-center gap-1 py-1 px-2" active-class="text-brand-600 font-bold">
-        <User :size="18" />
-        <span>Hồ sơ</span>
-      </router-link>
-    </nav>
   </div>
 </template>

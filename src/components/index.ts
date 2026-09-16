@@ -11,8 +11,6 @@ export { default as FhCountdown } from './FhCountdown.vue';
 export { default as FhEmptyState } from './FhEmptyState.vue';
 export { default as FhSkeleton } from './FhSkeleton.vue';
 export { default as FhConfirmDialog } from './FhConfirmDialog.vue';
-export { default as FhEvidenceGallery } from './FhEvidenceGallery.vue';
-export type { EvidenceItem } from './FhEvidenceGallery.vue';
 export type { TableColumn } from './FhTable.vue';
 export type { TimelineStep } from './FhTimeline.vue';
 

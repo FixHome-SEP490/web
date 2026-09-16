@@ -8,7 +8,6 @@ import {
   ChevronRight,
   User,
   Plus,
-  Wrench,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -18,25 +17,17 @@ import {
   FhMoney,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
-import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 
 const router = useRouter();
 
 const loading = ref(true);
 const orders = ref<ServiceOrderItem[]>([]);
-const pendingBookings = ref<BookingItem[]>([]);
 const statusFilter = ref<'ALL' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'>('ALL');
 
 onMounted(async () => {
   try {
-    const [list, bks] = await Promise.all([
-      ordersApi.getCustomerOrders(),
-      bookingsApi.getMyBookings(),
-    ]);
+    const list = await ordersApi.getCustomerOrders();
     orders.value = list;
-    pendingBookings.value = bks.filter(
-      (b) => b.status === 'SUBMITTED' || b.status === 'MATCHING' || b.status === 'PENDING',
-    );
   } finally {
     loading.value = false;
   }
@@ -70,41 +61,6 @@ const filteredOrders = computed(() => {
       <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
         <Plus :size="16" class="mr-1.5" /> Đặt thợ mới
       </FhButton>
-    </div>
-
-    <!-- Active Bookings Waiting for Technician Accept (Section 4 Flow) -->
-    <div
-      v-if="pendingBookings.length > 0"
-      class="p-4 rounded-[var(--radius-md)] bg-brand-50/80 border border-brand-200 space-y-3 shadow-xs"
-    >
-      <div class="flex items-center justify-between">
-        <div class="font-bold text-xs sm:text-sm text-brand-950 flex items-center gap-2">
-          <Wrench :size="16" class="text-brand-600" />
-          <span>Yêu cầu đang ghép thợ ({{ pendingBookings.length }})</span>
-        </div>
-        <span class="text-[11px] text-brand-700 font-medium">Chờ thợ phản hồi lời mời</span>
-      </div>
-
-      <div
-        v-for="bk in pendingBookings"
-        :key="bk.id"
-        class="p-3 bg-white rounded border border-brand-100 flex flex-wrap items-center justify-between gap-3 text-xs"
-      >
-        <div class="space-y-0.5">
-          <div class="font-bold text-ink-900">{{ bk.serviceName || 'Dịch vụ sửa chữa' }}</div>
-          <div class="text-[11px] text-ink-500 flex items-center gap-1.5">
-            <MapPin :size="12" class="text-brand-600" />
-            <span>{{ bk.addressSummary || 'Địa chỉ sửa chữa' }}</span>
-            <span>• Hẹn: {{ new Date(bk.preferredAt).toLocaleString('vi-VN') }}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <FhButton variant="secondary" size="sm" @click="router.push(`/app/bookings/${bk.id}/candidates`)">
-            Xem ứng viên thợ
-          </FhButton>
-        </div>
-      </div>
     </div>
 
     <!-- Status Filter Tabs -->
