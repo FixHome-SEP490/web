@@ -5,94 +5,109 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-vue-next';
-import {
-  FhCard,
-  FhCostBreakdown,
-} from '../../components';
 
 useSmoothScroll();
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-12 space-y-12">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-24 space-y-20">
     <!-- Header -->
-    <div class="text-center space-y-4">
-      <span class="text-overline text-brand-700 uppercase font-semibold">Quyết định nghiệp vụ D-02</span>
-      <h1 class="text-3xl sm:text-4xl font-bold text-ink-900 tracking-tight">
-        Chính sách giá & Tách bạch chi phí
+    <div class="text-center space-y-6">
+      <div class="text-xs font-bold text-brand-600 tracking-widest uppercase">Quyết định nghiệp vụ D-02</div>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-[1.1]">
+        Chính sách giá & <br class="hidden sm:block"/>Tách bạch chi phí
       </h1>
-      <p class="text-ink-600 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
+      <p class="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed font-medium">
         FixHome là nền tảng đầu tiên tại Việt Nam áp dụng nguyên tắc bắt buộc tách riêng Tiền công và Tiền vật tư trên toàn bộ chu trình dịch vụ.
       </p>
     </div>
 
     <!-- Rule Highlight Card -->
-    <div class="p-6 bg-brand-50 rounded-lg border border-brand-200 flex flex-col sm:flex-row gap-5 items-start">
-      <div class="w-12 h-12 rounded-sm bg-brand-600 text-white flex items-center justify-center shrink-0">
-        <ShieldCheck :size="24" />
+    <div class="p-8 sm:p-10 bg-brand-50 rounded-[2.5rem] border border-brand-100 flex flex-col sm:flex-row gap-8 items-start">
+      <div class="w-16 h-16 rounded-full bg-brand-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-brand-500/30">
+        <ShieldCheck :size="32" stroke-width="2" />
       </div>
-      <div class="space-y-2 text-sm text-brand-950">
-        <h3 class="text-base font-bold text-brand-900">Cam kết 3 Không về Giá cả:</h3>
-        <ul class="space-y-1.5 list-disc list-inside">
-          <li><strong>Không gộp giá:</strong> Tuyệt đối không cho phép báo giá "trọn gói mập mờ" không tách rõ linh kiện.</li>
-          <li><strong>Không tự ý phát sinh:</strong> Chi phí phát sinh trong lúc sửa bắt buộc phải lập phiếu yêu cầu và khách hàng bấm xác nhận trên app mới được tính tiền.</li>
-          <li><strong>Không ép giá:</strong> Mọi dịch vụ đều có khung giá tham khảo (base price min / max) được công khai trong danh mục.</li>
+      <div class="space-y-4 text-brand-950">
+        <h3 class="text-2xl font-bold text-brand-900">Cam kết 3 Không về Giá cả:</h3>
+        <ul class="space-y-3 font-medium text-brand-900/80 leading-relaxed text-base">
+          <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không gộp giá:</strong> Tuyệt đối không cho phép báo giá "trọn gói mập mờ" không tách rõ linh kiện.</span></li>
+          <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không tự ý phát sinh:</strong> Chi phí phát sinh trong lúc sửa bắt buộc phải lập phiếu yêu cầu và khách hàng bấm xác nhận trên app mới được tính tiền.</span></li>
+          <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không ép giá:</strong> Mọi dịch vụ đều có khung giá tham khảo được công khai trong danh mục.</span></li>
         </ul>
       </div>
     </div>
 
     <!-- Cost Breakdown Interactive Component Demo -->
-    <div class="space-y-4">
-      <h2 class="text-2xl font-bold text-ink-900">Cách thể hiện báo giá trên hệ thống</h2>
-      <p class="text-sm text-ink-600">
-        Dưới đây là bảng báo giá mẫu chuẩn mực hiển thị trên điện thoại của khách hàng trước khi bấm đồng ý:
-      </p>
+    <div class="space-y-12">
+      <div class="text-center space-y-4 max-w-2xl mx-auto">
+        <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Cách thể hiện báo giá trên hệ thống</h2>
+        <p class="text-lg text-slate-500 font-medium">
+          Dưới đây là bảng báo giá mẫu chuẩn mực hiển thị trên điện thoại của khách hàng trước khi bấm đồng ý:
+        </p>
+      </div>
 
-      <FhCard class="max-w-lg mx-auto shadow-(--shadow-e2) space-y-4">
-        <div class="flex items-center justify-between pb-3 border-b border-ink-100">
+      <div class="max-w-3xl mx-auto bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-slate-200/50">
+        <div class="p-8 md:p-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 gap-4">
           <div>
-            <div class="text-xs font-num font-bold text-ink-500">MÃ ĐƠN: #FH-20260913-DEMO</div>
-            <div class="text-sm font-bold text-ink-900">Thay tụ & nạp gas máy lạnh 1.5 HP</div>
+            <div class="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-2">Hoá đơn mẫu (Chờ bạn duyệt)</div>
+            <div class="font-bold text-lg text-slate-900">Thay tụ & nạp gas máy lạnh 1.5 HP</div>
           </div>
-          <span class="text-xs font-medium px-2 py-0.5 rounded bg-warning-50 text-warning-700 border border-warning-200">
-            Chờ bạn duyệt
-          </span>
+          <div class="text-xs text-slate-400 sm:text-right">
+            Mã đơn<br/><span class="font-bold text-slate-900 text-sm">FH-8821</span>
+          </div>
         </div>
-
-        <FhCostBreakdown
-          :labor-total="200000"
-          :parts-total="350000"
-        />
-
-        <div class="text-[11px] text-ink-500 text-center italic">
-          Bao gồm: Công kiểm tra & thay tụ (200.000 ₫) + Tụ kích 45uF chính hãng (350.000 ₫, BH 90 ngày).
+        
+        <div class="p-8 md:p-10 space-y-6 text-base font-medium">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Tiền công thợ (Kiểm tra & thay tụ)</span>
+            <span class="font-bold text-slate-900 font-num">200.000 ₫</span>
+          </div>
+          <div class="w-full h-px border-t border-dashed border-slate-200"></div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Vật tư & Linh kiện (Tụ kích 45uF chính hãng)</span>
+            <span class="font-bold text-slate-900 font-num">350.000 ₫</span>
+          </div>
         </div>
-      </FhCard>
+        
+        <div class="bg-slate-50 p-8 md:p-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-t border-slate-100 gap-4">
+          <div>
+            <div class="text-[11px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Tổng cộng</div>
+            <div class="text-sm text-brand-600 font-semibold flex items-center gap-1.5">
+              <ShieldCheck :size="16" /> Bảo hành 90 ngày
+            </div>
+          </div>
+          <span class="text-3xl md:text-4xl font-extrabold text-slate-900 font-num tracking-tight">550.000 ₫</span>
+        </div>
+      </div>
     </div>
 
     <!-- Additional Cost Sub-workflow -->
-    <div class="space-y-4 pt-6 border-t border-ink-200">
-      <h2 class="text-2xl font-bold text-ink-900">Quy định về chi phí phát sinh (Additional Cost)</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm text-ink-700">
-        <FhCard class="space-y-2">
-          <h4 class="font-bold text-ink-900 flex items-center gap-2">
-            <CheckCircle2 :size="16" class="text-success-600" />
+    <div class="space-y-12 pt-16 border-t border-slate-100">
+      <h2 class="text-3xl font-bold text-slate-900 tracking-tight text-center">Quy định về chi phí phát sinh</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+        <div class="p-8 md:p-10 rounded-[2.5rem] bg-white border border-slate-200 shadow-xl shadow-slate-200/40 space-y-6">
+          <div class="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 mb-6">
+             <CheckCircle2 :size="28" />
+          </div>
+          <h4 class="text-2xl font-bold text-slate-900">
             Khi nào được phát sinh?
           </h4>
-          <p class="text-xs text-ink-600 leading-relaxed">
+          <p class="text-base text-slate-500 leading-relaxed font-medium">
             Chỉ khi trong quá trình tháo lắp thực tế (trạng thái UNDER_REPAIR), thợ phát hiện thêm lỗi ẩn mà mắt thường không thấy lúc khảo sát ban đầu. Thợ phải chụp ảnh bằng chứng linh kiện hỏng.
           </p>
-        </FhCard>
+        </div>
 
-        <FhCard class="space-y-2">
-          <h4 class="font-bold text-ink-900 flex items-center gap-2">
-            <AlertCircle :size="16" class="text-danger-600" />
+        <div class="p-8 md:p-10 rounded-[2.5rem] bg-white border border-slate-200 shadow-xl shadow-slate-200/40 space-y-6">
+          <div class="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-6">
+             <AlertCircle :size="28" />
+          </div>
+          <h4 class="text-2xl font-bold text-slate-900">
             Nếu khách hàng từ chối?
           </h4>
-          <p class="text-xs text-ink-600 leading-relaxed">
+          <p class="text-base text-slate-500 leading-relaxed font-medium">
             Khách hàng có quyền từ chối (Reject) chi phí phát sinh bất kỳ lúc nào. Thợ sẽ chỉ tiếp tục hoàn thiện theo đúng nội dung và số tiền của báo giá ban đầu đã duyệt.
           </p>
-        </FhCard>
+        </div>
       </div>
     </div>
   </div>
