@@ -108,8 +108,6 @@ const filteredOrders = computed(() => {
           { key: 'actions', label: 'Chi tiết', width: '90px' },
         ]"
         :rows="filteredOrders"
-        row-class="cursor-pointer hover:bg-ink-50/80 transition-colors"
-        @row-click="(row: ServiceOrderItem) => router.push(`/console/orders/${row.id}`)"
       >
         <template #cell-code="{ row }">
           <span class="font-mono text-xs font-bold text-ink-900">{{ row.code }}</span>

@@ -1,6 +1,5 @@
 // src/api/profile.api.ts
 import apiClient from './client';
-import { unwrap } from './response';
 
 export interface UserAddress {
   id: string;
@@ -32,7 +31,7 @@ export interface UserProfile {
 export const profileApi = {
   async getMe(): Promise<UserProfile> {
     const res = await apiClient.get<UserProfile>('/me');
-    return unwrap(res.data);
+    return res.data;
   },
 
   async updateMe(dto: {
@@ -41,12 +40,12 @@ export const profileApi = {
     avatarUrl?: string;
   }): Promise<UserProfile> {
     const res = await apiClient.patch<UserProfile>('/me', dto);
-    return unwrap(res.data);
+    return res.data;
   },
 
   async getAddresses(): Promise<UserAddress[]> {
     const res = await apiClient.get<UserAddress[]>('/me/addresses');
-    return unwrap(res.data);
+    return res.data;
   },
 
   async createAddress(dto: {
@@ -55,12 +54,10 @@ export const profileApi = {
     ward?: string;
     district: string;
     province: string;
-    lat?: number;
-    lng?: number;
     isDefault?: boolean;
   }): Promise<UserAddress> {
     const res = await apiClient.post<UserAddress>('/me/addresses', dto);
-    return unwrap(res.data);
+    return res.data;
   },
 
   async updateAddress(
@@ -75,7 +72,7 @@ export const profileApi = {
     }>,
   ): Promise<UserAddress> {
     const res = await apiClient.patch<UserAddress>(`/me/addresses/${id}`, dto);
-    return unwrap(res.data);
+    return res.data;
   },
 
   async deleteAddress(id: string): Promise<void> {
