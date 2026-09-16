@@ -18,6 +18,7 @@ import {
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
+import { bookingSchedule } from '../../utils/booking-schedule';
 
 const router = useRouter();
 
@@ -32,7 +33,6 @@ const selectedServiceId = ref('');
 const description = ref('');
 const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
 const quantity = ref(1);
-const preferredTimeWindow = ref('08:00 - 12:00');
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
@@ -74,16 +74,7 @@ onMounted(async () => {
     if (defAddr) selectedAddressId.value = defAddr.id;
     else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
   } catch {
-    // Fallback if offline
-    categories.value = [
-      { id: 'cat-1', name: 'Điện lạnh', code: 'DIEN_LANH', sortOrder: 1, isActive: true },
-      { id: 'cat-2', name: 'Điện & Nước', code: 'DIEN_NUOC', sortOrder: 2, isActive: true },
-    ];
-    services.value = [
-      { id: 's1', categoryId: 'cat-1', name: 'Sửa điều hòa không mát / chảy nước', code: 'SUA_DH', estimatedMinutes: 60, isActive: true },
-    ];
-    selectedCategoryId.value = 'cat-1';
-    selectedServiceId.value = 's1';
+    window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
   }
 });
 
@@ -139,18 +130,19 @@ const goToStep3 = async () => {
 const createAndFindTech = async () => {
   loading.value = true;
   try {
+    if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
+    const schedule = bookingSchedule(preferredDate.value, preferredTime.value);
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
-      addressId: selectedAddressId.value || 'mock-addr',
+      addressId: selectedAddressId.value,
       description: description.value,
-      preferredAt: new Date().toISOString(),
-      preferredTimeWindow: preferredTimeWindow.value,
+      ...schedule,
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
-  } catch {
-    window.alert('Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
   } finally {
     loading.value = false;
   }

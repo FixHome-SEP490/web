@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../src/stores/auth.store'
 import { UserRole } from '../src/types'
+vi.mock('../src/api/auth.api', () => ({authApi: {logout: vi.fn().mockResolvedValue(undefined)}}))
 
 describe('auth store', () => {
   beforeEach(() => {
@@ -25,7 +26,7 @@ describe('auth store', () => {
     expect(localStorage.getItem('access_token')).toBe('token')
   })
 
-  it('clears authentication state on logout', () => {
+  it('clears authentication state on logout', async () => {
     const store = useAuthStore()
     store.setAuth('token', {
       id: 'user-1',
@@ -34,7 +35,7 @@ describe('auth store', () => {
       role: UserRole.CUSTOMER,
     })
 
-    store.logout()
+    await store.logout()
 
     expect(store.isAuthenticated).toBe(false)
     expect(store.user).toBeNull()

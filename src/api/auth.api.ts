@@ -29,7 +29,8 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     try {
-      await apiClient.post('/auth/logout');
+      const refreshToken = localStorage.getItem('refresh_token');
+      await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {});
     } catch {
       // ignore network error on logout
     }
