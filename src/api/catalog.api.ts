@@ -110,6 +110,13 @@ function unwrapService(payload: unknown, message: string): ServiceItem {
   return envelope.data as unknown as ServiceItem;
 }
 
+const writableCategory = ['name', 'slug', 'iconKey', 'sortOrder', 'description', 'isActive'];
+const writableService = ['categoryId', 'name', 'slug', 'description', 'basePrice', 'minPrice', 'maxPrice', 'estimatedMinutes', 'pricingMode', 'unit', 'fixedPrice', 'scopeDescription', 'isActive'];
+function writablePayload(dto: object, keys: string[]) {
+  return Object.fromEntries(Object.entries(dto).filter(([key, value]) => keys.includes(key) && value !== undefined)
+    .map(([key, value]) => [key, key === 'description' && value === null ? '' : value]));
+}
+
 export const catalogApi = {
   // Public Category endpoints
   async getCategories(onlyActive = true): Promise<ServiceCategory[]> {
@@ -130,12 +137,12 @@ export const catalogApi = {
   },
 
   async createCategory(dto: Partial<ServiceCategory>): Promise<ServiceCategory> {
-    const res = await apiClient.post<unknown>('/admin/categories', dto);
+    const res = await apiClient.post<unknown>('/admin/categories', writablePayload(dto, [...writableCategory, 'code']));
     return unwrapCategory(res.data, 'Backend returned an invalid category response.');
   },
 
   async updateCategory(id: string, dto: Partial<ServiceCategory>): Promise<ServiceCategory> {
-    const res = await apiClient.patch<unknown>(`/admin/categories/${id}`, dto);
+    const res = await apiClient.patch<unknown>(`/admin/categories/${id}`, writablePayload(dto, writableCategory));
     return unwrapCategory(res.data, 'Backend returned an invalid category response.');
   },
 
@@ -173,12 +180,12 @@ export const catalogApi = {
   },
 
   async createService(dto: Partial<ServiceItem>): Promise<ServiceItem> {
-    const res = await apiClient.post<unknown>('/admin/services', dto);
+    const res = await apiClient.post<unknown>('/admin/services', writablePayload(dto, [...writableService, 'code']));
     return unwrapService(res.data, 'Backend returned an invalid service response.');
   },
 
   async updateService(id: string, dto: Partial<ServiceItem>): Promise<ServiceItem> {
-    const res = await apiClient.patch<unknown>(`/admin/services/${id}`, dto);
+    const res = await apiClient.patch<unknown>(`/admin/services/${id}`, writablePayload(dto, writableService));
     return unwrapService(res.data, 'Backend returned an invalid service response.');
   },
 
