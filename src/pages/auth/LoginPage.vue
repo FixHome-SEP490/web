@@ -2,8 +2,7 @@
 import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Eye, EyeOff, Lock, Mail, Sparkles } from 'lucide-vue-next';
-import { FhButton } from '../../components';
+import { Eye, EyeOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 
 const router = useRouter();
@@ -72,41 +71,44 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="space-y-2 text-center sm:text-left">
-      <h2 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Đăng nhập tài khoản</h2>
-      <p class="text-sm text-ink-500">
-        Chào mừng bạn quay lại với FixHome. Vui lòng nhập thông tin xác thực.
+  <div class="w-full flex flex-col space-y-6">
+    <!-- Breadcrumb -->
+    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+      Trang chủ / Đăng nhập
+    </div>
+
+    <!-- Header -->
+    <div class="space-y-1 text-left mb-4">
+      <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Chào mừng trở lại</h2>
+      <p class="text-sm text-slate-500 font-medium">
+        Đăng nhập để theo dõi yêu cầu và lịch hẹn của bạn.
       </p>
     </div>
 
-    <form class="space-y-4" @submit.prevent="handleLogin">
+    <form class="space-y-5" @submit.prevent="handleLogin">
       <!-- Identifier Input -->
       <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider text-ink-700 mb-1.5">
-          Email hoặc Số điện thoại
+        <label class="block text-xs font-bold text-slate-800 mb-2">
+          Email hoặc Số điện thoại <span class="text-red-500">*</span>
         </label>
-        <div class="relative">
-          <input
-            v-model="identifier"
-            type="text"
-            required
-            placeholder="example@fixhome.vn hoặc 0901234567"
-            class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
-          />
-          <Mail class="absolute left-3.5 top-3 text-ink-400" :size="17" />
-        </div>
+        <input
+          v-model="identifier"
+          type="text"
+          required
+          placeholder="bạn@vidu.vn hoặc 090 123 4567"
+          class="w-full h-12 px-4 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+        />
       </div>
 
       <!-- Password Input -->
       <div>
-        <div class="flex items-center justify-between mb-1.5">
-          <label class="block text-xs font-semibold uppercase tracking-wider text-ink-700">
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-xs font-bold text-slate-800">
             Mật khẩu
           </label>
           <router-link
             to="/forgot-password"
-            class="text-xs text-brand-600 hover:text-brand-700 font-medium"
+            class="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors"
           >
             Quên mật khẩu?
           </router-link>
@@ -117,57 +119,63 @@ const handleLogin = async () => {
             :type="showPassword ? 'text' : 'password'"
             required
             placeholder="••••••••"
-            class="w-full h-11 pl-10 pr-11 text-sm bg-white border border-ink-200 rounded-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors"
+            class="w-full h-12 pl-4 pr-11 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
           />
-          <Lock class="absolute left-3.5 top-3 text-ink-400" :size="17" />
           <button
             type="button"
-            class="absolute right-3.5 top-3 text-ink-400 hover:text-ink-600 p-0.5"
+            class="absolute right-4 top-[0.85rem] text-slate-400 hover:text-slate-600 transition-colors"
             @click="showPassword = !showPassword"
           >
-            <component :is="showPassword ? EyeOff : Eye" :size="17" />
+            <component :is="showPassword ? EyeOff : Eye" :size="18" />
           </button>
         </div>
       </div>
 
+      <!-- Remember me -->
+      <div class="flex items-center gap-2 mt-2">
+        <input type="checkbox" id="remember" class="w-4 h-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500" />
+        <label for="remember" class="text-xs text-slate-500 font-medium cursor-pointer">Ghi nhớ thiết bị này</label>
+      </div>
+
       <!-- Submit Button -->
-      <FhButton
+      <button
         type="submit"
-        variant="primary"
-        size="lg"
-        block
-        :loading="authStore.loading"
-        class="mt-2"
+        class="w-full h-12 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl transition-colors mt-2"
+        :disabled="authStore.loading"
       >
-        Đăng nhập
-      </FhButton>
+        <span v-if="authStore.loading">Đang xử lý...</span>
+        <span v-else>Đăng nhập</span>
+      </button>
     </form>
 
-    <!-- Register Link -->
-    <div class="text-center text-sm text-ink-600">
-      Chưa có tài khoản?
-      <router-link to="/register" class="text-brand-600 hover:text-brand-700 font-semibold ml-1">
-        Đăng ký tài khoản mới
-      </router-link>
-    </div>
-
-    <!-- Demo Account Quick Selector (P12.3) -->
-    <div class="pt-6 border-t border-ink-200 space-y-3">
-      <div class="flex items-center gap-1.5 text-xs font-semibold text-ink-500 uppercase tracking-wider">
-        <Sparkles :size="14" class="text-brand-600" />
-        <span>Tài khoản Demo (1-Click Fill):</span>
+    <!-- Demo Account Quick Selector -->
+    <div class="pt-8">
+      <div class="relative flex py-4 items-center mb-4">
+        <div class="grow border-t border-slate-200"></div>
+        <span class="shrink-0 mx-4 text-[10px] uppercase tracking-widest text-slate-400 font-bold">Tài khoản Demo</span>
+        <div class="grow border-t border-slate-200"></div>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      
+      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <button
           v-for="demo in demoAccounts"
           :key="demo.email"
           type="button"
-          class="px-2.5 py-1.5 text-xs font-medium rounded-sm bg-ink-100 hover:bg-brand-50 hover:text-brand-700 border border-ink-200 hover:border-brand-200 transition-colors text-left truncate"
+          class="p-3 text-left rounded-xl bg-white border border-slate-200 hover:border-brand-500 hover:shadow-md transition-all group"
           @click="fillDemo(demo.email)"
         >
-          {{ demo.label }}
+          <div class="text-[11px] font-bold text-slate-900 group-hover:text-brand-600 transition-colors">{{ demo.label }}</div>
+          <div class="text-[9px] text-slate-500 mt-0.5 truncate">{{ demo.role }}</div>
         </button>
       </div>
+    </div>
+
+    <!-- Register Link (Mobile fallback) -->
+    <div class="text-center text-xs text-slate-500 font-medium lg:hidden pt-4">
+      Chưa có tài khoản?
+      <router-link to="/register" class="text-slate-900 hover:underline font-bold ml-1">
+        Đăng ký miễn phí
+      </router-link>
     </div>
   </div>
 </template>
