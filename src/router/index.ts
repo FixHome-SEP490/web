@@ -72,6 +72,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/auth/RegisterPage.vue'),
         meta: { guestOnly: true, title: 'Đăng ký tài khoản' },
       },
+      {
+        path: 'verify-otp',
+        name: 'verify-otp',
+        component: () => import('../pages/auth/VerifyOtpPage.vue'),
+        meta: { guestOnly: true, title: 'Xác thực tài khoản' },
+      },
+      {
+        path: 'forgot-password',
+        name: 'forgot-password',
+        component: () => import('../pages/auth/ForgotPasswordPage.vue'),
+        meta: { guestOnly: true, title: 'Quên mật khẩu' },
+      },
     ],
   },
 

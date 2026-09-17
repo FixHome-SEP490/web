@@ -34,13 +34,16 @@ const handleRegister = async () => {
 
   errorMessage.value = '';
   try {
-    await authStore.register({
+    const res = await authStore.register({
       fullName: fullName.value,
       email: email.value,
       phoneNumber: phoneNumber.value || undefined,
       password: password.value,
     });
-    router.push('/app');
+    router.push({
+      path: '/verify-otp',
+      query: { email: (res?.email || email.value).trim().toLowerCase() },
+    });
   } catch (err: unknown) {
     const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
     errorMessage.value =
