@@ -31,11 +31,11 @@ const paddingClasses = computed(() => {
 <template>
   <component
     :is="as"
-    class="bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e1)] transition-all duration-120 overflow-hidden"
+    class="bg-white rounded-md border border-ink-200 shadow-(--shadow-e1) transition-all duration-120 overflow-hidden"
     :class="[
       paddingClasses,
       {
-        'hover:shadow-[var(--shadow-e2)] hover:-translate-y-[1px] cursor-pointer': clickable,
+        'hover:shadow-(--shadow-e2) hover:-translate-y-px cursor-pointer': clickable,
       },
     ]"
   >

@@ -32,13 +32,13 @@ const emit = defineEmits<{
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs transition-opacity"
     >
       <div
-        class="bg-white rounded-[var(--radius-lg)] border border-ink-200 shadow-[var(--shadow-e3)] max-w-md w-full overflow-hidden p-6 space-y-4"
+        class="bg-white rounded-lg border border-ink-200 shadow-(--shadow-e3) max-w-md w-full overflow-hidden p-6 space-y-4"
       >
         <!-- Header -->
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-3">
             <div
-              class="w-10 h-10 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0"
+              class="w-10 h-10 rounded-sm flex items-center justify-center shrink-0"
               :class="danger ? 'bg-danger-50 text-danger-600' : 'bg-warning-50 text-warning-600'"
             >
               <AlertTriangle :size="22" :stroke-width="1.75" />
@@ -57,7 +57,7 @@ const emit = defineEmits<{
 
         <!-- Consequence Box (Mandated by P7.7) -->
         <div
-          class="p-3.5 rounded-[var(--radius-sm)] text-sm border"
+          class="p-3.5 rounded-sm text-sm border"
           :class="danger ? 'bg-danger-50/70 border-danger-200 text-danger-900' : 'bg-warning-50/70 border-warning-200 text-warning-900'"
         >
           <p class="font-medium">
