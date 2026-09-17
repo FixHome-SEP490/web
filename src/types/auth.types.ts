@@ -12,6 +12,31 @@ export interface RegisterRequest {
   phoneNumber?: string;
 }
 
+export interface RegisterResponse {
+  message: string;
+  email: string;
+  expiresInMinutes: number;
+}
+
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export interface ResendOtpRequest {
+  email: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
+}
+
 export interface LoginResponse {
   accessToken: string;
   refreshToken?: string;

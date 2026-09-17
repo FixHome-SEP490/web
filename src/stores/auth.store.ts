@@ -48,10 +48,46 @@ export const useAuthStore = defineStore('auth', () => {
   async function register(data: RegisterRequest) {
     loading.value = true;
     try {
-      const response = await authApi.register(data);
+      return await authApi.register(data);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function verifyRegisterOtp(data: { email: string; otp: string }) {
+    loading.value = true;
+    try {
+      const response = await authApi.verifyRegisterOtp(data);
       if (response.refreshToken) localStorage.setItem('refresh_token', response.refreshToken);
       setAuth(response.accessToken, response.user);
       return response.user;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function resendRegisterOtp(email: string) {
+    loading.value = true;
+    try {
+      return await authApi.resendRegisterOtp({ email });
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function forgotPassword(email: string) {
+    loading.value = true;
+    try {
+      return await authApi.forgotPassword({ email });
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function resetPassword(data: { email: string; otp: string; newPassword: string }) {
+    loading.value = true;
+    try {
+      return await authApi.resetPassword(data);
     } finally {
       loading.value = false;
     }
@@ -106,6 +142,10 @@ export const useAuthStore = defineStore('auth', () => {
     setAuth,
     login,
     register,
+    verifyRegisterOtp,
+    resendRegisterOtp,
+    forgotPassword,
+    resetPassword,
     fetchProfile,
     logout,
     hasRole,
