@@ -141,6 +141,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/customer/CustomerProfilePage.vue'),
         meta: { title: 'Hồ sơ & Sổ địa chỉ' },
       },
+      {
+        path: 'messages',
+        name: 'customer-messages',
+        component: () => import('../pages/chat/MessagesPage.vue'),
+        meta: { title: 'Tin nhắn trao đổi' },
+      },
     ],
   },
 
@@ -155,6 +161,12 @@ const routes: RouteRecordRaw[] = [
         name: 'technician-dashboard',
         component: () => import('../pages/technician/TechnicianDashboard.vue'),
         meta: { title: 'Bàn làm việc Kỹ thuật viên' },
+      },
+      {
+        path: 'messages',
+        name: 'tech-messages',
+        component: () => import('../pages/chat/MessagesPage.vue'),
+        meta: { title: 'Tin nhắn với khách' },
       },
       {
         path: 'invitations',

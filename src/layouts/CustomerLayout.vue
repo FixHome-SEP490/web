@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useChatStore } from '../stores/chat.store';
 import {
   Wrench,
   CalendarPlus,
@@ -11,13 +12,19 @@ import {
   User,
   LogOut,
   ChevronDown,
+  MessageSquare,
 } from 'lucide-vue-next';
-import { FhButton } from '../components';
+import { FhButton, ChatFloatingWidget } from '../components';
 import { toast } from 'vue-sonner';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const chatStore = useChatStore();
 const avatarMenuOpen = ref(false);
+
+onMounted(() => {
+  chatStore.initSocket();
+});
 
 const isSuspended = computed<boolean>(() => {
   if (authStore.user?.status === 'SUSPENDED') return true;
@@ -77,6 +84,20 @@ const handleLogout = async () => {
               active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
             >
               Lịch sử sửa chữa
+            </router-link>
+            <router-link
+              to="/app/messages"
+              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5 relative"
+              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+            >
+              <MessageSquare :size="16" />
+              <span>Tin nhắn</span>
+              <span
+                v-if="chatStore.totalUnreadCount > 0"
+                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none"
+              >
+                {{ chatStore.totalUnreadCount }}
+              </span>
             </router-link>
           </nav>
         </div>
@@ -168,5 +189,8 @@ const handleLogout = async () => {
     <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6 py-8">
       <router-view />
     </main>
+
+    <!-- Global Floating Chat Widget -->
+    <ChatFloatingWidget />
   </div>
 </template>

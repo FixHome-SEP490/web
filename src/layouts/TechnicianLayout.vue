@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useChatStore } from '../stores/chat.store';
 import {
   Wrench,
   Inbox,
@@ -12,13 +13,20 @@ import {
   User,
   ShieldCheck,
   ChevronDown,
+  MessageSquare,
 } from 'lucide-vue-next';
+import { ChatFloatingWidget } from '../components';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const chatStore = useChatStore();
 const isAvailable = ref(true);
 const avatarMenuOpen = ref(false);
 const invitationCount = ref(3); // Demo badge count
+
+onMounted(() => {
+  chatStore.initSocket();
+});
 
 const toggleAvailability = () => {
   isAvailable.value = !isAvailable.value;
@@ -96,6 +104,20 @@ const handleLogout = async () => {
               <DollarSign :size="16" />
               Thu nhập
             </router-link>
+            <router-link
+              to="/tech/messages"
+              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5 relative"
+              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+            >
+              <MessageSquare :size="16" />
+              <span>Tin nhắn</span>
+              <span
+                v-if="chatStore.totalUnreadCount > 0"
+                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none"
+              >
+                {{ chatStore.totalUnreadCount }}
+              </span>
+            </router-link>
           </nav>
         </div>
 
@@ -172,5 +194,8 @@ const handleLogout = async () => {
     <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
       <router-view />
     </main>
+
+    <!-- Global Floating Chat Widget -->
+    <ChatFloatingWidget />
   </div>
 </template>

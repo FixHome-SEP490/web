@@ -11,6 +11,7 @@ import {
   AlertCircle,
   XCircle,
   DollarSign,
+  MessageSquare,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -22,9 +23,11 @@ import {
   FhConfirmDialog,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { useChatStore } from '../../stores/chat.store';
 
 const route = useRoute();
 const router = useRouter();
+const chatStore = useChatStore();
 const orderId = route.params.id as string;
 
 const loading = ref(true);
@@ -152,6 +155,23 @@ const handleConfirmCashPayment = async (agreed: boolean) => {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể xử lý xác nhận tiền mặt.' };
   } finally {
     actionLoading.value = false;
+  }
+};
+
+const handleChatWithTech = async () => {
+  if (!order.value) return;
+  const bookingId = (order.value as unknown as { bookingId?: string }).bookingId || orderId;
+  const conv = await chatStore.openConversationForBooking(bookingId);
+  if (!conv) {
+    const found = chatStore.conversations.find(
+      (c) => c.counterpart.id === order.value?.technician?.id,
+    );
+    if (found) {
+      await chatStore.selectConversation(found.id);
+      chatStore.toggleWidget(true);
+    } else {
+      chatStore.toggleWidget(true);
+    }
   }
 };
 
@@ -306,25 +326,44 @@ const confirmWork = async () => {
               </div>
             </div>
 
-            <!-- Technician Box -->
-            <div v-if="order.technician" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex items-center justify-between">
+            <!-- Technician Box (Style Mobile) -->
+            <div v-if="order.technician" class="p-4 rounded-2xl bg-brand-50/60 border border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                <div class="w-12 h-12 rounded-full bg-brand-700 text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs border-2 border-white">
                   {{ order.technician.fullName.charAt(0) }}
                 </div>
                 <div>
-                  <div class="font-bold text-ink-900">{{ order.technician.fullName }}</div>
-                  <div class="text-[11px] text-ink-500">★ {{ order.technician.averageRating }} • Kỹ thuật viên chính</div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="font-bold text-ink-900 text-sm">{{ order.technician.fullName }}</div>
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      ✓ Đã xác minh
+                    </span>
+                  </div>
+                  <div class="text-xs text-amber-600 flex items-center gap-1 font-semibold mt-0.5">
+                    <span>★ {{ order.technician.averageRating || '5.0' }}</span>
+                    <span class="text-ink-400 font-normal">• Kỹ thuật viên chính</span>
+                  </div>
                 </div>
               </div>
 
-              <a
-                :href="`tel:${order.technician.phoneNumber}`"
-                class="p-2 rounded-full bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
-                title="Gọi thợ"
-              >
-                <Phone :size="16" />
-              </a>
+              <div class="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 shadow-xs"
+                  @click="handleChatWithTech"
+                >
+                  <MessageSquare :size="14" />
+                  <span>Nhắn tin</span>
+                </button>
+                <a
+                  v-if="order.technician.phoneNumber"
+                  :href="`tel:${order.technician.phoneNumber}`"
+                  class="p-2 rounded-xl bg-white border border-ink-200 text-brand-700 hover:bg-brand-50 transition-colors shadow-xs"
+                  title="Gọi thợ"
+                >
+                  <Phone :size="16" />
+                </a>
+              </div>
             </div>
           </div>
         </div>

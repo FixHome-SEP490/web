@@ -14,6 +14,7 @@ import {
   Navigation,
   DollarSign,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -23,9 +24,11 @@ import {
   FhMoney,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem, type QuotationItemPayload } from '../../api/orders.api';
+import { useChatStore } from '../../stores/chat.store';
 
 const route = useRoute();
 const router = useRouter();
+const chatStore = useChatStore();
 const jobId = route.params.id as string;
 
 const loading = ref(true);
@@ -87,6 +90,23 @@ const loadJob = async () => {
       cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
     } catch { actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'}; }
     finally { loading.value = false; }
+  };
+
+  const handleChatWithCustomer = async () => {
+    if (!job.value) return;
+    const bookingId = (job.value as unknown as { bookingId?: string }).bookingId || jobId;
+    const conv = await chatStore.openConversationForBooking(bookingId);
+    if (!conv) {
+      const found = chatStore.conversations.find(
+        (c) => c.bookingId === bookingId || c.serviceOrderId === jobId,
+      );
+      if (found) {
+        await chatStore.selectConversation(found.id);
+        chatStore.toggleWidget(true);
+      } else {
+        chatStore.toggleWidget(true);
+      }
+    }
   };
 
 const laborTotal = () =>
@@ -248,6 +268,13 @@ const handleDeclareCash = async () => {
             </div>
 
             <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors shadow-xs"
+                @click="handleChatWithCustomer"
+              >
+                <MessageSquare :size="13" /> Nhắn tin cho khách
+              </button>
               <a
                 v-if="job.customerPhone"
                 :href="'tel:' + job.customerPhone"
