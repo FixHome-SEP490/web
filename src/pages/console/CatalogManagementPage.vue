@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { Plus, Edit2, Search, Power, FolderKanban, Wrench } from 'lucide-vue-next';
+import { Plus, Edit2, Power, FolderKanban, Wrench } from 'lucide-vue-next';
 import {
   FhButton,
   FhCard,
@@ -8,6 +8,7 @@ import {
   FhStatusPill,
   FhMoney,
   FhConfirmDialog,
+  FhSkeleton,
 } from '../../components';
 import {
   catalogApi,
@@ -96,7 +97,22 @@ onMounted(() => {
 });
 
 // Filtered Lists
-const filteredCategories = computed(() => {
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredCategories = computed<(ServiceCategory & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: 5 }).map((_, i) => ({
+      id: `skeleton-cat-${i}`,
+      _isSkeleton: true,
+      name: '',
+      code: '',
+      slug: '',
+      iconKey: '',
+      sortOrder: i + 1,
+      description: '',
+      isActive: true,
+    } as unknown as ServiceCategory & { _isSkeleton: boolean }));
+  }
   if (!searchQuery.value) return categories.value;
   const q = searchQuery.value.toLowerCase();
   return categories.value.filter(
@@ -104,7 +120,27 @@ const filteredCategories = computed(() => {
   );
 });
 
-const filteredServices = computed(() => {
+const filteredServices = computed<(ServiceItem & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: 5 }).map((_, i) => ({
+      id: `skeleton-svc-${i}`,
+      _isSkeleton: true,
+      categoryId: '',
+      name: '',
+      code: '',
+      slug: '',
+      basePrice: 0,
+      minPrice: 0,
+      maxPrice: 0,
+      pricingMode: 'inspection_required',
+      unit: '',
+      fixedPrice: 0,
+      scopeDescription: '',
+      estimatedMinutes: 0,
+      description: '',
+      isActive: true,
+    } as unknown as ServiceItem & { _isSkeleton: boolean }));
+  }
   return services.value.filter((s) => {
     const matchCat =
       selectedCategoryFilter.value === 'ALL' ||
@@ -258,29 +294,11 @@ const handleConfirm = async () => {
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
-        <FhButton
-          v-if="activeTab === 'categories'"
-          variant="primary"
-          size="sm"
-          @click="openAddCategory"
-        >
-          <Plus :size="16" class="mr-1.5" /> Thêm danh mục
-        </FhButton>
-        <FhButton
-          v-else
-          variant="primary"
-          size="sm"
-          @click="openAddService"
-        >
-          <Plus :size="16" class="mr-1.5" /> Thêm dịch vụ
-        </FhButton>
-      </div>
     </div>
 
     <div
       v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      class="flex flex-wrap items-center gap-3 rounded-sm border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
       role="alert"
     >
       <span class="flex-1">{{ error }}</span>
@@ -288,7 +306,7 @@ const handleConfirm = async () => {
     </div>
     <div
       v-if="successMessage"
-      class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
+      class="rounded-sm border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
       role="status"
     >
       {{ successMessage }}
@@ -323,31 +341,6 @@ const handleConfirm = async () => {
       </button>
     </div>
 
-    <!-- Filters & Search -->
-    <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Tìm theo tên hoặc mã code..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-
-      <div v-if="activeTab === 'services'" class="flex items-center gap-2">
-        <span class="text-xs text-ink-500">Lọc danh mục:</span>
-        <select
-          v-model="selectedCategoryFilter"
-          class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Tất cả danh mục</option>
-          <option v-for="cat in categories" :key="cat.id" :value="cat.id">
-            {{ cat.name }}
-          </option>
-        </select>
-      </div>
-    </div>
 
     <!-- Tab 1: Categories Table -->
     <FhCard v-if="activeTab === 'categories'">
@@ -361,32 +354,54 @@ const handleConfirm = async () => {
           { key: 'actions', label: 'Thao tác', width: '140px' },
         ]"
         :rows="filteredCategories"
-        :loading="loading"
+        searchable
+        v-model:searchQuery="searchQuery"
+        search-placeholder="Tìm theo tên hoặc mã code..."
         :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Chưa có danh mục.'"
       >
+        <template #toolbar>
+          <FhButton variant="primary" size="sm" @click="openAddCategory">
+            <Plus :size="16" class="mr-1.5" /> Thêm danh mục
+          </FhButton>
+          <button @click="loadData" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors mr-2" title="Làm mới">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </template>
+
         <template #cell-sortOrder="{ row }">
-          <span class="font-num font-semibold text-xs text-ink-500">{{ row.sortOrder }}</span>
+          <FhSkeleton v-if="isSkeleton(row)" width="20px" height="16px" />
+          <span v-else class="font-num font-semibold text-xs text-ink-500">{{ row.sortOrder }}</span>
         </template>
 
         <template #cell-name="{ row }">
-          <div class="font-semibold text-ink-900">{{ row.name }}</div>
-          <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.description }}</div>
+          <div v-if="isSkeleton(row)">
+            <FhSkeleton width="120px" height="16px" class="mb-1" />
+            <FhSkeleton width="180px" height="12px" />
+          </div>
+          <div v-else>
+            <div class="font-semibold text-ink-900">{{ row.name }}</div>
+            <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.description }}</div>
+          </div>
         </template>
 
         <template #cell-code="{ row }">
-          <code class="text-xs px-2 py-0.5 rounded bg-ink-100 text-ink-700 font-mono">{{ row.code }}</code>
+          <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+          <code v-else class="text-xs px-2 py-0.5 rounded bg-ink-100 text-ink-700 font-mono">{{ row.code }}</code>
         </template>
 
         <template #cell-slug="{ row }">
-          <span class="text-xs text-ink-500 font-mono">{{ row.slug || '—' }}</span>
+          <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+          <span v-else class="text-xs text-ink-500 font-mono">{{ row.slug || '—' }}</span>
         </template>
 
         <template #cell-status="{ row }">
-          <FhStatusPill :status="row.isActive ? 'COMPLETED' : 'CANCELLED'" :label="row.isActive ? 'Hoạt động' : 'Tạm dừng'" />
+          <FhSkeleton v-if="isSkeleton(row)" width="70px" height="16px" />
+          <FhStatusPill v-else :status="row.isActive ? 'COMPLETED' : 'CANCELLED'" :label="row.isActive ? 'Hoạt động' : 'Tạm dừng'" />
         </template>
 
         <template #cell-actions="{ row }">
-          <div class="flex items-center gap-1.5">
+          <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
+          <div v-else class="flex items-center gap-1.5">
             <button
               class="p-1.5 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
               title="Chỉnh sửa"
@@ -420,26 +435,58 @@ const handleConfirm = async () => {
           { key: 'actions', label: 'Thao tác', width: '130px' },
         ]"
         :rows="filteredServices"
-        :loading="loading"
+        searchable
+        v-model:searchQuery="searchQuery"
+        search-placeholder="Tìm theo tên hoặc mã code..."
         :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Chưa có dịch vụ.'"
       >
+        <template #toolbar>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-ink-500">Lọc danh mục:</span>
+            <select
+              v-model="selectedCategoryFilter"
+              class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-sm text-ink-700 focus:outline-none focus:border-brand-600"
+            >
+              <option value="ALL">Tất cả danh mục</option>
+              <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+                {{ cat.name }}
+              </option>
+            </select>
+          </div>
+          <FhButton variant="primary" size="sm" @click="openAddService">
+            <Plus :size="16" class="mr-1.5" /> Thêm dịch vụ
+          </FhButton>
+          <button @click="loadData" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors mr-2" title="Làm mới">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </template>
+
         <template #cell-name="{ row }">
-          <div class="font-semibold text-ink-900">{{ row.name }}</div>
-          <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.description }}</div>
+          <div v-if="isSkeleton(row)">
+            <FhSkeleton width="120px" height="16px" class="mb-1" />
+            <FhSkeleton width="180px" height="12px" />
+          </div>
+          <div v-else>
+            <div class="font-semibold text-ink-900">{{ row.name }}</div>
+            <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.description }}</div>
+          </div>
         </template>
 
         <template #cell-category="{ row }">
-          <span class="text-xs font-medium text-ink-700">
+          <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+          <span v-else class="text-xs font-medium text-ink-700">
             {{ row.category?.name || categories.find((c) => c.id === row.categoryId)?.name || '—' }}
           </span>
         </template>
 
         <template #cell-code="{ row }">
-          <code class="text-xs px-1.5 py-0.5 rounded bg-ink-100 text-ink-700 font-mono">{{ row.code }}</code>
+          <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+          <code v-else class="text-xs px-1.5 py-0.5 rounded bg-ink-100 text-ink-700 font-mono">{{ row.code }}</code>
         </template>
 
         <template #cell-priceRange="{ row }">
-          <div class="text-xs font-bold font-num text-brand-700">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+          <div v-else class="text-xs font-bold font-num text-brand-700">
             <FhMoney :amount="row.minPrice ?? row.basePrice ?? 0" />
             –
             <FhMoney :amount="row.maxPrice ?? row.basePrice ?? 0" />
@@ -447,15 +494,18 @@ const handleConfirm = async () => {
         </template>
 
         <template #cell-duration="{ row }">
-          <span class="text-xs text-ink-600 font-num">~{{ row.estimatedMinutes }}p</span>
+          <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
+          <span v-else class="text-xs text-ink-600 font-num">~{{ row.estimatedMinutes }}p</span>
         </template>
 
         <template #cell-status="{ row }">
-          <FhStatusPill :status="row.isActive ? 'COMPLETED' : 'CANCELLED'" :label="row.isActive ? 'Hoạt động' : 'Tạm dừng'" />
+          <FhSkeleton v-if="isSkeleton(row)" width="70px" height="16px" />
+          <FhStatusPill v-else :status="row.isActive ? 'COMPLETED' : 'CANCELLED'" :label="row.isActive ? 'Hoạt động' : 'Tạm dừng'" />
         </template>
 
         <template #cell-actions="{ row }">
-          <div class="flex items-center gap-1.5">
+          <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
+          <div v-else class="flex items-center gap-1.5">
             <button
               class="p-1.5 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
               title="Chỉnh sửa"
@@ -481,7 +531,7 @@ const handleConfirm = async () => {
       v-if="showCategoryModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
     >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 shadow-xl space-y-5">
+      <div class="bg-white rounded-md max-w-lg w-full p-6 shadow-xl space-y-5">
         <h3 class="text-lg font-bold text-ink-900">
           {{ isEditingCategory ? 'Chỉnh sửa Danh mục' : 'Thêm Danh mục Mới' }}
         </h3>
@@ -492,7 +542,7 @@ const handleConfirm = async () => {
             <input
               v-model="categoryForm.name"
               type="text"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
               placeholder="Ví dụ: Điện lạnh"
             />
           </div>
@@ -504,7 +554,7 @@ const handleConfirm = async () => {
                 v-model="categoryForm.code"
                 type="text"
                 :disabled="isEditingCategory"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 disabled:bg-ink-100 font-mono"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 disabled:bg-ink-100 font-mono"
                 placeholder="DIEN_LANH"
               />
             </div>
@@ -513,7 +563,7 @@ const handleConfirm = async () => {
               <input
                 v-model="categoryForm.slug"
                 type="text"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-mono"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-mono"
                 placeholder="dien-lanh"
               />
             </div>
@@ -525,7 +575,7 @@ const handleConfirm = async () => {
               <input
                 v-model="categoryForm.iconKey"
                 type="text"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
                 placeholder="Snowflake, Zap, Lock..."
               />
             </div>
@@ -534,7 +584,7 @@ const handleConfirm = async () => {
               <input
                 v-model.number="categoryForm.sortOrder"
                 type="number"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-num"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
               />
             </div>
           </div>
@@ -544,7 +594,7 @@ const handleConfirm = async () => {
             <textarea
               v-model="categoryForm.description"
               rows="2"
-              class="w-full p-2.5 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+              class="w-full p-2.5 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
               placeholder="Mô tả về nhóm dịch vụ..."
             ></textarea>
           </div>
@@ -566,7 +616,7 @@ const handleConfirm = async () => {
       v-if="showServiceModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
     >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 shadow-xl space-y-5">
+      <div class="bg-white rounded-md max-w-lg w-full p-6 shadow-xl space-y-5">
         <h3 class="text-lg font-bold text-ink-900">
           {{ isEditingService ? 'Chỉnh sửa Dịch vụ' : 'Thêm Dịch vụ Mới' }}
         </h3>
@@ -576,7 +626,7 @@ const handleConfirm = async () => {
             <label class="block font-semibold text-ink-700 mb-1">Thuộc danh mục *</label>
             <select
               v-model="serviceForm.categoryId"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
             >
               <option v-for="c in categories" :key="c.id" :value="c.id">
                 {{ c.name }} ({{ c.code }})
@@ -589,7 +639,7 @@ const handleConfirm = async () => {
             <input
               v-model="serviceForm.name"
               type="text"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
               placeholder="Ví dụ: Vệ sinh máy lạnh treo tường"
             />
           </div>
@@ -601,7 +651,7 @@ const handleConfirm = async () => {
                 v-model="serviceForm.code"
                 type="text"
                 :disabled="isEditingService"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 disabled:bg-ink-100 font-mono"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 disabled:bg-ink-100 font-mono"
                 placeholder="VE_SINH_ML"
               />
             </div>
@@ -610,7 +660,7 @@ const handleConfirm = async () => {
               <input
                 v-model="serviceForm.slug"
                 type="text"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-mono"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-mono"
                 placeholder="ve-sinh-may-lanh"
               />
             </div>
@@ -671,7 +721,7 @@ const handleConfirm = async () => {
                 v-model.number="serviceForm.minPrice"
                 type="number"
                 step="10000"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-num"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
               />
             </div>
             <div>
@@ -680,7 +730,7 @@ const handleConfirm = async () => {
                 v-model.number="serviceForm.maxPrice"
                 type="number"
                 step="10000"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-num"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
               />
             </div>
             <div>
@@ -688,7 +738,7 @@ const handleConfirm = async () => {
               <input
                 v-model.number="serviceForm.estimatedMinutes"
                 type="number"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 font-num"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
               />
             </div>
           </div>
@@ -698,7 +748,7 @@ const handleConfirm = async () => {
             <textarea
               v-model="serviceForm.description"
               rows="2"
-              class="w-full p-2.5 bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+              class="w-full p-2.5 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
             ></textarea>
           </div>
         </div>

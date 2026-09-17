@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Users, Lock, Unlock, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, FhStatusPill, FhConfirmDialog, type TableColumn } from '../../../components';
+import { FhCard, FhTable, FhConfirmDialog, FhSkeleton, type TableColumn } from '../../../components';
 import {
   adminUsersApi,
   type AdminUserRecord,
@@ -10,12 +9,12 @@ import {
 } from '../../../api/admin-users.api';
 
 const columns: TableColumn[] = [
-  { key: 'name', label: 'Họ và tên' },
-  { key: 'email', label: 'Email & SĐT' },
-  { key: 'role', label: 'Vai trò', width: '150px' },
-  { key: 'createdAt', label: 'Ngày tạo', width: '120px' },
-  { key: 'status', label: 'Trạng thái', width: '150px' },
-  { key: 'actions', label: 'Thao tác', width: '100px' },
+  { key: 'name', label: 'HỌ VÀ TÊN', sortable: true },
+  { key: 'email', label: 'EMAIL' },
+  { key: 'role', label: 'VAI TRÒ', sortable: true },
+  { key: 'status', label: 'TRẠNG THÁI', sortable: true },
+  { key: 'createdAt', label: 'NGÀY TẠO', sortable: true },
+  { key: 'active', label: 'HOẠT ĐỘNG', sortable: false}
 ];
 
 const roleFilter = ref<AdminUserRole | 'ALL'>('ALL');
@@ -28,9 +27,30 @@ const users = ref<AdminUserRecord[]>([]);
 const loading = ref(true);
 const error = ref('');
 const successMessage = ref('');
+const selectedUsers = ref<AdminUserRecord[]>([]);
+const sortBy = ref('createdAt');
+const sortDesc = ref(true);
 let latestRequest = 0;
 
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const displayRows = computed<(AdminUserRecord & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: 10 }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      email: '',
+      fullName: '',
+      role: '',
+      status: '',
+      createdAt: ''
+    } as unknown as AdminUserRecord & { _isSkeleton: boolean }));
+  }
+  return users.value;
+});
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -93,13 +113,7 @@ const nextStatus = computed<AdminUserStatus>(() =>
 const canToggleStatus = (status: AdminUserStatus) =>
   status === 'active' || status === 'locked';
 
-const triggerToggleStatus = (user: AdminUserRecord) => {
-  if (!canToggleStatus(user.status)) return;
-  userToToggle.value = user;
-  showStatusModal.value = true;
-  error.value = '';
-  successMessage.value = '';
-};
+
 
 const confirmStatusChange = async () => {
   if (
@@ -125,154 +139,186 @@ const confirmStatusChange = async () => {
   }
 };
 
-const displayRole = (role: string) => role.toUpperCase();
 
-const roleClass = (role: string) => ({
-  'bg-purple-100 text-purple-800': displayRole(role) === 'ADMIN',
-  'bg-blue-100 text-blue-800': displayRole(role) === 'SERVICE_MANAGER',
-  'bg-brand-100 text-brand-800': displayRole(role) === 'TECHNICIAN',
-  'bg-ink-100 text-ink-800': displayRole(role) === 'CUSTOMER',
-});
+
+const handleSort = (key: string) => {
+  if (sortBy.value === key) {
+    sortDesc.value = !sortDesc.value;
+  } else {
+    sortBy.value = key;
+    sortDesc.value = false;
+  }
+  // In a real app, this would trigger loadUsers with sort params
+};
+
+const displayRole = (role: string) => {
+  const r = role.toUpperCase();
+  if (r === 'ADMIN') return 'Admin';
+  if (r === 'SERVICE_MANAGER') return 'Manager';
+  if (r === 'TECHNICIAN') return 'Technician';
+  return 'Customer';
+};
+
+
 
 const statusLabel = (status: string) => {
   switch (status.toUpperCase()) {
     case 'ACTIVE':
-      return 'Hoạt động';
+      return 'Online';
     case 'LOCKED':
-      return 'Đã khoá';
+      return 'Locked';
     case 'SUSPENDED':
-      return 'Tạm đình chỉ';
+      return 'Suspended';
     case 'PENDING_VERIFICATION':
-      return 'Chờ xác minh';
+      return 'Pending';
     default:
       return status;
   }
 };
 
+const getStatusColor = (status: string) => {
+  switch (status.toUpperCase()) {
+    case 'ACTIVE': return 'bg-emerald-500';
+    case 'LOCKED': return 'bg-red-500';
+    case 'SUSPENDED': return 'bg-red-500';
+    case 'PENDING_VERIFICATION': return 'bg-amber-400';
+    default: return 'bg-gray-400';
+  }
+};
+
 const formatDate = (value: string) => {
   if (!value) return '—';
+
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN');
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+};
+
+const getInitial = (name: string, email: string) => {
+  if (name) return name.charAt(0).toUpperCase();
+  if (email) return email.charAt(0).toUpperCase();
+  return 'A';
 };
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Users class="text-brand-600" :size="24" />
-          Quản trị Danh bạ Người dùng
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Quản lý trạng thái tài khoản của Admin, Service Manager, Kỹ thuật viên và Khách hàng.
-        </p>
-      </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadUsers">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
-    </div>
+  <div class="space-y-4">
 
-    <div
-      v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-      role="alert"
-    >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadUsers">Thử lại</button>
-    </div>
-    <div
-      v-if="successMessage"
-      class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
-      role="status"
-    >
-      {{ successMessage }}
-    </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <label class="sr-only" for="admin-user-search">Tìm người dùng</label>
-        <input
-          id="admin-user-search"
-          v-model="searchQuery"
-          type="search"
-          placeholder="Tìm theo tên, email hoặc SĐT..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
+    <!-- Error/Success states -->
+    <div v-if="error" class="rounded-md bg-red-50 p-4 text-sm text-red-700">{{ error }}</div>
+    <div v-if="successMessage" class="rounded-md bg-green-50 p-4 text-sm text-green-700">{{ successMessage }}</div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <label class="flex items-center gap-2 text-xs text-ink-500">
-          Vai trò:
-          <select v-model="roleFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700">
-            <option value="ALL">Tất cả vai trò</option>
-            <option value="admin">ADMIN</option>
-            <option value="service_manager">SERVICE_MANAGER</option>
-            <option value="technician">TECHNICIAN</option>
-            <option value="customer">CUSTOMER</option>
-          </select>
-        </label>
-        <label class="flex items-center gap-2 text-xs text-ink-500">
-          Trạng thái:
-          <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700">
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="active">ACTIVE</option>
-            <option value="suspended">SUSPENDED</option>
-            <option value="locked">LOCKED</option>
-            <option value="pending_verification">PENDING_VERIFICATION</option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <FhCard>
-      <FhTable :columns="columns" :rows="users" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có người dùng phù hợp.'">
+    <!-- Table -->
+    <FhCard class="border-none shadow-none bg-transparent">
+      <FhTable 
+        :columns="columns" 
+        :rows="displayRows" 
+        selectable
+        searchable
+        v-model:searchQuery="searchQuery"
+        search-placeholder="Tìm kiếm người dùng..."
+        v-model:selected="selectedUsers"
+        :sortBy="sortBy"
+        :sortDesc="sortDesc"
+        @sort="handleSort"
+        empty-text="Không tìm thấy người dùng."
+      >
+        <template #toolbar>
+          <label class="flex items-center gap-2 text-sm text-gray-500">
+            Trạng thái:
+            <select v-model="statusFilter" class="bg-gray-100 border border-gray-200 rounded-full px-2 py-1 font-medium text-gray-700 outline-none cursor-pointer focus:ring-0  pr-4">
+              <option value="ALL">Tất cả</option>
+              <option value="active">Online</option>
+              <option value="pending_verification">Pending</option>
+              <option value="suspended">Locked</option>
+            </select>
+          </label>
+          <button @click="loadUsers" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors mr-2" title="Làm mới">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </template>
         <template #cell-name="{ row }">
-          <div class="font-bold text-xs text-ink-900">{{ row.fullName }}</div>
+          <div v-if="isSkeleton(row)" class="flex items-center gap-3">
+            <FhSkeleton class="w-8! h-8! shrink-0" rounded="full" />
+            <FhSkeleton width="120px" height="16px" />
+          </div>
+          <div v-else class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0 overflow-hidden">
+              <img v-if="row.avatarUrl" :src="row.avatarUrl" class="w-full h-full object-cover" />
+              <span v-else>{{ getInitial(row.fullName, row.email) }}</span>
+            </div>
+            <div class="font-bold text-sm text-gray-900 flex items-center gap-1">
+              {{ row.fullName || row.email.split('@')[0] }}
+            </div>
+          </div>
         </template>
+      
         <template #cell-email="{ row }">
-          <div class="text-xs text-ink-700 font-mono">{{ row.email }}</div>
-          <div class="text-[11px] text-ink-400 font-num">{{ row.phoneNumber || '—' }}</div>
+          <FhSkeleton v-if="isSkeleton(row)" width="160px" height="16px" />
+          <div v-else class="text-sm text-gray-600">{{ row.email }}</div>
         </template>
+        
         <template #cell-role="{ row }">
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold" :class="roleClass(String(row.role))">
+          <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+          <span v-else class="text-sm font-medium text-gray-600">
             {{ displayRole(String(row.role)) }}
           </span>
         </template>
-        <template #cell-createdAt="{ row }">
-          <span class="text-xs text-ink-500 font-num">{{ formatDate(String(row.createdAt)) }}</span>
-        </template>
+        
         <template #cell-status="{ row }">
-          <FhStatusPill :status="String(row.status)" :label="statusLabel(String(row.status))" />
+          <FhSkeleton v-if="isSkeleton(row)" width="70px" height="16px" />
+          <div v-else class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full" :class="getStatusColor(String(row.status))"></span>
+            <span class="text-sm font-medium text-gray-700">{{ statusLabel(String(row.status)) }}</span>
+          </div>
         </template>
-        <template #cell-actions="{ row }">
-          <button
-            v-if="displayRole(String(row.role)) !== 'ADMIN' && ['active', 'locked'].includes(String(row.status).toLowerCase())"
-            class="p-2 rounded transition-colors"
-            :class="String(row.status).toUpperCase() === 'ACTIVE' ? 'text-danger-500 hover:bg-danger-50' : 'text-success-600 hover:bg-success-50'"
-            :title="String(row.status).toUpperCase() === 'ACTIVE' ? 'Khoá tài khoản' : 'Mở khoá tài khoản'"
-            type="button"
-            @click="triggerToggleStatus(row)"
-          >
-            <Lock v-if="String(row.status).toUpperCase() === 'ACTIVE'" :size="15" />
-            <Unlock v-else :size="15" />
+        
+        <template #cell-createdAt="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="90px" height="16px" />
+          <span v-else class="text-sm font-medium text-gray-600">{{ formatDate(String(row.createdAt)) }}</span>
+        </template>
+
+        <template #cell-active="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
+          <button v-else-if="canToggleStatus(row.status)" @click="userToToggle = row; showStatusModal = true" class="text-brand-500 hover:text-brand-600 font-bold text-xs uppercase transition-colors">
+            Ban
           </button>
-          <span v-else class="text-[11px] text-ink-400 italic">
-            {{ displayRole(String(row.role)) === 'ADMIN' ? 'Hệ thống' : 'Theo chính sách' }}
-          </span>
         </template>
       </FhTable>
     </FhCard>
 
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} người dùng</span>
+    <div class="flex items-center justify-between text-sm text-gray-500 px-2 py-4">
       <div class="flex items-center gap-2">
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" aria-label="Trang trước" @click="page--">
-          <ChevronLeft :size="16" />
+        <span>Showing:</span>
+        <select class="border-0 bg-transparent font-medium text-gray-700 outline-none cursor-pointer focus:ring-0 p-0 pr-4">
+          <option>8</option>
+          <option>10</option>
+          <option>20</option>
+        </select>
+        <span>of {{ total }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-1 rounded text-gray-500 hover:text-gray-900 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" @click="page--">
+          Prev
         </button>
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" aria-label="Trang sau" @click="page++">
-          <ChevronRight :size="16" />
+        <div class="flex items-center gap-1">
+          <button 
+            v-for="p in Math.min(3, totalPages)" 
+            :key="p"
+            class="w-8 h-8 rounded flex items-center justify-center font-medium"
+            :class="p === page ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-100'"
+            @click="page = p"
+          >
+            {{ p }}
+          </button>
+        </div>
+        <button class="px-3 py-1 rounded text-gray-500 hover:text-gray-900 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" @click="page++">
+          Next
         </button>
       </div>
     </div>
