@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useChatStore } from '../stores/chat.store';
@@ -8,24 +8,36 @@ import {
   Inbox,
   Briefcase,
   DollarSign,
-  Calendar,
   LogOut,
   User,
   ShieldCheck,
   ChevronDown,
   MessageSquare,
+  Zap,
 } from 'lucide-vue-next';
+
 import { ChatFloatingWidget } from '../components';
+import { ordersApi } from '../api/orders.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 const isAvailable = ref(true);
 const avatarMenuOpen = ref(false);
-const invitationCount = ref(3); // Demo badge count
+const activeJobs = ref<number>(0);
+const invitationCount = ref(3);
 
-onMounted(() => {
+onMounted(async () => {
   chatStore.initSocket();
+  try {
+    const jobs = await ordersApi.getTechnicianJobs();
+    const active = jobs.filter((j) =>
+      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase())
+    );
+    activeJobs.value = active.length;
+  } catch {
+    // ignore
+  }
 });
 
 const toggleAvailability = () => {
@@ -36,151 +48,189 @@ const handleLogout = async () => {
   await authStore.logout();
   router.push('/login');
 };
+
+const userInitial = computed(() => {
+  return authStore.user?.fullName?.charAt(0)?.toUpperCase() || 'T';
+});
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-ink-50 text-ink-900">
-    <!-- Top Navigation Bar per P6.1 -->
-    <header class="sticky top-0 z-30 bg-white border-b border-ink-200 shadow-(--shadow-e1)">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <!-- Left: Logo + Tech Links -->
-        <div class="flex items-center gap-8">
-          <router-link to="/tech" class="inline-flex items-center gap-2">
-            <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white">
+  <div class="min-h-screen flex flex-col bg-ink-50/50 text-ink-900 pb-16 md:pb-0">
+    <!-- Top Navigation Bar (Modern Mobile-harmonized Style) -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80 shadow-xs">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+        <!-- Left: Logo + Tech Tagline -->
+        <div class="flex items-center gap-6 lg:gap-8">
+          <router-link to="/tech" class="inline-flex items-center gap-2.5 group">
+            <div class="w-10 h-10 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
               <Wrench :size="20" />
             </div>
             <div>
-              <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
-              <span class="block text-[10px] font-bold text-brand-700 -mt-1 tracking-wider uppercase">Thợ Chuyên Nghiệp</span>
+              <div class="text-lg sm:text-xl font-extrabold text-ink-900 tracking-tight leading-none">
+                Fix<span class="text-brand-600">Home</span>
+              </div>
+              <span class="block text-[9px] font-extrabold text-brand-700 tracking-widest uppercase mt-0.5">
+                Kỹ thuật viên
+              </span>
             </div>
           </router-link>
 
-          <!-- Nav Items -->
-          <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-ink-700">
+          <!-- Desktop Nav Links -->
+          <nav class="hidden md:flex items-center gap-1 lg:gap-2 text-xs font-bold text-ink-600">
             <router-link
               to="/tech"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
-              exact-active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
+              exact-active-class="bg-brand-50 text-brand-700 font-extrabold"
             >
-              <Briefcase :size="16" />
+              <Briefcase :size="15" />
               Tổng quan
             </router-link>
+
             <router-link
               to="/tech/jobs"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5 relative"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
             >
-              <Wrench :size="16" />
-              Đơn nhận việc
+              <Wrench :size="15" />
+              <span>Đơn nhận việc</span>
+              <span
+                v-if="activeJobs > 0"
+                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none"
+              >
+                {{ activeJobs }}
+              </span>
             </router-link>
+
             <router-link
               to="/tech/invitations"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5 relative"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5 relative"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
             >
-              <Inbox :size="16" />
+              <Inbox :size="15" />
               <span>Hộp thư mời</span>
               <span
                 v-if="invitationCount > 0"
-                class="px-1.5 py-0.2 text-[11px] font-bold rounded-full bg-brand-600 text-white font-num leading-none"
+                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-amber-500 text-white font-num leading-none"
               >
                 {{ invitationCount }}
               </span>
             </router-link>
-            <router-link
-              to="/tech/schedule"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
-            >
-              <Calendar :size="16" />
-              Lịch làm việc
-            </router-link>
+
             <router-link
               to="/tech/earnings"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
             >
-              <DollarSign :size="16" />
+              <DollarSign :size="15" />
               Thu nhập
             </router-link>
+
             <router-link
               to="/tech/messages"
-              class="hover:text-brand-600 transition-colors py-1 flex items-center gap-1.5 relative"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5 relative"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
             >
-              <MessageSquare :size="16" />
+              <MessageSquare :size="15" />
               <span>Tin nhắn</span>
               <span
                 v-if="chatStore.totalUnreadCount > 0"
-                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none"
+                class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-rose-600 text-white font-num leading-none"
               >
-                {{ chatStore.totalUnreadCount }}
+                {{ chatStore.totalUnreadCount > 9 ? '9+' : chatStore.totalUnreadCount }}
               </span>
             </router-link>
           </nav>
         </div>
 
-        <!-- Right Side: Availability Toggle per P6.1 + Avatar -->
-        <div class="flex items-center gap-5">
-          <!-- Availability Toggle -->
-          <div class="flex items-center gap-2 bg-ink-25 px-3 py-1.5 rounded-sm border border-ink-200">
-            <button
-              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="isAvailable ? 'bg-success-600' : 'bg-ink-300'"
-              @click="toggleAvailability"
-            >
-              <span
-                class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out"
-                :class="isAvailable ? 'translate-x-4' : 'translate-x-0'"
-              />
-            </button>
-            <span class="text-xs font-semibold select-none" :class="isAvailable ? 'text-success-600' : 'text-ink-500'">
-              {{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}
-            </span>
-          </div>
+        <!-- Right: Active badge + Availability Switch + User Avatar -->
+        <div class="flex items-center gap-3">
+          <!-- Active Jobs Badge (Mobile Header Match) -->
+          <router-link
+            v-if="activeJobs > 0"
+            to="/tech/jobs"
+            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-bold shadow-xs hover:bg-brand-700 active:scale-95 transition-all"
+          >
+            <Zap :size="13" class="fill-white" />
+            <span>{{ activeJobs }} đơn chờ</span>
+          </router-link>
 
-          <!-- Avatar Dropdown -->
+          <!-- Chat icon shortcut with badge -->
+          <router-link
+            to="/tech/messages"
+            class="relative w-9 h-9 rounded-xl bg-ink-100/80 hover:bg-ink-200 text-ink-700 flex items-center justify-center transition-colors"
+            title="Trò chuyện với khách hàng"
+          >
+            <MessageSquare :size="18" />
+            <span
+              v-if="chatStore.totalUnreadCount > 0"
+              class="absolute -top-1 -right-1 px-1.5 min-w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white leading-none"
+            >
+              {{ chatStore.totalUnreadCount > 9 ? '9+' : chatStore.totalUnreadCount }}
+            </span>
+          </router-link>
+
+          <!-- Availability Switch (Online / Offline Toggle) -->
+          <button
+            type="button"
+            class="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-semibold"
+            :class="
+              isAvailable
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-ink-100 border-ink-200 text-ink-600'
+            "
+            @click="toggleAvailability"
+          >
+            <span
+              class="w-2 h-2 rounded-full transition-colors"
+              :class="isAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-ink-400'"
+            />
+            <span class="hidden sm:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
+          </button>
+
+          <!-- Avatar Dropdown Menu -->
           <div class="relative">
             <button
-              class="flex items-center gap-2 p-1.5 rounded-sm hover:bg-ink-100 transition-colors"
+              type="button"
+              class="flex items-center gap-1.5 p-1 rounded-2xl hover:bg-ink-100 transition-colors"
               @click="avatarMenuOpen = !avatarMenuOpen"
             >
-              <div class="w-8 h-8 rounded-full bg-brand-600 text-white font-semibold flex items-center justify-center text-sm shadow-sm overflow-hidden">
+              <div class="w-9 h-9 rounded-xl bg-brand-600 text-white font-bold flex items-center justify-center text-xs shadow-xs overflow-hidden">
                 <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
-                <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
+                <span v-else>{{ userInitial }}</span>
               </div>
-              <ChevronDown :size="16" class="text-ink-500" />
+              <ChevronDown :size="15" class="text-ink-400 hidden sm:block" />
             </button>
 
             <!-- Dropdown Menu -->
             <div
               v-if="avatarMenuOpen"
-              class="absolute right-0 mt-2 w-52 bg-white rounded-md border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100"
+              class="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-ink-200 shadow-lg py-2 z-50 divide-y divide-ink-100 text-xs"
               @click="avatarMenuOpen = false"
             >
-              <div class="px-4 py-2">
-                <p class="text-sm font-semibold text-ink-900 truncate">{{ authStore.user?.fullName }}</p>
-                <p class="text-xs text-ink-500">Kỹ thuật viên</p>
+              <div class="px-4 py-3">
+                <p class="font-bold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
+                <p class="text-[11px] text-ink-500 font-medium">Kỹ thuật viên FixHome</p>
               </div>
 
-              <div class="py-1 text-sm text-ink-700">
-                <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
-                  <User :size="16" />
+              <div class="py-1 text-ink-700 font-semibold">
+                <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600">
+                  <User :size="15" />
                   Hồ sơ thợ & Kỹ năng
                 </router-link>
-                <router-link to="/tech/kyc" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
-                  <ShieldCheck :size="16" />
+                <router-link to="/tech/kyc" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600">
+                  <ShieldCheck :size="15" />
                   Xác minh danh tính (KYC)
                 </router-link>
               </div>
 
               <div class="py-1">
                 <button
-                  class="flex items-center gap-2.5 px-4 py-2 text-sm text-danger-600 hover:bg-danger-50 w-full text-left"
+                  type="button"
+                  class="flex items-center gap-2.5 px-4 py-2 text-rose-600 hover:bg-rose-50 w-full text-left font-bold"
                   @click="handleLogout"
                 >
-                  <LogOut :size="16" />
+                  <LogOut :size="15" />
                   Đăng xuất
                 </button>
               </div>
@@ -190,10 +240,67 @@ const handleLogout = async () => {
       </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <router-view />
     </main>
+
+    <!-- Mobile Bottom Navigation Bar (Matching Mobile App Experience) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 flex items-center justify-around py-2 px-1 shadow-lg">
+      <router-link
+        to="/tech"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+        exact-active-class="text-brand-600"
+      >
+        <Briefcase :size="18" />
+        <span>Tổng quan</span>
+      </router-link>
+
+      <router-link
+        to="/tech/jobs"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
+        active-class="text-brand-600"
+      >
+        <Wrench :size="18" />
+        <span>Công việc</span>
+        <span
+          v-if="activeJobs > 0"
+          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-brand-600"
+        />
+      </router-link>
+
+      <router-link
+        to="/tech/invitations"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
+        active-class="text-brand-600"
+      >
+        <Inbox :size="18" />
+        <span>Thư mời</span>
+        <span
+          v-if="invitationCount > 0"
+          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-amber-500"
+        />
+      </router-link>
+
+      <router-link
+        to="/tech/earnings"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+      >
+        <DollarSign :size="18" />
+        <span>Thu nhập</span>
+      </router-link>
+
+      <router-link
+        to="/tech/profile"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+      >
+        <User :size="18" />
+        <span>Hồ sơ</span>
+      </router-link>
+    </nav>
 
     <!-- Global Floating Chat Widget -->
     <ChatFloatingWidget />
