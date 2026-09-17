@@ -13,6 +13,7 @@ import {
   ChevronDown,
 } from 'lucide-vue-next';
 import { FhButton } from '../components';
+import { toast } from 'vue-sonner';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -28,6 +29,7 @@ const isSuspended = computed<boolean>(() => {
 
 const handleLogout = async () => {
   await authStore.logout();
+  toast('Đã đăng xuất');
   router.push('/login');
 };
 </script>
@@ -35,12 +37,12 @@ const handleLogout = async () => {
 <template>
   <div class="min-h-screen flex flex-col bg-ink-50 text-ink-900">
     <!-- Top Navigation Bar per P6.1 -->
-    <header class="sticky top-0 z-30 bg-white border-b border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="max-w-[1120px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <header class="sticky top-0 z-30 bg-white border-b border-ink-200 shadow-(--shadow-e1)">
+      <div class="max-w-280 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <!-- Brand / Logo -->
         <div class="flex items-center gap-8">
           <router-link to="/app" class="inline-flex items-center gap-2">
-            <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white">
+            <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white">
               <Wrench :size="20" :stroke-width="2" />
             </div>
             <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
@@ -96,11 +98,12 @@ const handleLogout = async () => {
           <!-- User Avatar Dropdown -->
           <div class="relative">
             <button
-              class="flex items-center gap-2 p-1.5 rounded-[var(--radius-sm)] hover:bg-ink-100 transition-colors"
+              class="flex items-center gap-2 p-1.5 rounded-sm hover:bg-ink-100 transition-colors"
               @click="avatarMenuOpen = !avatarMenuOpen"
             >
-              <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-200">
-                {{ authStore.user?.fullName?.charAt(0) ?? 'C' }}
+              <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-200 overflow-hidden">
+                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
+                <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'C' }}</span>
               </div>
               <ChevronDown :size="16" class="text-ink-500" />
             </button>
@@ -108,7 +111,7 @@ const handleLogout = async () => {
             <!-- Dropdown Menu -->
             <div
               v-if="avatarMenuOpen"
-              class="absolute right-0 mt-2 w-56 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-[var(--shadow-e3)] py-2 z-50 divide-y divide-ink-100"
+              class="absolute right-0 mt-2 w-56 bg-white rounded-md border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100"
               @click="avatarMenuOpen = false"
             >
               <div class="px-4 py-2">
@@ -162,7 +165,7 @@ const handleLogout = async () => {
     </div>
 
     <!-- Main Content: max-width 1120px per P6.1 -->
-    <main class="flex-1 max-w-[1120px] w-full mx-auto px-4 sm:px-6 py-8">
+    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6 py-8">
       <router-view />
     </main>
   </div>

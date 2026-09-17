@@ -1,3 +1,5 @@
+<script setup lang="ts">
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   ShieldCheck,
   DollarSign,
@@ -5,73 +7,84 @@ import {
   Award,
   PhoneCall,
 } from 'lucide-vue-next';
-import { FhCard } from '../../components';
+
+useSmoothScroll();
+</script>
 
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-12 space-y-12">
-    <div class="text-center space-y-4">
-      <span class="text-overline text-brand-700 uppercase font-semibold">Cộng đồng thợ lành nghề</span>
-      <h1 class="text-3xl sm:text-4xl font-bold text-ink-900 tracking-tight">
-        Hợp tác cùng nền tảng FixHome
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-24 space-y-20">
+    <div class="text-center space-y-6">
+      <div class="text-xs font-bold text-brand-600 tracking-widest uppercase">Cộng đồng thợ lành nghề</div>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-[1.1]">
+        Hợp tác cùng <br class="hidden sm:block"/>nền tảng FixHome
       </h1>
-      <p class="text-ink-600 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
+      <p class="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed font-medium">
         Nhận đơn hàng liên tục trong khu vực hoạt động của bạn, minh bạch thu nhập và được bảo vệ quyền lợi khi làm việc.
       </p>
     </div>
 
     <!-- Benefits Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-      <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
-          <DollarSign :size="20" />
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-8">
+      <div class="bg-white border border-slate-200 rounded-4xl p-8 shadow-xl shadow-slate-200/40 space-y-6 hover:-translate-y-1 transition-transform duration-300">
+        <div class="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <DollarSign :size="24" />
         </div>
-        <h3 class="text-base font-bold text-ink-900">Thu nhập xứng đáng</h3>
-        <p class="text-xs text-ink-500 leading-relaxed">
+        <h3 class="text-2xl font-bold text-slate-900">Thu nhập xứng đáng</h3>
+        <p class="text-base text-slate-500 leading-relaxed font-medium">
           Tỷ lệ hoa hồng hợp lý, nhận tiền công đầy đủ ngay sau khi khách hàng xác nhận hoàn tất đơn hàng.
         </p>
-      </FhCard>
+      </div>
 
-      <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
-          <Calendar :size="20" />
+      <div class="bg-white border border-slate-200 rounded-4xl p-8 shadow-xl shadow-slate-200/40 space-y-6 hover:-translate-y-1 transition-transform duration-300">
+        <div class="w-14 h-14 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center">
+          <Calendar :size="24" />
         </div>
-        <h3 class="text-base font-bold text-ink-900">Chủ động thời gian</h3>
-        <p class="text-xs text-ink-500 leading-relaxed">
+        <h3 class="text-2xl font-bold text-slate-900">Chủ động thời gian</h3>
+        <p class="text-base text-slate-500 leading-relaxed font-medium">
           Tự do bật/tắt chế độ "Đang nhận việc", cài đặt lịch làm việc theo ngày trong tuần và đăng ký nghỉ phép linh hoạt.
         </p>
-      </FhCard>
+      </div>
 
-      <FhCard class="space-y-3">
-        <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-50 text-brand-600 flex items-center justify-center">
-          <Award :size="20" />
+      <div class="bg-white border border-slate-200 rounded-4xl p-8 shadow-xl shadow-slate-200/40 space-y-6 hover:-translate-y-1 transition-transform duration-300">
+        <div class="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+          <Award :size="24" />
         </div>
-        <h3 class="text-base font-bold text-ink-900">Đánh giá công bằng</h3>
-        <p class="text-xs text-ink-500 leading-relaxed">
-          Điểm số uy tín (Reliability) và xếp hạng sao chỉ dựa trên đánh giá từ khách hàng thật của đơn hàng đã hoàn tất (D-09).
+        <h3 class="text-2xl font-bold text-slate-900">Đánh giá công bằng</h3>
+        <p class="text-base text-slate-500 leading-relaxed font-medium">
+          Điểm số uy tín và xếp hạng sao chỉ dựa trên đánh giá từ khách hàng thật của đơn hàng đã hoàn tất (D-09).
         </p>
-      </FhCard>
+      </div>
     </div>
 
     <!-- Verification Info per P4.3 -->
-    <div class="p-8 bg-ink-900 text-white rounded-[var(--radius-lg)] space-y-4">
-      <div class="flex items-center gap-3">
-        <ShieldCheck :size="24" class="text-brand-400" />
-        <h3 class="text-lg font-bold">Quy trình gia nhập dành cho Kỹ thuật viên (P4.3)</h3>
-      </div>
-      <p class="text-sm text-ink-300 leading-relaxed">
-        Để đảm bảo an toàn cho các hộ gia đình, tài khoản Kỹ thuật viên không mở đăng ký tự do trên web.
-        Tất cả hồ sơ thợ đều do <strong>Service Manager (Quản lý khu vực)</strong> của FixHome phỏng vấn trực tiếp,
-        kiểm tra chứng chỉ nghề, xác thực CCCD và kích hoạt sau khi hoàn thành khóa đào tạo văn hoá ứng xử.
-      </p>
-      <div class="pt-2 flex flex-col sm:flex-row items-center gap-4">
-        <div class="text-sm text-brand-300 flex items-center gap-2">
-          <PhoneCall :size="16" />
-          Hotline tuyển thợ: <strong>0902 000 001</strong>
+    <div class="p-10 sm:p-16 bg-[#0a192f] text-white rounded-[2.5rem] space-y-8 shadow-2xl">
+      <div class="flex items-center gap-4">
+        <div class="w-16 h-16 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center shrink-0 border border-brand-500/30">
+           <ShieldCheck :size="32" stroke-width="2" />
         </div>
-        <span class="text-xs text-ink-400 sm:border-l sm:border-ink-700 sm:pl-4">
-          Địa chỉ văn phòng tiếp nhận: 120 Pasteur, P. Bến Nghé, Quận 1, TP.HCM
-        </span>
+        <h3 class="text-2xl sm:text-3xl font-bold tracking-tight">Quy trình gia nhập (P4.3)</h3>
+      </div>
+      <p class="text-lg text-slate-300 leading-relaxed max-w-4xl">
+        Để đảm bảo an toàn cho các hộ gia đình, tài khoản Kỹ thuật viên không mở đăng ký tự do trên web.
+        Tất cả hồ sơ thợ đều do <strong>Service Manager</strong> của FixHome phỏng vấn trực tiếp,
+        kiểm tra chứng chỉ nghề, xác thực CCCD và kích hoạt sau khi hoàn thành khóa đào tạo.
+      </p>
+      
+      <div class="pt-8 mt-8 border-t border-slate-700/50 flex flex-col sm:flex-row items-center gap-6 sm:gap-12">
+        <div class="text-lg text-brand-400 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+             <PhoneCall :size="20" />
+          </div>
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Hotline tuyển thợ</div>
+            <strong class="font-num tracking-wider">0902 000 001</strong>
+          </div>
+        </div>
+        <div class="text-sm text-slate-400 sm:border-l sm:border-slate-700/50 sm:pl-12 max-w-xs leading-relaxed">
+          <strong>Văn phòng tiếp nhận:</strong><br/>
+          120 Pasteur, P. Bến Nghé, Quận 1, TP.HCM
+        </div>
       </div>
     </div>
   </div>

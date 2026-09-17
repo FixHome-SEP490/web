@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search, Clock } from 'lucide-vue-next';
 
-import { FhButton, FhCard, FhMoney } from '../../components';
+import { FhButton, FhMoney } from '../../components';
 
 const router = useRouter();
 const selectedCategory = ref('ALL');
 const searchQuery = ref('');
+
+useSmoothScroll();
 
 const categories = [
   { id: 'ALL', name: 'Tất cả dịch vụ' },
@@ -87,37 +90,37 @@ const filteredServices = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-10">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-24 space-y-12">
     <div class="text-center space-y-4 max-w-2xl mx-auto">
-      <h1 class="text-3xl sm:text-4xl font-bold text-ink-900 tracking-tight">
-        Bảng giá dịch vụ tham khảo
+      <h1 class="text-4xl sm:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
+        Bảng giá dịch vụ <br class="hidden sm:block"/>tham khảo
       </h1>
-      <p class="text-ink-600 text-sm sm:text-base">
+      <p class="text-slate-500 text-base sm:text-lg">
         Biểu giá công thợ tham khảo theo tiêu chuẩn kỹ thuật FixHome. Giá thực tế phụ thuộc khảo sát và loại linh kiện thay thế.
       </p>
 
       <!-- Search Box -->
-      <div class="relative max-w-md mx-auto pt-2">
+      <div class="relative max-w-md mx-auto mt-6">
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Tìm kiếm dịch vụ (ví dụ: máy lạnh, ống nước...)"
-          class="w-full h-11 pl-10 pr-4 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 shadow-[var(--shadow-e1)]"
+          class="w-full h-14 pl-12 pr-6 text-sm bg-slate-50 border border-slate-200 rounded-full text-slate-900 focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/20 shadow-sm transition-all"
         />
-        <Search class="absolute left-3.5 top-5 text-ink-400" :size="17" />
+        <Search class="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" :size="20" />
       </div>
     </div>
 
     <!-- Category Filter Tabs -->
-    <div class="flex items-center justify-center gap-2 overflow-x-auto pb-2">
+    <div class="flex items-center justify-center gap-3 overflow-x-auto pb-4 no-scrollbar">
       <button
         v-for="cat in categories"
         :key="cat.id"
-        class="px-4 py-2 rounded-[var(--radius-sm)] text-xs font-semibold select-none transition-colors shrink-0"
+        class="px-5 py-2.5 rounded-full text-sm font-semibold select-none transition-all shrink-0"
         :class="[
           selectedCategory === cat.id
-            ? 'bg-brand-600 text-white shadow-sm'
-            : 'bg-white text-ink-700 border border-ink-200 hover:bg-ink-100',
+            ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
+            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900',
         ]"
         @click="selectedCategory = cat.id"
       >
@@ -126,42 +129,43 @@ const filteredServices = computed(() => {
     </div>
 
     <!-- Services Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <FhCard
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div
         v-for="srv in filteredServices"
         :key="srv.id"
-        class="flex flex-col justify-between"
+        class="bg-white border border-slate-200 rounded-4xl p-8 flex flex-col justify-between hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-300 transition-all cursor-pointer"
+        @click="router.push('/services/' + srv.id)"
       >
-        <div class="space-y-3">
-          <div class="flex items-center justify-between text-xs text-ink-500">
-            <span class="flex items-center gap-1 font-num">
-              <Clock :size="13" /> ~{{ srv.duration }} phút
+        <div class="space-y-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span class="flex items-center gap-1.5 font-num">
+              <Clock :size="14" /> ~{{ srv.duration }} phút
             </span>
-            <span class="text-success-600 font-semibold">Bảo hành 30-90 ngày</span>
+            <span class="text-brand-600 font-semibold bg-brand-50 px-2.5 py-1 rounded-full">Bảo hành 30-90 ngày</span>
           </div>
 
-          <h3 class="text-base font-bold text-ink-900 leading-snug">
+          <h3 class="text-xl font-bold text-slate-900 leading-snug">
             {{ srv.name }}
           </h3>
 
-          <p class="text-xs text-ink-600 leading-relaxed">
+          <p class="text-sm text-slate-500 leading-relaxed font-medium">
             {{ srv.desc }}
           </p>
         </div>
 
-        <div class="pt-4 mt-4 border-t border-ink-100 flex items-center justify-between">
+        <div class="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
           <div>
-            <div class="text-[11px] text-ink-400">Giá công tham khảo:</div>
-            <div class="text-sm font-bold font-num text-brand-700">
+            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Giá công tham khảo</div>
+            <div class="text-base font-bold font-num text-slate-900">
               <FhMoney :amount="srv.minPrice" /> – <FhMoney :amount="srv.maxPrice" />
             </div>
           </div>
 
-          <FhButton variant="primary" size="sm" @click="router.push('/register')">
+          <FhButton variant="primary" size="md" class="rounded-full shadow-md shadow-brand-500/20 h-10 px-5" @click.stop="router.push('/register')">
             Đặt thợ
           </FhButton>
         </div>
-      </FhCard>
+      </div>
     </div>
   </div>
 </template>

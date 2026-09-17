@@ -72,38 +72,39 @@ const handleLogout = async () => {
   <div class="min-h-screen flex bg-ink-50 text-ink-900">
     <!-- Left Sidebar: collapsible 240px / 72px per P6.1 -->
     <aside
-      class="sticky top-0 h-screen z-30 bg-ink-900 text-white flex flex-col justify-between transition-all duration-200 shrink-0 select-none border-r border-ink-800"
-      :class="isCollapsed ? 'w-[72px]' : 'w-[240px]'"
+      class="sticky top-0 h-screen z-30 bg-gray-900 text-white flex flex-col justify-between transition-all duration-300 shrink-0 select-none border-r border-gray-800"
+      :class="isCollapsed ? 'w-18' : 'w-64'"
     >
-      <!-- Brand & Collapse Trigger -->
+      <!-- Collapse Trigger (Floating) -->
+      <button
+        class="absolute -right-3 top-6 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center text-white shadow-md hover:bg-brand-500 transition-colors z-50 focus:outline-none"
+        @click="isCollapsed = !isCollapsed"
+      >
+        <component :is="isCollapsed ? ChevronRight : ChevronLeft" :size="14" stroke-width="3" />
+      </button>
+
+      <!-- Brand -->
       <div>
-        <div class="h-16 flex items-center px-4 border-b border-ink-800 justify-between">
-          <router-link to="/console" class="flex items-center gap-2.5 overflow-hidden">
-            <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white shrink-0">
+        <div class="h-16 flex items-center px-4 border-b border-gray-800 overflow-hidden whitespace-nowrap">
+          <router-link to="/console" class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white shrink-0">
               <Wrench :size="20" />
             </div>
-            <div v-if="!isCollapsed" class="whitespace-nowrap">
+            <div class="transition-opacity duration-300" :class="isCollapsed ? 'opacity-0 w-0 invisible' : 'opacity-100 w-auto'">
               <span class="text-lg font-bold tracking-tight">Fix<span class="text-brand-400">Home</span></span>
               <span class="block text-[10px] font-semibold text-brand-300 uppercase tracking-widest -mt-1">
                 {{ isAdmin ? 'Admin Console' : 'Manager Console' }}
               </span>
             </div>
           </router-link>
-
-          <button
-            class="text-ink-400 hover:text-white p-1 rounded transition-colors hidden sm:block"
-            @click="isCollapsed = !isCollapsed"
-          >
-            <component :is="isCollapsed ? ChevronRight : ChevronLeft" :size="18" />
-          </button>
         </div>
 
         <!-- Navigation Menu -->
         <div class="p-3 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)]">
           <div v-for="group in navigation" :key="group.group" class="space-y-1">
             <div
-              v-if="!isCollapsed"
-              class="px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-400 mb-2"
+              class="px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
+              :class="isCollapsed ? 'opacity-0 h-0 invisible' : 'opacity-100 h-auto'"
             >
               {{ group.group }}
             </div>
@@ -112,34 +113,34 @@ const handleLogout = async () => {
               v-for="item in group.items"
               :key="item.path"
               :to="item.path"
-              class="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors group"
+              class="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-700 transition-colors whitespace-nowrap overflow-hidden"
               :class="[
                 route.path === item.path || (item.path !== '/console' && route.path.startsWith(`${item.path}/`))
-                  ? 'bg-brand-600 text-white font-medium shadow-sm'
-                  : 'text-ink-300 hover:bg-ink-800 hover:text-white',
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-gray-300',
               ]"
               :title="isCollapsed ? item.label : ''"
             >
               <component :is="item.icon" :size="18" class="shrink-0" />
-              <span v-if="!isCollapsed" class="truncate">{{ item.label }}</span>
+              <span class="transition-opacity duration-300" :class="isCollapsed ? 'opacity-0 w-0 invisible' : 'opacity-100 w-auto'">{{ item.label }}</span>
             </router-link>
           </div>
         </div>
       </div>
 
       <!-- User Profile & Logout at Bottom -->
-      <div class="p-3 border-t border-ink-800 bg-ink-950/40">
-        <div class="flex items-center gap-2.5 px-2 py-1.5 rounded-[var(--radius-sm)] overflow-hidden">
+      <div class="p-3 border-t border-gray-800 overflow-hidden whitespace-nowrap">
+        <div class="flex items-center gap-2.5 px-2 py-1.5 rounded-sm">
           <div class="w-8 h-8 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-xs shrink-0">
             {{ authStore.user?.fullName?.charAt(0) ?? 'A' }}
           </div>
-          <div v-if="!isCollapsed" class="truncate flex-1 min-w-0">
+          <div class="transition-opacity duration-300 flex-1 min-w-0" :class="isCollapsed ? 'opacity-0 w-0 invisible' : 'opacity-100 w-auto'">
             <p class="text-xs font-semibold text-white truncate">{{ authStore.user?.fullName }}</p>
-            <p class="text-[11px] text-ink-400 truncate">{{ authStore.user?.role }}</p>
+            <p class="text-[11px] text-gray-400 truncate">{{ authStore.user?.role }}</p>
           </div>
           <button
-            v-if="!isCollapsed"
-            class="text-ink-400 hover:text-danger-400 p-1 rounded transition-colors"
+            class="text-gray-400 hover:text-red-400 p-1 rounded transition-all duration-300 shrink-0"
+            :class="isCollapsed ? 'opacity-0 w-0 invisible absolute' : 'opacity-100 w-auto relative'"
             title="Đăng xuất"
             @click="handleLogout"
           >
@@ -152,7 +153,7 @@ const handleLogout = async () => {
     <!-- Main Workspace -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Topbar with Breadcrumbs per P6.1 -->
-      <header class="h-16 bg-white border-b border-ink-200 px-6 sm:px-8 flex items-center justify-between shadow-[var(--shadow-e1)]">
+      <header class="h-16 bg-white border-b border-ink-200 px-6 sm:px-8 flex items-center justify-between shadow-(--shadow-e1)">
         <!-- Breadcrumb / Route Title -->
         <div class="flex items-center gap-2 text-sm text-ink-500">
           <span class="font-medium text-ink-700">Console</span>
@@ -168,7 +169,7 @@ const handleLogout = async () => {
       </header>
 
       <!-- Main Content Container: max-width 1440px per P7.4 -->
-      <main class="flex-1 p-6 sm:p-8 max-w-[1440px] w-full mx-auto">
+      <main class="flex-1 p-6 sm:p-8 max-w-360 w-full mx-auto">
         <router-view />
       </main>
     </div>

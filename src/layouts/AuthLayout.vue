@@ -1,93 +1,100 @@
 <script setup lang="ts">
-import { ShieldCheck, Wrench, CheckCircle2 } from 'lucide-vue-next';
+import { ShieldCheck, Wrench } from 'lucide-vue-next';
 </script>
 
 
 <template>
-  <div class="min-h-screen flex bg-ink-50">
-    <!-- Left Column: Authentication Form -->
-    <div class="flex-1 flex flex-col justify-between p-6 sm:p-10 md:p-12 lg:max-w-xl xl:max-w-2xl bg-white shadow-[var(--shadow-e1)] border-r border-ink-200">
-      <div>
-        <!-- Brand Header -->
-        <router-link to="/" class="inline-flex items-center gap-2.5 group">
-          <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white shadow-[var(--shadow-e1)] group-hover:bg-brand-700 transition-colors">
-            <Wrench :size="22" :stroke-width="2" />
-          </div>
-          <div>
-            <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
-            <span class="block text-[11px] font-medium text-ink-500 -mt-1 tracking-wider uppercase">Dịch vụ sửa nhà</span>
-          </div>
-        </router-link>
-      </div>
+  <div class="min-h-screen flex items-center justify-center bg-brand-500 p-4 sm:p-8">
+    <div class="w-full max-w-6xl bg-white border border-slate-100 rounded-4xl sm:rounded-[2.5rem] flex flex-col lg:flex-row overflow-hidden shadow-2xl shadow-slate-200/50 min-h-150">
+      
+      <!-- Left Column (Light Side) -->
+      <div class="hidden lg:flex w-1/2 relative bg-slate-50 text-slate-900 p-12 xl:p-14 flex-col justify-between border-r border-slate-100">
+        <!-- Faint Grid Background -->
+        <div 
+          class="absolute inset-0 opacity-[0.03] pointer-events-none" 
+          style="background-image: linear-gradient(rgba(0, 0, 0, 1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 1) 1px, transparent 1px); background-size: 40px 40px;"
+        ></div>
 
-      <!-- Main Form Slot -->
-      <div class="w-full max-w-md mx-auto my-8">
-        <router-view />
-      </div>
-
-      <!-- Footer Info -->
-      <div class="text-xs text-ink-500 text-center sm:text-left flex flex-wrap items-center justify-between gap-2 pt-6 border-t border-ink-100">
-        <span>© 2026 FixHome. Nền tảng sửa chữa gia đình hàng đầu.</span>
-        <div class="flex gap-4">
-          <router-link to="/pricing-policy" class="hover:text-brand-600 transition-colors">Chính sách giá</router-link>
-          <router-link to="/how-it-works" class="hover:text-brand-600 transition-colors">Hướng dẫn</router-link>
+        <!-- Top: Logo & Label -->
+        <div class="relative z-10 flex items-center justify-between">
+          <router-link to="/" class="inline-flex items-center gap-3">
+            <div class="w-9 h-9 rounded-sm bg-brand-500 flex items-center justify-center text-white shadow-md">
+              <Wrench :size="20" :stroke-width="2.5" />
+            </div>
+            <div>
+              <span class="text-xl font-bold tracking-tight text-slate-900">Fix<span class="text-brand-500">Home</span></span>
+              <span class="block text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none mt-0.5">Dịch vụ sửa nhà</span>
+            </div>
+          </router-link>
+          <div class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400">
+            Kỹ thuật gia đình
+          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Right Column: Brand Feature Showcase (Desktop only) -->
-    <div class="hidden lg:flex flex-1 relative bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 text-white p-12 xl:p-16 flex-col justify-between overflow-hidden">
-      <!-- Decorative Background Orbs -->
-      <div class="absolute -right-20 -top-20 w-96 h-96 bg-brand-400/20 rounded-full blur-3xl pointer-events-none" />
-      <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-brand-300/10 rounded-full blur-3xl pointer-events-none" />
-
-      <!-- Top Badge -->
-      <div class="relative z-10">
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 backdrop-blur-md text-brand-100 border border-white/20">
-          <ShieldCheck :size="15" />
-          Cam kết bảo hành & Minh bạch chi phí
-        </span>
-      </div>
-
-      <!-- Center Hero Statement -->
-      <div class="relative z-10 max-w-lg space-y-6">
-        <h1 class="text-3xl xl:text-4xl font-bold tracking-tight leading-tight">
-          Sửa chữa điện nước, điện lạnh uy tín & minh bạch tại nhà
-        </h1>
-        <p class="text-brand-100 text-base leading-relaxed">
-          Kết nối thợ chuyên nghiệp đã qua xác minh trong 15 phút. Báo giá tách bạch tiền công và vật tư, bảo hành chuẩn mực.
-        </p>
-
-        <!-- Feature List -->
-        <div class="space-y-3 pt-2">
-          <div class="flex items-center gap-3">
-            <CheckCircle2 :size="18" class="text-brand-300 shrink-0" />
-            <span class="text-sm text-brand-50">100% thợ có chứng chỉ & xác minh danh tính</span>
+        <!-- Middle: Headline -->
+        <div class="relative z-10 space-y-6 mt-16">
+          <div class="text-xs uppercase tracking-[0.15em] font-bold text-brand-600">
+            Dịch vụ kỹ thuật tại nhà
           </div>
-          <div class="flex items-center gap-3">
-            <CheckCircle2 :size="18" class="text-brand-300 shrink-0" />
-            <span class="text-sm text-brand-50">Tách rõ tiền công thợ và thiết bị thay thế</span>
+          <h1 class="text-4xl xl:text-5xl font-extrabold tracking-tight leading-[1.15] text-slate-900">
+            Mọi thiết bị,<br/>được xử lý đúng<br/>chuẩn kỹ thuật.
+          </h1>
+          <p class="text-slate-600 text-sm xl:text-base leading-relaxed max-w-[90%] font-medium">
+            Đội thợ được đào tạo bài bản, báo giá minh bạch và bảo hành rõ ràng cho từng hạng mục.
+          </p>
+        </div>
+
+        <!-- Bottom: Stats & Footer -->
+        <div class="relative z-10 mt-16 space-y-12">
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-3 gap-6">
+            <div>
+              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">12.400+</div>
+              <div class="text-xs text-slate-500 font-medium">Hạng mục hoàn thành</div>
+            </div>
+            <div>
+              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">4.9/5</div>
+              <div class="text-xs text-slate-500 font-medium">Điểm đánh giá</div>
+            </div>
+            <div>
+              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">45p</div>
+              <div class="text-xs text-slate-500 font-medium">Thời gian phản hồi</div>
+            </div>
           </div>
-          <div class="flex items-center gap-3">
-            <CheckCircle2 :size="18" class="text-brand-300 shrink-0" />
-            <span class="text-sm text-brand-50">Chẩn đoán sự cố thông minh bằng AI FixHome</span>
+
+          <!-- Footer Note -->
+          <div class="flex items-center gap-3 text-xs text-slate-500 font-bold">
+            <ShieldCheck :size="16" class="text-brand-600" />
+            <span>Đang trực 24/7 - Bảo hành 12 tháng</span>
           </div>
         </div>
       </div>
 
-      <!-- Bottom Stats Grid -->
-      <div class="relative z-10 grid grid-cols-3 gap-4 pt-6 border-t border-white/20">
-        <div>
-          <div class="font-num text-2xl font-bold">15<span class="text-brand-300">p</span></div>
-          <div class="text-xs text-brand-200">Thợ nhận việc</div>
+      <!-- Right Column (Form Side) -->
+      <div class="w-full lg:w-1/2 bg-white p-6 sm:p-12 xl:p-16 flex flex-col">
+        <!-- Top Auth Toggle -->
+        <div class="flex justify-center lg:justify-end mb-12">
+          <div class="inline-flex bg-slate-100 rounded-full p-1 w-full lg:w-auto">
+            <router-link 
+              to="/login"
+              class="flex-1 lg:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-lg transition-colors"
+              :class="$route.path === '/login' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-900'"
+            >
+              Đăng nhập
+            </router-link>
+            <router-link 
+              to="/register"
+              class="flex-1 lg:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-lg transition-colors"
+              :class="$route.path === '/register' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-900'"
+            >
+              Đăng ký
+            </router-link>
+          </div>
         </div>
-        <div>
-          <div class="font-num text-2xl font-bold">4.9<span class="text-brand-300">★</span></div>
-          <div class="text-xs text-brand-200">Đánh giá thực tế</div>
-        </div>
-        <div>
-          <div class="font-num text-2xl font-bold">30<span class="text-brand-300">n</span></div>
-          <div class="text-xs text-brand-200">Bảo hành tối thiểu</div>
+
+        <!-- Dynamic Form Slot -->
+        <div class="flex-1 flex flex-col justify-center max-w-105 w-full mx-auto">
+          <router-view />
         </div>
       </div>
     </div>

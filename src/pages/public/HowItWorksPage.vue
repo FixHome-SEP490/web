@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import {
   Sparkles,
   MapPin,
@@ -7,9 +8,11 @@ import {
   ShieldCheck,
   ArrowRight,
 } from 'lucide-vue-next';
-import { FhButton, FhCard } from '../../components';
+import { FhButton } from '../../components';
 
 const router = useRouter();
+
+useSmoothScroll();
 
 const steps = [
   {
@@ -40,50 +43,48 @@ const steps = [
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-12 space-y-12">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-24 space-y-20">
     <!-- Header -->
-    <div class="text-center space-y-4">
-      <span class="text-overline text-brand-700 uppercase font-semibold">Quy chuẩn dịch vụ</span>
-      <h1 class="text-3xl sm:text-4xl font-bold text-ink-900 tracking-tight">
-        Cách thức hoạt động tại FixHome
+    <div class="text-center space-y-6">
+      <div class="text-xs font-bold text-brand-600 tracking-widest uppercase">Quy chuẩn dịch vụ</div>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-[1.1]">
+        Cách thức hoạt động <br class="hidden sm:block"/>tại FixHome
       </h1>
-      <p class="text-ink-600 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
+      <p class="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed font-medium">
         Chúng tôi xây dựng quy trình sửa chữa khép kín, minh bạch và có bằng chứng xác thực ở từng bước để loại bỏ hoàn toàn tình trạng chặt chém.
       </p>
     </div>
 
-    <!-- 4 Steps Details -->
-    <div class="space-y-8">
-      <FhCard
-        v-for="s in steps"
+    <!-- 4 Steps Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
+      <div
+        v-for="(s, idx) in steps"
         :key="s.step"
-        class="flex flex-col sm:flex-row gap-6 p-6 sm:p-8 items-start"
+        class="bg-white rounded-4xl border border-slate-200 p-8 shadow-xl shadow-slate-200/40 relative flex flex-col items-start hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
       >
-        <div class="w-14 h-14 rounded-[var(--radius-md)] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
-          <component :is="s.icon" :size="28" :stroke-width="1.75" />
+        <div class="w-16 h-16 rounded-full bg-slate-50 text-brand-600 flex items-center justify-center mb-8 border border-slate-100">
+          <component :is="s.icon" :size="28" :stroke-width="2" />
         </div>
 
-        <div class="space-y-2 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold uppercase tracking-wider text-brand-700 font-num">{{ s.step }}</span>
-          </div>
-          <h3 class="text-xl font-bold text-ink-900">
+        <div class="space-y-4 flex-1">
+          <div class="text-[11px] font-bold uppercase tracking-widest text-slate-400 font-num">Bước 0{{ idx + 1 }}</div>
+          <h3 class="text-xl font-bold text-slate-900 leading-snug">
             {{ s.title }}
           </h3>
-          <p class="text-sm text-ink-600 leading-relaxed">
+          <p class="text-sm text-slate-500 leading-relaxed font-medium">
             {{ s.desc }}
           </p>
         </div>
-      </FhCard>
+      </div>
     </div>
 
     <!-- Call to action -->
-    <div class="text-center pt-6 space-y-4">
-      <h3 class="text-xl font-bold text-ink-900">Bạn đã sẵn sàng trải nghiệm dịch vụ?</h3>
+    <div class="text-center space-y-8 pt-10">
+      <h3 class="text-3xl font-bold text-slate-900 tracking-tight">Bạn đã sẵn sàng trải nghiệm dịch vụ?</h3>
       <div class="flex justify-center gap-4">
-        <FhButton variant="primary" size="lg" @click="router.push('/register')">
+        <FhButton variant="primary" size="lg" class="rounded-full shadow-lg shadow-brand-500/25 h-14 px-10 text-base" @click="router.push('/register')">
           Tạo yêu cầu sửa chữa
-          <ArrowRight :size="18" />
+          <ArrowRight :size="18" class="ml-2" />
         </FhButton>
       </div>
     </div>

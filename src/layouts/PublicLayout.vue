@@ -30,14 +30,14 @@ onUnmounted(() => {
       class="fixed top-0 left-0 right-0 z-40 transition-all duration-200"
       :class="[
         isScrolled
-          ? 'bg-white/95 backdrop-blur-md border-b border-ink-200 shadow-[var(--shadow-e1)] py-3.5'
+          ? 'bg-white/95 backdrop-blur-md border-b border-ink-200 shadow-(--shadow-e1) py-3.5'
           : 'bg-transparent py-5',
       ]"
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <!-- Logo -->
         <router-link to="/" class="inline-flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white shadow-[var(--shadow-e1)]">
+          <div class="w-10 h-10 rounded-sm bg-brand-600 flex items-center justify-center text-white shadow-(--shadow-e1)">
             <Wrench :size="22" :stroke-width="2" />
           </div>
           <div>
@@ -70,7 +70,7 @@ onUnmounted(() => {
 
         <!-- Mobile Menu Trigger -->
         <button
-          class="md:hidden p-2 text-ink-700 hover:text-ink-900 rounded-[var(--radius-sm)]"
+          class="md:hidden p-2 text-ink-700 hover:text-ink-900 rounded-sm"
           @click="mobileMenuOpen = !mobileMenuOpen"
         >
           <Menu v-if="!mobileMenuOpen" :size="24" />
@@ -81,7 +81,7 @@ onUnmounted(() => {
       <!-- Mobile Dropdown Menu -->
       <div
         v-if="mobileMenuOpen"
-        class="md:hidden bg-white border-b border-ink-200 px-4 py-6 space-y-4 shadow-[var(--shadow-e2)]"
+        class="md:hidden bg-white border-b border-ink-200 px-4 py-6 space-y-4 shadow-(--shadow-e2)"
       >
         <div class="flex flex-col space-y-3 text-base font-medium">
           <router-link to="/services" class="py-1 text-ink-800" @click="mobileMenuOpen = false">Dịch vụ</router-link>
@@ -116,7 +116,7 @@ onUnmounted(() => {
           <!-- Col 1: Brand -->
           <div class="space-y-4 md:col-span-1">
             <div class="inline-flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-600 flex items-center justify-center text-white">
+              <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white">
                 <Wrench :size="20" />
               </div>
               <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
