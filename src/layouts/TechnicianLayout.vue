@@ -62,9 +62,7 @@ const userInitial = computed(() => {
         <!-- Left: Logo + Tech Tagline -->
         <div class="flex items-center gap-6 lg:gap-8">
           <router-link to="/tech" class="inline-flex items-center gap-2.5 group">
-            <div class="w-10 h-10 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
-              <Wrench :size="20" />
-            </div>
+            <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
             <div>
               <div class="text-lg sm:text-xl font-extrabold text-ink-900 tracking-tight leading-none">
                 Fix<span class="text-brand-600">Home</span>

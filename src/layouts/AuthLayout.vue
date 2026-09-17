@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ShieldCheck, Wrench } from 'lucide-vue-next';
+import { ShieldCheck } from 'lucide-vue-next';
 </script>
 
 
@@ -17,12 +17,10 @@ import { ShieldCheck, Wrench } from 'lucide-vue-next';
 
         <!-- Top: Logo & Label -->
         <div class="relative z-10 flex items-center justify-between">
-          <router-link to="/" class="inline-flex items-center gap-3">
-            <div class="w-9 h-9 rounded-sm bg-brand-500 flex items-center justify-center text-white shadow-md">
-              <Wrench :size="20" :stroke-width="2.5" />
-            </div>
+          <router-link to="/" class="inline-flex items-center gap-3 group">
+            <img :src="'/logo.png'" alt="FixHome" class="w-11 h-11 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
             <div>
-              <span class="text-xl font-bold tracking-tight text-slate-900">Fix<span class="text-brand-500">Home</span></span>
+              <span class="text-xl font-extrabold tracking-tight text-slate-900">Fix<span class="text-brand-600">Home</span></span>
               <span class="block text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none mt-0.5">Dịch vụ sửa nhà</span>
             </div>
           </router-link>
@@ -72,6 +70,14 @@ import { ShieldCheck, Wrench } from 'lucide-vue-next';
 
       <!-- Right Column (Form Side) -->
       <div class="w-full lg:w-1/2 bg-white p-6 sm:p-12 xl:p-16 flex flex-col">
+        <!-- Mobile Brand (shown on small screens) -->
+        <div class="lg:hidden flex justify-center mb-6">
+          <router-link to="/" class="inline-flex items-center gap-2.5">
+            <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs" />
+            <span class="text-2xl font-black tracking-tight text-slate-900">Fix<span class="text-brand-600">Home</span></span>
+          </router-link>
+        </div>
+
         <!-- Top Auth Toggle -->
         <div class="flex justify-center lg:justify-end mb-12">
           <div class="inline-flex bg-slate-100 rounded-full p-1 w-full lg:w-auto">
