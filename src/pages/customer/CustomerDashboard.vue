@@ -51,7 +51,33 @@ const popularServices = [
     iconColor: '#0284C7',
     pedestalBg: '#E0F2FE',
     badge: 'HOT',
-    query: 'máy lạnh',
+    query: 'vệ sinh điều hòa',
+    price: 180000,
+    unit: 'Máy',
+    isFixed: true,
+  },
+  {
+    id: 'washer_clean',
+    name: 'Vệ sinh\nmáy giặt',
+    icon: Disc,
+    iconColor: '#7C3AED',
+    pedestalBg: '#EDE9FE',
+    badge: 'GIÁ TỐT',
+    query: 'vệ sinh máy giặt',
+    price: 350000,
+    unit: 'Máy',
+    isFixed: true,
+  },
+  {
+    id: 'dryer_clean',
+    name: 'Vệ sinh\nmáy sấy',
+    icon: Package,
+    iconColor: '#EA580C',
+    pedestalBg: '#FFEDD5',
+    query: 'vệ sinh máy sấy',
+    price: 350000,
+    unit: 'Máy',
+    isFixed: true,
   },
   {
     id: 'plumbing',
@@ -60,6 +86,7 @@ const popularServices = [
     iconColor: '#0D9488',
     pedestalBg: '#CCFBF1',
     query: 'ống nước',
+    isFixed: false,
   },
   {
     id: 'electricity',
@@ -69,6 +96,7 @@ const popularServices = [
     pedestalBg: '#FEF9C3',
     badge: '24/7',
     query: 'điện',
+    isFixed: false,
   },
   {
     id: 'drainage',
@@ -77,6 +105,7 @@ const popularServices = [
     iconColor: '#4F46E5',
     pedestalBg: '#E0E7FF',
     query: 'cống',
+    isFixed: false,
   },
   {
     id: 'tv_repair',
@@ -85,32 +114,21 @@ const popularServices = [
     iconColor: '#2563EB',
     pedestalBg: '#DBEAFE',
     query: 'tivi',
+    isFixed: false,
   },
   {
-    id: 'appliances',
-    name: 'Điện tử\ngia dụng',
+    id: 'inspection',
+    name: 'Kiểm tra\nthiết bị',
     icon: Cpu,
     iconColor: '#059669',
     pedestalBg: '#D1FAE5',
-    query: 'gia dụng',
-  },
-  {
-    id: 'washer_repair',
-    name: 'Sửa máy\ngiặt',
-    icon: Disc,
-    iconColor: '#7C3AED',
-    pedestalBg: '#EDE9FE',
-    query: 'máy giặt',
-  },
-  {
-    id: 'fridge_repair',
-    name: 'Sửa tủ\nlạnh',
-    icon: Package,
-    iconColor: '#EA580C',
-    pedestalBg: '#FFEDD5',
-    query: 'tủ lạnh',
+    query: 'kiểm tra',
+    price: 100000,
+    unit: 'Lần',
+    isFixed: true,
   },
 ];
+
 
 // Quick Category Chips
 const quickChips = [
@@ -173,9 +191,17 @@ function handleChipClick(chip: typeof quickChips[0]) {
   }
 }
 
-function handleServiceClick(service: typeof popularServices[0]) {
-  router.push({ path: '/app/bookings/new', query: { q: service.query } });
+function handleServiceClick(service: (typeof popularServices)[0]) {
+  router.push({
+    path: '/app/bookings/new',
+    query: {
+      q: service.query,
+      popular: 'true',
+      ...(service.isFixed ? { fixed: 'true' } : {}),
+    },
+  });
 }
+
 
 async function handleChatForOrder(order: ServiceOrderItem) {
   const bookingId = (order as unknown as { bookingId?: string }).bookingId || order.id;
@@ -478,7 +504,20 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <span class="text-xs font-bold text-ink-800 group-hover:text-brand-600 whitespace-pre-line leading-tight">
             {{ srv.name }}
           </span>
+          <span
+            v-if="srv.price"
+            class="mt-1.5 text-[10px] font-extrabold text-brand-700 bg-brand-50 border border-brand-200/80 px-2 py-0.5 rounded-full font-num"
+          >
+            Từ {{ srv.price.toLocaleString('vi-VN') }}đ
+          </span>
+          <span
+            v-else
+            class="mt-1.5 text-[10px] font-medium text-ink-400 bg-ink-50 px-1.5 py-0.5 rounded-full"
+          >
+            Khảo sát tận nơi
+          </span>
         </button>
+
       </div>
     </div>
 

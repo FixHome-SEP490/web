@@ -99,8 +99,15 @@ const selectedService = computed(() => {
 });
 
 const isFixedPrice = computed(() => {
-  const mode = selectedService.value?.pricingMode;
-  return mode === 'FIXED_PRICE' || mode === 'fixed_price';
+  const s = selectedService.value;
+  if (!s) return route.query.fixed === 'true';
+  const mode = s.pricingMode?.toLowerCase();
+  return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0) || route.query.fixed === 'true';
+});
+
+const totalFixedAmount = computed(() => {
+  const price = selectedService.value?.fixedPrice || selectedService.value?.basePrice || 0;
+  return price * quantity.value;
 });
 
 onMounted(async () => {
@@ -118,6 +125,16 @@ onMounted(async () => {
 
       if (q) {
         for (const c of cats) {
+          // If popular or fixed query is set, prioritize fixed_price service first
+          const sFixed = c.services?.find((srv) =>
+            srv.name.toLowerCase().includes(q) &&
+            (srv.pricingMode?.toLowerCase() === 'fixed_price' || (srv.fixedPrice != null && srv.fixedPrice > 0))
+          );
+          if (sFixed) {
+            matchedCat = c;
+            matchedSvc = sFixed;
+            break;
+          }
           const s = c.services?.find((srv) => srv.name.toLowerCase().includes(q));
           if (s) {
             matchedCat = c;
@@ -131,6 +148,9 @@ onMounted(async () => {
       services.value = matchedCat.services ?? [];
       if (matchedSvc) {
         selectedServiceId.value = matchedSvc.id;
+        if (matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
+          description.value = `Yêu cầu dịch vụ niêm yết: ${matchedSvc.name}`;
+        }
       } else if (services.value.length > 0) {
         selectedServiceId.value = services.value[0].id;
       }
@@ -139,6 +159,7 @@ onMounted(async () => {
     const defAddr = addrs.find((a) => a.isDefault);
     if (defAddr) selectedAddressId.value = defAddr.id;
     else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
+
   } catch {
     window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
   }
@@ -175,13 +196,17 @@ const goToStep2 = () => {
     return;
   }
   if (!description.value.trim()) {
-    window.alert('Vui lòng mô tả sơ bộ tình trạng lỗi của thiết bị.');
-    return;
+    if (isFixedPrice.value && selectedService.value) {
+      description.value = `Yêu cầu dịch vụ niêm yết: ${selectedService.value.name} (${quantity.value} ${selectedService.value.unit || 'thiết bị'})`;
+    } else {
+      window.alert('Vui lòng mô tả sơ bộ tình trạng lỗi của thiết bị.');
+      return;
+    }
   }
   step.value = 2;
 };
 
-const goToStep3 = async () => {
+const goToNextStepFrom2 = async () => {
   if (!selectedAddressId.value && addresses.value.length > 0) {
     window.alert('Vui lòng chọn địa chỉ sửa chữa.');
     return;
@@ -192,7 +217,15 @@ const goToStep3 = async () => {
     window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ.');
     return;
   }
+
+  // Dịch vụ phổ biến có giá niêm yết: Bỏ qua AI chẩn đoán, đi thẳng tới Bước Xác nhận đơn
+  if (isFixedPrice.value) {
+    step.value = 4;
+    return;
+  }
+
   step.value = 3;
+
 
   loading.value = true;
   try {
@@ -243,25 +276,28 @@ const createAndFindTech = async () => {
       <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2">
         <div class="flex items-center gap-2 shrink-0" :class="step >= 1 ? 'text-brand-600 font-bold' : 'text-ink-400'">
           <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 1 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">1</span>
-          <span>Dịch vụ & Lỗi</span>
+          <span>{{ isFixedPrice ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Lỗi' }}</span>
         </div>
         <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 2 ? 'bg-brand-600' : 'bg-ink-200'"></div>
         <div class="flex items-center gap-2 shrink-0" :class="step >= 2 ? 'text-brand-600 font-bold' : 'text-ink-400'">
           <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 2 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">2</span>
           <span>Địa chỉ & Giờ</span>
         </div>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 3 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
-          <span>AI Soi lỗi</span>
-        </div>
+        <template v-if="!isFixedPrice">
+          <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
+          <div class="flex items-center gap-2 shrink-0" :class="step >= 3 ? 'text-brand-600 font-bold' : 'text-ink-400'">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
+            <span>AI Soi lỗi</span>
+          </div>
+        </template>
         <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 4 ? 'bg-brand-600' : 'bg-ink-200'"></div>
         <div class="flex items-center gap-2 shrink-0" :class="step >= 4 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">4</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ isFixedPrice ? '3' : '4' }}</span>
           <span>Xác nhận</span>
         </div>
       </div>
     </div>
+
 
     <!-- Step 1: Service & Issue Description -->
     <div v-if="step === 1" class="space-y-6">
@@ -383,14 +419,20 @@ const createAndFindTech = async () => {
 
           <!-- Issue Description -->
           <div>
-            <label class="block font-bold text-ink-800 mb-1.5">Mô tả hiện tượng hư hỏng *</label>
+            <label class="block font-bold text-ink-800 mb-1.5 flex items-center justify-between flex-wrap gap-1">
+              <span>Mô tả yêu cầu <span v-if="!isFixedPrice">*</span></span>
+              <span v-if="isFixedPrice" class="text-[11px] font-normal text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
+                ⚡ Giá niêm yết (Không bắt buộc mô tả lỗi)
+              </span>
+            </label>
             <textarea
               v-model="description"
-              rows="4"
+              rows="3"
               class="w-full p-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all leading-relaxed"
-              placeholder="Ví dụ: Điều hòa vẫn chạy nhưng không mát, quạt dàn lạnh có tiếng kêu rè rè và nhỏ nước xuống góc tường..."
+              :placeholder="isFixedPrice ? 'Ghi chú thêm cho thợ (ví dụ: Vị trí đặt máy, lưu ý khi tới...)' : 'Ví dụ: Điều hòa vẫn chạy nhưng không mát, quạt dàn lạnh có tiếng kêu rè rè và nhỏ nước xuống góc tường...'"
             ></textarea>
           </div>
+
 
           <!-- Urgency Level -->
           <div>
@@ -491,9 +533,15 @@ const createAndFindTech = async () => {
           <FhButton variant="ghost" size="md" @click="step = 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" @click="goToStep3">
-            Phân tích AI <Sparkles :size="15" class="ml-1.5" />
+          <FhButton variant="primary" size="md" @click="goToNextStepFrom2">
+            <template v-if="isFixedPrice">
+              Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
+            </template>
+            <template v-else>
+              Phân tích sự cố cùng AI <Sparkles :size="15" class="ml-1.5" />
+            </template>
           </FhButton>
+
         </div>
       </div>
     </div>
@@ -594,6 +642,27 @@ const createAndFindTech = async () => {
               <span class="text-ink-500">Dịch vụ yêu cầu:</span>
               <span class="font-bold text-ink-900">{{ services.find((s) => s.id === selectedServiceId)?.name }}</span>
             </div>
+
+            <!-- Fixed Price Breakdown -->
+            <template v-if="isFixedPrice">
+              <div class="flex items-center justify-between py-2">
+                <span class="text-ink-500">Đơn giá niêm yết:</span>
+                <span class="font-semibold text-ink-800 font-num">
+                  <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" /> / {{ selectedService?.unit || 'thiết bị' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-ink-500">Số lượng:</span>
+                <span class="font-bold text-ink-900 font-num">{{ quantity }} {{ selectedService?.unit || 'thiết bị' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
+                <span class="font-bold text-brand-950">Tổng thanh toán niêm yết:</span>
+                <span class="font-extrabold text-brand-700 text-base font-num">
+                  <FhMoney :amount="totalFixedAmount" />
+                </span>
+              </div>
+            </template>
+
             <div class="flex items-center justify-between py-2">
               <span class="text-ink-500">Địa chỉ thực hiện:</span>
               <span class="font-semibold text-ink-900 text-right max-w-xs">
@@ -612,7 +681,19 @@ const createAndFindTech = async () => {
           </div>
 
           <!-- Trust guarantee -->
-          <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 flex items-start gap-3">
+          <div
+            v-if="isFixedPrice"
+            class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-3"
+          >
+            <CheckCircle2 :size="18" class="text-emerald-600 shrink-0 mt-0.5" />
+            <p class="text-xs leading-relaxed">
+              <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi nghiệm thu hài lòng, không phát sinh chi phí khảo sát.
+            </p>
+          </div>
+          <div
+            v-else
+            class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 flex items-start gap-3"
+          >
             <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
             <p class="text-xs leading-relaxed">
               <strong>Cam kết giá minh bạch:</strong> Thợ FixHome sẽ liên hệ và có mặt tận nơi để khảo sát. Thợ chỉ bắt đầu sửa chữa khi bạn đã đồng ý với báo giá chi tiết.
@@ -621,9 +702,10 @@ const createAndFindTech = async () => {
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 3">
+          <FhButton variant="ghost" size="md" @click="step = isFixedPrice ? 2 : 3">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
+
           <FhButton
             variant="primary"
             size="lg"
