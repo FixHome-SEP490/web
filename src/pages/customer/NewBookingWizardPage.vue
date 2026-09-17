@@ -14,15 +14,20 @@ import {
   ShieldCheck,
   Plus,
   Trash2,
+  Calendar as CalendarIcon,
+  Clock,
 } from 'lucide-vue-next';
 import {
   FhButton,
   FhMoney,
+  FhDatePicker,
+  FhTimeScrollPicker,
 } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
+
 
 const route = useRoute();
 const router = useRouter();
@@ -42,11 +47,48 @@ const uploadedPhotos = ref<string[]>([]);
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
-const preferredDate = ref('TODAY');
+const today = new Date();
+const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+
+const todayIso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+const preferredDate = ref(todayIso);
 const preferredTime = ref('EARLIEST');
+
+const formattedScheduleDisplay = computed(() => {
+  let dateText = preferredDate.value;
+  if (preferredDate.value === 'TODAY' || preferredDate.value === todayIso) {
+    dateText = 'Hôm nay';
+  } else if (preferredDate.value === 'TOMORROW') {
+    dateText = 'Ngày mai';
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value)) {
+    const [y, m, d] = preferredDate.value.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+    dateText = `${dayNames[dt.getDay()]}, ${pad(d)}/${pad(m)}/${y}`;
+  }
+
+  let timeText = preferredTime.value;
+  if (preferredTime.value === 'EARLIEST') {
+    timeText = 'Sớm nhất (Thợ có mặt ngay)';
+  } else if (preferredTime.value === 'MORNING') {
+    timeText = 'Buổi sáng (08:00 – 12:00)';
+  } else if (preferredTime.value === 'AFTERNOON') {
+    timeText = 'Buổi chiều (13:30 – 17:30)';
+  } else if (preferredTime.value === 'EVENING') {
+    timeText = 'Buổi tối (18:00 – 20:30)';
+  } else if (/^\d{1,2}:\d{2}$/.test(preferredTime.value)) {
+    const [h, min] = preferredTime.value.split(':').map(Number);
+    const endH = h + 2 < 10 ? `0${h + 2}` : `${h + 2}`;
+    timeText = `${preferredTime.value} (${preferredTime.value} – ${endH}:${pad(min)})`;
+  }
+
+  return `${dateText} • ${timeText}`;
+});
 
 // AI Diagnosis Result
 const aiResult = ref<DiagnosisResult | null>(null);
+
 
 const selectedService = computed(() => {
   for (const cat of categories.value) {
@@ -144,7 +186,14 @@ const goToStep3 = async () => {
     window.alert('Vui lòng chọn địa chỉ sửa chữa.');
     return;
   }
+  try {
+    bookingSchedule(preferredDate.value, preferredTime.value);
+  } catch (err) {
+    window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ.');
+    return;
+  }
   step.value = 3;
+
   loading.value = true;
   try {
     const res = await bookingsApi.diagnoseAI({
@@ -415,32 +464,27 @@ const createAndFindTech = async () => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-ink-100">
-            <div>
-              <label class="block font-bold text-ink-800 mb-1.5">Ngày hẹn</label>
-              <select
-                v-model="preferredDate"
-                class="w-full h-11 px-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm font-medium text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all"
-              >
-                <option value="TODAY">Hôm nay (Càng sớm càng tốt)</option>
-                <option value="TOMORROW">Ngày mai</option>
-                <option value="WEEKEND">Cuối tuần này</option>
-              </select>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-4 border-t border-ink-100">
+            <div class="space-y-1.5">
+              <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <CalendarIcon :size="15" class="text-brand-600" />
+                <span>Ngày hẹn dịch vụ</span>
+              </label>
+              <FhDatePicker v-model="preferredDate" />
             </div>
 
-            <div>
-              <label class="block font-bold text-ink-800 mb-1.5">Khung giờ mong muốn</label>
-              <select
+            <div class="space-y-1.5">
+              <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <Clock :size="15" class="text-brand-600" />
+                <span>Khung giờ mong muốn</span>
+              </label>
+              <FhTimeScrollPicker
                 v-model="preferredTime"
-                class="w-full h-11 px-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm font-medium text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all"
-              >
-                <option value="EARLIEST">Sớm nhất (Thợ có mặt ngay)</option>
-                <option value="MORNING">Buổi sáng (08:00 – 12:00)</option>
-                <option value="AFTERNOON">Buổi chiều (13:30 – 17:30)</option>
-                <option value="EVENING">Buổi tối (18:00 – 20:30)</option>
-              </select>
+                :selected-date="preferredDate"
+              />
             </div>
           </div>
+
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
@@ -558,8 +602,9 @@ const createAndFindTech = async () => {
             </div>
             <div class="flex items-center justify-between py-2">
               <span class="text-ink-500">Thời gian hẹn:</span>
-              <span class="font-bold text-ink-900">Hôm nay (Sớm nhất có thể)</span>
+              <span class="font-bold text-ink-900 text-right">{{ formattedScheduleDisplay }}</span>
             </div>
+
             <div class="flex items-center justify-between pt-2">
               <span class="text-ink-500">Mức độ khẩn cấp:</span>
               <span class="font-bold text-brand-700 uppercase">{{ urgency }}</span>
