@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Wrench,
 } from 'lucide-vue-next';
 
 import type { Component } from 'vue';
@@ -80,9 +79,7 @@ const htmlTitle = computed(() => {
     <div>
       <div class="h-16 flex items-center px-4 border-b border-gray-800 overflow-hidden whitespace-nowrap">
         <router-link to="/console" class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white shrink-0">
-            <Wrench :size="20" />
-          </div>
+          <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs" />
           <div class="transition-opacity duration-300" :class="isCollapsed ? 'opacity-0 w-0 invisible' : 'opacity-100 w-auto'">
             <span class="text-lg font-bold tracking-tight" v-html="htmlTitle"></span>
             <span class="block text-[10px] font-semibold text-brand-300 uppercase tracking-widest -mt-1">

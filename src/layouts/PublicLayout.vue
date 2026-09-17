@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { Wrench, PhoneCall, ShieldCheck, Search, Menu, X } from 'lucide-vue-next';
+import { PhoneCall, ShieldCheck, Search, Menu, X } from 'lucide-vue-next';
 
 import { FhButton } from '../components';
 
@@ -36,13 +36,11 @@ onUnmounted(() => {
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <!-- Logo -->
-        <router-link to="/" class="inline-flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-sm bg-brand-600 flex items-center justify-center text-white shadow-(--shadow-e1)">
-            <Wrench :size="22" :stroke-width="2" />
-          </div>
+        <router-link to="/" class="inline-flex items-center gap-2.5 group">
+          <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
           <div>
-            <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
-            <span class="block text-[10px] font-medium text-ink-500 -mt-1 tracking-wider uppercase">Sửa chữa gia đình</span>
+            <span class="text-xl font-extrabold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
+            <span class="block text-[10px] font-medium text-ink-500 -mt-0.5 tracking-wider uppercase">Sửa chữa gia đình</span>
           </div>
         </router-link>
 
@@ -116,10 +114,8 @@ onUnmounted(() => {
           <!-- Col 1: Brand -->
           <div class="space-y-4 md:col-span-1">
             <div class="inline-flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-sm bg-brand-600 flex items-center justify-center text-white">
-                <Wrench :size="20" />
-              </div>
-              <span class="text-xl font-bold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
+              <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-lg" />
+              <span class="text-xl font-extrabold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
             </div>
             <p class="text-sm text-ink-600 leading-relaxed">
               Nền tảng công nghệ kết nối thợ sửa chữa gia đình hàng đầu. Minh bạch tiền công và vật tư.
