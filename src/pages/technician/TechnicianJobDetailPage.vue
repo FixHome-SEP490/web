@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -79,6 +79,8 @@ const loadJob = async () => {
       job.value = data;
       isEnRoute.value = data.status !== 'ACCEPTED';
       gpsCheckedIn.value = !!data.arrivalVerified;
+      if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
+      else stopLocationPing();
       beforePhotoUploaded.value = Number(data.beforeEvidenceCount) > 0;
       afterPhotoUploaded.value = Number(data.afterEvidenceCount) > 0;
       isCompleted.value = data.status === 'COMPLETED';
@@ -133,6 +135,30 @@ const removeItem = (idx: number) => {
   quotationItems.value.splice(idx, 1);
 };
 
+let locationPing: ReturnType<typeof setInterval> | null = null;
+const stopLocationPing = () => { if (locationPing) { clearInterval(locationPing); locationPing = null; } };
+const startLocationPing = () => {
+  stopLocationPing();
+  const ping = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        ordersApi.updateLocation(jobId, {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+        }).catch(() => { /* transient network error, next ping retries */ });
+      },
+      () => { /* location unavailable this tick, next ping retries */ },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  };
+  ping();
+  locationPing = setInterval(ping, 20000);
+};
+
+onUnmounted(stopLocationPing);
+
 const handleEnRoute = async () => {
   try {
     actionLoading.value = true;
@@ -140,6 +166,7 @@ const handleEnRoute = async () => {
     await ordersApi.enRoute(jobId);
     isEnRoute.value = true;
     if (job.value) job.value.status = 'EN_ROUTE';
+    startLocationPing();
     actionMessage.value = { type: 'success', text: 'Đã cập nhật: Đang trên đường tới nhà khách!' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể chuyển trạng thái đang di chuyển' };
@@ -156,6 +183,7 @@ const handleCheckIn = async () => {
       const result = await ordersApi.checkIn(jobId,{lat:position.coords.latitude,lng:position.coords.longitude,accuracyMeters:position.coords.accuracy});
       if (result.result !== 'valid') throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
       gpsCheckedIn.value = true;
+      stopLocationPing();
       actionMessage.value = {type:'success',text:'Đã xác nhận vị trí đến nơi.'};
     } catch { actionMessage.value = {type:'error',text:'Chưa xác nhận được vị trí. Hãy cấp quyền GPS và thử lại tại địa chỉ sửa chữa.'}; }
     finally { actionLoading.value = false; }

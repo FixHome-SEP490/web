@@ -31,6 +31,8 @@ export interface ServiceOrderItem {
   customerPhone: string;
   addressSummary: string;
   scheduledAt: string;
+  destination?: { lat: number; lng: number } | null;
+  technicianLocation?: { lat: number; lng: number; updatedAt: string | null } | null;
   technician?: {
     id: string;
     fullName: string;
@@ -147,6 +149,14 @@ export const ordersApi = {
   },
 
   async startRepair(orderId: string): Promise<Record<string, unknown>> { const res = await apiClient.post<{data: Record<string,unknown>}>(`/service-orders/${orderId}/start-repair`); return res.data.data; },
+
+  async updateLocation(
+    orderId: string,
+    coords: { lat: number; lng: number; accuracyMeters?: number },
+  ): Promise<{ lat: number; lng: number; updatedAt: string }> {
+    const res = await apiClient.patch<ApiResponse<{ lat: number; lng: number; updatedAt: string }>>(`/service-orders/${orderId}/location`, coords);
+    return (res.data?.data || res.data) as { lat: number; lng: number; updatedAt: string };
+  },
 
   async uploadEvidence(
     orderId: string,

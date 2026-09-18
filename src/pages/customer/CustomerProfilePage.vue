@@ -4,8 +4,11 @@ import { User, MapPin, Plus, Trash2, Check, Star, Pencil, Phone, Mail, Camera } 
 import {
   FhButton,
   FhConfirmDialog,
+  MapTilerMap,
+  type MapMarker,
 } from '../../components';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import { useAuthStore } from '../../stores/auth';
 
 const authStore = useAuthStore();
@@ -40,12 +43,61 @@ const showDeleteConfirm = ref(false);
 const addressToDelete = ref<string | null>(null);
 const addressLat = ref<number | ''>('');
 const addressLng = ref<number | ''>('');
+const mapCenter = ref({ lat: 21.0285, lng: 105.8542 }); // Hanoi, used until an address is picked
+const mapRef = ref<InstanceType<typeof MapTilerMap> | null>(null);
+const addressMarkers = ref<MapMarker[]>([]);
+const addressSearch = ref('');
+const addressSuggestions = ref<PlaceSuggestion[]>([]);
+const searchingAddress = ref(false);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+const syncPickerMarker = (lat: number, lng: number) => {
+  addressLat.value = lat;
+  addressLng.value = lng;
+  addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
+};
+
+const onMapMarkerMove = (_id: string, lat: number, lng: number) => {
+  syncPickerMarker(lat, lng);
+};
+
+const onAddressSearchInput = () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  const query = addressSearch.value.trim();
+  if (query.length < 3) { addressSuggestions.value = []; return; }
+  searchDebounce = setTimeout(async () => {
+    searchingAddress.value = true;
+    try {
+      addressSuggestions.value = await geoApi.autocomplete(query);
+    } catch {
+      addressSuggestions.value = [];
+    } finally {
+      searchingAddress.value = false;
+    }
+  }, 350);
+};
+
+const selectAddressSuggestion = async (suggestion: PlaceSuggestion) => {
+  addressSearch.value = suggestion.description;
+  addressSuggestions.value = [];
+  try {
+    const place = await geoApi.geocode(suggestion.placeId);
+    mapCenter.value = { lat: place.lat, lng: place.lng };
+    syncPickerMarker(place.lat, place.lng);
+    mapRef.value?.flyTo(place.lat, place.lng);
+    if (!addressForm.value.line1) addressForm.value.line1 = place.formattedAddress;
+  } catch {
+    alert('Không thể tra cứu địa chỉ này. Vui lòng thử lại hoặc chọn trực tiếp trên bản đồ.');
+  }
+};
 
 const locateAddress = () => {
   if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ định vị.');
   navigator.geolocation.getCurrentPosition(position => {
-    addressLat.value = position.coords.latitude;
-    addressLng.value = position.coords.longitude;
+    const { latitude, longitude } = position.coords;
+    mapCenter.value = { lat: latitude, lng: longitude };
+    syncPickerMarker(latitude, longitude);
+    mapRef.value?.flyTo(latitude, longitude);
   }, () => alert('Không thể lấy vị trí. Hãy cấp quyền hoặc nhập tọa độ địa chỉ.'), { timeout: 10000 });
 };
 
@@ -152,6 +204,9 @@ const handleAddAddress = async () => {
     showAddressModal.value = false;
     addressLat.value = '';
     addressLng.value = '';
+    addressMarkers.value = [];
+    addressSearch.value = '';
+    addressSuggestions.value = [];
     addressForm.value = {
       label: 'Nhà riêng',
       line1: '',
@@ -465,8 +520,38 @@ const confirmDelete = async () => {
           </div>
 
           <div class="space-y-2">
-            <p class="text-xs text-ink-600">Tọa độ nơi sửa chữa (cần để đặt lịch và xác nhận thợ đến nơi)</p>
+            <p class="text-xs text-ink-600">Chọn vị trí chính xác trên bản đồ (cần để đặt lịch và xác nhận thợ đến nơi)</p>
+            <div class="relative">
+              <input
+                v-model="addressSearch"
+                type="text"
+                placeholder="Tìm địa chỉ..."
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
+                @input="onAddressSearchInput"
+              />
+              <ul
+                v-if="addressSuggestions.length"
+                class="absolute z-10 mt-1 w-full bg-white border border-ink-200 rounded-sm shadow-lg max-h-48 overflow-auto"
+              >
+                <li
+                  v-for="s in addressSuggestions"
+                  :key="s.placeId"
+                  class="px-3 py-2 text-xs hover:bg-ink-50 cursor-pointer"
+                  @click="selectAddressSuggestion(s)"
+                >
+                  {{ s.description }}
+                </li>
+              </ul>
+            </div>
             <FhButton variant="ghost" size="sm" @click="locateAddress">Dùng vị trí hiện tại khi đang ở địa chỉ này</FhButton>
+            <MapTilerMap
+              ref="mapRef"
+              :center="mapCenter"
+              :markers="addressMarkers"
+              click-to-move="picker"
+              height-class="h-56"
+              @marker-move="onMapMarkerMove"
+            />
             <div class="grid grid-cols-2 gap-2">
               <input v-model.number="addressLat" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
               <input v-model.number="addressLng" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
