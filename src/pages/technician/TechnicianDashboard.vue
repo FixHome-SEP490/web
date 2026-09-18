@@ -26,6 +26,7 @@ import {
   FhCountdown,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -34,7 +35,32 @@ const chatStore = useChatStore();
 const loading = ref(true);
 const jobs = ref<ServiceOrderItem[]>([]);
 const isAvailable = ref(true);
-const invitationExpires = new Date(Date.now() + 12 * 60 * 1000);
+const invitations = ref<InvitationItem[]>([]);
+const decliningInvitation = ref(false);
+
+const topInvitation = computed(() => invitations.value[0] ?? null);
+
+const loadInvitations = async () => {
+  try {
+    invitations.value = await bookingsApi.getMyInvitations();
+  } catch {
+    invitations.value = [];
+  }
+};
+
+const declineTopInvitation = async () => {
+  const inv = topInvitation.value;
+  if (!inv) return;
+  decliningInvitation.value = true;
+  try {
+    await bookingsApi.respondInvitation(inv.id, 'DECLINE');
+    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+  } catch {
+    // ignore, banner will refresh on next mount/poll
+  } finally {
+    decliningInvitation.value = false;
+  }
+};
 
 onMounted(async () => {
   try {
@@ -45,6 +71,7 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+  await loadInvitations();
 });
 
 const completedJobs = computed(() => {
@@ -240,26 +267,30 @@ const handleChatWithCustomer = async (order: ServiceOrderItem) => {
       </div>
     </div>
 
-    <!-- 5. Urgent Invitation Banner (If new invitations pending) -->
-    <div class="p-5 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-50 to-white border border-amber-300/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+    <!-- 5. Urgent Invitation Banner (real data, only shown when a pending invitation exists) -->
+    <div v-if="topInvitation" class="p-5 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-50 to-white border border-amber-300/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
       <div class="space-y-1">
         <div class="flex items-center gap-2">
           <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold uppercase tracking-wider shadow-xs">
             <Zap :size="12" class="fill-white" />
             Lời mời nhận việc mới
           </span>
-          <FhCountdown :expires-at="invitationExpires" />
+          <FhCountdown :expires-at="topInvitation.expiresAt" />
         </div>
         <h3 class="text-sm sm:text-base font-bold text-ink-900">
-          Vệ sinh điều hòa Daikin Inverter · 142 Nguyễn Thị Minh Khai, Q.3 (Cách 1.8 km)
+          {{ topInvitation.booking?.serviceName }}
         </h3>
-        <p class="text-xs text-ink-600">
-          Hẹn lúc: Hôm nay · Thu nhập dự kiến: 180.000 ₫ – 220.000 ₫
+        <p class="text-xs text-ink-600 flex items-center gap-1">
+          <MapPin :size="12" class="text-brand-600 shrink-0" />
+          {{ topInvitation.booking?.addressSummary }}
+        </p>
+        <p v-if="invitations.length > 1" class="text-xs text-ink-500">
+          + {{ invitations.length - 1 }} lời mời khác đang chờ
         </p>
       </div>
 
       <div class="flex items-center gap-2.5 w-full sm:w-auto">
-        <FhButton variant="secondary" size="sm" class="flex-1 sm:flex-none">
+        <FhButton variant="secondary" size="sm" class="flex-1 sm:flex-none" :loading="decliningInvitation" @click="declineTopInvitation">
           Từ chối
         </FhButton>
         <FhButton variant="primary" size="sm" class="flex-1 sm:flex-none" @click="router.push('/tech/invitations')">

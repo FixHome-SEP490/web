@@ -5,12 +5,20 @@ import type { ApiResponse } from './orders.api';
 export interface PlaceSuggestion {
   placeId: string;
   description: string;
+  lat: number;
+  lng: number;
+  ward?: string;
+  district?: string;
+  province?: string;
 }
 
 export interface PlaceLocation {
   lat: number;
   lng: number;
   formattedAddress: string;
+  ward?: string;
+  district?: string;
+  province?: string;
 }
 
 export const geoApi = {
@@ -18,11 +26,6 @@ export const geoApi = {
     if (!input.trim()) return [];
     const res = await apiClient.get<ApiResponse<PlaceSuggestion[]>>('/geo/autocomplete', { params: { input } });
     return res.data?.data || [];
-  },
-
-  async geocode(placeId: string): Promise<PlaceLocation> {
-    const res = await apiClient.get<ApiResponse<PlaceLocation>>('/geo/geocode', { params: { placeId } });
-    return res.data.data as PlaceLocation;
   },
 
   async reverse(lat: number, lng: number): Promise<PlaceLocation> {

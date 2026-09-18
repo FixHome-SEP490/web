@@ -111,6 +111,6 @@ onBeforeUnmount(() => {
       <span class="text-sm font-medium">Chưa cấu hình bản đồ</span>
       <span class="text-xs">Thiếu VITE_MAPTILER_KEY trong biến môi trường.</span>
     </div>
-    <div v-else ref="containerRef" class="absolute inset-0" />
+    <div v-else ref="containerRef" style="position: absolute; inset: 0;" />
   </div>
 </template>

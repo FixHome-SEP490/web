@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Clock, ShieldCheck, CheckCircle2, ChevronRight, Star, ArrowLeft, Wrench } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhStatusPill } from '../../components';
+import { FhButton, FhMoney, FhStatusPill, FhSkeleton, FhEmptyState } from '../../components';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 
 const route = useRoute();
@@ -11,44 +11,30 @@ const router = useRouter();
 const slug = route.params.slug as string;
 
 const loading = ref(true);
+const loadError = ref('');
 const service = ref<ServiceItem | null>(null);
 
 useSmoothScroll();
 
-// Fallback mock if backend is unavailable
-const fallbackService: ServiceItem = {
-  id: 'mock-1',
-  categoryId: 'cat-1',
-  name: 'Vệ sinh & bảo dưỡng máy lạnh',
-  code: 'VE_SINH_DIEU_HOA',
-  slug: 've-sinh-dieu-hoa',
-  description: 'Vệ sinh dàn nóng, dàn lạnh bằng máy xịt áp lực chuyên dụng, kiểm tra áp suất gas và độ ồn hoạt động.',
-  basePrice: 200000,
-  minPrice: 150000,
-  maxPrice: 400000,
-  basePriceMin: 150000,
-  basePriceMax: 400000,
-  estimatedMinutes: 45,
-  isActive: true,
-  category: {
-    id: 'cat-1',
-    name: 'Điện lạnh',
-    code: 'DIEN_LANH',
-    sortOrder: 1,
-    isActive: true,
-  },
-};
+function isFixedPrice(s: ServiceItem): boolean {
+  const mode = s.pricingMode?.toLowerCase();
+  return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
+}
 
-onMounted(async () => {
+async function loadService() {
+  loading.value = true;
+  loadError.value = '';
   try {
-    const data = await catalogApi.getService(slug);
-    service.value = data;
+    service.value = await catalogApi.getService(slug);
   } catch {
-    service.value = fallbackService;
+    service.value = null;
+    loadError.value = 'Không tìm thấy dịch vụ này hoặc không thể kết nối tới hệ thống. Vui lòng thử lại.';
   } finally {
     loading.value = false;
   }
-});
+}
+
+onMounted(loadService);
 </script>
 
 <template>
@@ -71,7 +57,30 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div v-if="service" class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12 lg:gap-20 items-start">
+    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12 lg:gap-20 items-start">
+      <div class="space-y-6">
+        <FhSkeleton height="32px" width="60%" />
+        <FhSkeleton height="48px" width="90%" />
+        <FhSkeleton height="16px" :count="3" />
+      </div>
+      <FhSkeleton height="320px" rounded="lg" />
+    </div>
+
+    <FhEmptyState
+      v-else-if="loadError"
+      title="Không tải được dịch vụ"
+      :description="loadError"
+      action-text="Thử lại"
+      @action="loadService"
+    >
+      <template #extra>
+        <router-link to="/services" class="text-xs font-semibold text-brand-600 hover:underline mt-2 block">
+          Quay lại bảng giá dịch vụ
+        </router-link>
+      </template>
+    </FhEmptyState>
+
+    <div v-else-if="service" class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12 lg:gap-20 items-start">
       <!-- Left Column -->
       <div class="space-y-16">
         <!-- Header Hero -->
@@ -142,9 +151,16 @@ onMounted(async () => {
              <Wrench :size="24" />
            </div>
            
-           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Giá công tham khảo</div>
+           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+             {{ isFixedPrice(service) ? 'Giá niêm yết' : 'Giá công tham khảo' }}
+           </div>
            <div class="text-4xl sm:text-5xl font-extrabold text-slate-900 font-num tracking-tight mb-10">
-             <FhMoney :amount="service.minPrice ?? service.basePrice ?? 150000" />
+             <template v-if="isFixedPrice(service)">
+               <FhMoney :amount="service.fixedPrice ?? service.basePrice ?? 0" />
+             </template>
+             <template v-else>
+               <FhMoney :amount="service.minPrice ?? service.basePrice ?? 0" /> – <FhMoney :amount="service.maxPrice ?? service.basePrice ?? 0" />
+             </template>
            </div>
 
            <div class="space-y-4">
