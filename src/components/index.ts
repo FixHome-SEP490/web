@@ -16,6 +16,8 @@ export { default as ChatThread } from './chat/ChatThread.vue';
 export { default as ChatFloatingWidget } from './chat/ChatFloatingWidget.vue';
 export { default as FhDatePicker } from './common/FhDatePicker.vue';
 export { default as FhTimeScrollPicker } from './common/FhTimeScrollPicker.vue';
+export { default as MapTilerMap } from './common/MapTilerMap.vue';
+export type { MapMarker } from './common/MapTilerMap.vue';
 export type { TableColumn } from './FhTable.vue';
 export type { TimelineStep } from './FhTimeline.vue';
 

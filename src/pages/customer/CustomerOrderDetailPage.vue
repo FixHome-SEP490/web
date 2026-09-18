@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -21,6 +21,9 @@ import {
   FhMoney,
   FhTimeline,
   FhConfirmDialog,
+  MapTilerMap,
+  type MapMarker,
+  type TimelineStep,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -54,6 +57,48 @@ const cashSettlement = ref<{
 
 const disputeReason = ref('');
 const showDisputeModal = ref(false);
+
+// Render only the timeline entries actually returned by the Backend API.
+// No locally invented states or progression — an empty timeline is shown honestly.
+const timelineSteps = computed<TimelineStep[]>(() => {
+  const entries = order.value?.timeline ?? [];
+  return entries.map((entry, index) => ({
+    key: `${entry.status}-${index}`,
+    label: entry.title || entry.status,
+    timestamp: entry.timestamp,
+    actor: entry.actor,
+    completed: index < entries.length - 1,
+    current: index === entries.length - 1,
+  }));
+});
+
+const trackingMarkers = computed<MapMarker[]>(() => {
+  const markers: MapMarker[] = [];
+  if (order.value?.destination) markers.push({ id: 'destination', lat: order.value.destination.lat, lng: order.value.destination.lng, color: '#16a34a' });
+  if (order.value?.technicianLocation) markers.push({ id: 'technician', lat: order.value.technicianLocation.lat, lng: order.value.technicianLocation.lng, color: '#2563eb' });
+  return markers;
+});
+
+let trackingPoll: ReturnType<typeof setInterval> | null = null;
+const stopTrackingPoll = () => { if (trackingPoll) { clearInterval(trackingPoll); trackingPoll = null; } };
+const startTrackingPoll = () => {
+  stopTrackingPoll();
+  trackingPoll = setInterval(async () => {
+    try {
+      const fresh = await ordersApi.getOrder(orderId);
+      if (order.value) Object.assign(order.value, fresh);
+    } catch {
+      // Ignore transient polling errors; next tick retries.
+    }
+  }, 15000);
+};
+
+watch(() => order.value?.status, (status) => {
+  if (status === 'EN_ROUTE' || status === 'en_route') startTrackingPoll();
+  else stopTrackingPoll();
+});
+
+onUnmounted(stopTrackingPoll);
 
 onMounted(async () => {
   await loadOrder();
@@ -366,6 +411,21 @@ const confirmWork = async () => {
               </div>
             </div>
           </div>
+
+          <div v-if="order.status === 'EN_ROUTE' || order.status === 'en_route'" class="space-y-2">
+            <div class="text-xs font-semibold text-ink-600 flex items-center gap-1.5">
+              <MapPin :size="14" class="text-brand-600" />
+              Vị trí kỹ thuật viên
+              <span v-if="order.technicianLocation" class="text-ink-400 font-normal">
+                (cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }})
+              </span>
+            </div>
+            <MapTilerMap
+              :center="order.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order.destination || { lat: 21.0285, lng: 105.8542 })"
+              :markers="trackingMarkers"
+              height-class="h-64"
+            />
+          </div>
         </div>
       </FhCard>
 
@@ -411,16 +471,11 @@ const confirmWork = async () => {
       </FhCard>
 
       <!-- Status Timeline (FhTimeline) -->
-      <FhCard title="Tiến trình thực hiện (Timeline Spec v1.2)">
-        <FhTimeline
-          :steps="[
-            { key: '1', label: 'Tiếp nhận yêu cầu', note: 'Đơn được tạo trên hệ thống', timestamp: '08:30', completed: true },
-            { key: '2', label: 'Ghép kỹ thuật viên', note: order.technician?.fullName ? `Thợ ${order.technician.fullName} đã nhận đơn` : 'Đã ghép thợ', timestamp: '08:45', completed: true },
-            { key: '3', label: 'Đang di chuyển (En Route)', note: 'Thợ đang trên đường tới nhà', timestamp: '09:00', completed: order.status !== 'ACCEPTED' },
-            { key: '4', label: 'Bắt đầu sửa chữa (Under Repair)', note: 'Thợ đã check-in GPS và khảo sát', timestamp: '09:20', completed: order.status === 'UNDER_REPAIR' || order.status === 'COMPLETED' },
-            { key: '5', label: 'Hoàn tất & Bảo hành điện tử', note: 'Nghiệm thu sau sửa và kích hoạt bảo hành', completed: order.status === 'COMPLETED' },
-          ]"
-        />
+      <FhCard title="Tiến trình thực hiện (theo dữ liệu Backend)">
+        <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
+        <p v-else class="text-xs text-ink-400 italic">
+          Backend không trả về mục lịch sử nào cho đơn này.
+        </p>
       </FhCard>
 
       <!-- Quotation & D-02 Cost Breakdown Card -->

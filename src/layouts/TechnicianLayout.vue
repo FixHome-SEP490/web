@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useChatStore } from '../stores/chat.store';
@@ -18,6 +18,7 @@ import {
 
 import { ChatFloatingWidget } from '../components';
 import { ordersApi } from '../api/orders.api';
+import { bookingsApi } from '../api/bookings.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -25,7 +26,18 @@ const chatStore = useChatStore();
 const isAvailable = ref(true);
 const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
-const invitationCount = ref(3);
+const invitationCount = ref(0);
+
+const refreshInvitationCount = async () => {
+  try {
+    const invitations = await bookingsApi.getMyInvitations();
+    invitationCount.value = invitations.length;
+  } catch {
+    // ignore
+  }
+};
+
+let invitationPoll: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
   chatStore.initSocket();
@@ -38,6 +50,12 @@ onMounted(async () => {
   } catch {
     // ignore
   }
+  await refreshInvitationCount();
+  invitationPoll = setInterval(refreshInvitationCount, 30000);
+});
+
+onUnmounted(() => {
+  if (invitationPoll) clearInterval(invitationPoll);
 });
 
 const toggleAvailability = () => {

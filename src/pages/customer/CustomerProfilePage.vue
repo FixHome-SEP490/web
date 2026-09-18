@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { User, MapPin, Plus, Trash2, Check, Star, Pencil, Phone, Mail, Camera } from 'lucide-vue-next';
+import { User, MapPin, Plus, Trash2, Check, Star, Pencil, Phone, Mail, Camera, X } from 'lucide-vue-next';
 import {
   FhButton,
   FhConfirmDialog,
+  MapTilerMap,
+  type MapMarker,
 } from '../../components';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import { useAuthStore } from '../../stores/auth';
 
 const authStore = useAuthStore();
@@ -31,7 +34,7 @@ const addressForm = ref({
   line1: '',
   ward: '',
   district: '',
-  province: 'Hà Nội',
+  province: '',
   isDefault: false,
 });
 
@@ -40,12 +43,110 @@ const showDeleteConfirm = ref(false);
 const addressToDelete = ref<string | null>(null);
 const addressLat = ref<number | ''>('');
 const addressLng = ref<number | ''>('');
+const mapCenter = ref({ lat: 21.0285, lng: 105.8542 }); // Hanoi, used until an address is picked
+const mapRef = ref<InstanceType<typeof MapTilerMap> | null>(null);
+const addressMarkers = ref<MapMarker[]>([]);
+const addressSuggestions = ref<PlaceSuggestion[]>([]);
+const searchingAddress = ref(false);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+// Admin-area fields (ward/district/province) are never typed by hand anymore — they're
+// always derived from a map/search/coordinate lookup. Vietnam's post-reform addressing
+// often has no district level, so we fall back to ward/province to keep the field the
+// backend still requires non-empty without bothering the user about it.
+const applyPlace = (lat: number, lng: number, place?: { formattedAddress?: string; description?: string; ward?: string; district?: string; province?: string }) => {
+  addressLat.value = lat;
+  addressLng.value = lng;
+  addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
+  if (place) {
+    addressForm.value.line1 = place.formattedAddress || place.description || addressForm.value.line1;
+    addressForm.value.ward = place.ward || addressForm.value.ward;
+    addressForm.value.district = place.district || addressForm.value.district;
+    addressForm.value.province = place.province || addressForm.value.province;
+  }
+};
+
+let reverseDebounce: ReturnType<typeof setTimeout> | null = null;
+const onMapMarkerMove = (_id: string, lat: number, lng: number) => {
+  addressLat.value = lat;
+  addressLng.value = lng;
+  addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
+  if (reverseDebounce) clearTimeout(reverseDebounce);
+  reverseDebounce = setTimeout(async () => {
+    try {
+      const place = await geoApi.reverse(lat, lng);
+      applyPlace(lat, lng, place);
+    } catch {
+      // Keep the pin where the user dropped it even if reverse lookup fails.
+    }
+  }, 500);
+};
+
+const onAddressSearchInput = () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  const query = addressForm.value.line1.trim();
+  if (query.length < 3) { addressSuggestions.value = []; return; }
+  searchDebounce = setTimeout(async () => {
+    searchingAddress.value = true;
+    try {
+      addressSuggestions.value = await geoApi.autocomplete(query);
+    } catch {
+      addressSuggestions.value = [];
+    } finally {
+      searchingAddress.value = false;
+    }
+  }, 350);
+};
+
+const selectAddressSuggestion = (suggestion: PlaceSuggestion) => {
+  addressSuggestions.value = [];
+  mapCenter.value = { lat: suggestion.lat, lng: suggestion.lng };
+  applyPlace(suggestion.lat, suggestion.lng, suggestion);
+  mapRef.value?.flyTo(suggestion.lat, suggestion.lng);
+};
+
+const searchingByCoords = ref(false);
+const searchByCoordinates = async () => {
+  if (addressLat.value === '' || addressLng.value === '') {
+    alert('Vui lòng nhập đủ vĩ độ và kinh độ.');
+    return;
+  }
+  const lat = Number(addressLat.value);
+  const lng = Number(addressLng.value);
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    alert('Toạ độ không hợp lệ.');
+    return;
+  }
+  searchingByCoords.value = true;
+  try {
+    const place = await geoApi.reverse(lat, lng);
+    mapCenter.value = { lat, lng };
+    applyPlace(lat, lng, place);
+    mapRef.value?.flyTo(lat, lng);
+  } catch {
+    // Reverse geocode failed (e.g. remote water/unmapped area); still center the map on the coordinates.
+    mapCenter.value = { lat, lng };
+    applyPlace(lat, lng);
+    mapRef.value?.flyTo(lat, lng);
+    alert('Đã ghim toạ độ trên bản đồ, nhưng không tra được địa chỉ tương ứng.');
+  } finally {
+    searchingByCoords.value = false;
+  }
+};
 
 const locateAddress = () => {
   if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ định vị.');
-  navigator.geolocation.getCurrentPosition(position => {
-    addressLat.value = position.coords.latitude;
-    addressLng.value = position.coords.longitude;
+  navigator.geolocation.getCurrentPosition(async position => {
+    const { latitude, longitude } = position.coords;
+    mapCenter.value = { lat: latitude, lng: longitude };
+    applyPlace(latitude, longitude);
+    mapRef.value?.flyTo(latitude, longitude);
+    try {
+      const place = await geoApi.reverse(latitude, longitude);
+      applyPlace(latitude, longitude, place);
+    } catch {
+      // Keep the raw coordinates pinned even if reverse lookup fails.
+    }
   }, () => alert('Không thể lấy vị trí. Hãy cấp quyền hoặc nhập tọa độ địa chỉ.'), { timeout: 10000 });
 };
 
@@ -134,8 +235,12 @@ const openEditProfileModal = () => {
 };
 
 const handleAddAddress = async () => {
-  if (!addressForm.value.line1 || !addressForm.value.district || !addressForm.value.province) {
-    alert('Vui lòng điền đủ địa chỉ số nhà, quận/huyện và tỉnh/thành.');
+  if (!addressForm.value.line1.trim()) {
+    alert('Vui lòng tìm hoặc chọn địa chỉ trên bản đồ trước khi lưu.');
+    return;
+  }
+  if (!addressForm.value.province) {
+    alert('Chưa xác định được tỉnh/thành. Vui lòng chọn lại vị trí trên bản đồ hoặc tìm địa chỉ khác.');
     return;
   }
   try {
@@ -145,19 +250,23 @@ const handleAddAddress = async () => {
       label: addressForm.value.label,
       line1: addressForm.value.line1,
       ward: addressForm.value.ward || undefined,
-      district: addressForm.value.district,
+      // Many post-reform Vietnamese addresses have no separate district level; fall back
+      // to ward/province so the backend's required field is still satisfied.
+      district: addressForm.value.district || addressForm.value.ward || addressForm.value.province,
       province: addressForm.value.province,
       isDefault: addressForm.value.isDefault,
     });
     showAddressModal.value = false;
     addressLat.value = '';
     addressLng.value = '';
+    addressMarkers.value = [];
+    addressSuggestions.value = [];
     addressForm.value = {
       label: 'Nhà riêng',
       line1: '',
       ward: '',
       district: '',
-      province: 'Hà Nội',
+      province: '',
       isDefault: false,
     };
     await loadAddresses();
@@ -405,12 +514,22 @@ const confirmDelete = async () => {
         v-if="showAddressModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
       >
-      <div class="bg-white rounded-md max-w-md w-full p-6 shadow-xl space-y-5">
-        <h3 class="text-lg font-bold text-ink-900">
-          Thêm Địa chỉ Mới
-        </h3>
+      <div class="bg-white rounded-md max-w-md w-full shadow-xl flex flex-col max-h-[90vh]">
+        <div class="flex items-center justify-between px-6 pt-6 shrink-0">
+          <h3 class="text-lg font-bold text-ink-900">
+            Thêm Địa chỉ Mới
+          </h3>
+          <button
+            type="button"
+            aria-label="Đóng"
+            class="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100"
+            @click="showAddressModal = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
 
-        <div class="space-y-4 text-xs">
+        <div class="space-y-4 text-xs px-6 py-5 overflow-y-auto flex-1 min-h-0">
           <div>
             <label class="block font-semibold text-ink-700 mb-1">Tên nhãn gợi nhớ</label>
             <input
@@ -421,56 +540,60 @@ const confirmDelete = async () => {
             />
           </div>
 
-          <div>
-            <label class="block font-semibold text-ink-700 mb-1">Số nhà, tên đường / tòa nhà *</label>
-            <input
-              v-model="addressForm.line1"
-              type="text"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-              placeholder="Ví dụ: Số 25 Ngõ 12 Đội Cấn"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block font-semibold text-ink-700 mb-1">Phường / Xã</label>
+          <div class="space-y-2">
+            <label class="block font-semibold text-ink-700 mb-1">Địa chỉ (số nhà, tên đường...) *</label>
+            <div class="relative">
               <input
-                v-model="addressForm.ward"
+                v-model="addressForm.line1"
                 type="text"
+                placeholder="Tìm địa chỉ, ví dụ: Số 25 Ngõ 12 Đội Cấn"
                 class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-                placeholder="Phường Đội Cấn"
+                @input="onAddressSearchInput"
               />
+              <ul
+                v-if="addressSuggestions.length"
+                class="absolute z-10 mt-1 w-full bg-white border border-ink-200 rounded-sm shadow-lg max-h-48 overflow-auto"
+              >
+                <li
+                  v-for="s in addressSuggestions"
+                  :key="s.placeId"
+                  class="px-3 py-2 text-xs hover:bg-ink-50 cursor-pointer"
+                  @click="selectAddressSuggestion(s)"
+                >
+                  {{ s.description }}
+                </li>
+              </ul>
             </div>
-            <div>
-              <label class="block font-semibold text-ink-700 mb-1">Quận / Huyện *</label>
-              <input
-                v-model="addressForm.district"
-                type="text"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-                placeholder="Quận Ba Đình"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-ink-700 mb-1">Tỉnh / Thành phố *</label>
-            <select
-              v-model="addressForm.province"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-            >
-              <option value="Hà Nội">Hà Nội</option>
-              <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-              <option value="Đà Nẵng">Đà Nẵng</option>
-            </select>
+            <p v-if="addressForm.ward || addressForm.province" class="text-[11px] text-ink-500 flex items-center gap-1">
+              <MapPin :size="12" class="shrink-0" />
+              <span>{{ [addressForm.ward, addressForm.province].filter(Boolean).join(', ') }}</span>
+            </p>
           </div>
 
           <div class="space-y-2">
-            <p class="text-xs text-ink-600">Tọa độ nơi sửa chữa (cần để đặt lịch và xác nhận thợ đến nơi)</p>
+            <p class="text-xs text-ink-600">Hoặc chọn vị trí chính xác trên bản đồ (cần để đặt lịch và xác nhận thợ đến nơi)</p>
             <FhButton variant="ghost" size="sm" @click="locateAddress">Dùng vị trí hiện tại khi đang ở địa chỉ này</FhButton>
+            <MapTilerMap
+              ref="mapRef"
+              :center="mapCenter"
+              :markers="addressMarkers"
+              click-to-move="picker"
+              height-class="h-56"
+              @marker-move="onMapMarkerMove"
+            />
             <div class="grid grid-cols-2 gap-2">
               <input v-model.number="addressLat" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
               <input v-model.number="addressLng" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
             </div>
+            <FhButton
+              variant="ghost"
+              size="sm"
+              :disabled="searchingByCoords"
+              :loading="searchingByCoords"
+              @click="searchByCoordinates"
+            >
+              Tìm theo toạ độ này
+            </FhButton>
           </div>
           <label class="flex items-center gap-2 cursor-pointer pt-1">
             <input
@@ -482,7 +605,7 @@ const confirmDelete = async () => {
           </label>
         </div>
 
-        <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-ink-100 shrink-0">
           <FhButton variant="ghost" size="sm" @click="showAddressModal = false">
             Huỷ bỏ
           </FhButton>

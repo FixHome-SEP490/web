@@ -26,6 +26,7 @@ import {
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
+import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
 
 
@@ -44,6 +45,8 @@ const description = ref('');
 const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
 const quantity = ref(1);
 const uploadedPhotos = ref<string[]>([]);
+const uploadingPhoto = ref(false);
+const photoInput = ref<HTMLInputElement | null>(null);
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
@@ -176,14 +179,44 @@ const onCategorySelect = (catId: string) => {
   }
 };
 
-const handleAddMockPhoto = () => {
+const openPhotoPicker = () => {
   if (uploadedPhotos.value.length >= 5) {
-    alert('Tối đa 5 ảnh thiết bị.');
+    window.alert('Tối đa 5 ảnh thiết bị.');
     return;
   }
-  // Mock image preview for UI
-  const mockId = Math.floor(Math.random() * 1000);
-  uploadedPhotos.value.push(`https://picsum.photos/seed/${mockId}/300/300`);
+  photoInput.value?.click();
+};
+
+const handlePhotoSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  input.value = '';
+  if (files.length === 0) return;
+
+  const remaining = 5 - uploadedPhotos.value.length;
+  const toUpload = files.slice(0, remaining);
+
+  uploadingPhoto.value = true;
+  try {
+    for (const file of toUpload) {
+      if (!ALLOWED_MEDIA_MIME_TYPES.includes(file.type)) {
+        window.alert(`Ảnh "${file.name}" không đúng định dạng (chỉ nhận JPG, PNG, WebP).`);
+        continue;
+      }
+      if (file.size > MAX_MEDIA_SIZE_BYTES) {
+        window.alert(`Ảnh "${file.name}" vượt quá 10 MB.`);
+        continue;
+      }
+      try {
+        const uploaded = await mediaApi.upload(file);
+        uploadedPhotos.value.push(uploaded.url);
+      } catch {
+        window.alert(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
+      }
+    }
+  } finally {
+    uploadingPhoto.value = false;
+  }
 };
 
 const removePhoto = (idx: number) => {
@@ -259,6 +292,7 @@ const createAndFindTech = async () => {
       ...schedule,
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
+      mediaUrls: uploadedPhotos.value,
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch (error) {
@@ -387,14 +421,25 @@ const createAndFindTech = async () => {
           <!-- Photo Upload Area (Mobile Dotted Box) -->
           <div>
             <label class="block font-bold text-ink-800 mb-1.5">Ảnh hiện trạng thiết bị</label>
+            <input
+              ref="photoInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              class="hidden"
+              @change="handlePhotoSelected"
+            />
             <div
               class="p-5 rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50/80 transition-colors text-center cursor-pointer flex flex-col items-center justify-center space-y-1.5"
-              @click="handleAddMockPhoto"
+              :class="{ 'opacity-60 pointer-events-none': uploadingPhoto }"
+              @click="openPhotoPicker"
             >
               <div class="w-10 h-10 rounded-full bg-white text-brand-600 flex items-center justify-center shadow-xs">
                 <Camera :size="20" />
               </div>
-              <p class="text-xs font-bold text-brand-700">Thêm ảnh thiết bị</p>
+              <p class="text-xs font-bold text-brand-700">
+                {{ uploadingPhoto ? 'Đang tải ảnh lên...' : 'Thêm ảnh thiết bị' }}
+              </p>
               <p class="text-[11px] text-ink-500">Ảnh toàn cảnh hoặc vị trí hư hỏng (Tối đa 5 ảnh · JPG, PNG · 10 MB)</p>
             </div>
 
@@ -406,6 +451,7 @@ const createAndFindTech = async () => {
                 class="relative w-16 h-16 rounded-xl overflow-hidden border border-ink-200 shadow-xs group"
               >
                 <img :src="photo" class="w-full h-full object-cover" />
+
                 <button
                   type="button"
                   class="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full hover:bg-danger-600 transition-colors"

@@ -13,47 +13,66 @@ import {
 import {
   FhButton,
   FhStatusPill,
+  FhEmptyState,
+  FhMoney,
 } from '../../components';
 import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
 
 const route = useRoute();
 const router = useRouter();
-const bookingId = (route.params.id as string) || 'bk-829102';
+const bookingId = route.params.id as string | undefined;
 
 const loading = ref(true);
+const loadError = ref('');
 const sending = ref(false);
+const sendError = ref('');
 const candidates = ref<TechnicianCandidate[]>([]);
 const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
 
-onMounted(async () => {
+const loadCandidates = async () => {
+  if (!bookingId) {
+    loadError.value = 'Không xác định được đơn đặt lịch. Vui lòng tạo lại yêu cầu đặt thợ.';
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
+  loadError.value = '';
   try {
     const list = await bookingsApi.getCandidates(bookingId);
     candidates.value = list;
     // Preselect top 3 by default
     selectedIds.value = list.slice(0, 3).map((c) => c.id);
+  } catch {
+    candidates.value = [];
+    loadError.value = 'Không thể tải danh sách kỹ thuật viên phù hợp. Vui lòng thử lại.';
   } finally {
     loading.value = false;
   }
-});
+};
+
+onMounted(loadCandidates);
 
 const toggleSelect = (id: string) => {
   if (selectedIds.value.includes(id)) {
     selectedIds.value = selectedIds.value.filter((x) => x !== id);
   } else {
     if (selectedIds.value.length >= 5) {
-      alert('Theo quy định FixHome, bạn chỉ có thể chọn tối đa 5 kỹ thuật viên cho 1 lần ghép thợ.');
+      sendError.value = 'Theo quy định FixHome, bạn chỉ có thể chọn tối đa 5 kỹ thuật viên cho 1 lần ghép thợ.';
       return;
     }
+    sendError.value = '';
     selectedIds.value.push(id);
   }
 };
 
 const handleSendShortlist = async () => {
+  if (!bookingId) return;
   if (selectedIds.value.length === 0) {
-    alert('Vui lòng chọn ít nhất 1 kỹ thuật viên.');
+    sendError.value = 'Vui lòng chọn ít nhất 1 kỹ thuật viên.';
     return;
   }
+  sendError.value = '';
   sending.value = true;
   try {
     await bookingsApi.sendShortlist(bookingId, selectedIds.value);
@@ -62,7 +81,7 @@ const handleSendShortlist = async () => {
       router.push('/app/orders');
     }, 2500);
   } catch {
-    alert('Không thể gửi lời mời. Vui lòng thử lại.');
+    sendError.value = 'Không thể gửi lời mời. Vui lòng thử lại.';
   } finally {
     sending.value = false;
   }
@@ -101,10 +120,35 @@ const selectedCount = computed(() => selectedIds.value.length);
       </div>
     </div>
 
+    <!-- Send/select error banner -->
+    <div
+      v-if="sendError"
+      class="p-3.5 rounded-[var(--radius-sm)] bg-danger-50 border border-danger-200 text-danger-800 text-xs font-medium"
+    >
+      {{ sendError }}
+    </div>
+
     <!-- Candidate List -->
     <div v-if="loading" class="text-center py-16 text-ink-400">
       Đang tải danh sách thợ phù hợp...
     </div>
+
+    <div
+      v-else-if="loadError"
+      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      role="alert"
+    >
+      <span class="flex-1">{{ loadError }}</span>
+      <button v-if="bookingId" class="font-semibold underline" type="button" @click="loadCandidates">Thử lại</button>
+    </div>
+
+    <FhEmptyState
+      v-else-if="candidates.length === 0"
+      title="Chưa tìm thấy kỹ thuật viên phù hợp"
+      description="Hiện chưa có thợ nào đang rảnh lịch và đúng khu vực cho yêu cầu này. Bạn có thể thử lại sau ít phút."
+      action-text="Tải lại danh sách"
+      @action="loadCandidates"
+    />
 
     <div v-else class="space-y-3.5">
       <div

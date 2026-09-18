@@ -1,92 +1,61 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search, Clock } from 'lucide-vue-next';
 
-import { FhButton, FhMoney } from '../../components';
+import { FhButton, FhMoney, FhSkeleton, FhEmptyState } from '../../components';
+import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 
 const router = useRouter();
-const selectedCategory = ref('ALL');
+const selectedCategoryId = ref('ALL');
 const searchQuery = ref('');
+
+const loading = ref(true);
+const loadError = ref('');
+const categories = ref<ServiceCategory[]>([]);
 
 useSmoothScroll();
 
-const categories = [
-  { id: 'ALL', name: 'Tất cả dịch vụ' },
-  { id: 'DIEN_LANH', name: 'Điện lạnh' },
-  { id: 'DIEN_NUOC', name: 'Điện nước' },
-  { id: 'GIA_DUNG', name: 'Gia dụng' },
-  { id: 'KHOA_CUA', name: 'Khoá cửa' },
-];
-
-const services = [
-  {
-    id: 'srv-01',
-    category: 'DIEN_LANH',
-    name: 'Vệ sinh máy lạnh treo tường (≤ 2.0 HP)',
-    desc: 'Xịt rửa dàn nóng, dàn lạnh bằng bạt chuyên dụng, kiểm tra áp suất gas và độ ồn.',
-    minPrice: 180000,
-    maxPrice: 250000,
-    duration: 45,
-  },
-  {
-    id: 'srv-02',
-    category: 'DIEN_LANH',
-    name: 'Nạp gas bổ sung R32 / R410A',
-    desc: 'Kiểm tra rò rỉ khớp nối zắc co, nạp gas bổ sung chuẩn áp suất kỹ thuật.',
-    minPrice: 200000,
-    maxPrice: 350000,
-    duration: 30,
-  },
-  {
-    id: 'srv-03',
-    category: 'DIEN_NUOC',
-    name: 'Sửa rò rỉ đường ống nước âm tường',
-    desc: 'Dò tìm điểm rò rỉ, đục cắt và thay thế đoạn ống nhiệt PPR hoặc PVC hỏng.',
-    minPrice: 250000,
-    maxPrice: 450000,
-    duration: 90,
-  },
-  {
-    id: 'srv-04',
-    category: 'DIEN_NUOC',
-    name: 'Thay thế & lắp mới vòi sen, vòi lavabo',
-    desc: 'Tháo dỡ thiết bị cũ, cuốn băng tan và lắp đặt thiết bị mới chống thấm.',
-    minPrice: 150000,
-    maxPrice: 220000,
-    duration: 40,
-  },
-  {
-    id: 'srv-05',
-    category: 'GIA_DUNG',
-    name: 'Sửa bo mạch máy giặt không vắt / lỗi mã',
-    desc: 'Kiểm tra cảm biến mực nước, công tắc cửa và sửa chữa linh kiện điều khiển.',
-    minPrice: 350000,
-    maxPrice: 650000,
-    duration: 60,
-  },
-  {
-    id: 'srv-06',
-    category: 'KHOA_CUA',
-    name: 'Lắp đặt khoá điện tử / khoá vân tay',
-    desc: 'Khoan đục cửa gỗ hoặc nhôm kính, cài đặt vân tay, mật mã và thẻ từ.',
-    minPrice: 300000,
-    maxPrice: 500000,
-    duration: 60,
-  },
-];
+const allServices = computed<ServiceItem[]>(() =>
+  categories.value.flatMap((cat) => cat.services ?? []),
+);
 
 const filteredServices = computed(() => {
-  return services.filter((s) => {
-    const matchCat = selectedCategory.value === 'ALL' || s.category === selectedCategory.value;
+  return allServices.value.filter((s) => {
+    const matchCat = selectedCategoryId.value === 'ALL' || s.categoryId === selectedCategoryId.value;
+    const q = searchQuery.value.trim().toLowerCase();
     const matchSearch =
-      !searchQuery.value ||
-      s.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      s.desc.toLowerCase().includes(searchQuery.value.toLowerCase());
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      (s.description ?? '').toLowerCase().includes(q);
     return matchCat && matchSearch;
   });
 });
+
+function isFixedPrice(service: ServiceItem): boolean {
+  const mode = service.pricingMode?.toLowerCase();
+  return mode === 'fixed_price' || (service.fixedPrice != null && service.fixedPrice > 0);
+}
+
+function goToDetail(service: ServiceItem) {
+  router.push('/services/' + (service.slug ?? service.id));
+}
+
+async function loadCatalog() {
+  loading.value = true;
+  loadError.value = '';
+  try {
+    categories.value = await catalogApi.getCategories(true);
+  } catch {
+    categories.value = [];
+    loadError.value = 'Không thể tải danh mục dịch vụ từ hệ thống. Vui lòng thử lại.';
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadCatalog);
 </script>
 
 <template>
@@ -112,36 +81,75 @@ const filteredServices = computed(() => {
     </div>
 
     <!-- Category Filter Tabs -->
-    <div class="flex items-center justify-center gap-3 overflow-x-auto pb-4 no-scrollbar">
+    <div v-if="!loading && !loadError" class="flex items-center justify-center gap-3 overflow-x-auto pb-4 no-scrollbar">
+      <button
+        class="px-5 py-2.5 rounded-full text-sm font-semibold select-none transition-all shrink-0"
+        :class="[
+          selectedCategoryId === 'ALL'
+            ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
+            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900',
+        ]"
+        @click="selectedCategoryId = 'ALL'"
+      >
+        Tất cả dịch vụ
+      </button>
       <button
         v-for="cat in categories"
         :key="cat.id"
         class="px-5 py-2.5 rounded-full text-sm font-semibold select-none transition-all shrink-0"
         :class="[
-          selectedCategory === cat.id
+          selectedCategoryId === cat.id
             ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900',
         ]"
-        @click="selectedCategory = cat.id"
+        @click="selectedCategoryId = cat.id"
       >
         {{ cat.name }}
       </button>
     </div>
 
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div v-for="i in 6" :key="i" class="bg-white border border-slate-200 rounded-4xl p-8 space-y-4">
+        <FhSkeleton height="14px" width="40%" />
+        <FhSkeleton height="24px" width="90%" />
+        <FhSkeleton height="14px" :count="2" />
+        <FhSkeleton height="32px" width="50%" />
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <FhEmptyState
+      v-else-if="loadError"
+      title="Không tải được danh mục dịch vụ"
+      :description="loadError"
+      action-text="Thử lại"
+      @action="loadCatalog"
+    />
+
+    <!-- Empty state -->
+    <FhEmptyState
+      v-else-if="filteredServices.length === 0"
+      title="Không tìm thấy dịch vụ phù hợp"
+      description="Hãy thử đổi từ khoá tìm kiếm hoặc chọn danh mục khác."
+    />
+
     <!-- Services Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
       <div
         v-for="srv in filteredServices"
         :key="srv.id"
         class="bg-white border border-slate-200 rounded-4xl p-8 flex flex-col justify-between hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-300 transition-all cursor-pointer"
-        @click="router.push('/services/' + srv.id)"
+        @click="goToDetail(srv)"
       >
         <div class="space-y-4">
           <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
             <span class="flex items-center gap-1.5 font-num">
-              <Clock :size="14" /> ~{{ srv.duration }} phút
+              <Clock :size="14" /> ~{{ srv.estimatedMinutes }} phút
             </span>
-            <span class="text-brand-600 font-semibold bg-brand-50 px-2.5 py-1 rounded-full">Bảo hành 30-90 ngày</span>
+            <span class="text-brand-600 font-semibold bg-brand-50 px-2.5 py-1 rounded-full">
+              {{ isFixedPrice(srv) ? 'Giá cố định' : 'Cần khảo sát' }}
+            </span>
           </div>
 
           <h3 class="text-xl font-bold text-slate-900 leading-snug">
@@ -149,15 +157,22 @@ const filteredServices = computed(() => {
           </h3>
 
           <p class="text-sm text-slate-500 leading-relaxed font-medium">
-            {{ srv.desc }}
+            {{ srv.description }}
           </p>
         </div>
 
         <div class="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
           <div>
-            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Giá công tham khảo</div>
+            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+              {{ isFixedPrice(srv) ? 'Giá niêm yết' : 'Giá công tham khảo' }}
+            </div>
             <div class="text-base font-bold font-num text-slate-900">
-              <FhMoney :amount="srv.minPrice" /> – <FhMoney :amount="srv.maxPrice" />
+              <template v-if="isFixedPrice(srv)">
+                <FhMoney :amount="srv.fixedPrice ?? srv.basePrice ?? 0" />
+              </template>
+              <template v-else>
+                <FhMoney :amount="srv.minPrice ?? srv.basePrice ?? 0" /> – <FhMoney :amount="srv.maxPrice ?? srv.basePrice ?? 0" />
+              </template>
             </div>
           </div>
 
