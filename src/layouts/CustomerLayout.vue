@@ -57,7 +57,7 @@ const handleLogout = async () => {
             <router-link
               to="/app"
               class="hover:text-brand-600 transition-colors py-1"
-              active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
+              exact-active-class="text-brand-600 font-semibold border-b-2 border-brand-600"
             >
               Tổng quan
             </router-link>
