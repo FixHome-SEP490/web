@@ -504,7 +504,10 @@ const createAndFindTech = async () => {
           </div>
         </div>
 
-        <div class="flex justify-end pt-5 border-t border-ink-100">
+        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
+          <FhButton variant="ghost" size="md" @click="router.back()">
+            <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
+          </FhButton>
           <FhButton variant="primary" size="md" @click="goToStep2">
             Tiếp tục <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>

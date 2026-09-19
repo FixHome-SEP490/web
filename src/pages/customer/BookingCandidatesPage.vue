@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Send,
   Users,
+  ArrowLeft,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -93,22 +94,32 @@ const selectedCount = computed(() => selectedIds.value.length);
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-20">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Users class="text-brand-600" :size="24" />
-          Kỹ thuật viên Phù hợp gần bạn
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Hệ thống đã lọc danh sách thợ có tay nghề phù hợp, đang rảnh lịch và ở cự ly gần nhất.
-        </p>
-      </div>
+    <div class="space-y-4">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-ink-900 transition-colors"
+        @click="router.back()"
+      >
+        <ArrowLeft :size="16" /> Quay lại
+      </button>
 
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-semibold text-ink-600">Shortlist:</span>
-        <span class="text-xs font-bold font-num px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200">
-          {{ selectedCount }} / 5 thợ
-        </span>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
+            <Users class="text-brand-600" :size="24" />
+            Kỹ thuật viên Phù hợp gần bạn
+          </h1>
+          <p class="text-xs text-ink-500 mt-1">
+            Hệ thống đã lọc danh sách thợ có tay nghề phù hợp, đang rảnh lịch và ở cự ly gần nhất.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold text-ink-600">Shortlist:</span>
+          <span class="text-xs font-bold font-num px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200">
+            {{ selectedCount }} / 5 thợ
+          </span>
+        </div>
       </div>
     </div>
 
