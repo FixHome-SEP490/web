@@ -314,6 +314,15 @@ const confirmWork = async () => {
         </FhButton>
 
         <FhButton
+          v-if="order && order.status === 'ACCEPTED'"
+          variant="secondary"
+          size="sm"
+          @click="router.push(`/app/bookings/${order!.bookingId}`)"
+        >
+          Đổi lịch / thông tin
+        </FhButton>
+
+        <FhButton
           v-if="order && order.status !== 'COMPLETED' && order.status !== 'CANCELLED'"
           variant="danger"
           size="sm"

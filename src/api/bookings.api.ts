@@ -10,6 +10,8 @@ export interface BookingItem {
   addressSummary?: string;
   description: string;
   preferredAt: string;
+  preferredEndAt?: string;
+  quantity?: number;
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   status: 'SUBMITTED' | 'MATCHING' | 'MATCHED' | 'CANCELLED' | 'CLOSED';
   createdAt: string;
@@ -71,10 +73,11 @@ export interface InvitationItem {
   expiresAt: string;
 }
 
-function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string }): BookingItem {
+function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string; media?: { url: string }[] }): BookingItem {
   return { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
     addressSummary: booking.addressTextSnapshot ?? booking.addressSummary,
     preferredAt: booking.preferredStartAt ?? booking.preferredAt,
+    mediaUrls: booking.media ? booking.media.map((m) => m.url) : booking.mediaUrls,
     status: booking.status.toUpperCase() as BookingItem['status'] };
 }
 
@@ -90,6 +93,11 @@ export const bookingsApi = {
   async getMyBookings(): Promise<BookingItem[]> { const res = await apiClient.get<{data: BookingItem[]}>('/bookings/my'); return res.data.data.map(normalizeBooking); },
 
   async getBooking(id: string): Promise<BookingItem> { const res = await apiClient.get<{data: BookingItem}>(`/bookings/${id}`); return normalizeBooking(res.data.data); },
+
+  async updateBooking(id: string, dto: { description?: string; preferredStartAt: string; preferredEndAt: string }): Promise<BookingItem> {
+    const res = await apiClient.patch<{ data: BookingItem }>(`/bookings/${id}/schedule`, dto);
+    return normalizeBooking(res.data.data);
+  },
 
   async diagnoseAI(dto: { description: string; serviceId?: string }): Promise<DiagnosisResult> {
     try {

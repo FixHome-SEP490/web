@@ -79,8 +79,9 @@ watch(
   { immediate: true },
 );
 
-// Scroll columns to the currently selected values
-const scrollToSelected = () => {
+// Scroll columns to the currently selected values. Hoisted function (not `const`) because the
+// `immediate: true` watch above calls it synchronously during setup, before a `const` would be initialized.
+function scrollToSelected() {
   nextTick(() => {
     if (hourColRef.value) {
       const hIdx = hours.indexOf(selectedHour.value);

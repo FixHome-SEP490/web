@@ -5,6 +5,8 @@ export interface TechnicianSkillView {
   serviceName: string;
   level: string;
   listedLaborPrice: number | null;
+  pricingMode: string;
+  fixedPrice: number | null;
 }
 
 export interface TechnicianServiceAreaView {
@@ -41,6 +43,8 @@ function normalizeSkill(payload: unknown): TechnicianSkillView {
     serviceName: String(service.name ?? ''),
     level: String(skill.level ?? 'INTERMEDIATE'),
     listedLaborPrice: skill.listedLaborPrice == null ? null : Number(skill.listedLaborPrice),
+    pricingMode: String(service.pricingMode ?? ''),
+    fixedPrice: service.fixedPrice == null ? null : Number(service.fixedPrice),
   };
 }
 

@@ -112,6 +112,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chọn Kỹ thuật viên' },
       },
       {
+        path: 'bookings/:id',
+        name: 'booking-detail',
+        component: () => import('../pages/customer/BookingDetailPage.vue'),
+        meta: { title: 'Chi tiết đơn đặt lịch' },
+      },
+      {
         path: 'orders',
         name: 'customer-orders',
         component: () => import('../pages/customer/CustomerOrdersPage.vue'),
