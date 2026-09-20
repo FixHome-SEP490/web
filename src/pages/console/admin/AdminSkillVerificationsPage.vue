@@ -67,7 +67,11 @@ const loadVerifications = async () => {
 onMounted(() => void loadVerifications());
 watch(statusFilter, () => {
   successMessage.value = '';
-  page.value === 1 ? void loadVerifications() : (page.value = 1);
+  if (page.value === 1) {
+    void loadVerifications();
+  } else {
+    page.value = 1;
+  }
 });
 watch(page, () => void loadVerifications());
 
