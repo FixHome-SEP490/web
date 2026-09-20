@@ -6,6 +6,7 @@ import { AppSidebar } from '../components';
 import {
   LayoutDashboard,
   KanbanSquare,
+  UserPlus,
   Users,
   UserCheck,
   Ban,
@@ -31,6 +32,7 @@ const navigation = computed(() => [
     items: [
       { label: 'Tổng quan vận hành', path: '/console', icon: LayoutDashboard },
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
+      { label: 'Gán thợ thủ công', path: '/console/bookings', icon: UserPlus },
         ...(isServiceManager.value
         ? [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
