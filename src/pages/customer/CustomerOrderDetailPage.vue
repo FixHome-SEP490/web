@@ -12,6 +12,7 @@ import {
   XCircle,
   DollarSign,
   MessageSquare,
+  Star,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -25,7 +26,8 @@ import {
   type MapMarker,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord } from '../../api/orders.api';
+import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 
 const route = useRoute();
@@ -45,6 +47,17 @@ const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const warrantyClaimDescription = ref('');
 const quotationApproved = ref(false);
+
+// Additional Cost (Chi phí phát sinh)
+const additionalCosts = ref<AdditionalCostRecord[]>([]);
+const acDecidingId = ref('');
+
+// Review
+const showReviewModal = ref(false);
+const existingReview = ref<Review | null>(null);
+const reviewRating = ref(0);
+const reviewComment = ref('');
+const reviewSubmitting = ref(false);
 
 // Cash Settlement State
 const cashSettlement = ref<{
@@ -135,6 +148,24 @@ const loadOrder = async () => {
     } catch {
       // Ignore
     }
+
+    // Try load existing review (chỉ có nghĩa khi đơn đã hoàn tất)
+    if (data.status === 'COMPLETED') {
+      try {
+        existingReview.value = await reviewsApi.getByOrder(orderId);
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Chi phí phát sinh chỉ tồn tại khi đơn đang UNDER_REPAIR hoặc đã COMPLETED
+    if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
+      try {
+        additionalCosts.value = await ordersApi.getAdditionalCosts(orderId);
+      } catch {
+        // Ignore
+      }
+    }
   } catch {
     actionMessage.value = { type: 'error', text: 'Không thể tải đơn hàng. Vui lòng thử lại.' };
   } finally {
@@ -169,6 +200,23 @@ const handleRejectQuotation = async () => {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể từ chối báo giá.' };
   } finally {
     actionLoading.value = false;
+  }
+};
+
+const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'APPROVE' | 'REJECT') => {
+  acDecidingId.value = cost.id;
+  try {
+    const updated = await ordersApi.decideAdditionalCost(cost.id, action);
+    const idx = additionalCosts.value.findIndex((c) => c.id === cost.id);
+    if (idx !== -1) additionalCosts.value[idx] = updated;
+    actionMessage.value = {
+      type: 'success',
+      text: action === 'APPROVE' ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.' : 'Đã từ chối chi phí phát sinh.',
+    };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể xử lý chi phí phát sinh.' };
+  } finally {
+    acDecidingId.value = '';
   }
 };
 
@@ -258,6 +306,26 @@ const confirmCancel = async () => {
   }
 };
 
+const handleSubmitReview = async () => {
+  if (reviewRating.value < 1) {
+    actionMessage.value = { type: 'error', text: 'Vui lòng chọn số sao đánh giá.' };
+    return;
+  }
+  try {
+    reviewSubmitting.value = true;
+    existingReview.value = await reviewsApi.createReview(orderId, {
+      rating: reviewRating.value,
+      comment: reviewComment.value.trim() || undefined,
+    });
+    showReviewModal.value = false;
+    actionMessage.value = { type: 'success', text: 'Cảm ơn bạn đã đánh giá kỹ thuật viên!' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi đánh giá.' };
+  } finally {
+    reviewSubmitting.value = false;
+  }
+};
+
 const handleCreateWarrantyClaim = async () => {
   if (!warrantyClaimDescription.value.trim()) {
     actionMessage.value = { type: 'error', text: 'Vui lòng mô tả vấn đề cần bảo hành!' };
@@ -304,6 +372,22 @@ const confirmWork = async () => {
 
       <div class="flex items-center gap-2">
         <FhButton
+          v-if="order && order.status === 'COMPLETED' && !existingReview"
+          variant="secondary"
+          size="sm"
+          @click="showReviewModal = true"
+        >
+          <Star :size="14" class="mr-1 text-amber-500" />
+          Đánh giá thợ
+        </FhButton>
+        <span
+          v-else-if="order && order.status === 'COMPLETED' && existingReview"
+          class="inline-flex items-center gap-1 text-xs font-semibold text-ink-600"
+        >
+          <Star :size="14" class="text-amber-400 fill-amber-400" /> Bạn đã đánh giá {{ existingReview.rating }}/5
+        </span>
+
+        <FhButton
           v-if="order && order.status === 'COMPLETED' && order.paymentStatus === 'PAID'"
           variant="secondary"
           size="sm"
@@ -311,6 +395,15 @@ const confirmWork = async () => {
         >
           <ShieldCheck :size="14" class="mr-1 text-brand-600" />
           Yêu cầu bảo hành
+        </FhButton>
+
+        <FhButton
+          v-if="order && order.status === 'ACCEPTED'"
+          variant="secondary"
+          size="sm"
+          @click="router.push(`/app/bookings/${order!.bookingId}`)"
+        >
+          Đổi lịch / thông tin
         </FhButton>
 
         <FhButton
@@ -577,6 +670,39 @@ const confirmWork = async () => {
           </div>
         </div>
       </FhCard>
+
+      <!-- Chi phí phát sinh (Additional Cost) -->
+      <FhCard v-if="additionalCosts.length > 0" title="Chi phí phát sinh ngoài phạm vi ban đầu">
+        <div class="space-y-3 text-xs">
+          <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2">
+            <div class="flex items-center justify-between">
+              <FhStatusPill
+                :status="cost.status"
+                :label="{PENDING_APPROVAL:'Chờ bạn duyệt',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',EXPIRED:'Hết hạn chờ duyệt',CANCELLED:'Đã huỷ'}[cost.status]"
+              />
+              <span class="font-num font-bold text-ink-900"><FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" /></span>
+            </div>
+            <p class="text-ink-600 italic">"{{ cost.reason }}"</p>
+            <div v-if="cost.evidenceUrls?.length" class="flex gap-2">
+              <img v-for="url in cost.evidenceUrls" :key="url" :src="url" class="w-14 h-14 rounded object-cover border border-ink-200" />
+            </div>
+            <ul class="text-ink-500 space-y-0.5">
+              <li v-for="item in cost.items" :key="item.id" class="flex justify-between">
+                <span>{{ item.description }} ({{ item.quantity }} x <FhMoney :amount="item.unitPrice" />)</span>
+                <span class="font-num"><FhMoney :amount="item.lineTotal" /></span>
+              </li>
+            </ul>
+            <div v-if="cost.status === 'PENDING_APPROVAL'" class="flex items-center gap-2 pt-1">
+              <FhButton variant="secondary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'REJECT')">
+                Từ chối
+              </FhButton>
+              <FhButton variant="primary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'APPROVE')">
+                <CheckCircle2 :size="14" class="mr-1" /> Đồng ý
+              </FhButton>
+            </div>
+          </div>
+        </div>
+      </FhCard>
     </div>
 
     <!-- Confirm Cancel Modal -->
@@ -619,6 +745,54 @@ const confirmWork = async () => {
             @click="handleConfirmCashPayment(false)"
           >
             Gửi khiếu nại
+          </FhButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div
+      v-if="showReviewModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
+        <h3 class="text-base font-bold text-ink-900">Đánh giá kỹ thuật viên</h3>
+        <p class="text-xs text-ink-500">Bạn hài lòng với chất lượng dịch vụ ở mức nào?</p>
+
+        <div class="flex items-center justify-center gap-1.5 py-2">
+          <button
+            v-for="star in 5"
+            :key="star"
+            type="button"
+            class="p-1"
+            @click="reviewRating = star"
+          >
+            <Star
+              :size="28"
+              :class="star <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+            />
+          </button>
+        </div>
+
+        <textarea
+          v-model="reviewComment"
+          rows="3"
+          placeholder="Nhận xét thêm (không bắt buộc)..."
+          class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
+        ></textarea>
+
+        <div class="flex gap-2 pt-2">
+          <FhButton variant="ghost" size="sm" class="flex-1" @click="showReviewModal = false">
+            Đóng
+          </FhButton>
+          <FhButton
+            variant="primary"
+            size="sm"
+            class="flex-1"
+            :disabled="reviewSubmitting"
+            @click="handleSubmitReview"
+          >
+            Gửi đánh giá
           </FhButton>
         </div>
       </div>

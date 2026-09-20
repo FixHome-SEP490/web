@@ -17,13 +17,13 @@ export const serviceAreasApi = {
     provinceCode?: string;
     isActive?: boolean;
   }): Promise<ServiceArea[]> {
-    const res = await apiClient.get<ServiceArea[]>('/service-areas', { params });
-    return res.data;
+    const res = await apiClient.get<{ data: ServiceArea[] }>('/service-areas', { params });
+    return res.data.data;
   },
 
   async getServiceArea(id: string): Promise<ServiceArea> {
-    const res = await apiClient.get<ServiceArea>(`/service-areas/${id}`);
-    return res.data;
+    const res = await apiClient.get<{ data: ServiceArea }>(`/service-areas/${id}`);
+    return res.data.data;
   },
 
   async createServiceArea(dto: {
@@ -33,8 +33,8 @@ export const serviceAreasApi = {
     districtName: string;
     isActive?: boolean;
   }): Promise<ServiceArea> {
-    const res = await apiClient.post<ServiceArea>('/service-areas', dto);
-    return res.data;
+    const res = await apiClient.post<{ data: ServiceArea }>('/service-areas', dto);
+    return res.data.data;
   },
 
   async updateServiceArea(
@@ -47,13 +47,13 @@ export const serviceAreasApi = {
       isActive: boolean;
     }>,
   ): Promise<ServiceArea> {
-    const res = await apiClient.patch<ServiceArea>(`/service-areas/${id}`, dto);
-    return res.data;
+    const res = await apiClient.patch<{ data: ServiceArea }>(`/service-areas/${id}`, dto);
+    return res.data.data;
   },
 
   async toggleStatus(id: string, isActive: boolean): Promise<ServiceArea> {
-    const res = await apiClient.patch<ServiceArea>(`/service-areas/${id}/status`, { isActive });
-    return res.data;
+    const res = await apiClient.patch<{ data: ServiceArea }>(`/service-areas/${id}/status`, { isActive });
+    return res.data.data;
   },
 
   async deleteServiceArea(id: string): Promise<void> {

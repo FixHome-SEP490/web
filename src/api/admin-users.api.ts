@@ -145,6 +145,20 @@ export const adminUsersApi = {
     return unwrapUsers(response.data);
   },
 
+  async createTechnician(payload: {
+    email: string;
+    fullName: string;
+    phoneNumber?: string;
+  }): Promise<{ user: AdminUserRecord; tempPassword: string }> {
+    const response = await apiClient.post<unknown>('/admin/users/technicians', payload);
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid technician creation response.');
+    if (!isRecord(envelope.data)) invalid('Backend returned an invalid technician creation response.');
+    return {
+      user: normalizeUser(envelope.data.user),
+      tempPassword: requiredString(envelope.data.tempPassword, 'Backend did not return a temp password.'),
+    };
+  },
+
   async getUser(id: string): Promise<AdminUserRecord> {
     const response = await apiClient.get<unknown>(`/admin/users/${id}`);
     return unwrapUser(response.data, 'Backend returned an invalid user detail response.');

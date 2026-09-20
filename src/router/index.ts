@@ -112,6 +112,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chọn Kỹ thuật viên' },
       },
       {
+        path: 'bookings/:id',
+        name: 'booking-detail',
+        component: () => import('../pages/customer/BookingDetailPage.vue'),
+        meta: { title: 'Chi tiết đơn đặt lịch' },
+      },
+      {
         path: 'orders',
         name: 'customer-orders',
         component: () => import('../pages/customer/CustomerOrdersPage.vue'),
@@ -226,6 +232,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Board đơn sửa chữa', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'bookings',
+        name: 'console-bookings',
+        component: () => import('../pages/console/ConsoleBookingsPage.vue'),
+        meta: { title: 'Gán thợ thủ công', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'orders/:id',
         name: 'console-order-detail',
         component: () => import('../pages/console/ConsoleOrderDetailPage.vue'),
@@ -278,6 +290,12 @@ const routes: RouteRecordRaw[] = [
         name: 'console-service-areas',
         component: () => import('../pages/console/ServiceAreasPage.vue'),
         meta: { title: 'Khu vực hoạt động', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
+        path: 'admin/skill-verifications',
+        name: 'admin-skill-verifications',
+        component: () => import('../pages/console/admin/AdminSkillVerificationsPage.vue'),
+        meta: { title: 'Duyệt kỹ năng thợ', roles: ['ADMIN'] },
       },
       {
         path: 'admin/users',

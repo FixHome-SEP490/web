@@ -5,6 +5,7 @@ interface Props {
   clickable?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
   as?: string;
+  title?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +40,10 @@ const paddingClasses = computed(() => {
       },
     ]"
   >
+    <div v-if="title || $slots.action" class="flex items-center justify-between mb-4">
+      <h2 v-if="title" class="text-lg font-bold text-ink-900">{{ title }}</h2>
+      <slot name="action" />
+    </div>
     <slot />
   </component>
 </template>

@@ -15,7 +15,6 @@ import {
   ShoppingBag,
   Snowflake,
   Droplets,
-  Tv,
   Cpu,
   Disc,
   Package,
@@ -63,7 +62,7 @@ const popularServices = [
     iconColor: '#7C3AED',
     pedestalBg: '#EDE9FE',
     badge: 'GIÁ TỐT',
-    query: 'vệ sinh máy giặt',
+    query: 'vệ sinh cửa trên',
     price: 350000,
     unit: 'Máy',
     isFixed: true,
@@ -99,24 +98,6 @@ const popularServices = [
     isFixed: false,
   },
   {
-    id: 'drainage',
-    name: 'Thông nghẹt\ncống',
-    icon: Wrench,
-    iconColor: '#4F46E5',
-    pedestalBg: '#E0E7FF',
-    query: 'cống',
-    isFixed: false,
-  },
-  {
-    id: 'tv_repair',
-    name: 'Sửa Tivi\ntại nhà',
-    icon: Tv,
-    iconColor: '#2563EB',
-    pedestalBg: '#DBEAFE',
-    query: 'tivi',
-    isFixed: false,
-  },
-  {
     id: 'inspection',
     name: 'Kiểm tra\nthiết bị',
     icon: Cpu,
@@ -133,9 +114,8 @@ const popularServices = [
 // Quick Category Chips
 const quickChips = [
   { id: 'urgent', title: '⚡ Cứu hộ điện nước 24/7', query: 'điện' },
-  { id: 'ac', title: '❄️ Vệ sinh máy lạnh 150K', query: 'máy lạnh' },
+  { id: 'ac', title: '❄️ Vệ sinh máy lạnh 180K', query: 'vệ sinh điều hòa' },
   { id: 'ai', title: '🤖 AI Chẩn đoán hỏng hóc', isAi: true },
-  { id: 'drain', title: '🚿 Thông cống không đục phá', query: 'cống' },
   { id: 'voucher', title: '🎁 Voucher giảm 50.000đ' },
 ];
 

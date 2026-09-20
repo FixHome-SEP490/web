@@ -20,6 +20,7 @@ import {
   FhMoney,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { useChatStore } from '../../stores/chat.store';
 
 const router = useRouter();
@@ -27,13 +28,31 @@ const chatStore = useChatStore();
 
 const loading = ref(true);
 const orders = ref<ServiceOrderItem[]>([]);
+const pendingBookings = ref<BookingItem[]>([]);
 const activeTab = ref<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
 const searchQuery = ref('');
 
+const isOverdue = (booking: BookingItem) =>
+  !!booking.preferredEndAt && new Date(booking.preferredEndAt) < new Date();
+
+const pendingLabel = (booking: BookingItem) => {
+  if (isOverdue(booking)) return 'Đã quá hạn, đang chờ điều phối viên hỗ trợ';
+  if (booking.status === 'MATCHING') return 'Đang chờ thợ xác nhận';
+  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, đang chờ điều phối viên hỗ trợ';
+  return 'Đang tìm thợ phù hợp';
+};
+
 onMounted(async () => {
   try {
-    const list = await ordersApi.getCustomerOrders();
-    orders.value = list;
+    const [orderList, bookingList] = await Promise.all([
+      ordersApi.getCustomerOrders(),
+      bookingsApi.getMyBookings(),
+    ]);
+    orders.value = orderList;
+    const orderedBookingIds = new Set(orderList.map((o) => o.bookingId));
+    pendingBookings.value = bookingList.filter(
+      (b) => ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(b.status) && !orderedBookingIds.has(b.id),
+    );
   } finally {
     loading.value = false;
   }
@@ -82,6 +101,13 @@ const filteredOrders = computed(() => {
   }
 
   return list;
+});
+
+const visiblePending = computed(() => {
+  if (!['ALL', 'IN_PROGRESS'].includes(activeTab.value)) return [];
+  const q = searchQuery.value.toLowerCase().trim();
+  if (!q) return pendingBookings.value;
+  return pendingBookings.value.filter((b) => b.serviceName?.toLowerCase().includes(q));
 });
 
 async function handleChat(order: ServiceOrderItem, event: Event) {
@@ -134,7 +160,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
     <div class="flex items-center gap-1.5 p-1 bg-ink-100/70 rounded-xl border border-ink-200 text-xs font-semibold">
       <button
         v-for="tab in [
-          { key: 'ALL', label: `Tất cả (${orders.length})` },
+          { key: 'ALL', label: `Tất cả (${orders.length + pendingBookings.length})` },
           { key: 'IN_PROGRESS', label: 'Đang xử lý' },
           { key: 'COMPLETED', label: 'Hoàn tất' },
           { key: 'CANCELLED', label: 'Đã huỷ' },
@@ -157,7 +183,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <!-- Empty State -->
     <div
-      v-else-if="filteredOrders.length === 0"
+      v-else-if="filteredOrders.length === 0 && visiblePending.length === 0"
       class="text-center py-16 bg-white rounded-2xl border border-ink-200 space-y-3 p-8"
     >
       <div class="w-14 h-14 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-2">
@@ -174,6 +200,34 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <!-- Orders Feed -->
     <div v-else class="space-y-4">
+      <!-- Pending bookings: no technician has accepted yet, so there is no ServiceOrder -->
+      <div
+        v-for="booking in visiblePending"
+        :key="booking.id"
+        class="p-5 rounded-2xl bg-white border border-dashed space-y-3 cursor-pointer transition-all"
+        :class="isOverdue(booking) ? 'border-red-300 hover:border-red-400' : 'border-amber-300 hover:border-amber-400'"
+        @click="router.push(`/app/bookings/${booking.id}`)"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
+            <Calendar :size="13" />
+            <span>{{ new Date(booking.createdAt).toLocaleDateString('vi-VN') }}</span>
+          </span>
+          <div
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+            :class="isOverdue(booking) ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="isOverdue(booking) ? 'bg-red-500' : 'bg-amber-500'"></span>
+            <span>{{ pendingLabel(booking) }}</span>
+          </div>
+        </div>
+        <h3 class="font-bold text-sm text-ink-900">{{ booking.serviceName }}</h3>
+        <p class="text-xs text-ink-500 flex items-center gap-1.5 line-clamp-1">
+          <MapPin :size="13" class="shrink-0 text-brand-600" />
+          <span>{{ booking.addressSummary }}</span>
+        </p>
+      </div>
+
       <div
         v-for="order in filteredOrders"
         :key="order.id"
