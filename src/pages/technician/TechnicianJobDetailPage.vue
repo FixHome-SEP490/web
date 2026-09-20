@@ -23,7 +23,8 @@ import {
   FhCostBreakdown,
   FhMoney,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type QuotationItemPayload } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
 
 const route = useRoute();
@@ -52,6 +53,17 @@ const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'dispute
 
 // Quotation Items Form (D-02 Standard)
 const quotationItems = ref<QuotationItemPayload[]>([{type:'LABOR',description:'',quantity:1,unitPrice:0}]);
+
+// Additional Cost (Chi phí phát sinh)
+const additionalCosts = ref<AdditionalCostRecord[]>([]);
+const showAdditionalCostForm = ref(false);
+const acReviseId = ref<string | null>(null);
+const acReason = ref('');
+const acItems = ref<QuotationItemPayload[]>([{type:'LABOR',description:'',quantity:1,unitPrice:0}]);
+const acEvidenceUrls = ref<string[]>([]);
+const acFile = ref<HTMLInputElement | null>(null);
+const acUploading = ref(false);
+const acSubmitting = ref(false);
 
 const completionRequested = ref(false);
 const beforeFile = ref<HTMLInputElement | null>(null);
@@ -90,6 +102,9 @@ const loadJob = async () => {
       const settlement = await ordersApi.getCashSettlement(jobId);
       cashSettled.value = !!settlement;
       cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
+      if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
+        additionalCosts.value = await ordersApi.getAdditionalCosts(jobId);
+      }
     } catch { actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'}; }
     finally { loading.value = false; }
   };
@@ -198,6 +213,58 @@ const handleSubmitQuotation = async () => {
     } catch { actionMessage.value = {type:'error',text:'Chưa gửi được báo giá. Kiểm tra nội dung, giá và trạng thái đơn.'}; }
     finally { actionLoading.value = false; }
   };
+
+const acLaborTotal = () => acItems.value.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+const acPartsTotal = () => acItems.value.filter((i) => i.type === 'PARTS').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+const addAcItem = (type: 'LABOR' | 'PARTS') => {
+  acItems.value.push({ type, description: type === 'LABOR' ? 'Hạng mục công phát sinh' : 'Tên linh kiện phát sinh', quantity: 1, unitPrice: 0 });
+};
+const removeAcItem = (idx: number) => acItems.value.splice(idx, 1);
+
+function openAdditionalCostForm(revise?: AdditionalCostRecord) {
+  acReviseId.value = revise?.id ?? null;
+  acReason.value = revise?.reason ?? '';
+  acItems.value = revise
+    ? revise.items.map((i) => ({ type: i.type === 'LABOR' ? 'LABOR' : 'PARTS', description: i.description, quantity: i.quantity, unitPrice: i.unitPrice }))
+    : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
+  acEvidenceUrls.value = revise?.evidenceUrls ? [...revise.evidenceUrls] : [];
+  showAdditionalCostForm.value = true;
+}
+
+async function handleUploadAcEvidence(file?: File) {
+  if (!file) return;
+  acUploading.value = true;
+  try {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('Invalid image');
+    const media = await mediaApi.upload(file);
+    acEvidenceUrls.value.push(media.url);
+  } catch {
+    actionMessage.value = { type: 'error', text: 'Chưa tải được ảnh bằng chứng. Chọn JPEG/PNG/WebP dưới 10 MB.' };
+  } finally {
+    acUploading.value = false;
+  }
+}
+
+async function handleSubmitAdditionalCost() {
+  if (!acReason.value.trim()) {
+    actionMessage.value = { type: 'error', text: 'Vui lòng mô tả lý do phát sinh.' };
+    return;
+  }
+  acSubmitting.value = true;
+  try {
+    const body = { reason: acReason.value.trim(), items: acItems.value, evidenceUrls: acEvidenceUrls.value };
+    const saved = acReviseId.value
+      ? await ordersApi.reviseAdditionalCost(acReviseId.value, body)
+      : await ordersApi.createAdditionalCost(jobId, body);
+    additionalCosts.value = [saved, ...additionalCosts.value.filter((c) => c.id !== acReviseId.value)];
+    showAdditionalCostForm.value = false;
+    actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu chi phí phát sinh, chờ khách duyệt.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu chi phí phát sinh.' };
+  } finally {
+    acSubmitting.value = false;
+  }
+}
 
 const handleStartRepair = async () => {
   try {
@@ -478,6 +545,97 @@ const handleDeclareCash = async () => {
                 >
                   <FileText :size="14" class="mr-1.5" /> Gửi báo giá cho khách duyệt
                 </FhButton>
+              </div>
+            </div>
+          </div>
+        </FhCard>
+
+        <!-- Chi phí phát sinh (Additional Cost) -->
+        <FhCard v-if="job && job.status === 'UNDER_REPAIR'" title="Chi phí phát sinh ngoài phạm vi ban đầu">
+          <div class="space-y-3 text-xs">
+            <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2">
+              <div class="flex items-center justify-between">
+                <FhStatusPill
+                  :status="cost.status"
+                  :label="{PENDING_APPROVAL:'Chờ khách duyệt',APPROVED:'Đã duyệt',REJECTED:'Bị từ chối',EXPIRED:'Hết hạn chờ duyệt',CANCELLED:'Đã huỷ'}[cost.status]"
+                />
+                <span class="font-num font-bold text-ink-800"><FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" /></span>
+              </div>
+              <p class="text-ink-600 italic">"{{ cost.reason }}"</p>
+              <FhButton
+                v-if="['REJECTED','EXPIRED'].includes(cost.status)"
+                variant="ghost"
+                size="sm"
+                @click="openAdditionalCostForm(cost)"
+              >
+                Sửa lại & gửi lần nữa
+              </FhButton>
+            </div>
+
+            <FhButton
+              v-if="!showAdditionalCostForm"
+              variant="secondary"
+              size="sm"
+              @click="openAdditionalCostForm()"
+            >
+              <Plus :size="13" class="mr-1" /> Tạo yêu cầu chi phí phát sinh
+            </FhButton>
+
+            <div v-if="showAdditionalCostForm" class="space-y-3 pt-2 border-t border-ink-100">
+              <textarea
+                v-model="acReason"
+                rows="2"
+                placeholder="Mô tả sự cố phát sinh ngoài phạm vi ban đầu..."
+                class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
+              ></textarea>
+
+              <div class="flex items-center justify-between font-semibold text-ink-700">
+                <span>Hạng mục chi phí phát sinh:</span>
+                <div class="flex gap-2">
+                  <button type="button" class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1" @click="addAcItem('LABOR')">
+                    <Plus :size="13" /> Thêm công thợ
+                  </button>
+                  <button type="button" class="text-[11px] text-ink-700 font-bold hover:underline flex items-center gap-1" @click="addAcItem('PARTS')">
+                    <Plus :size="13" /> Thêm linh kiện
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div v-for="(item, idx) in acItems" :key="idx" class="p-2.5 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex items-center gap-2">
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase" :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-ink-200 text-ink-800'">
+                    {{ item.type === 'LABOR' ? 'Công' : 'Linh kiện' }}
+                  </span>
+                  <input v-model="item.description" type="text" class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs" />
+                  <input v-model.number="item.unitPrice" type="number" step="10000" class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right" />
+                  <button class="p-1 text-ink-400 hover:text-danger-500 rounded" @click="removeAcItem(idx)">
+                    <Trash2 :size="14" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <img v-for="url in acEvidenceUrls" :key="url" :src="url" class="w-14 h-14 rounded object-cover border border-ink-200" />
+                  <div
+                    class="w-14 h-14 rounded border-2 border-dashed border-ink-300 hover:border-brand-500 flex items-center justify-center cursor-pointer text-ink-400"
+                    @click="acFile?.click()"
+                  >
+                    <Camera :size="18" />
+                  </div>
+                  <input ref="acFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUploadAcEvidence(($event.target as HTMLInputElement).files?.[0])" />
+                </div>
+                <span class="text-[11px] text-ink-400">Ảnh bằng chứng sự cố phát sinh (không bắt buộc)</span>
+              </div>
+
+              <div class="pt-2 border-t border-ink-100 flex items-center justify-between">
+                <span class="font-bold text-brand-700 font-num text-sm"><FhMoney :amount="acLaborTotal() + acPartsTotal()" /></span>
+                <div class="flex gap-2">
+                  <FhButton variant="ghost" size="sm" @click="showAdditionalCostForm = false">Huỷ</FhButton>
+                  <FhButton variant="primary" size="sm" :disabled="acSubmitting || acUploading" @click="handleSubmitAdditionalCost">
+                    Gửi yêu cầu
+                  </FhButton>
+                </div>
               </div>
             </div>
           </div>
