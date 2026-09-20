@@ -74,6 +74,52 @@ export interface ServiceOrderItem {
   };
 }
 
+export interface AdditionalCostRecord {
+  id: string;
+  serviceOrderId: string;
+  technicianId: string;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED';
+  reason: string;
+  totalLaborDelta: number;
+  totalPartsDelta: number;
+  expiresAt: string;
+  decidedAt?: string | null;
+  supersedesId?: string | null;
+  evidenceUrls?: string[] | null;
+  createdAt: string;
+  items: {
+    id: string;
+    type: 'LABOR' | 'PARTS_EQUIPMENT';
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
+}
+
+export interface CancellationRecord {
+  id: string;
+  serviceOrderId: string;
+  actor: 'CUSTOMER' | 'TECHNICIAN' | 'customer' | 'technician';
+  actorUserId: string;
+  reason: string;
+  stateAtCancel: string;
+  strikeApplied: boolean;
+  compensationStatus: string;
+  reviewedByUserId?: string | null;
+  createdAt: string;
+}
+
+export interface StrikeRecord {
+  id: string;
+  userId: string;
+  cancellationId: string;
+  status: 'ACTIVE' | 'WAIVED' | 'active' | 'waived';
+  waivedByUserId?: string | null;
+  waiveReason?: string | null;
+  createdAt: string;
+}
+
 export interface WarrantyItem {
   id: string;
   orderCode: string;
@@ -115,6 +161,22 @@ function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
         quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), lineTotal: Number(item.lineTotal),
       })),
     } : undefined,
+  };
+}
+
+function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecord {
+  return {
+    ...rec,
+    status: String(rec.status).toUpperCase() as AdditionalCostRecord['status'],
+    totalLaborDelta: Number(rec.totalLaborDelta),
+    totalPartsDelta: Number(rec.totalPartsDelta),
+    items: rec.items.map((item) => ({
+      ...item,
+      type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS_EQUIPMENT',
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      lineTotal: Number(item.lineTotal),
+    })),
   };
 }
 
@@ -196,6 +258,40 @@ export const ordersApi = {
 
   async rejectQuotation(quotationId: string, reason?: string): Promise<Record<string, unknown>> { void reason; const res = await apiClient.post<{data: Record<string,unknown>}>(`/quotations/${quotationId}/decision`, {action:'REJECT'}); return res.data.data; },
 
+  // ── Chi phí phát sinh (Additional Cost) ──
+
+  async getAdditionalCosts(orderId: string): Promise<AdditionalCostRecord[]> {
+    const res = await apiClient.get<{ data: AdditionalCostRecord[] }>(`/service-orders/${orderId}/additional-costs`);
+    return res.data.data.map(normalizeAdditionalCost);
+  },
+
+  async createAdditionalCost(
+    orderId: string,
+    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+  ): Promise<AdditionalCostRecord> {
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/service-orders/${orderId}/additional-costs`, {
+      ...body,
+      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
+    });
+    return normalizeAdditionalCost(res.data.data);
+  },
+
+  async decideAdditionalCost(id: string, action: 'APPROVE' | 'REJECT'): Promise<AdditionalCostRecord> {
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/additional-costs/${id}/decision`, { action });
+    return normalizeAdditionalCost(res.data.data);
+  },
+
+  async reviseAdditionalCost(
+    id: string,
+    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+  ): Promise<AdditionalCostRecord> {
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/additional-costs/${id}/revise`, {
+      ...body,
+      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
+    });
+    return normalizeAdditionalCost(res.data.data);
+  },
+
   // ── Spec v1.2: Cash Settlement Dual-Confirmation ──
 
   async declareCashSettlement(
@@ -244,5 +340,30 @@ export const ordersApi = {
       description,
     });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
+  },
+
+  // ── SM/Admin: Cancellations & Strikes ──
+
+  async getCancellations(): Promise<CancellationRecord[]> {
+    const res = await apiClient.get<{ data: CancellationRecord[] }>('/cancellations');
+    return res.data.data;
+  },
+
+  async reviewCancellation(
+    id: string,
+    body: { waiveStrike?: boolean; waiveReason?: string; grantPriorityBoost?: boolean },
+  ): Promise<CancellationRecord> {
+    const res = await apiClient.post<{ data: CancellationRecord }>(`/cancellations/${id}/review`, body);
+    return res.data.data;
+  },
+
+  async getStrikes(userId?: string): Promise<StrikeRecord[]> {
+    const res = await apiClient.get<{ data: StrikeRecord[] }>('/strikes', { params: { userId } });
+    return res.data.data;
+  },
+
+  async waiveStrike(id: string, reason: string): Promise<StrikeRecord> {
+    const res = await apiClient.post<{ data: StrikeRecord }>(`/strikes/${id}/waive`, { reason });
+    return res.data.data;
   },
 };
