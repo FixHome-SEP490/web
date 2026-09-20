@@ -203,6 +203,42 @@ const getInitial = (name: string, email: string) => {
   if (email) return email.charAt(0).toUpperCase();
   return 'A';
 };
+
+// Tạo tài khoản Kỹ thuật viên (chỉ Admin/SM mới onboard được, tech không tự đăng ký)
+const showCreateTechModal = ref(false);
+const createTechForm = ref({ email: '', fullName: '', phoneNumber: '' });
+const createTechLoading = ref(false);
+const createTechError = ref('');
+const createdTech = ref<{ email: string; fullName: string; tempPassword: string } | null>(null);
+
+function openCreateTechModal() {
+  createTechForm.value = { email: '', fullName: '', phoneNumber: '' };
+  createTechError.value = '';
+  createdTech.value = null;
+  showCreateTechModal.value = true;
+}
+
+async function handleCreateTechnician() {
+  if (!createTechForm.value.email.trim() || !createTechForm.value.fullName.trim()) {
+    createTechError.value = 'Vui lòng nhập đầy đủ email và họ tên.';
+    return;
+  }
+  createTechLoading.value = true;
+  createTechError.value = '';
+  try {
+    const { user, tempPassword } = await adminUsersApi.createTechnician({
+      email: createTechForm.value.email.trim(),
+      fullName: createTechForm.value.fullName.trim(),
+      phoneNumber: createTechForm.value.phoneNumber.trim() || undefined,
+    });
+    createdTech.value = { email: user.email, fullName: user.fullName, tempPassword };
+    void loadUsers();
+  } catch (reason) {
+    createTechError.value = getErrorMessage(reason, 'Không thể tạo tài khoản thợ.');
+  } finally {
+    createTechLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -240,6 +276,9 @@ const getInitial = (name: string, email: string) => {
           </label>
           <button @click="loadUsers" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors mr-2" title="Làm mới">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+          <button @click="openCreateTechModal" class="px-3 py-1.5 rounded-full bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition-colors">
+            + Tạo tài khoản thợ
           </button>
         </template>
         <template #cell-name="{ row }">
@@ -333,5 +372,42 @@ const getInitial = (name: string, email: string) => {
       @confirm="confirmStatusChange"
       @cancel="showStatusModal = false"
     />
+
+    <!-- Create Technician Modal -->
+    <div
+      v-if="showCreateTechModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
+        <template v-if="!createdTech">
+          <h3 class="text-base font-bold text-gray-900">Tạo tài khoản Kỹ thuật viên</h3>
+          <p class="text-xs text-gray-500">
+            Thợ không tự đăng ký được — tài khoản do Admin khởi tạo. Mật khẩu tạm sẽ chỉ hiện 1 lần, hãy gửi lại cho thợ ngay sau khi tạo.
+          </p>
+          <div class="space-y-2">
+            <input v-model="createTechForm.fullName" type="text" placeholder="Họ và tên" class="w-full h-9 px-3 border border-gray-200 rounded text-sm" />
+            <input v-model="createTechForm.email" type="email" placeholder="Email đăng nhập" class="w-full h-9 px-3 border border-gray-200 rounded text-sm" />
+            <input v-model="createTechForm.phoneNumber" type="text" placeholder="Số điện thoại (không bắt buộc)" class="w-full h-9 px-3 border border-gray-200 rounded text-sm" />
+          </div>
+          <p v-if="createTechError" class="text-xs text-red-600 font-semibold">{{ createTechError }}</p>
+          <div class="flex gap-2 pt-2">
+            <button class="flex-1 h-9 rounded text-sm font-semibold text-gray-600 hover:bg-gray-50" @click="showCreateTechModal = false">Huỷ</button>
+            <button class="flex-1 h-9 rounded text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50" :disabled="createTechLoading" @click="handleCreateTechnician">
+              Tạo tài khoản
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <h3 class="text-base font-bold text-gray-900">Đã tạo tài khoản thành công</h3>
+          <p class="text-xs text-gray-500">{{ createdTech.fullName }} ({{ createdTech.email }}). Sao chép mật khẩu tạm bên dưới và gửi cho thợ — không thể xem lại sau khi đóng cửa sổ này.</p>
+          <div class="p-3 bg-gray-50 border border-gray-200 rounded font-mono text-sm font-bold text-gray-900 select-all break-all">
+            {{ createdTech.tempPassword }}
+          </div>
+          <button class="w-full h-9 rounded text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700" @click="showCreateTechModal = false">
+            Đã sao chép, đóng lại
+          </button>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
