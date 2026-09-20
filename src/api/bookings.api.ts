@@ -134,4 +134,15 @@ export const bookingsApi = {
   async respondInvitation(invitationId: string, action: 'ACCEPT' | 'DECLINE'): Promise<void> {
     await apiClient.post(`/invitations/${invitationId}/respond`, { action });
   },
+
+  // ── SM/Admin: gán thợ thủ công ──
+
+  async getAllForStaff(status?: BookingItem['status'], pageSize = 100): Promise<BookingItem[]> {
+    const res = await apiClient.get<{ data: BookingItem[] }>('/bookings', { params: { status: status?.toLowerCase(), pageSize } });
+    return res.data.data.map(normalizeBooking);
+  },
+
+  async assignTechnicianToBooking(bookingId: string, technicianId: string, reason: string): Promise<void> {
+    await apiClient.post(`/bookings/${bookingId}/assign`, { technicianId, reason });
+  },
 };
