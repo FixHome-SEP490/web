@@ -7,6 +7,7 @@ import { adminUsersApi } from '../../api/admin-users.api';
 
 interface StrikeRow extends StrikeRecord {
   userName: string;
+  role: string;
   orderCode: string;
   suspendedUntil?: string | null;
 }
@@ -35,6 +36,7 @@ async function loadStrikes() {
         return {
           ...s,
           userName: user?.fullName ?? s.userId,
+          role: user?.role ?? '',
           orderCode: order?.code ?? cancellation?.serviceOrderId ?? '—',
           suspendedUntil: user?.bookingSuspendedUntil ?? null,
         };
