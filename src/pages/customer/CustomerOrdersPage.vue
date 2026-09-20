@@ -32,8 +32,15 @@ const pendingBookings = ref<BookingItem[]>([]);
 const activeTab = ref<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
 const searchQuery = ref('');
 
-const pendingLabel = (status: BookingItem['status']) =>
-  status === 'MATCHING' ? 'Đang chờ thợ xác nhận' : 'Đang tìm thợ phù hợp';
+const isOverdue = (booking: BookingItem) =>
+  !!booking.preferredEndAt && new Date(booking.preferredEndAt) < new Date();
+
+const pendingLabel = (booking: BookingItem) => {
+  if (isOverdue(booking)) return 'Đã quá hạn, đang chờ điều phối viên hỗ trợ';
+  if (booking.status === 'MATCHING') return 'Đang chờ thợ xác nhận';
+  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, đang chờ điều phối viên hỗ trợ';
+  return 'Đang tìm thợ phù hợp';
+};
 
 onMounted(async () => {
   try {
@@ -44,7 +51,7 @@ onMounted(async () => {
     orders.value = orderList;
     const orderedBookingIds = new Set(orderList.map((o) => o.bookingId));
     pendingBookings.value = bookingList.filter(
-      (b) => ['SUBMITTED', 'MATCHING'].includes(b.status) && !orderedBookingIds.has(b.id),
+      (b) => ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(b.status) && !orderedBookingIds.has(b.id),
     );
   } finally {
     loading.value = false;
@@ -197,7 +204,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       <div
         v-for="booking in visiblePending"
         :key="booking.id"
-        class="p-5 rounded-2xl bg-white border border-dashed border-amber-300 space-y-3 cursor-pointer hover:border-amber-400 transition-all"
+        class="p-5 rounded-2xl bg-white border border-dashed space-y-3 cursor-pointer transition-all"
+        :class="isOverdue(booking) ? 'border-red-300 hover:border-red-400' : 'border-amber-300 hover:border-amber-400'"
         @click="router.push(`/app/bookings/${booking.id}`)"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -205,9 +213,12 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             <Calendar :size="13" />
             <span>{{ new Date(booking.createdAt).toLocaleDateString('vi-VN') }}</span>
           </span>
-          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-            <span>{{ pendingLabel(booking.status) }}</span>
+          <div
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+            :class="isOverdue(booking) ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="isOverdue(booking) ? 'bg-red-500' : 'bg-amber-500'"></span>
+            <span>{{ pendingLabel(booking) }}</span>
           </div>
         </div>
         <h3 class="font-bold text-sm text-ink-900">{{ booking.serviceName }}</h3>
