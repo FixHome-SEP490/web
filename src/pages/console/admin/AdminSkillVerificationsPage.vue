@@ -31,6 +31,7 @@ let latestRequest = 0;
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
 function getErrorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof Error && reason.message) return reason.message;
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
     const response = (reason as { response?: { data?: { message?: unknown; error?: { message?: unknown } } } })
       .response;

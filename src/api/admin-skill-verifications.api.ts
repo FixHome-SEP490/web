@@ -83,15 +83,15 @@ export const adminSkillVerificationsApi = {
   },
 
   async get(id: string): Promise<SkillVerification> {
-    const res = await apiClient.get<unknown>(`/admin/technician-skill-verifications/${id}`);
-    return normalizeVerification(res.data);
+    const res = await apiClient.get<{ data: unknown }>(`/admin/technician-skill-verifications/${id}`);
+    return normalizeVerification(res.data.data);
   },
 
   async getDocumentAccess(id: string, documentId: string): Promise<{ signedUrl: string }> {
-    const res = await apiClient.get<{ signedUrl: string }>(
+    const res = await apiClient.get<{ data: { signedUrl: string } }>(
       `/admin/technician-skill-verifications/${id}/documents/${documentId}/access`,
     );
-    return res.data;
+    return res.data.data;
   },
 
   /** Uploads raw bytes straight to Supabase Storage — different origin, must
@@ -109,29 +109,29 @@ export const adminSkillVerificationsApi = {
     id: string,
     mimeType: string,
   ): Promise<{ storageObjectPath: string; uploadUrl: string }> {
-    const res = await apiClient.post<{ storageObjectPath: string; uploadUrl: string }>(
+    const res = await apiClient.post<{ data: { storageObjectPath: string; uploadUrl: string } }>(
       `/admin/technician-skill-verifications/${id}/certificate-upload-url`,
       { mimeType },
     );
-    return res.data;
+    return res.data.data;
   },
 
   async approve(
     id: string,
     certificate: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
   ): Promise<SkillVerification> {
-    const res = await apiClient.patch<unknown>(
+    const res = await apiClient.patch<{ data: unknown }>(
       `/admin/technician-skill-verifications/${id}/approve`,
       certificate,
     );
-    return normalizeVerification(res.data);
+    return normalizeVerification(res.data.data);
   },
 
   async reject(id: string, rejectionReason: string): Promise<SkillVerification> {
-    const res = await apiClient.patch<unknown>(
+    const res = await apiClient.patch<{ data: unknown }>(
       `/admin/technician-skill-verifications/${id}/reject`,
       { rejectionReason },
     );
-    return normalizeVerification(res.data);
+    return normalizeVerification(res.data.data);
   },
 };
