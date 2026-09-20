@@ -292,6 +292,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Khu vực hoạt động', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'admin/skill-verifications',
+        name: 'admin-skill-verifications',
+        component: () => import('../pages/console/admin/AdminSkillVerificationsPage.vue'),
+        meta: { title: 'Duyệt kỹ năng thợ', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
