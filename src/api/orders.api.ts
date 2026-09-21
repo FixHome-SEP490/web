@@ -185,6 +185,14 @@ export const ordersApi = {
 
   async getCustomerOrders(): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeOrder); },
 
+  async getCustomerOrdersPaged(page: number, pageSize: number): Promise<{ data: ServiceOrderItem[]; total: number }> {
+    const res = await apiClient.get<{ data: ServiceOrderItem[]; meta: { total: number } }>('/service-orders/my', { params: { page, pageSize } });
+    if (typeof res.data.meta?.total !== 'number') {
+      throw new Error('Unexpected API response: service-orders/my missing meta.total');
+    }
+    return { data: res.data.data.map(normalizeOrder), total: res.data.meta.total };
+  },
+
   async getTechnicianJobs(): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeOrder); },
 
   async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined}}); return res.data.data.map(normalizeOrder); },
