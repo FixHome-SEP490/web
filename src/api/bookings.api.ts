@@ -3,6 +3,7 @@ import apiClient from './client';
 
 export interface BookingItem {
   id: string;
+  serviceOrderId?: string | null;
   customerId: string;
   serviceId: string;
   serviceName?: string;
