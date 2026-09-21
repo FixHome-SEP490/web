@@ -126,7 +126,23 @@ onMounted(async () => {
       let matchedCat = cats[0];
       let matchedSvc: ServiceItem | undefined;
 
-      if (q) {
+      // The assistant hands over the exact service id it recommended, so there
+      // is nothing to guess at. Name matching stays for every other caller,
+      // but a name is a poor key: the assistant's wording for a service and
+      // the catalogue's are written by different people.
+      const wantedId = route.query.serviceId ? String(route.query.serviceId) : '';
+      if (wantedId) {
+        for (const c of cats) {
+          const s = c.services?.find((srv) => srv.id === wantedId);
+          if (s) {
+            matchedCat = c;
+            matchedSvc = s;
+            break;
+          }
+        }
+      }
+
+      if (!matchedSvc && q) {
         for (const c of cats) {
           // If popular or fixed query is set, prioritize fixed_price service first
           const sFixed = c.services?.find((srv) =>
