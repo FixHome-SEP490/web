@@ -108,6 +108,11 @@ export const bookingsApi = {
     return normalizeBooking(res.data.data);
   },
 
+  async cancelBooking(id: string, reason: string): Promise<BookingItem> {
+    const res = await apiClient.post<{ data: BookingItem }>(`/bookings/${id}/cancel`, { reason });
+    return normalizeBooking(res.data.data);
+  },
+
   async diagnoseAI(dto: { description: string; serviceId?: string }): Promise<DiagnosisResult> {
     try {
       const res = await apiClient.post<DiagnosisResult>('/ai/diagnoses', dto);
