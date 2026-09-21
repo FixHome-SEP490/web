@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // src/pages/customer/BookingDetailPage.vue
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
@@ -19,6 +19,39 @@ const booking = ref<BookingItem | null>(null);
 const checkingOrderLink = ref(false);
 const orderLinkError = ref('');
 const serviceOrderId = computed(() => booking.value?.serviceOrderId?.trim() ?? '');
+// Only owner-authorized Booking details can establish a match or linked ServiceOrder.
+// Never poll indefinitely after navigation, race an edit/cancel, or overlap requests.
+let matchingTimer: ReturnType<typeof setInterval> | null = null;
+let matchingRequestInFlight = false;
+let detailMounted = true;
+const waitingForMatch = () => !!booking.value && !serviceOrderId.value &&
+  ['MATCHING', 'MATCHED'].includes(booking.value.status);
+const stopMatchingPoll = () => {
+  if (matchingTimer) clearInterval(matchingTimer);
+  matchingTimer = null;
+};
+const startMatchingPoll = () => {
+  if (matchingTimer || !waitingForMatch()) return;
+  matchingTimer = setInterval(async () => {
+    if (!detailMounted || !waitingForMatch()) { stopMatchingPoll(); return; }
+    if (matchingRequestInFlight || loading.value || saving.value || cancelling.value ||
+        checkingOrderLink.value || showCancelModal.value) return;
+    matchingRequestInFlight = true;
+    try {
+      const latest = await bookingsApi.getBooking(bookingId);
+      if (detailMounted && !saving.value && !cancelling.value && !showCancelModal.value &&
+          !checkingOrderLink.value) {
+        booking.value = latest;
+        if (!waitingForMatch()) stopMatchingPoll();
+      }
+    } catch {
+      // A failed poll cannot be treated as accepted, expired, or cancelled; retry later.
+    } finally {
+      matchingRequestInFlight = false;
+    }
+  }, 5000);
+};
+onUnmounted(() => { detailMounted = false; stopMatchingPoll(); });
 const canCancelBooking = computed(() => !!booking.value && !serviceOrderId.value &&
   ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(booking.value.status));
 const showCancelModal = ref(false);
@@ -58,6 +91,7 @@ const confirmBookingCancel = async () => {
     const result = await bookingsApi.cancelBooking(bookingId, reason);
     if (result.status !== 'CANCELLED') throw new Error('Unexpected cancellation state');
     booking.value = result;
+    stopMatchingPoll();
     finishBookingCancel();
     cancelNotice.value = 'Yêu cầu đã được huỷ.';
   } catch {
@@ -99,6 +133,8 @@ const refreshOrderLink = async () => {
   orderLinkError.value = '';
   try {
     booking.value = await bookingsApi.getBooking(bookingId);
+    if (!waitingForMatch()) stopMatchingPoll();
+    else startMatchingPoll();
   } catch {
     orderLinkError.value = 'Không thể kiểm tra liên kết đơn dịch vụ. Vui lòng thử lại.';
   } finally {
@@ -129,6 +165,7 @@ const loadBooking = async () => {
   try {
     const b = await bookingsApi.getBooking(bookingId);
     booking.value = b;
+    startMatchingPoll();
     description.value = b.description;
     const start = new Date(b.preferredAt);
     const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
