@@ -63,17 +63,69 @@ export interface DiagnosisResult {
   recommendedActions?: string[];
 }
 
+/** Technician preview before winning: never model it as a full customer Booking. */
+export interface InvitationBookingPreview {
+  id: string;
+  serviceName: string;
+  addressSummary: string; // Coarse district/province only; not a saved customer address.
+  quantity: number;
+  urgency: string;
+  preferredStartAt: string | null;
+  preferredEndAt: string | null;
+}
+
 export interface InvitationItem {
   id: string;
   bookingId: string;
-  booking?: BookingItem;
-  technicianId: string;
+  booking?: InvitationBookingPreview;
   priorityOrder: number;
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
   invitedAt: string;
   expiresAt: string;
 }
 
+interface BackendInvitationPreview {
+  id: string;
+  bookingId: string;
+  priorityOrder: number;
+  status: string;
+  invitedAt: string;
+  expiresAt: string;
+  booking?: {
+    id: string;
+    province: string | null;
+    district: string | null;
+    serviceName: string | null;
+    quantity: number;
+    urgency: string;
+    preferredStartAt: string | null;
+    preferredEndAt: string | null;
+  };
+}
+
+function normalizeInvitationPreview(invitation: BackendInvitationPreview): InvitationItem {
+  const booking = invitation.booking;
+  if (!invitation.expiresAt || !booking) {
+    throw new Error('Unexpected API response: missing active invitation preview');
+  }
+  return {
+    id: invitation.id,
+    bookingId: invitation.bookingId,
+    priorityOrder: invitation.priorityOrder,
+    status: invitation.status.toUpperCase() as InvitationItem['status'],
+    invitedAt: invitation.invitedAt,
+    expiresAt: invitation.expiresAt,
+    booking: {
+      id: booking.id,
+      serviceName: booking.serviceName ?? 'Dịch vụ sửa chữa',
+      addressSummary: [booking.district, booking.province].filter(Boolean).join(', ') || 'Chưa có khu vực',
+      quantity: booking.quantity,
+      urgency: booking.urgency,
+      preferredStartAt: booking.preferredStartAt,
+      preferredEndAt: booking.preferredEndAt,
+    },
+  };
+}
 function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string; media?: { url: string }[] }): BookingItem {
   return { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
     addressSummary: booking.addressTextSnapshot ?? booking.addressSummary,
@@ -143,7 +195,10 @@ export const bookingsApi = {
     await apiClient.post(`/bookings/${bookingId}/shortlist`, { technicianIds });
   },
 
-  async getMyInvitations(): Promise<InvitationItem[]> { const res = await apiClient.get<{data: InvitationItem[]}>('/invitations/my'); return res.data.data.map(i => ({...i, status: i.status.toUpperCase() as InvitationItem['status'], booking: i.booking ? normalizeBooking(i.booking) : undefined})); },
+  async getMyInvitations(): Promise<InvitationItem[]> {
+    const res = await apiClient.get<{ data: BackendInvitationPreview[] }>('/invitations/my');
+    return res.data.data.map(normalizeInvitationPreview);
+  },
 
   async respondInvitation(invitationId: string, action: 'ACCEPT' | 'DECLINE'): Promise<void> {
     await apiClient.post(`/invitations/${invitationId}/respond`, { action });

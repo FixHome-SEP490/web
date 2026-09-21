@@ -206,23 +206,10 @@ const handleDecline = async (inv: InvitationItem) => {
           </span>
         </div>
 
-        <p class="text-xs text-ink-700 p-3 rounded bg-ink-50 border border-ink-200 leading-relaxed">
-          "{{ detailInvitation.booking?.description }}"
+        <p class="text-xs text-ink-600 p-3 rounded bg-ink-50 border border-ink-200 leading-relaxed">
+          Trước khi nhận đơn, bạn chỉ xem được dịch vụ và khu vực dự kiến.
+          Mô tả chi tiết, hình ảnh và địa chỉ chính xác chỉ được cung cấp khi bạn nhận đơn thành công.
         </p>
-
-        <div v-if="detailInvitation.booking?.mediaUrls?.length" class="flex flex-wrap gap-2">
-          <a
-            v-for="url in detailInvitation.booking.mediaUrls"
-            :key="url"
-            :href="url"
-            target="_blank"
-            rel="noopener"
-            class="w-20 h-20 rounded-lg overflow-hidden border border-ink-200 shrink-0 hover:border-brand-400 transition-colors"
-          >
-            <img :src="url" alt="Ảnh hiện trạng thiết bị" class="w-full h-full object-cover" />
-          </a>
-        </div>
-
         <div class="flex gap-2 pt-2 border-t border-ink-100">
           <FhButton variant="ghost" size="md" class="flex-1" @click="handleDecline(detailInvitation)">
             <XCircle :size="16" class="mr-1.5 text-ink-400" /> Bỏ qua
