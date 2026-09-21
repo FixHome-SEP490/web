@@ -189,7 +189,14 @@ export const bookingsApi = {
     }
   },
 
-  async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> { const res = await apiClient.get<{data: TechnicianCandidate[]}>(`/bookings/${bookingId}/technician-candidates`); return res.data.data.map(c => ({...c, id: c.userId || c.technicianId || c.id})); },
+  async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> {
+    const res = await apiClient.get<{ data: TechnicianCandidate[] }>(`/bookings/${bookingId}/technician-candidates`);
+    return res.data.data.map(candidate => {
+      // Backend shortlist accepts User IDs, never TechnicianProfile IDs.
+      if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
+      return { ...candidate, id: candidate.userId.trim() };
+    });
+  },
 
   async sendShortlist(bookingId: string, technicianIds: string[]): Promise<void> {
     await apiClient.post(`/bookings/${bookingId}/shortlist`, { technicianIds });

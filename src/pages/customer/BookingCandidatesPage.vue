@@ -68,7 +68,7 @@ const toggleSelect = (id: string) => {
 };
 
 const handleSendShortlist = async () => {
-  if (!bookingId) return;
+  if (sending.value || inviteSent.value || !bookingId) return;
   if (selectedIds.value.length === 0) {
     sendError.value = 'Vui lòng chọn ít nhất 1 kỹ thuật viên.';
     return;

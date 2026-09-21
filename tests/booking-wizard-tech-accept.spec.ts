@@ -22,7 +22,7 @@ const invitation = {
   invitedAt: '2030-01-01T08:00:00Z', expiresAt: '2030-01-01T09:00:00Z',
   booking: { id: 'booking-from-route', serviceName: 'Synthetic repair', district: 'Synthetic District', province: 'Synthetic Province', quantity: 1, urgency: 'medium', preferredStartAt: null, preferredEndAt: null },
 };
-const candidate = { id: 'technician-real-id', fullName: 'Synthetic technician', averageRating: 4, ratingCount: 2, yearsExperience: 2, reliabilityScore: 80, isAvailable: true };
+const candidate = { userId: 'technician-real-id', technicianId: 'profile-not-user-id', fullName: 'Synthetic technician', averageRating: 4, ratingCount: 2, yearsExperience: 2, reliabilityScore: 80, isAvailable: true };
 const global = { stubs: { FhButton: ActionButton, FhCountdown: true, FhMoney: true, FhEmptyState: true, FhStatusPill: true } };
 
 beforeEach(() => {
@@ -63,6 +63,36 @@ describe('WEB-WIZARD-TECH Accept must open the returned ServiceOrder', () => {
 });
 
 describe('WEB-WIZARD-TECH shortlist confirmation', () => {
+  it.each([1, 3, 5])('submits exactly %i distinct backend User IDs and never profile IDs', async number => {
+    const items = Array.from({ length: number }, (_, i) => ({
+      ...candidate, userId: `user-${i + 1}`, technicianId: `profile-${i + 1}`, fullName: `Synthetic tech ${i + 1}`,
+    }));
+    mockGet.mockResolvedValue({ data: { data: items } });
+    mockPost.mockResolvedValue({ data: { data: [] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+    // Backend ranks candidates, Web defaults to three and lets the customer select up to five.
+    if (number > 3) {
+      for (let i = 3; i < number; i++) await wrapper.findAll('input[type="checkbox"]')[i].trigger('change');
+    }
+    const send = wrapper.findAll('button').find(b => b.text().includes('Gửi lời mời đồng thời'));
+    await send!.trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
+      technicianIds: items.map(item => item.userId),
+    });
+    wrapper.unmount();
+  });
+
+  it('rejects a candidate lacking backend userId instead of sending a profile id', async () => {
+    mockGet.mockResolvedValue({ data: { data: [{ ...candidate, userId: undefined }] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Không thể tải danh sách kỹ thuật viên phù hợp');
+    expect(mockPost).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   it('opens actual Booking detail after shortlist instead of a delayed generic orders redirect', async () => {
     mockGet.mockResolvedValue({ data: { data: [candidate] } });
     mockPost.mockResolvedValue({ data: { data: [{ id: 'invite-1', status: 'pending' }] } });
