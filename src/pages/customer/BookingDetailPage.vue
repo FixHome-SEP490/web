@@ -3,7 +3,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
-import { FhButton, FhDatePicker, FhTimeScrollPicker } from '../../components';
+import { FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
 
@@ -19,6 +19,73 @@ const booking = ref<BookingItem | null>(null);
 const checkingOrderLink = ref(false);
 const orderLinkError = ref('');
 const serviceOrderId = computed(() => booking.value?.serviceOrderId?.trim() ?? '');
+const canCancelBooking = computed(() => !!booking.value && !serviceOrderId.value &&
+  ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(booking.value.status));
+const showCancelModal = ref(false);
+const cancelReason = ref('');
+const cancelError = ref('');
+const cancelNotice = ref('');
+const cancelling = ref(false);
+
+const openBookingCancel = () => {
+  if (!canCancelBooking.value || saving.value || cancelling.value || loading.value || checkingOrderLink.value) return;
+  cancelReason.value = '';
+  cancelError.value = '';
+  showCancelModal.value = true;
+};
+const closeBookingCancel = () => {
+  if (cancelling.value) return;
+  showCancelModal.value = false;
+  cancelReason.value = '';
+  cancelError.value = '';
+};
+const finishBookingCancel = () => {
+  showCancelModal.value = false;
+  cancelReason.value = '';
+  cancelError.value = '';
+};
+const confirmBookingCancel = async () => {
+  if (!showCancelModal.value || !canCancelBooking.value || cancelling.value || saving.value || checkingOrderLink.value) return;
+  const reason = cancelReason.value.trim();
+  if (!reason || reason.length > 2000) {
+    cancelError.value = 'Vui lòng nhập lý do huỷ từ 1 đến 2000 ký tự.';
+    return;
+  }
+  cancelling.value = true;
+  cancelError.value = '';
+  cancelNotice.value = '';
+  try {
+    const result = await bookingsApi.cancelBooking(bookingId, reason);
+    if (result.status !== 'CANCELLED') throw new Error('Unexpected cancellation state');
+    booking.value = result;
+    finishBookingCancel();
+    cancelNotice.value = 'Yêu cầu đã được huỷ.';
+  } catch {
+    // Network failure or an Accept race: never assume the cancellation succeeded.
+    // Re-read the owner-checked Booking before offering any retry or an SO link.
+    try {
+      const fresh = await bookingsApi.getBooking(bookingId);
+      booking.value = fresh;
+      if (fresh.status === 'CANCELLED') {
+        finishBookingCancel();
+        cancelNotice.value = 'Yêu cầu đã được huỷ theo trạng thái mới nhất.';
+        return;
+      }
+      if (!canCancelBooking.value) {
+        finishBookingCancel();
+        cancelNotice.value = serviceOrderId.value
+          ? 'Kỹ thuật viên đã nhận đơn. Hãy mở đơn dịch vụ để xem hoặc yêu cầu huỷ theo quy trình tương ứng.'
+          : 'Trạng thái yêu cầu đã thay đổi. Vui lòng kiểm tra lại trước khi thao tác.';
+        return;
+      }
+    } catch {
+      // No verified new state; retain the modal and show a safe retry message.
+    }
+    cancelError.value = 'Chưa xác nhận được việc huỷ. Vui lòng kiểm tra kết nối và thử lại.';
+  } finally {
+    cancelling.value = false;
+  }
+};
 
 const openServiceOrder = () => {
   if (!serviceOrderId.value) return;
@@ -27,7 +94,7 @@ const openServiceOrder = () => {
 
 // Refresh the authoritative Booking detail; do not search paged order lists or guess an order ID.
 const refreshOrderLink = async () => {
-  if (checkingOrderLink.value || loading.value || saving.value) return;
+  if (checkingOrderLink.value || loading.value || saving.value || cancelling.value || showCancelModal.value) return;
   checkingOrderLink.value = true;
   orderLinkError.value = '';
   try {
@@ -77,7 +144,7 @@ const loadBooking = async () => {
 onMounted(loadBooking);
 
 const handleSave = async () => {
-  if (!booking.value) return;
+  if (!booking.value || saving.value || cancelling.value || showCancelModal.value) return;
   saveError.value = '';
   saving.value = true;
   const wasMatched = booking.value.status === 'MATCHED';
@@ -143,6 +210,8 @@ const handleSave = async () => {
         <span>{{ statusLabel(booking.status) }}</span>
       </div>
 
+      <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ cancelNotice }}</p>
+
       <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
       <div v-if="serviceOrderId" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
         <p class="text-xs text-ink-700">Yêu cầu này đã có đơn dịch vụ liên kết.</p>
@@ -156,7 +225,7 @@ const handleSave = async () => {
           type="button"
           data-testid="booking-refresh-order-link"
           class="text-xs font-semibold text-brand-700 underline disabled:opacity-50"
-          :disabled="checkingOrderLink || saving"
+          :disabled="checkingOrderLink || saving || cancelling"
           @click="refreshOrderLink"
         >{{ checkingOrderLink ? 'Đang kiểm tra...' : 'Kiểm tra lại đơn dịch vụ' }}</button>
         <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs text-danger-700">{{ orderLinkError }}</p>
@@ -202,7 +271,7 @@ const handleSave = async () => {
           {{ saveError }}
         </div>
 
-        <FhButton variant="primary" size="md" :loading="saving" @click="handleSave">
+        <FhButton variant="primary" size="md" :loading="saving" :disabled="showCancelModal || cancelling" @click="handleSave">
           <CheckCircle2 :size="15" class="mr-1.5" /> Lưu thay đổi
         </FhButton>
       </template>
@@ -210,6 +279,41 @@ const handleSave = async () => {
       <p v-else class="text-xs text-ink-500">
         Đơn ở trạng thái này không thể chỉnh sửa.
       </p>
+      <div v-if="canCancelBooking" class="pt-3 border-t border-ink-100 space-y-2">
+        <p class="text-xs text-ink-500">Bạn chỉ có thể huỷ yêu cầu chưa có đơn dịch vụ. Nếu kỹ thuật viên đã nhận, hãy mở đơn dịch vụ để xem quy trình huỷ tương ứng.</p>
+        <FhButton
+          data-testid="booking-start-cancel"
+          variant="danger"
+          size="sm"
+          :disabled="saving || checkingOrderLink || cancelling"
+          @click="openBookingCancel"
+        >Huỷ yêu cầu đặt lịch</FhButton>
+      </div>
     </div>
+    <FhConfirmDialog
+      :open="showCancelModal"
+      :loading="cancelling"
+      title="Xác nhận huỷ yêu cầu đặt lịch"
+      consequence="Yêu cầu chưa có kỹ thuật viên nhận sẽ bị huỷ; các lời mời còn chờ sẽ được hệ thống xử lý. Nếu đã có đơn dịch vụ, bạn cần dùng quy trình huỷ đơn dịch vụ."
+      confirm-text="Xác nhận huỷ yêu cầu"
+      cancel-text="Giữ yêu cầu"
+      @confirm="confirmBookingCancel"
+      @cancel="closeBookingCancel"
+    >
+      <div class="space-y-1.5">
+        <label for="booking-cancel-reason" class="block text-xs font-semibold text-ink-700">Lý do huỷ *</label>
+        <textarea
+          id="booking-cancel-reason"
+          v-model="cancelReason"
+          data-testid="booking-cancel-reason"
+          rows="3"
+          maxlength="2000"
+          :disabled="cancelling"
+          class="w-full rounded-xl border border-ink-200 p-3 text-sm text-ink-900 focus:outline-none focus:border-brand-600"
+          placeholder="Cho FixHome biết lý do bạn muốn huỷ yêu cầu"
+        ></textarea>
+        <p v-if="cancelError" data-testid="booking-cancel-error" role="alert" class="text-xs text-danger-700">{{ cancelError }}</p>
+      </div>
+    </FhConfirmDialog>
   </div>
 </template>
