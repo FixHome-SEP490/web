@@ -92,6 +92,14 @@ export const bookingsApi = {
 
   async getMyBookings(): Promise<BookingItem[]> { const res = await apiClient.get<{data: BookingItem[]}>('/bookings/my'); return res.data.data.map(normalizeBooking); },
 
+  async getMyBookingsPaged(page: number, pageSize: number): Promise<{ data: BookingItem[]; total: number }> {
+    const res = await apiClient.get<{ data: BookingItem[]; meta: { total: number } }>('/bookings/my', { params: { page, pageSize } });
+    if (typeof res.data.meta?.total !== 'number') {
+      throw new Error('Unexpected API response: bookings/my missing meta.total');
+    }
+    return { data: res.data.data.map(normalizeBooking), total: res.data.meta.total };
+  },
+
   async getBooking(id: string): Promise<BookingItem> { const res = await apiClient.get<{data: BookingItem}>(`/bookings/${id}`); return normalizeBooking(res.data.data); },
 
   async updateBooking(id: string, dto: { description?: string; preferredStartAt: string; preferredEndAt: string }): Promise<BookingItem> {
