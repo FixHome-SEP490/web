@@ -16,6 +16,7 @@ import {
   Trash2,
   Calendar as CalendarIcon,
   Clock,
+  AlertTriangle,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -25,7 +26,8 @@ import {
 } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
-import { bookingsApi, type DiagnosisResult } from '../../api/bookings.api';
+import { bookingsApi } from '../../api/bookings.api';
+import { aiApi, type AiReply } from '../../api/ai.api';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
 
@@ -89,8 +91,29 @@ const formattedScheduleDisplay = computed(() => {
   return `${dateText} • ${timeText}`;
 });
 
-// AI Diagnosis Result
-const aiResult = ref<DiagnosisResult | null>(null);
+// What the assistant actually said. The shape is the AI Service's own, passed
+// through by our backend: this page used to read possibleIssues,
+// possibleCauses and suggestedPriceMin, none of which the service has ever
+// returned, so every call landed in the catch below and showed a diagnosis
+// written into this file.
+const aiResult = ref<AiReply | null>(null);
+
+/** Null when there is no price, and "từ X" when the ceiling is unknown. */
+const aiPriceLabel = computed(() => {
+  const price = aiResult.value?.priceEstimate;
+  if (!price) return null;
+  const money = (value: number) => `${value.toLocaleString('vi-VN')}đ`;
+  if (price.max && price.max > price.min) return `${money(price.min)} – ${money(price.max)}`;
+  return `Từ ${money(price.min)}`;
+});
+
+/** Safety steps outrank everything else, so they are rendered on their own. */
+const aiUrgentActions = computed(() =>
+  aiResult.value?.urgency === 'HIGH' ? aiResult.value.suggestedActionsVi ?? [] : [],
+);
+const aiOrdinaryActions = computed(() =>
+  aiResult.value?.urgency === 'HIGH' ? [] : aiResult.value?.suggestedActionsVi ?? [],
+);
 
 
 const selectedService = computed(() => {
@@ -278,19 +301,13 @@ const goToNextStepFrom2 = async () => {
 
   loading.value = true;
   try {
-    const res = await bookingsApi.diagnoseAI({
-      description: description.value,
-      serviceId: selectedServiceId.value,
-    });
-    aiResult.value = res;
-  } catch {
-    aiResult.value = {
-      possibleIssues: ['Bộ lọc bám bẩn hoặc thiếu gas làm lạnh'],
-      possibleCauses: ['Chưa được bảo dưỡng vệ sinh định kỳ hơn 6 tháng'],
-      suggestedPriceMin: 150000,
-      suggestedPriceMax: 350000,
-      confidence: 0.92,
-    };
+    // aiApi never rejects: it answers that the assistant is unavailable, which
+    // the template shows as such. The old fallback here invented a fault and a
+    // price range and presented them as the AI's own - and since it ran on
+    // every failure, and every call was failing, that invention was all anyone
+    // ever saw. AI failure must not block a booking, and saying so plainly
+    // honours that without making anything up.
+    aiResult.value = await aiApi.analyze({ description: description.value });
   } finally {
     loading.value = false;
   }
@@ -623,7 +640,12 @@ const createAndFindTech = async () => {
             Gợi ý phán đoán sự cố từ AI
           </h2>
           <p class="text-xs text-ink-500 mt-1">
-            Hệ thống đối chiếu triệu chứng thực tế với kho kiến thức 50,000+ ca sửa chữa.
+            <!-- The number here used to be "50,000+ ca sửa chữa", which is not
+                 a number anyone measured. The corpus is 166 documents, 3,319
+                 passages and 134 fault codes, and saying so is both true and
+                 more convincing than a round figure nobody can source. -->
+            Đối chiếu triệu chứng với kho tri thức nghề của FixHome — 134 mã hư
+            hỏng trên 22 thiết bị gia dụng.
           </p>
         </div>
 
@@ -633,49 +655,118 @@ const createAndFindTech = async () => {
         </div>
 
         <div v-else-if="aiResult" class="space-y-5 text-xs sm:text-sm">
-          <!-- Main AI Advice Card -->
-          <div class="p-5 rounded-2xl bg-purple-50 border border-purple-200 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
-                <Sparkles :size="15" class="text-purple-600" /> Độ chính xác ước tính: {{ Math.round(aiResult.confidence * 100) }}%
-              </span>
-              <span class="text-[10px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200">
-                FixHome AI Engine
-              </span>
-            </div>
-
-            <div>
-              <div class="text-xs font-bold text-purple-950 mb-1.5">Sự cố tiềm ẩn được phát hiện:</div>
-              <ul class="list-disc list-inside space-y-1 text-xs text-purple-900 font-medium">
-                <li v-for="iss in aiResult.possibleIssues" :key="iss">{{ iss }}</li>
-              </ul>
-            </div>
+          <!-- The assistant could not be reached. Said plainly, with nothing
+               invented, and the booking carries on regardless. -->
+          <div
+            v-if="aiResult.status === 'unavailable'"
+            class="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900"
+          >
+            <p class="font-bold text-xs mb-1">Trợ lý đang tạm thời không kết nối được</p>
+            <p class="text-xs leading-relaxed">
+              Anh/chị vẫn đặt thợ bình thường được. Thợ FixHome sẽ kiểm tra trực tiếp
+              và báo giá trước khi sửa.
+            </p>
           </div>
 
-          <!-- Cause and Price Estimate Cards -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-1.5">
-              <div class="font-bold text-ink-900 text-xs">Nguyên nhân khả dĩ</div>
-              <ul class="list-disc list-inside space-y-1 text-xs text-ink-600">
-                <li v-for="c in aiResult.possibleCauses" :key="c">{{ c }}</li>
-              </ul>
+          <template v-else>
+            <!-- Safety first, literally. A warning read after a list of faults
+                 is a warning nobody acted on. -->
+            <div
+              v-if="aiUrgentActions.length"
+              class="p-5 rounded-2xl bg-danger-50 border border-danger-200 space-y-2"
+            >
+              <div class="flex items-center gap-1.5 font-extrabold text-danger-700 text-xs">
+                <AlertTriangle :size="15" /> Anh/chị làm ngay giúp em
+              </div>
+              <p
+                v-for="(action, index) in aiUrgentActions"
+                :key="index"
+                class="text-xs text-danger-900 leading-relaxed"
+              >
+                {{ index + 1 }}. {{ action }}
+              </p>
             </div>
 
-            <div class="p-4 rounded-2xl bg-brand-50 border border-brand-200 flex flex-col justify-between">
-              <div>
-                <div class="font-bold text-brand-900 text-xs mb-0.5">Khoảng chi phí tham khảo</div>
-                <div class="text-[11px] text-ink-500">Ước tính công thợ (chưa bao gồm linh kiện)</div>
+            <div class="p-5 rounded-2xl bg-purple-50 border border-purple-200 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
+                  <Sparkles :size="15" class="text-purple-600" />
+                  <template v-if="aiResult.device">{{ aiResult.device.nameVi }}</template>
+                  <template v-else>Gợi ý sơ bộ</template>
+                </span>
+                <span
+                  v-if="aiResult.confidence"
+                  class="text-[10px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200"
+                >
+                  Mức tin cậy {{ Math.round(aiResult.confidence * 100) }}%
+                </span>
               </div>
-              <div class="text-lg font-extrabold font-num text-brand-700 mt-2">
-                <FhMoney :amount="aiResult.suggestedPriceMin" /> – <FhMoney :amount="aiResult.suggestedPriceMax" />
+
+              <p v-if="aiResult.messageVi" class="text-xs text-purple-950 leading-relaxed">
+                {{ aiResult.messageVi }}
+              </p>
+
+              <div v-if="aiResult.suspectedFaults?.length">
+                <div class="text-xs font-bold text-purple-950 mb-1.5">Có thể là:</div>
+                <ul class="list-disc list-inside space-y-1 text-xs text-purple-900 font-medium">
+                  <li v-for="fault in aiResult.suspectedFaults" :key="fault.faultCode">
+                    {{ fault.nameVi }}
+                  </li>
+                </ul>
               </div>
             </div>
-          </div>
 
-          <!-- Disclaimer Note -->
-          <p class="text-[11px] text-ink-500 italic bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-800">
-            * Lưu ý: Đây là gợi ý tham khảo từ AI. Kỹ thuật viên sẽ kiểm tra trực tiếp thực tế tại nhà và chốt báo giá chính xác trước khi thực hiện sửa chữa.
-          </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div
+                v-if="aiOrdinaryActions.length"
+                class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-1.5"
+              >
+                <div class="font-bold text-ink-900 text-xs">Anh/chị có thể làm trước</div>
+                <ul class="list-disc list-inside space-y-1 text-xs text-ink-600">
+                  <li v-for="(action, index) in aiOrdinaryActions" :key="index">{{ action }}</li>
+                </ul>
+              </div>
+
+              <div
+                v-if="aiPriceLabel"
+                class="p-4 rounded-2xl bg-brand-50 border border-brand-200 flex flex-col justify-between"
+              >
+                <div>
+                  <div class="font-bold text-brand-900 text-xs mb-0.5">Chi phí tham khảo</div>
+                  <div class="text-[11px] text-ink-500">
+                    <template v-if="aiResult.priceEstimate?.requiresAssessment">
+                      Thợ xem tận nơi rồi mới báo giá chính xác
+                    </template>
+                    <template v-else>Ước tính công thợ, chưa gồm linh kiện</template>
+                  </div>
+                </div>
+                <div class="text-lg font-extrabold font-num text-brand-700 mt-2">
+                  {{ aiPriceLabel }}
+                </div>
+              </div>
+            </div>
+
+            <div v-if="aiResult.clarification?.questionsVi?.length" class="p-4 rounded-2xl bg-ink-50 border border-ink-200">
+              <div class="font-bold text-ink-900 text-xs mb-1.5">Trợ lý cần hỏi thêm</div>
+              <p
+                v-for="(question, index) in aiResult.clarification.questionsVi"
+                :key="index"
+                class="text-xs text-ink-600 leading-relaxed"
+              >
+                {{ question }}
+              </p>
+              <p class="text-[11px] text-ink-500 mt-2">
+                Mở trợ lý ở góc màn hình để trả lời và nhận chẩn đoán sát hơn.
+              </p>
+            </div>
+
+            <p
+              v-if="aiResult.disclaimerVi"
+              class="text-[11px] text-ink-500 italic bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-800"
+            >
+              {{ aiResult.disclaimerVi }}
+            </p>
+          </template>
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
