@@ -16,6 +16,28 @@ const loadError = ref('');
 const saving = ref(false);
 const saveError = ref('');
 const booking = ref<BookingItem | null>(null);
+const checkingOrderLink = ref(false);
+const orderLinkError = ref('');
+const serviceOrderId = computed(() => booking.value?.serviceOrderId?.trim() ?? '');
+
+const openServiceOrder = () => {
+  if (!serviceOrderId.value) return;
+  router.push({ name: 'customer-order-detail', params: { id: serviceOrderId.value } });
+};
+
+// Refresh the authoritative Booking detail; do not search paged order lists or guess an order ID.
+const refreshOrderLink = async () => {
+  if (checkingOrderLink.value || loading.value || saving.value) return;
+  checkingOrderLink.value = true;
+  orderLinkError.value = '';
+  try {
+    booking.value = await bookingsApi.getBooking(bookingId);
+  } catch {
+    orderLinkError.value = 'Không thể kiểm tra liên kết đơn dịch vụ. Vui lòng thử lại.';
+  } finally {
+    checkingOrderLink.value = false;
+  }
+};
 
 const description = ref('');
 const preferredDate = ref('');
@@ -119,6 +141,25 @@ const handleSave = async () => {
       <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 w-fit">
         <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
         <span>{{ statusLabel(booking.status) }}</span>
+      </div>
+
+      <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
+      <div v-if="serviceOrderId" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
+        <p class="text-xs text-ink-700">Yêu cầu này đã có đơn dịch vụ liên kết.</p>
+        <FhButton data-testid="booking-open-service-order" variant="primary" size="sm" @click="openServiceOrder">
+          Mở chi tiết đơn dịch vụ
+        </FhButton>
+      </div>
+      <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+        <p class="text-xs text-ink-700">Chưa nhận được mã đơn dịch vụ từ hệ thống. Bạn có thể kiểm tra lại khi kỹ thuật viên đã nhận đơn.</p>
+        <button
+          type="button"
+          data-testid="booking-refresh-order-link"
+          class="text-xs font-semibold text-brand-700 underline disabled:opacity-50"
+          :disabled="checkingOrderLink || saving"
+          @click="refreshOrderLink"
+        >{{ checkingOrderLink ? 'Đang kiểm tra...' : 'Kiểm tra lại đơn dịch vụ' }}</button>
+        <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs text-danger-700">{{ orderLinkError }}</p>
       </div>
 
       <template v-if="editable">
