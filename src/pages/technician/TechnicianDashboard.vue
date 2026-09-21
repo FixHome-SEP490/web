@@ -25,7 +25,7 @@ import {
   FhStatusPill,
   FhCountdown,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi } from '../../api/technician-profile.api';
 
@@ -71,7 +71,7 @@ onMounted(async () => {
     .catch(() => { isAvailable.value = null; });
   try {
     const list = await ordersApi.getTechnicianJobs();
-    jobs.value = list;
+    jobs.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
   } catch {
     jobs.value = [];
   } finally {

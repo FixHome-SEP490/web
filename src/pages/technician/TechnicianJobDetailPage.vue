@@ -23,7 +23,7 @@ import {
   FhCostBreakdown,
   FhMoney,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
 import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
 
@@ -35,6 +35,7 @@ const jobId = route.params.id as string;
 const loading = ref(true);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+const historicalJob = ref<HistoricalOrderItem | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 // Workspace Steps State
@@ -87,7 +88,14 @@ onMounted(async () => {
 const loadJob = async () => {
     loading.value = true;
     try {
-      const data = await ordersApi.getOrder(jobId);
+      const data = await ordersApi.getTechnicianOrder(jobId);
+      if (isHistoricalOrder(data)) {
+        historicalJob.value = data;
+        job.value = null;
+        stopLocationPing();
+        return; // No private data or workspace API calls for old technicians.
+      }
+      historicalJob.value = null;
       job.value = data;
       isEnRoute.value = data.status !== 'ACCEPTED';
       gpsCheckedIn.value = !!data.arrivalVerified;
@@ -350,6 +358,14 @@ const handleDeclareCash = async () => {
 
     <div v-if="loading" class="text-center py-16 text-ink-400">
       Đang tải dữ liệu công việc...
+    </div>
+
+    <div v-else-if="historicalJob" data-testid="technician-historical-detail"
+      class="rounded-2xl border border-ink-200 bg-white p-5 space-y-3">
+      <h1 class="text-base font-bold text-ink-900">Lịch sử công việc: {{ historicalJob.code }}</h1>
+      <p class="text-sm text-ink-700">Trạng thái: {{ historicalJob.status }}</p>
+      <p class="text-xs text-ink-600">Ngày ghi nhận: {{ new Date(historicalJob.createdAt).toLocaleDateString('vi-VN') }}</p>
+      <p class="text-xs text-ink-500">Bạn không còn được giao đơn này. Thông tin riêng tư của khách và các thao tác thực hiện công việc không còn khả dụng.</p>
     </div>
 
     <div v-else-if="job" class="space-y-6">
