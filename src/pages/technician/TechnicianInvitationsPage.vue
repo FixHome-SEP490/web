@@ -43,11 +43,11 @@ const urgencyLabel = (urgency?: string) => {
 const handleAccept = async (inv: InvitationItem) => {
   responding.value = true;
   try {
-    await bookingsApi.respondInvitation(inv.id, 'ACCEPT');
-    alert('Nhận đơn thành công! Đang chuyển bạn đến workspace thực thi công việc.');
-    router.push('/tech/jobs');
+    const result = await bookingsApi.respondInvitation(inv.id, 'ACCEPT');
+    if (!result.serviceOrderId) throw new Error('Missing ServiceOrder ID');
+    await router.push({ name: 'tech-job-detail', params: { id: result.serviceOrderId } });
   } catch {
-    alert('Không thể nhận đơn (có thể đã có thợ khác nhận trước hoặc hết hạn).');
+    alert('Chưa xác nhận được trạng thái nhận đơn. Hãy kiểm tra danh sách công việc trước khi thử nhận lại.');
   } finally {
     responding.value = false;
   }

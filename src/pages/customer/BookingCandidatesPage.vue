@@ -78,9 +78,6 @@ const handleSendShortlist = async () => {
   try {
     await bookingsApi.sendShortlist(bookingId, selectedIds.value);
     inviteSent.value = true;
-    setTimeout(() => {
-      router.push('/app/orders');
-    }, 2500);
   } catch {
     sendError.value = 'Không thể gửi lời mời. Vui lòng thử lại.';
   } finally {
@@ -241,8 +238,12 @@ const selectedCount = computed(() => selectedIds.value.length);
         <CheckCircle2 :size="48" class="text-success-600 mx-auto" />
         <h3 class="text-lg font-bold text-ink-900">Đã gửi lời mời thành công!</h3>
         <p class="text-xs text-ink-600 leading-relaxed">
-          Lời mời đang được chuyển tới {{ selectedCount }} kỹ thuật viên. Đang chuyển hướng bạn tới trang quản lý đơn...
+          Đã gửi tới {{ selectedCount }} kỹ thuật viên. Bạn có thể mở yêu cầu để theo dõi trạng thái xác nhận từ hệ thống.
         </p>
+        <FhButton data-testid="view-matching-booking" variant="primary" size="md"
+          @click="router.push({ name: 'booking-detail', params: { id: bookingId } })">
+          Xem trạng thái yêu cầu
+        </FhButton>
       </div>
     </div>
 

@@ -200,8 +200,15 @@ export const bookingsApi = {
     return res.data.data.map(normalizeInvitationPreview);
   },
 
-  async respondInvitation(invitationId: string, action: 'ACCEPT' | 'DECLINE'): Promise<void> {
-    await apiClient.post(`/invitations/${invitationId}/respond`, { action });
+  async respondInvitation(invitationId: string, action: 'ACCEPT' | 'DECLINE'): Promise<{ serviceOrderId: string | null }> {
+    const res = await apiClient.post<{ data: { serviceOrder?: { id?: string } } }>(
+      `/invitations/${invitationId}/respond`, { action },
+    );
+    const id = res.data.data?.serviceOrder?.id?.trim() ?? '';
+    if (action === 'ACCEPT' && !id) {
+      throw new Error('Backend did not confirm the accepted ServiceOrder ID');
+    }
+    return { serviceOrderId: id || null };
   },
 
   // ── SM/Admin: gán thợ thủ công ──
