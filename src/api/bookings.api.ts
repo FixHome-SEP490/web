@@ -278,29 +278,7 @@ export const bookingsApi = {
     return normalizeBooking(res.data.data);
   },
 
-  async diagnoseAI(dto: { description: string; serviceId?: string }): Promise<DiagnosisResult> {
-    try {
-      const res = await apiClient.post<DiagnosisResult>('/ai/diagnoses', dto);
-      return res.data;
-    } catch {
-      // Smart offline fallback
-      return {
-        possibleIssues: [
-          'Thiếu gas làm lạnh (R32 / R410A) do rò rỉ zắc co',
-          'Lưới lọc bụi và dàn tản nhiệt bám bẩn nặng gây cản gió',
-          'Tụ kích block hoặc quạt dàn nóng bị yếu',
-        ],
-        possibleCauses: [
-          'Chưa bảo dưỡng định kỳ trong hơn 6 tháng',
-          'Môi trường bụi bẩn cao hoặc đường ống đồng gấp khúc',
-        ],
-        suggestedPriceMin: 150000,
-        suggestedPriceMax: 380000,
-        confidence: 0.92,
-        urgency: 'NORMAL',
-      };
-    }
-  },
+
 
   async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> {
     const res = await apiClient.get<{ data: TechnicianCandidate[] }>(`/bookings/${bookingId}/technician-candidates`);
