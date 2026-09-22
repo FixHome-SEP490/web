@@ -71,6 +71,8 @@ export const profileApi = {
       district: string;
       province: string;
       isDefault: boolean;
+      lat: number;
+      lng: number;
     }>,
   ): Promise<UserAddress> {
     const res = await apiClient.patch<{ data: UserAddress }>(`/me/addresses/${id}`, dto);
