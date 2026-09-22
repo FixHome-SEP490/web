@@ -3,9 +3,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
-import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
+import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker } from '../../components';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
-import { bookingSchedule } from '../../utils/booking-schedule';
 
 const route = useRoute();
 const router = useRouter();
@@ -233,7 +232,59 @@ const description = ref('');
 const preferredDate = ref('');
 const preferredTime = ref('');
 
-const editable = computed(() => booking.value && ['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.value.status));
+const editable = computed(() => !!booking.value && !serviceOrderId.value &&
+  ['SUBMITTED', 'MATCHING'].includes(booking.value.status));
+
+const needsShortlist = (item: BookingItem) => !item.serviceOrderId?.trim()
+  && ['SUBMITTED', 'CLOSED'].includes(item.status)
+  && isFutureServerTimestamp(item.preferredEndAt)
+  && Number.isFinite(Date.parse(item.preferredAt))
+  && Date.parse(item.preferredAt) < Date.parse(item.preferredEndAt)
+  && !(item.invitations ?? []).some(invitation =>
+    ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase()));
+const canChooseTechnicians = computed(() => !!booking.value && needsShortlist(booking.value));
+const chooseTechnicians = () => {
+  if (!booking.value || !needsShortlist(booking.value) || loading.value || saving.value ||
+      cancelling.value || checkingOrderLink.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
+  router.push(`/app/bookings/${bookingId}/candidates`);
+};
+
+const scheduleSelection = (timestamp: string) => {
+  const start = new Date(timestamp);
+  if (!Number.isFinite(start.getTime())) return { day: '', time: '' };
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    day: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+    time: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+  };
+};
+
+const scheduleForSave = (item: BookingItem) => {
+  const start = Date.parse(item.preferredAt);
+  const end = Date.parse(item.preferredEndAt ?? '');
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    throw new Error('Khung giờ gốc thiếu hoặc không hợp lệ. Vui lòng tải lại yêu cầu trước khi lưu.');
+  }
+  const original = scheduleSelection(item.preferredAt);
+  if (preferredDate.value === original.day && preferredTime.value === original.time) {
+    if (start <= Date.now()) throw new Error('Khung giờ đã qua. Vui lòng chọn giờ hoặc ngày khác.');
+    // Preserve server precision/offset and duration on a description-only edit.
+    return { preferredStartAt: item.preferredAt, preferredEndAt: item.preferredEndAt! };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value) || !/^\d{2}:\d{2}$/.test(preferredTime.value)) {
+    throw new Error('Vui lòng chọn ngày và giờ bắt đầu hợp lệ cho khung giờ đến.');
+  }
+  const nextStart = new Date(`${preferredDate.value}T${preferredTime.value}:00`);
+  const selected = scheduleSelection(nextStart.toString());
+  if (!Number.isFinite(nextStart.getTime()) || selected.day !== preferredDate.value ||
+      selected.time !== preferredTime.value || nextStart.getTime() <= Date.now()) {
+    throw new Error('Khung giờ đã qua hoặc không hợp lệ. Vui lòng chọn giờ hoặc ngày khác.');
+  }
+  return {
+    preferredStartAt: nextStart.toISOString(),
+    preferredEndAt: new Date(nextStart.getTime() + end - start).toISOString(),
+  };
+};
 
 const statusLabel = (status?: string) => {
   switch (status) {
@@ -250,10 +301,9 @@ const applyBookingDetail = (nextBooking: BookingItem) => {
   applyBookingState(nextBooking);
   startMatchingPoll();
   description.value = nextBooking.description;
-  const start = new Date(nextBooking.preferredAt);
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-  preferredDate.value = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-  preferredTime.value = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+  const selection = scheduleSelection(nextBooking.preferredAt);
+  preferredDate.value = selection.day;
+  preferredTime.value = selection.time;
 };
 
 const loadBooking = async (requestedBookingId = bookingId) => {
@@ -293,22 +343,19 @@ watch(() => String(route.params.id ?? ''), (nextBookingId, previousBookingId) =>
 });
 
 const handleSave = async () => {
-  if (!booking.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
+  if (!booking.value || !editable.value || loading.value || checkingOrderLink.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
   saveError.value = '';
   saving.value = true;
-  const wasMatched = booking.value.status === 'MATCHED';
   try {
-    const schedule = bookingSchedule(preferredDate.value, preferredTime.value);
+    const schedule = scheduleForSave(booking.value);
     const updated = await bookingsApi.updateBooking(bookingId, {
       description: description.value,
       ...schedule,
     });
-    if (wasMatched && updated.status === 'CLOSED') {
-      // Original shortlist exhausted for the new time window — send the customer to pick fresh candidates.
+    if (updated.id === bookingId && updated.status === 'SUBMITTED' && needsShortlist(updated)) {
+      // The Backend cancelled the old round; the customer must explicitly choose a new shortlist.
       router.push(`/app/bookings/${bookingId}/candidates`);
     } else {
-      // Either unchanged (still eligible), or the system auto-activated the next candidate from the
-      // original shortlist (status MATCHING) — nothing more for the customer to do right now.
       router.push('/app/orders');
     }
   } catch (err) {
@@ -477,6 +524,15 @@ const confirmMatchingExtension = async () => {
 
       <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
 
+      <div v-if="canChooseTechnicians" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
+        <p class="text-xs text-ink-700">Chọn 1–5 kỹ thuật viên cho lượt mời mới. Các lời mời cũ không được tự khôi phục.</p>
+        <FhButton data-testid="booking-choose-technicians" variant="primary" size="sm"
+          :disabled="saving || cancelling || checkingOrderLink || showCancelModal || showExtensionModal || extending"
+          @click="chooseTechnicians">
+          {{ booking.status === 'CLOSED' ? 'Chọn lại kỹ thuật viên' : 'Chọn kỹ thuật viên' }}
+        </FhButton>
+      </div>
+
       <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
       <div v-if="serviceOrderId" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
         <p class="text-xs text-ink-700">Yêu cầu này đã có đơn dịch vụ liên kết.</p>
@@ -516,21 +572,24 @@ const confirmMatchingExtension = async () => {
           </div>
 
           <div class="space-y-1.5">
-            <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+            <label for="booking-start-time" class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
               <Clock :size="15" class="text-brand-600" />
-              <span>Khung giờ mong muốn</span>
+              <span>Giờ bắt đầu khoảng đến</span>
             </label>
-            <FhTimeScrollPicker v-model="preferredTime" :selected-date="preferredDate" />
+            <input id="booking-start-time" v-model="preferredTime" type="time"
+              class="w-full p-3.5 bg-ink-50 border border-ink-200 rounded-xl text-sm text-ink-900 focus:outline-none focus:border-brand-600" />
           </div>
         </div>
 
-        <p v-if="booking.status === 'MATCHED'" class="text-xs text-ink-500 leading-relaxed">
-          Đơn đã có thợ nhận. Nếu khung giờ mới không còn phù hợp với thợ đó, hệ thống sẽ tự huỷ và đưa đơn về bước
-          tìm thợ mới.
+        <p class="text-xs text-ink-500 leading-relaxed">
+          Khoảng đến đã lưu: {{ formatServerDate(booking.preferredAt) }} – {{ formatServerDate(booking.preferredEndAt) || 'Thiếu giờ kết thúc' }}.
+          Khi đổi giờ bắt đầu, độ dài khoảng đến đã lưu được giữ nguyên. Chỉ sửa mô tả sẽ giữ nguyên cả hai mốc giờ.
         </p>
 
         <div
           v-if="saveError"
+          data-testid="booking-save-error"
+          role="alert"
           class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
         >
           {{ saveError }}
