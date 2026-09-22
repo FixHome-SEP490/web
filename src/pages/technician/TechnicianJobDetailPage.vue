@@ -24,11 +24,13 @@ import {
   FhMoney,
   BookingMediaViewer,
 } from '../../components';
+import PartsQuoteDemoPreview from '../../components/PartsQuoteDemoPreview.vue';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
 
+const showPartsDemo = import.meta.env.DEV;
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
@@ -527,6 +529,7 @@ const handleDeclareCash = async () => {
         <!-- Phase 3: Quotation Submission (D-02 Standard) -->
         <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)">
           <div class="space-y-4 text-xs">
+            <PartsQuoteDemoPreview v-if="showPartsDemo" />
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
             <div class="space-y-2">
