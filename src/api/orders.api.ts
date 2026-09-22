@@ -35,6 +35,9 @@ export interface ServiceOrderItem {
   completionRequestedAt?: string;
   customerConfirmed?: boolean;
   pricingMode?: string;
+  fixedUnitPrice?: number | null;
+  quantity?: number;
+  scopeDescription?: string;
   id: string;
   code: string;
   bookingId: string;

@@ -196,6 +196,48 @@ describe('technician ServiceOrder private media access', () => {
     expect(mocks.uploadEvidence).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+  it('renders the persisted fixed-price Booking snapshot instead of a new quotation form', async () => {
+    mocks.getTechnicianOrder.mockResolvedValueOnce({
+      ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 1,
+      pricingMode: 'fixed_price', fixedUnitPrice: 85000, quantity: 2,
+      scopeDescription: 'Dịch vụ niêm yết đã chọn',
+    });
+    const priceStubs = { ...pickerStubs, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' } };
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: priceStubs } });
+    await flushPromises();
+    const fixed = wrapper.get('[data-testid="fixed-price-order-summary"]');
+    expect(fixed.text()).toContain('Dịch vụ niêm yết đã chọn');
+    expect(wrapper.get('[data-testid="fixed-price-breakdown"]').text()).toContain('170000');
+    expect(wrapper.find('[data-testid="fixed-price-start-repair"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Gửi báo giá cho khách duyệt');
+    wrapper.unmount();
+  });
+
+  it('keeps the official quotation form for inspection-required jobs', async () => {
+    mocks.getTechnicianOrder.mockResolvedValueOnce({
+      ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 1,
+      pricingMode: 'inspection_required',
+    });
+    const buttonsVisible = { ...pickerStubs, FhButton: { props: ['disabled'], template: '<button :disabled="disabled"><slot /></button>' } };
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: buttonsVisible } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="fixed-price-order-summary"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Gửi báo giá cho khách duyệt');
+    wrapper.unmount();
+  });
+
+  it('does not invent a fixed price when Backend has no saved price snapshot', async () => {
+    mocks.getTechnicianOrder.mockResolvedValueOnce({
+      ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 1,
+      pricingMode: 'fixed_price', fixedUnitPrice: null, quantity: 1,
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="fixed-price-order-summary"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="fixed-price-breakdown"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Chưa có giá cố định đã lưu');
+    wrapper.unmount();
+  });
   it('does not fetch Booking media for historical former technicians', async () => {
     mocks.getTechnicianOrder.mockResolvedValueOnce({
       id: 'job-old', code: 'SO-OLD', status: 'ACCEPTED', historical: true,

@@ -41,6 +41,12 @@ let disposed = false;
 const loading = ref(true);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+const isFixedPriceOrder = computed(() => String(job.value?.pricingMode ?? '').toLowerCase() === 'fixed_price');
+const fixedPriceTotal = computed(() => {
+  const unit = job.value?.fixedUnitPrice;
+  if (typeof unit !== 'number' || !Number.isFinite(unit)) return null;
+  return unit * Math.max(1, Number(job.value?.quantity ?? 1));
+});
 const historicalJob = ref<HistoricalOrderItem | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
@@ -536,8 +542,28 @@ const handleDeclareCash = async () => {
         </FhCard>
 
         <!-- Phase 3: Quotation Submission (D-02 Standard) -->
-        <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)">
-          <div class="space-y-4 text-xs">
+        <FhCard :title="isFixedPriceOrder ? '4. Giá cố định theo Booking' : '4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)'">
+          <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="space-y-3 text-sm">
+            <p class="font-semibold text-brand-800">Dịch vụ có giá cố định theo Booking đã đặt; không lập báo giá kiểm tra hiện trường lần nữa.</p>
+            <p v-if="job?.scopeDescription" class="text-ink-700">Phạm vi đã đặt: {{ job.scopeDescription }}</p>
+            <div v-if="fixedPriceTotal != null" data-testid="fixed-price-breakdown" class="rounded-lg bg-ink-50 border border-ink-200 p-3 space-y-1">
+              <p>Đơn giá đã lưu: <FhMoney :amount="job?.fixedUnitPrice ?? 0" /></p>
+              <p>Số lượng đã đặt: {{ job?.quantity ?? 1 }}</p>
+              <p class="font-semibold">Giá công theo Booking: <FhMoney :amount="fixedPriceTotal" /></p>
+              <p class="text-ink-500 text-xs">Không bao gồm chi phí phát sinh được duyệt riêng (nếu có).</p>
+            </div>
+            <p v-else role="status" class="text-danger-700">Chưa có giá cố định đã lưu trong đơn; cần kiểm tra dữ liệu Booking trước khi bắt đầu sửa.</p>
+            <FhButton
+              data-testid="fixed-price-start-repair"
+              variant="primary"
+              size="sm"
+              :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || job?.status !== 'EN_ROUTE' || fixedPriceTotal == null"
+              @click="handleStartRepair"
+            >
+              Bắt đầu sửa chữa (UNDER_REPAIR)
+            </FhButton>
+          </div>
+          <div v-else class="space-y-4 text-xs">
             <PartsQuoteDemoPreview v-if="showPartsDemo" />
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
