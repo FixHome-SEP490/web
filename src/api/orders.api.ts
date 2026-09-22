@@ -15,6 +15,19 @@ export type CanonicalOrderStatus =
   | 'ARRIVED' // UI transitional alias
   | 'IN_PROGRESS'; // UI transitional alias
 
+export interface HistoricalOrderItem {
+  id: string;
+  code: string;
+  status: CanonicalOrderStatus;
+  createdAt: string;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  historical: true;
+}
+
+export type TechnicianOrderItem = ServiceOrderItem | HistoricalOrderItem;
+export const isHistoricalOrder = (order: TechnicianOrderItem): order is HistoricalOrderItem =>
+  (order as HistoricalOrderItem).historical === true;
 export interface ServiceOrderItem {
   arrivalVerified?: boolean;
   beforeEvidenceCount?: number;
@@ -22,6 +35,9 @@ export interface ServiceOrderItem {
   completionRequestedAt?: string;
   customerConfirmed?: boolean;
   pricingMode?: string;
+  fixedUnitPrice?: number | null;
+  quantity?: number;
+  scopeDescription?: string;
   id: string;
   code: string;
   bookingId: string;
@@ -164,6 +180,18 @@ function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
   };
 }
 
+function normalizeTechnicianOrder(order: TechnicianOrderItem): TechnicianOrderItem {
+  if (isHistoricalOrder(order)) {
+    // Fail closed: return only the history allowlist, even if an API adds fields unexpectedly.
+    return {
+      id: order.id, code: order.code,
+      status: String(order.status).toUpperCase() as CanonicalOrderStatus,
+      createdAt: order.createdAt, completedAt: order.completedAt ?? null,
+      cancelledAt: order.cancelledAt ?? null, historical: true,
+    };
+  }
+  return normalizeOrder(order);
+}
 function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecord {
   return {
     ...rec,
@@ -185,7 +213,20 @@ export const ordersApi = {
 
   async getCustomerOrders(): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeOrder); },
 
-  async getTechnicianJobs(): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeOrder); },
+  async getCustomerOrdersPaged(page: number, pageSize: number): Promise<{ data: ServiceOrderItem[]; total: number }> {
+    const res = await apiClient.get<{ data: ServiceOrderItem[]; meta: { total: number } }>('/service-orders/my', { params: { page, pageSize } });
+    if (typeof res.data.meta?.total !== 'number') {
+      throw new Error('Unexpected API response: service-orders/my missing meta.total');
+    }
+    return { data: res.data.data.map(normalizeOrder), total: res.data.meta.total };
+  },
+
+  async getTechnicianJobs(): Promise<TechnicianOrderItem[]> { const res = await apiClient.get<{data: TechnicianOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeTechnicianOrder); },
+
+  async getTechnicianOrder(id: string): Promise<TechnicianOrderItem> {
+    const res = await apiClient.get<{ data: TechnicianOrderItem }>('/service-orders/' + encodeURIComponent(id));
+    return normalizeTechnicianOrder(res.data.data);
+  },
 
   async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined}}); return res.data.data.map(normalizeOrder); },
 

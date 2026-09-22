@@ -19,7 +19,7 @@ import {
   FhCostBreakdown,
   FhMoney,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type CanonicalOrderStatus } from '../../api/orders.api';
+import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type CanonicalOrderStatus } from '../../api/orders.api';
 import { useChatStore } from '../../stores/chat.store';
 
 const router = useRouter();
@@ -31,13 +31,16 @@ const activeTab = ref<JobTab>('all');
 const loading = ref(true);
 const actionLoading = ref<string | null>(null);
 const jobs = ref<ServiceOrderItem[]>([]);
+const historicalJobs = ref<HistoricalOrderItem[]>([]);
 
 const loadJobs = async () => {
   try {
     const list = await ordersApi.getTechnicianJobs();
-    jobs.value = list;
+    jobs.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
+    historicalJobs.value = list.filter(isHistoricalOrder);
   } catch {
     jobs.value = [];
+    historicalJobs.value = [];
   } finally {
     loading.value = false;
   }
@@ -82,6 +85,11 @@ const filteredJobs = computed(() => {
   });
 });
 
+const visibleHistoricalJobs = computed(() => {
+  if (activeTab.value === 'all') return historicalJobs.value;
+  if (activeTab.value === 'completed') return historicalJobs.value.filter(job => job.status === 'COMPLETED');
+  return [];
+});
 const pendingCount = computed(() => {
   return jobs.value.filter((j) => ['ACCEPTED', 'EN_ROUTE'].includes(String(j.status).toUpperCase())).length;
 });
@@ -149,7 +157,7 @@ const handleChatWithCustomer = async (job: ServiceOrderItem) => {
       >
         <span>Tất cả</span>
         <span class="px-1.5 py-0.2 rounded-full text-[10px] font-num" :class="activeTab === 'all' ? 'bg-brand-50 text-brand-700' : 'bg-ink-200/60 text-ink-500'">
-          {{ jobs.length }}
+          {{ jobs.length + historicalJobs.length }}
         </span>
       </button>
 
@@ -210,7 +218,7 @@ const handleChatWithCustomer = async (job: ServiceOrderItem) => {
 
     <!-- Empty State (Matching Mobile Style) -->
     <div
-      v-else-if="filteredJobs.length === 0"
+      v-else-if="filteredJobs.length === 0 && visibleHistoricalJobs.length === 0"
       class="text-center py-16 px-6 bg-white rounded-3xl border border-ink-200/80 shadow-xs space-y-3"
     >
       <div class="w-16 h-16 rounded-2xl bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
@@ -317,6 +325,16 @@ const handleChatWithCustomer = async (job: ServiceOrderItem) => {
             </FhButton>
           </div>
         </div>
+      </div>
+      <div v-for="entry in visibleHistoricalJobs" :key="entry.id"
+        data-testid="technician-historical-order"
+        class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2">
+        <p class="text-xs font-bold text-ink-900">Mã đơn: {{ entry.code }}</p>
+        <p class="text-xs text-ink-600">Trạng thái: {{ getStatusBadge(entry.status).label }}</p>
+        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ new Date(entry.createdAt).toLocaleDateString('vi-VN') }}</p>
+        <p class="text-xs text-ink-500">Lịch sử công việc rút gọn. Không còn quyền xem thông tin riêng tư của khách.</p>
+        <button type="button" class="text-xs font-semibold text-brand-700 underline"
+          @click="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>
       </div>
     </div>
   </div>

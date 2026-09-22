@@ -25,8 +25,9 @@ import {
   FhStatusPill,
   FhCountdown,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
+import { technicianProfileApi } from '../../api/technician-profile.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -34,7 +35,7 @@ const chatStore = useChatStore();
 
 const loading = ref(true);
 const jobs = ref<ServiceOrderItem[]>([]);
-const isAvailable = ref(true);
+const isAvailable = ref<boolean | null>(null);
 const invitations = ref<InvitationItem[]>([]);
 const decliningInvitation = ref(false);
 
@@ -63,15 +64,21 @@ const declineTopInvitation = async () => {
 };
 
 onMounted(async () => {
+  // A pause blocks NEW invitations, not previously issued PENDING invitations.
+  // Never assume online/available before the actual technician profile loads.
+  const profileRequest = technicianProfileApi.getMyProfile()
+    .then(profile => { isAvailable.value = profile.isAvailable; })
+    .catch(() => { isAvailable.value = null; });
   try {
     const list = await ordersApi.getTechnicianJobs();
-    jobs.value = list;
+    jobs.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
   } catch {
     jobs.value = [];
   } finally {
     loading.value = false;
   }
   await loadInvitations();
+  await profileRequest;
 });
 
 const completedJobs = computed(() => {
@@ -116,9 +123,10 @@ const handleChatWithCustomer = async (order: ServiceOrderItem) => {
             <span v-else>{{ authStore.user?.fullName?.charAt(0) || 'T' }}</span>
           </div>
           <span
+            data-testid="technician-receive-status"
             class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white transition-colors"
-            :class="isAvailable ? 'bg-emerald-500' : 'bg-ink-400'"
-            title="Trạng thái nhận việc"
+            :class="isAvailable === true ? 'bg-emerald-500' : 'bg-ink-400'"
+            :title="isAvailable === null ? 'Chưa xác định trạng thái nhận đơn' : isAvailable ? 'Đang nhận đơn mới' : 'Tạm ngưng nhận đơn mới'"
           />
         </div>
 

@@ -1,32 +1,33 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { DollarSign, Calendar, Wallet, ArrowUpRight, ShieldCheck, Download } from 'lucide-vue-next';
+import { DollarSign, Calendar, Wallet, ArrowUpRight, Download } from 'lucide-vue-next';
 
 import { FhMoney, FhTable, FhButton } from '../../components';
 
+const showWalletDemo = import.meta.env.DEV;
 const payouts = ref([
   {
-    orderCode: 'FH-20260910-0042',
+    orderCode: 'DEMO-0042',
     date: '10/09/2026',
-    customer: 'Trần Văn Nam',
+    customer: 'Khách demo 1',
     gross: 400000,
     platformFee: 60000,
     net: 340000,
     status: 'COMPLETED',
   },
   {
-    orderCode: 'FH-20260908-0019',
+    orderCode: 'DEMO-0019',
     date: '08/09/2026',
-    customer: 'Lê Hoàng Anh',
+    customer: 'Khách demo 2',
     gross: 250000,
     platformFee: 37500,
     net: 212500,
     status: 'COMPLETED',
   },
   {
-    orderCode: 'FH-20260905-0081',
+    orderCode: 'DEMO-0081',
     date: '05/09/2026',
-    customer: 'Phạm Thuỳ Linh',
+    customer: 'Khách demo 3',
     gross: 500000,
     platformFee: 75000,
     net: 425000,
@@ -34,13 +35,15 @@ const payouts = ref([
   },
 ]);
 
-const handleWithdraw = () => {
-  window.alert('Yêu cầu rút tiền đã được gửi tới bộ phận Tài vụ FixHome. Tiền sẽ về tài khoản ngân hàng liên kết trong 1-2 giờ làm việc.');
-};
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6">
+    <template v-if="showWalletDemo">
+    <div data-testid="wallet-demo-notice" role="note" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+      <strong>DEMO — Dữ liệu minh họa, không phải tiền thật.</strong>
+      Số dư, doanh thu, phí nền tảng và lịch sử bên dưới là ví dụ giao diện; chưa kết nối Wallet hoặc ngân hàng. Trang này không thể rút tiền hay tạo giao dịch. Quy tắc Linh kiện/Wallet đang chờ nhóm chốt.
+    </div>
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
@@ -49,13 +52,13 @@ const handleWithdraw = () => {
           <span>Thu Nhập & Quyết Toán</span>
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Theo dõi doanh thu công thợ thực nhận (85%), đối soát hoa hồng nền tảng và lịch sử thanh toán.
+          Các số liệu dưới đây chỉ để xem trước giao diện; không dùng tỷ lệ phí minh họa làm quy tắc nghiệp vụ.
         </p>
       </div>
 
       <div class="flex items-center gap-2">
-        <FhButton variant="secondary" size="sm">
-          <Download :size="14" class="mr-1.5" /> Xuất đối soát
+        <FhButton variant="secondary" size="sm" disabled>
+          <Download :size="14" class="mr-1.5" /> Xuất đối soát (DEMO — chưa hỗ trợ)
         </FhButton>
       </div>
     </div>
@@ -65,23 +68,22 @@ const handleWithdraw = () => {
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 text-xs font-semibold text-blue-200">
           <Wallet :size="16" class="text-amber-300" />
-          <span>Số dư ví khả dụng (Có thể rút ngay)</span>
+          <span>Số dư minh họa (DEMO — không thể rút)</span>
         </div>
         <div class="text-3xl sm:text-4xl font-extrabold font-num tracking-tight">
           3.850.000 <span class="text-lg font-sans font-bold">VNĐ</span>
         </div>
         <p class="text-xs text-blue-100 flex items-center gap-1.5 pt-1">
-          <ShieldCheck :size="14" class="text-emerald-300" />
-          Đã liên kết tài khoản Vietcombank (***8921)
+          Chưa kết nối ngân hàng — số dư bên trên chỉ để minh họa
         </p>
       </div>
 
       <button
         type="button"
         class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-blue-50 active:scale-95 text-xs font-extrabold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2"
-        @click="handleWithdraw"
+        disabled aria-disabled="true" title="Chức năng rút tiền chưa được triển khai"
       >
-        <span>Rút tiền về ngân hàng</span>
+        <span>Rút tiền chưa hỗ trợ (DEMO)</span>
         <ArrowUpRight :size="16" />
       </button>
     </div>
@@ -113,11 +115,11 @@ const handleWithdraw = () => {
       </div>
 
       <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-100 via-indigo-50 to-white border border-indigo-200/80 shadow-xs space-y-1">
-        <span class="text-xs font-bold text-indigo-800">Tỷ lệ chia sẻ</span>
+        <span class="text-xs font-bold text-indigo-800">Phí nền tảng (DEMO)</span>
         <div class="text-lg sm:text-2xl font-extrabold text-indigo-950 font-num">
-          85% <span class="text-xs font-sans font-bold text-indigo-700">KTV</span>
+          Chưa chốt
         </div>
-        <p class="text-[11px] text-indigo-600 font-medium">Phí nền tảng cố định 15%</p>
+        <p class="text-[11px] text-indigo-600 font-medium">Chỉ minh họa giao diện, không phải quy tắc tính phí</p>
       </div>
     </div>
 
@@ -134,8 +136,8 @@ const handleWithdraw = () => {
           { key: 'date', label: 'Ngày thực hiện' },
           { key: 'customer', label: 'Khách hàng' },
           { key: 'gross', label: 'Tổng thu', align: 'right' },
-          { key: 'platformFee', label: 'Phí nền tảng (15%)', align: 'right' },
-          { key: 'net', label: 'Thực nhận (85%)', align: 'right' },
+          { key: 'platformFee', label: 'Phí nền tảng (mẫu)', align: 'right' },
+          { key: 'net', label: 'Thực nhận (mẫu)', align: 'right' },
         ]"
         :rows="payouts"
       >
@@ -171,6 +173,10 @@ const handleWithdraw = () => {
           </span>
         </template>
       </FhTable>
+    </div>
+    </template>
+    <div v-else role="status" class="rounded-xl border border-ink-200 bg-ink-50 p-5 text-sm text-ink-700">
+      Thu nhập và Wallet đang chờ nhóm chốt nghiệp vụ và tích hợp Backend. Không hiển thị số dư hoặc giao dịch giả trong bản phát hành.
     </div>
   </div>
 </template>

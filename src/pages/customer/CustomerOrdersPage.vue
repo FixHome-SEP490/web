@@ -13,6 +13,8 @@ import {
   MessageSquare,
   Star,
   Receipt,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -23,40 +25,188 @@ import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { useChatStore } from '../../stores/chat.store';
 
+const PAGE_SIZE = 20;
+
 const router = useRouter();
 const chatStore = useChatStore();
 
-const loading = ref(true);
+// ── Loading / error state ──
+const loadingOrders = ref(true);
+const loadingBookings = ref(true);
+const ordersError = ref<string | null>(null);
+const bookingsError = ref<string | null>(null);
+
+// ── Data ──
 const orders = ref<ServiceOrderItem[]>([]);
-const pendingBookings = ref<BookingItem[]>([]);
+const bookings = ref<BookingItem[]>([]);
+
+// ── Pagination state ──
+const ordersPage = ref(1);
+const bookingsPage = ref(1);
+const ordersTotal = ref(0);
+const bookingsTotal = ref(0);
+const ordersExhausted = ref(false);
+const bookingsExhausted = ref(false);
+const ordersFailedPage = ref<number | null>(null);
+const bookingsFailedPage = ref<number | null>(null);
+const fetchingMoreOrders = ref(false);
+const fetchingMoreBookings = ref(false);
+
+// ── UI state ──
 const activeTab = ref<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
 const searchQuery = ref('');
+
+// ── Computed ──
+// Show verified records as soon as either source completes.
+const loading = computed(() => loadingOrders.value && loadingBookings.value);
+// hasError used in template for partial-failure banner
+const hasError = computed(() => !!(ordersError.value || bookingsError.value));
+
+/** Booking IDs that are already represented by a loaded ServiceOrder */
+const orderedBookingIds = computed(() => new Set(orders.value.map((o) => o.bookingId)));
+
+/**
+ * Bookings to display as standalone cards (not yet covered by a loaded SO).
+ * Includes CANCELLED and CLOSED (pre-Accept cancels).
+ * MATCHED bookings whose SO is not yet loaded (cross-page) remain visible here
+ * so the user does not lose sight of them — labelled "Đang chờ liên kết đơn thợ".
+ */
+const pendingBookings = computed(() =>
+  bookings.value.filter(
+    (b) =>
+      ['SUBMITTED', 'MATCHING', 'MATCHED', 'CLOSED', 'CANCELLED'].includes(b.status) &&
+      !orderedBookingIds.value.has(b.id),
+  ),
+);
+
+// Raw server page progress controls pagination: dedup may remove all overlapping rows,
+// but this does not imply that later server pages contain no new records.
+const hasMoreOrders = computed(() => !ordersExhausted.value && ordersPage.value * PAGE_SIZE < ordersTotal.value);
+const hasMoreBookings = computed(() => !bookingsExhausted.value && bookingsPage.value * PAGE_SIZE < bookingsTotal.value);
+
+function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  const unique = new Map(current.map((item) => [item.id, item] as const));
+  for (const item of incoming) unique.set(item.id, item);
+  return [...unique.values()];
+}
+
+/**
+ * Loaded distinct record count — truthful count of what is actually on screen.
+ * We do NOT sum ordersTotal + bookingsTotal as that overcounts when a Booking
+ * and its linked SO represent the same request. Cross-page SO matches are unknown
+ * until fully loaded, so we only count loaded distinct items.
+ */
+const loadedCount = computed(() => orders.value.length + pendingBookings.value.length);
 
 const isOverdue = (booking: BookingItem) =>
   !!booking.preferredEndAt && new Date(booking.preferredEndAt) < new Date();
 
 const pendingLabel = (booking: BookingItem) => {
+  if (booking.status === 'CANCELLED') return 'Đã huỷ trước khi có thợ';
+  if (booking.status === 'MATCHED') return 'Đang chờ liên kết đơn thợ';
   if (isOverdue(booking)) return 'Đã quá hạn, đang chờ điều phối viên hỗ trợ';
   if (booking.status === 'MATCHING') return 'Đang chờ thợ xác nhận';
   if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, đang chờ điều phối viên hỗ trợ';
   return 'Đang tìm thợ phù hợp';
 };
 
-onMounted(async () => {
+// ── Fetch functions — return true on success, false on failure ──
+
+async function fetchOrders(page: number): Promise<boolean> {
   try {
-    const [orderList, bookingList] = await Promise.all([
-      ordersApi.getCustomerOrders(),
-      bookingsApi.getMyBookings(),
-    ]);
-    orders.value = orderList;
-    const orderedBookingIds = new Set(orderList.map((o) => o.bookingId));
-    pendingBookings.value = bookingList.filter(
-      (b) => ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(b.status) && !orderedBookingIds.has(b.id),
-    );
-  } finally {
-    loading.value = false;
+    const result = await ordersApi.getCustomerOrdersPaged(page, PAGE_SIZE);
+    orders.value = mergeById(page === 1 ? [] : orders.value, result.data);
+    ordersTotal.value = result.total;
+    ordersExhausted.value = result.data.length === 0;
+    ordersFailedPage.value = null;
+    ordersError.value = null;
+    return true;
+  } catch {
+    ordersFailedPage.value = page;
+    ordersError.value = 'Không thể tải danh sách đơn dịch vụ. Vui lòng thử lại.';
+    return false;
   }
+}
+
+async function fetchBookings(page: number): Promise<boolean> {
+  try {
+    const result = await bookingsApi.getMyBookingsPaged(page, PAGE_SIZE);
+    bookings.value = mergeById(page === 1 ? [] : bookings.value, result.data);
+    bookingsTotal.value = result.total;
+    bookingsExhausted.value = result.data.length === 0;
+    bookingsFailedPage.value = null;
+    bookingsError.value = null;
+    return true;
+  } catch {
+    bookingsFailedPage.value = page;
+    bookingsError.value = 'Không thể tải danh sách yêu cầu đặt thợ. Vui lòng thử lại.';
+    return false;
+  }
+}
+
+onMounted(async () => {
+  loadingOrders.value = true;
+  loadingBookings.value = true;
+  await Promise.all([
+    fetchOrders(1).finally(() => { loadingOrders.value = false; }),
+    fetchBookings(1).finally(() => { loadingBookings.value = false; }),
+  ]);
 });
+
+async function loadMoreOrders() {
+  if (loadingOrders.value || fetchingMoreOrders.value || !hasMoreOrders.value) return;
+  fetchingMoreOrders.value = true;
+  try {
+    const next = ordersPage.value + 1;
+    const ok = await fetchOrders(next);
+    // Advance page counter ONLY on success; on failure, retry repeats same page safely
+    if (ok) ordersPage.value = next;
+  } finally {
+    fetchingMoreOrders.value = false;
+  }
+}
+
+async function loadMoreBookings() {
+  if (loadingBookings.value || fetchingMoreBookings.value || !hasMoreBookings.value) return;
+  fetchingMoreBookings.value = true;
+  try {
+    const next = bookingsPage.value + 1;
+    const ok = await fetchBookings(next);
+    if (ok) bookingsPage.value = next;
+  } finally {
+    fetchingMoreBookings.value = false;
+  }
+}
+
+async function retryOrders() {
+  if (loadingOrders.value || fetchingMoreOrders.value) return;
+  const page = ordersFailedPage.value ?? 1;
+  if (page === 1) loadingOrders.value = true;
+  else fetchingMoreOrders.value = true;
+  try {
+    const ok = await fetchOrders(page);
+    if (ok) ordersPage.value = page;
+  } finally {
+    if (page === 1) loadingOrders.value = false;
+    else fetchingMoreOrders.value = false;
+  }
+}
+
+async function retryBookings() {
+  if (loadingBookings.value || fetchingMoreBookings.value) return;
+  const page = bookingsFailedPage.value ?? 1;
+  if (page === 1) loadingBookings.value = true;
+  else fetchingMoreBookings.value = true;
+  try {
+    const ok = await fetchBookings(page);
+    if (ok) bookingsPage.value = page;
+  } finally {
+    if (page === 1) loadingBookings.value = false;
+    else fetchingMoreBookings.value = false;
+  }
+}
+
+// ── Filtering ──
 
 const getStatusBadge = (status: string) => {
   const s = String(status).toUpperCase();
@@ -104,10 +254,25 @@ const filteredOrders = computed(() => {
 });
 
 const visiblePending = computed(() => {
-  if (!['ALL', 'IN_PROGRESS'].includes(activeTab.value)) return [];
   const q = searchQuery.value.toLowerCase().trim();
-  if (!q) return pendingBookings.value;
-  return pendingBookings.value.filter((b) => b.serviceName?.toLowerCase().includes(q));
+  let subset: typeof pendingBookings.value;
+
+  if (activeTab.value === 'ALL') {
+    // ALL: every booking status is visible
+    subset = pendingBookings.value;
+  } else if (activeTab.value === 'IN_PROGRESS') {
+    // IN_PROGRESS: actionable pending only (not CANCELLED, not CLOSED)
+    subset = pendingBookings.value.filter((b) => !['CANCELLED', 'CLOSED'].includes(b.status));
+  } else if (activeTab.value === 'CANCELLED') {
+    // CANCELLED tab: only pre-SO cancelled bookings
+    subset = pendingBookings.value.filter((b) => b.status === 'CANCELLED');
+  } else {
+    // COMPLETED or any other tab: no pending booking cards
+    return [];
+  }
+
+  if (!q) return subset;
+  return subset.filter((b) => b.serviceName?.toLowerCase().includes(q));
 });
 
 async function handleChat(order: ServiceOrderItem, event: Event) {
@@ -160,19 +325,62 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
     <div class="flex items-center gap-1.5 p-1 bg-ink-100/70 rounded-xl border border-ink-200 text-xs font-semibold">
       <button
         v-for="tab in [
-          { key: 'ALL', label: `Tất cả (${orders.length + pendingBookings.length})` },
+          { key: 'ALL', label: `Tất cả (${loadedCount})` },
           { key: 'IN_PROGRESS', label: 'Đang xử lý' },
           { key: 'COMPLETED', label: 'Hoàn tất' },
           { key: 'CANCELLED', label: 'Đã huỷ' },
         ]"
         :key="tab.key"
+        :data-testid="`history-tab-${tab.key}`"
         type="button"
         class="flex-1 py-2 rounded-lg transition-all text-center"
         :class="activeTab === tab.key ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
-        @click="activeTab = (tab.key as any)"
+        @click="activeTab = (tab.key as 'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED')"
       >
         {{ tab.label }}
       </button>
+    </div>
+
+    <!-- Partial-failure error banners (one per source, with retry) -->
+    <div v-if="!loading && hasError" class="space-y-2">
+      <div
+        v-if="ordersError"
+        data-testid="orders-error-banner"
+        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700"
+      >
+        <span class="flex items-center gap-1.5">
+          <AlertCircle :size="14" />
+          {{ ordersError }}
+        </span>
+        <button
+          type="button"
+          class="flex items-center gap-1 font-semibold hover:underline shrink-0"
+          data-testid="retry-orders"
+          :disabled="loadingOrders || fetchingMoreOrders"
+          @click="retryOrders"
+        >
+          <RefreshCw :size="12" /> Thử lại
+        </button>
+      </div>
+      <div
+        v-if="bookingsError"
+        data-testid="bookings-error-banner"
+        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
+      >
+        <span class="flex items-center gap-1.5">
+          <AlertCircle :size="14" />
+          {{ bookingsError }}
+        </span>
+        <button
+          type="button"
+          class="flex items-center gap-1 font-semibold hover:underline shrink-0"
+          data-testid="retry-bookings"
+          :disabled="loadingBookings || fetchingMoreBookings"
+          @click="retryBookings"
+        >
+          <RefreshCw :size="12" /> Thử lại
+        </button>
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -181,9 +389,10 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       <p class="text-xs">Đang tải danh sách đơn dịch vụ...</p>
     </div>
 
-    <!-- Empty State -->
+    <!-- Empty State (only when no error AND no data) -->
     <div
-      v-else-if="filteredOrders.length === 0 && visiblePending.length === 0"
+      v-else-if="!hasError && !loadingOrders && !loadingBookings && !hasMoreOrders && !hasMoreBookings && filteredOrders.length === 0 && visiblePending.length === 0"
+      data-testid="history-empty-state"
       class="text-center py-16 bg-white rounded-2xl border border-ink-200 space-y-3 p-8"
     >
       <div class="w-14 h-14 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-2">
@@ -200,12 +409,15 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <!-- Orders Feed -->
     <div v-else class="space-y-4">
+      <p v-if="loadingOrders || loadingBookings" role="status" class="text-center text-xs text-ink-500">Đang tải dữ liệu...</p>
+      <p v-if="!hasError && !loadingOrders && !loadingBookings && filteredOrders.length === 0 && visiblePending.length === 0" data-testid="loaded-page-empty" class="text-center text-xs text-ink-500 py-3">Chưa có kết quả trong các trang đã tải. Chọn Xem thêm để tìm tiếp.</p>
       <!-- Pending bookings: no technician has accepted yet, so there is no ServiceOrder -->
       <div
         v-for="booking in visiblePending"
         :key="booking.id"
+        :data-testid="`booking-card-${booking.id}`"
         class="p-5 rounded-2xl bg-white border border-dashed space-y-3 cursor-pointer transition-all"
-        :class="isOverdue(booking) ? 'border-red-300 hover:border-red-400' : 'border-amber-300 hover:border-amber-400'"
+        :class="booking.status === 'CANCELLED' ? 'border-red-200 hover:border-red-300' : isOverdue(booking) ? 'border-red-300 hover:border-red-400' : 'border-amber-300 hover:border-amber-400'"
         @click="router.push(`/app/bookings/${booking.id}`)"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -215,9 +427,9 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           </span>
           <div
             class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
-            :class="isOverdue(booking) ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'"
+            :class="booking.status === 'CANCELLED' ? 'bg-red-50 text-red-700' : isOverdue(booking) ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'"
           >
-            <span class="w-1.5 h-1.5 rounded-full" :class="isOverdue(booking) ? 'bg-red-500' : 'bg-amber-500'"></span>
+            <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-red-400' : isOverdue(booking) ? 'bg-red-500' : 'bg-amber-500'"></span>
             <span>{{ pendingLabel(booking) }}</span>
           </div>
         </div>
@@ -228,9 +440,24 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         </p>
       </div>
 
+      <!-- Load-more bookings button -->
+      <div v-if="hasMoreBookings" class="flex justify-center">
+        <button
+          type="button"
+          class="px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          :disabled="fetchingMoreBookings || loadingBookings"
+          data-testid="load-more-bookings"
+          @click="loadMoreBookings"
+        >
+          <RefreshCw :size="13" :class="fetchingMoreBookings ? 'animate-spin' : ''" />
+          {{ fetchingMoreBookings ? 'Đang tải...' : 'Xem thêm yêu cầu' }}
+        </button>
+      </div>
+
       <div
         v-for="order in filteredOrders"
         :key="order.id"
+        :data-testid="`order-card-${order.id}`"
         class="p-5 rounded-2xl bg-white border border-ink-200 hover:border-brand-300 hover:shadow-md transition-all cursor-pointer space-y-4"
         @click="router.push(`/app/orders/${order.id}`)"
       >
@@ -328,6 +555,20 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Load-more orders button -->
+      <div v-if="hasMoreOrders" class="flex justify-center">
+        <button
+          type="button"
+          class="px-4 py-2 rounded-xl border border-ink-300 text-ink-700 text-xs font-semibold hover:bg-ink-50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          :disabled="fetchingMoreOrders || loadingOrders"
+          data-testid="load-more-orders"
+          @click="loadMoreOrders"
+        >
+          <RefreshCw :size="13" :class="fetchingMoreOrders ? 'animate-spin' : ''" />
+          {{ fetchingMoreOrders ? 'Đang tải...' : 'Xem thêm đơn dịch vụ' }}
+        </button>
       </div>
     </div>
   </div>

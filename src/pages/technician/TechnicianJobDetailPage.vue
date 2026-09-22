@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -22,20 +22,36 @@ import {
   FhStatusPill,
   FhCostBreakdown,
   FhMoney,
+  BookingMediaViewer,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import PartsQuoteDemoPreview from '../../components/PartsQuoteDemoPreview.vue';
+import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
 
+const showPartsDemo = import.meta.env.DEV;
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
-const jobId = route.params.id as string;
+let jobId = String(route.params.id ?? '');
+let loadGeneration = 0;
+let disposed = false;
 
 const loading = ref(true);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+const isFixedPriceOrder = computed(() => String(job.value?.pricingMode ?? '').toLowerCase() === 'fixed_price');
+const fixedPriceTotal = computed(() => {
+  const unit = job.value?.fixedUnitPrice;
+  if (typeof unit !== 'number' || !Number.isFinite(unit)) return null;
+  return unit * Math.max(1, Number(job.value?.quantity ?? 1));
+});
+const historicalJob = ref<HistoricalOrderItem | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
+const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
+const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
 
 // Workspace Steps State
 const isEnRoute = ref(false);
@@ -80,14 +96,26 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', file?: File) {
   finally { actionLoading.value = false; }
 }
 
-onMounted(async () => {
-  await loadJob();
+onMounted(() => {
+  disposed = false;
+  void loadJob(jobId);
 });
 
-const loadJob = async () => {
+const loadJob = async (requestedJobId = jobId) => {
+    const generation = ++loadGeneration;
+    const isCurrent = () => !disposed && generation === loadGeneration && requestedJobId === jobId;
     loading.value = true;
+    bookingForMedia.value = null;
     try {
-      const data = await ordersApi.getOrder(jobId);
+      const data = await ordersApi.getTechnicianOrder(requestedJobId);
+      if (!isCurrent()) return;
+      if (isHistoricalOrder(data)) {
+        historicalJob.value = data;
+        job.value = null;
+        stopLocationPing();
+        return; // No private data or workspace API calls for old technicians.
+      }
+      historicalJob.value = null;
       job.value = data;
       isEnRoute.value = data.status !== 'ACCEPTED';
       gpsCheckedIn.value = !!data.arrivalVerified;
@@ -99,15 +127,42 @@ const loadJob = async () => {
       completionRequested.value = !!data.completionRequestedAt;
       quotationSubmitted.value = !!data.quotation;
       declaredCashAmount.value = Number(data.grandTotal);
-      const settlement = await ordersApi.getCashSettlement(jobId);
+
+      const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
+      if (bookingId) {
+        try {
+          const booking = await bookingsApi.getBooking(bookingId);
+          if (isCurrent() && isFullBookingWithMedia(booking, bookingId)) {
+            bookingForMedia.value = booking;
+          }
+        } catch {
+          if (isCurrent()) bookingForMedia.value = null;
+        }
+      }
+      if (!isCurrent()) return;
+
+      const settlement = await ordersApi.getCashSettlement(requestedJobId);
+      if (!isCurrent()) return;
       cashSettled.value = !!settlement;
       cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
       if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
-        additionalCosts.value = await ordersApi.getAdditionalCosts(jobId);
+        const costs = await ordersApi.getAdditionalCosts(requestedJobId);
+        if (!isCurrent()) return;
+        additionalCosts.value = costs;
       }
-    } catch { actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'}; }
-    finally { loading.value = false; }
+    } catch {
+      if (isCurrent()) actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'};
+    } finally {
+      if (isCurrent()) loading.value = false;
+    }
   };
+
+watch(() => String(route.params.id ?? ''), (nextId, previousId) => {
+  if (!nextId || nextId === previousId) return;
+  jobId = nextId;
+  bookingForMedia.value = null;
+  void loadJob(nextId);
+});
 
   const handleChatWithCustomer = async () => {
     if (!job.value) return;
@@ -172,7 +227,12 @@ const startLocationPing = () => {
   locationPing = setInterval(ping, 20000);
 };
 
-onUnmounted(stopLocationPing);
+onUnmounted(() => {
+  disposed = true;
+  loadGeneration += 1;
+  bookingForMedia.value = null;
+  stopLocationPing();
+});
 
 const handleEnRoute = async () => {
   try {
@@ -204,6 +264,9 @@ const handleCheckIn = async () => {
     finally { actionLoading.value = false; }
   };
 
+const openBeforeEvidencePicker = () => {
+  if (gpsCheckedIn.value && !beforePhotoUploaded.value && !actionLoading.value) beforeFile.value?.click();
+};
 const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files?.[0]);
 
 const handleSubmitQuotation = async () => {
@@ -352,6 +415,14 @@ const handleDeclareCash = async () => {
       Đang tải dữ liệu công việc...
     </div>
 
+    <div v-else-if="historicalJob" data-testid="technician-historical-detail"
+      class="rounded-2xl border border-ink-200 bg-white p-5 space-y-3">
+      <h1 class="text-base font-bold text-ink-900">Lịch sử công việc: {{ historicalJob.code }}</h1>
+      <p class="text-sm text-ink-700">Trạng thái: {{ historicalJob.status }}</p>
+      <p class="text-xs text-ink-600">Ngày ghi nhận: {{ new Date(historicalJob.createdAt).toLocaleDateString('vi-VN') }}</p>
+      <p class="text-xs text-ink-500">Bạn không còn được giao đơn này. Thông tin riêng tư của khách và các thao tác thực hiện công việc không còn khả dụng.</p>
+    </div>
+
     <div v-else-if="job" class="space-y-6">
       <!-- Order Info Banner -->
       <FhCard>
@@ -389,6 +460,12 @@ const handleDeclareCash = async () => {
           </div>
         </div>
       </FhCard>
+
+      <BookingMediaViewer
+        v-if="bookingForMedia && bookingMedia.length > 0"
+        :booking-id="bookingMediaBookingId"
+        :media="bookingMedia"
+      />
 
       <!-- Workspace Workflow Stepper -->
       <div class="space-y-5">
@@ -445,7 +522,13 @@ const handleDeclareCash = async () => {
               <div
                 class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
                 :class="beforePhotoUploaded ? 'border-success-500 bg-success-50/50 text-success-700' : (!gpsCheckedIn ? 'border-ink-200 text-ink-300 cursor-not-allowed' : 'border-ink-300 hover:border-brand-500 text-ink-500')"
-                @click="gpsCheckedIn && !beforePhotoUploaded ? handleUploadBefore() : null"
+                data-testid="before-evidence-picker"
+                role="button"
+                :tabindex="gpsCheckedIn && !beforePhotoUploaded && !actionLoading ? 0 : -1"
+                :aria-disabled="!gpsCheckedIn || beforePhotoUploaded || actionLoading"
+                @click="openBeforeEvidencePicker"
+                @keydown.enter.prevent="openBeforeEvidencePicker"
+                @keydown.space.prevent="openBeforeEvidencePicker"
               >
                 <Camera :size="22" />
                 <span class="text-[10px] font-semibold">{{ beforePhotoUploaded ? 'Đã tải ảnh' : 'Chụp ảnh' }}</span>
@@ -459,8 +542,29 @@ const handleDeclareCash = async () => {
         </FhCard>
 
         <!-- Phase 3: Quotation Submission (D-02 Standard) -->
-        <FhCard title="4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)">
-          <div class="space-y-4 text-xs">
+        <FhCard :title="isFixedPriceOrder ? '4. Giá cố định theo Booking' : '4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)'">
+          <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="space-y-3 text-sm">
+            <p class="font-semibold text-brand-800">Dịch vụ có giá cố định theo Booking đã đặt; không lập báo giá kiểm tra hiện trường lần nữa.</p>
+            <p v-if="job?.scopeDescription" class="text-ink-700">Phạm vi đã đặt: {{ job.scopeDescription }}</p>
+            <div v-if="fixedPriceTotal != null" data-testid="fixed-price-breakdown" class="rounded-lg bg-ink-50 border border-ink-200 p-3 space-y-1">
+              <p>Đơn giá đã lưu: <FhMoney :amount="job?.fixedUnitPrice ?? 0" /></p>
+              <p>Số lượng đã đặt: {{ job?.quantity ?? 1 }}</p>
+              <p class="font-semibold">Giá công theo Booking: <FhMoney :amount="fixedPriceTotal" /></p>
+              <p class="text-ink-500 text-xs">Không bao gồm chi phí phát sinh được duyệt riêng (nếu có).</p>
+            </div>
+            <p v-else role="status" class="text-danger-700">Chưa có giá cố định đã lưu trong đơn; cần kiểm tra dữ liệu Booking trước khi bắt đầu sửa.</p>
+            <FhButton
+              data-testid="fixed-price-start-repair"
+              variant="primary"
+              size="sm"
+              :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || job?.status !== 'EN_ROUTE' || fixedPriceTotal == null"
+              @click="handleStartRepair"
+            >
+              Bắt đầu sửa chữa (UNDER_REPAIR)
+            </FhButton>
+          </div>
+          <div v-else class="space-y-4 text-xs">
+            <PartsQuoteDemoPreview v-if="showPartsDemo" />
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
             <div class="space-y-2">

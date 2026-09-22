@@ -29,6 +29,11 @@ const newAvatarUrl = ref('');
 
 // Address Modal
 const showAddressModal = ref(false);
+const editingAddressId = ref<string | null>(null);
+const originalAddress = ref<UserAddress | null>(null);
+const editLocationVerified = ref(false);
+const addressError = ref('');
+const savingAddress = ref(false);
 const addressForm = ref({
   label: 'Nhà riêng',
   line1: '',
@@ -49,7 +54,67 @@ const addressMarkers = ref<MapMarker[]>([]);
 const addressSuggestions = ref<PlaceSuggestion[]>([]);
 const searchingAddress = ref(false);
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+let addressGeoEpoch = 0;
 
+const sameArea = (a: string | null | undefined, b: string | null | undefined) =>
+  !!a && !!b && a.normalize('NFC').trim().toLocaleLowerCase('vi') === b.normalize('NFC').trim().toLocaleLowerCase('vi');
+
+const validCoordinates = (lat: number | '', lng: number | '') =>
+  lat !== '' && lng !== '' && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)) &&
+  Math.abs(Number(lat)) <= 90 && Math.abs(Number(lng)) <= 180;
+
+const resetAddressForm = () => {
+  addressGeoEpoch++;
+  if (searchDebounce) clearTimeout(searchDebounce);
+  if (reverseDebounce) clearTimeout(reverseDebounce);
+  searchDebounce = null;
+  reverseDebounce = null;
+  addressForm.value = { label: 'Nhà riêng', line1: '', ward: '', district: '', province: '', isDefault: false };
+  addressLat.value = '';
+  addressLng.value = '';
+  addressMarkers.value = [];
+  addressSuggestions.value = [];
+  searchingAddress.value = false;
+  searchingByCoords.value = false;
+  editLocationVerified.value = false;
+  addressError.value = '';
+  originalAddress.value = null;
+  editingAddressId.value = null;
+  mapCenter.value = { lat: 21.0285, lng: 105.8542 };
+};
+const openAddAddress = () => {
+  if (savingAddress.value) return;
+  resetAddressForm();
+  showAddressModal.value = true;
+};
+const openEditAddress = (addr: UserAddress) => {
+  if (savingAddress.value) return;
+  resetAddressForm();
+  originalAddress.value = { ...addr };
+  editingAddressId.value = addr.id;
+  addressForm.value = {
+    label: addr.label ?? '', line1: addr.line1, ward: addr.ward ?? '',
+    district: addr.district, province: addr.province, isDefault: addr.isDefault,
+  };
+  if (addr.lat != null && addr.lng != null && validCoordinates(Number(addr.lat), Number(addr.lng))) {
+    addressLat.value = Number(addr.lat);
+    addressLng.value = Number(addr.lng);
+    mapCenter.value = { lat: Number(addr.lat), lng: Number(addr.lng) };
+    addressMarkers.value = [{ id: 'picker', lat: Number(addr.lat), lng: Number(addr.lng), draggable: true, color: '#dc2626' }];
+  }
+  showAddressModal.value = true;
+};
+const closeAddressModal = () => {
+  if (savingAddress.value) return;
+  showAddressModal.value = false;
+  resetAddressForm();
+};
+const invalidateEditLocation = () => {
+  addressGeoEpoch++;
+  if (!editingAddressId.value) return;
+  editLocationVerified.value = false;
+  addressError.value = '';
+};
 // Admin-area fields (ward/district/province) are never typed by hand anymore — they're
 // always derived from a map/search/coordinate lookup. Vietnam's post-reform addressing
 // often has no district level, so we fall back to ward/province to keep the field the
@@ -60,14 +125,22 @@ const applyPlace = (lat: number, lng: number, place?: { formattedAddress?: strin
   addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
   if (place) {
     addressForm.value.line1 = place.formattedAddress || place.description || addressForm.value.line1;
-    addressForm.value.ward = place.ward || addressForm.value.ward;
+    addressForm.value.ward = originalAddress.value ? (place.ward || '') : (place.ward || addressForm.value.ward);
     addressForm.value.district = place.district || addressForm.value.district;
     addressForm.value.province = place.province || addressForm.value.province;
+    if (originalAddress.value) {
+      editLocationVerified.value = Boolean((place.formattedAddress || place.description) && place.province && place.district &&
+        sameArea(place.province, originalAddress.value.province) &&
+        sameArea(place.district, originalAddress.value.district));
+      addressError.value = editLocationVerified.value ? '' : 'Không thể đổi sang khu vực khác tại đây. Vui lòng thêm địa chỉ mới.';
+    }
   }
 };
 
 let reverseDebounce: ReturnType<typeof setTimeout> | null = null;
 const onMapMarkerMove = (_id: string, lat: number, lng: number) => {
+  invalidateEditLocation();
+  const requestEpoch = addressGeoEpoch;
   addressLat.value = lat;
   addressLng.value = lng;
   addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
@@ -75,6 +148,7 @@ const onMapMarkerMove = (_id: string, lat: number, lng: number) => {
   reverseDebounce = setTimeout(async () => {
     try {
       const place = await geoApi.reverse(lat, lng);
+      if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
       applyPlace(lat, lng, place);
     } catch {
       // Keep the pin where the user dropped it even if reverse lookup fails.
@@ -83,15 +157,18 @@ const onMapMarkerMove = (_id: string, lat: number, lng: number) => {
 };
 
 const onAddressSearchInput = () => {
+  invalidateEditLocation();
+  const requestEpoch = addressGeoEpoch;
   if (searchDebounce) clearTimeout(searchDebounce);
   const query = addressForm.value.line1.trim();
   if (query.length < 3) { addressSuggestions.value = []; return; }
   searchDebounce = setTimeout(async () => {
     searchingAddress.value = true;
     try {
-      addressSuggestions.value = await geoApi.autocomplete(query);
+      const suggestions = await geoApi.autocomplete(query);
+      if (requestEpoch === addressGeoEpoch && showAddressModal.value) addressSuggestions.value = suggestions;
     } catch {
-      addressSuggestions.value = [];
+      if (requestEpoch === addressGeoEpoch) addressSuggestions.value = [];
     } finally {
       searchingAddress.value = false;
     }
@@ -99,6 +176,7 @@ const onAddressSearchInput = () => {
 };
 
 const selectAddressSuggestion = (suggestion: PlaceSuggestion) => {
+  invalidateEditLocation();
   addressSuggestions.value = [];
   mapCenter.value = { lat: suggestion.lat, lng: suggestion.lng };
   applyPlace(suggestion.lat, suggestion.lng, suggestion);
@@ -107,23 +185,28 @@ const selectAddressSuggestion = (suggestion: PlaceSuggestion) => {
 
 const searchingByCoords = ref(false);
 const searchByCoordinates = async () => {
+  if (searchingByCoords.value) return;
+  invalidateEditLocation();
+  const requestEpoch = addressGeoEpoch;
   if (addressLat.value === '' || addressLng.value === '') {
     alert('Vui lòng nhập đủ vĩ độ và kinh độ.');
     return;
   }
   const lat = Number(addressLat.value);
   const lng = Number(addressLng.value);
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     alert('Toạ độ không hợp lệ.');
     return;
   }
   searchingByCoords.value = true;
   try {
     const place = await geoApi.reverse(lat, lng);
+    if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
     mapCenter.value = { lat, lng };
     applyPlace(lat, lng, place);
     mapRef.value?.flyTo(lat, lng);
   } catch {
+    if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
     // Reverse geocode failed (e.g. remote water/unmapped area); still center the map on the coordinates.
     mapCenter.value = { lat, lng };
     applyPlace(lat, lng);
@@ -135,14 +218,18 @@ const searchByCoordinates = async () => {
 };
 
 const locateAddress = () => {
+  invalidateEditLocation();
+  const requestEpoch = addressGeoEpoch;
   if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ định vị.');
   navigator.geolocation.getCurrentPosition(async position => {
+    if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
     const { latitude, longitude } = position.coords;
     mapCenter.value = { lat: latitude, lng: longitude };
     applyPlace(latitude, longitude);
     mapRef.value?.flyTo(latitude, longitude);
     try {
       const place = await geoApi.reverse(latitude, longitude);
+      if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
       applyPlace(latitude, longitude, place);
     } catch {
       // Keep the raw coordinates pinned even if reverse lookup fails.
@@ -165,7 +252,7 @@ const loadAddresses = async () => {
     const data = await profileApi.getAddresses();
     addresses.value = data;
   } catch {
-    addresses.value = [];
+    // Keep the last verified address list when a refresh temporarily fails.
   } finally {
     loadingAddresses.value = false;
   }
@@ -275,6 +362,62 @@ const handleAddAddress = async () => {
   }
 };
 
+const handleSaveAddress = async () => {
+  if (savingAddress.value) return;
+  if (!editingAddressId.value) {
+    savingAddress.value = true;
+    try { await handleAddAddress(); } finally { savingAddress.value = false; }
+    return;
+  }
+  const original = originalAddress.value;
+  if (!original) return;
+  addressError.value = '';
+  const line1 = addressForm.value.line1.trim();
+  if (!line1 || !addressForm.value.province.trim() || !addressForm.value.district.trim()) {
+    addressError.value = 'Vui lòng chọn địa chỉ đầy đủ trước khi lưu.';
+    return;
+  }
+  const areaChanged = !sameArea(original.province, addressForm.value.province) ||
+    !sameArea(original.district, addressForm.value.district);
+  if (areaChanged) {
+    addressError.value = 'Không thể đổi sang khu vực khác tại đây. Vui lòng thêm địa chỉ mới.';
+    return;
+  }
+  const lat = addressLat.value === '' ? null : Number(addressLat.value);
+  const lng = addressLng.value === '' ? null : Number(addressLng.value);
+  const locationChanged = line1 !== original.line1.trim() ||
+    (addressForm.value.ward || '') !== (original.ward || '') ||
+    lat !== (original.lat == null ? null : Number(original.lat)) ||
+    lng !== (original.lng == null ? null : Number(original.lng));
+  if (locationChanged && (!editLocationVerified.value || !validCoordinates(addressLat.value, addressLng.value))) {
+    addressError.value = 'Địa chỉ hoặc vị trí đã thay đổi. Vui lòng xác nhận lại vị trí trên bản đồ trước khi lưu.';
+    return;
+  }
+  const dto = locationChanged ? {
+    label: addressForm.value.label.trim(), isDefault: addressForm.value.isDefault,
+    line1, ward: addressForm.value.ward,
+    district: original.district, province: original.province,
+    lat: lat!, lng: lng!,
+  } : {
+    label: addressForm.value.label.trim(), isDefault: addressForm.value.isDefault,
+  };
+  savingAddress.value = true;
+  try {
+    const updated = await profileApi.updateAddress(original.id, dto);
+    addresses.value = addresses.value.map(addr => addr.id === original.id ? updated : addr);
+    closeAddressModalAfterSave();
+    await loadAddresses();
+  } catch {
+    addressError.value = 'Không thể lưu địa chỉ. Vui lòng thử lại.';
+  } finally {
+    savingAddress.value = false;
+  }
+};
+// Close only after an acknowledged server update, independently of the in-flight guard.
+const closeAddressModalAfterSave = () => {
+  showAddressModal.value = false;
+  resetAddressForm();
+};
 const triggerDeleteAddress = (id: string) => {
   addressToDelete.value = id;
   showDeleteConfirm.value = true;
@@ -326,7 +469,7 @@ const confirmDelete = async () => {
 
         <!-- Action Buttons -->
         <div class="flex items-center gap-3">
-          <FhButton variant="primary" size="md" @click="showAddressModal = true">
+          <FhButton variant="primary" size="md" data-testid="add-saved-address" @click="openAddAddress">
             <Plus :size="16" class="mr-1.5" /> Thêm địa chỉ mới
           </FhButton>
         </div>
@@ -380,7 +523,7 @@ const confirmDelete = async () => {
             <p class="text-xs text-ink-500 max-w-xs mx-auto mt-1 mb-4">
               Thêm địa chỉ nhà riêng hoặc văn phòng để gọi thợ tiện lợi hơn.
             </p>
-            <FhButton variant="secondary" size="sm" @click="showAddressModal = true" class="bg-ink-100">
+            <FhButton variant="secondary" size="sm" @click="openAddAddress" class="bg-ink-100">
               <Plus :size="15" class="mr-1" /> Thêm địa chỉ mới
             </FhButton>
           </div>
@@ -404,6 +547,9 @@ const confirmDelete = async () => {
                 <p class="text-xs text-ink-500">{{ addr.ward ? addr.ward + ', ' : '' }}{{ addr.district }}, {{ addr.province }}</p>
               </div>
               <div class="pt-2 border-t border-ink-100 flex items-center justify-end">
+                <button type="button" :data-testid="`edit-saved-address-${addr.id}`" class="p-1.5 text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded" title="Sửa địa chỉ" @click="openEditAddress(addr)">
+                  <Pencil :size="16" />
+                </button>
                 <button class="p-1.5 text-ink-400 hover:text-danger-500 hover:bg-danger-50 rounded transition-all duration-300 hover:scale-110 active:scale-95" title="Xoá địa chỉ" @click="triggerDeleteAddress(addr.id)">
                   <Trash2 :size="16" />
                 </button>
@@ -512,18 +658,19 @@ const confirmDelete = async () => {
     >
       <div
         v-if="showAddressModal"
+        data-testid="saved-address-modal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
       >
       <div class="bg-white rounded-md max-w-md w-full shadow-xl flex flex-col max-h-[90vh]">
         <div class="flex items-center justify-between px-6 pt-6 shrink-0">
           <h3 class="text-lg font-bold text-ink-900">
-            Thêm Địa chỉ Mới
+            {{ editingAddressId ? 'Sửa địa chỉ đã lưu' : 'Thêm Địa chỉ Mới' }}
           </h3>
           <button
             type="button"
             aria-label="Đóng"
             class="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100"
-            @click="showAddressModal = false"
+            @click="closeAddressModal"
           >
             <X :size="18" />
           </button>
@@ -533,7 +680,7 @@ const confirmDelete = async () => {
           <div>
             <label class="block font-semibold text-ink-700 mb-1">Tên nhãn gợi nhớ</label>
             <input
-              v-model="addressForm.label"
+              v-model="addressForm.label" data-testid="saved-address-label"
               type="text"
               class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
               placeholder="Nhà riêng, Văn phòng, Nhà bố mẹ..."
@@ -544,7 +691,7 @@ const confirmDelete = async () => {
             <label class="block font-semibold text-ink-700 mb-1">Địa chỉ (số nhà, tên đường...) *</label>
             <div class="relative">
               <input
-                v-model="addressForm.line1"
+                v-model="addressForm.line1" data-testid="saved-address-line1"
                 type="text"
                 placeholder="Tìm địa chỉ, ví dụ: Số 25 Ngõ 12 Đội Cấn"
                 class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
@@ -582,22 +729,22 @@ const confirmDelete = async () => {
               @marker-move="onMapMarkerMove"
             />
             <div class="grid grid-cols-2 gap-2">
-              <input v-model.number="addressLat" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
-              <input v-model.number="addressLng" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
+              <input v-model.number="addressLat" data-testid="saved-address-lat" @input="invalidateEditLocation" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
+              <input v-model.number="addressLng" data-testid="saved-address-lng" @input="invalidateEditLocation" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
             </div>
             <FhButton
               variant="ghost"
               size="sm"
               :disabled="searchingByCoords"
               :loading="searchingByCoords"
-              @click="searchByCoordinates"
+              @click="searchByCoordinates" data-testid="verify-saved-address-coordinates"
             >
               Tìm theo toạ độ này
             </FhButton>
           </div>
           <label class="flex items-center gap-2 cursor-pointer pt-1">
             <input
-              v-model="addressForm.isDefault"
+              v-model="addressForm.isDefault" data-testid="saved-address-default"
               type="checkbox"
               class="rounded text-brand-600 focus:ring-brand-500"
             />
@@ -605,12 +752,14 @@ const confirmDelete = async () => {
           </label>
         </div>
 
+        <p v-if="addressError" data-testid="saved-address-error" role="alert" class="px-6 py-2 text-xs text-danger-700">{{ addressError }}</p>
+        <p v-if="editingAddressId" class="px-6 text-xs text-ink-500">Sửa địa chỉ đã lưu không làm thay đổi địa chỉ của các đơn đã tạo trước đây.</p>
         <div class="flex justify-end gap-3 px-6 py-4 border-t border-ink-100 shrink-0">
-          <FhButton variant="ghost" size="sm" @click="showAddressModal = false">
+          <FhButton variant="ghost" size="sm" data-testid="cancel-saved-address" :disabled="savingAddress" @click="closeAddressModal">
             Huỷ bỏ
           </FhButton>
-          <FhButton variant="primary" size="sm" @click="handleAddAddress">
-            Lưu địa chỉ
+          <FhButton variant="primary" size="sm" data-testid="save-saved-address" :loading="savingAddress" @click="handleSaveAddress">
+            {{ editingAddressId ? 'Lưu thay đổi' : 'Lưu địa chỉ' }}
           </FhButton>
         </div>
       </div>
