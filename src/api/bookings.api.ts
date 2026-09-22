@@ -17,6 +17,7 @@ export interface BookingItem {
   status: 'SUBMITTED' | 'MATCHING' | 'MATCHED' | 'CANCELLED' | 'CLOSED';
   createdAt: string;
   mediaUrls?: string[];
+  media?: BookingMedia[];
   diagnosis?: {
     possibleIssues: string[];
     possibleCauses: string[];
@@ -24,6 +25,15 @@ export interface BookingItem {
     suggestedPriceMax: number;
     confidence: number;
   };
+}
+
+export interface BookingMedia {
+  id: string;
+  url: string | null;
+  isPrivate: boolean;
+  legacyInsecure: boolean;
+  mimeType: string;
+  sizeBytes: number | null;
 }
 
 export interface CreateBookingDto {
@@ -35,6 +45,7 @@ export interface CreateBookingDto {
   quantity?: number;
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   mediaUrls?: string[];
+  photoUploadIds?: string[];
 }
 
 export interface TechnicianCandidate {
@@ -126,11 +137,11 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
     },
   };
 }
-function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string; media?: { url: string }[] }): BookingItem {
+function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string }): BookingItem {
   return { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
     addressSummary: booking.addressTextSnapshot ?? booking.addressSummary,
     preferredAt: booking.preferredStartAt ?? booking.preferredAt,
-    mediaUrls: booking.media ? booking.media.map((m) => m.url) : booking.mediaUrls,
+    mediaUrls: booking.media ? booking.media.flatMap((media) => typeof media.url === 'string' ? [media.url] : []) : booking.mediaUrls,
     status: booking.status.toUpperCase() as BookingItem['status'] };
 }
 

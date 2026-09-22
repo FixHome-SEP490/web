@@ -1,0 +1,123 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import apiClient from '../src/api/client';
+import { bookingsApi, type BookingMedia } from '../src/api/bookings.api';
+import { mediaApi } from '../src/api/media.api';
+
+vi.mock('../src/api/client', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
+
+describe('private Booking media API contract', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('uploads a Booking photo through the authenticated API and returns only safe metadata', async () => {
+    const file = new File(['private photo'], 'unit.jpg', { type: 'image/jpeg' });
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: { data: { uploadId: 'opaque-upload-id', mimeType: 'image/jpeg', sizeBytes: file.size, url: 'https://public.invalid/photo.jpg' } },
+    });
+
+    await expect(mediaApi.uploadBookingPhoto(file)).resolves.toEqual({
+      uploadId: 'opaque-upload-id',
+      mimeType: 'image/jpeg',
+      sizeBytes: file.size,
+    });
+
+    const [path, body, config] = vi.mocked(apiClient.post).mock.calls[0];
+    expect(path).toBe('/media/booking-photo-upload');
+    expect(body).toBeInstanceOf(FormData);
+    expect((body as FormData).get('file')).toBe(file);
+    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+    expect(apiClient.post).not.toHaveBeenCalledWith('/media/upload', expect.anything(), expect.anything());
+  });
+
+  it('keeps the existing public upload endpoint available to unrelated evidence flows', async () => {
+    const file = new File(['evidence'], 'evidence.jpg', { type: 'image/jpeg' });
+    const legacyResponse = { url: 'https://public.invalid/evidence.jpg', mimeType: file.type, sizeBytes: file.size, filename: file.name };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { data: legacyResponse } });
+
+    await expect(mediaApi.upload(file)).resolves.toEqual(legacyResponse);
+    expect(vi.mocked(apiClient.post).mock.calls[0][0]).toBe('/media/upload');
+  });
+
+  it.each([
+    { mimeType: 'image/jpeg', sizeBytes: 13 },
+    { uploadId: 'opaque-upload-id', mimeType: 'image/jpeg', sizeBytes: -1 },
+    { uploadId: 'opaque-upload-id', mimeType: '', sizeBytes: 13 },
+  ])('rejects incomplete private upload metadata', async (metadata) => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { data: metadata } });
+
+    await expect(mediaApi.uploadBookingPhoto(new File(['photo'], 'unit.jpg', { type: 'image/jpeg' })))
+      .rejects.toThrow('invalid private Booking photo metadata');
+  });
+
+  it('submits photoUploadIds and preserves private media without mapping null URLs into legacy image URLs', async () => {
+    const dto = {
+      serviceId: 'service-id',
+      addressId: 'address-id',
+      description: 'Appliance repair',
+      preferredStartAt: '2026-09-23T08:00:00.000Z',
+      preferredEndAt: '2026-09-23T10:00:00.000Z',
+      urgency: 'NORMAL' as const,
+      photoUploadIds: ['opaque-upload-id'],
+    };
+    const privateMedia = {
+      id: 'private-media-id',
+      url: null,
+      isPrivate: true,
+      legacyInsecure: false,
+      mimeType: 'image/jpeg',
+      sizeBytes: 13,
+    };
+    const legacyMedia = {
+      id: 'legacy-media-id',
+      url: 'https://public.invalid/legacy.jpg',
+      isPrivate: false,
+      legacyInsecure: true,
+      mimeType: 'image/png',
+      sizeBytes: 21,
+    };
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: {
+        data: {
+          id: 'booking-id',
+          status: 'submitted',
+          media: [privateMedia, legacyMedia],
+        },
+      },
+    });
+
+    const booking = await bookingsApi.createBooking(dto);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/bookings', { ...dto, urgency: 'medium' });
+    expect(booking.media).toEqual([privateMedia, legacyMedia]);
+    expect(booking.mediaUrls).toEqual(['https://public.invalid/legacy.jpg']);
+    expect(booking.mediaUrls).not.toContain(null);
+  });
+
+  it('preserves null size metadata on a legacy public media row without changing URL mapping', async () => {
+    const privateMedia: BookingMedia = {
+      id: 'private-media-id',
+      url: null,
+      isPrivate: true,
+      legacyInsecure: false,
+      mimeType: 'image/jpeg',
+      sizeBytes: 13,
+    };
+    const legacyMedia: BookingMedia = {
+      id: 'legacy-media-id',
+      url: 'https://public.invalid/legacy.jpg',
+      isPrivate: false,
+      legacyInsecure: true,
+      mimeType: 'image/png',
+      sizeBytes: null,
+    };
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { data: { id: 'booking-id', status: 'submitted', media: [privateMedia, legacyMedia] } },
+    });
+
+    const booking = await bookingsApi.getBooking('booking-id');
+
+    expect(booking.media).toEqual([privateMedia, legacyMedia]);
+    expect(booking.media?.[1]).toMatchObject({ sizeBytes: null, isPrivate: false, legacyInsecure: true });
+    expect(booking.mediaUrls).toEqual(['https://public.invalid/legacy.jpg']);
+    expect(booking.mediaUrls).not.toContain(null);
+  });
+});

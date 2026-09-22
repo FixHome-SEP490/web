@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // src/pages/customer/NewBookingWizardPage.vue
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Wrench,
@@ -44,9 +44,37 @@ const selectedServiceId = ref('');
 const description = ref('');
 const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
 const quantity = ref(1);
-const uploadedPhotos = ref<string[]>([]);
+interface BookingPhotoDraft {
+  localId: number;
+  previewUrl: string;
+  uploadId: string | null;
+}
+
+const uploadedPhotos = ref<BookingPhotoDraft[]>([]);
 const uploadingPhoto = ref(false);
 const photoInput = ref<HTMLInputElement | null>(null);
+const isPhotoFlowDisposed = ref(false);
+const activePhotoPreviewUrls = new Set<string>();
+let nextPhotoLocalId = 0;
+
+const createPhotoPreviewUrl = (file: File) => {
+  const previewUrl = URL.createObjectURL(file);
+  activePhotoPreviewUrls.add(previewUrl);
+  return previewUrl;
+};
+
+const revokePhotoPreviewUrl = (previewUrl: string) => {
+  if (!activePhotoPreviewUrls.delete(previewUrl)) return;
+  URL.revokeObjectURL(previewUrl);
+};
+
+const removePhotoByLocalId = (localId: number) => {
+  const index = uploadedPhotos.value.findIndex((photo) => photo.localId === localId);
+  if (index < 0) return false;
+  const [photo] = uploadedPhotos.value.splice(index, 1);
+  revokePhotoPreviewUrl(photo.previewUrl);
+  return true;
+};
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
@@ -168,6 +196,15 @@ onMounted(async () => {
   }
 });
 
+onBeforeUnmount(() => {
+  isPhotoFlowDisposed.value = true;
+  for (const previewUrl of activePhotoPreviewUrls) {
+    URL.revokeObjectURL(previewUrl);
+  }
+  activePhotoPreviewUrls.clear();
+  uploadedPhotos.value = [];
+});
+
 const onCategorySelect = (catId: string) => {
   selectedCategoryId.value = catId;
   const cat = categories.value.find((c) => c.id === catId);
@@ -180,6 +217,7 @@ const onCategorySelect = (catId: string) => {
 };
 
 const openPhotoPicker = () => {
+  if (uploadingPhoto.value) return;
   if (uploadedPhotos.value.length >= 5) {
     window.alert('Tối đa 5 ảnh thiết bị.');
     return;
@@ -191,14 +229,20 @@ const handlePhotoSelected = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   input.value = '';
-  if (files.length === 0) return;
+  if (files.length === 0 || uploadingPhoto.value || isPhotoFlowDisposed.value) return;
 
   const remaining = 5 - uploadedPhotos.value.length;
+  if (remaining <= 0) {
+    window.alert('Tối đa 5 ảnh thiết bị.');
+    return;
+  }
+  if (files.length > remaining) window.alert('Tối đa 5 ảnh thiết bị.');
   const toUpload = files.slice(0, remaining);
 
   uploadingPhoto.value = true;
   try {
     for (const file of toUpload) {
+      if (isPhotoFlowDisposed.value) return;
       if (!ALLOWED_MEDIA_MIME_TYPES.includes(file.type)) {
         window.alert(`Ảnh "${file.name}" không đúng định dạng (chỉ nhận JPG, PNG, WebP).`);
         continue;
@@ -207,20 +251,32 @@ const handlePhotoSelected = async (event: Event) => {
         window.alert(`Ảnh "${file.name}" vượt quá 10 MB.`);
         continue;
       }
+      const photo: BookingPhotoDraft = {
+        localId: nextPhotoLocalId++,
+        previewUrl: createPhotoPreviewUrl(file),
+        uploadId: null,
+      };
+      uploadedPhotos.value.push(photo);
       try {
-        const uploaded = await mediaApi.upload(file);
-        uploadedPhotos.value.push(uploaded.url);
+        const uploaded = await mediaApi.uploadBookingPhoto(file);
+        if (isPhotoFlowDisposed.value) continue;
+        const currentPhoto = uploadedPhotos.value.find((item) => item.localId === photo.localId);
+        if (currentPhoto) currentPhoto.uploadId = uploaded.uploadId;
       } catch {
-        window.alert(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
+        const photoStillSelected = removePhotoByLocalId(photo.localId);
+        if (!isPhotoFlowDisposed.value && photoStillSelected) {
+          window.alert(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
+        }
       }
     }
   } finally {
-    uploadingPhoto.value = false;
+    if (!isPhotoFlowDisposed.value) uploadingPhoto.value = false;
   }
 };
 
 const removePhoto = (idx: number) => {
-  uploadedPhotos.value.splice(idx, 1);
+  const photo = uploadedPhotos.value[idx];
+  if (photo) removePhotoByLocalId(photo.localId);
 };
 
 const goToStep2 = () => {
@@ -281,6 +337,16 @@ const goToNextStepFrom2 = async () => {
 };
 
 const createAndFindTech = async () => {
+  if (uploadingPhoto.value) {
+    window.alert('Vui lòng chờ ảnh tải lên hoàn tất trước khi đặt lịch.');
+    return;
+  }
+  const photoUploadIds = uploadedPhotos.value.flatMap((photo) => photo.uploadId ? [photo.uploadId] : []);
+  if (photoUploadIds.length !== uploadedPhotos.value.length) {
+    window.alert('Không thể xác nhận ảnh. Vui lòng chọn lại ảnh trước khi đặt lịch.');
+    return;
+  }
+
   loading.value = true;
   try {
     if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
@@ -292,7 +358,7 @@ const createAndFindTech = async () => {
       ...schedule,
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
-      mediaUrls: uploadedPhotos.value,
+      photoUploadIds,
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch (error) {
@@ -447,10 +513,10 @@ const createAndFindTech = async () => {
             <div v-if="uploadedPhotos.length > 0" class="flex flex-wrap gap-2.5 mt-3">
               <div
                 v-for="(photo, idx) in uploadedPhotos"
-                :key="idx"
+                :key="photo.localId"
                 class="relative w-16 h-16 rounded-xl overflow-hidden border border-ink-200 shadow-xs group"
               >
-                <img :src="photo" class="w-full h-full object-cover" />
+                <img :src="photo.previewUrl" alt="Ảnh thiết bị đã chọn" class="w-full h-full object-cover" />
 
                 <button
                   type="button"
