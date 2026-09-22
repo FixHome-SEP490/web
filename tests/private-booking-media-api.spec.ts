@@ -120,4 +120,26 @@ describe('private Booking media API contract', () => {
     expect(booking.mediaUrls).toEqual(['https://public.invalid/legacy.jpg']);
     expect(booking.mediaUrls).not.toContain(null);
   });
+
+  it('downloads private Booking media as an authenticated binary response without URL credentials', async () => {
+    const blob = new Blob(['private image bytes'], { type: 'image/jpeg' });
+    vi.mocked(apiClient.get).mockResolvedValue({ data: blob });
+
+    await expect(mediaApi.getBookingMediaContent('booking-id', 'private-media-id')).resolves.toBe(blob);
+
+    const [path, config] = vi.mocked(apiClient.get).mock.calls[0];
+    expect(path).toBe('/bookings/booking-id/media/private-media-id/content');
+    expect(config).toEqual({ responseType: 'blob' });
+    expect(path).not.toContain('access_token');
+    expect(path).not.toContain('token');
+    expect(config).not.toHaveProperty('params');
+    expect(config).not.toHaveProperty('headers.Authorization');
+  });
+
+  it('rejects a non-binary private media response before it can become a preview', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { message: 'forbidden' } });
+
+    await expect(mediaApi.getBookingMediaContent('booking-id', 'private-media-id'))
+      .rejects.toThrow('invalid private Booking media response');
+  });
 });

@@ -54,4 +54,16 @@ export const mediaApi = {
     }
     return { uploadId: data.uploadId, mimeType: data.mimeType, sizeBytes: data.sizeBytes };
   },
+
+  /** Downloads private Booking media through the authenticated Backend proxy. */
+  async getBookingMediaContent(bookingId: string, mediaId: string): Promise<Blob> {
+    const res = await apiClient.get<Blob>(
+      `/bookings/${encodeURIComponent(bookingId)}/media/${encodeURIComponent(mediaId)}/content`,
+      { responseType: 'blob' },
+    );
+    if (!(res.data instanceof Blob)) {
+      throw new Error('Unexpected API response: invalid private Booking media response');
+    }
+    return res.data;
+  },
 };

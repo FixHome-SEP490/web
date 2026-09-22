@@ -3,8 +3,8 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
-import { FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
-import { bookingsApi, type BookingItem } from '../../api/bookings.api';
+import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
+import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
 
 const route = useRoute();
@@ -16,6 +16,17 @@ const loadError = ref('');
 const saving = ref(false);
 const saveError = ref('');
 const booking = ref<BookingItem | null>(null);
+const bookingMedia = computed<BookingMedia[]>(() => {
+  if (booking.value?.media?.length) return booking.value.media;
+  return (booking.value?.mediaUrls ?? []).map((url, index) => ({
+    id: `legacy-media-${index}`,
+    url,
+    isPrivate: false,
+    legacyInsecure: true,
+    mimeType: 'image/*',
+    sizeBytes: null,
+  }));
+});
 const checkingOrderLink = ref(false);
 const orderLinkError = ref('');
 const serviceOrderId = computed(() => booking.value?.serviceOrderId?.trim() ?? '');
@@ -248,6 +259,8 @@ const handleSave = async () => {
       </div>
 
       <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ cancelNotice }}</p>
+
+      <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
 
       <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
       <div v-if="serviceOrderId" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">

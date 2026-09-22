@@ -5,7 +5,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
 
 const { mockGet, mockPost, push } = vi.hoisted(() => ({ mockGet: vi.fn(), mockPost: vi.fn(), push: vi.fn() }));
-vi.mock('../src/api/client', () => ({ default: { get: mockGet, post: mockPost } }));
+vi.mock('../src/api/client', () => ({
+  default: { get: mockGet, post: mockPost },
+  AUTH_SESSION_INVALIDATED_EVENT: 'fixhome:auth-session-invalidated',
+}));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'booking-real-id' } }),
   useRouter: () => ({ push }),

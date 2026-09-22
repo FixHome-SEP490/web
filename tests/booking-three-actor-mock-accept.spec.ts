@@ -7,7 +7,10 @@ import { defineComponent, h } from 'vue';
 const { mockGet, mockPost, push, route } = vi.hoisted(() => ({
   mockGet: vi.fn(), mockPost: vi.fn(), push: vi.fn(), route: { params: { id: 'booking-synthetic' } },
 }));
-vi.mock('../src/api/client', () => ({ default: { get: mockGet, post: mockPost } }));
+vi.mock('../src/api/client', () => ({
+  default: { get: mockGet, post: mockPost },
+  AUTH_SESSION_INVALIDATED_EVENT: 'fixhome:auth-session-invalidated',
+}));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
 
 import { bookingsApi } from '../src/api/bookings.api';
