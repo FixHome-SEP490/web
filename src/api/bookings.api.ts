@@ -145,6 +145,33 @@ function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string;
     status: booking.status.toUpperCase() as BookingItem['status'] };
 }
 
+/**
+ * Full Booking media is only safe to render after the Backend returned the
+ * requested Booking identity and complete media metadata. Invitation previews
+ * intentionally do not satisfy this contract.
+ */
+export function isFullBookingWithMedia(
+  booking: BookingItem,
+  expectedBookingId: string,
+): booking is BookingItem & { media: BookingMedia[] } {
+  if (!expectedBookingId.trim() || booking.id !== expectedBookingId || !Array.isArray(booking.media)) {
+    return false;
+  }
+
+  return booking.media.every((media) => (
+    typeof media.id === 'string'
+      && media.id.trim().length > 0
+      && (media.url === null || typeof media.url === 'string')
+      && typeof media.isPrivate === 'boolean'
+      && typeof media.legacyInsecure === 'boolean'
+      && typeof media.mimeType === 'string'
+      && media.mimeType.trim().length > 0
+      && (media.sizeBytes === null
+        || (typeof media.sizeBytes === 'number' && Number.isFinite(media.sizeBytes) && media.sizeBytes >= 0))
+      && (!media.isPrivate || media.url === null)
+  ));
+}
+
 export const bookingsApi = {
   async createBooking(dto: CreateBookingDto): Promise<BookingItem> {
     const res = await apiClient.post<{ data: BookingItem }>('/bookings', {

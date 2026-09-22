@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../src/api/client';
-import { bookingsApi, type BookingMedia } from '../src/api/bookings.api';
+import { bookingsApi, isFullBookingWithMedia, type BookingMedia, type BookingItem } from '../src/api/bookings.api';
 import { mediaApi } from '../src/api/media.api';
 
 vi.mock('../src/api/client', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
@@ -119,6 +119,24 @@ describe('private Booking media API contract', () => {
     expect(booking.media?.[1]).toMatchObject({ sizeBytes: null, isPrivate: false, legacyInsecure: true });
     expect(booking.mediaUrls).toEqual(['https://public.invalid/legacy.jpg']);
     expect(booking.mediaUrls).not.toContain(null);
+  });
+
+  it('accepts complete media metadata with legacy null size and rejects invitation previews', () => {
+    const complete = {
+      id: 'booking-id',
+      media: [{
+        id: 'legacy-media-id',
+        url: 'https://public.invalid/legacy.jpg',
+        isPrivate: false,
+        legacyInsecure: true,
+        mimeType: 'image/png',
+        sizeBytes: null,
+      }],
+    } as BookingItem;
+
+    expect(isFullBookingWithMedia(complete, 'booking-id')).toBe(true);
+    expect(isFullBookingWithMedia({ ...complete, media: undefined }, 'booking-id')).toBe(false);
+    expect(isFullBookingWithMedia({ ...complete, id: 'different-booking' }, 'booking-id')).toBe(false);
   });
 
   it('downloads private Booking media as an authenticated binary response without URL credentials', async () => {

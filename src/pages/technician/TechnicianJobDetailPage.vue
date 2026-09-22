@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -22,21 +22,28 @@ import {
   FhStatusPill,
   FhCostBreakdown,
   FhMoney,
+  BookingMediaViewer,
 } from '../../components';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
 
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
-const jobId = route.params.id as string;
+let jobId = String(route.params.id ?? '');
+let loadGeneration = 0;
+let disposed = false;
 
 const loading = ref(true);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
 const historicalJob = ref<HistoricalOrderItem | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
+const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
+const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
 
 // Workspace Steps State
 const isEnRoute = ref(false);
@@ -81,14 +88,19 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', file?: File) {
   finally { actionLoading.value = false; }
 }
 
-onMounted(async () => {
-  await loadJob();
+onMounted(() => {
+  disposed = false;
+  void loadJob(jobId);
 });
 
-const loadJob = async () => {
+const loadJob = async (requestedJobId = jobId) => {
+    const generation = ++loadGeneration;
+    const isCurrent = () => !disposed && generation === loadGeneration && requestedJobId === jobId;
     loading.value = true;
+    bookingForMedia.value = null;
     try {
-      const data = await ordersApi.getTechnicianOrder(jobId);
+      const data = await ordersApi.getTechnicianOrder(requestedJobId);
+      if (!isCurrent()) return;
       if (isHistoricalOrder(data)) {
         historicalJob.value = data;
         job.value = null;
@@ -107,15 +119,42 @@ const loadJob = async () => {
       completionRequested.value = !!data.completionRequestedAt;
       quotationSubmitted.value = !!data.quotation;
       declaredCashAmount.value = Number(data.grandTotal);
-      const settlement = await ordersApi.getCashSettlement(jobId);
+
+      const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
+      if (bookingId) {
+        try {
+          const booking = await bookingsApi.getBooking(bookingId);
+          if (isCurrent() && isFullBookingWithMedia(booking, bookingId)) {
+            bookingForMedia.value = booking;
+          }
+        } catch {
+          if (isCurrent()) bookingForMedia.value = null;
+        }
+      }
+      if (!isCurrent()) return;
+
+      const settlement = await ordersApi.getCashSettlement(requestedJobId);
+      if (!isCurrent()) return;
       cashSettled.value = !!settlement;
       cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
       if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
-        additionalCosts.value = await ordersApi.getAdditionalCosts(jobId);
+        const costs = await ordersApi.getAdditionalCosts(requestedJobId);
+        if (!isCurrent()) return;
+        additionalCosts.value = costs;
       }
-    } catch { actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'}; }
-    finally { loading.value = false; }
+    } catch {
+      if (isCurrent()) actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'};
+    } finally {
+      if (isCurrent()) loading.value = false;
+    }
   };
+
+watch(() => String(route.params.id ?? ''), (nextId, previousId) => {
+  if (!nextId || nextId === previousId) return;
+  jobId = nextId;
+  bookingForMedia.value = null;
+  void loadJob(nextId);
+});
 
   const handleChatWithCustomer = async () => {
     if (!job.value) return;
@@ -180,7 +219,12 @@ const startLocationPing = () => {
   locationPing = setInterval(ping, 20000);
 };
 
-onUnmounted(stopLocationPing);
+onUnmounted(() => {
+  disposed = true;
+  loadGeneration += 1;
+  bookingForMedia.value = null;
+  stopLocationPing();
+});
 
 const handleEnRoute = async () => {
   try {
@@ -405,6 +449,12 @@ const handleDeclareCash = async () => {
           </div>
         </div>
       </FhCard>
+
+      <BookingMediaViewer
+        v-if="bookingForMedia && bookingMedia.length > 0"
+        :booking-id="bookingMediaBookingId"
+        :media="bookingMedia"
+      />
 
       <!-- Workspace Workflow Stepper -->
       <div class="space-y-5">

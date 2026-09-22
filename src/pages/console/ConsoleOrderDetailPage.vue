@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -13,20 +13,28 @@ import {
   FhCostBreakdown,
   FhMoney,
   FhTimeline,
+  BookingMediaViewer,
   type TimelineStep,
 } from '../../components';
 import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/console-order-context.api';
+import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { useAuthStore } from '../../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
-const orderId = route.params.id as string;
+const isStaffMediaViewerAllowed = computed(() => ['ADMIN', 'SERVICE_MANAGER'].includes(String(authStore.userRole ?? '').toUpperCase()));
+let orderId = String(route.params.id ?? '');
+let loadGeneration = 0;
+let disposed = false;
 
 const loading = ref(true);
 const loadError = ref('');
 const order = ref<ConsoleOrderContext | null>(null);
+const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
+const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
+const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -37,23 +45,65 @@ function getErrorMessage(reason: unknown, fallback: string): string {
   return fallback;
 }
 
-const loadOrder = async () => {
+const loadOrder = async (requestedOrderId = orderId) => {
+  const generation = ++loadGeneration;
+  const requestedRole = String(authStore.userRole ?? '').toUpperCase();
+  const isCurrent = () => !disposed
+    && generation === loadGeneration
+    && requestedOrderId === orderId
+    && requestedRole === String(authStore.userRole ?? '').toUpperCase();
   loading.value = true;
   loadError.value = '';
+  bookingForMedia.value = null;
   try {
     // Real API only: validation/network failures surface as an error state.
     // This page never falls back to local or mock order data.
-    order.value = await consoleOrderContextApi.getConsoleOrderContext(orderId);
+    const nextOrder = await consoleOrderContextApi.getConsoleOrderContext(requestedOrderId);
+    if (!isCurrent()) return;
+    order.value = nextOrder;
+
+    const bookingId = typeof nextOrder.bookingId === 'string' ? nextOrder.bookingId.trim() : '';
+    if (isStaffMediaViewerAllowed.value && bookingId) {
+      try {
+        const booking = await bookingsApi.getBooking(bookingId);
+        if (isCurrent() && isFullBookingWithMedia(booking, bookingId)) {
+          bookingForMedia.value = booking;
+        }
+      } catch {
+        if (isCurrent()) bookingForMedia.value = null;
+      }
+    }
   } catch (reason) {
+    if (!isCurrent()) return;
     order.value = null;
     loadError.value = getErrorMessage(reason, 'Không thể tải chi tiết đơn hàng từ Backend.');
   } finally {
-    loading.value = false;
+    if (isCurrent()) loading.value = false;
   }
 };
 
 onMounted(() => {
+  disposed = false;
   void loadOrder();
+});
+
+watch(() => String(route.params.id ?? ''), (nextId, previousId) => {
+  if (!nextId || nextId === previousId) return;
+  orderId = nextId;
+  bookingForMedia.value = null;
+  void loadOrder(nextId);
+});
+
+watch(() => String(authStore.userRole ?? '').toUpperCase(), (nextRole, previousRole) => {
+  if (nextRole === previousRole) return;
+  bookingForMedia.value = null;
+  void loadOrder(orderId);
+});
+
+onUnmounted(() => {
+  disposed = true;
+  loadGeneration += 1;
+  bookingForMedia.value = null;
 });
 
 // Render only the timeline entries actually returned by the Backend API.
@@ -99,7 +149,7 @@ const timelineSteps = computed<TimelineStep[]>(() => {
       role="alert"
     >
       <span class="flex-1">{{ loadError }}</span>
-      <button class="font-semibold underline" type="button" @click="loadOrder">Thử lại</button>
+      <button class="font-semibold underline" type="button" @click="() => loadOrder()">Thử lại</button>
     </div>
 
     <div v-else-if="order" class="space-y-6">
@@ -142,6 +192,12 @@ const timelineSteps = computed<TimelineStep[]>(() => {
           </div>
         </div>
       </FhCard>
+
+      <BookingMediaViewer
+        v-if="bookingForMedia && bookingMedia.length > 0"
+        :booking-id="bookingMediaBookingId"
+        :media="bookingMedia"
+      />
 
       <!-- Timeline History (API-backed only) -->
       <FhCard title="Lịch sử chuyển trạng thái (theo dữ liệu Backend)">
