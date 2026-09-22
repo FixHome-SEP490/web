@@ -13,7 +13,7 @@ import {
   ChevronDown,
   MessageSquare,
 } from 'lucide-vue-next';
-import { FhButton, ChatFloatingWidget } from '../components';
+import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import { toast } from 'vue-sonner';
 
 const router = useRouter();
@@ -189,5 +189,6 @@ const handleLogout = async () => {
 
     <!-- Global Floating Chat Widget -->
     <ChatFloatingWidget />
+    <AiAssistantWidget />
   </div>
 </template>

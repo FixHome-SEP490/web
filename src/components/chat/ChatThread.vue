@@ -60,7 +60,13 @@ const messages = computed(() => {
 
 const canSend = computed(() => {
   if (!conversation.value) return false;
-  return conversation.value.status === 'ACTIVE' && conversation.value.canSend !== false;
+  // The backend already decides this - status is ACTIVE and the viewer is a
+  // participant - so asking the same question again here bought nothing and
+  // cost everything: it compared against 'ACTIVE' while the wire carries
+  // 'active', so every open conversation rendered as "Khung trò chuyện đã
+  // đóng" and the whole feature looked unbuilt. The mobile app reads canSend
+  // alone, which is why it worked.
+  return conversation.value.canSend !== false;
 });
 
 const counterpartRoleLabel = computed(() => {

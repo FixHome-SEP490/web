@@ -84,15 +84,14 @@ export interface TechnicianCandidate {
   typicalWarrantyDays?: number;
 }
 
-export interface DiagnosisResult {
-  possibleIssues: string[];
-  possibleCauses: string[];
-  suggestedPriceMin: number;
-  suggestedPriceMax: number;
-  confidence: number;
-  urgency?: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
-  recommendedActions?: string[];
-}
+// DiagnosisResult and diagnoseAI lived here and are gone. They described a
+// reply the AI Service has never sent - possibleIssues, possibleCauses,
+// suggestedPriceMin - so the call always failed to parse into them, and the
+// catch returned a diagnosis written by hand: a named refrigerant, a named
+// cause, and a price range, presented as the assistant's own work. Since the
+// catch ran on every call, that invention was the only thing anyone ever saw.
+// The assistant is reached through src/api/ai.api.ts, which speaks the shape
+// the service actually returns and says so when it cannot be reached.
 
 /** Technician preview before winning: never model it as a full customer Booking. */
 export interface InvitationBookingPreview {
@@ -279,29 +278,7 @@ export const bookingsApi = {
     return normalizeBooking(res.data.data);
   },
 
-  async diagnoseAI(dto: { description: string; serviceId?: string }): Promise<DiagnosisResult> {
-    try {
-      const res = await apiClient.post<DiagnosisResult>('/ai/diagnoses', dto);
-      return res.data;
-    } catch {
-      // Smart offline fallback
-      return {
-        possibleIssues: [
-          'Thiếu gas làm lạnh (R32 / R410A) do rò rỉ zắc co',
-          'Lưới lọc bụi và dàn tản nhiệt bám bẩn nặng gây cản gió',
-          'Tụ kích block hoặc quạt dàn nóng bị yếu',
-        ],
-        possibleCauses: [
-          'Chưa bảo dưỡng định kỳ trong hơn 6 tháng',
-          'Môi trường bụi bẩn cao hoặc đường ống đồng gấp khúc',
-        ],
-        suggestedPriceMin: 150000,
-        suggestedPriceMax: 380000,
-        confidence: 0.92,
-        urgency: 'NORMAL',
-      };
-    }
-  },
+
 
   async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> {
     const res = await apiClient.get<{ data: TechnicianCandidate[] }>(`/bookings/${bookingId}/technician-candidates`);

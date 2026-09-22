@@ -18,7 +18,26 @@ function unwrap<T>(payload: unknown): T {
   return current as T;
 }
 
-export type ConversationStatus = 'ACTIVE' | 'READ_ONLY' | 'CLOSED';
+/**
+ * As the backend sends it, which is lowercase.
+ *
+ * The type used to claim uppercase and nothing checked it, so a comparison
+ * against 'ACTIVE' silently failed for every conversation that was open. Both
+ * spellings are listed because the value travels from a database enum through
+ * two services, and being wrong about it once already closed the whole feature.
+ */
+export type ConversationStatus =
+  | 'active'
+  | 'read_only'
+  | 'closed'
+  | 'ACTIVE'
+  | 'READ_ONLY'
+  | 'CLOSED';
+
+/** True when this conversation still accepts messages. Case-insensitive. */
+export function isConversationOpen(status: ConversationStatus | null | undefined): boolean {
+  return String(status ?? '').toUpperCase() === 'ACTIVE';
+}
 
 export interface ConversationParticipant {
   id: string;
