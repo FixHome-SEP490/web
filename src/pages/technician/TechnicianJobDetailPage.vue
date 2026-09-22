@@ -258,6 +258,9 @@ const handleCheckIn = async () => {
     finally { actionLoading.value = false; }
   };
 
+const openBeforeEvidencePicker = () => {
+  if (gpsCheckedIn.value && !beforePhotoUploaded.value && !actionLoading.value) beforeFile.value?.click();
+};
 const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files?.[0]);
 
 const handleSubmitQuotation = async () => {
@@ -513,7 +516,13 @@ const handleDeclareCash = async () => {
               <div
                 class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
                 :class="beforePhotoUploaded ? 'border-success-500 bg-success-50/50 text-success-700' : (!gpsCheckedIn ? 'border-ink-200 text-ink-300 cursor-not-allowed' : 'border-ink-300 hover:border-brand-500 text-ink-500')"
-                @click="gpsCheckedIn && !beforePhotoUploaded ? handleUploadBefore() : null"
+                data-testid="before-evidence-picker"
+                role="button"
+                :tabindex="gpsCheckedIn && !beforePhotoUploaded && !actionLoading ? 0 : -1"
+                :aria-disabled="!gpsCheckedIn || beforePhotoUploaded || actionLoading"
+                @click="openBeforeEvidencePicker"
+                @keydown.enter.prevent="openBeforeEvidencePicker"
+                @keydown.space.prevent="openBeforeEvidencePicker"
               >
                 <Camera :size="22" />
                 <span class="text-[10px] font-semibold">{{ beforePhotoUploaded ? 'Đã tải ảnh' : 'Chụp ảnh' }}</span>

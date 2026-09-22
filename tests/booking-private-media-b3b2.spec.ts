@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getTechnicianOrder: vi.fn(),
   getCashSettlement: vi.fn(),
   getAdditionalCosts: vi.fn(),
+  uploadEvidence: vi.fn(),
   getBooking: vi.fn(),
   getBookingMediaContent: vi.fn(),
   getConsoleOrderContext: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock('../src/api/orders.api', () => ({
     getTechnicianOrder: mocks.getTechnicianOrder,
     getCashSettlement: mocks.getCashSettlement,
     getAdditionalCosts: mocks.getAdditionalCosts,
-    uploadEvidence: vi.fn(),
+    uploadEvidence: mocks.uploadEvidence,
   },
   isHistoricalOrder: (order: { historical?: boolean }) => order.historical === true,
 }));
@@ -131,6 +132,7 @@ beforeEach(() => {
   mocks.getTechnicianOrder.mockReset().mockResolvedValue(activeJob);
   mocks.getCashSettlement.mockReset().mockResolvedValue(null);
   mocks.getAdditionalCosts.mockReset().mockResolvedValue([]);
+  mocks.uploadEvidence.mockReset();
   mocks.getBooking.mockReset().mockResolvedValue(fullBooking());
   mocks.getBookingMediaContent.mockReset().mockResolvedValue(new Blob(['private'], { type: 'image/jpeg' }));
   mocks.getConsoleOrderContext.mockReset().mockResolvedValue(consoleOrder());
@@ -153,6 +155,7 @@ afterEach(() => {
 });
 
 describe('technician ServiceOrder private media access', () => {
+  const pickerStubs = { ...stubs, FhCard: { template: '<section><slot /></section>' } };
   it('shows private media only for an active assigned winner with a full Booking response', async () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
@@ -162,6 +165,37 @@ describe('technician ServiceOrder private media access', () => {
     wrapper.unmount();
   });
 
+  it('opens BEFORE file picker only after verified check-in; click does not submit an empty upload', async () => {
+    mocks.getTechnicianOrder.mockResolvedValueOnce({
+      ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 0,
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
+    await flushPromises();
+    const picker = wrapper.get('[data-testid="before-evidence-picker"]');
+    const input = wrapper.get('input[type="file"]');
+    const open = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {});
+    expect(picker.attributes('aria-disabled')).toBe('false');
+    await picker.trigger('click');
+    await picker.trigger('keydown.enter');
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('does not open BEFORE picker before verified check-in', async () => {
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
+    await flushPromises();
+    const picker = wrapper.get('[data-testid="before-evidence-picker"]');
+    const input = wrapper.get('input[type="file"]');
+    const open = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {});
+    expect(picker.attributes('aria-disabled')).toBe('true');
+    expect(picker.attributes('tabindex')).toBe('-1');
+    await picker.trigger('click');
+    await picker.trigger('keydown.enter');
+    expect(open).not.toHaveBeenCalled();
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   it('does not fetch Booking media for historical former technicians', async () => {
     mocks.getTechnicianOrder.mockResolvedValueOnce({
       id: 'job-old', code: 'SO-OLD', status: 'ACCEPTED', historical: true,
