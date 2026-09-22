@@ -27,6 +27,7 @@ import {
   type TimelineStep,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord } from '../../api/orders.api';
+import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 
@@ -46,7 +47,7 @@ const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const warrantyClaimDescription = ref('');
-const quotationApproved = ref(false);
+const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value));
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
@@ -123,8 +124,6 @@ const loadOrder = async () => {
     const data = await ordersApi.getOrder(orderId);
     order.value = data;
 
-    const qStatus = String(data.quotation?.status || '').toUpperCase();
-    quotationApproved.value = qStatus === 'ACCEPTED' || qStatus === 'APPROVED';
 
     // Try load invoice
     try {
@@ -177,6 +176,7 @@ const handleApproveQuotation = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
+    if (!canDecideQuotation.value) throw new Error('Báo giá không còn chờ duyệt. Hãy tải lại đơn hàng.');
     if (!order.value?.quotation?.id) throw new Error('Không có báo giá để duyệt.');
     await ordersApi.approveQuotation(order.value.quotation.id);
     await loadOrder();
@@ -192,6 +192,7 @@ const handleRejectQuotation = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
+    if (!canDecideQuotation.value) throw new Error('Báo giá không còn chờ duyệt. Hãy tải lại đơn hàng.');
     if (!order.value?.quotation?.id) throw new Error('Không có báo giá để từ chối.');
     await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
     await loadOrder();
@@ -638,7 +639,7 @@ const confirmWork = async () => {
             </div>
 
             <div class="flex items-center gap-3">
-              <template v-if="order.quotation && !quotationApproved">
+              <template v-if="canDecideQuotation">
                 <FhButton
                   variant="secondary"
                   size="md"
@@ -658,7 +659,7 @@ const confirmWork = async () => {
               </template>
 
               <FhButton
-                v-else-if="order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid'"
+                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid')"
                 variant="primary"
                 size="md"
                 :disabled="actionLoading"
