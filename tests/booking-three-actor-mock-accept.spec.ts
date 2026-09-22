@@ -1,5 +1,5 @@
 // WEB-ACCEPT synthetic three-actor UI/API contract test.
-// Fake HTTP state enforces auth and first-winner rules BY DESIGN; this is NOT a PostgreSQL race/JWT E2E test.
+// Fake HTTP state enforces authorization and sequential #1 -> #2 invitations BY DESIGN; not a PostgreSQL/JWT E2E.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
@@ -27,7 +27,7 @@ const bookingId = 'booking-synthetic';
 const orderId = 'service-order-issued-by-fake-backend';
 const privateDetail = 'PRIVATE_HOUSE_NUMBER_AND_DIAGNOSIS';
 type Actor = 'customer' | 'tech-a' | 'tech-b';
-type FakeInvitation = { id: string; technicianId: 'tech-a' | 'tech-b'; status: 'pending' | 'accepted' | 'cancelled' | 'expired'; expiresAt: string };
+type FakeInvitation = { id: string; technicianId: 'tech-a' | 'tech-b'; status: 'pending' | 'standby' | 'accepted' | 'declined' | 'cancelled' | 'expired'; expiresAt: string };
 
 function scenario() {
   let actor: Actor = 'customer';
@@ -61,6 +61,12 @@ function scenario() {
     }
     if (path === '/invitations/my') {
       if (actor === 'customer') throw forbidden();
+      const first = invitations[0];
+      if (first?.status === 'pending' && first.expiresAt <= new Date().toISOString()) {
+        first.status = 'expired';
+        const second = invitations.find(inv => inv.status === 'standby');
+        if (second) { second.status = 'pending'; second.expiresAt = new Date(Date.now() + 60000).toISOString(); }
+      }
       return envelope(invitations.filter(inv => inv.technicianId === actor && inv.status === 'pending'
         && inv.expiresAt > new Date().toISOString() && status === 'matching').map(inv => ({
           ...inv, bookingId, priorityOrder: 1, invitedAt: '2029-12-31T00:00:00Z', booking: preview,
@@ -73,10 +79,10 @@ function scenario() {
       if (actor !== 'customer' || status !== 'submitted') throw forbidden();
       if (payload.technicianIds?.length !== 2 || payload.technicianIds[0] !== 'tech-a' || payload.technicianIds[1] !== 'tech-b') throw forbidden();
       status = 'matching';
-      invitations.push(...(['tech-a', 'tech-b'] as const).map(id => ({
-        id: `invite-${id}`, technicianId: id, status: 'pending' as const,
-        expiresAt: new Date(Date.now() + 60000).toISOString(),
-      })));
+      invitations.push(
+        { id: 'invite-tech-a', technicianId: 'tech-a', status: 'pending', expiresAt: new Date(Date.now() + 60000).toISOString() },
+        { id: 'invite-tech-b', technicianId: 'tech-b', status: 'standby', expiresAt: '' },
+      );
       return envelope(invitations);
     }
     if (path === `/bookings/${bookingId}/cancel`) {
@@ -96,7 +102,12 @@ function scenario() {
         invitations.filter(inv => inv !== invitation).forEach(inv => { inv.status = 'cancelled'; });
         return envelope({ invitation, serviceOrder: { id: orderId, bookingId } });
       }
-      if (payload.action === 'DECLINE') { invitation.status = 'cancelled'; return envelope({ invitation }); }
+      if (payload.action === 'DECLINE') {
+        invitation.status = 'declined';
+        const second = invitations.find(inv => inv.status === 'standby');
+        if (second) { second.status = 'pending'; second.expiresAt = new Date(Date.now() + 60000).toISOString(); }
+        return envelope({ invitation });
+      }
     }
     throw forbidden();
   });
@@ -117,18 +128,26 @@ beforeEach(() => { mockGet.mockReset(); mockPost.mockReset(); push.mockReset(); 
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] }); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-describe('WEB-ACCEPT shared synthetic Customer + two-Technician state', () => {
-  it('one accepted SO only, loser cannot navigate/read private Booking; customer poll opens same SO', async () => {
-    const fake = scenario();
-    const candidatePage = mount(BookingCandidatesPage, { global: ui });
-    await flushPromises();
-    const send = candidatePage.findAll('button').find(b => b.text().includes('Gửi lời mời đồng thời'));
-    await send!.trigger('click'); await flushPromises();
-    expect(fake.state.invitations).toHaveLength(2);
-    expect(fake.state.status).toBe('matching');
-    expect(push).not.toHaveBeenCalledWith('/app/orders');
-    candidatePage.unmount();
+async function sendTwoCustomerChoices() {
+  const page = mount(BookingCandidatesPage, { global: ui });
+  await flushPromises();
+  const selections = page.findAll('input[type="checkbox"]');
+  expect(selections).toHaveLength(2);
+  await selections[0].trigger('change');
+  await selections[1].trigger('change');
+  const send = page.findAll('button').find(button => button.text().includes('Mời thợ ưu tiên số 1'));
+  expect(send?.exists()).toBe(true);
+  await send!.trigger('click');
+  await flushPromises();
+  page.unmount();
+}
 
+describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only', () => {
+  it('only first technician is invited; winner alone opens the one ServiceOrder and private Booking', async () => {
+    const fake = scenario();
+    await sendTwoCustomerChoices();
+    expect(fake.state.invitations.map(i => i.status)).toEqual(['pending', 'standby']);
+    expect(fake.state.status).toBe('matching');
     const customerPage = mount(BookingDetailPage, { global: ui });
     await flushPromises();
     expect(customerPage.find('[data-testid="booking-open-service-order"]').exists()).toBe(false);
@@ -136,61 +155,74 @@ describe('WEB-ACCEPT shared synthetic Customer + two-Technician state', () => {
     fake.setActor('tech-a');
     const technicianA = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
+    expect(technicianA.text()).toContain('Synthetic District, Synthetic Province');
+    expect(technicianA.text()).not.toContain(privateDetail);
+    await technicianA.find('button.w-full').trigger('click');
     fake.setActor('tech-b');
     const technicianB = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
-    for (const page of [technicianA, technicianB]) {
-      expect(page.text()).toContain('Synthetic District, Synthetic Province');
-      expect(page.text()).not.toContain(privateDetail);
-      await page.find('button.w-full').trigger('click');
-      expect(page.text()).not.toContain(privateDetail);
-      expect(page.find(`a[href="${privateDetail}"]`).exists()).toBe(false);
-    }
+    expect(technicianB.text()).not.toContain('Synthetic District, Synthetic Province');
+    expect(technicianB.text()).not.toContain(privateDetail);
+    expect(technicianB.findAll('button').some(button => button.text().includes('Chấp nhận đơn này'))).toBe(false);
+    await expect(bookingsApi.respondInvitation('invite-tech-b', 'ACCEPT')).rejects.toThrow('Synthetic 403');
 
     fake.setActor('tech-a');
     await acceptClick(technicianA);
     expect(fake.state.serviceOrderCount).toBe(1);
     expect(fake.state.winner).toBe('tech-a');
+    expect(fake.state.invitations.map(i => i.status)).toEqual(['accepted', 'cancelled']);
     expect(push).toHaveBeenCalledWith({ name: 'tech-job-detail', params: { id: orderId } });
-
-    push.mockClear(); fake.setActor('tech-b');
-    await acceptClick(technicianB); // stale UI tries old PENDING invitation: fake backend rejects.
-    expect(fake.state.serviceOrderCount).toBe(1);
-    expect(push).not.toHaveBeenCalled();
+    fake.setActor('tech-b');
     await expect(bookingsApi.getBooking(bookingId)).rejects.toThrow('Synthetic 403');
-    expect(vi.mocked(alert)).toHaveBeenCalled();
-
+    await expect(bookingsApi.respondInvitation('invite-tech-b', 'ACCEPT')).rejects.toThrow('Synthetic 403');
     fake.setActor('customer');
     await vi.advanceTimersByTimeAsync(5000); await flushPromises();
-    const open = customerPage.find('[data-testid="booking-open-service-order"]');
-    expect(open.exists()).toBe(true);
-    await open.trigger('click');
+    await customerPage.find('[data-testid="booking-open-service-order"]').trigger('click');
     expect(push).toHaveBeenCalledWith({ name: 'customer-order-detail', params: { id: orderId } });
-    expect(fake.state.invitations.filter(i => i.status === 'accepted')).toHaveLength(1);
-    expect(fake.state.invitations.filter(i => i.status === 'cancelled')).toHaveLength(1);
     technicianA.unmount(); technicianB.unmount(); customerPage.unmount();
   });
 
-  it('expired invitation does not navigate or create an SO; cancelling Booking rejects stale Accept', async () => {
+  it('after priority #1 declines, only #2 receives invitation and may Accept exactly once', async () => {
     const fake = scenario();
-    const candidates = mount(BookingCandidatesPage, { global: ui }); await flushPromises();
-    const send = candidates.findAll('button').find(b => b.text().includes('Gửi lời mời đồng thời'));
-    await send!.trigger('click'); await flushPromises(); candidates.unmount();
+    await sendTwoCustomerChoices();
+    fake.setActor('tech-b');
+    expect(await bookingsApi.getMyInvitations()).toEqual([]);
+    await expect(bookingsApi.respondInvitation('invite-tech-b', 'ACCEPT')).rejects.toThrow('Synthetic 403');
     fake.setActor('tech-a');
-    const page = mount(TechnicianInvitationsPage, { global: ui }); await flushPromises();
-    fake.expire('tech-a');
+    await bookingsApi.respondInvitation('invite-tech-a', 'DECLINE');
+    expect(fake.state.invitations.map(i => i.status)).toEqual(['declined', 'pending']);
+    fake.setActor('tech-b');
+    const page = mount(TechnicianInvitationsPage, { global: ui });
+    await flushPromises();
+    expect(page.text()).toContain('Synthetic District, Synthetic Province');
     await acceptClick(page);
-    expect(fake.state.serviceOrderCount).toBe(0);
-    expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'tech-job-detail' }));
+    expect(fake.state.winner).toBe('tech-b');
+    expect(fake.state.serviceOrderCount).toBe(1);
+    fake.setActor('tech-a');
+    await expect(bookingsApi.respondInvitation('invite-tech-a', 'ACCEPT')).rejects.toThrow('Synthetic 403');
+    await expect(bookingsApi.getBooking(bookingId)).rejects.toThrow('Synthetic 403');
     page.unmount();
+  });
 
+  it('expired first invitation activates #2; cancellation rejects its stale Accept', async () => {
+    const fake = scenario();
+    await sendTwoCustomerChoices();
+    fake.setActor('tech-a');
+    const first = mount(TechnicianInvitationsPage, { global: ui });
+    await flushPromises();
+    fake.expire('tech-a');
+    await acceptClick(first);
+    expect(fake.state.serviceOrderCount).toBe(0);
+    first.unmount();
     fake.setActor('tech-b');
-    const second = mount(TechnicianInvitationsPage, { global: ui }); await flushPromises();
+    const second = mount(TechnicianInvitationsPage, { global: ui });
+    await flushPromises();
+    expect(fake.state.invitations.map(i => i.status)).toEqual(['expired', 'pending']);
     fake.setActor('customer');
-    const result = await bookingsApi.cancelBooking(bookingId, 'Synthetic cancelled before acceptance');
-    expect(result.status).toBe('CANCELLED');
+    const cancelled = await bookingsApi.cancelBooking(bookingId, 'Synthetic cancelled before acceptance');
+    expect(cancelled.status).toBe('CANCELLED');
     fake.setActor('tech-b');
-    await acceptClick(second); // fake backend rejects stale invitation after cancellation.
+    await acceptClick(second);
     expect(fake.state.serviceOrderCount).toBe(0);
     expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'tech-job-detail' }));
     second.unmount();

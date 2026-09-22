@@ -525,7 +525,7 @@ const confirmMatchingExtension = async () => {
       <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
 
       <div v-if="canChooseTechnicians" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
-        <p class="text-xs text-ink-700">Chọn 1–5 kỹ thuật viên cho lượt mời mới. Các lời mời cũ không được tự khôi phục.</p>
+        <p class="text-xs text-ink-700">Chọn 2 kỹ thuật viên theo thứ tự ưu tiên cho lượt mời mới. Các lời mời cũ không được tự khôi phục.</p>
         <FhButton data-testid="booking-choose-technicians" variant="primary" size="sm"
           :disabled="saving || cancelling || checkingOrderLink || showCancelModal || showExtensionModal || extending"
           @click="chooseTechnicians">

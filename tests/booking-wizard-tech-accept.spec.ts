@@ -62,26 +62,63 @@ describe('WEB-WIZARD-TECH Accept must open the returned ServiceOrder', () => {
   });
 });
 
-describe('WEB-WIZARD-TECH shortlist confirmation', () => {
-  it.each([1, 3, 5])('submits exactly %i distinct backend User IDs and never profile IDs', async number => {
-    const items = Array.from({ length: number }, (_, i) => ({
-      ...candidate, userId: `user-${i + 1}`, technicianId: `profile-${i + 1}`, fullName: `Synthetic tech ${i + 1}`,
-    }));
-    mockGet.mockResolvedValue({ data: { data: items } });
+describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
+  const two = [
+    { ...candidate, userId: 'user-1', technicianId: 'profile-1', fullName: 'Synthetic Tech 1' },
+    { ...candidate, userId: 'user-2', technicianId: 'profile-2', fullName: 'Synthetic Tech 2' },
+  ];
+  const sendButton = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.findAll('button').find(button => button.text().includes('Mời thợ ưu tiên số 1'))!;
+
+  it('requires the customer to choose two and sends their chosen priority, never profile IDs', async () => {
+    mockGet.mockResolvedValue({ data: { data: two } });
     mockPost.mockResolvedValue({ data: { data: [] } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
-    // Backend ranks candidates, Web defaults to three and lets the customer select up to five.
-    if (number > 3) {
-      for (let i = 3; i < number; i++) await wrapper.findAll('input[type="checkbox"]')[i].trigger('change');
-    }
-    const send = wrapper.findAll('button').find(b => b.text().includes('Gửi lời mời đồng thời'));
-    await send!.trigger('click');
+    const inputs = wrapper.findAll('input[type="checkbox"]');
+    expect(inputs).toHaveLength(2);
+    expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
+    await inputs[1].trigger('change');
+    expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
+    await inputs[0].trigger('change');
+    expect(sendButton(wrapper).attributes('disabled')).toBeUndefined();
+    await sendButton(wrapper).trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledTimes(1);
     expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
-      technicianIds: items.map(item => item.userId),
+      technicianIds: ['user-2', 'user-1'],
     });
+    wrapper.unmount();
+  });
+
+  it('does not select a third technician or silently preselect anyone', async () => {
+    const third = { ...candidate, userId: 'user-3', technicianId: 'profile-3', fullName: 'Synthetic Tech 3' };
+    mockGet.mockResolvedValue({ data: { data: [...two, third] } });
+    mockPost.mockResolvedValue({ data: { data: [] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+    const inputs = wrapper.findAll('input[type="checkbox"]');
+    expect(inputs.every(input => (input.element as HTMLInputElement).checked === false)).toBe(true);
+    await inputs[0].trigger('change');
+    await inputs[1].trigger('change');
+    await inputs[2].trigger('change');
+    expect((inputs[2].element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.text()).toContain('Chỉ được chọn đúng 2');
+    await sendButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
+      technicianIds: ['user-1', 'user-2'],
+    });
+    wrapper.unmount();
+  });
+
+  it('disables send when fewer than two candidates are selected', async () => {
+    mockGet.mockResolvedValue({ data: { data: [candidate] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+    await wrapper.find('input[type="checkbox"]').trigger('change');
+    expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
+    expect(mockPost).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -93,33 +130,31 @@ describe('WEB-WIZARD-TECH shortlist confirmation', () => {
     expect(mockPost).not.toHaveBeenCalled();
     wrapper.unmount();
   });
-  it('opens actual Booking detail after shortlist instead of a delayed generic orders redirect', async () => {
-    mockGet.mockResolvedValue({ data: { data: [candidate] } });
+
+  it('opens the exact Booking detail after sending the first invitation', async () => {
+    mockGet.mockResolvedValue({ data: { data: two } });
     mockPost.mockResolvedValue({ data: { data: [{ id: 'invite-1', status: 'pending' }] } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
-    const send = wrapper.findAll('button').find(b => b.text().includes('Gửi lời mời đồng thời'));
-    expect(send?.exists()).toBe(true);
-    await send!.trigger('click');
+    const inputs = wrapper.findAll('input[type="checkbox"]');
+    await inputs[0].trigger('change');
+    await inputs[1].trigger('change');
+    await sendButton(wrapper).trigger('click');
     await flushPromises();
-    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', { technicianIds: ['technician-real-id'] });
+    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', { technicianIds: ['user-1', 'user-2'] });
     expect(wrapper.text()).toContain('Đã gửi lời mời');
-    const view = wrapper.find('[data-testid="view-matching-booking"]');
-    expect(view.exists()).toBe(true);
-    await view.trigger('click');
+    await wrapper.find('[data-testid="view-matching-booking"]').trigger('click');
     expect(push).toHaveBeenCalledWith({ name: 'booking-detail', params: { id: 'booking-from-route' } });
-    expect(push).not.toHaveBeenCalledWith('/app/orders');
+    wrapper.unmount();
   });
 
-  it('describes simultaneous invitations and first valid Accept wins', async () => {
-    mockGet.mockResolvedValue({ data: { data: [candidate] } });
+  it('explains technician #2 is only invited after #1 declines or expires', async () => {
+    mockGet.mockResolvedValue({ data: { data: two } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
-
-    expect(wrapper.text()).toContain('gửi lời mời đến các thợ bạn chọn cùng lúc');
-    expect(wrapper.text()).toContain('Người đầu tiên đủ điều kiện xác nhận sẽ nhận đơn');
-    expect(wrapper.text()).not.toContain('tuần tự');
-    expect(wrapper.text()).not.toContain('30 phút');
+    expect(wrapper.text()).toContain('mời thợ số 1 trước');
+    expect(wrapper.text()).toContain('thợ số 2 mới nhận lời mời');
+    expect(wrapper.text()).not.toContain('gửi lời mời đến các thợ bạn chọn cùng lúc');
     wrapper.unmount();
   });
 });

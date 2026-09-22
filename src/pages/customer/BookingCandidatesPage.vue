@@ -42,8 +42,8 @@ const loadCandidates = async () => {
   try {
     const list = await bookingsApi.getCandidates(bookingId);
     candidates.value = list;
-    // Preselect top 3 by default
-    selectedIds.value = list.slice(0, 3).map((c) => c.id);
+    // The customer must choose both technicians and their order explicitly.
+    selectedIds.value = [];
   } catch {
     candidates.value = [];
     loadError.value = 'Không thể tải danh sách kỹ thuật viên phù hợp. Vui lòng thử lại.';
@@ -58,8 +58,8 @@ const toggleSelect = (id: string) => {
   if (selectedIds.value.includes(id)) {
     selectedIds.value = selectedIds.value.filter((x) => x !== id);
   } else {
-    if (selectedIds.value.length >= 5) {
-      sendError.value = 'Theo quy định FixHome, bạn chỉ có thể chọn tối đa 5 kỹ thuật viên cho 1 lần ghép thợ.';
+    if (selectedIds.value.length >= 2) {
+      sendError.value = 'Chỉ được chọn đúng 2 kỹ thuật viên theo thứ tự ưu tiên.';
       return;
     }
     sendError.value = '';
@@ -69,8 +69,8 @@ const toggleSelect = (id: string) => {
 
 const handleSendShortlist = async () => {
   if (sending.value || inviteSent.value || !bookingId) return;
-  if (selectedIds.value.length === 0) {
-    sendError.value = 'Vui lòng chọn ít nhất 1 kỹ thuật viên.';
+  if (selectedIds.value.length !== 2) {
+    sendError.value = 'Vui lòng chọn đúng 2 kỹ thuật viên theo thứ tự ưu tiên.';
     return;
   }
   sendError.value = '';
@@ -114,17 +114,17 @@ const selectedCount = computed(() => selectedIds.value.length);
         <div class="flex items-center gap-2">
           <span class="text-xs font-semibold text-ink-600">Shortlist:</span>
           <span class="text-xs font-bold font-num px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200">
-            {{ selectedCount }} / 5 thợ
+            {{ selectedCount }} / 2 thợ
           </span>
         </div>
       </div>
     </div>
 
-    <!-- Rule Banner: simultaneous invitations, first valid Accept wins -->
+    <!-- Customer-ranked invitations: only the first technician is notified initially. -->
     <div class="p-3.5 rounded-[var(--radius-sm)] bg-brand-50/70 border border-brand-200 text-brand-900 flex items-start gap-2.5 text-xs">
       <ShieldCheck :size="16" class="text-brand-600 shrink-0 mt-0.5" />
       <div class="leading-relaxed">
-        <strong>Cơ chế gửi lời mời đồng thời:</strong> Hệ thống gửi lời mời đến các thợ bạn chọn cùng lúc. Người đầu tiên đủ điều kiện xác nhận sẽ nhận đơn; các lời mời còn lại không thể tạo thêm đơn dịch vụ.
+        <strong>Chọn đúng 2 thợ theo thứ tự ưu tiên:</strong> Hệ thống mời thợ số 1 trước. Chỉ khi thợ số 1 từ chối hoặc hết hạn phản hồi, thợ số 2 mới nhận lời mời.
       </div>
     </div>
 
@@ -238,7 +238,7 @@ const selectedCount = computed(() => selectedIds.value.length);
         <CheckCircle2 :size="48" class="text-success-600 mx-auto" />
         <h3 class="text-lg font-bold text-ink-900">Đã gửi lời mời thành công!</h3>
         <p class="text-xs text-ink-600 leading-relaxed">
-          Đã gửi tới {{ selectedCount }} kỹ thuật viên. Bạn có thể mở yêu cầu để theo dõi trạng thái xác nhận từ hệ thống.
+          Đã gửi lời mời cho thợ ưu tiên số 1. Thợ số 2 sẽ chỉ nhận lời mời nếu thợ số 1 từ chối hoặc hết hạn phản hồi.
         </p>
         <FhButton data-testid="view-matching-booking" variant="primary" size="md"
           @click="router.push({ name: 'booking-detail', params: { id: bookingId } })">
@@ -251,17 +251,17 @@ const selectedCount = computed(() => selectedIds.value.length);
     <div class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 p-3.5 shadow-lg">
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4">
         <div class="text-xs text-ink-600">
-          Đã chọn <strong class="text-brand-700 font-num text-sm">{{ selectedCount }}</strong> kỹ thuật viên (Tối đa 5)
+          Đã chọn <strong class="text-brand-700 font-num text-sm">{{ selectedCount }}</strong> kỹ thuật viên (Cần chọn đúng 2)
         </div>
 
         <FhButton
           variant="primary"
           size="md"
-          :disabled="selectedCount === 0"
+          :disabled="selectedCount !== 2"
           :loading="sending"
           @click="handleSendShortlist"
         >
-          <Send :size="15" class="mr-1.5" /> Gửi lời mời đồng thời
+          <Send :size="15" class="mr-1.5" /> Mời thợ ưu tiên số 1
         </FhButton>
       </div>
     </div>
