@@ -37,6 +37,36 @@ describe('private Booking media API contract', () => {
     expect(vi.mocked(apiClient.post).mock.calls[0][0]).toBe('/media/upload');
   });
 
+  it('extends the authenticated Booking matching group and returns authoritative metadata', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: {
+        data: {
+          bookingId: 'booking-id',
+          invitationGroupId: 'opaque-group-id',
+          expiresAt: '2030-10-15T05:00:00.000Z',
+          extendedInvitationCount: 3,
+        },
+      },
+    });
+
+    await expect(bookingsApi.extendMatching('booking-id')).resolves.toEqual({
+      bookingId: 'booking-id',
+      invitationGroupId: 'opaque-group-id',
+      expiresAt: '2030-10-15T05:00:00.000Z',
+      extendedInvitationCount: 3,
+    });
+    expect(apiClient.post).toHaveBeenCalledWith('/bookings/booking-id/matching/extend');
+  });
+
+  it.each([
+    { bookingId: 'booking-id', invitationGroupId: 'opaque-group-id', expiresAt: '', extendedInvitationCount: 3 },
+    { bookingId: 'booking-id', invitationGroupId: 'opaque-group-id', expiresAt: '2030-10-15T05:00:00.000Z', extendedInvitationCount: 0 },
+  ])('rejects an incomplete matching extension response', async (data) => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { data } });
+
+    await expect(bookingsApi.extendMatching('booking-id')).rejects.toThrow('invalid matching extension response');
+  });
+
   it.each([
     { mimeType: 'image/jpeg', sizeBytes: 13 },
     { uploadId: 'opaque-upload-id', mimeType: 'image/jpeg', sizeBytes: -1 },
@@ -137,6 +167,37 @@ describe('private Booking media API contract', () => {
     expect(isFullBookingWithMedia(complete, 'booking-id')).toBe(true);
     expect(isFullBookingWithMedia({ ...complete, media: undefined }, 'booking-id')).toBe(false);
     expect(isFullBookingWithMedia({ ...complete, id: 'different-booking' }, 'booking-id')).toBe(false);
+  });
+
+  it('keeps internal invitation-group markers out of the normalized Booking contract', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        data: {
+          id: 'booking-id',
+          status: 'matching',
+          invitations: [{
+            id: 'invitation-id',
+            bookingId: 'booking-id',
+            groupId: 'internal-group-marker',
+            priorityOrder: 1,
+            status: 'pending',
+            invitedAt: '2030-10-15T04:00:00.000Z',
+            expiresAt: '2030-10-15T05:00:00.000Z',
+          }],
+        },
+      },
+    });
+
+    const booking = await bookingsApi.getBooking('booking-id');
+    expect(booking.invitations?.[0]).toEqual({
+      id: 'invitation-id',
+      bookingId: 'booking-id',
+      priorityOrder: 1,
+      status: 'PENDING',
+      invitedAt: '2030-10-15T04:00:00.000Z',
+      expiresAt: '2030-10-15T05:00:00.000Z',
+    });
+    expect(booking.invitations?.[0]).not.toHaveProperty('groupId');
   });
 
   it('downloads private Booking media as an authenticated binary response without URL credentials', async () => {

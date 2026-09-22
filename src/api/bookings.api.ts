@@ -18,6 +18,7 @@ export interface BookingItem {
   createdAt: string;
   mediaUrls?: string[];
   media?: BookingMedia[];
+  invitations?: BookingInvitation[];
   diagnosis?: {
     possibleIssues: string[];
     possibleCauses: string[];
@@ -25,6 +26,18 @@ export interface BookingItem {
     suggestedPriceMax: number;
     confidence: number;
   };
+}
+
+export type BookingInvitationStatus = 'PENDING' | 'STANDBY' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED';
+
+/** Customer-safe invitation fields; the internal invitation-group marker is intentionally omitted. */
+export interface BookingInvitation {
+  id: string;
+  bookingId: string;
+  priorityOrder: number;
+  status: BookingInvitationStatus;
+  invitedAt: string;
+  expiresAt: string | null;
 }
 
 export interface BookingMedia {
@@ -46,6 +59,13 @@ export interface CreateBookingDto {
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   mediaUrls?: string[];
   photoUploadIds?: string[];
+}
+
+export interface MatchingExtensionResult {
+  bookingId: string;
+  invitationGroupId: string;
+  expiresAt: string;
+  extendedInvitationCount: number;
 }
 
 export interface TechnicianCandidate {
@@ -137,12 +157,44 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
     },
   };
 }
+
+function normalizeBookingInvitations(value: unknown): BookingInvitation[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized: BookingInvitation[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return undefined;
+    const raw = item as Record<string, unknown>;
+    if (
+      typeof raw.id !== 'string'
+      || typeof raw.bookingId !== 'string'
+      || typeof raw.priorityOrder !== 'number'
+      || !Number.isFinite(raw.priorityOrder)
+      || typeof raw.status !== 'string'
+      || typeof raw.invitedAt !== 'string'
+      || (raw.expiresAt !== null && typeof raw.expiresAt !== 'string')
+    ) return undefined;
+    normalized.push({
+      id: raw.id,
+      bookingId: raw.bookingId,
+      priorityOrder: raw.priorityOrder,
+      status: raw.status.toUpperCase() as BookingInvitationStatus,
+      invitedAt: raw.invitedAt,
+      expiresAt: raw.expiresAt,
+    });
+  }
+  return normalized;
+}
+
 function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string }): BookingItem {
-  return { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
+  const normalized: BookingItem = { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
     addressSummary: booking.addressTextSnapshot ?? booking.addressSummary,
     preferredAt: booking.preferredStartAt ?? booking.preferredAt,
     mediaUrls: booking.media ? booking.media.flatMap((media) => typeof media.url === 'string' ? [media.url] : []) : booking.mediaUrls,
     status: booking.status.toUpperCase() as BookingItem['status'] };
+  if ('invitations' in booking) {
+    normalized.invitations = normalizeBookingInvitations((booking as unknown as { invitations?: unknown }).invitations);
+  }
+  return normalized;
 }
 
 /**
@@ -192,6 +244,30 @@ export const bookingsApi = {
   },
 
   async getBooking(id: string): Promise<BookingItem> { const res = await apiClient.get<{data: BookingItem}>(`/bookings/${id}`); return normalizeBooking(res.data.data); },
+
+  async extendMatching(bookingId: string): Promise<MatchingExtensionResult> {
+    const res = await apiClient.post<{ data: Partial<MatchingExtensionResult> }>(`/bookings/${bookingId}/matching/extend`);
+    const data = res.data.data;
+    if (
+      !data
+      || data.bookingId !== bookingId
+      || typeof data.invitationGroupId !== 'string'
+      || !data.invitationGroupId.trim()
+      || typeof data.expiresAt !== 'string'
+      || !Number.isFinite(Date.parse(data.expiresAt))
+      || typeof data.extendedInvitationCount !== 'number'
+      || !Number.isSafeInteger(data.extendedInvitationCount)
+      || data.extendedInvitationCount < 1
+    ) {
+      throw new Error('Backend returned an invalid matching extension response');
+    }
+    return {
+      bookingId: data.bookingId,
+      invitationGroupId: data.invitationGroupId,
+      expiresAt: data.expiresAt,
+      extendedInvitationCount: data.extendedInvitationCount,
+    };
+  },
 
   async updateBooking(id: string, dto: { description?: string; preferredStartAt: string; preferredEndAt: string }): Promise<BookingItem> {
     const res = await apiClient.patch<{ data: BookingItem }>(`/bookings/${id}/schedule`, dto);

@@ -110,4 +110,16 @@ describe('WEB-WIZARD-TECH shortlist confirmation', () => {
     expect(push).toHaveBeenCalledWith({ name: 'booking-detail', params: { id: 'booking-from-route' } });
     expect(push).not.toHaveBeenCalledWith('/app/orders');
   });
+
+  it('describes simultaneous invitations and first valid Accept wins', async () => {
+    mockGet.mockResolvedValue({ data: { data: [candidate] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('gửi lời mời đến các thợ bạn chọn cùng lúc');
+    expect(wrapper.text()).toContain('Người đầu tiên đủ điều kiện xác nhận sẽ nhận đơn');
+    expect(wrapper.text()).not.toContain('tuần tự');
+    expect(wrapper.text()).not.toContain('30 phút');
+    wrapper.unmount();
+  });
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // src/pages/customer/BookingDetailPage.vue
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
 import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker, FhTimeScrollPicker } from '../../components';
@@ -9,7 +9,8 @@ import { bookingSchedule } from '../../utils/booking-schedule';
 
 const route = useRoute();
 const router = useRouter();
-const bookingId = route.params.id as string;
+let bookingId = String(route.params.id ?? '');
+let detailGeneration = 0;
 
 const loading = ref(true);
 const loadError = ref('');
@@ -30,10 +31,73 @@ const bookingMedia = computed<BookingMedia[]>(() => {
 const checkingOrderLink = ref(false);
 const orderLinkError = ref('');
 const serviceOrderId = computed(() => booking.value?.serviceOrderId?.trim() ?? '');
+const showExtensionModal = ref(false);
+const extending = ref(false);
+const extensionError = ref('');
+const extensionNotice = ref('');
+const extensionCompleted = ref(false);
+let extensionRequestToken = 0;
+let extendedPendingInvitationIds = new Set<string>();
+
+const isFutureServerTimestamp = (value: unknown): value is string => {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp > Date.now();
+};
+
+const livePendingInvitations = computed(() => {
+  const invitations = booking.value?.invitations;
+  if (!Array.isArray(invitations)) return [];
+  return invitations.filter((invitation) => (
+    String(invitation.status).toUpperCase() === 'PENDING'
+      && isFutureServerTimestamp(invitation.expiresAt)
+  ));
+});
+
+const currentInvitationExpiry = computed(() => livePendingInvitations.value
+  .map((invitation) => invitation.expiresAt)
+  .filter((expiresAt): expiresAt is string => typeof expiresAt === 'string')
+  .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null);
+
+const canExtendMatching = computed(() => !!booking.value
+  && booking.value.status === 'MATCHING'
+  && !serviceOrderId.value
+  && isFutureServerTimestamp(booking.value.preferredEndAt)
+  && livePendingInvitations.value.length > 0
+  && !extensionCompleted.value);
+
+const formatServerDate = (value: string | null | undefined) => value
+  ? new Date(value).toLocaleString('vi-VN')
+  : '';
+
+const pendingInvitationIds = (nextBooking: BookingItem | null) => new Set(
+  (nextBooking?.invitations ?? [])
+    .filter((invitation) => String(invitation.status).toUpperCase() === 'PENDING')
+    .map((invitation) => invitation.id),
+);
+
+const applyBookingState = (nextBooking: BookingItem) => {
+  const seenPendingIds = pendingInvitationIds(nextBooking);
+  const hasNewPendingInvitation = extensionCompleted.value
+    && extendedPendingInvitationIds.size > 0
+    && [...seenPendingIds].some((id) => !extendedPendingInvitationIds.has(id));
+  if (hasNewPendingInvitation) {
+    // A new invitation ID is the only safe client signal for a new shortlist round.
+    // Losing or declining members from the extended group keeps the captured IDs.
+    extendedPendingInvitationIds = new Set();
+    extensionCompleted.value = false;
+    extensionNotice.value = '';
+    extensionError.value = '';
+  }
+  booking.value = nextBooking;
+};
+
 // Only owner-authorized Booking details can establish a match or linked ServiceOrder.
 // Never poll indefinitely after navigation, race an edit/cancel, or overlap requests.
 let matchingTimer: ReturnType<typeof setInterval> | null = null;
 let matchingRequestInFlight = false;
+let matchingPollGeneration = 0;
+const invalidateMatchingPoll = () => { matchingPollGeneration += 1; };
 let detailMounted = true;
 const waitingForMatch = () => !!booking.value && !serviceOrderId.value &&
   ['MATCHING', 'MATCHED'].includes(booking.value.status);
@@ -46,13 +110,16 @@ const startMatchingPoll = () => {
   matchingTimer = setInterval(async () => {
     if (!detailMounted || !waitingForMatch()) { stopMatchingPoll(); return; }
     if (matchingRequestInFlight || loading.value || saving.value || cancelling.value ||
-        checkingOrderLink.value || showCancelModal.value) return;
+        checkingOrderLink.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
     matchingRequestInFlight = true;
+    const polledBookingId = bookingId;
+    const pollGeneration = matchingPollGeneration;
     try {
-      const latest = await bookingsApi.getBooking(bookingId);
-      if (detailMounted && !saving.value && !cancelling.value && !showCancelModal.value &&
-          !checkingOrderLink.value) {
-        booking.value = latest;
+      const latest = await bookingsApi.getBooking(polledBookingId);
+      if (detailMounted && polledBookingId === bookingId && pollGeneration === matchingPollGeneration &&
+          !saving.value && !cancelling.value && !showCancelModal.value && !checkingOrderLink.value &&
+          !showExtensionModal.value && !extending.value) {
+        applyBookingState(latest);
         if (!waitingForMatch()) stopMatchingPoll();
       }
     } catch {
@@ -62,7 +129,13 @@ const startMatchingPoll = () => {
     }
   }, 5000);
 };
-onUnmounted(() => { detailMounted = false; stopMatchingPoll(); });
+onUnmounted(() => {
+  detailMounted = false;
+  detailGeneration += 1;
+  extensionRequestToken += 1;
+  invalidateMatchingPoll();
+  stopMatchingPoll();
+});
 const canCancelBooking = computed(() => !!booking.value && !serviceOrderId.value &&
   ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(booking.value.status));
 const showCancelModal = ref(false);
@@ -72,7 +145,7 @@ const cancelNotice = ref('');
 const cancelling = ref(false);
 
 const openBookingCancel = () => {
-  if (!canCancelBooking.value || saving.value || cancelling.value || loading.value || checkingOrderLink.value) return;
+  if (!canCancelBooking.value || saving.value || cancelling.value || loading.value || checkingOrderLink.value || showExtensionModal.value || extending.value) return;
   cancelReason.value = '';
   cancelError.value = '';
   showCancelModal.value = true;
@@ -89,7 +162,7 @@ const finishBookingCancel = () => {
   cancelError.value = '';
 };
 const confirmBookingCancel = async () => {
-  if (!showCancelModal.value || !canCancelBooking.value || cancelling.value || saving.value || checkingOrderLink.value) return;
+  if (!showCancelModal.value || !canCancelBooking.value || cancelling.value || saving.value || checkingOrderLink.value || showExtensionModal.value || extending.value) return;
   const reason = cancelReason.value.trim();
   if (!reason || reason.length > 2000) {
     cancelError.value = 'Vui lòng nhập lý do huỷ từ 1 đến 2000 ký tự.';
@@ -101,7 +174,7 @@ const confirmBookingCancel = async () => {
   try {
     const result = await bookingsApi.cancelBooking(bookingId, reason);
     if (result.status !== 'CANCELLED') throw new Error('Unexpected cancellation state');
-    booking.value = result;
+    applyBookingState(result);
     stopMatchingPoll();
     finishBookingCancel();
     cancelNotice.value = 'Yêu cầu đã được huỷ.';
@@ -110,7 +183,7 @@ const confirmBookingCancel = async () => {
     // Re-read the owner-checked Booking before offering any retry or an SO link.
     try {
       const fresh = await bookingsApi.getBooking(bookingId);
-      booking.value = fresh;
+      applyBookingState(fresh);
       if (fresh.status === 'CANCELLED') {
         finishBookingCancel();
         cancelNotice.value = 'Yêu cầu đã được huỷ theo trạng thái mới nhất.';
@@ -139,13 +212,16 @@ const openServiceOrder = () => {
 
 // Refresh the authoritative Booking detail; do not search paged order lists or guess an order ID.
 const refreshOrderLink = async () => {
-  if (checkingOrderLink.value || loading.value || saving.value || cancelling.value || showCancelModal.value) return;
+  if (checkingOrderLink.value || loading.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
   checkingOrderLink.value = true;
   orderLinkError.value = '';
+  const requestedBookingId = bookingId;
   try {
-    booking.value = await bookingsApi.getBooking(bookingId);
-    if (!waitingForMatch()) stopMatchingPoll();
-    else startMatchingPoll();
+    const latest = await bookingsApi.getBooking(requestedBookingId);
+    if (detailMounted && requestedBookingId === bookingId) {
+      applyBookingState(latest);
+      if (!waitingForMatch()) stopMatchingPoll();
+    }
   } catch {
     orderLinkError.value = 'Không thể kiểm tra liên kết đơn dịch vụ. Vui lòng thử lại.';
   } finally {
@@ -170,29 +246,54 @@ const statusLabel = (status?: string) => {
   }
 };
 
-const loadBooking = async () => {
+const applyBookingDetail = (nextBooking: BookingItem) => {
+  applyBookingState(nextBooking);
+  startMatchingPoll();
+  description.value = nextBooking.description;
+  const start = new Date(nextBooking.preferredAt);
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  preferredDate.value = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+  preferredTime.value = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+};
+
+const loadBooking = async (requestedBookingId = bookingId) => {
+  const generation = ++detailGeneration;
   loading.value = true;
   loadError.value = '';
   try {
-    const b = await bookingsApi.getBooking(bookingId);
-    booking.value = b;
-    startMatchingPoll();
-    description.value = b.description;
-    const start = new Date(b.preferredAt);
-    const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-    preferredDate.value = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-    preferredTime.value = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+    const nextBooking = await bookingsApi.getBooking(requestedBookingId);
+    if (!detailMounted || generation !== detailGeneration || requestedBookingId !== bookingId) return;
+    applyBookingDetail(nextBooking);
   } catch {
-    loadError.value = 'Không thể tải thông tin đơn. Vui lòng thử lại.';
+    if (detailMounted && generation === detailGeneration && requestedBookingId === bookingId) {
+      loadError.value = 'Không thể tải thông tin đơn. Vui lòng thử lại.';
+    }
   } finally {
-    loading.value = false;
+    if (detailMounted && generation === detailGeneration && requestedBookingId === bookingId) loading.value = false;
   }
 };
 
 onMounted(loadBooking);
 
+watch(() => String(route.params.id ?? ''), (nextBookingId, previousBookingId) => {
+  if (!nextBookingId || nextBookingId === previousBookingId) return;
+  bookingId = nextBookingId;
+  detailGeneration += 1;
+  extensionRequestToken += 1;
+  invalidateMatchingPoll();
+  showExtensionModal.value = false;
+  extending.value = false;
+  extensionError.value = '';
+  extensionNotice.value = '';
+  extensionCompleted.value = false;
+  extendedPendingInvitationIds = new Set();
+  booking.value = null;
+  stopMatchingPoll();
+  void loadBooking(nextBookingId);
+});
+
 const handleSave = async () => {
-  if (!booking.value || saving.value || cancelling.value || showCancelModal.value) return;
+  if (!booking.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
   saveError.value = '';
   saving.value = true;
   const wasMatched = booking.value.status === 'MATCHED';
@@ -214,6 +315,95 @@ const handleSave = async () => {
     saveError.value = err instanceof Error ? err.message : 'Không thể lưu thay đổi. Vui lòng thử lại.';
   } finally {
     saving.value = false;
+  }
+};
+
+const openMatchingExtension = () => {
+  if (!canExtendMatching.value || extending.value || saving.value || cancelling.value || checkingOrderLink.value || showCancelModal.value) return;
+  invalidateMatchingPoll();
+  extensionError.value = '';
+  extensionNotice.value = '';
+  showExtensionModal.value = true;
+};
+
+const closeMatchingExtension = () => {
+  if (extending.value) return;
+  showExtensionModal.value = false;
+};
+
+const extensionHttpStatus = (reason: unknown): number | null => {
+  if (!reason || typeof reason !== 'object') return null;
+  const response = (reason as { response?: { status?: unknown } }).response;
+  return typeof response?.status === 'number' ? response.status : null;
+};
+
+const reconcileAfterExtension = async (requestedBookingId: string, token: number): Promise<boolean> => {
+  try {
+    const fresh = await bookingsApi.getBooking(requestedBookingId);
+    if (!detailMounted || token !== extensionRequestToken || requestedBookingId !== bookingId) return false;
+    applyBookingState(fresh);
+    if (!waitingForMatch()) stopMatchingPoll();
+    else startMatchingPoll();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const confirmMatchingExtension = async () => {
+  if (!showExtensionModal.value || !canExtendMatching.value || extending.value || saving.value || cancelling.value || checkingOrderLink.value) return;
+  const requestedBookingId = bookingId;
+  invalidateMatchingPoll();
+  const token = ++extensionRequestToken;
+  extending.value = true;
+  extensionError.value = '';
+  extensionNotice.value = '';
+  try {
+    const result = await bookingsApi.extendMatching(requestedBookingId);
+    if (!detailMounted || token !== extensionRequestToken || requestedBookingId !== bookingId) return;
+
+    extendedPendingInvitationIds = pendingInvitationIds(booking.value);
+    extensionCompleted.value = true;
+    showExtensionModal.value = false;
+    extensionNotice.value = `Đã gia hạn thời gian chờ thợ cho ${result.extendedInvitationCount} lời mời đang chờ đến ${formatServerDate(result.expiresAt)}.`;
+
+    try {
+      const fresh = await bookingsApi.getBooking(requestedBookingId);
+      if (!detailMounted || token !== extensionRequestToken || requestedBookingId !== bookingId) return;
+      applyBookingState(fresh);
+      if (!waitingForMatch()) stopMatchingPoll();
+      else startMatchingPoll();
+    } catch {
+      if (detailMounted && token === extensionRequestToken && requestedBookingId === bookingId) {
+        extensionError.value = 'Đã xác nhận gia hạn theo phản hồi của hệ thống, nhưng chưa tải lại được trạng thái yêu cầu.';
+      }
+    }
+  } catch (reason) {
+    if (!detailMounted || token !== extensionRequestToken || requestedBookingId !== bookingId) return;
+    const status = extensionHttpStatus(reason);
+    const reconciled = await reconcileAfterExtension(requestedBookingId, token);
+    if (!detailMounted || token !== extensionRequestToken || requestedBookingId !== bookingId) return;
+    if (reconciled && !canExtendMatching.value) showExtensionModal.value = false;
+    extensionCompleted.value = false;
+    if (status === 401) {
+      extensionError.value = reconciled
+        ? 'Phiên đăng nhập không còn hợp lệ. Trạng thái yêu cầu đã được cập nhật; vui lòng đăng nhập lại.'
+        : 'Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại rồi kiểm tra lại yêu cầu.';
+    } else if (status === 403) {
+      extensionError.value = reconciled
+        ? 'Bạn không có quyền gia hạn yêu cầu này. Trạng thái mới nhất đã được tải lại.'
+        : 'Bạn không có quyền gia hạn yêu cầu này.';
+    } else if ((status === 409 || status === 410) && booking.value?.serviceOrderId) {
+      extensionError.value = 'Trạng thái ghép thợ đã thay đổi vì kỹ thuật viên đã nhận đơn. Lượt gia hạn không được thực hiện.';
+    } else if (status === 409 || status === 410) {
+      extensionError.value = 'Lượt gia hạn không còn khả dụng. Trạng thái yêu cầu đã được tải lại.';
+    } else {
+      extensionError.value = reconciled
+        ? 'Chưa thể xác nhận gia hạn. Trạng thái yêu cầu đã được tải lại; chưa ghi nhận thành công.'
+        : 'Chưa thể xác nhận gia hạn do lỗi kết nối. Vui lòng thử lại; chưa ghi nhận thành công.';
+    }
+  } finally {
+    if (detailMounted && token === extensionRequestToken && requestedBookingId === bookingId) extending.value = false;
   }
 };
 </script>
@@ -239,7 +429,7 @@ const handleSave = async () => {
       role="alert"
     >
       <span class="flex-1">{{ loadError }}</span>
-      <button class="font-semibold underline" type="button" @click="loadBooking">Thử lại</button>
+      <button class="font-semibold underline" type="button" @click="() => loadBooking()">Thử lại</button>
     </div>
 
     <div v-else-if="booking" class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-5">
@@ -260,6 +450,31 @@ const handleSave = async () => {
 
       <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ cancelNotice }}</p>
 
+      <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">
+        {{ extensionNotice }}
+      </p>
+      <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-xs text-danger-800">
+        {{ extensionError }}
+      </p>
+
+      <div v-if="canExtendMatching" data-testid="matching-extension-card" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-3">
+        <div class="space-y-1">
+          <p class="text-sm font-semibold text-brand-900">Gia hạn thời gian chờ thợ</p>
+          <p class="text-xs text-ink-700">
+            Các lời mời đang chờ hiện hết hạn lúc {{ formatServerDate(currentInvitationExpiry) }}. Bạn có thể xác nhận một lần gia hạn trong phạm vi khung giờ đã chọn.
+          </p>
+        </div>
+        <FhButton
+          data-testid="booking-start-matching-extension"
+          variant="primary"
+          size="sm"
+          :disabled="saving || cancelling || checkingOrderLink || showExtensionModal || extending"
+          @click="openMatchingExtension"
+        >
+          {{ extending ? 'Đang gửi yêu cầu...' : 'Xin gia hạn lượt mời đang chờ' }}
+        </FhButton>
+      </div>
+
       <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
 
       <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
@@ -275,7 +490,7 @@ const handleSave = async () => {
           type="button"
           data-testid="booking-refresh-order-link"
           class="text-xs font-semibold text-brand-700 underline disabled:opacity-50"
-          :disabled="checkingOrderLink || saving || cancelling"
+          :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
           @click="refreshOrderLink"
         >{{ checkingOrderLink ? 'Đang kiểm tra...' : 'Kiểm tra lại đơn dịch vụ' }}</button>
         <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs text-danger-700">{{ orderLinkError }}</p>
@@ -321,7 +536,7 @@ const handleSave = async () => {
           {{ saveError }}
         </div>
 
-        <FhButton variant="primary" size="md" :loading="saving" :disabled="showCancelModal || cancelling" @click="handleSave">
+        <FhButton variant="primary" size="md" :loading="saving" :disabled="showCancelModal || showExtensionModal || cancelling || extending" @click="handleSave">
           <CheckCircle2 :size="15" class="mr-1.5" /> Lưu thay đổi
         </FhButton>
       </template>
@@ -335,7 +550,7 @@ const handleSave = async () => {
           data-testid="booking-start-cancel"
           variant="danger"
           size="sm"
-          :disabled="saving || checkingOrderLink || cancelling"
+          :disabled="saving || checkingOrderLink || cancelling || showExtensionModal || extending"
           @click="openBookingCancel"
         >Huỷ yêu cầu đặt lịch</FhButton>
       </div>
@@ -365,5 +580,16 @@ const handleSave = async () => {
         <p v-if="cancelError" data-testid="booking-cancel-error" role="alert" class="text-xs text-danger-700">{{ cancelError }}</p>
       </div>
     </FhConfirmDialog>
+    <FhConfirmDialog
+      :open="showExtensionModal"
+      :loading="extending"
+      :danger="false"
+      title="Xác nhận gia hạn thời gian chờ thợ"
+      consequence="Bạn xác nhận gia hạn một lần cho các lời mời đang chờ của yêu cầu này. Thời hạn mới do hệ thống xác định trong khung giờ đến đã chọn; không tạo thêm lời mời mới."
+      confirm-text="Xác nhận gia hạn"
+      cancel-text="Giữ nguyên"
+      @confirm="confirmMatchingExtension"
+      @cancel="closeMatchingExtension"
+    />
   </div>
 </template>

@@ -120,11 +120,11 @@ const selectedCount = computed(() => selectedIds.value.length);
       </div>
     </div>
 
-    <!-- Rule Banner (Spec v1.2 Sequential Dispatch ≤5) -->
+    <!-- Rule Banner: simultaneous invitations, first valid Accept wins -->
     <div class="p-3.5 rounded-[var(--radius-sm)] bg-brand-50/70 border border-brand-200 text-brand-900 flex items-start gap-2.5 text-xs">
       <ShieldCheck :size="16" class="text-brand-600 shrink-0 mt-0.5" />
       <div class="leading-relaxed">
-        <strong>Cơ chế gửi lời mời tuần tự (Sequential Dispatch Spec v1.2):</strong> Hệ thống gửi lời mời lần lượt theo thứ tự ưu tiên của bạn. Thợ số 1 có 30 phút để xác nhận. Nếu từ chối hoặc hết giờ, hệ thống sẽ tự động chuyển sang thợ tiếp theo trong danh sách ưu tiên.
+        <strong>Cơ chế gửi lời mời đồng thời:</strong> Hệ thống gửi lời mời đến các thợ bạn chọn cùng lúc. Người đầu tiên đủ điều kiện xác nhận sẽ nhận đơn; các lời mời còn lại không thể tạo thêm đơn dịch vụ.
       </div>
     </div>
 
