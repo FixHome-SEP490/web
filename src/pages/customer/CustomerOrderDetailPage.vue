@@ -13,6 +13,7 @@ import {
   DollarSign,
   MessageSquare,
   Star,
+  Map as MapIcon,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -46,6 +47,7 @@ const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(nu
 const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
+const showTrackingModal = ref(false);
 const warrantyClaimDescription = ref('');
 const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value));
 
@@ -110,6 +112,10 @@ const startTrackingPoll = () => {
 watch(() => order.value?.status, (status) => {
   if (status === 'EN_ROUTE' || status === 'en_route') startTrackingPoll();
   else stopTrackingPoll();
+});
+
+watch(() => order.value?.arrivalVerified, (verified) => {
+  if (verified) showTrackingModal.value = false;
 });
 
 onUnmounted(stopTrackingPoll);
@@ -481,6 +487,15 @@ const confirmWork = async () => {
 
               <div class="flex items-center gap-2 self-end sm:self-center">
                 <button
+                  v-if="(order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
+                  type="button"
+                  class="p-2 rounded-xl bg-white border border-ink-200 text-brand-700 hover:bg-brand-50 transition-colors shadow-xs"
+                  title="Xem vị trí thợ trên bản đồ"
+                  @click="showTrackingModal = true"
+                >
+                  <MapIcon :size="16" />
+                </button>
+                <button
                   type="button"
                   class="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 shadow-xs"
                   @click="handleChatWithTech"
@@ -498,21 +513,6 @@ const confirmWork = async () => {
                 </a>
               </div>
             </div>
-          </div>
-
-          <div v-if="order.status === 'EN_ROUTE' || order.status === 'en_route'" class="space-y-2">
-            <div class="text-xs font-semibold text-ink-600 flex items-center gap-1.5">
-              <MapPin :size="14" class="text-brand-600" />
-              Vị trí kỹ thuật viên
-              <span v-if="order.technicianLocation" class="text-ink-400 font-normal">
-                (cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }})
-              </span>
-            </div>
-            <MapTilerMap
-              :center="order.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order.destination || { lat: 21.0285, lng: 105.8542 })"
-              :markers="trackingMarkers"
-              height-class="h-64"
-            />
           </div>
         </div>
       </FhCard>
@@ -824,6 +824,29 @@ const confirmWork = async () => {
             Gửi yêu cầu
           </FhButton>
         </div>
+      </div>
+    </div>
+
+    <!-- Tracking Modal -->
+    <div
+      v-if="showTrackingModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-bold text-ink-900 flex items-center gap-1.5">
+            <MapPin :size="16" class="text-brand-600" /> Vị trí kỹ thuật viên
+          </h3>
+          <span v-if="order?.technicianLocation" class="text-[11px] text-ink-400">
+            Cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }}
+          </span>
+        </div>
+        <MapTilerMap
+          :center="order?.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order?.destination || { lat: 21.0285, lng: 105.8542 })"
+          :markers="trackingMarkers"
+          height-class="h-72"
+        />
+        <FhButton variant="ghost" size="sm" class="w-full" @click="showTrackingModal = false">Đóng</FhButton>
       </div>
     </div>
 
