@@ -288,6 +288,18 @@ export const ordersApi = {
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
+  async getEvidence(
+    orderId: string,
+  ): Promise<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>> {
+    const res = await apiClient.get<ApiResponse<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>>>(`/service-orders/${orderId}/evidence`);
+    return (res.data?.data || res.data || []) as Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>;
+  },
+
+  async deleteEvidence(orderId: string, evidenceId: string): Promise<void> {
+    await apiClient.delete(`/service-orders/${orderId}/evidence/${evidenceId}`);
+  },
+
+
   async completeRepair(
     orderId: string,
     body?: { completionNote?: string },

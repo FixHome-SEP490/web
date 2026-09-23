@@ -27,6 +27,7 @@ export interface TechnicianProfileView {
   averageRating: number;
   ratingCount: number;
   reliabilityScore: number;
+  serviceRadiusKm: number;
   skills: TechnicianSkillView[];
   serviceAreas: TechnicianServiceAreaView[];
   schedules: TechnicianScheduleView[];
@@ -165,6 +166,7 @@ function normalizeProfile(payload: unknown): TechnicianProfileView {
     averageRating: Number(profile.averageRating ?? 5),
     ratingCount: Number(profile.ratingCount ?? 0),
     reliabilityScore: Number(profile.reliabilityScore ?? 100),
+    serviceRadiusKm: Number(profile.serviceRadiusKm ?? 10),
     skills: Array.isArray(profile.skills) ? profile.skills.map(normalizeSkill) : [],
     serviceAreas: Array.isArray(profile.serviceAreas)
       ? profile.serviceAreas.map(normalizeServiceArea)
@@ -184,6 +186,7 @@ export const technicianProfileApi = {
     bio?: string;
     isAvailable?: boolean;
     yearsExperience?: number;
+    serviceRadiusKm?: number;
   }): Promise<TechnicianProfileView> {
     const res = await apiClient.patch<{ data: unknown }>('/technicians/me/profile', dto);
     return normalizeProfile(res.data.data);

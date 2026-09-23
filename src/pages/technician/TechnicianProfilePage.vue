@@ -14,22 +14,25 @@ import {
   Check,
   Plus,
   Trash2,
+  X,
 } from 'lucide-vue-next';
 import {
   FhCard,
   FhMoney,
   FhButton,
   FhConfirmDialog,
+  MapTilerMap,
+  type MapMarker,
 } from '../../components';
 import { useAuthStore } from '../../stores/auth';
-import { profileApi } from '../../api/profile.api';
+import { profileApi, type UserAddress } from '../../api/profile.api';
+import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import {
   technicianProfileApi,
   type TechnicianProfileView,
   type TechnicianServiceOfferingView,
   type TechnicianTimeOffView,
 } from '../../api/technician-profile.api';
-import { serviceAreasApi, type ServiceArea } from '../../api/service-areas.api';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 
 const authStore = useAuthStore();
@@ -49,7 +52,6 @@ const newAvatarUrl = ref('');
 const loading = ref(true);
 const loadError = ref('');
 const technicianProfile = ref<TechnicianProfileView | null>(null);
-const areaNames = ref(new Map<string, { provinceName: string; districtName: string }>());
 const togglingAvailability = ref(false);
 
 const DAY_NAMES = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -240,81 +242,120 @@ const handleSaveSkill = async (service: ServiceItem) => {
   }
 };
 
-// ---- Khu vực phục vụ ----
-const showAreasModal = ref(false);
-const loadingAreas = ref(false);
-const availableAreas = ref<ServiceArea[]>([]);
-const selectedAreaKeys = ref<Set<string>>(new Set());
-const savingAreas = ref(false);
+// ---- Vị trí & bán kính hoạt động ----
+const technicianAddress = ref<UserAddress | null>(null);
+const showLocationModal = ref(false);
+const savingLocation = ref(false);
+const locationLine1 = ref('');
+const locationWard = ref('');
+const locationDistrict = ref('');
+const locationProvince = ref('');
+const locationLat = ref<number | ''>('');
+const locationLng = ref<number | ''>('');
+const locationRadiusKm = ref(10);
+const mapCenter = ref({ lat: 21.0285, lng: 105.8542 }); // Hanoi, used until a location is picked
+const mapRef = ref<InstanceType<typeof MapTilerMap> | null>(null);
+const locationMarkers = ref<MapMarker[]>([]);
+const locationSuggestions = ref<PlaceSuggestion[]>([]);
+const searchingLocation = ref(false);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+let reverseDebounce: ReturnType<typeof setTimeout> | null = null;
 
-const areaKey = (provinceCode: string, districtCode: string) => `${provinceCode}|${districtCode}`;
-const areaSearch = ref('');
-const areaProvinceFilter = ref('');
-
-const openAreasModal = async () => {
-  showAreasModal.value = true;
-  areaSearch.value = '';
-  areaProvinceFilter.value = '';
-  loadingAreas.value = true;
-  try {
-    availableAreas.value = await serviceAreasApi.getServiceAreas({ isActive: true });
-    selectedAreaKeys.value = new Set(
-      (technicianProfile.value?.serviceAreas ?? []).map((a) => areaKey(a.provinceCode, a.districtCode)),
-    );
-  } catch {
-    availableAreas.value = [];
-  } finally {
-    loadingAreas.value = false;
+const applyPlace = (lat: number, lng: number, place?: { formattedAddress?: string; description?: string; ward?: string; district?: string; province?: string }) => {
+  locationLat.value = lat;
+  locationLng.value = lng;
+  locationMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
+  if (place) {
+    locationLine1.value = place.formattedAddress || place.description || locationLine1.value;
+    locationWard.value = place.ward || '';
+    locationDistrict.value = place.district || locationDistrict.value;
+    locationProvince.value = place.province || locationProvince.value;
   }
 };
 
-const toggleArea = (area: ServiceArea) => {
-  const key = areaKey(area.provinceCode, area.districtCode);
-  const next = new Set(selectedAreaKeys.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  selectedAreaKeys.value = next;
+const onLocationMarkerMove = (_id: string, lat: number, lng: number) => {
+  locationLat.value = lat;
+  locationLng.value = lng;
+  locationMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
+  if (reverseDebounce) clearTimeout(reverseDebounce);
+  reverseDebounce = setTimeout(async () => {
+    try {
+      const place = await geoApi.reverse(lat, lng);
+      applyPlace(lat, lng, place);
+    } catch {
+      // Keep the pin where the user dropped it even if reverse lookup fails.
+    }
+  }, 500);
 };
 
-const areaByKey = computed(() => new Map(availableAreas.value.map((a) => [areaKey(a.provinceCode, a.districtCode), a])));
+const onLocationSearchInput = () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  const query = locationLine1.value.trim();
+  if (query.length < 3) { locationSuggestions.value = []; return; }
+  searchDebounce = setTimeout(async () => {
+    searchingLocation.value = true;
+    try {
+      locationSuggestions.value = await geoApi.autocomplete(query);
+    } catch {
+      locationSuggestions.value = [];
+    } finally {
+      searchingLocation.value = false;
+    }
+  }, 350);
+};
 
-const selectedAreaList = computed(() =>
-  [...selectedAreaKeys.value]
-    .map((key) => areaByKey.value.get(key))
-    .filter((a): a is ServiceArea => !!a),
-);
+const selectLocationSuggestion = (suggestion: PlaceSuggestion) => {
+  locationSuggestions.value = [];
+  mapCenter.value = { lat: suggestion.lat, lng: suggestion.lng };
+  applyPlace(suggestion.lat, suggestion.lng, suggestion);
+  mapRef.value?.flyTo(suggestion.lat, suggestion.lng);
+};
 
-const provinceOptions = computed(() => {
-  const seen = new Map<string, string>();
-  for (const a of availableAreas.value) seen.set(a.provinceCode, a.provinceName);
-  return [...seen.entries()].map(([code, name]) => ({ code, name }));
-});
+const openLocationModal = () => {
+  const addr = technicianAddress.value;
+  locationLine1.value = addr?.line1 ?? '';
+  locationWard.value = addr?.ward ?? '';
+  locationDistrict.value = addr?.district ?? '';
+  locationProvince.value = addr?.province ?? '';
+  locationLat.value = addr?.lat ?? '';
+  locationLng.value = addr?.lng ?? '';
+  locationRadiusKm.value = technicianProfile.value?.serviceRadiusKm ?? 10;
+  locationMarkers.value = addr?.lat != null && addr?.lng != null
+    ? [{ id: 'picker', lat: Number(addr.lat), lng: Number(addr.lng), draggable: true, color: '#dc2626' }]
+    : [];
+  mapCenter.value = addr?.lat != null && addr?.lng != null
+    ? { lat: Number(addr.lat), lng: Number(addr.lng) }
+    : { lat: 21.0285, lng: 105.8542 };
+  locationSuggestions.value = [];
+  showLocationModal.value = true;
+};
 
-// Lọc theo tỉnh đã chọn và/hoặc từ khoá gõ vào — danh sách gốc quá dài
-// (294 phường/xã) nên không hiển thị hết, tránh cuộn dài như cũ.
-const areaSearchResults = computed(() => {
-  const q = areaSearch.value.trim().toLowerCase();
-  if (!areaProvinceFilter.value && q.length < 1) return [];
-  return availableAreas.value
-    .filter((a) => !areaProvinceFilter.value || a.provinceCode === areaProvinceFilter.value)
-    .filter((a) => !q || a.districtName.toLowerCase().includes(q) || a.provinceName.toLowerCase().includes(q))
-    .slice(0, 50);
-});
-
-const handleSaveAreas = async () => {
-  savingAreas.value = true;
+const handleSaveLocation = async () => {
+  if (!locationLine1.value.trim() || locationLat.value === '' || locationLng.value === '') {
+    alert('Vui lòng tìm hoặc chọn vị trí trên bản đồ trước khi lưu.');
+    return;
+  }
+  savingLocation.value = true;
   try {
-    const areas = [...selectedAreaKeys.value].map((key) => {
-      const [provinceCode, districtCode] = key.split('|');
-      return { provinceCode, districtCode };
-    });
-    await technicianProfileApi.updateMyServiceAreas(areas);
+    const addressDto = {
+      line1: locationLine1.value.trim(),
+      ward: locationWard.value || undefined,
+      district: locationDistrict.value || locationWard.value || locationProvince.value,
+      province: locationProvince.value,
+      lat: Number(locationLat.value),
+      lng: Number(locationLng.value),
+      isDefault: true,
+    };
+    await (technicianAddress.value
+      ? profileApi.updateAddress(technicianAddress.value.id, addressDto)
+      : profileApi.createAddress(addressDto));
+    await technicianProfileApi.updateMyProfile({ serviceRadiusKm: locationRadiusKm.value });
     await loadProfile();
-    showAreasModal.value = false;
+    showLocationModal.value = false;
   } catch {
-    alert('Không thể cập nhật khu vực phục vụ. Vui lòng thử lại.');
+    alert('Không thể lưu vị trí. Vui lòng thử lại.');
   } finally {
-    savingAreas.value = false;
+    savingLocation.value = false;
   }
 };
 
@@ -327,21 +368,16 @@ const uniqueSchedule = computed(() => {
   return [...seen.values()].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
 });
 
-const areaLabel = (area: { provinceCode: string; districtCode: string }) => {
-  const found = areaNames.value.get(`${area.provinceCode}|${area.districtCode}`);
-  return found ? { province: found.provinceName, district: found.districtName } : { province: area.provinceCode, district: area.districtCode };
-};
-
 const loadProfile = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    const [profile, areas] = await Promise.all([
+    const [profile, addresses] = await Promise.all([
       technicianProfileApi.getMyProfile(),
-      serviceAreasApi.getServiceAreas().catch(() => []),
+      profileApi.getAddresses().catch(() => []),
     ]);
     technicianProfile.value = profile;
-    areaNames.value = new Map(areas.map((a) => [`${a.provinceCode}|${a.districtCode}`, { provinceName: a.provinceName, districtName: a.districtName }]));
+    technicianAddress.value = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
   } catch {
     loadError.value = 'Không thể tải hồ sơ. Vui lòng thử lại.';
   } finally {
@@ -634,33 +670,36 @@ const handleSaveAvatar = async () => {
           </div>
         </FhCard>
 
-        <!-- Service Areas -->
-        <FhCard title="Khu vực hoạt động đăng ký">
+        <!-- Vị trí & bán kính hoạt động -->
+        <FhCard title="Vị trí & bán kính hoạt động">
           <template #action>
-            <div class="flex items-center gap-2">
-              <span class="text-[11px] text-ink-400 font-mono">{{ technicianProfile.serviceAreas.length }} quận</span>
-              <button
-                @click="openAreasModal"
-                class="p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900 rounded-full transition-colors"
-                title="Chỉnh sửa khu vực"
-              >
-                <Pencil :size="16" />
-              </button>
-            </div>
+            <button
+              @click="openLocationModal"
+              class="p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900 rounded-full transition-colors cursor-pointer"
+              title="Chỉnh sửa vị trí"
+            >
+              <Pencil :size="16" />
+            </button>
           </template>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div
-              v-for="area in technicianProfile.serviceAreas"
-              :key="`${area.provinceCode}-${area.districtCode}`"
-              class="p-3 rounded-sm bg-white border border-ink-200/80 flex items-center justify-between shadow-sm hover:border-brand-400 hover:-translate-y-1 hover:shadow-md transition-all duration-300"
+          <div v-if="!technicianAddress" class="text-center py-8 text-ink-500 text-sm">
+            <MapPin :size="24" class="mx-auto text-ink-400 mb-2" />
+            <p>Chưa cập nhật vị trí — khách sẽ không thấy bạn khi quét thợ gần đó.</p>
+            <button
+              @click="openLocationModal"
+              class="mt-2 text-xs font-semibold text-brand-600 hover:text-brand-800 hover:underline cursor-pointer"
             >
-              <div class="flex items-center gap-2.5">
-                <MapPin :size="16" class="text-brand-600 shrink-0" />
-                <span class="text-sm font-medium text-ink-800">{{ areaLabel(area).district }}</span>
-              </div>
-              <span class="text-[11px] text-ink-500">{{ areaLabel(area).province }}</span>
+              + Cập nhật vị trí ngay
+            </button>
+          </div>
+
+          <div v-else class="p-3 rounded-md bg-white border border-ink-200/80 space-y-1.5">
+            <div class="flex items-center gap-2.5">
+              <MapPin :size="16" class="text-brand-600 shrink-0" />
+              <span class="text-sm font-medium text-ink-800">{{ technicianAddress.line1 }}</span>
             </div>
+            <p class="text-xs text-ink-500 pl-6">{{ [technicianAddress.ward, technicianAddress.district, technicianAddress.province].filter(Boolean).join(', ') }}</p>
+            <p class="text-xs text-ink-700 font-semibold pl-6">Bán kính hoạt động: {{ technicianProfile.serviceRadiusKm }} km</p>
           </div>
         </FhCard>
 
@@ -982,66 +1021,91 @@ const handleSaveAvatar = async () => {
       </div>
     </div>
 
-    <!-- Service Areas Modal -->
-    <div
-      v-if="showAreasModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-md max-w-md w-full p-6 shadow-xl space-y-4">
-        <h3 class="text-lg font-bold text-ink-900">Khu vực phục vụ</h3>
-        <div v-if="loadingAreas" class="text-sm text-ink-500 py-6 text-center">Đang tải danh sách khu vực...</div>
-        <template v-else>
-          <!-- Đã chọn -->
-          <div v-if="selectedAreaList.length" class="flex flex-wrap gap-1.5">
-            <span
-              v-for="area in selectedAreaList"
-              :key="area.id"
-              class="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium border border-brand-200"
+    <!-- Location & Radius Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showLocationModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-ink-950/60 backdrop-blur-xs transition-opacity duration-200"
+        @click.self="showLocationModal = false"
+      >
+        <div class="bg-white rounded-md max-w-md w-full shadow-xl flex flex-col max-h-[92vh]">
+          <div class="flex items-center justify-between px-6 pt-6 shrink-0">
+            <h3 class="text-lg font-bold text-ink-900">Vị trí &amp; bán kính hoạt động</h3>
+            <button
+              type="button"
+              aria-label="Đóng"
+              class="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100"
+              @click="showLocationModal = false"
             >
-              {{ area.districtName }}
-              <button type="button" class="hover:text-brand-900" @click="toggleArea(area)">✕</button>
-            </span>
+              <X :size="18" />
+            </button>
           </div>
-          <p v-else class="text-xs text-ink-400">Chưa chọn khu vực nào.</p>
 
-          <!-- Tìm & thêm -->
-          <div class="flex gap-2">
-            <select v-model="areaProvinceFilter" class="px-2.5 py-2 border border-ink-200 rounded text-sm bg-white shrink-0">
-              <option value="">Tất cả tỉnh/thành</option>
-              <option v-for="p in provinceOptions" :key="p.code" :value="p.code">{{ p.name }}</option>
-            </select>
-            <input
-              v-model="areaSearch"
-              type="text"
-              placeholder="Gõ tên phường/xã để tìm..."
-              class="flex-1 min-w-0 px-3 py-2 border border-ink-200 rounded text-sm"
-            />
-          </div>
-          <div v-if="areaProvinceFilter || areaSearch.trim()" class="max-h-56 overflow-y-auto border border-ink-100 rounded divide-y divide-ink-100 text-sm">
-            <p v-if="!areaSearchResults.length" class="p-3 text-ink-400 text-xs">Không tìm thấy khu vực phù hợp.</p>
-            <label
-              v-for="area in areaSearchResults"
-              :key="area.id"
-              class="flex items-center gap-2 px-3 py-2 hover:bg-ink-50 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                :checked="selectedAreaKeys.has(areaKey(area.provinceCode, area.districtCode))"
-                @change="toggleArea(area)"
+          <div class="space-y-4 text-xs px-6 py-5 overflow-y-auto flex-1 min-h-0">
+            <div class="space-y-2">
+              <label class="block font-semibold text-ink-700 mb-1">Địa chỉ nhà/cửa hàng (số nhà, tên đường...) *</label>
+              <div class="relative">
+                <input
+                  v-model="locationLine1"
+                  type="text"
+                  placeholder="Tìm địa chỉ, ví dụ: Số 25 Ngõ 12 Đội Cấn"
+                  class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
+                  @input="onLocationSearchInput"
+                />
+                <ul
+                  v-if="locationSuggestions.length"
+                  class="absolute z-10 mt-1 w-full bg-white border border-ink-200 rounded-sm shadow-lg max-h-48 overflow-auto"
+                >
+                  <li
+                    v-for="s in locationSuggestions"
+                    :key="s.placeId"
+                    class="px-3 py-2 text-xs hover:bg-ink-50 cursor-pointer"
+                    @click="selectLocationSuggestion(s)"
+                  >
+                    {{ s.description }}
+                  </li>
+                </ul>
+              </div>
+              <p v-if="locationWard || locationProvince" class="text-[11px] text-ink-500 flex items-center gap-1">
+                <MapPin :size="12" class="shrink-0" />
+                <span>{{ [locationWard, locationProvince].filter(Boolean).join(', ') }}</span>
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <p class="text-xs text-ink-600">Hoặc kéo ghim đến đúng vị trí trên bản đồ</p>
+              <MapTilerMap
+                ref="mapRef"
+                :center="mapCenter"
+                :markers="locationMarkers"
+                click-to-move="picker"
+                height-class="h-56"
+                @marker-move="onLocationMarkerMove"
               />
-              <span>{{ area.districtName }}</span>
-              <span class="text-ink-400 text-xs">({{ area.provinceName }})</span>
-            </label>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1">Bán kính hoạt động (km)</label>
+              <input
+                v-model.number="locationRadiusKm"
+                type="number" min="1" max="100" step="1"
+                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
+              />
+              <p class="text-[11px] text-ink-500 mt-1">Khách hàng nằm ngoài bán kính này sẽ không thấy bạn khi quét thợ.</p>
+            </div>
           </div>
-        </template>
-        <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showAreasModal = false">Huỷ bỏ</FhButton>
-          <FhButton variant="primary" size="sm" :loading="savingAreas" @click="handleSaveAreas">
-            Lưu khu vực
-          </FhButton>
+
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-ink-100 shrink-0">
+            <FhButton variant="ghost" size="sm" :disabled="savingLocation" @click="showLocationModal = false">
+              Huỷ bỏ
+            </FhButton>
+            <FhButton variant="primary" size="sm" :loading="savingLocation" @click="handleSaveLocation">
+              Lưu vị trí
+            </FhButton>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
   </div>
 </template>
