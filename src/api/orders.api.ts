@@ -90,6 +90,16 @@ export interface ServiceOrderItem {
   };
 }
 
+export interface PublicTrackResult {
+  code: string;
+  status: CanonicalOrderStatus;
+  serviceName?: string;
+  technician?: { fullName: string; phoneNumber: string };
+  destination?: { lat: number; lng: number } | null;
+  technicianLocation?: { lat: number; lng: number; updatedAt: string | null } | null;
+  timeline: { status: string; timestamp: string }[];
+}
+
 export interface AdditionalCostRecord {
   id: string;
   serviceOrderId: string;
@@ -231,6 +241,11 @@ export const ordersApi = {
   async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined}}); return res.data.data.map(normalizeOrder); },
 
   async getOrder(id: string): Promise<ServiceOrderItem> { const res = await apiClient.get<{data: ServiceOrderItem}>(`/service-orders/${id}`); return normalizeOrder(res.data.data); },
+
+  async trackOrder(orderCode: string, phone: string): Promise<PublicTrackResult> {
+    const res = await apiClient.post<{ data: PublicTrackResult }>('/service-orders/public/track', { orderCode, phone });
+    return { ...res.data.data, status: res.data.data.status.toUpperCase() as CanonicalOrderStatus };
+  },
 
   // ── Spec v1.2: Order Execution & Lifecycle Transitions ──
 
