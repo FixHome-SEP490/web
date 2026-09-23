@@ -248,9 +248,13 @@ const selectedAreaKeys = ref<Set<string>>(new Set());
 const savingAreas = ref(false);
 
 const areaKey = (provinceCode: string, districtCode: string) => `${provinceCode}|${districtCode}`;
+const areaSearch = ref('');
+const areaProvinceFilter = ref('');
 
 const openAreasModal = async () => {
   showAreasModal.value = true;
+  areaSearch.value = '';
+  areaProvinceFilter.value = '';
   loadingAreas.value = true;
   try {
     availableAreas.value = await serviceAreasApi.getServiceAreas({ isActive: true });
@@ -272,15 +276,29 @@ const toggleArea = (area: ServiceArea) => {
   selectedAreaKeys.value = next;
 };
 
-const areasByProvince = computed(() => {
-  const groups = new Map<string, { provinceName: string; areas: ServiceArea[] }>();
-  for (const area of availableAreas.value) {
-    if (!groups.has(area.provinceCode)) {
-      groups.set(area.provinceCode, { provinceName: area.provinceName, areas: [] });
-    }
-    groups.get(area.provinceCode)!.areas.push(area);
-  }
-  return [...groups.values()];
+const areaByKey = computed(() => new Map(availableAreas.value.map((a) => [areaKey(a.provinceCode, a.districtCode), a])));
+
+const selectedAreaList = computed(() =>
+  [...selectedAreaKeys.value]
+    .map((key) => areaByKey.value.get(key))
+    .filter((a): a is ServiceArea => !!a),
+);
+
+const provinceOptions = computed(() => {
+  const seen = new Map<string, string>();
+  for (const a of availableAreas.value) seen.set(a.provinceCode, a.provinceName);
+  return [...seen.entries()].map(([code, name]) => ({ code, name }));
+});
+
+// Lọc theo tỉnh đã chọn và/hoặc từ khoá gõ vào — danh sách gốc quá dài
+// (294 phường/xã) nên không hiển thị hết, tránh cuộn dài như cũ.
+const areaSearchResults = computed(() => {
+  const q = areaSearch.value.trim().toLowerCase();
+  if (!areaProvinceFilter.value && q.length < 1) return [];
+  return availableAreas.value
+    .filter((a) => !areaProvinceFilter.value || a.provinceCode === areaProvinceFilter.value)
+    .filter((a) => !q || a.districtName.toLowerCase().includes(q) || a.provinceName.toLowerCase().includes(q))
+    .slice(0, 50);
 });
 
 const handleSaveAreas = async () => {
@@ -972,25 +990,50 @@ const handleSaveAvatar = async () => {
       <div class="bg-white rounded-md max-w-md w-full p-6 shadow-xl space-y-4">
         <h3 class="text-lg font-bold text-ink-900">Khu vực phục vụ</h3>
         <div v-if="loadingAreas" class="text-sm text-ink-500 py-6 text-center">Đang tải danh sách khu vực...</div>
-        <div v-else class="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-sm">
-          <div v-for="group in areasByProvince" :key="group.provinceName">
-            <p class="font-semibold text-ink-700 mb-1.5">{{ group.provinceName }}</p>
-            <div class="grid grid-cols-2 gap-1.5 pl-2">
-              <label
-                v-for="area in group.areas"
-                :key="area.id"
-                class="flex items-center gap-2 text-ink-700"
-              >
-                <input
-                  type="checkbox"
-                  :checked="selectedAreaKeys.has(areaKey(area.provinceCode, area.districtCode))"
-                  @change="toggleArea(area)"
-                />
-                {{ area.districtName }}
-              </label>
-            </div>
+        <template v-else>
+          <!-- Đã chọn -->
+          <div v-if="selectedAreaList.length" class="flex flex-wrap gap-1.5">
+            <span
+              v-for="area in selectedAreaList"
+              :key="area.id"
+              class="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium border border-brand-200"
+            >
+              {{ area.districtName }}
+              <button type="button" class="hover:text-brand-900" @click="toggleArea(area)">✕</button>
+            </span>
           </div>
-        </div>
+          <p v-else class="text-xs text-ink-400">Chưa chọn khu vực nào.</p>
+
+          <!-- Tìm & thêm -->
+          <div class="flex gap-2">
+            <select v-model="areaProvinceFilter" class="px-2.5 py-2 border border-ink-200 rounded text-sm bg-white shrink-0">
+              <option value="">Tất cả tỉnh/thành</option>
+              <option v-for="p in provinceOptions" :key="p.code" :value="p.code">{{ p.name }}</option>
+            </select>
+            <input
+              v-model="areaSearch"
+              type="text"
+              placeholder="Gõ tên phường/xã để tìm..."
+              class="flex-1 min-w-0 px-3 py-2 border border-ink-200 rounded text-sm"
+            />
+          </div>
+          <div v-if="areaProvinceFilter || areaSearch.trim()" class="max-h-56 overflow-y-auto border border-ink-100 rounded divide-y divide-ink-100 text-sm">
+            <p v-if="!areaSearchResults.length" class="p-3 text-ink-400 text-xs">Không tìm thấy khu vực phù hợp.</p>
+            <label
+              v-for="area in areaSearchResults"
+              :key="area.id"
+              class="flex items-center gap-2 px-3 py-2 hover:bg-ink-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedAreaKeys.has(areaKey(area.provinceCode, area.districtCode))"
+                @change="toggleArea(area)"
+              />
+              <span>{{ area.districtName }}</span>
+              <span class="text-ink-400 text-xs">({{ area.provinceName }})</span>
+            </label>
+          </div>
+        </template>
         <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
           <FhButton variant="ghost" size="sm" @click="showAreasModal = false">Huỷ bỏ</FhButton>
           <FhButton variant="primary" size="sm" :loading="savingAreas" @click="handleSaveAreas">
