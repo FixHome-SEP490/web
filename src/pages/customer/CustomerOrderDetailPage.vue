@@ -277,16 +277,10 @@ const confirmPayment = async () => {
   try {
     actionLoading.value = true;
     if (!invoice.value?.id) throw new Error('Chưa có hóa đơn để thanh toán.');
-    const payment = await ordersApi.payInvoice(invoice.value.id);
-    await loadOrder();
-    showPaymentModal.value = false;
-    actionMessage.value = {
-      type: 'success',
-      text: payment.status === 'verified' ? 'Thanh toán đã được xác minh.' : 'Yêu cầu thanh toán đang chờ xác minh. Hóa đơn chưa được đánh dấu đã thanh toán.',
-    };
+    const paymentUrl = await ordersApi.createVnpayUrl(invoice.value.id);
+    window.location.href = paymentUrl;
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Thanh toán thất bại.' };
-  } finally {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể khởi tạo thanh toán VNPay.' };
     actionLoading.value = false;
   }
 };

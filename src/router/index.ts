@@ -52,6 +52,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/public/TrackOrderPage.vue'),
         meta: { title: 'Tra cứu tiến độ đơn' },
       },
+      {
+        path: 'vnpay-return',
+        name: 'vnpay-return',
+        component: () => import('../pages/public/VnpayReturnPage.vue'),
+        meta: { title: 'Kết quả thanh toán VNPay' },
+      },
     ],
   },
 

@@ -368,6 +368,13 @@ export const ordersApi = {
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
+  async createVnpayUrl(invoiceId: string): Promise<string> {
+    const res = await apiClient.post<ApiResponse<{ paymentUrl: string }>>(`/invoices/${invoiceId}/vnpay-url`);
+    const paymentUrl = (res.data?.data as { paymentUrl?: string } | undefined)?.paymentUrl;
+    if (!paymentUrl) throw new Error('Không nhận được liên kết thanh toán VNPay.');
+    return paymentUrl;
+  },
+
   async getWarranties(): Promise<WarrantyItem[]> {
     const orders = await this.getCustomerOrders();
     const lists = await Promise.all(orders.map(async order => {
