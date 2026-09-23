@@ -36,7 +36,10 @@ const isSuspended = computed<boolean>(() => {
 const handleLogout = async () => {
   await authStore.logout();
   toast('Đã đăng xuất');
-  router.push('/login');
+  // Full reload (not router.push): wipes every Pinia store's in-memory state
+  // (chat socket, cached lists, etc.) so a later login never shows stale
+  // data left over from the previous session.
+  window.location.href = '/login';
 };
 </script>
 
