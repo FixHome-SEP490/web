@@ -112,6 +112,39 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     wrapper.unmount();
   });
 
+  it('restores native checkbox state when a third technician is rejected, then allows replacing a selected technician', async () => {
+    const third = { ...candidate, userId: 'user-3', technicianId: 'profile-3', fullName: 'Synthetic Tech 3' };
+    mockGet.mockResolvedValue({ data: { data: [...two, third] } });
+    mockPost.mockResolvedValue({ data: { data: [] } });
+    const wrapper = mount(BookingCandidatesPage, { global });
+    await flushPromises();
+    const inputs = wrapper.findAll('input[type="checkbox"]');
+    for (const index of [0, 1]) {
+      (inputs[index].element as HTMLInputElement).checked = true;
+      await inputs[index].trigger('change');
+    }
+    expect(sendButton(wrapper).attributes('disabled')).toBeUndefined();
+    // A real user interaction has already changed the native checked flag.
+    (inputs[2].element as HTMLInputElement).checked = true;
+    await inputs[2].trigger('change');
+    expect((inputs[2].element as HTMLInputElement).checked).toBe(false);
+    expect((inputs[0].element as HTMLInputElement).checked).toBe(true);
+    expect((inputs[1].element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.text()).toContain('Chỉ được chọn đúng 2');
+    (inputs[0].element as HTMLInputElement).checked = false;
+    await inputs[0].trigger('change');
+    (inputs[2].element as HTMLInputElement).checked = true;
+    await inputs[2].trigger('change');
+    expect((inputs[2].element as HTMLInputElement).checked).toBe(true);
+    await sendButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
+      technicianIds: ['user-2', 'user-3'],
+    });
+    wrapper.unmount();
+  });
+
   it('disables send when fewer than two candidates are selected', async () => {
     mockGet.mockResolvedValue({ data: { data: [candidate] } });
     const wrapper = mount(BookingCandidatesPage, { global });

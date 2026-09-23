@@ -67,6 +67,15 @@ const toggleSelect = (id: string) => {
   }
 };
 
+const handleCheckboxChange = (event: Event, id: string) => {
+  toggleSelect(id);
+  // Native checkbox state changes before Vue receives the change event.
+  // Restore the DOM to the selection source of truth when a third is rejected.
+  if (event.target instanceof HTMLInputElement) {
+    event.target.checked = selectedIds.value.includes(id);
+  }
+};
+
 const handleSendShortlist = async () => {
   if (sending.value || inviteSent.value || !bookingId) return;
   if (selectedIds.value.length !== 2) {
@@ -170,7 +179,7 @@ const selectedCount = computed(() => selectedIds.value.length);
             type="checkbox"
             :checked="selectedIds.includes(tech.id)"
             class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 cursor-pointer"
-            @change="toggleSelect(tech.id)"
+            @change="handleCheckboxChange($event, tech.id)"
           />
 
           <div class="w-12 h-12 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-sm relative">
