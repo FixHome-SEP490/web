@@ -19,8 +19,8 @@ export const MAX_MEDIA_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const mediaApi = {
   /**
-   * Upload an image to Supabase public storage via the backend.
-   * Returns an UploadedMedia object whose `url` is the full public Supabase CDN URL.
+   * Upload an image to Cloudinary public storage via the backend.
+   * Returns an UploadedMedia object whose `url` is the full public Cloudinary CDN URL.
    */
   async upload(file: File): Promise<UploadedMedia> {
     const form = new FormData();

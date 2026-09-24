@@ -301,7 +301,8 @@ const handlePhotoSelected = async (event: Event) => {
         if (isPhotoFlowDisposed.value) continue;
         const currentPhoto = uploadedPhotos.value.find((item) => item.localId === photo.localId);
         if (currentPhoto) currentPhoto.uploadId = uploaded.uploadId;
-      } catch {
+      } catch (err) {
+        console.error(`[NewBookingWizardPage] Upload booking photo failed for "${file.name}":`, err);
         const photoStillSelected = removePhotoByLocalId(photo.localId);
         if (!isPhotoFlowDisposed.value && photoStillSelected) {
           window.alert(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
