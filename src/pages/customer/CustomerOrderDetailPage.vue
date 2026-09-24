@@ -9,10 +9,11 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
-  XCircle,
   DollarSign,
   MessageSquare,
   Star,
+  CreditCard,
+  Map as MapIcon,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -46,6 +47,7 @@ const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(nu
 const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
+const showTrackingModal = ref(false);
 const warrantyClaimDescription = ref('');
 const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value));
 
@@ -69,8 +71,8 @@ const cashSettlement = ref<{
   technicianNotes?: string;
 } | null>(null);
 
-const disputeReason = ref('');
-const showDisputeModal = ref(false);
+const confirmCashAmount = ref<number | ''>('');
+const cashMismatchNote = ref('');
 
 // Render only the timeline entries actually returned by the Backend API.
 // No locally invented states or progression — an empty timeline is shown honestly.
@@ -112,6 +114,10 @@ watch(() => order.value?.status, (status) => {
   else stopTrackingPoll();
 });
 
+watch(() => order.value?.arrivalVerified, (verified) => {
+  if (verified) showTrackingModal.value = false;
+});
+
 onUnmounted(stopTrackingPoll);
 
 onMounted(async () => {
@@ -143,6 +149,7 @@ const loadOrder = async () => {
           status: 'pending_confirmation' | 'confirmed' | 'disputed';
           technicianNotes?: string;
         };
+        confirmCashAmount.value = cashSettlement.value.declaredAmount;
       }
     } catch {
       // Ignore
@@ -221,28 +228,30 @@ const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'A
   }
 };
 
-const handleConfirmCashPayment = async (agreed: boolean) => {
+const handleConfirmCashPayment = async () => {
+  if (!cashSettlement.value || confirmCashAmount.value === '') return;
+  const amount = Number(confirmCashAmount.value);
+  const matches = amount === cashSettlement.value.declaredAmount;
   try {
     actionLoading.value = true;
     actionMessage.value = null;
     await ordersApi.confirmCashSettlement(orderId, {
-      agreed,
-      disputeReason: agreed ? undefined : disputeReason.value,
-      confirmedAmount: agreed ? Number(cashSettlement.value?.declaredAmount) : undefined,
+      agreed: matches,
+      confirmedAmount: amount,
+      disputeReason: matches ? undefined : (cashMismatchNote.value.trim() || 'Số tiền khách xác nhận không khớp với số thợ khai báo'),
     });
 
-    if (agreed) {
+    if (matches) {
       await loadOrder();
       actionMessage.value = {
         type: 'success',
         text: 'Đã xác nhận thanh toán tiền mặt. Trạng thái đơn đã được cập nhật.',
       };
     } else {
-      if (cashSettlement.value) cashSettlement.value.status = 'disputed';
-      showDisputeModal.value = false;
+      cashSettlement.value.status = 'disputed';
       actionMessage.value = {
         type: 'success',
-        text: 'Đã ghi nhận khiếu nại số tiền mặt! Quản lý FixHome sẽ kiểm tra và đối soát ngay.',
+        text: 'Số tiền bạn nhập không khớp với thợ khai báo — đã gửi FixHome đối soát.',
       };
     }
   } catch (err) {
@@ -277,16 +286,10 @@ const confirmPayment = async () => {
   try {
     actionLoading.value = true;
     if (!invoice.value?.id) throw new Error('Chưa có hóa đơn để thanh toán.');
-    const payment = await ordersApi.payInvoice(invoice.value.id);
-    await loadOrder();
-    showPaymentModal.value = false;
-    actionMessage.value = {
-      type: 'success',
-      text: payment.status === 'verified' ? 'Thanh toán đã được xác minh.' : 'Yêu cầu thanh toán đang chờ xác minh. Hóa đơn chưa được đánh dấu đã thanh toán.',
-    };
+    const paymentUrl = await ordersApi.createVnpayUrl(invoice.value.id);
+    window.location.href = paymentUrl;
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Thanh toán thất bại.' };
-  } finally {
+    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể khởi tạo thanh toán VNPay.' };
     actionLoading.value = false;
   }
 };
@@ -361,7 +364,6 @@ const confirmWork = async () => {
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-12">
-    <FhButton v-if="order?.completionRequestedAt && !order.customerConfirmed && order.status === 'UNDER_REPAIR'" :disabled="actionLoading" @click="confirmWork">Xác nhận nghiệm thu dịch vụ</FhButton>
     <!-- Breadcrumb & Back Button -->
     <div class="flex items-center justify-between">
       <button
@@ -487,6 +489,15 @@ const confirmWork = async () => {
 
               <div class="flex items-center gap-2 self-end sm:self-center">
                 <button
+                  v-if="(order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
+                  type="button"
+                  class="p-2 rounded-xl bg-white border border-ink-200 text-brand-700 hover:bg-brand-50 transition-colors shadow-xs"
+                  title="Xem vị trí thợ trên bản đồ"
+                  @click="showTrackingModal = true"
+                >
+                  <MapIcon :size="16" />
+                </button>
+                <button
                   type="button"
                   class="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 shadow-xs"
                   @click="handleChatWithTech"
@@ -505,20 +516,74 @@ const confirmWork = async () => {
               </div>
             </div>
           </div>
+        </div>
+      </FhCard>
 
-          <div v-if="order.status === 'EN_ROUTE' || order.status === 'en_route'" class="space-y-2">
-            <div class="text-xs font-semibold text-ink-600 flex items-center gap-1.5">
-              <MapPin :size="14" class="text-brand-600" />
-              Vị trí kỹ thuật viên
-              <span v-if="order.technicianLocation" class="text-ink-400 font-normal">
-                (cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }})
-              </span>
+      <!-- Step 1: Khách hàng Nghiệm thu dịch vụ (Khi thợ đã gửi yêu cầu nghiệm thu) -->
+      <FhCard
+        v-if="order?.completionRequestedAt && !order.customerConfirmed && order.status === 'UNDER_REPAIR'"
+        class="border-2 border-brand-500 bg-brand-50/50 shadow-sm"
+      >
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-brand-900 font-bold text-sm">
+              <ShieldCheck :size="20" class="text-brand-600 shrink-0" />
+              <span>Kỹ thuật viên đã hoàn thành công việc & Đề nghị Nghiệm thu</span>
             </div>
-            <MapTilerMap
-              :center="order.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order.destination || { lat: 21.0285, lng: 105.8542 })"
-              :markers="trackingMarkers"
-              height-class="h-64"
-            />
+            <span class="text-[11px] font-semibold text-brand-700 bg-brand-100 px-2.5 py-0.5 rounded-full">
+              Bước 1: Nghiệm thu
+            </span>
+          </div>
+
+          <p class="text-xs text-ink-700 leading-relaxed">
+            Kỹ thuật viên đã xử lý xong và tải ảnh bằng chứng hoàn tất. Vui lòng trực tiếp kiểm tra vận hành của thiết bị / hiện trường. Khi bạn đã hài lòng với chất lượng công việc, hãy bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> để chuyển sang bước thanh toán.
+          </p>
+
+          <div class="pt-1 flex items-center justify-end">
+            <FhButton
+              variant="primary"
+              size="md"
+              :disabled="actionLoading"
+              @click="confirmWork"
+            >
+              <CheckCircle2 :size="16" class="mr-1.5" />
+              Xác nhận nghiệm thu dịch vụ (Nghiệm thu OK)
+            </FhButton>
+          </div>
+        </div>
+      </FhCard>
+
+      <!-- Step 2: Khách hàng Thanh toán sau khi đã nghiệm thu -->
+      <FhCard
+        v-if="order?.customerConfirmed && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && order.status === 'UNDER_REPAIR'"
+        class="border-2 border-success-500 bg-success-50/50 shadow-sm"
+      >
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-success-900 font-bold text-sm">
+              <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
+              <span>Nghiệm thu dịch vụ ĐÃ ĐẠT! Vui lòng tiến hành thanh toán</span>
+            </div>
+            <span class="text-[11px] font-semibold text-success-700 bg-success-100 px-2.5 py-0.5 rounded-full">
+              Bước 2: Thanh toán
+            </span>
+          </div>
+
+          <p class="text-xs text-ink-700 leading-relaxed">
+            Bạn đã xác nhận nghiệm thu dịch vụ thành công. Tổng số tiền cần thanh toán là <strong class="text-ink-900 font-num"><FhMoney :amount="order.grandTotal" /></strong>. Bạn có thể thanh toán trực tuyến qua VNPAY / Ví điện tử hoặc trả tiền mặt trực tiếp cho thợ.
+          </p>
+
+          <div class="pt-1 flex items-center justify-end gap-3">
+            <FhButton
+              v-if="invoice?.id"
+              variant="primary"
+              size="md"
+              :disabled="actionLoading"
+              @click="handlePay"
+            >
+              <CreditCard :size="16" class="mr-1.5" />
+              Thanh toán Online ngay (<FhMoney :amount="order.grandTotal" />)
+            </FhButton>
           </div>
         </div>
       </FhCard>
@@ -540,25 +605,34 @@ const confirmWork = async () => {
             {{ cashSettlement.technicianNotes ? `(Ghi chú: ${cashSettlement.technicianNotes})` : '' }}
           </p>
 
+          <div>
+            <label class="block font-semibold text-ink-700 mb-1 text-xs">Số tiền bạn đã thực trả (VNĐ)</label>
+            <input
+              v-model.number="confirmCashAmount"
+              type="number" min="0" step="1000"
+              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num"
+            />
+          </div>
+
+          <div v-if="confirmCashAmount !== '' && Number(confirmCashAmount) !== cashSettlement.declaredAmount">
+            <label class="block font-semibold text-ink-700 mb-1 text-xs">Ghi chú (vì số tiền không khớp)</label>
+            <textarea
+              v-model="cashMismatchNote"
+              rows="2"
+              placeholder="Ví dụ: thợ báo 300k nhưng thực tế tôi chỉ đưa 250k"
+              class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
+            ></textarea>
+          </div>
+
           <div class="flex flex-wrap items-center gap-2 pt-1">
             <FhButton
               variant="primary"
               size="sm"
-              :disabled="actionLoading"
-              @click="handleConfirmCashPayment(true)"
+              :disabled="actionLoading || confirmCashAmount === ''"
+              @click="handleConfirmCashPayment"
             >
               <CheckCircle2 :size="14" class="mr-1.5" />
-              Xác nhận đúng số tiền đã trả
-            </FhButton>
-
-            <FhButton
-              variant="danger"
-              size="sm"
-              :disabled="actionLoading"
-              @click="showDisputeModal = true"
-            >
-              <XCircle :size="14" class="mr-1.5" />
-              Báo sai / Khiếu nại số tiền
+              Xác nhận số tiền &amp; thanh toán
             </FhButton>
           </div>
         </div>
@@ -658,15 +732,18 @@ const confirmWork = async () => {
                 </FhButton>
               </template>
 
-              <FhButton
-                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid')"
-                variant="primary"
-                size="md"
-                :disabled="actionLoading"
-                @click="handlePay"
+              <span
+                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && !order.customerConfirmed"
+                class="text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 font-medium"
               >
-                Thanh toán Online (<FhMoney :amount="order.grandTotal" />)
-              </FhButton>
+                Cần xác nhận nghiệm thu trước khi thanh toán
+              </span>
+              <span
+                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && order.customerConfirmed"
+                class="text-xs text-success-700 bg-success-50 px-2.5 py-1 rounded border border-success-200 font-medium"
+              >
+                Xem nút "Thanh toán Online" ở bước Thanh toán bên trên
+              </span>
             </div>
           </div>
         </div>
@@ -716,40 +793,6 @@ const confirmWork = async () => {
       @confirm="confirmCancel"
       @cancel="showCancelModal = false"
     />
-
-    <!-- Dispute Modal -->
-    <div
-      v-if="showDisputeModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
-        <h3 class="text-base font-bold text-ink-900">Khiếu nại Số tiền mặt</h3>
-        <p class="text-xs text-ink-500">
-          Vui lòng nhập lý do (ví dụ: thợ báo 300k nhưng thực tế tôi chỉ đưa 250k):
-        </p>
-        <textarea
-          v-model="disputeReason"
-          rows="3"
-          placeholder="Nhập lý do khiếu nại..."
-          class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-        ></textarea>
-
-        <div class="flex gap-2 pt-2">
-          <FhButton variant="ghost" size="sm" class="flex-1" @click="showDisputeModal = false">
-            Huỷ
-          </FhButton>
-          <FhButton
-            variant="danger"
-            size="sm"
-            class="flex-1"
-            :disabled="!disputeReason.trim() || actionLoading"
-            @click="handleConfirmCashPayment(false)"
-          >
-            Gửi khiếu nại
-          </FhButton>
-        </div>
-      </div>
-    </div>
 
     <!-- Review Modal -->
     <div
@@ -830,6 +873,29 @@ const confirmWork = async () => {
             Gửi yêu cầu
           </FhButton>
         </div>
+      </div>
+    </div>
+
+    <!-- Tracking Modal -->
+    <div
+      v-if="showTrackingModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+    >
+      <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-bold text-ink-900 flex items-center gap-1.5">
+            <MapPin :size="16" class="text-brand-600" /> Vị trí kỹ thuật viên
+          </h3>
+          <span v-if="order?.technicianLocation" class="text-[11px] text-ink-400">
+            Cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }}
+          </span>
+        </div>
+        <MapTilerMap
+          :center="order?.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order?.destination || { lat: 21.0285, lng: 105.8542 })"
+          :markers="trackingMarkers"
+          height-class="h-72"
+        />
+        <FhButton variant="ghost" size="sm" class="w-full" @click="showTrackingModal = false">Đóng</FhButton>
       </div>
     </div>
 

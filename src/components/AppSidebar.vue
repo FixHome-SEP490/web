@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import {
   ChevronLeft,
@@ -32,7 +32,6 @@ const props = withDefaults(defineProps<{
 
 const isCollapsed = ref(false);
 const route = useRoute();
-const router = useRouter();
 const authStore = useAuthStore();
 const showProfileDropdown = ref(false);
 
@@ -40,7 +39,10 @@ const handleLogout = async () => {
   if (authStore.logout) {
     await authStore.logout();
   }
-  router.push('/login');
+  // Full reload (not router.push): wipes every Pinia store's in-memory state
+  // (chat socket, cached lists, etc.) so a later login never shows stale
+  // data left over from the previous session.
+  window.location.href = '/login';
 };
 
 const userAvatar = computed(() => authStore.user?.avatarUrl);

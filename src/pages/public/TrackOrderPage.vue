@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search } from 'lucide-vue-next';
 
@@ -7,73 +7,87 @@ import {
   FhButton,
   FhStatusPill,
   FhTimeline,
+  MapTilerMap,
+  type MapMarker,
   type TimelineStep,
 } from '../../components';
+import { ordersApi, type PublicTrackResult } from '../../api/orders.api';
 
 const orderCode = ref('');
 const phone = ref('');
 const searched = ref(false);
 const loading = ref(false);
+const errorMessage = ref('');
 
 useSmoothScroll();
 
-const mockFoundOrder = ref<{
-  code: string;
-  service: string;
-  status: string;
-  technician: string;
-  steps: TimelineStep[];
-} | null>(null);
+const foundOrder = ref<PublicTrackResult | null>(null);
 
-const handleTrack = () => {
+const STATUS_LABEL: Record<string, string> = {
+  ACCEPTED: 'Đơn đã được nhận',
+  EN_ROUTE: 'Kỹ thuật viên đang di chuyển',
+  UNDER_REPAIR: 'Đang tiến hành sửa chữa',
+  COMPLETED: 'Đã hoàn tất',
+  CANCELLED: 'Đã huỷ',
+};
+
+const timelineSteps = computed<TimelineStep[]>(() => {
+  const entries = foundOrder.value?.timeline ?? [];
+  return entries.map((entry, index) => ({
+    key: `${entry.status}-${index}`,
+    label: STATUS_LABEL[entry.status.toUpperCase()] || entry.status,
+    timestamp: new Date(entry.timestamp).toLocaleString('vi-VN'),
+    completed: index < entries.length - 1,
+    current: index === entries.length - 1,
+  }));
+});
+
+const showMap = computed(() =>
+  (foundOrder.value?.status === 'EN_ROUTE' || foundOrder.value?.status === 'UNDER_REPAIR')
+  && !!foundOrder.value?.technicianLocation,
+);
+
+const trackingMarkers = computed<MapMarker[]>(() => {
+  const markers: MapMarker[] = [];
+  if (foundOrder.value?.destination) markers.push({ id: 'destination', lat: foundOrder.value.destination.lat, lng: foundOrder.value.destination.lng, color: '#16a34a' });
+  if (foundOrder.value?.technicianLocation) markers.push({ id: 'technician', lat: foundOrder.value.technicianLocation.lat, lng: foundOrder.value.technicianLocation.lng, color: '#2563eb' });
+  return markers;
+});
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+const startPoll = () => {
+  stopPoll();
+  pollTimer = setInterval(async () => {
+    try {
+      const fresh = await ordersApi.trackOrder(orderCode.value.trim(), phone.value.trim());
+      foundOrder.value = fresh;
+      if (fresh.status !== 'EN_ROUTE' && fresh.status !== 'UNDER_REPAIR') stopPoll();
+    } catch {
+      // Ignore transient polling errors; next tick retries.
+    }
+  }, 15000);
+};
+
+onBeforeUnmount(stopPoll);
+
+const handleTrack = async () => {
   if (!orderCode.value.trim() || !phone.value.trim()) return;
   loading.value = true;
+  errorMessage.value = '';
+  stopPoll();
 
-  setTimeout(() => {
-    loading.value = false;
+  try {
+    foundOrder.value = await ordersApi.trackOrder(orderCode.value.trim(), phone.value.trim());
     searched.value = true;
-    mockFoundOrder.value = {
-      code: orderCode.value.trim().toUpperCase(),
-      service: 'Vệ sinh & Bơm ga máy lạnh Inverter Daikin',
-      status: 'UNDER_REPAIR',
-      technician: 'Trần Văn Hoàng (0903 000 001)',
-      steps: [
-        {
-          key: '1',
-          label: 'Khách hàng tạo yêu cầu sửa chữa',
-          timestamp: '13:00 Hôm nay',
-          actor: 'Khách hàng',
-          completed: true,
-        },
-        {
-          key: '2',
-          label: 'Kỹ thuật viên nhận đơn & xuất phát',
-          timestamp: '13:15 Hôm nay',
-          actor: 'Trần Văn Hoàng',
-          completed: true,
-        },
-        {
-          key: '3',
-          label: 'Check-in GPS tại địa chỉ khách hàng',
-          timestamp: '13:40 Hôm nay',
-          actor: 'Hệ thống xác thực (Hợp lệ)',
-          completed: true,
-        },
-        {
-          key: '4',
-          label: 'Đang tiến hành sửa chữa & kiểm tra',
-          timestamp: 'Hiện tại',
-          actor: 'Trần Văn Hoàng',
-          current: true,
-        },
-        {
-          key: '5',
-          label: 'Chụp ảnh nghiệm thu & Hoàn tất',
-          completed: false,
-        },
-      ],
-    };
-  }, 600);
+    if (foundOrder.value.status === 'EN_ROUTE' || foundOrder.value.status === 'UNDER_REPAIR') startPoll();
+  } catch {
+    foundOrder.value = null;
+    searched.value = true;
+    errorMessage.value = 'Không tìm thấy đơn hàng phù hợp với mã đơn và số điện thoại đã nhập.';
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
@@ -132,21 +146,38 @@ const handleTrack = () => {
     </div>
 
     <!-- Results Display -->
-    <div v-if="searched && mockFoundOrder" class="space-y-6 pt-4 max-w-3xl mx-auto">
-      <div class="bg-white border border-slate-200 rounded-4xl p-8 md:p-10 shadow-xl shadow-slate-200/50">
+    <div v-if="searched" class="space-y-6 pt-4 max-w-3xl mx-auto">
+      <div v-if="errorMessage" class="bg-white border border-slate-200 rounded-4xl p-8 text-center text-sm font-medium text-slate-500">
+        {{ errorMessage }}
+      </div>
+
+      <div v-else-if="foundOrder" class="bg-white border border-slate-200 rounded-4xl p-8 md:p-10 shadow-xl shadow-slate-200/50 space-y-8">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
           <div>
-            <span class="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">{{ mockFoundOrder.code }}</span>
-            <h3 class="text-xl font-bold text-slate-900 mb-2">{{ mockFoundOrder.service }}</h3>
-            <p class="text-sm font-medium text-slate-500">Thợ phụ trách: {{ mockFoundOrder.technician }}</p>
+            <span class="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">{{ foundOrder.code }}</span>
+            <h3 class="text-xl font-bold text-slate-900 mb-2">{{ foundOrder.serviceName }}</h3>
+            <p v-if="foundOrder.technician" class="text-sm font-medium text-slate-500">
+              Thợ phụ trách: {{ foundOrder.technician.fullName }} ({{ foundOrder.technician.phoneNumber }})
+            </p>
           </div>
-          <FhStatusPill :status="mockFoundOrder.status" />
+          <FhStatusPill :status="foundOrder.status" />
+        </div>
+
+        <!-- Live map -->
+        <div v-if="showMap" class="space-y-2">
+          <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Vị trí kỹ thuật viên</h4>
+          <MapTilerMap
+            :center="foundOrder.technicianLocation ? { lat: foundOrder.technicianLocation.lat, lng: foundOrder.technicianLocation.lng } : (foundOrder.destination || { lat: 21.0285, lng: 105.8542 })"
+            :markers="trackingMarkers"
+            height-class="h-72"
+          />
         </div>
 
         <!-- Timeline -->
-        <div class="pt-8">
+        <div>
           <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-6">Tiến trình thực hiện</h4>
-          <FhTimeline :steps="mockFoundOrder.steps" />
+          <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
+          <p v-else class="text-xs text-slate-400 italic">Chưa có cập nhật tiến trình cho đơn này.</p>
         </div>
       </div>
     </div>

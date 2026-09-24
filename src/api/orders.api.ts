@@ -90,6 +90,16 @@ export interface ServiceOrderItem {
   };
 }
 
+export interface PublicTrackResult {
+  code: string;
+  status: CanonicalOrderStatus;
+  serviceName?: string;
+  technician?: { fullName: string; phoneNumber: string };
+  destination?: { lat: number; lng: number } | null;
+  technicianLocation?: { lat: number; lng: number; updatedAt: string | null } | null;
+  timeline: { status: string; timestamp: string }[];
+}
+
 export interface AdditionalCostRecord {
   id: string;
   serviceOrderId: string;
@@ -232,6 +242,11 @@ export const ordersApi = {
 
   async getOrder(id: string): Promise<ServiceOrderItem> { const res = await apiClient.get<{data: ServiceOrderItem}>(`/service-orders/${id}`); return normalizeOrder(res.data.data); },
 
+  async trackOrder(orderCode: string, phone: string): Promise<PublicTrackResult> {
+    const res = await apiClient.post<{ data: PublicTrackResult }>('/service-orders/public/track', { orderCode, phone });
+    return { ...res.data.data, status: res.data.data.status.toUpperCase() as CanonicalOrderStatus };
+  },
+
   // ── Spec v1.2: Order Execution & Lifecycle Transitions ──
 
   async enRoute(orderId: string): Promise<Record<string, unknown>> {
@@ -272,6 +287,18 @@ export const ordersApi = {
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
+
+  async getEvidence(
+    orderId: string,
+  ): Promise<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>> {
+    const res = await apiClient.get<ApiResponse<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>>>(`/service-orders/${orderId}/evidence`);
+    return (res.data?.data || res.data || []) as Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; createdAt?: string }>;
+  },
+
+  async deleteEvidence(orderId: string, evidenceId: string): Promise<void> {
+    await apiClient.delete(`/service-orders/${orderId}/evidence/${evidenceId}`);
+  },
+
 
   async completeRepair(
     orderId: string,
@@ -366,6 +393,13 @@ export const ordersApi = {
   async payInvoice(invoiceId: string): Promise<Record<string, unknown>> {
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/invoices/${invoiceId}/pay`, { idempotencyKey: crypto.randomUUID() });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
+  },
+
+  async createVnpayUrl(invoiceId: string): Promise<string> {
+    const res = await apiClient.post<ApiResponse<{ paymentUrl: string }>>(`/invoices/${invoiceId}/vnpay-url`);
+    const paymentUrl = (res.data?.data as { paymentUrl?: string } | undefined)?.paymentUrl;
+    if (!paymentUrl) throw new Error('Không nhận được liên kết thanh toán VNPay.');
+    return paymentUrl;
   },
 
   async getWarranties(): Promise<WarrantyItem[]> {

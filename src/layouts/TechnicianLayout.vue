@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useChatStore } from '../stores/chat.store';
 import {
@@ -20,7 +19,6 @@ import { ChatFloatingWidget } from '../components';
 import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
 
-const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 const isAvailable = ref(true);
@@ -64,7 +62,10 @@ const toggleAvailability = () => {
 
 const handleLogout = async () => {
   await authStore.logout();
-  router.push('/login');
+  // Full reload (not router.push): wipes every Pinia store's in-memory state
+  // (chat socket, cached lists, etc.) so a later login never shows stale
+  // data left over from the previous session.
+  window.location.href = '/login';
 };
 
 const userInitial = computed(() => {

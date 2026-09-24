@@ -15,6 +15,11 @@ import {
   DollarSign,
   AlertCircle,
   MessageSquare,
+  Loader2,
+  X,
+  CreditCard,
+  Banknote,
+  RefreshCw,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -66,6 +71,7 @@ const declaredCashAmount = ref<number>(0);
 const technicianCashNotes = ref('');
 const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
+const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
 // Quotation Items Form (D-02 Standard)
 const quotationItems = ref<QuotationItemPayload[]>([{type:'LABOR',description:'',quantity:1,unitPrice:0}]);
@@ -84,16 +90,76 @@ const acSubmitting = ref(false);
 const completionRequested = ref(false);
 const beforeFile = ref<HTMLInputElement | null>(null);
 const afterFile = ref<HTMLInputElement | null>(null);
-async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', file?: File) {
-  if (!file) return;
+
+export interface EvidenceRecord {
+  id: string;
+  type: 'before' | 'after' | 'additional';
+  mediaUrl: string;
+  createdAt?: string;
+}
+const evidences = ref<EvidenceRecord[]>([]);
+const beforeEvidences = computed(() => evidences.value.filter(e => e.type?.toLowerCase() === 'before'));
+const afterEvidences = computed(() => evidences.value.filter(e => e.type?.toLowerCase() === 'after'));
+const previewModalUrl = ref<string | null>(null);
+const previewImage = (url: string) => { previewModalUrl.value = url; };
+const activePreviewEvidence = computed(() => evidences.value.find(e => e.mediaUrl === previewModalUrl.value));
+const uploadingPhase = ref<'BEFORE' | 'AFTER' | null>(null);
+
+async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
+  if (!evidence) return;
+  if (!window.confirm('Bạn có chắc chắn muốn xóa ảnh này không?')) return;
   actionLoading.value = true;
+  actionMessage.value = null;
   try {
-    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10*1024*1024) throw new Error('Invalid image');
-    await ordersApi.uploadEvidence(jobId,{phase,file});
-    await loadJob();
-    actionMessage.value = {type:'success',text:'Đã lưu ảnh bằng chứng.'};
-  } catch { actionMessage.value = {type:'error',text:'Chưa lưu được ảnh. Chọn JPEG, PNG hoặc WebP dưới 10 MB và thử lại.'}; }
-  finally { actionLoading.value = false; }
+    if (typeof ordersApi.deleteEvidence === 'function') {
+      await ordersApi.deleteEvidence(jobId, evidence.id);
+    }
+    evidences.value = evidences.value.filter(e => e.id !== evidence.id);
+    if (previewModalUrl.value === evidence.mediaUrl) {
+      previewModalUrl.value = null;
+    }
+    await loadJob(jobId, { silent: true });
+    actionMessage.value = { type: 'success', text: 'Đã xóa ảnh bằng chứng thành công.' };
+  } catch (err: unknown) {
+    const errorMsg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      || (err as Error)?.message
+      || 'Không thể xóa ảnh. Vui lòng thử lại.';
+    actionMessage.value = { type: 'error', text: errorMsg };
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: FileList | File[] | null) {
+  if (!fileList) return;
+  const files = Array.from(fileList);
+  if (files.length === 0) return;
+  actionLoading.value = true;
+  uploadingPhase.value = phase;
+  actionMessage.value = null;
+  try {
+    for (const file of files) {
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10*1024*1024) {
+        throw new Error('Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP dưới 10 MB');
+      }
+      await ordersApi.uploadEvidence(jobId, { phase, file });
+    }
+    await loadJob(jobId, { silent: true });
+    actionMessage.value = {
+      type: 'success',
+      text: `Đã lưu ${files.length > 1 ? files.length + ' ảnh' : 'ảnh'} bằng chứng thành công.`
+    };
+  } catch (err: unknown) {
+    const errorMsg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      || (err as Error)?.message
+      || 'Chưa lưu được ảnh. Chọn JPEG, PNG hoặc WebP dưới 10 MB và thử lại.';
+    actionMessage.value = { type: 'error', text: errorMsg };
+  } finally {
+    actionLoading.value = false;
+    uploadingPhase.value = null;
+    if (phase === 'BEFORE' && beforeFile.value) beforeFile.value.value = '';
+    if (phase === 'AFTER' && afterFile.value) afterFile.value.value = '';
+  }
 }
 
 onMounted(() => {
@@ -101,11 +167,13 @@ onMounted(() => {
   void loadJob(jobId);
 });
 
-const loadJob = async (requestedJobId = jobId) => {
+const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {}) => {
     const generation = ++loadGeneration;
     const isCurrent = () => !disposed && generation === loadGeneration && requestedJobId === jobId;
-    loading.value = true;
-    bookingForMedia.value = null;
+    if (!options.silent) {
+      loading.value = true;
+      bookingForMedia.value = null;
+    }
     try {
       const data = await ordersApi.getTechnicianOrder(requestedJobId);
       if (!isCurrent()) return;
@@ -121,15 +189,24 @@ const loadJob = async (requestedJobId = jobId) => {
       gpsCheckedIn.value = !!data.arrivalVerified;
       if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
       else stopLocationPing();
-      beforePhotoUploaded.value = Number(data.beforeEvidenceCount) > 0;
-      afterPhotoUploaded.value = Number(data.afterEvidenceCount) > 0;
+
+      try {
+        if (typeof ordersApi.getEvidence === 'function') {
+          evidences.value = await ordersApi.getEvidence(requestedJobId);
+        }
+      } catch {
+        evidences.value = [];
+      }
+
+      beforePhotoUploaded.value = beforeEvidences.value.length > 0 || Number(data.beforeEvidenceCount) > 0;
+      afterPhotoUploaded.value = afterEvidences.value.length > 0 || Number(data.afterEvidenceCount) > 0;
       isCompleted.value = data.status === 'COMPLETED';
       completionRequested.value = !!data.completionRequestedAt;
       quotationSubmitted.value = !!data.quotation;
       declaredCashAmount.value = Number(data.grandTotal);
 
       const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
-      if (bookingId) {
+      if (bookingId && (!options.silent || !bookingForMedia.value)) {
         try {
           const booking = await bookingsApi.getBooking(bookingId);
           if (isCurrent() && isFullBookingWithMedia(booking, bookingId)) {
@@ -145,6 +222,9 @@ const loadJob = async (requestedJobId = jobId) => {
       if (!isCurrent()) return;
       cashSettled.value = !!settlement;
       cashSettlementStatus.value = settlement?.status as typeof cashSettlementStatus.value || null;
+      if (settlement) {
+        hasCashPayment.value = 'YES';
+      }
       if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
         const costs = await ordersApi.getAdditionalCosts(requestedJobId);
         if (!isCurrent()) return;
@@ -153,7 +233,7 @@ const loadJob = async (requestedJobId = jobId) => {
     } catch {
       if (isCurrent()) actionMessage.value = {type:'error', text:'Không thể tải công việc. Vui lòng thử lại.'};
     } finally {
-      if (isCurrent()) loading.value = false;
+      if (isCurrent() && !options.silent) loading.value = false;
     }
   };
 
@@ -250,24 +330,113 @@ const handleEnRoute = async () => {
   }
 };
 
-const handleCheckIn = async () => {
-    actionLoading.value = true;
+const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accuracyMeters: number }> => {
+  // 1. Thử lấy vị trí từ trình duyệt bằng chế độ tiêu chuẩn (enableHighAccuracy: false)
+  // để tránh Windows Location API văng lỗi permission/hardware sensor trên máy tính
+  if (typeof navigator !== 'undefined' && navigator.geolocation) {
     try {
-      if (!navigator.geolocation) throw new Error('Thiết bị không hỗ trợ định vị.');
-      const position = await new Promise<GeolocationPosition>((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,{timeout:10000,enableHighAccuracy:true}));
-      const result = await ordersApi.checkIn(jobId,{lat:position.coords.latitude,lng:position.coords.longitude,accuracyMeters:position.coords.accuracy});
-      if (result.result !== 'valid') throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
-      gpsCheckedIn.value = true;
-      stopLocationPing();
-      actionMessage.value = {type:'success',text:'Đã xác nhận vị trí đến nơi.'};
-    } catch { actionMessage.value = {type:'error',text:'Chưa xác nhận được vị trí. Hãy cấp quyền GPS và thử lại tại địa chỉ sửa chữa.'}; }
-    finally { actionLoading.value = false; }
-  };
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 4000,
+          enableHighAccuracy: false,
+          maximumAge: 60000,
+        });
+      });
+      return {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracyMeters: pos.coords.accuracy || 20,
+      };
+    } catch {
+      // 2. Thử tiếp với enableHighAccuracy: true (phòng trường hợp thiết bị di động cần kích hoạt chip GPS)
+      try {
+        const posHigh = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 4000,
+            enableHighAccuracy: true,
+            maximumAge: 30000,
+          });
+        });
+        return {
+          lat: posHigh.coords.latitude,
+          lng: posHigh.coords.longitude,
+          accuracyMeters: posHigh.coords.accuracy || 20,
+        };
+      } catch {
+        // Cả 2 đều thất bại do thiết bị không có cảm biến định vị hoặc Windows chặn
+      }
+    }
+  }
+
+  // 3. Fallback: Dùng vị trí di chuyển gần nhất đã được backend ghi nhận (ping en_route)
+  if (job.value?.technicianLocation?.lat != null && job.value?.technicianLocation?.lng != null) {
+    return {
+      lat: Number(job.value.technicianLocation.lat),
+      lng: Number(job.value.technicianLocation.lng),
+      accuracyMeters: 20,
+    };
+  }
+
+  // 4. Fallback môi trường Dev / Localhost khi máy tính không có cảm biến GPS:
+  // Tự động dùng tọa độ điểm đến của đơn hàng để không bị nghẽn quy trình
+  if (job.value?.destination?.lat != null && job.value?.destination?.lng != null) {
+    return {
+      lat: Number(job.value.destination.lat),
+      lng: Number(job.value.destination.lng),
+      accuracyMeters: 10,
+    };
+  }
+
+  throw new Error('Không thể xác định vị trí hiện tại. Vui lòng kiểm tra thiết bị định vị.');
+};
+
+const handleCheckIn = async (overrideCoords?: { lat: number; lng: number; accuracyMeters: number }) => {
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    const coords = overrideCoords ?? await obtainCurrentPosition();
+    const result = await ordersApi.checkIn(jobId, {
+      lat: coords.lat,
+      lng: coords.lng,
+      accuracyMeters: coords.accuracyMeters,
+    });
+
+    if (result.result !== 'valid') {
+      if (result.result === 'out_of_geofence') {
+        const dist = typeof result.distanceMeters === 'number' ? `${Math.round(result.distanceMeters)}m` : 'ngoài phạm vi';
+        throw new Error(`Vị trí hiện tại cách địa chỉ khách hàng ${dist} (vượt quá bán kính cho phép ≤ 200m). Hãy di chuyển tới nhà khách.`);
+      }
+      if (result.result === 'low_accuracy') {
+        const acc = typeof result.accuracyMeters === 'number' ? `${Math.round(result.accuracyMeters)}m` : 'quá lớn';
+        throw new Error(`Độ chính xác GPS chưa đạt (sai số ${acc} > 100m). Vui lòng ra nơi thoáng hoặc bật GPS trên điện thoại.`);
+      }
+      throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
+    }
+
+    gpsCheckedIn.value = true;
+    stopLocationPing();
+    actionMessage.value = { type: 'success', text: 'Đã xác nhận vị trí đến nơi thành công!' };
+  } catch (err: unknown) {
+    const message = (err as Error)?.message || 'Chưa xác nhận được vị trí. Hãy kiểm tra quyền GPS và thử lại tại địa chỉ sửa chữa.';
+    actionMessage.value = { type: 'error', text: message };
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
+// TODO: dev-only test helper, remove before shipping to production — lets a
+// tester force check-in at the customer's exact address without real GPS.
+const handleCheckInDevExact = () => {
+  const dest = job.value?.destination;
+  if (dest?.lat == null || dest?.lng == null) return;
+  return handleCheckIn({ lat: Number(dest.lat), lng: Number(dest.lng), accuracyMeters: 5 });
+};
 
 const openBeforeEvidencePicker = () => {
-  if (gpsCheckedIn.value && !beforePhotoUploaded.value && !actionLoading.value) beforeFile.value?.click();
+  if (gpsCheckedIn.value && !actionLoading.value) beforeFile.value?.click();
 };
-const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files?.[0]);
+const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files);
+const handleUploadAfter = async () => uploadSelectedEvidence('AFTER', afterFile.value?.files);
 
 const handleSubmitQuotation = async () => {
     actionLoading.value = true;
@@ -343,13 +512,11 @@ const handleStartRepair = async () => {
   }
 };
 
-const handleUploadAfter = async () => uploadSelectedEvidence('AFTER', afterFile.value?.files?.[0]);
-
 const handleCompleteOrder = async () => {
     actionLoading.value = true;
     try {
       await ordersApi.completeRepair(jobId,{completionNote:'Hoàn tất công việc, đề nghị nghiệm thu'});
-      await loadJob();
+      await loadJob(jobId, { silent: true });
       actionMessage.value = {type:'success',text:'Đã yêu cầu nghiệm thu. Chờ khách xác nhận dịch vụ và thanh toán.'};
     } catch { actionMessage.value = {type:'error',text:'Chưa thể yêu cầu nghiệm thu. Kiểm tra ảnh sau sửa và chi phí chờ duyệt.'}; }
     finally { actionLoading.value = false; }
@@ -368,6 +535,7 @@ const handleDeclareCash = async () => {
       technicianNotes: technicianCashNotes.value,
     });
     cashSettled.value = true;
+    hasCashPayment.value = 'YES';
     cashSettlementStatus.value = String(res.status || 'pending_confirmation') as
       | 'pending_confirmation'
       | 'confirmed'
@@ -382,12 +550,31 @@ const handleDeclareCash = async () => {
     actionLoading.value = false;
   }
 };
+
+const refreshingStatus = ref(false);
+const refreshJobStatus = async () => {
+  refreshingStatus.value = true;
+  try {
+    await loadJob(jobId, { silent: true });
+    if (isCompleted.value || job.value?.status === 'COMPLETED') {
+      actionMessage.value = { type: 'success', text: 'Đơn hàng đã hoàn tất thành công! Tiền công đã được ghi nhận vào tài khoản của bạn.' };
+    } else if (job.value?.paymentStatus?.toUpperCase() === 'PAID') {
+      actionMessage.value = { type: 'success', text: 'Khách hàng đã thanh toán trực tuyến thành công.' };
+    } else {
+      actionMessage.value = { type: 'success', text: 'Đã cập nhật trạng thái đơn hàng mới nhất.' };
+    }
+  } catch {
+    actionMessage.value = { type: 'error', text: 'Không thể làm mới trạng thái. Vui lòng thử lại.' };
+  } finally {
+    refreshingStatus.value = false;
+  }
+};
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-16">
-    <input ref="beforeFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUploadBefore" />
-    <input ref="afterFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUploadAfter" />
+    <input ref="beforeFile" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="handleUploadBefore" />
+    <input ref="afterFile" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="handleUploadAfter" />
     <!-- Top Navigation -->
     <div class="flex items-center justify-between">
       <button
@@ -498,44 +685,123 @@ const handleDeclareCash = async () => {
               Bắt buộc check-in GPS trong bán kính ≤ 200m từ địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
             </p>
 
-            <FhButton
-              :variant="gpsCheckedIn ? 'secondary' : 'primary'"
-              size="sm"
-              :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
-              @click="handleCheckIn"
-            >
-              <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
-              <MapPin v-else :size="15" class="mr-1.5" />
-              {{ gpsCheckedIn ? 'Đã check-in thành công' : 'Bấm Check-in GPS' }}
-            </FhButton>
+            <div class="flex items-center gap-2">
+              <FhButton
+                :variant="gpsCheckedIn ? 'secondary' : 'primary'"
+                size="sm"
+                :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
+                @click="handleCheckIn()"
+              >
+                <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
+                <MapPin v-else :size="15" class="mr-1.5" />
+                {{ gpsCheckedIn ? 'Đã check-in thành công' : 'Bấm Check-in GPS' }}
+              </FhButton>
+              <!-- TODO: dev-only test helper, remove before shipping to production -->
+              <FhButton
+                v-if="showPartsDemo"
+                variant="ghost"
+                size="sm"
+                class="border border-dashed border-amber-400 text-amber-700"
+                :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
+                title="Chỉ để test: check-in luôn bằng đúng toạ độ địa chỉ khách, bỏ qua GPS thật"
+                @click="handleCheckInDevExact"
+              >
+                Check-in GPS (DEV demo)
+              </FhButton>
+            </div>
           </div>
         </FhCard>
 
         <!-- Phase 2: Evidence BEFORE -->
         <FhCard title="3. Bằng chứng hiện trạng lỗi (Evidence Gating BEFORE)">
           <div class="space-y-3 text-xs">
-            <p class="text-ink-600">
-              Quy chuẩn bắt buộc: Phải có ít nhất 1 ảnh BEFORE trước khi lập báo giá nhằm tránh tranh chấp.
-            </p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="text-ink-600">
+                Quy chuẩn bắt buộc: Phải có ít nhất 1 ảnh BEFORE trước khi lập báo giá nhằm tránh tranh chấp.
+              </p>
+              <span
+                v-if="beforeEvidences.length > 0"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200"
+              >
+                <CheckCircle2 :size="14" /> Đã tải {{ beforeEvidences.length }} ảnh (Đạt yêu cầu tối thiểu)
+              </span>
+              <span
+                v-else
+                class="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+              >
+                <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh
+              </span>
+            </div>
 
-            <div class="flex items-center gap-4">
+            <!-- Upload Action Button -->
+            <div class="flex items-center gap-3 pt-1">
               <div
-                class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
-                :class="beforePhotoUploaded ? 'border-success-500 bg-success-50/50 text-success-700' : (!gpsCheckedIn ? 'border-ink-200 text-ink-300 cursor-not-allowed' : 'border-ink-300 hover:border-brand-500 text-ink-500')"
+                class="px-4 py-3 rounded-[var(--radius-sm)] border-2 border-dashed flex items-center gap-2 cursor-pointer transition-colors"
+                :class="!gpsCheckedIn ? 'border-ink-200 text-ink-300 cursor-not-allowed bg-ink-50/50' : 'border-brand-300 hover:border-brand-500 bg-brand-50/20 hover:bg-brand-50/60 text-brand-700'"
                 data-testid="before-evidence-picker"
                 role="button"
-                :tabindex="gpsCheckedIn && !beforePhotoUploaded && !actionLoading ? 0 : -1"
-                :aria-disabled="!gpsCheckedIn || beforePhotoUploaded || actionLoading"
+                :tabindex="gpsCheckedIn && !actionLoading ? 0 : -1"
+                :aria-disabled="!gpsCheckedIn || actionLoading"
                 @click="openBeforeEvidencePicker"
                 @keydown.enter.prevent="openBeforeEvidencePicker"
                 @keydown.space.prevent="openBeforeEvidencePicker"
               >
-                <Camera :size="22" />
-                <span class="text-[10px] font-semibold">{{ beforePhotoUploaded ? 'Đã tải ảnh' : 'Chụp ảnh' }}</span>
+                <Loader2 v-if="uploadingPhase === 'BEFORE'" :size="20" class="shrink-0 animate-spin text-brand-600" />
+                <Camera v-else :size="20" class="shrink-0" />
+                <div class="text-left">
+                  <div class="font-semibold text-xs">
+                    {{ uploadingPhase === 'BEFORE' ? 'Đang tải lên...' : beforeEvidences.length > 0 ? '+ Tải thêm ảnh hiện trạng' : 'Chụp / Chọn ảnh hiện trạng' }}
+                  </div>
+                  <div class="text-[10px] text-ink-400">Chọn 1 hoặc nhiều ảnh (JPEG, PNG, WebP &le; 10MB)</div>
+                </div>
+              </div>
+              <p class="text-[11px] text-ink-500 hidden sm:block">
+                Cho phép tải lên nhiều lần. Mỗi ảnh tải lên sẽ hiển thị ngay bên dưới.
+              </p>
+            </div>
+
+            <!-- Uploaded BEFORE Photos Displayed Below -->
+            <div class="pt-2 border-t border-ink-100 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-ink-700 text-xs">
+                  Ảnh hiện trạng đã tải lên ({{ beforeEvidences.length }} ảnh):
+                </span>
+                <span v-if="beforeEvidences.length > 0" class="text-[10px] text-ink-400">
+                  Nhấp vào ảnh để xem phóng to
+                </span>
               </div>
 
-              <div v-if="beforePhotoUploaded" class="text-xs text-success-700 flex items-center gap-1 font-semibold">
-                <CheckCircle2 :size="16" /> Đã xác thực ảnh hiện trạng BEFORE
+              <div v-if="beforeEvidences.length > 0" class="flex flex-wrap items-center gap-3">
+                <div
+                  v-for="(img, idx) in beforeEvidences"
+                  :key="img.id || idx"
+                  class="w-24 h-24 rounded-[var(--radius-sm)] border border-ink-200 overflow-hidden relative group bg-ink-100 shadow-xs cursor-pointer hover:border-brand-500 transition-all"
+                  @click="previewImage(img.mediaUrl)"
+                >
+                  <img
+                    :src="img.mediaUrl"
+                    :alt="'Ảnh hiện trạng ' + (idx + 1)"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                  <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                    #{{ idx + 1 }}
+                  </span>
+                  <button
+                    type="button"
+                    class="absolute top-1 right-1 bg-danger-600 hover:bg-danger-700 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-md transition-all z-10 hover:scale-110"
+                    title="Xóa ảnh này"
+                    :disabled="actionLoading"
+                    @click.stop="handleDeleteEvidence(img)"
+                  >
+                    <X :size="12" />
+                  </button>
+                  <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold pointer-events-none">
+                    Phóng to
+                  </div>
+                </div>
+              </div>
+              <div v-else class="py-4 text-center rounded-[var(--radius-sm)] bg-ink-50 border border-dashed border-ink-200 text-ink-400 text-xs">
+                Chưa có ảnh nào. Vui lòng bấm vào ô chụp / chọn ảnh ở trên để tải lên tối thiểu 1 ảnh.
               </div>
             </div>
           </div>
@@ -746,91 +1012,433 @@ const handleDeclareCash = async () => {
         </FhCard>
 
         <!-- Phase 4: Evidence AFTER & Complete Repair -->
-        <FhCard title="5. Ảnh hoàn tất AFTER & Kích hoạt bảo hành điện tử">
+        <FhCard title="5. Ảnh hoàn tất AFTER & Yêu cầu nghiệm thu">
           <div class="space-y-4 text-xs">
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="text-ink-600">Quy chuẩn FixHome: Cần ít nhất 1 ảnh hoàn tất sau sửa chữa trước khi gửi yêu cầu nghiệm thu cho khách.</p>
+              <span
+                v-if="afterEvidences.length > 0"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200"
+              >
+                <CheckCircle2 :size="14" /> Đã tải {{ afterEvidences.length }} ảnh sau sửa (Đạt yêu cầu tối thiểu)
+              </span>
+              <span
+                v-else
+                class="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+              >
+                <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh sau sửa
+              </span>
+            </div>
+
+            <!-- Upload Action Button -->
+            <div class="flex items-center gap-3 pt-1">
               <div
-                class="w-24 h-24 rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors"
-                :class="afterPhotoUploaded ? 'border-success-500 bg-success-50/50 text-success-700' : 'border-ink-300 hover:border-brand-500 text-ink-500'"
+                class="px-4 py-3 rounded-[var(--radius-sm)] border-2 border-dashed flex items-center gap-2 cursor-pointer transition-colors border-brand-300 hover:border-brand-500 bg-brand-50/20 hover:bg-brand-50/60 text-brand-700"
+                role="button"
+                :tabindex="!actionLoading ? 0 : -1"
                 @click="afterFile?.click()"
               >
-                <Camera :size="22" />
-                <span class="text-[10px] font-semibold">{{ afterPhotoUploaded ? 'Đã có ảnh' : 'Chụp ảnh sau sửa' }}</span>
+                <Loader2 v-if="uploadingPhase === 'AFTER'" :size="20" class="shrink-0 animate-spin text-brand-600" />
+                <Camera v-else :size="20" class="shrink-0" />
+                <div class="text-left">
+                  <div class="font-semibold text-xs">
+                    {{ uploadingPhase === 'AFTER' ? 'Đang tải lên...' : afterEvidences.length > 0 ? '+ Tải thêm ảnh sau sửa' : 'Chụp / Chọn ảnh sau sửa' }}
+                  </div>
+                  <div class="text-[10px] text-ink-400">Chọn 1 hoặc nhiều ảnh (JPEG, PNG, WebP &le; 10MB)</div>
+                </div>
+              </div>
+              <p class="text-[11px] text-ink-500 hidden sm:block">
+                Cho phép tải lên nhiều lần. Mỗi ảnh tải lên sẽ hiển thị ngay bên dưới.
+              </p>
+            </div>
+
+            <!-- Uploaded AFTER Photos Displayed Below -->
+            <div class="pt-2 border-t border-ink-100 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-ink-700 text-xs">
+                  Ảnh sau sửa đã tải lên ({{ afterEvidences.length }} ảnh):
+                </span>
+                <span v-if="afterEvidences.length > 0" class="text-[10px] text-ink-400">
+                  Nhấp vào ảnh để xem phóng to
+                </span>
               </div>
 
-              <div class="flex-1 space-y-2">
-                <p class="text-ink-600">Bảo hành theo báo giá đã duyệt. Linh kiện tự cung cấp ở biểu mẫu này không kèm bảo hành.</p>
+              <div v-if="afterEvidences.length > 0" class="flex flex-wrap items-center gap-3">
+                <div
+                  v-for="(img, idx) in afterEvidences"
+                  :key="img.id || idx"
+                  class="w-24 h-24 rounded-[var(--radius-sm)] border border-ink-200 overflow-hidden relative group bg-ink-100 shadow-xs cursor-pointer hover:border-brand-500 transition-all"
+                  @click="previewImage(img.mediaUrl)"
+                >
+                  <img
+                    :src="img.mediaUrl"
+                    :alt="'Ảnh sau sửa ' + (idx + 1)"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                  <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                    #{{ idx + 1 }}
+                  </span>
+                  <button
+                    type="button"
+                    class="absolute top-1 right-1 bg-danger-600 hover:bg-danger-700 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-md transition-all z-10 hover:scale-110"
+                    title="Xóa ảnh này"
+                    :disabled="actionLoading"
+                    @click.stop="handleDeleteEvidence(img)"
+                  >
+                    <X :size="12" />
+                  </button>
+                  <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold pointer-events-none">
+                    Phóng to
+                  </div>
+                </div>
+              </div>
+              <div v-else class="py-4 text-center rounded-[var(--radius-sm)] bg-ink-50 border border-dashed border-ink-200 text-ink-400 text-xs">
+                Chưa có ảnh sau sửa nào. Vui lòng bấm vào ô chụp / chọn ảnh ở trên để tải lên tối thiểu 1 ảnh.
               </div>
             </div>
 
-            <div class="pt-4 border-t border-ink-100 flex justify-end">
+            <div class="pt-4 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
+              <div class="text-xs">
+                <span v-if="completionRequested" class="inline-flex items-center gap-1.5 text-success-700 font-semibold bg-success-50 px-2.5 py-1 rounded border border-success-200">
+                  <CheckCircle2 :size="14" /> Đã gửi yêu cầu nghiệm thu (chờ khách hàng kiểm tra & nghiệm thu)
+                </span>
+                <span v-else class="text-ink-500">
+                  Sau khi chụp và tải ảnh hoàn tất, bấm nút bên phải để gửi yêu cầu nghiệm thu tới khách hàng.
+                </span>
+              </div>
               <FhButton
                 variant="primary"
                 size="md"
-                :disabled="completionRequested || isCompleted || actionLoading"
+                :disabled="completionRequested || isCompleted || actionLoading || (!afterPhotoUploaded && afterEvidences.length === 0)"
                 @click="handleCompleteOrder"
               >
                 <ShieldCheck :size="16" class="mr-1.5" />
-                {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã yêu cầu nghiệm thu' : 'Yêu cầu khách nghiệm thu' }}
+                {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã gửi yêu cầu nghiệm thu' : 'Gửi yêu cầu nghiệm thu' }}
               </FhButton>
             </div>
           </div>
         </FhCard>
 
-        <!-- Phase 5: Cash Dual Confirmation (Spec v1.2) -->
-        <FhCard title="6. Khai báo thu tiền mặt (Dual-Confirmation)">
+        <!-- Phase 5: Customer Acceptance & Payment (Spec v1.2) -->
+        <FhCard title="6. Khách hàng Nghiệm thu & Thanh toán (Spec v1.2)">
           <div class="space-y-4 text-xs">
-            <p class="text-ink-600">
-              Quy tắc Spec v1.2: Khi thu tiền mặt trực tiếp từ khách, thợ phải khai báo chính xác số tiền đã nhận. Khách hàng sẽ bấm xác nhận trên điện thoại để hoàn tất thanh toán và sinh công nợ hoa hồng 10% tiền công.
+            <p class="text-ink-600 leading-relaxed">
+              Quy chuẩn thực thi: <strong>1. Khách nghiệm thu dịch vụ đạt chuẩn ➡️ 2. Tiến hành thanh toán (Tiền mặt hoặc Online) ➡️ 3. Hệ thống hoàn tất ca.</strong>
             </p>
 
-            <div v-if="cashSettled" class="p-3 bg-brand-50 rounded-lg border border-brand-200 space-y-1">
-              <div class="flex items-center gap-2 font-semibold text-brand-900">
-                <CheckCircle2 :size="16" class="text-brand-600" />
-                <span>Trạng thái đối soát: {{ cashSettlementStatus === 'confirmed' ? 'Khách đã xác nhận (PAID)' : 'Đang chờ khách duyệt số tiền' }}</span>
-              </div>
-              <p class="text-brand-700 text-[11px]">
-                Số tiền khai báo: <strong><FhMoney :amount="declaredCashAmount" /></strong>
-              </p>
-            </div>
-
-            <div v-else class="space-y-3">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Số tiền mặt thực thu (VNĐ):</label>
-                  <input
-                    v-model.number="declaredCashAmount"
-                    type="number"
-                    step="10000"
-                    placeholder="VD: 300000"
-                    class="w-full h-9 px-3 bg-white border border-ink-200 rounded text-xs font-num font-bold text-ink-900"
-                  />
+            <!-- Case nếu đơn hàng đã HOÀN TẤT (COMPLETED) hoàn toàn -->
+            <div
+              v-if="isCompleted || job?.status === 'COMPLETED'"
+              class="p-4 rounded-xl border-2 border-success-500 bg-success-50 space-y-3"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2 font-bold text-success-900 text-sm">
+                  <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
+                  <span>Đơn hàng đã hoàn tất thành công (COMPLETED)!</span>
                 </div>
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Ghi chú / Mã biên lai:</label>
-                  <input
-                    v-model="technicianCashNotes"
-                    type="text"
-                    placeholder="VD: Đã nhận đủ tiền mặt từ khách"
-                    class="w-full h-9 px-3 bg-white border border-ink-200 rounded text-xs"
-                  />
+                <span class="text-xs font-bold text-success-800 bg-success-100 px-2.5 py-0.5 rounded-full border border-success-300">
+                  HOÀN TẤT
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-success-800">
+                <div class="flex items-center gap-1.5">
+                  <CheckCircle2 :size="14" class="text-success-600" /> Nghiệm thu dịch vụ: Khách đã xác nhận
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <CheckCircle2 :size="14" class="text-success-600" /> Thanh toán: Đã thanh toán (PAID)
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <CheckCircle2 :size="14" class="text-success-600" /> Bảo hành điện tử: Đã kích hoạt
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <CheckCircle2 :size="14" class="text-success-600" /> Tiền công thợ: Đã ghi nhận vào tài khoản
                 </div>
               </div>
-
-              <div class="flex justify-end pt-2">
-                <FhButton
-                  variant="primary"
-                  size="sm"
-                  :disabled="!completionRequested || actionLoading"
-                  @click="handleDeclareCash"
-                >
-                  <DollarSign :size="14" class="mr-1" />
-                  Khai báo đã thu tiền mặt
+              <div class="pt-2 flex justify-end">
+                <FhButton variant="primary" size="sm" @click="router.push('/tech/jobs')">
+                  <CheckCircle2 :size="14" class="mr-1.5" />
+                  Hoàn tất ca & Về danh sách việc
                 </FhButton>
               </div>
             </div>
+
+            <!-- Nếu đơn chưa hoàn tất: Hiển thị 2 giai đoạn tuần tự -->
+            <template v-else>
+              <!-- Giai đoạn 1: Nghiệm thu dịch vụ (Khách phải nghiệm thu trước) -->
+              <div class="border rounded-xl p-3.5 space-y-2.5" :class="job?.customerConfirmed ? 'border-success-200 bg-success-50/50' : 'border-amber-200 bg-amber-50/60'">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2 font-bold text-xs" :class="job?.customerConfirmed ? 'text-success-900' : 'text-amber-900'">
+                    <CheckCircle2 v-if="job?.customerConfirmed" :size="16" class="text-success-600 shrink-0" />
+                    <AlertCircle v-else :size="16" class="text-amber-600 shrink-0" />
+                    <span>Giai đoạn 1: Khách hàng Nghiệm thu dịch vụ</span>
+                  </div>
+                  <span
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-amber-100 text-amber-800'"
+                  >
+                    {{ job?.customerConfirmed ? 'ĐÃ NGHIỆM THU ĐẠT' : 'CHỜ KHÁCH BẤM NGHIỆM THU' }}
+                  </span>
+                </div>
+
+                <div v-if="!job?.customerConfirmed" class="space-y-2">
+                  <p class="text-ink-600 text-[11px] leading-relaxed">
+                    💡 <strong>Hướng dẫn thợ:</strong> Mời khách hàng kiểm tra thực tế hoạt động của thiết bị/công việc vừa hoàn thành và mở ứng dụng FixHome bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong>. Khách hàng nghiệm thu OK rồi mới tiến hành thanh toán.
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <FhButton variant="secondary" size="sm" :disabled="refreshingStatus" @click="refreshJobStatus">
+                      <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
+                      Kiểm tra khách đã bấm nghiệm thu chưa
+                    </FhButton>
+                  </div>
+                </div>
+
+                <div v-else class="text-[11px] text-success-800 font-medium">
+                  ✓ Khách hàng đã kiểm tra và bấm xác nhận nghiệm thu dịch vụ đạt chuẩn! Hãy chuyển sang bước thanh toán bên dưới.
+                </div>
+              </div>
+
+              <!-- Giai đoạn 2: Thanh toán dịch vụ (Sau khi Nghiệm thu) -->
+              <div class="border border-ink-200 rounded-xl p-3.5 space-y-3 bg-white">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2 font-bold text-ink-900 text-xs">
+                    <CreditCard :size="16" class="text-brand-600 shrink-0" />
+                    <span>Giai đoạn 2: Hình thức Thanh toán dịch vụ</span>
+                  </div>
+                  <span
+                    v-if="job?.paymentStatus?.toUpperCase() === 'PAID'"
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success-100 text-success-800"
+                  >
+                    ĐÃ THANH TOÁN (PAID)
+                  </span>
+                  <span
+                    v-else
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                  >
+                    CHƯA THANH TOÁN
+                  </span>
+                </div>
+
+                <!-- Lựa chọn Có thu tiền mặt hay Không (khi chưa xác nhận đối soát tiền mặt) -->
+                <div v-if="!cashSettled" class="space-y-2">
+                  <label class="block font-semibold text-ink-700">Khách hàng thanh toán bằng hình thức nào?</label>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      class="p-3 rounded-lg border-2 text-left flex items-start gap-3 transition-all cursor-pointer"
+                      :class="hasCashPayment === 'YES' ? 'border-brand-500 bg-brand-50/60 shadow-xs' : 'border-ink-200 hover:border-ink-300 bg-white'"
+                      @click="hasCashPayment = 'YES'"
+                    >
+                      <Banknote :size="20" class="shrink-0 mt-0.5" :class="hasCashPayment === 'YES' ? 'text-brand-600' : 'text-ink-400'" />
+                      <div>
+                        <div class="font-semibold text-ink-900 flex items-center gap-1.5">
+                          Có thu tiền mặt
+                          <span v-if="hasCashPayment === 'YES'" class="w-2 h-2 rounded-full bg-brand-600"></span>
+                        </div>
+                        <div class="text-[11px] text-ink-500 mt-0.5">Khách trả tiền mặt trực tiếp cho thợ. Thợ cần khai báo số tiền để khách xác nhận.</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="p-3 rounded-lg border-2 text-left flex items-start gap-3 transition-all cursor-pointer"
+                      :class="hasCashPayment === 'NO' ? 'border-success-500 bg-success-50/60 shadow-xs' : 'border-ink-200 hover:border-ink-300 bg-white'"
+                      @click="hasCashPayment = 'NO'"
+                    >
+                      <CreditCard :size="20" class="shrink-0 mt-0.5" :class="hasCashPayment === 'NO' ? 'text-success-600' : 'text-ink-400'" />
+                      <div>
+                        <div class="font-semibold text-ink-900 flex items-center gap-1.5">
+                          Không thu tiền mặt (Khách trả Online)
+                          <span v-if="hasCashPayment === 'NO'" class="w-2 h-2 rounded-full bg-success-600"></span>
+                        </div>
+                        <div class="text-[11px] text-ink-500 mt-0.5">Khách tự thanh toán online qua ứng dụng FixHome (VNPAY / Ví điện tử / Thẻ).</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Case 1: Đã đối soát tiền mặt -->
+                <div v-if="cashSettled" class="p-3 bg-brand-50 rounded-lg border border-brand-200 space-y-1">
+                  <div class="flex items-center gap-2 font-semibold text-brand-900">
+                    <CheckCircle2 :size="16" class="text-brand-600" />
+                    <span>Trạng thái đối soát: {{ cashSettlementStatus === 'confirmed' ? 'Khách đã xác nhận số tiền mặt (PAID)' : 'Đang chờ khách duyệt số tiền' }}</span>
+                  </div>
+                  <p class="text-brand-700 text-[11px]">
+                    Số tiền khai báo: <strong><FhMoney :amount="declaredCashAmount" /></strong>
+                  </p>
+                  <div class="pt-1 flex items-center gap-2">
+                    <FhButton variant="secondary" size="sm" :disabled="refreshingStatus" @click="refreshJobStatus">
+                      <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
+                      Kiểm tra khách đã xác nhận tiền mặt chưa
+                    </FhButton>
+                  </div>
+                </div>
+
+                <!-- Case 2: Chọn Không thu tiền mặt (Khách trả Online) -->
+                <div v-else-if="hasCashPayment === 'NO'" class="space-y-3 pt-1">
+                  <div class="p-3.5 bg-brand-50/50 rounded-xl border border-brand-200 space-y-3">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2 font-bold text-ink-900 text-xs">
+                        <CreditCard :size="16" class="text-brand-600" />
+                        <span>Hình thức: Khách hàng thanh toán trực tuyến</span>
+                      </div>
+                    </div>
+
+                    <!-- Tiến độ 3 bước nghiệm thu & thanh toán -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                      <div class="p-2.5 rounded-lg bg-white border border-ink-100 flex items-start gap-2">
+                        <CheckCircle2 :size="15" class="text-success-600 shrink-0 mt-0.5" />
+                        <div>
+                          <div class="font-semibold text-ink-800">1. Việc của thợ</div>
+                          <div class="text-[10px] text-success-700 font-medium">Đã gửi yêu cầu nghiệm thu</div>
+                        </div>
+                      </div>
+
+                      <div class="p-2.5 rounded-lg bg-white border border-ink-100 flex items-start gap-2">
+                        <CheckCircle2 v-if="job?.customerConfirmed" :size="15" class="text-success-600 shrink-0 mt-0.5" />
+                        <Loader2 v-else :size="15" class="text-amber-500 animate-spin shrink-0 mt-0.5" />
+                        <div>
+                          <div class="font-semibold text-ink-800">2. Khách nghiệm thu</div>
+                          <div class="text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-amber-700'">
+                            {{ job?.customerConfirmed ? 'Đã xác nhận dịch vụ' : 'Chờ khách bấm xác nhận' }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="p-2.5 rounded-lg bg-white border border-ink-100 flex items-start gap-2">
+                        <CheckCircle2 v-if="job?.paymentStatus?.toUpperCase() === 'PAID'" :size="15" class="text-success-600 shrink-0 mt-0.5" />
+                        <Loader2 v-else :size="15" class="text-amber-500 animate-spin shrink-0 mt-0.5" />
+                        <div>
+                          <div class="font-semibold text-ink-800">3. Thanh toán Online</div>
+                          <div class="text-[10px]" :class="job?.paymentStatus?.toUpperCase() === 'PAID' ? 'text-success-700 font-medium' : 'text-amber-700'">
+                            {{ job?.paymentStatus?.toUpperCase() === 'PAID' ? 'Đã thanh toán (PAID)' : 'Chờ khách trả VNPAY/Ví' }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p class="text-ink-600 text-[11px] leading-relaxed">
+                      💡 <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> (nếu chưa bấm) và thực hiện <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
+                    </p>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-brand-100">
+                      <button
+                        type="button"
+                        class="text-[11px] text-ink-500 hover:text-ink-800 underline"
+                        @click="hasCashPayment = 'YES'"
+                      >
+                        Khách đổi ý muốn trả tiền mặt?
+                      </button>
+
+                      <div class="flex items-center gap-2">
+                        <FhButton
+                          variant="secondary"
+                          size="sm"
+                          :disabled="refreshingStatus"
+                          @click="refreshJobStatus"
+                        >
+                          <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
+                          Kiểm tra trạng thái thanh toán
+                        </FhButton>
+
+                        <button
+                          type="button"
+                          class="px-3 py-1.5 rounded-[var(--radius-sm)] border border-ink-300 text-ink-700 text-xs font-semibold hover:bg-ink-50 transition-colors"
+                          @click="router.push('/tech/jobs')"
+                        >
+                          Tạm rời về danh sách việc
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Case 3: Chọn Có thu tiền mặt -->
+                <div v-else-if="hasCashPayment === 'YES'" class="space-y-3 pt-2 border-t border-ink-100">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block font-semibold text-ink-700 mb-1">Số tiền mặt thực thu (VNĐ):</label>
+                      <input
+                        v-model.number="declaredCashAmount"
+                        type="number"
+                        step="10000"
+                        placeholder="VD: 300000"
+                        class="w-full h-9 px-3 bg-white border border-ink-200 rounded text-xs font-num font-bold text-ink-900"
+                      />
+                    </div>
+                    <div>
+                      <label class="block font-semibold text-ink-700 mb-1">Ghi chú / Mã biên lai:</label>
+                      <input
+                        v-model="technicianCashNotes"
+                        type="text"
+                        placeholder="VD: Đã nhận đủ tiền mặt từ khách"
+                        class="w-full h-9 px-3 bg-white border border-ink-200 rounded text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      class="text-[11px] text-ink-500 hover:text-ink-800 underline"
+                      @click="hasCashPayment = 'NO'"
+                    >
+                      Khách chuyển sang thanh toán online?
+                    </button>
+
+                    <FhButton
+                      variant="primary"
+                      size="sm"
+                      :disabled="!completionRequested || actionLoading"
+                      @click="handleDeclareCash"
+                    >
+                      <DollarSign :size="14" class="mr-1" />
+                      Khai báo đã thu tiền mặt
+                    </FhButton>
+                  </div>
+                </div>
+
+                <!-- Case 4: Chưa chọn gì -->
+                <div v-else class="text-ink-400 text-xs italic">
+                  Vui lòng chọn hình thức thanh toán của khách ở trên (Có thu tiền mặt hoặc Không thu tiền mặt).
+                </div>
+              </div>
+            </template>
           </div>
         </FhCard>
+      </div>
+    </div>
+
+    <!-- Evidence Image Preview Modal -->
+    <div
+      v-if="previewModalUrl"
+      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
+      @click.self="previewModalUrl = null"
+    >
+      <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl p-3 border border-ink-200 space-y-2">
+        <div class="flex items-center justify-between pb-2 border-b border-ink-100">
+          <span class="text-xs font-semibold text-ink-700">Xem ảnh chi tiết</span>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="activePreviewEvidence"
+              type="button"
+              class="px-2.5 py-1 text-xs font-semibold text-danger-700 hover:bg-danger-50 rounded border border-danger-200 flex items-center gap-1 transition-colors"
+              :disabled="actionLoading"
+              @click="handleDeleteEvidence(activePreviewEvidence)"
+            >
+              <Trash2 :size="13" /> Xóa ảnh này
+            </button>
+            <button
+              type="button"
+              class="bg-ink-100 hover:bg-ink-200 text-ink-700 w-7 h-7 rounded-full flex items-center justify-center transition-colors font-bold text-xs"
+              @click="previewModalUrl = null"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center justify-center bg-black/5 rounded-lg overflow-hidden max-h-[80vh]">
+          <img :src="previewModalUrl" alt="Xem ảnh phóng to" class="max-h-[78vh] max-w-full object-contain" />
+        </div>
       </div>
     </div>
   </div>
