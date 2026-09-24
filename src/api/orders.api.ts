@@ -108,6 +108,8 @@ export interface AdditionalCostRecord {
   reason: string;
   totalLaborDelta: number;
   totalPartsDelta: number;
+  fulfillmentMethod?: 'pickup' | 'delivery' | null;
+  shippingFee?: number;
   expiresAt: string;
   decidedAt?: string | null;
   supersedesId?: string | null;
@@ -120,6 +122,9 @@ export interface AdditionalCostRecord {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    partSource?: 'fixhome' | 'technician' | 'external' | null;
+    partCatalogId?: string | null;
+    partNameSnapshot?: string | null;
   }[];
 }
 
@@ -170,7 +175,7 @@ export interface QuotationItemPayload {
   unitPrice: number;
   lineTotal?: number;
   warrantyDays?: number;
-  partSource?: 'fixhome' | 'technician';
+  partSource?: 'fixhome' | 'technician' | 'external';
   partCatalogId?: string;
   partWarrantyOption?: 'included' | 'no_warranty' | 'paid_warranty';
   warrantyFee?: number;
@@ -208,12 +213,17 @@ function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecor
     status: String(rec.status).toUpperCase() as AdditionalCostRecord['status'],
     totalLaborDelta: Number(rec.totalLaborDelta),
     totalPartsDelta: Number(rec.totalPartsDelta),
+    fulfillmentMethod: rec.fulfillmentMethod || null,
+    shippingFee: Number(rec.shippingFee || 0),
     items: rec.items.map((item) => ({
       ...item,
       type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS_EQUIPMENT',
       quantity: Number(item.quantity),
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
+      partSource: item.partSource || null,
+      partCatalogId: item.partCatalogId || null,
+      partNameSnapshot: item.partNameSnapshot || null,
     })),
   };
 }
@@ -335,7 +345,13 @@ export const ordersApi = {
 
   async createAdditionalCost(
     orderId: string,
-    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+    body: {
+      reason: string;
+      items: QuotationItemPayload[];
+      evidenceUrls?: string[];
+      fulfillmentMethod?: 'pickup' | 'delivery';
+      shippingFee?: number;
+    },
   ): Promise<AdditionalCostRecord> {
     const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/service-orders/${orderId}/additional-costs`, {
       ...body,
@@ -351,7 +367,13 @@ export const ordersApi = {
 
   async reviseAdditionalCost(
     id: string,
-    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+    body: {
+      reason: string;
+      items: QuotationItemPayload[];
+      evidenceUrls?: string[];
+      fulfillmentMethod?: 'pickup' | 'delivery';
+      shippingFee?: number;
+    },
   ): Promise<AdditionalCostRecord> {
     const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/additional-costs/${id}/revise`, {
       ...body,

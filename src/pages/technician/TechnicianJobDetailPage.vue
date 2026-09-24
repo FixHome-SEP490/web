@@ -20,6 +20,8 @@ import {
   CreditCard,
   Banknote,
   RefreshCw,
+  Package,
+  AlertTriangle,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -28,6 +30,7 @@ import {
   FhCostBreakdown,
   FhMoney,
   BookingMediaViewer,
+  TechnicianPartsSection,
 } from '../../components';
 import PartsQuoteDemoPreview from '../../components/PartsQuoteDemoPreview.vue';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
@@ -83,6 +86,8 @@ const acReviseId = ref<string | null>(null);
 const acReason = ref('');
 const acItems = ref<QuotationItemPayload[]>([{type:'LABOR',description:'',quantity:1,unitPrice:0}]);
 const acEvidenceUrls = ref<string[]>([]);
+const acFulfillmentMethod = ref<'pickup' | 'delivery'>('pickup');
+const acShippingFee = ref<number>(0);
 const acFile = ref<HTMLInputElement | null>(null);
 const acUploading = ref(false);
 const acSubmitting = ref(false);
@@ -448,16 +453,31 @@ const handleSubmitQuotation = async () => {
 
 const acLaborTotal = () => acItems.value.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 const acPartsTotal = () => acItems.value.filter((i) => i.type === 'PARTS').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-const addAcItem = (type: 'LABOR' | 'PARTS') => {
-  acItems.value.push({ type, description: type === 'LABOR' ? 'Hạng mục công phát sinh' : 'Tên linh kiện phát sinh', quantity: 1, unitPrice: 0 });
+const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician' | 'external' = 'technician') => {
+  acItems.value.push({
+    type,
+    description: type === 'LABOR' ? 'Hạng mục công phát sinh' : (partSource === 'external' ? 'Linh kiện ngoài (EXTERNAL)' : 'Tên linh kiện phát sinh'),
+    quantity: 1,
+    unitPrice: 0,
+    partSource: type === 'PARTS' ? partSource : undefined,
+  });
 };
 const removeAcItem = (idx: number) => acItems.value.splice(idx, 1);
 
 function openAdditionalCostForm(revise?: AdditionalCostRecord) {
   acReviseId.value = revise?.id ?? null;
   acReason.value = revise?.reason ?? '';
+  acFulfillmentMethod.value = revise?.fulfillmentMethod || 'pickup';
+  acShippingFee.value = revise?.shippingFee || 0;
   acItems.value = revise
-    ? revise.items.map((i) => ({ type: i.type === 'LABOR' ? 'LABOR' : 'PARTS', description: i.description, quantity: i.quantity, unitPrice: i.unitPrice }))
+    ? revise.items.map((i) => ({
+        type: i.type === 'LABOR' ? 'LABOR' : 'PARTS',
+        description: i.description,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        partSource: i.partSource || undefined,
+        partCatalogId: i.partCatalogId || undefined,
+      }))
     : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
   acEvidenceUrls.value = revise?.evidenceUrls ? [...revise.evidenceUrls] : [];
   showAdditionalCostForm.value = true;
@@ -484,7 +504,15 @@ async function handleSubmitAdditionalCost() {
   }
   acSubmitting.value = true;
   try {
-    const body = { reason: acReason.value.trim(), items: acItems.value, evidenceUrls: acEvidenceUrls.value };
+    const hasParts = acItems.value.some((i) => i.type === 'PARTS');
+    const shipping = (hasParts && acFulfillmentMethod.value === 'delivery') ? Number(acShippingFee.value || 0) : 0;
+    const body = {
+      reason: acReason.value.trim(),
+      items: acItems.value,
+      evidenceUrls: acEvidenceUrls.value,
+      fulfillmentMethod: hasParts ? acFulfillmentMethod.value : undefined,
+      shippingFee: shipping,
+    };
     const saved = acReviseId.value
       ? await ordersApi.reviseAdditionalCost(acReviseId.value, body)
       : await ordersApi.createAdditionalCost(jobId, body);
@@ -657,6 +685,13 @@ const refreshJobStatus = async () => {
       <!-- Workspace Workflow Stepper -->
       <div class="space-y-5">
         <h3 class="text-base font-bold text-ink-900">Quy trình Thực thi Tiêu chuẩn (Spec v1.2)</h3>
+
+        <!-- Flow 1 & 2: Parts Request & Handover Management -->
+        <TechnicianPartsSection
+          :order-id="job.id"
+          :order-status="job.status"
+          @parts-updated="loadJob(jobId, { silent: true })"
+        />
 
         <!-- Phase 0: En Route -->
         <FhCard title="1. Khởi hành đến nhà khách (En Route)">
@@ -959,28 +994,110 @@ const refreshJobStatus = async () => {
                 class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
               ></textarea>
 
-              <div class="flex items-center justify-between font-semibold text-ink-700">
+              <div class="flex flex-wrap items-center justify-between font-semibold text-ink-700 gap-2">
                 <span>Hạng mục chi phí phát sinh:</span>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                   <button type="button" class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1" @click="addAcItem('LABOR')">
-                    <Plus :size="13" /> Thêm công thợ
+                    <Plus :size="13" /> + Công thợ
                   </button>
-                  <button type="button" class="text-[11px] text-ink-700 font-bold hover:underline flex items-center gap-1" @click="addAcItem('PARTS')">
-                    <Plus :size="13" /> Thêm linh kiện
+                  <button type="button" class="text-[11px] text-blue-600 font-bold hover:underline flex items-center gap-1" @click="addAcItem('PARTS', 'fixhome')">
+                    <Plus :size="13" /> + LK FixHome
+                  </button>
+                  <button type="button" class="text-[11px] text-amber-700 font-bold hover:underline flex items-center gap-1" @click="addAcItem('PARTS', 'external')">
+                    <Plus :size="13" /> + LK Ngoài (EXTERNAL)
                   </button>
                 </div>
               </div>
 
               <div class="space-y-2">
-                <div v-for="(item, idx) in acItems" :key="idx" class="p-2.5 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex items-center gap-2">
-                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase" :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-ink-200 text-ink-800'">
-                    {{ item.type === 'LABOR' ? 'Công' : 'Linh kiện' }}
-                  </span>
-                  <input v-model="item.description" type="text" class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs" />
-                  <input v-model.number="item.unitPrice" type="number" step="10000" class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right" />
-                  <button class="p-1 text-ink-400 hover:text-danger-500 rounded" @click="removeAcItem(idx)">
-                    <Trash2 :size="14" />
-                  </button>
+                <div v-for="(item, idx) in acItems" :key="idx" class="p-2.5 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div class="flex items-center gap-1.5 min-w-[120px]">
+                    <span
+                      class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                      :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : (item.partSource === 'external' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-800')"
+                    >
+                      {{ item.type === 'LABOR' ? 'Công' : (item.partSource === 'external' ? 'LK Ngoài' : 'LK FixHome') }}
+                    </span>
+                    <select
+                      v-if="item.type === 'PARTS'"
+                      v-model="item.partSource"
+                      class="h-7 px-1.5 bg-white border border-ink-200 rounded text-[11px]"
+                    >
+                      <option value="fixhome">Kho FixHome</option>
+                      <option value="technician">Thợ tự có</option>
+                      <option value="external">Mua ngoài</option>
+                    </select>
+                  </div>
+                  <input
+                    v-model="item.description"
+                    type="text"
+                    placeholder="Mô tả hạng mục..."
+                    class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
+                  />
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-ink-400 text-[11px]">SL:</span>
+                    <input
+                      v-model.number="item.quantity"
+                      type="number"
+                      min="1"
+                      class="w-12 h-8 px-1.5 bg-white border border-ink-200 rounded text-xs text-center"
+                    />
+                    <input
+                      v-model.number="item.unitPrice"
+                      type="number"
+                      step="10000"
+                      placeholder="Đơn giá"
+                      class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
+                    />
+                    <button class="p-1 text-ink-400 hover:text-danger-500 rounded" title="Xóa" @click="removeAcItem(idx)">
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fulfillment Method for FixHome parts -->
+              <div
+                v-if="acItems.some(i => i.type === 'PARTS' && i.partSource === 'fixhome')"
+                class="p-2.5 rounded bg-blue-50 border border-blue-200 space-y-2 text-xs"
+              >
+                <div class="font-semibold text-blue-900 flex items-center gap-1.5">
+                  <Package :size="14" /> Phương thức nhận linh kiện FixHome:
+                </div>
+                <div class="flex items-center gap-4">
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" v-model="acFulfillmentMethod" value="pickup" class="text-brand-600" />
+                    <span class="text-ink-700">Nhận tại kho FixHome (Tự đến lấy - 0đ)</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" v-model="acFulfillmentMethod" value="delivery" class="text-brand-600" />
+                    <span class="text-ink-700">Giao đến tận nơi</span>
+                  </label>
+                </div>
+                <div v-if="acFulfillmentMethod === 'delivery'" class="flex items-center gap-2 pt-1">
+                  <span class="text-ink-600">Phí giao hàng dự kiến:</span>
+                  <input
+                    v-model.number="acShippingFee"
+                    type="number"
+                    step="5000"
+                    placeholder="Phí ship (VNĐ)"
+                    class="w-32 h-7 px-2 bg-white border border-blue-300 rounded text-xs font-num font-bold"
+                  />
+                  <span class="text-ink-400 text-[11px]">VNĐ (tính vào tổng thanh toán)</span>
+                </div>
+              </div>
+
+              <!-- Disclaimer for External parts -->
+              <div
+                v-if="acItems.some(i => i.partSource === 'external')"
+                class="p-2.5 rounded bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2"
+              >
+                <AlertTriangle :size="16" class="text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p class="font-semibold">Lưu ý về linh kiện ngoài (EXTERNAL):</p>
+                  <p class="text-[11px] text-amber-800">
+                    Linh kiện mua ngoài không thuộc chính sách bảo hành của FixHome. Khách hàng sẽ phải tích xác nhận chấp nhận rủi ro khi duyệt yêu cầu phát sinh này.
+                  </p>
                 </div>
               </div>
 
@@ -999,7 +1116,12 @@ const refreshJobStatus = async () => {
               </div>
 
               <div class="pt-2 border-t border-ink-100 flex items-center justify-between">
-                <span class="font-bold text-brand-700 font-num text-sm"><FhMoney :amount="acLaborTotal() + acPartsTotal()" /></span>
+                <div>
+                  <span class="text-ink-500 text-xs">Tổng phát sinh: </span>
+                  <span class="font-bold text-brand-700 font-num text-sm">
+                    <FhMoney :amount="acLaborTotal() + acPartsTotal() + ((acFulfillmentMethod === 'delivery' && acItems.some(i => i.type === 'PARTS')) ? Number(acShippingFee || 0) : 0)" />
+                  </span>
+                </div>
                 <div class="flex gap-2">
                   <FhButton variant="ghost" size="sm" @click="showAdditionalCostForm = false">Huỷ</FhButton>
                   <FhButton variant="primary" size="sm" :disabled="acSubmitting || acUploading" @click="handleSubmitAdditionalCost">

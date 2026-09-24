@@ -14,6 +14,8 @@ import {
   Star,
   CreditCard,
   Map as MapIcon,
+  AlertTriangle,
+  Truck,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -54,6 +56,10 @@ const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const acDecidingId = ref('');
+const externalDisclaimerAccepted = ref<Record<string, boolean>>({});
+const hasExternalParts = (cost: AdditionalCostRecord) => {
+  return cost.items?.some((i) => i.partSource === 'external') ?? false;
+};
 
 // Review
 const showReviewModal = ref(false);
@@ -752,30 +758,96 @@ const confirmWork = async () => {
       <!-- Chi phí phát sinh (Additional Cost) -->
       <FhCard v-if="additionalCosts.length > 0" title="Chi phí phát sinh ngoài phạm vi ban đầu">
         <div class="space-y-3 text-xs">
-          <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2">
+          <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2.5">
             <div class="flex items-center justify-between">
               <FhStatusPill
                 :status="cost.status"
                 :label="{PENDING_APPROVAL:'Chờ bạn duyệt',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',EXPIRED:'Hết hạn chờ duyệt',CANCELLED:'Đã huỷ'}[cost.status]"
               />
-              <span class="font-num font-bold text-ink-900"><FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" /></span>
+              <span class="font-num font-bold text-ink-900 text-sm">
+                <FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta) + Number(cost.shippingFee || 0)" />
+              </span>
             </div>
             <p class="text-ink-600 italic">"{{ cost.reason }}"</p>
             <div v-if="cost.evidenceUrls?.length" class="flex gap-2">
               <img v-for="url in cost.evidenceUrls" :key="url" :src="url" class="w-14 h-14 rounded object-cover border border-ink-200" />
             </div>
-            <ul class="text-ink-500 space-y-0.5">
-              <li v-for="item in cost.items" :key="item.id" class="flex justify-between">
-                <span>{{ item.description }} ({{ item.quantity }} x <FhMoney :amount="item.unitPrice" />)</span>
-                <span class="font-num"><FhMoney :amount="item.lineTotal" /></span>
+
+            <!-- Items breakdown -->
+            <ul class="text-ink-600 space-y-1 bg-white p-2 rounded border border-ink-200">
+              <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between text-xs py-0.5">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    v-if="item.partSource === 'external'"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase"
+                  >
+                    LK Ngoài
+                  </span>
+                  <span
+                    v-else-if="item.partSource === 'fixhome'"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 uppercase"
+                  >
+                    LK FixHome
+                  </span>
+                  <span>{{ item.description }} ({{ item.quantity }} x <FhMoney :amount="item.unitPrice" />)</span>
+                </div>
+                <span class="font-num font-semibold text-ink-800"><FhMoney :amount="item.lineTotal" /></span>
+              </li>
+
+              <!-- Shipping fee if any -->
+              <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between text-xs pt-1 border-t border-ink-100 text-purple-700 font-medium">
+                <span class="flex items-center gap-1">
+                  <Truck :size="12" /> Phí giao linh kiện tận nơi:
+                </span>
+                <span class="font-num font-bold"><FhMoney :amount="cost.shippingFee" /></span>
               </li>
             </ul>
+
+            <!-- External Parts Warning & Checkbox (Flow 2 requirement) -->
+            <div
+              v-if="hasExternalParts(cost)"
+              class="p-2.5 rounded bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1.5"
+            >
+              <div class="flex items-start gap-1.5 font-bold text-amber-900">
+                <AlertTriangle :size="15" class="text-amber-600 shrink-0 mt-0.5" />
+                <span>Lưu ý về linh kiện ngoài (EXTERNAL):</span>
+              </div>
+              <p class="text-[11px] text-amber-800 leading-relaxed">
+                Yêu cầu này có chứa linh kiện mua ngoài. <strong>Linh kiện này không được cung cấp bởi FixHome và không thuộc chính sách bảo hành của FixHome</strong>.
+              </p>
+              <label
+                v-if="cost.status === 'PENDING_APPROVAL'"
+                class="flex items-start gap-2 pt-1 cursor-pointer select-none border-t border-amber-200/80 mt-1"
+              >
+                <input
+                  type="checkbox"
+                  v-model="externalDisclaimerAccepted[cost.id]"
+                  class="mt-0.5 h-3.5 w-3.5 text-brand-600 rounded border-amber-400 focus:ring-amber-500"
+                />
+                <span class="text-[11px] font-medium text-amber-950">
+                  Tôi đã hiểu và chấp nhận rủi ro đối với linh kiện ngoài không có bảo hành từ FixHome.
+                </span>
+              </label>
+            </div>
+
+            <!-- Decision buttons -->
             <div v-if="cost.status === 'PENDING_APPROVAL'" class="flex items-center gap-2 pt-1">
-              <FhButton variant="secondary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'REJECT')">
+              <FhButton
+                variant="secondary"
+                size="sm"
+                :disabled="acDecidingId === cost.id"
+                @click="handleDecideAdditionalCost(cost, 'REJECT')"
+              >
                 Từ chối
               </FhButton>
-              <FhButton variant="primary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'APPROVE')">
-                <CheckCircle2 :size="14" class="mr-1" /> Đồng ý
+              <FhButton
+                variant="primary"
+                size="sm"
+                :disabled="acDecidingId === cost.id || (hasExternalParts(cost) && !externalDisclaimerAccepted[cost.id])"
+                :title="hasExternalParts(cost) && !externalDisclaimerAccepted[cost.id] ? 'Vui lòng tích vào ô xác nhận trước khi đồng ý' : ''"
+                @click="handleDecideAdditionalCost(cost, 'APPROVE')"
+              >
+                <CheckCircle2 :size="14" class="mr-1" /> Đồng ý chi phí phát sinh
               </FhButton>
             </div>
           </div>
