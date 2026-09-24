@@ -34,6 +34,7 @@ const searchQuery = ref('');
 const statusFilter = ref('ALL');
 const typeFilter = ref('ALL');
 const fulfillmentFilter = ref('ALL');
+const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 
 const qrModalRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
@@ -78,6 +79,18 @@ const filteredRequests = computed(() => {
     }
     if (fulfillmentFilter.value !== 'ALL' && req.fulfillmentMethod.toUpperCase() !== fulfillmentFilter.value) {
       return false;
+    }
+    if (dateFilter.value !== 'ALL') {
+      const created = new Date(req.createdAt).getTime();
+      const now = Date.now();
+      if (dateFilter.value === 'today') {
+        const todayStart = new Date().setHours(0, 0, 0, 0);
+        if (created < todayStart) return false;
+      } else if (dateFilter.value === '7days') {
+        if (now - created > 7 * 24 * 60 * 60 * 1000) return false;
+      } else if (dateFilter.value === '30days') {
+        if (now - created > 30 * 24 * 60 * 60 * 1000) return false;
+      }
     }
     if (searchQuery.value) {
       const q = searchQuery.value.toLowerCase();
@@ -220,6 +233,14 @@ const getUsageBadgeClass = (status: string) => {
       </div>
     </div>
 
+    <!-- Scope disclaimer banner -->
+    <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-[var(--radius-sm)] text-xs text-blue-900 flex items-start gap-2">
+      <Package :size="16" class="text-blue-600 mt-0.5 shrink-0" />
+      <div>
+        <span class="font-bold">Phạm vi Quản lý Yêu cầu Linh kiện:</span> Theo dõi và điều phối yêu cầu linh kiện thực tế từ kỹ thuật viên (Parts Request & Handover Tracking). Hệ thống không quản lý kho bãi / tồn kho (không quản lý nhập/xuất kho, supplier, purchase order hay kiểm kê tồn).
+      </div>
+    </div>
+
     <!-- Alert toast -->
     <div
       v-if="toastMessage"
@@ -296,6 +317,16 @@ const getUsageBadgeClass = (status: string) => {
           <option value="ALL">Tất cả phương thức</option>
           <option value="PICKUP">Lấy tại kho (PICKUP)</option>
           <option value="DELIVERY">Giao tận nơi (DELIVERY)</option>
+        </select>
+
+        <select
+          v-model="dateFilter"
+          class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+        >
+          <option value="ALL">Mọi thời gian</option>
+          <option value="today">Hôm nay</option>
+          <option value="7days">7 ngày qua</option>
+          <option value="30days">30 ngày qua</option>
         </select>
       </div>
     </div>
