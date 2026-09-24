@@ -698,7 +698,7 @@ const refreshJobStatus = async () => {
               </FhButton>
               <!-- TODO: dev-only test helper, remove before shipping to production -->
               <FhButton
-                v-if="import.meta.env.DEV"
+                v-if="showPartsDemo"
                 variant="ghost"
                 size="sm"
                 class="border border-dashed border-amber-400 text-amber-700"
