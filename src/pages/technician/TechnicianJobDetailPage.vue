@@ -390,11 +390,11 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
   throw new Error('Không thể xác định vị trí hiện tại. Vui lòng kiểm tra thiết bị định vị.');
 };
 
-const handleCheckIn = async () => {
+const handleCheckIn = async (overrideCoords?: { lat: number; lng: number; accuracyMeters: number }) => {
   actionLoading.value = true;
   actionMessage.value = null;
   try {
-    const coords = await obtainCurrentPosition();
+    const coords = overrideCoords ?? await obtainCurrentPosition();
     const result = await ordersApi.checkIn(jobId, {
       lat: coords.lat,
       lng: coords.lng,
@@ -422,6 +422,14 @@ const handleCheckIn = async () => {
   } finally {
     actionLoading.value = false;
   }
+};
+
+// TODO: dev-only test helper, remove before shipping to production — lets a
+// tester force check-in at the customer's exact address without real GPS.
+const handleCheckInDevExact = () => {
+  const dest = job.value?.destination;
+  if (dest?.lat == null || dest?.lng == null) return;
+  return handleCheckIn({ lat: Number(dest.lat), lng: Number(dest.lng), accuracyMeters: 5 });
 };
 
 const openBeforeEvidencePicker = () => {
@@ -677,16 +685,30 @@ const refreshJobStatus = async () => {
               Bắt buộc check-in GPS trong bán kính ≤ 200m từ địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
             </p>
 
-            <FhButton
-              :variant="gpsCheckedIn ? 'secondary' : 'primary'"
-              size="sm"
-              :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
-              @click="handleCheckIn"
-            >
-              <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
-              <MapPin v-else :size="15" class="mr-1.5" />
-              {{ gpsCheckedIn ? 'Đã check-in thành công' : 'Bấm Check-in GPS' }}
-            </FhButton>
+            <div class="flex items-center gap-2">
+              <FhButton
+                :variant="gpsCheckedIn ? 'secondary' : 'primary'"
+                size="sm"
+                :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
+                @click="handleCheckIn()"
+              >
+                <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
+                <MapPin v-else :size="15" class="mr-1.5" />
+                {{ gpsCheckedIn ? 'Đã check-in thành công' : 'Bấm Check-in GPS' }}
+              </FhButton>
+              <!-- TODO: dev-only test helper, remove before shipping to production -->
+              <FhButton
+                v-if="import.meta.env.DEV"
+                variant="ghost"
+                size="sm"
+                class="border border-dashed border-amber-400 text-amber-700"
+                :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
+                title="Chỉ để test: check-in luôn bằng đúng toạ độ địa chỉ khách, bỏ qua GPS thật"
+                @click="handleCheckInDevExact"
+              >
+                Check-in GPS (DEV demo)
+              </FhButton>
+            </div>
           </div>
         </FhCard>
 
