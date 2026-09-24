@@ -15,7 +15,7 @@ requirements and contracts belong in Docs-FixHome.
 
 ## 2. Technology Stack
 
-- Node.js 20.19+ and npm with deterministic `npm ci`
+- Node.js 22.22.2+ and npm with deterministic `npm ci` (matching dependency engine requirements)
 - Vue 3 Composition API and TypeScript 6
 - Vite 8 build/dev tooling and `@vitejs/plugin-vue`
 - Tailwind CSS 4 through the Vite plugin

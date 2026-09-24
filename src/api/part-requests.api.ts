@@ -77,7 +77,12 @@ export interface MarkDeliveringPayload {
 }
 
 export interface QueryPartRequestsParams {
-  status?: string;
+  status?: PartRequestStatus;
+  requestType?: PartRequestType;
+  fulfillmentMethod?: FulfillmentMethod;
+  createdFrom?: string;
+  createdTo?: string;
+  search?: string;
   serviceOrderId?: string;
   technicianId?: string;
   page?: number;
@@ -85,6 +90,10 @@ export interface QueryPartRequestsParams {
 }
 
 export const partRequestsApi = {
+  async regenerateQr(requestId: string): Promise<PartRequest> {
+    const response = await apiClient.patch<{ data: PartRequest }>(`/part-requests/${requestId}/qr`, {});
+    return response.data.data;
+  },
   /**
    * Flow 1: Technician creates a Pre-Repair Parts Request
    */

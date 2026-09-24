@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
+import QRCode from 'qrcode';
+import { useAuthStore } from '../../stores/auth';
 import {
   Boxes,
   Search,
@@ -24,8 +26,17 @@ import {
   partRequestsApi,
   type PartRequest,
   type PartRequestStatus,
+  type PartRequestType,
+  type FulfillmentMethod,
 } from '../../api/part-requests.api';
 
+const auth = useAuthStore();
+const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
+const page = ref(1);
+const pageSize = 20;
+const loadError = ref('');
+let loadVersion = 0;
+const qrImage = ref('');
 const loading = ref(true);
 const actionLoading = ref(false);
 const requests = ref<PartRequest[]>([]);
@@ -39,6 +50,14 @@ const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 const qrModalRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
+watch(qrModalRequest, async (request) => {
+  qrImage.value = '';
+  if (!request?.qrToken) return;
+  try {
+    const data = await QRCode.toDataURL(request.qrToken, { width: 220 });
+    if (qrModalRequest.value?.qrToken === request.qrToken) qrImage.value = data;
+  } catch { showToast('error', 'Không thể tạo mã QR. Vui lòng dùng mã bàn giao.'); }
+});
 const toastMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 const showToast = (type: 'success' | 'error', text: string) => {
@@ -51,17 +70,28 @@ const showToast = (type: 'success' | 'error', text: string) => {
 };
 
 const loadData = async () => {
+  const version = ++loadVersion;
   loading.value = true;
+  loadError.value = '';
   try {
     const res = await partRequestsApi.getAll({
-      status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() : undefined,
+      status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() as PartRequestStatus : undefined,
+      requestType: typeFilter.value !== 'ALL' ? typeFilter.value.toLowerCase() as PartRequestType : undefined,
+      fulfillmentMethod: fulfillmentFilter.value !== 'ALL' ? fulfillmentFilter.value.toLowerCase() as FulfillmentMethod : undefined,
+      createdFrom: dateFilter.value === 'ALL' ? undefined : new Date(dateFilter.value === 'today' ? new Date().setHours(0, 0, 0, 0) : Date.now() - (dateFilter.value === '7days' ? 7 : 30) * 86400000).toISOString(),
+      search: searchQuery.value.trim() || undefined,
+      page: page.value,
+      pageSize,
     });
+    if (version !== loadVersion) return;
     requests.value = res.data;
     totalCount.value = res.total;
   } catch {
-    showToast('error', 'Không thể tải danh sách yêu cầu linh kiện.');
+    if (version !== loadVersion) return;
+    requests.value = [];
+    loadError.value = 'Không thể tải danh sách yêu cầu linh kiện. Vui lòng thử lại.';
   } finally {
-    loading.value = false;
+    if (version === loadVersion) loading.value = false;
   }
 };
 
@@ -69,40 +99,13 @@ onMounted(() => {
   void loadData();
 });
 
-const filteredRequests = computed(() => {
-  return requests.value.filter((req) => {
-    if (statusFilter.value !== 'ALL' && req.status.toUpperCase() !== statusFilter.value) {
-      return false;
-    }
-    if (typeFilter.value !== 'ALL' && req.requestType.toUpperCase() !== typeFilter.value) {
-      return false;
-    }
-    if (fulfillmentFilter.value !== 'ALL' && req.fulfillmentMethod.toUpperCase() !== fulfillmentFilter.value) {
-      return false;
-    }
-    if (dateFilter.value !== 'ALL') {
-      const created = new Date(req.createdAt).getTime();
-      const now = Date.now();
-      if (dateFilter.value === 'today') {
-        const todayStart = new Date().setHours(0, 0, 0, 0);
-        if (created < todayStart) return false;
-      } else if (dateFilter.value === '7days') {
-        if (now - created > 7 * 24 * 60 * 60 * 1000) return false;
-      } else if (dateFilter.value === '30days') {
-        if (now - created > 30 * 24 * 60 * 60 * 1000) return false;
-      }
-    }
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase();
-      const matchId = req.id.toLowerCase().includes(q);
-      const matchOrder = req.serviceOrderId.toLowerCase().includes(q);
-      const matchTech = req.technicianId.toLowerCase().includes(q);
-      const matchItem = req.items?.some((i) => i.partNameSnapshot.toLowerCase().includes(q));
-      if (!matchId && !matchOrder && !matchTech && !matchItem) return false;
-    }
-    return true;
-  });
+const filteredRequests = requests;
+watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
+  page.value = 1;
+  const timer = setTimeout(() => { void loadData(); }, 250);
+  onCleanup(() => clearTimeout(timer));
 });
+const changePage = (delta: number) => { page.value += delta; void loadData(); };
 
 const stats = computed(() => {
   const reqs = requests.value;
@@ -116,6 +119,7 @@ const stats = computed(() => {
 });
 
 const handleMarkReady = async (req: PartRequest) => {
+  if (!canOperate.value || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const updated = await partRequestsApi.markReady(req.id);
@@ -131,6 +135,7 @@ const handleMarkReady = async (req: PartRequest) => {
 };
 
 const handleMarkDelivering = async (req: PartRequest) => {
+  if (!canOperate.value || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const updated = await partRequestsApi.markDelivering(req.id);
@@ -145,6 +150,7 @@ const handleMarkDelivering = async (req: PartRequest) => {
 };
 
 const handleCancelRequest = async (req: PartRequest) => {
+  if (!canOperate.value || actionLoading.value) return;
   if (!confirm(`Bạn có chắc chắn muốn hủy yêu cầu linh kiện ${req.id}?`)) return;
   actionLoading.value = true;
   try {
@@ -167,6 +173,19 @@ const copyToken = async (token: string) => {
   } catch {
     // fallback
   }
+};
+
+const regenerateQr = async () => {
+  if (!canOperate.value || actionLoading.value || !qrModalRequest.value) return;
+  actionLoading.value = true;
+  try {
+    const updated = await partRequestsApi.regenerateQr(qrModalRequest.value.id);
+    qrModalRequest.value = updated;
+    const index = requests.value.findIndex(r => r.id === updated.id);
+    if (index !== -1) requests.value[index] = updated;
+    showToast('success', 'Đã tạo mã bàn giao mới. Mã cũ không còn hiệu lực.');
+  } catch { showToast('error', 'Không thể tạo lại mã bàn giao. Vui lòng tải lại yêu cầu.'); }
+  finally { actionLoading.value = false; }
 };
 
 const getStatusLabel = (status: PartRequestStatus | string) => {
@@ -196,7 +215,7 @@ const getStatusBadgeClass = (status: PartRequestStatus | string) => {
 const getUsageStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'pending': return 'Đang giữ (Chưa chốt)';
-    case 'used': return 'Đã dùng (Tính vào đơn)';
+    case 'used': return 'Đã dùng (chỉ tính phí đã duyệt)';
     case 'returned': return 'Đã trả lại (Miễn phí)';
     default: return status;
   }
@@ -219,10 +238,10 @@ const getUsageBadgeClass = (status: string) => {
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Boxes class="text-brand-600" :size="24" />
-          Quản lý Yêu cầu Linh kiện (Parts Requests)
+          {{ canOperate ? 'Quản lý Yêu cầu Linh kiện' : 'Lịch sử Yêu cầu Linh kiện (chỉ đọc)' }}
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Điều phối, đóng gói linh kiện kho FixHome, cấp mã QR bàn giao hoặc gửi ship cho Kỹ thuật viên.
+          {{ canOperate ? 'Chuẩn bị linh kiện và xác nhận bàn giao cho kỹ thuật viên.' : 'Xem trạng thái bàn giao và lịch sử USED / RETURNED.' }}
         </p>
       </div>
 
@@ -251,6 +270,7 @@ const getUsageBadgeClass = (status: string) => {
       <button @click="toastMessage = null" class="font-bold ml-2">×</button>
     </div>
 
+    <p class="text-xs text-ink-500">Thống kê trên trang hiện tại</p>
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
       <div class="p-3 bg-white border border-amber-200 rounded-[var(--radius-sm)] shadow-xs">
@@ -337,6 +357,8 @@ const getUsageBadgeClass = (status: string) => {
         <RefreshCw :size="20" class="mx-auto animate-spin mb-2" />
         Đang tải dữ liệu yêu cầu linh kiện...
       </div>
+
+      <div v-else-if="loadError" class="p-8 text-center text-danger-700" role="alert">{{ loadError }}</div>
 
       <div v-else-if="filteredRequests.length === 0" class="p-8 text-center text-xs text-ink-400">
         Không tìm thấy yêu cầu linh kiện nào phù hợp với bộ lọc.
@@ -443,7 +465,7 @@ const getUsageBadgeClass = (status: string) => {
           <div class="flex items-center gap-1.5 flex-wrap">
             <!-- Mark Ready (When REQUESTED) -->
             <button
-              v-if="row.status.toLowerCase() === 'requested'"
+              v-if="canOperate && row.status.toLowerCase() === 'requested'"
               class="px-2 py-1 text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 rounded transition-colors flex items-center gap-1 shadow-xs"
               :disabled="actionLoading"
               @click="handleMarkReady(row)"
@@ -462,7 +484,7 @@ const getUsageBadgeClass = (status: string) => {
 
             <!-- Mark Delivering (When READY and delivery) -->
             <button
-              v-if="row.status.toLowerCase() === 'ready' && row.fulfillmentMethod === 'delivery'"
+              v-if="canOperate && row.status.toLowerCase() === 'ready' && row.fulfillmentMethod === 'delivery'"
               class="px-2 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded transition-colors flex items-center gap-1"
               :disabled="actionLoading"
               @click="handleMarkDelivering(row)"
@@ -481,7 +503,7 @@ const getUsageBadgeClass = (status: string) => {
 
             <!-- Cancel button -->
             <button
-              v-if="['requested', 'ready'].includes(row.status.toLowerCase())"
+              v-if="canOperate && ['requested', 'ready', 'delivering'].includes(row.status.toLowerCase())"
               class="p-1 text-ink-400 hover:text-danger-600 rounded hover:bg-danger-50 transition-colors"
               title="Hủy yêu cầu"
               :disabled="actionLoading"
@@ -493,6 +515,14 @@ const getUsageBadgeClass = (status: string) => {
         </template>
       </FhTable>
     </FhCard>
+
+    <div class="flex items-center justify-between text-xs">
+      <span>Trang {{ page }} • {{ totalCount }} yêu cầu</span>
+      <div class="flex gap-2">
+        <FhButton size="sm" :disabled="loading || page <= 1" @click="changePage(-1)">Trước</FhButton>
+        <FhButton size="sm" :disabled="loading || page * pageSize >= totalCount" @click="changePage(1)">Sau</FhButton>
+      </div>
+    </div>
 
     <!-- QR Handover Modal -->
     <div
@@ -517,8 +547,8 @@ const getUsageBadgeClass = (status: string) => {
         <!-- QR Code display -->
         <div class="flex flex-col items-center justify-center p-4 bg-ink-50 border border-ink-200 rounded-lg space-y-3">
           <img
-            v-if="qrModalRequest.qrToken"
-            :src="`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrModalRequest.qrToken)}`"
+            v-if="qrImage"
+            :src="qrImage"
             alt="QR Token"
             class="w-48 h-48 bg-white p-2 rounded shadow-sm border border-ink-200"
           />
@@ -541,7 +571,8 @@ const getUsageBadgeClass = (status: string) => {
           💡 <strong>Hướng dẫn bàn giao:</strong> Kỹ thuật viên dùng camera điện thoại hoặc nút "Nhận linh kiện (Quét QR)" trên giao diện đơn hàng để quét hoặc nhập mã token trên. Sau khi quét, trạng thái sẽ tự động chuyển thành <strong>RECEIVED</strong>.
         </div>
 
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-end gap-2 pt-2">
+          <FhButton v-if="canOperate" variant="secondary" size="sm" :disabled="actionLoading" @click="regenerateQr">Tạo lại QR</FhButton>
           <FhButton variant="primary" size="sm" @click="qrModalRequest = null">
             Đóng
           </FhButton>
@@ -573,6 +604,7 @@ const getUsageBadgeClass = (status: string) => {
           <div>Phí giao hàng: <strong class="text-ink-900 font-num"><FhMoney :amount="detailModalRequest.shippingFee || 0" /></strong></div>
         </div>
 
+        <p class="text-xs text-ink-600">Đã nhận: {{ detailModalRequest.receivedAt ? new Date(detailModalRequest.receivedAt).toLocaleString('vi-VN') : 'Chưa nhận' }} • Hoàn tất: {{ detailModalRequest.completedAt ? new Date(detailModalRequest.completedAt).toLocaleString('vi-VN') : 'Chưa hoàn tất' }}</p>
         <div class="space-y-2">
           <h4 class="text-xs font-bold text-ink-800 uppercase tracking-wider">Danh sách linh kiện & Trạng thái sử dụng:</h4>
           <div class="border border-ink-200 rounded divide-y divide-ink-100">

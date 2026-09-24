@@ -479,7 +479,7 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- QR Handover Action (When READY or DELIVERING) -->
           <div
-            v-if="pr.status === 'ready' || pr.status === 'delivering'"
+            v-if="(pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') || (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering')"
             class="p-3 rounded-lg bg-blue-50 border border-blue-200 space-y-2"
           >
             <div class="flex items-center justify-between">
@@ -500,18 +500,6 @@ const getStatusBadgeClass = (status: string) => {
             <p class="text-[11px] text-blue-800">
               Quản lý dịch vụ đã chuẩn bị xong. Khi bạn đến kho hoặc nhận từ người giao, hãy quét hoặc nhập mã QR token để xác nhận:
             </p>
-
-            <!-- Show QR token for demo helper if available -->
-            <div v-if="pr.qrToken" class="text-[11px] font-mono bg-white p-2 rounded border border-blue-200 flex items-center justify-between">
-              <span>Mã QR Token: <strong class="text-blue-700">{{ pr.qrToken }}</strong></span>
-              <button
-                type="button"
-                class="text-blue-600 hover:underline font-sans font-semibold text-[10px]"
-                @click="qrTokenInput = pr.qrToken || ''"
-              >
-                Sử dụng mã này
-              </button>
-            </div>
 
             <!-- Input QR Token form -->
             <div v-if="showQrInput === pr.id" class="flex items-center gap-2 pt-1">
