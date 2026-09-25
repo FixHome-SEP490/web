@@ -108,6 +108,8 @@ export interface AdditionalCostRecord {
   reason: string;
   totalLaborDelta: number;
   totalPartsDelta: number;
+  fulfillmentMethod?: 'pickup' | 'delivery' | null;
+  shippingFee?: number;
   expiresAt: string;
   decidedAt?: string | null;
   supersedesId?: string | null;
@@ -120,6 +122,9 @@ export interface AdditionalCostRecord {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    partSource?: 'fixhome' | 'technician' | 'external' | null;
+    partCatalogId?: string | null;
+    partNameSnapshot?: string | null;
   }[];
 }
 
@@ -157,6 +162,37 @@ export interface WarrantyItem {
   technicianName: string;
 }
 
+export interface OrderWarrantyItem {
+  id: string;
+  invoiceItemId?: string | null;
+  warrantyDaysSnapshot: number;
+  itemDescription: string;
+  startsAt: string;
+  expiresAt: string;
+  status: 'ACTIVE' | 'EXPIRED';
+}
+
+export interface OrderWarrantyGroup {
+  orderId: string;
+  orderCode: string;
+  serviceName: string;
+  technicianName: string;
+  technicianPhone?: string;
+  completedAt?: string;
+  coverages: OrderWarrantyItem[];
+  minStartsAt: string;
+  maxExpiresAt: string;
+  hasActiveCoverage: boolean;
+  status: 'ACTIVE' | 'EXPIRED';
+  activeClaim?: {
+    id: string;
+    description: string;
+    status: string;
+    submittedAt?: string;
+    createdAt?: string;
+  } | null;
+}
+
 export interface ApiResponse<T = unknown> {
   data?: T;
   message?: string;
@@ -170,12 +206,16 @@ export interface QuotationItemPayload {
   unitPrice: number;
   lineTotal?: number;
   warrantyDays?: number;
-  partSource?: 'fixhome' | 'technician';
+  warrantyPolicy?: string;
+  partSku?: string;
+  partNameSnapshot?: string;
+  partSource?: 'fixhome' | 'technician' | 'external';
   partCatalogId?: string;
   partWarrantyOption?: 'included' | 'no_warranty' | 'paid_warranty';
   warrantyFee?: number;
   warrantyTermDays?: number;
 }
+
 
 function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
   return { ...order, status: order.status.toUpperCase() as CanonicalOrderStatus,
@@ -208,12 +248,17 @@ function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecor
     status: String(rec.status).toUpperCase() as AdditionalCostRecord['status'],
     totalLaborDelta: Number(rec.totalLaborDelta),
     totalPartsDelta: Number(rec.totalPartsDelta),
+    fulfillmentMethod: rec.fulfillmentMethod || null,
+    shippingFee: Number(rec.shippingFee || 0),
     items: rec.items.map((item) => ({
       ...item,
       type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS_EQUIPMENT',
       quantity: Number(item.quantity),
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
+      partSource: item.partSource || null,
+      partCatalogId: item.partCatalogId || null,
+      partNameSnapshot: item.partNameSnapshot || null,
     })),
   };
 }
@@ -335,12 +380,58 @@ export const ordersApi = {
 
   async createAdditionalCost(
     orderId: string,
-    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+    body: {
+      reason: string;
+      items: QuotationItemPayload[];
+      evidenceUrls?: string[];
+      fulfillmentMethod?: 'pickup' | 'delivery';
+      shippingFee?: number;
+    },
   ): Promise<AdditionalCostRecord> {
-    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/service-orders/${orderId}/additional-costs`, {
-      ...body,
-      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
-    });
+    const payload: Record<string, unknown> = {
+      reason: body.reason.trim(),
+      items: body.items.map((item) => {
+        const isLabor = item.type === 'LABOR';
+        if (isLabor) {
+          return {
+            type: 'labor',
+            description: item.description.trim(),
+            quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+            unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          };
+        }
+        const partSource = item.partSource || 'technician';
+        const resItem: Record<string, unknown> = {
+          type: 'parts_equipment',
+          description: item.description.trim(),
+          quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+          unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          partSource,
+          partNameSnapshot: (item.partNameSnapshot || item.description).trim(),
+        };
+        if (partSource === 'fixhome' && item.partCatalogId) {
+          resItem.partCatalogId = item.partCatalogId;
+        }
+        if (item.warrantyDays !== undefined && item.warrantyDays !== null) {
+          resItem.warrantyDays = Math.round(Number(item.warrantyDays));
+        }
+        return resItem;
+      }),
+    };
+    if (body.evidenceUrls && body.evidenceUrls.length > 0) {
+      payload.evidenceUrls = body.evidenceUrls;
+    }
+    if (body.fulfillmentMethod) {
+      payload.fulfillmentMethod = body.fulfillmentMethod;
+    }
+    if (body.shippingFee !== undefined && body.shippingFee !== null) {
+      payload.shippingFee = Math.max(0, Math.round(Number(body.shippingFee)));
+    }
+
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(
+      `/service-orders/${orderId}/additional-costs`,
+      payload,
+    );
     return normalizeAdditionalCost(res.data.data);
   },
 
@@ -351,14 +442,61 @@ export const ordersApi = {
 
   async reviseAdditionalCost(
     id: string,
-    body: { reason: string; items: QuotationItemPayload[]; evidenceUrls?: string[] },
+    body: {
+      reason: string;
+      items: QuotationItemPayload[];
+      evidenceUrls?: string[];
+      fulfillmentMethod?: 'pickup' | 'delivery';
+      shippingFee?: number;
+    },
   ): Promise<AdditionalCostRecord> {
-    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/additional-costs/${id}/revise`, {
-      ...body,
-      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
-    });
+    const payload: Record<string, unknown> = {
+      reason: body.reason.trim(),
+      items: body.items.map((item) => {
+        const isLabor = item.type === 'LABOR';
+        if (isLabor) {
+          return {
+            type: 'labor',
+            description: item.description.trim(),
+            quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+            unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          };
+        }
+        const partSource = item.partSource || 'technician';
+        const resItem: Record<string, unknown> = {
+          type: 'parts_equipment',
+          description: item.description.trim(),
+          quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+          unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          partSource,
+          partNameSnapshot: (item.partNameSnapshot || item.description).trim(),
+        };
+        if (partSource === 'fixhome' && item.partCatalogId) {
+          resItem.partCatalogId = item.partCatalogId;
+        }
+        if (item.warrantyDays !== undefined && item.warrantyDays !== null) {
+          resItem.warrantyDays = Math.round(Number(item.warrantyDays));
+        }
+        return resItem;
+      }),
+    };
+    if (body.evidenceUrls && body.evidenceUrls.length > 0) {
+      payload.evidenceUrls = body.evidenceUrls;
+    }
+    if (body.fulfillmentMethod) {
+      payload.fulfillmentMethod = body.fulfillmentMethod;
+    }
+    if (body.shippingFee !== undefined && body.shippingFee !== null) {
+      payload.shippingFee = Math.max(0, Math.round(Number(body.shippingFee)));
+    }
+
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(
+      `/additional-costs/${id}/revise`,
+      payload,
+    );
     return normalizeAdditionalCost(res.data.data);
   },
+
 
   // ── Spec v1.2: Cash Settlement Dual-Confirmation ──
 
@@ -408,6 +546,144 @@ export const ordersApi = {
       const res = await apiClient.get<{data: {id:string;startsAt:string;expiresAt:string;status:string;note?:string}[]}>(`/service-orders/${order.id}/warranties`);
       return res.data.data.map(w => ({...w, orderCode:order.code, serviceName:order.serviceName, itemDescription:w.note || 'Bảo hành dịch vụ', technicianName:order.technician?.fullName || '', status:w.status.toUpperCase() as WarrantyItem['status']}));
     })); return lists.flat();
+  },
+
+  async getOrderWarranties(orderId: string): Promise<{
+    id: string;
+    invoiceItemId?: string | null;
+    warrantyDaysSnapshot: number;
+    note?: string | null;
+    startsAt: string;
+    expiresAt: string;
+    status: string;
+  }[]> {
+    const res = await apiClient.get<{
+      data: {
+        id: string;
+        invoiceItemId?: string | null;
+        warrantyDaysSnapshot: number;
+        note?: string | null;
+        startsAt: string;
+        expiresAt: string;
+        status: string;
+      }[];
+    }>(`/service-orders/${orderId}/warranties`);
+    return res.data?.data || [];
+  },
+
+  async getOrderWarrantyClaims(orderId: string): Promise<{
+    id: string;
+    serviceOrderId: string;
+    description: string;
+    status: string;
+    submittedAt?: string;
+    createdAt?: string;
+  }[]> {
+    const res = await apiClient.get<{
+      data: {
+        id: string;
+        serviceOrderId: string;
+        description: string;
+        status: string;
+        submittedAt?: string;
+        createdAt?: string;
+      }[];
+    }>(`/service-orders/${orderId}/warranty-claims`);
+    return res.data?.data || [];
+  },
+
+  async getOrderWarrantiesGrouped(): Promise<OrderWarrantyGroup[]> {
+    const orders = await this.getCustomerOrders();
+    const completedOrders = orders.filter(
+      (o) => o.status?.toUpperCase() === 'COMPLETED'
+    );
+    const groups: OrderWarrantyGroup[] = [];
+
+    await Promise.all(
+      completedOrders.map(async (order) => {
+        try {
+          const res = await apiClient.get<{
+            data: {
+              id: string;
+              invoiceItemId?: string | null;
+              warrantyDaysSnapshot?: number;
+              startsAt: string;
+              expiresAt: string;
+              status: string;
+              note?: string;
+            }[];
+          }>(`/service-orders/${order.id}/warranties`);
+
+          const coverages = res.data?.data || [];
+          if (coverages.length === 0) return;
+
+          const now = new Date();
+          const hasActive = coverages.some(
+            (c) => new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE'
+          );
+
+          let maxExpires = coverages[0].expiresAt;
+          let minStarts = coverages[0].startsAt;
+          coverages.forEach((c) => {
+            if (new Date(c.expiresAt).getTime() > new Date(maxExpires).getTime()) {
+              maxExpires = c.expiresAt;
+            }
+            if (new Date(c.startsAt).getTime() < new Date(minStarts).getTime()) {
+              minStarts = c.startsAt;
+            }
+          });
+
+          // Check if there are active warranty claims for this order
+          let activeClaim: OrderWarrantyGroup['activeClaim'] = null;
+          try {
+            const claimsRes = await apiClient.get<{
+              data: {
+                id: string;
+                description: string;
+                status: string;
+                submittedAt?: string;
+                createdAt?: string;
+              }[];
+            }>(`/service-orders/${order.id}/warranty-claims`);
+            const pending = (claimsRes.data?.data || []).find((c) =>
+              ['SUBMITTED', 'ACCEPTED', 'IN_PROGRESS', 'submitted', 'accepted', 'in_progress'].includes(c.status)
+            );
+            if (pending) {
+              activeClaim = pending;
+            }
+          } catch {
+            // ignore claim fetch error
+          }
+
+          groups.push({
+            orderId: order.id,
+            orderCode: order.code,
+            serviceName: order.serviceName,
+            technicianName: order.technician?.fullName || 'Kỹ thuật viên FixHome',
+            technicianPhone: order.technician?.phoneNumber,
+            completedAt: (order as unknown as { completedAt?: string }).completedAt,
+            coverages: coverages.map((c) => ({
+              id: c.id,
+              invoiceItemId: c.invoiceItemId,
+              warrantyDaysSnapshot: c.warrantyDaysSnapshot || 0,
+              itemDescription: c.note || 'Bảo hành dịch vụ',
+              startsAt: c.startsAt,
+              expiresAt: c.expiresAt,
+              status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
+            })),
+            minStartsAt: minStarts,
+            maxExpiresAt: maxExpires,
+            hasActiveCoverage: hasActive,
+            status: hasActive ? 'ACTIVE' : 'EXPIRED',
+            activeClaim,
+          });
+        } catch {
+          // ignore error for single order
+        }
+      })
+    );
+
+    return groups.sort((a, b) => new Date(b.maxExpiresAt).getTime() - new Date(a.maxExpiresAt).getTime());
   },
 
   async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {

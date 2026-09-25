@@ -14,6 +14,9 @@ import {
   Star,
   CreditCard,
   Map as MapIcon,
+  AlertTriangle,
+  Truck,
+  Clock,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -49,11 +52,62 @@ const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const showTrackingModal = ref(false);
 const warrantyClaimDescription = ref('');
+// Warranty Coverages & Claims for completed order
+interface OrderWarrantyRecord {
+  id: string;
+  invoiceItemId?: string | null;
+  warrantyDaysSnapshot: number;
+  note?: string | null;
+  startsAt: string;
+  expiresAt: string;
+  status: string;
+}
+
+const orderWarranties = ref<OrderWarrantyRecord[]>([]);
+const activeWarrantyClaim = ref<{
+  id: string;
+  description: string;
+  status: string;
+  submittedAt?: string;
+} | null>(null);
+
+const isOrderWarrantyActive = computed(() => {
+  const now = new Date();
+  return orderWarranties.value.some(
+    (w) => new Date(w.expiresAt).getTime() > now.getTime() && w.status?.toUpperCase() === 'ACTIVE'
+  );
+});
+
+const maxWarrantyExpiresAt = computed(() => {
+  if (orderWarranties.value.length === 0) return '';
+  let max = orderWarranties.value[0].expiresAt;
+  orderWarranties.value.forEach((w) => {
+    if (new Date(w.expiresAt).getTime() > new Date(max).getTime()) {
+      max = w.expiresAt;
+    }
+  });
+  return max;
+});
+
+const formatDate = (val?: string | null) => {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? val : d.toLocaleDateString('vi-VN');
+  } catch {
+    return val;
+  }
+};
+
 const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value));
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const acDecidingId = ref('');
+const externalDisclaimerAccepted = ref<Record<string, boolean>>({});
+const hasExternalParts = (cost: AdditionalCostRecord) => {
+  return cost.items?.some((i) => i.partSource === 'external') ?? false;
+};
 
 // Review
 const showReviewModal = ref(false);
@@ -122,6 +176,9 @@ onUnmounted(stopTrackingPoll);
 
 onMounted(async () => {
   await loadOrder();
+  if (route.query.claimWarranty === 'true' || route.query.claimWarranty === '1') {
+    showWarrantyClaimModal.value = true;
+  }
 });
 
 const loadOrder = async () => {
@@ -168,6 +225,24 @@ const loadOrder = async () => {
     if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
       try {
         additionalCosts.value = await ordersApi.getAdditionalCosts(orderId);
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Tải thông tin bảo hành & yêu cầu bảo hành nếu đơn COMPLETED
+    if (data.status === 'COMPLETED' || (data.status as string) === 'completed') {
+      try {
+        orderWarranties.value = (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[];
+      } catch {
+        // Ignore
+      }
+      try {
+        const claims = await ordersApi.getOrderWarrantyClaims(orderId);
+        activeWarrantyClaim.value =
+          claims.find((c) =>
+            ['SUBMITTED', 'ACCEPTED', 'IN_PROGRESS', 'submitted', 'accepted', 'in_progress'].includes(c.status)
+          ) || null;
       } catch {
         // Ignore
       }
@@ -338,6 +413,12 @@ const handleCreateWarrantyClaim = async () => {
   try {
     actionLoading.value = true;
     await ordersApi.createWarrantyClaim(orderId, warrantyClaimDescription.value);
+    activeWarrantyClaim.value = {
+      id: 'new',
+      description: warrantyClaimDescription.value.trim(),
+      status: 'SUBMITTED',
+      submittedAt: new Date().toISOString(),
+    };
     showWarrantyClaimModal.value = false;
     warrantyClaimDescription.value = '';
     actionMessage.value = {
@@ -752,32 +833,216 @@ const confirmWork = async () => {
       <!-- Chi phí phát sinh (Additional Cost) -->
       <FhCard v-if="additionalCosts.length > 0" title="Chi phí phát sinh ngoài phạm vi ban đầu">
         <div class="space-y-3 text-xs">
-          <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2">
+          <div v-for="cost in additionalCosts" :key="cost.id" class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 space-y-2.5">
             <div class="flex items-center justify-between">
               <FhStatusPill
                 :status="cost.status"
                 :label="{PENDING_APPROVAL:'Chờ bạn duyệt',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',EXPIRED:'Hết hạn chờ duyệt',CANCELLED:'Đã huỷ'}[cost.status]"
               />
-              <span class="font-num font-bold text-ink-900"><FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" /></span>
+              <span class="font-num font-bold text-ink-900 text-sm">
+                <FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta) + Number(cost.shippingFee || 0)" />
+              </span>
             </div>
             <p class="text-ink-600 italic">"{{ cost.reason }}"</p>
             <div v-if="cost.evidenceUrls?.length" class="flex gap-2">
               <img v-for="url in cost.evidenceUrls" :key="url" :src="url" class="w-14 h-14 rounded object-cover border border-ink-200" />
             </div>
-            <ul class="text-ink-500 space-y-0.5">
-              <li v-for="item in cost.items" :key="item.id" class="flex justify-between">
-                <span>{{ item.description }} ({{ item.quantity }} x <FhMoney :amount="item.unitPrice" />)</span>
-                <span class="font-num"><FhMoney :amount="item.lineTotal" /></span>
+
+            <!-- Items breakdown -->
+            <ul class="text-ink-600 space-y-1 bg-white p-2 rounded border border-ink-200">
+              <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between text-xs py-0.5">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    v-if="item.partSource === 'external'"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase"
+                  >
+                    LK Ngoài
+                  </span>
+                  <span
+                    v-else-if="item.partSource === 'fixhome'"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 uppercase"
+                  >
+                    LK FixHome
+                  </span>
+                  <span>{{ item.description }} ({{ item.quantity }} x <FhMoney :amount="item.unitPrice" />)</span>
+                </div>
+                <span class="font-num font-semibold text-ink-800"><FhMoney :amount="item.lineTotal" /></span>
+              </li>
+
+              <!-- Shipping fee if any -->
+              <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between text-xs pt-1 border-t border-ink-100 text-purple-700 font-medium">
+                <span class="flex items-center gap-1">
+                  <Truck :size="12" /> Phí giao linh kiện tận nơi:
+                </span>
+                <span class="font-num font-bold"><FhMoney :amount="cost.shippingFee" /></span>
               </li>
             </ul>
+
+            <!-- External Parts Warning & Checkbox (Flow 2 requirement) -->
+            <div
+              v-if="hasExternalParts(cost)"
+              class="p-2.5 rounded bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1.5"
+            >
+              <div class="flex items-start gap-1.5 font-bold text-amber-900">
+                <AlertTriangle :size="15" class="text-amber-600 shrink-0 mt-0.5" />
+                <span>Lưu ý về linh kiện ngoài (EXTERNAL):</span>
+              </div>
+              <p class="text-[11px] text-amber-800 leading-relaxed">
+                Yêu cầu này có chứa linh kiện mua ngoài. <strong>Linh kiện này không được cung cấp bởi FixHome và không thuộc chính sách bảo hành của FixHome</strong>.
+              </p>
+              <label
+                v-if="cost.status === 'PENDING_APPROVAL'"
+                class="flex items-start gap-2 pt-1 cursor-pointer select-none border-t border-amber-200/80 mt-1"
+              >
+                <input
+                  type="checkbox"
+                  v-model="externalDisclaimerAccepted[cost.id]"
+                  class="mt-0.5 h-3.5 w-3.5 text-brand-600 rounded border-amber-400 focus:ring-amber-500"
+                />
+                <span class="text-[11px] font-medium text-amber-950">
+                  Tôi đã hiểu và chấp nhận rủi ro đối với linh kiện ngoài không có bảo hành từ FixHome.
+                </span>
+              </label>
+            </div>
+
+            <!-- Decision buttons -->
             <div v-if="cost.status === 'PENDING_APPROVAL'" class="flex items-center gap-2 pt-1">
-              <FhButton variant="secondary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'REJECT')">
+              <FhButton
+                variant="secondary"
+                size="sm"
+                :disabled="acDecidingId === cost.id"
+                @click="handleDecideAdditionalCost(cost, 'REJECT')"
+              >
                 Từ chối
               </FhButton>
-              <FhButton variant="primary" size="sm" :disabled="acDecidingId === cost.id" @click="handleDecideAdditionalCost(cost, 'APPROVE')">
-                <CheckCircle2 :size="14" class="mr-1" /> Đồng ý
+              <FhButton
+                variant="primary"
+                size="sm"
+                :disabled="acDecidingId === cost.id || (hasExternalParts(cost) && !externalDisclaimerAccepted[cost.id])"
+                :title="hasExternalParts(cost) && !externalDisclaimerAccepted[cost.id] ? 'Vui lòng tích vào ô xác nhận trước khi đồng ý' : ''"
+                @click="handleDecideAdditionalCost(cost, 'APPROVE')"
+              >
+                <CheckCircle2 :size="14" class="mr-1" /> Đồng ý chi phí phát sinh
               </FhButton>
             </div>
+          </div>
+        </div>
+      </FhCard>
+
+      <!-- Bảo hành Điện tử của Đơn hàng (Spec v1.2 / Warranty) -->
+      <FhCard v-if="order.status === 'COMPLETED' && orderWarranties.length > 0">
+        <template #title>
+          <div class="flex items-center gap-2">
+            <ShieldCheck class="text-emerald-600" :size="20" />
+            <span>Bảo hành Điện tử của Đơn hàng</span>
+          </div>
+        </template>
+        <template #action>
+          <span
+            class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
+            :class="
+              activeWarrantyClaim
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : isOrderWarrantyActive
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : 'bg-gray-100 text-gray-600 border border-gray-300'
+            "
+          >
+            {{
+              activeWarrantyClaim
+                ? 'ĐANG XỬ LÝ BẢO HÀNH'
+                : isOrderWarrantyActive
+                ? 'BẢO HÀNH CÒN HIỆU LỰC'
+                : 'BẢO HÀNH ĐÃ HẾT HẠN'
+            }}
+          </span>
+        </template>
+
+        <div class="space-y-4 text-xs">
+          <!-- Summary banner -->
+          <div class="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="font-bold text-emerald-950 flex items-center gap-1.5">
+                <ShieldCheck :size="15" class="text-emerald-600 shrink-0" />
+                Chính sách bảo hành điện tử chính hãng FixHome
+              </p>
+              <p class="text-[11px] text-emerald-800 mt-0.5">
+                100% miễn phí công thợ khi bảo hành sự cố tái phát trong thời hạn bảo hành.
+              </p>
+            </div>
+            <div class="text-right">
+              <span class="text-[11px] text-ink-500 block">Hạn bảo hành tối đa:</span>
+              <span class="font-bold text-emerald-900 font-num text-sm">
+                {{ formatDate(maxWarrantyExpiresAt) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Items Table -->
+          <div class="border border-ink-200 rounded-lg overflow-hidden bg-white">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-ink-50 text-ink-600 font-semibold border-b border-ink-100">
+                <tr>
+                  <th class="p-2.5">Hạng mục bảo hành</th>
+                  <th class="p-2.5 text-center">Thời hạn</th>
+                  <th class="p-2.5 text-center">Ngày hết hạn</th>
+                  <th class="p-2.5 text-right">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr v-for="w in orderWarranties" :key="w.id" class="hover:bg-ink-50/50">
+                  <td class="p-2.5 font-medium text-ink-900">
+                    {{ w.note || 'Bảo hành dịch vụ' }}
+                  </td>
+                  <td class="p-2.5 text-center text-ink-600 font-num">
+                    {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }}
+                  </td>
+                  <td class="p-2.5 text-center font-num text-ink-700">
+                    {{ formatDate(w.expiresAt) }}
+                  </td>
+                  <td class="p-2.5 text-right">
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-bold"
+                      :class="new Date(w.expiresAt) > new Date() ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'"
+                    >
+                      {{ new Date(w.expiresAt) > new Date() ? 'Còn hiệu lực' : 'Đã hết hạn' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Active Claim State -->
+          <div
+            v-if="activeWarrantyClaim"
+            class="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 space-y-1"
+          >
+            <div class="flex items-center gap-1.5 font-bold">
+              <Clock :size="15" class="text-amber-600" />
+              <span>Đang có yêu cầu bảo hành đang được tiếp nhận &amp; xử lý</span>
+            </div>
+            <p class="text-[11px] text-amber-800">
+              Mô tả sự cố: "{{ activeWarrantyClaim.description }}"
+            </p>
+            <p class="text-[10px] text-ink-500 font-num">
+              Thời gian gửi: {{ formatDate(activeWarrantyClaim.submittedAt) }}
+            </p>
+          </div>
+
+          <!-- Action Button -->
+          <div v-else-if="isOrderWarrantyActive" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
+            <span class="text-ink-500 text-[11px]">
+              Nếu thiết bị gặp sự cố hoặc hoạt động bất thường, bạn có thể yêu cầu kỹ thuật viên đến kiểm tra lại miễn phí.
+            </span>
+            <FhButton
+              variant="primary"
+              size="sm"
+              @click="showWarrantyClaimModal = true"
+            >
+              <ShieldCheck :size="14" class="mr-1.5" />
+              Yêu cầu hỗ trợ bảo hành
+            </FhButton>
           </div>
         </div>
       </FhCard>

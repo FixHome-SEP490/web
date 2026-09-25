@@ -154,6 +154,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Hồ sơ & Sổ địa chỉ' },
       },
       {
+        path: 'addresses',
+        redirect: '/app/profile',
+      },
+      {
         path: 'messages',
         name: 'customer-messages',
         component: () => import('../pages/chat/MessagesPage.vue'),
@@ -248,6 +252,12 @@ const routes: RouteRecordRaw[] = [
         name: 'console-order-detail',
         component: () => import('../pages/console/ConsoleOrderDetailPage.vue'),
         meta: { title: 'Chi tiết & Can thiệp đơn', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
+        path: 'part-requests',
+        name: 'console-part-requests',
+        component: () => import('../pages/console/ConsolePartRequestsPage.vue'),
+        meta: { title: 'Yêu cầu linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'technicians',

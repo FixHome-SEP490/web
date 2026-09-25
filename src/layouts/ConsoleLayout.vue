@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   Receipt,
   ScrollText,
+  Boxes,
 } from 'lucide-vue-next';
 
 
@@ -33,6 +34,7 @@ const navigation = computed(() => [
     items: [
       { label: 'Tổng quan vận hành', path: '/console', icon: LayoutDashboard },
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
+      { label: 'Yêu cầu linh kiện', path: '/console/part-requests', icon: Boxes },
       { label: 'Gán thợ thủ công', path: '/console/bookings', icon: UserPlus },
         ...(isServiceManager.value
         ? [

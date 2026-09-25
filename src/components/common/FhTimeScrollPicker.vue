@@ -110,19 +110,46 @@ onMounted(() => {
   }
 });
 
+// Helper to check if a preset time has passed for today
+const isPresetPast = (h: string, m: string): boolean => {
+  if (!isToday.value) return false;
+  const now = new Date();
+  const presetDate = new Date();
+  presetDate.setHours(Number(h), Number(m), 0, 0);
+  return presetDate.getTime() <= now.getTime() + 15 * 60 * 1000;
+};
+
 // Switch mode
 const setMode = (newMode: 'EARLIEST' | 'CUSTOM') => {
   mode.value = newMode;
   if (newMode === 'EARLIEST') {
     emit('update:modelValue', 'EARLIEST');
   } else {
-    // If today, check if default selectedHour is in the past
+    // If today, ensure selected time is at least 30 minutes in the future
     if (isToday.value) {
       const now = new Date();
-      const currentH = now.getHours();
-      if (Number(selectedHour.value) <= currentH) {
-        const nextValidH = Math.min(Math.max(currentH + 1, 7), 21);
-        selectedHour.value = nextValidH < 10 ? `0${nextValidH}` : `${nextValidH}`;
+      const minSlot = new Date(now.getTime() + 30 * 60 * 1000);
+      let targetH = minSlot.getHours();
+      let targetM = minSlot.getMinutes();
+      if (targetM > 45) {
+        targetH += 1;
+        targetM = 0;
+      } else if (targetM > 30) {
+        targetM = 45;
+      } else if (targetM > 15) {
+        targetM = 30;
+      } else if (targetM > 0) {
+        targetM = 15;
+      }
+      targetH = Math.min(Math.max(targetH, 7), 21);
+      const hStr = targetH < 10 ? `0${targetH}` : `${targetH}`;
+      const mStr = targetM < 10 ? `0${targetM}` : `${targetM}`;
+
+      const selectedDate = new Date();
+      selectedDate.setHours(Number(selectedHour.value), Number(selectedMinute.value), 0, 0);
+      if (selectedDate <= now) {
+        selectedHour.value = hStr;
+        selectedMinute.value = mStr;
       }
     }
     emitTimeChange();
@@ -184,6 +211,7 @@ const onMinScroll = () => {
 
 // Quick preset times
 const applyPreset = (h: string, m: string) => {
+  if (isPresetPast(h, m)) return;
   mode.value = 'CUSTOM';
   selectedHour.value = h;
   selectedMinute.value = m;
@@ -197,7 +225,7 @@ const isTimePastForToday = computed(() => {
   const now = new Date();
   const selectedDate = new Date();
   selectedDate.setHours(Number(selectedHour.value), Number(selectedMinute.value), 0, 0);
-  return selectedDate <= now;
+  return selectedDate.getTime() <= now.getTime();
 });
 
 // Computed arrival window end time
@@ -263,10 +291,13 @@ const endTimeDisplay = computed(() => {
           type="button"
           class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border"
           :class="
-            selectedHour === '08' && selectedMinute === '30'
-              ? 'bg-brand-50 border-brand-500 text-brand-700'
-              : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
+            isPresetPast('08', '30')
+              ? 'opacity-40 cursor-not-allowed bg-ink-100 text-ink-400 border-ink-200'
+              : selectedHour === '08' && selectedMinute === '30'
+                ? 'bg-brand-50 border-brand-500 text-brand-700'
+                : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
           "
+          :disabled="isPresetPast('08', '30')"
           @click="applyPreset('08', '30')"
         >
           Sáng: 08:30
@@ -275,10 +306,13 @@ const endTimeDisplay = computed(() => {
           type="button"
           class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border"
           :class="
-            selectedHour === '11' && selectedMinute === '30'
-              ? 'bg-brand-50 border-brand-500 text-brand-700'
-              : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
+            isPresetPast('11', '30')
+              ? 'opacity-40 cursor-not-allowed bg-ink-100 text-ink-400 border-ink-200'
+              : selectedHour === '11' && selectedMinute === '30'
+                ? 'bg-brand-50 border-brand-500 text-brand-700'
+                : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
           "
+          :disabled="isPresetPast('11', '30')"
           @click="applyPreset('11', '30')"
         >
           Trưa: 11:30
@@ -287,10 +321,13 @@ const endTimeDisplay = computed(() => {
           type="button"
           class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border"
           :class="
-            selectedHour === '14' && selectedMinute === '00'
-              ? 'bg-brand-50 border-brand-500 text-brand-700'
-              : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
+            isPresetPast('14', '00')
+              ? 'opacity-40 cursor-not-allowed bg-ink-100 text-ink-400 border-ink-200'
+              : selectedHour === '14' && selectedMinute === '00'
+                ? 'bg-brand-50 border-brand-500 text-brand-700'
+                : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
           "
+          :disabled="isPresetPast('14', '00')"
           @click="applyPreset('14', '00')"
         >
           Chiều: 14:00
@@ -299,10 +336,13 @@ const endTimeDisplay = computed(() => {
           type="button"
           class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border"
           :class="
-            selectedHour === '18' && selectedMinute === '30'
-              ? 'bg-brand-50 border-brand-500 text-brand-700'
-              : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
+            isPresetPast('18', '30')
+              ? 'opacity-40 cursor-not-allowed bg-ink-100 text-ink-400 border-ink-200'
+              : selectedHour === '18' && selectedMinute === '30'
+                ? 'bg-brand-50 border-brand-500 text-brand-700'
+                : 'bg-ink-50 border-ink-200 text-ink-600 hover:bg-ink-100'
           "
+          :disabled="isPresetPast('18', '30')"
           @click="applyPreset('18', '30')"
         >
           Tối: 18:30
