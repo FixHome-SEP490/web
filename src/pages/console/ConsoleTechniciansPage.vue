@@ -168,6 +168,8 @@ const formatDocumentType = (value: string) => {
       return 'CCCD mặt sau';
     case 'face_photo':
       return 'Ảnh khuôn mặt';
+    case 'face_video':
+      return 'Video xác minh khuôn mặt';
     default:
       return value;
   }

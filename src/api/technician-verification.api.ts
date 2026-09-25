@@ -4,8 +4,8 @@ import apiClient from './client';
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 type BackendVerificationStatus = 'pending' | 'approved' | 'verified' | 'rejected';
 
-export type KycDocumentType = 'citizen_id_front' | 'citizen_id_back' | 'face_photo';
-export type KycMimeType = 'image/jpeg' | 'image/png' | 'image/webp';
+export type KycDocumentType = 'citizen_id_front' | 'citizen_id_back' | 'face_video';
+export type KycMimeType = 'image/jpeg' | 'image/png' | 'image/webp' | 'video/webm';
 
 export interface MyVerificationDocument {
   documentType: string;
@@ -17,6 +17,9 @@ export interface MyVerification {
   status: VerificationStatus;
   submittedAt: string;
   rejectionReason: string | null;
+  // Outcome of the automated FPT.AI eKYC check, when one has run. Informational —
+  // the technician still sees PENDING until Admin approves unless auto-verify is on.
+  fptDecision: 'pass' | 'fail' | 'error' | null;
   documents: MyVerificationDocument[];
 }
 
@@ -60,6 +63,10 @@ function normalizeDocument(payload: unknown): MyVerificationDocument {
   };
 }
 
+function normalizeFptDecision(value: unknown): 'pass' | 'fail' | 'error' | null {
+  return value === 'pass' || value === 'fail' || value === 'error' ? value : null;
+}
+
 function normalizeVerification(payload: unknown): MyVerification {
   const verification = isRecord(payload) ? payload : {};
   return {
@@ -68,6 +75,7 @@ function normalizeVerification(payload: unknown): MyVerification {
     submittedAt: String(verification.submittedAt ?? ''),
     rejectionReason:
       verification.rejectionReason == null ? null : String(verification.rejectionReason),
+    fptDecision: normalizeFptDecision(verification.fptDecision),
     documents: Array.isArray(verification.documents)
       ? verification.documents.map(normalizeDocument)
       : [],
@@ -111,5 +119,10 @@ export const technicianVerificationApi = {
       documents,
     });
     return normalizeVerification(res.data.data);
+  },
+
+  /** Withdraws the technician's own still-PENDING request so they can resubmit. */
+  async withdraw(): Promise<void> {
+    await apiClient.delete('/technicians/me/verification');
   },
 };

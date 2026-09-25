@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Camera, CheckCircle2, AlertCircle, ShieldCheck, X } from 'lucide-vue-next';
-import { FhButton, FhCard, FhStatusPill } from '../../components';
+import { FhButton, FhCard, FhConfirmDialog, FhStatusPill } from '../../components';
 import {
   technicianVerificationApi,
   type KycDocumentType,
@@ -10,19 +10,41 @@ import {
   type SubmitDocumentPayload,
 } from '../../api/technician-verification.api';
 
-const ALLOWED_MIME_TYPES: KycMimeType[] = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME_TYPES: KycMimeType[] = ['image/jpeg', 'image/png', 'image/webp', 'video/webm'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MIME_EXTENSIONS: Record<KycMimeType, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'video/webm': 'webm',
 };
+
+// Liveness capture: one short video where the technician turns their head
+// front -> left -> right, instead of 3 separate still photos — this is what
+// FPT.AI's liveness/v3 endpoint (video + face-match) actually accepts.
+const RECORDING_PHASES = [
+  { label: 'Nhìn thẳng vào camera' },
+  { label: 'Quay mặt sang trái' },
+  { label: 'Quay mặt sang phải' },
+] as const;
+const PHASE_SECONDS = 2;
+const RECORDING_TOTAL_SECONDS = RECORDING_PHASES.length * PHASE_SECONDS;
+
+function pickSupportedVideoMimeType(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  return (
+    ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((type) =>
+      MediaRecorder.isTypeSupported(type),
+    ) ?? null
+  );
+}
 
 interface KycSlot {
   key: 'front' | 'back' | 'face';
   documentType: KycDocumentType;
   label: string;
   hint: string;
+  kind: 'image' | 'video';
   file: File | null;
   previewUrl: string | null;
 }
@@ -33,6 +55,7 @@ const slots = ref<KycSlot[]>([
     documentType: 'citizen_id_front',
     label: 'CCCD/CMND – Mặt trước',
     hint: 'Chọn ảnh có sẵn hoặc chụp mới',
+    kind: 'image',
     file: null,
     previewUrl: null,
   },
@@ -41,14 +64,16 @@ const slots = ref<KycSlot[]>([
     documentType: 'citizen_id_back',
     label: 'CCCD/CMND – Mặt sau',
     hint: 'Chọn ảnh có sẵn hoặc chụp mới',
+    kind: 'image',
     file: null,
     previewUrl: null,
   },
   {
     key: 'face',
-    documentType: 'face_photo',
-    label: 'Ảnh chân dung',
-    hint: 'Bấm để mở camera chụp trực tiếp',
+    documentType: 'face_video',
+    label: 'Video xác minh khuôn mặt',
+    hint: 'Bấm để quay video (nhìn thẳng, quay trái, quay phải)',
+    kind: 'video',
     file: null,
     previewUrl: null,
   },
@@ -63,14 +88,29 @@ const submitting = ref(false);
 const verification = ref<MyVerification | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
-// Live camera capture for the face photo (input[capture] silently falls back
-// to a plain file picker on desktop browsers, so we drive getUserMedia
-// ourselves to guarantee the camera actually opens).
+const showWithdrawConfirm = ref(false);
+const withdrawing = ref(false);
+
+// Live camera capture for the face liveness video (input[capture] silently
+// falls back to a plain file picker on desktop browsers, so we drive
+// getUserMedia/MediaRecorder ourselves to guarantee the camera actually opens).
 const showCamera = ref(false);
 const cameraBusy = ref(false);
 const videoEl = ref<HTMLVideoElement | null>(null);
-const canvasEl = ref<HTMLCanvasElement | null>(null);
 let mediaStream: MediaStream | null = null;
+
+const recording = ref(false);
+const recordingSecondsLeft = ref(RECORDING_TOTAL_SECONDS);
+const recordingPhaseIndex = computed(() =>
+  Math.min(
+    RECORDING_PHASES.length - 1,
+    Math.floor((RECORDING_TOTAL_SECONDS - recordingSecondsLeft.value) / PHASE_SECONDS),
+  ),
+);
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+let recordingCompleted = false;
+let phaseTimer: ReturnType<typeof setInterval> | null = null;
 
 const showUploadForm = computed(
   () => !verification.value || verification.value.status === 'REJECTED',
@@ -93,25 +133,49 @@ const loadVerification = async () => {
 };
 
 onMounted(loadVerification);
-onUnmounted(() => stopCameraStream());
+onUnmounted(() => {
+  stopPhaseTimer();
+  stopCameraStream();
+});
 
 function stopCameraStream() {
   mediaStream?.getTracks().forEach((track) => track.stop());
   mediaStream = null;
 }
 
+function stopPhaseTimer() {
+  if (phaseTimer) {
+    clearInterval(phaseTimer);
+    phaseTimer = null;
+  }
+  recording.value = false;
+}
+
 const applyFileToSlot = (key: KycSlot['key'], file: File) => {
+  const slot = slots.value.find((s) => s.key === key);
+  if (!slot) return;
+
   if (!ALLOWED_MIME_TYPES.includes(file.type as KycMimeType)) {
-    actionMessage.value = { type: 'error', text: 'Chỉ nhận ảnh định dạng JPEG, PNG hoặc WebP.' };
+    actionMessage.value = {
+      type: 'error',
+      text:
+        slot.kind === 'video'
+          ? 'Không thể tạo video xác minh. Vui lòng thử lại.'
+          : 'Chỉ nhận ảnh định dạng JPEG, PNG hoặc WebP.',
+    };
     return;
   }
   if (file.size > MAX_FILE_SIZE) {
-    actionMessage.value = { type: 'error', text: 'Ảnh vượt quá 10MB. Vui lòng chọn ảnh khác.' };
+    actionMessage.value = {
+      type: 'error',
+      text:
+        slot.kind === 'video'
+          ? 'Video vượt quá 10MB. Vui lòng quay lại video ngắn hơn.'
+          : 'Ảnh vượt quá 10MB. Vui lòng chọn ảnh khác.',
+    };
     return;
   }
 
-  const slot = slots.value.find((s) => s.key === key);
-  if (!slot) return;
   if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
   slot.file = file;
   slot.previewUrl = URL.createObjectURL(file);
@@ -162,31 +226,55 @@ const openCamera = async () => {
 };
 
 const closeCamera = () => {
+  stopPhaseTimer();
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  mediaRecorder = null;
   stopCameraStream();
   showCamera.value = false;
 };
 
-const capturePhoto = () => {
-  const video = videoEl.value;
-  const canvas = canvasEl.value;
-  if (!video || !canvas || video.videoWidth === 0) return;
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  canvas.toBlob(
-    (blob) => {
-      if (!blob) {
-        actionMessage.value = { type: 'error', text: 'Không thể chụp ảnh. Vui lòng thử lại.' };
-        return;
-      }
-      applyFileToSlot('face', new File([blob], 'face-capture.jpg', { type: 'image/jpeg' }));
-      closeCamera();
-    },
-    'image/jpeg',
-    0.92,
-  );
+const startRecording = () => {
+  if (!mediaStream || recording.value) return;
+  const mimeType = pickSupportedVideoMimeType();
+  if (!mimeType) {
+    actionMessage.value = {
+      type: 'error',
+      text: 'Trình duyệt này không hỗ trợ quay video. Vui lòng dùng Chrome hoặc Edge bản mới nhất.',
+    };
+    closeCamera();
+    return;
+  }
+
+  recordedChunks = [];
+  recordingCompleted = false;
+  recordingSecondsLeft.value = RECORDING_TOTAL_SECONDS;
+
+  const recorder = new MediaRecorder(mediaStream, { mimeType });
+  mediaRecorder = recorder;
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) recordedChunks.push(event.data);
+  };
+  recorder.onstop = () => {
+    const blob = recordingCompleted
+      ? new Blob(recordedChunks, { type: 'video/webm' })
+      : null;
+    recordedChunks = [];
+    closeCamera();
+    if (blob) {
+      applyFileToSlot('face', new File([blob], 'face-liveness.webm', { type: 'video/webm' }));
+    }
+  };
+
+  recorder.start();
+  recording.value = true;
+  phaseTimer = setInterval(() => {
+    recordingSecondsLeft.value -= 1;
+    if (recordingSecondsLeft.value <= 0) {
+      stopPhaseTimer();
+      recordingCompleted = true;
+      recorder.stop();
+    }
+  }, 1000);
 };
 
 const uploadSlot = async (slot: KycSlot): Promise<SubmitDocumentPayload> => {
@@ -226,6 +314,28 @@ const handleSubmit = async () => {
     submitting.value = false;
   }
 };
+
+const confirmWithdraw = async () => {
+  if (withdrawing.value) return;
+  withdrawing.value = true;
+  try {
+    await technicianVerificationApi.withdraw();
+    verification.value = null;
+    resetSlots();
+    actionMessage.value = {
+      type: 'success',
+      text: 'Đã rút hồ sơ. Vui lòng nộp lại ảnh/video mới.',
+    };
+  } catch (err) {
+    actionMessage.value = {
+      type: 'error',
+      text: (err as Error)?.message || 'Không thể rút hồ sơ. Vui lòng thử lại.',
+    };
+  } finally {
+    withdrawing.value = false;
+    showWithdrawConfirm.value = false;
+  }
+};
 </script>
 
 <template>
@@ -248,7 +358,7 @@ const handleSubmit = async () => {
     <div>
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Xác minh danh tính (KYC)</h1>
       <p class="text-xs text-ink-500 mt-1">
-        Nộp ảnh CCCD/CMND và ảnh chân dung để quản trị viên xác minh danh tính trước khi nhận việc.
+        Nộp ảnh CCCD/CMND và một video ngắn xác minh khuôn mặt để hệ thống và quản trị viên xác minh danh tính trước khi nhận việc.
       </p>
     </div>
 
@@ -274,12 +384,20 @@ const handleSubmit = async () => {
             <p>
               Hồ sơ của bạn đã được nộp và đang chờ quản trị viên xác minh. Vui lòng quay lại sau.
             </p>
+            <p v-if="verification.fptDecision === 'pass'" class="text-success-700">
+              Hệ thống đã kiểm tra tự động và không phát hiện bất thường.
+            </p>
             <ul class="list-disc list-inside text-ink-500">
               <li v-for="doc in verification.documents" :key="doc.documentType">
                 {{ doc.fileName }}
               </li>
             </ul>
           </div>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <FhButton variant="secondary" @click="showWithdrawConfirm = true">
+            Nộp lại
+          </FhButton>
         </div>
       </FhCard>
 
@@ -315,8 +433,17 @@ const handleSubmit = async () => {
               :class="slot.file ? 'border-success-500 bg-success-50/50' : 'border-ink-300 hover:border-brand-500 text-ink-500'"
               @click="slot.key === 'face' ? openCamera() : triggerPick(slot.key)"
             >
+              <video
+                v-if="slot.previewUrl && slot.kind === 'video'"
+                :src="slot.previewUrl"
+                class="w-full h-full object-cover"
+                muted
+                loop
+                autoplay
+                playsinline
+              />
               <img
-                v-if="slot.previewUrl"
+                v-else-if="slot.previewUrl"
                 :src="slot.previewUrl"
                 class="w-full h-full object-cover"
                 alt=""
@@ -333,7 +460,7 @@ const handleSubmit = async () => {
         </div>
 
         <p class="text-[11px] text-ink-400 mt-4">
-          Ảnh JPEG, PNG hoặc WebP, tối đa 10MB mỗi ảnh.
+          Ảnh JPEG, PNG hoặc WebP tối đa 10MB mỗi ảnh; video xác minh khuôn mặt dài {{ RECORDING_TOTAL_SECONDS }} giây, tối đa 10MB.
         </p>
 
         <div class="mt-5 flex justify-end gap-3">
@@ -352,34 +479,88 @@ const handleSubmit = async () => {
       </FhCard>
     </template>
 
-    <!-- Live camera modal for the face photo -->
+    <!-- Live camera modal: records a short face liveness video -->
     <div
       v-if="showCamera"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-4"
     >
       <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-4 shadow-xl space-y-3">
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-ink-900">Chụp ảnh chân dung</h3>
+          <h3 class="text-sm font-bold text-ink-900">Quay video xác minh khuôn mặt</h3>
           <button type="button" class="text-ink-400 hover:text-ink-700" @click="closeCamera">
             <X :size="18" />
           </button>
         </div>
 
-        <video
-          ref="videoEl"
-          class="w-full aspect-[3/4] object-cover rounded-[var(--radius-sm)] bg-ink-950 scale-x-[-1]"
-          autoplay
-          playsinline
-          muted
-        />
-        <canvas ref="canvasEl" class="hidden" />
+        <div class="relative">
+          <video
+            ref="videoEl"
+            class="w-full aspect-[3/4] object-cover rounded-[var(--radius-sm)] bg-ink-950 scale-x-[-1]"
+            autoplay
+            playsinline
+            muted
+          />
+          <div
+            v-if="recording"
+            class="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-danger-600/90 px-2.5 py-1 text-[11px] font-semibold text-white"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+            {{ recordingSecondsLeft }}s
+          </div>
+        </div>
+
+        <!-- Always-visible step guide, so the technician sees the sequence
+             before recording starts, not only mid-recording. -->
+        <div class="flex items-start justify-center gap-2">
+          <div
+            v-for="(phase, index) in RECORDING_PHASES"
+            :key="phase.label"
+            class="flex-1 flex flex-col items-center gap-1 text-center"
+          >
+            <div
+              class="h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-colors"
+              :class="
+                recording && index < recordingPhaseIndex
+                  ? 'border-success-500 bg-success-500 text-white'
+                  : recording && index === recordingPhaseIndex
+                    ? 'border-brand-500 text-brand-600'
+                    : 'border-ink-300 text-ink-400'
+              "
+            >
+              <CheckCircle2 v-if="recording && index < recordingPhaseIndex" :size="14" />
+              <span v-else>{{ index + 1 }}</span>
+            </div>
+            <span
+              class="text-[10px] font-medium leading-tight"
+              :class="recording && index === recordingPhaseIndex ? 'text-brand-700 font-bold' : 'text-ink-500'"
+            >
+              {{ phase.label }}
+            </span>
+          </div>
+        </div>
 
         <p class="text-[11px] text-ink-500 text-center">
-          Giữ khuôn mặt trong khung hình, đủ ánh sáng rồi bấm chụp.
+          <template v-if="recording">Giữ khuôn mặt trong khung hình, làm theo hướng dẫn phía trên.</template>
+          <template v-else>
+            Video {{ RECORDING_TOTAL_SECONDS }} giây, tự động chuyển hướng theo thứ tự trên. Đủ ánh sáng rồi bấm bắt đầu.
+          </template>
         </p>
 
-        <FhButton block @click="capturePhoto">Chụp ảnh</FhButton>
+        <FhButton block :disabled="recording" @click="startRecording">
+          {{ recording ? 'Đang quay...' : 'Bắt đầu quay' }}
+        </FhButton>
       </div>
     </div>
+
+    <FhConfirmDialog
+      :open="showWithdrawConfirm"
+      :loading="withdrawing"
+      title="Rút hồ sơ đang chờ duyệt?"
+      consequence="Ảnh CCCD và video xác minh đã nộp sẽ bị xoá. Bạn cần nộp lại từ đầu."
+      confirm-text="Rút và nộp lại"
+      cancel-text="Quay lại"
+      @confirm="confirmWithdraw"
+      @cancel="showWithdrawConfirm = false"
+    />
   </div>
 </template>
