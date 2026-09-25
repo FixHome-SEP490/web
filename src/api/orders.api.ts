@@ -162,6 +162,37 @@ export interface WarrantyItem {
   technicianName: string;
 }
 
+export interface OrderWarrantyItem {
+  id: string;
+  invoiceItemId?: string | null;
+  warrantyDaysSnapshot: number;
+  itemDescription: string;
+  startsAt: string;
+  expiresAt: string;
+  status: 'ACTIVE' | 'EXPIRED';
+}
+
+export interface OrderWarrantyGroup {
+  orderId: string;
+  orderCode: string;
+  serviceName: string;
+  technicianName: string;
+  technicianPhone?: string;
+  completedAt?: string;
+  coverages: OrderWarrantyItem[];
+  minStartsAt: string;
+  maxExpiresAt: string;
+  hasActiveCoverage: boolean;
+  status: 'ACTIVE' | 'EXPIRED';
+  activeClaim?: {
+    id: string;
+    description: string;
+    status: string;
+    submittedAt?: string;
+    createdAt?: string;
+  } | null;
+}
+
 export interface ApiResponse<T = unknown> {
   data?: T;
   message?: string;
@@ -515,6 +546,144 @@ export const ordersApi = {
       const res = await apiClient.get<{data: {id:string;startsAt:string;expiresAt:string;status:string;note?:string}[]}>(`/service-orders/${order.id}/warranties`);
       return res.data.data.map(w => ({...w, orderCode:order.code, serviceName:order.serviceName, itemDescription:w.note || 'Bảo hành dịch vụ', technicianName:order.technician?.fullName || '', status:w.status.toUpperCase() as WarrantyItem['status']}));
     })); return lists.flat();
+  },
+
+  async getOrderWarranties(orderId: string): Promise<{
+    id: string;
+    invoiceItemId?: string | null;
+    warrantyDaysSnapshot: number;
+    note?: string | null;
+    startsAt: string;
+    expiresAt: string;
+    status: string;
+  }[]> {
+    const res = await apiClient.get<{
+      data: {
+        id: string;
+        invoiceItemId?: string | null;
+        warrantyDaysSnapshot: number;
+        note?: string | null;
+        startsAt: string;
+        expiresAt: string;
+        status: string;
+      }[];
+    }>(`/service-orders/${orderId}/warranties`);
+    return res.data?.data || [];
+  },
+
+  async getOrderWarrantyClaims(orderId: string): Promise<{
+    id: string;
+    serviceOrderId: string;
+    description: string;
+    status: string;
+    submittedAt?: string;
+    createdAt?: string;
+  }[]> {
+    const res = await apiClient.get<{
+      data: {
+        id: string;
+        serviceOrderId: string;
+        description: string;
+        status: string;
+        submittedAt?: string;
+        createdAt?: string;
+      }[];
+    }>(`/service-orders/${orderId}/warranty-claims`);
+    return res.data?.data || [];
+  },
+
+  async getOrderWarrantiesGrouped(): Promise<OrderWarrantyGroup[]> {
+    const orders = await this.getCustomerOrders();
+    const completedOrders = orders.filter(
+      (o) => o.status?.toUpperCase() === 'COMPLETED'
+    );
+    const groups: OrderWarrantyGroup[] = [];
+
+    await Promise.all(
+      completedOrders.map(async (order) => {
+        try {
+          const res = await apiClient.get<{
+            data: {
+              id: string;
+              invoiceItemId?: string | null;
+              warrantyDaysSnapshot?: number;
+              startsAt: string;
+              expiresAt: string;
+              status: string;
+              note?: string;
+            }[];
+          }>(`/service-orders/${order.id}/warranties`);
+
+          const coverages = res.data?.data || [];
+          if (coverages.length === 0) return;
+
+          const now = new Date();
+          const hasActive = coverages.some(
+            (c) => new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE'
+          );
+
+          let maxExpires = coverages[0].expiresAt;
+          let minStarts = coverages[0].startsAt;
+          coverages.forEach((c) => {
+            if (new Date(c.expiresAt).getTime() > new Date(maxExpires).getTime()) {
+              maxExpires = c.expiresAt;
+            }
+            if (new Date(c.startsAt).getTime() < new Date(minStarts).getTime()) {
+              minStarts = c.startsAt;
+            }
+          });
+
+          // Check if there are active warranty claims for this order
+          let activeClaim: OrderWarrantyGroup['activeClaim'] = null;
+          try {
+            const claimsRes = await apiClient.get<{
+              data: {
+                id: string;
+                description: string;
+                status: string;
+                submittedAt?: string;
+                createdAt?: string;
+              }[];
+            }>(`/service-orders/${order.id}/warranty-claims`);
+            const pending = (claimsRes.data?.data || []).find((c) =>
+              ['SUBMITTED', 'ACCEPTED', 'IN_PROGRESS', 'submitted', 'accepted', 'in_progress'].includes(c.status)
+            );
+            if (pending) {
+              activeClaim = pending;
+            }
+          } catch {
+            // ignore claim fetch error
+          }
+
+          groups.push({
+            orderId: order.id,
+            orderCode: order.code,
+            serviceName: order.serviceName,
+            technicianName: order.technician?.fullName || 'Kỹ thuật viên FixHome',
+            technicianPhone: order.technician?.phoneNumber,
+            completedAt: (order as unknown as { completedAt?: string }).completedAt,
+            coverages: coverages.map((c) => ({
+              id: c.id,
+              invoiceItemId: c.invoiceItemId,
+              warrantyDaysSnapshot: c.warrantyDaysSnapshot || 0,
+              itemDescription: c.note || 'Bảo hành dịch vụ',
+              startsAt: c.startsAt,
+              expiresAt: c.expiresAt,
+              status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
+            })),
+            minStartsAt: minStarts,
+            maxExpiresAt: maxExpires,
+            hasActiveCoverage: hasActive,
+            status: hasActive ? 'ACTIVE' : 'EXPIRED',
+            activeClaim,
+          });
+        } catch {
+          // ignore error for single order
+        }
+      })
+    );
+
+    return groups.sort((a, b) => new Date(b.maxExpiresAt).getTime() - new Date(a.maxExpiresAt).getTime());
   },
 
   async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {
