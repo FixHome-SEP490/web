@@ -175,12 +175,16 @@ export interface QuotationItemPayload {
   unitPrice: number;
   lineTotal?: number;
   warrantyDays?: number;
+  warrantyPolicy?: string;
+  partSku?: string;
+  partNameSnapshot?: string;
   partSource?: 'fixhome' | 'technician' | 'external';
   partCatalogId?: string;
   partWarrantyOption?: 'included' | 'no_warranty' | 'paid_warranty';
   warrantyFee?: number;
   warrantyTermDays?: number;
 }
+
 
 function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
   return { ...order, status: order.status.toUpperCase() as CanonicalOrderStatus,

@@ -137,6 +137,29 @@ describe('Part Requests Flow & API Unit Tests', () => {
     expect(result.data[0].name).toBe('Board X');
   });
 
+  it('searches catalog parts with search query and returns warrantyDays', async () => {
+    apiClientMock.get.mockResolvedValueOnce({
+      data: {
+        data: [{
+          id: 'part-2',
+          sku: 'AC001',
+          name: 'Block máy nén Mono 9.000 BTU',
+          sellingPrice: 1800000,
+          warrantyDays: 365,
+          warrantyPolicy: 'Bảo hành 12 tháng theo tiêu chuẩn FixHome',
+          isActive: true,
+        }],
+        meta: { page: 1, limit: 50, total: 1, totalPages: 1 },
+      },
+    });
+
+    const result = await partsCatalogApi.getCatalog({ search: 'Block', limit: 50 });
+    expect(apiClientMock.get).toHaveBeenCalledWith('/parts/catalog', { params: { search: 'Block', limit: 50 } });
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].warrantyDays).toBe(365);
+    expect(result.data[0].sellingPrice).toBe(1800000);
+  });
+
   it('verifies /console/part-requests route is registered with appropriate roles', () => {
     const route = router.getRoutes().find((r) => r.path === '/console/part-requests');
     expect(route).toBeDefined();
@@ -145,3 +168,4 @@ describe('Part Requests Flow & API Unit Tests', () => {
     expect(route?.meta?.title).toBe('Yêu cầu linh kiện');
   });
 });
+

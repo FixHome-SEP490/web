@@ -22,6 +22,8 @@ import {
   RefreshCw,
   Package,
   AlertTriangle,
+  Search,
+  Wrench,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -34,9 +36,12 @@ import {
 } from '../../components';
 import PartsQuoteDemoPreview from '../../components/PartsQuoteDemoPreview.vue';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type QuotationItemPayload, type AdditionalCostRecord } from '../../api/orders.api';
+import { partsCatalogApi } from '../../api/parts-catalog.api';
+import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
 import { useChatStore } from '../../stores/chat.store';
+
 
 const showPartsDemo = import.meta.env.DEV;
 const route = useRoute();
@@ -453,7 +458,140 @@ const handleSubmitQuotation = async () => {
 
 const acLaborTotal = () => acItems.value.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 const acPartsTotal = () => acItems.value.filter((i) => i.type === 'PARTS').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+
+// FixHome Parts Catalog Picker State for Additional Cost
+const showAcPartPicker = ref(false);
+const acPartSearchQuery = ref('');
+const acPartActiveCategory = ref('ALL');
+const isAcPartSearching = ref(false);
+const acCatalogParts = ref<FixHomePart[]>([]);
+const acPartSearchResults = ref<FixHomePart[]>([]);
+const acPartsMap = ref<Map<string, FixHomePart>>(new Map());
+const acTargetItemIndex = ref<number | null>(null);
+
+const AC_CATEGORY_TABS = [
+  { label: 'Tất cả', value: 'ALL' },
+  { label: 'Điều hòa / Máy lạnh', value: 'Điều hòa' },
+  { label: 'Máy giặt', value: 'Máy giặt' },
+  { label: 'Tủ lạnh', value: 'Tủ lạnh' },
+  { label: 'Bình nóng lạnh', value: 'Bình nóng lạnh' },
+  { label: 'Quạt / Thiết bị khác', value: 'Quạt' },
+];
+
+const formatAcWarrantyBadge = (days?: number | null): string => {
+  if (days && days > 0) {
+    if (days >= 360) return `BH ${Math.round(days / 365)} năm`;
+    if (days >= 30) return `BH ${Math.round(days / 30)} tháng`;
+    return `BH ${days} ngày`;
+  }
+  return 'BH chính hãng';
+};
+
+const loadAcCatalog = async () => {
+  if (acCatalogParts.value.length > 0) return;
+  try {
+    const res = await partsCatalogApi.getCatalog({ limit: 100 });
+    acCatalogParts.value = res.data;
+    acPartSearchResults.value = res.data;
+    for (const p of res.data) {
+      acPartsMap.value.set(p.id, p);
+    }
+  } catch {
+    // Ignore catalog fetch errors
+  }
+};
+
+let acSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+const onAcPartSearchInput = () => {
+  if (acSearchDebounceTimer) clearTimeout(acSearchDebounceTimer);
+  acSearchDebounceTimer = setTimeout(() => {
+    void executeAcPartSearch();
+  }, 250);
+};
+
+const selectAcCategory = (catVal: string) => {
+  acPartActiveCategory.value = catVal;
+  void executeAcPartSearch();
+};
+
+const clearAcSearch = () => {
+  acPartSearchQuery.value = '';
+  acPartActiveCategory.value = 'ALL';
+  acPartSearchResults.value = acCatalogParts.value;
+};
+
+const executeAcPartSearch = async () => {
+  const query = acPartSearchQuery.value.trim();
+  const cat = acPartActiveCategory.value !== 'ALL' ? acPartActiveCategory.value : '';
+  const effective = query || cat;
+
+  if (!effective) {
+    acPartSearchResults.value = acCatalogParts.value;
+    return;
+  }
+
+  try {
+    isAcPartSearching.value = true;
+    const res = await partsCatalogApi.getCatalog({ search: effective, limit: 50 });
+    acPartSearchResults.value = res.data;
+    for (const p of res.data) {
+      acPartsMap.value.set(p.id, p);
+    }
+  } catch {
+    acPartSearchResults.value = acCatalogParts.value.filter(
+      (p) =>
+        p.name.toLowerCase().includes(effective.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(effective.toLowerCase())) ||
+        (p.description && p.description.toLowerCase().includes(effective.toLowerCase())),
+    );
+  } finally {
+    isAcPartSearching.value = false;
+  }
+};
+
+const openAcPartPicker = (replaceIndex: number | null = null) => {
+  acTargetItemIndex.value = replaceIndex;
+  showAcPartPicker.value = true;
+  acPartSearchQuery.value = '';
+  acPartActiveCategory.value = 'ALL';
+  void loadAcCatalog();
+};
+
+const selectPartForAc = (part: FixHomePart) => {
+  acPartsMap.value.set(part.id, part);
+  const newItem: QuotationItemPayload = {
+    type: 'PARTS',
+    partSource: 'fixhome',
+    partCatalogId: part.id,
+    partNameSnapshot: part.name,
+    description: part.name,
+    quantity: 1,
+    unitPrice: part.sellingPrice,
+    warrantyDays: part.warrantyDays ?? undefined,
+    warrantyPolicy: part.warrantyPolicy ?? undefined,
+    partSku: part.sku ?? undefined,
+  };
+
+  if (acTargetItemIndex.value !== null && acItems.value[acTargetItemIndex.value]) {
+    acItems.value[acTargetItemIndex.value] = {
+      ...acItems.value[acTargetItemIndex.value],
+      ...newItem,
+      quantity: acItems.value[acTargetItemIndex.value].quantity || 1,
+    };
+  } else {
+    acItems.value.push(newItem);
+  }
+
+  showAcPartPicker.value = false;
+  acTargetItemIndex.value = null;
+};
+
 const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician' | 'external' = 'technician') => {
+  if (type === 'PARTS' && partSource === 'fixhome') {
+    openAcPartPicker(null);
+    return;
+  }
   acItems.value.push({
     type,
     description: type === 'LABOR' ? 'Hạng mục công phát sinh' : (partSource === 'external' ? 'Linh kiện ngoài (EXTERNAL)' : 'Tên linh kiện phát sinh'),
@@ -477,11 +615,15 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
         unitPrice: i.unitPrice,
         partSource: i.partSource || undefined,
         partCatalogId: i.partCatalogId || undefined,
+        partNameSnapshot: i.partNameSnapshot || undefined,
+        warrantyDays: (i as unknown as { warrantyDays?: number }).warrantyDays || undefined,
       }))
     : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
   acEvidenceUrls.value = revise?.evidenceUrls ? [...revise.evidenceUrls] : [];
   showAdditionalCostForm.value = true;
+  void loadAcCatalog();
 }
+
 
 async function handleUploadAcEvidence(file?: File) {
   if (!file) return;
@@ -1010,11 +1152,16 @@ const refreshJobStatus = async () => {
               </div>
 
               <div class="space-y-2">
-                <div v-for="(item, idx) in acItems" :key="idx" class="p-2.5 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex flex-col sm:flex-row sm:items-center gap-2">
-                  <div class="flex items-center gap-1.5 min-w-[120px]">
+                <div
+                  v-for="(item, idx) in acItems"
+                  :key="idx"
+                  class="p-2.5 rounded-[var(--radius-sm)] border flex flex-col sm:flex-row sm:items-center gap-2 transition-all"
+                  :class="item.partSource === 'fixhome' ? 'bg-blue-50/40 border-blue-200' : (item.partSource === 'external' ? 'bg-amber-50/40 border-amber-200' : 'bg-ink-50 border-ink-200')"
+                >
+                  <div class="flex items-center gap-1.5 shrink-0">
                     <span
                       class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
-                      :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : (item.partSource === 'external' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-800')"
+                      :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : (item.partSource === 'external' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-800 border border-blue-200')"
                     >
                       {{ item.type === 'LABOR' ? 'Công' : (item.partSource === 'external' ? 'LK Ngoài' : 'LK FixHome') }}
                     </span>
@@ -1022,39 +1169,93 @@ const refreshJobStatus = async () => {
                       v-if="item.type === 'PARTS'"
                       v-model="item.partSource"
                       class="h-7 px-1.5 bg-white border border-ink-200 rounded text-[11px]"
+                      @change="if (item.partSource === 'fixhome' && !item.partCatalogId) openAcPartPicker(idx);"
                     >
                       <option value="fixhome">Kho FixHome</option>
                       <option value="technician">Thợ tự có</option>
                       <option value="external">Mua ngoài</option>
                     </select>
                   </div>
+
+                  <!-- If FixHome part with catalog info -->
+                  <div v-if="item.type === 'PARTS' && item.partSource === 'fixhome' && item.partCatalogId" class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded border border-blue-200">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-bold text-ink-900 text-xs truncate">{{ item.description }}</span>
+                        <span v-if="item.partSku" class="text-[10px] font-mono px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200 font-semibold">
+                          {{ item.partSku }}
+                        </span>
+                        <span
+                          class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"
+                          :title="item.warrantyPolicy || undefined"
+                        >
+                          <ShieldCheck :size="11" />
+                          {{ formatAcWarrantyBadge(item.warrantyDays) }}
+                        </span>
+                      </div>
+                      <p v-if="item.warrantyPolicy" class="text-[10px] text-ink-500 mt-0.5 truncate">
+                        {{ item.warrantyPolicy }}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="text-[11px] text-blue-600 hover:text-blue-800 font-semibold underline shrink-0 cursor-pointer"
+                      @click="openAcPartPicker(idx)"
+                    >
+                      Đổi linh kiện
+                    </button>
+                  </div>
+
+                  <!-- If FixHome part without catalog info -->
+                  <div v-else-if="item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId" class="flex-1">
+                    <button
+                      type="button"
+                      class="w-full h-8 px-3 rounded border border-dashed border-blue-400 bg-white hover:bg-blue-50 text-blue-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      @click="openAcPartPicker(idx)"
+                    >
+                      <Search :size="13" /> Bấm để chọn linh kiện từ kho FixHome (Xem giá & bảo hành)
+                    </button>
+                  </div>
+
+                  <!-- Otherwise normal input (Labor or External) -->
                   <input
+                    v-else
                     v-model="item.description"
                     type="text"
-                    placeholder="Mô tả hạng mục..."
+                    :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh...' : 'Tên linh kiện ngoài...'"
                     class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
                   />
-                  <div class="flex items-center gap-1.5">
+
+                  <!-- Quantity, Price and Delete -->
+                  <div class="flex items-center gap-1.5 shrink-0">
                     <span class="text-ink-400 text-[11px]">SL:</span>
                     <input
                       v-model.number="item.quantity"
                       type="number"
                       min="1"
-                      class="w-12 h-8 px-1.5 bg-white border border-ink-200 rounded text-xs text-center"
+                      class="w-12 h-8 px-1.5 bg-white border border-ink-200 rounded text-xs text-center font-num font-bold"
                     />
+
+                    <div v-if="item.partSource === 'fixhome' && item.partCatalogId" class="min-w-[100px] text-right px-2 py-1 bg-white rounded border border-blue-200">
+                      <span class="text-[10px] text-ink-400 block -mb-0.5">Đơn giá kho:</span>
+                      <span class="font-num font-bold text-brand-700 text-xs"><FhMoney :amount="item.unitPrice" /></span>
+                    </div>
                     <input
+                      v-else
                       v-model.number="item.unitPrice"
                       type="number"
                       step="10000"
                       placeholder="Đơn giá"
                       class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
                     />
-                    <button class="p-1 text-ink-400 hover:text-danger-500 rounded" title="Xóa" @click="removeAcItem(idx)">
+
+                    <button class="p-1 text-ink-400 hover:text-danger-500 rounded transition-colors" title="Xóa" @click="removeAcItem(idx)">
                       <Trash2 :size="14" />
                     </button>
                   </div>
                 </div>
               </div>
+
 
               <!-- Fulfillment Method for FixHome parts -->
               <div
@@ -1563,5 +1764,151 @@ const refreshJobStatus = async () => {
         </div>
       </div>
     </div>
+
+    <!-- Modal: Chọn linh kiện từ kho FixHome cho chi phí phát sinh -->
+    <div
+      v-if="showAcPartPicker"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      @click.self="showAcPartPicker = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-ink-200">
+        <!-- Modal Header -->
+        <div class="p-4 border-b border-ink-200 flex items-center justify-between bg-ink-25">
+          <div class="flex items-center gap-2">
+            <div class="p-2 rounded-lg bg-brand-600 text-white shadow-xs">
+              <Wrench :size="18" />
+            </div>
+            <div>
+              <h3 class="font-bold text-ink-900 text-sm">Kho linh kiện chính hãng FixHome</h3>
+              <p class="text-[11px] text-ink-500">
+                Tra cứu hơn 790+ linh kiện chính hãng. Tự động lấy đơn giá niêm yết và thời hạn bảo hành.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="text-ink-400 hover:text-ink-700 p-1.5 rounded-lg hover:bg-ink-100 transition-colors"
+            @click="showAcPartPicker = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="px-4 pt-3 pb-1 border-b border-ink-100 flex items-center gap-1.5 overflow-x-auto">
+          <button
+            v-for="cat in AC_CATEGORY_TABS"
+            :key="cat.value"
+            type="button"
+            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 cursor-pointer"
+            :class="
+              acPartActiveCategory === cat.value
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'bg-ink-50 text-ink-700 hover:bg-brand-50 border border-ink-200'
+            "
+            @click="selectAcCategory(cat.value)"
+          >
+            {{ cat.label }}
+          </button>
+        </div>
+
+        <!-- Search Input Bar -->
+        <div class="p-3 border-b border-ink-100 bg-white">
+          <div class="relative flex items-center">
+            <Search :size="15" class="absolute left-3 text-ink-400 pointer-events-none" />
+            <input
+              v-model="acPartSearchQuery"
+              type="text"
+              placeholder="Gõ tên linh kiện (Bo mạch, Block, Van xả...), mã SKU (AC001) hoặc thương hiệu (Daikin, Panasonic)..."
+              class="w-full text-xs rounded-lg border border-ink-300 pl-9 pr-14 py-2 bg-white text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-hidden"
+              @input="onAcPartSearchInput"
+            />
+            <div class="absolute right-3 flex items-center gap-1">
+              <Loader2 v-if="isAcPartSearching" :size="14" class="animate-spin text-brand-600" />
+              <button
+                v-if="acPartSearchQuery || acPartActiveCategory !== 'ALL'"
+                type="button"
+                class="text-ink-400 hover:text-ink-700 p-0.5 rounded"
+                title="Xóa tìm kiếm"
+                @click="clearAcSearch"
+              >
+                <X :size="14" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Parts List Body -->
+        <div class="flex-1 overflow-y-auto p-3 divide-y divide-ink-100">
+          <div v-if="isAcPartSearching" class="py-8 text-center text-ink-400 text-xs">
+            <Loader2 :size="18" class="animate-spin inline mr-1 text-brand-600" /> Đang tra cứu danh mục linh kiện FixHome...
+          </div>
+
+          <div v-else-if="acPartSearchResults.length === 0" class="py-10 text-center text-ink-500 text-xs space-y-1.5">
+            <Package :size="28" class="mx-auto text-ink-300" />
+            <p class="font-semibold text-ink-800">Không tìm thấy linh kiện phù hợp</p>
+            <p class="text-[11px] text-ink-400">
+              Hãy thử tìm kiếm bằng từ khoá chung (như "Bo", "Van", "Block", "Cảm biến") hoặc kiểm tra mã SKU.
+            </p>
+          </div>
+
+          <div
+            v-for="part in acPartSearchResults"
+            :key="part.id"
+            class="py-2.5 px-2 hover:bg-brand-50/50 rounded-lg transition-colors flex items-center justify-between gap-3 group"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span class="font-bold text-ink-900 group-hover:text-brand-700 transition-colors text-xs">
+                  {{ part.name }}
+                </span>
+                <span
+                  v-if="part.sku"
+                  class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-ink-100 text-ink-600 font-semibold"
+                >
+                  {{ part.sku }}
+                </span>
+              </div>
+              <p v-if="part.description" class="text-[11px] text-ink-500 line-clamp-1">
+                {{ part.description }}
+              </p>
+              <div v-if="part.warrantyPolicy" class="text-[10px] text-emerald-700 italic mt-0.5">
+                {{ part.warrantyPolicy }}
+              </div>
+            </div>
+
+            <div class="text-right shrink-0 space-y-1">
+              <div class="font-num font-bold text-xs text-brand-700">
+                <FhMoney :amount="part.sellingPrice" />
+              </div>
+              <span
+                class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+              >
+                <ShieldCheck :size="11" />
+                {{ formatAcWarrantyBadge(part.warrantyDays) }}
+              </span>
+              <div>
+                <button
+                  type="button"
+                  class="px-3 py-1 rounded bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[11px] shadow-xs cursor-pointer transition-colors mt-1"
+                  @click="selectPartForAc(part)"
+                >
+                  Chọn linh kiện
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-3 border-t border-ink-200 bg-ink-25 flex items-center justify-between text-xs">
+          <span class="text-[11px] text-ink-500">
+            💡 Linh kiện từ kho FixHome được áp dụng chính sách bảo hành chính hãng và đồng bộ với kho.
+          </span>
+          <FhButton variant="ghost" size="sm" @click="showAcPartPicker = false">Đóng</FhButton>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
