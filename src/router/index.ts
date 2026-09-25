@@ -163,6 +163,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/chat/MessagesPage.vue'),
         meta: { title: 'Tin nhắn trao đổi' },
       },
+      {
+        path: 'notifications',
+        name: 'customer-notifications',
+        component: () => import('../pages/customer/CustomerNotificationsPage.vue'),
+        meta: { title: 'Thông báo của tôi' },
+      },
     ],
   },
 
