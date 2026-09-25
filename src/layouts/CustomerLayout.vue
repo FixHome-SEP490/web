@@ -145,7 +145,7 @@ const handleLogout = async () => {
                   <User :size="16" />
                   Hồ sơ cá nhân
                 </router-link>
-                <router-link to="/app/addresses" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
+                <router-link to="/app/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50">
                   <MapPin :size="16" />
                   Sổ địa chỉ
                 </router-link>

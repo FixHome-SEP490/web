@@ -154,6 +154,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Hồ sơ & Sổ địa chỉ' },
       },
       {
+        path: 'addresses',
+        redirect: '/app/profile',
+      },
+      {
         path: 'messages',
         name: 'customer-messages',
         component: () => import('../pages/chat/MessagesPage.vue'),

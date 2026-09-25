@@ -38,7 +38,7 @@ const chatStore = useChatStore();
 const searchQuery = ref('');
 const orders = ref<ServiceOrderItem[]>([]);
 const addresses = ref<UserAddress[]>([]);
-const selectedAddress = ref('123 Đường Số 1, Quận 1, TP.HCM');
+const selectedAddress = ref('');
 const loading = ref(true);
 
 // 8 Popular Services matching Mobile
@@ -119,6 +119,10 @@ const quickChips = [
   { id: 'voucher', title: '🎁 Voucher giảm 50.000đ' },
 ];
 
+function formatAddress(addr: UserAddress): string {
+  return [addr.line1, addr.ward, addr.district, addr.province].filter(Boolean).join(', ');
+}
+
 onMounted(async () => {
   try {
     const [orderList, addrList] = await Promise.all([
@@ -130,10 +134,11 @@ onMounted(async () => {
 
     const def = addrList.find((a) => a.isDefault);
     if (def) {
-      selectedAddress.value = `${def.line1}, ${def.ward}, ${def.district}, ${def.province}`;
+      selectedAddress.value = formatAddress(def);
     } else if (addrList.length > 0) {
-      const a = addrList[0];
-      selectedAddress.value = `${a.line1}, ${a.ward}, ${a.district}, ${a.province}`;
+      selectedAddress.value = formatAddress(addrList[0]);
+    } else {
+      selectedAddress.value = '';
     }
   } finally {
     loading.value = false;
@@ -228,15 +233,29 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </div>
 
       <!-- Address Selector -->
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-ink-50 border border-ink-200 text-xs max-w-md">
-        <MapPin :size="16" class="text-danger-600 shrink-0" />
+      <router-link
+        to="/app/profile"
+        class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-ink-50 hover:bg-ink-100 transition-colors border border-ink-200 text-xs max-w-md group cursor-pointer"
+        :title="selectedAddress ? 'Quản lý sổ địa chỉ' : 'Thêm địa chỉ giao hàng'"
+      >
+        <MapPin :size="16" class="text-danger-600 shrink-0 group-hover:scale-105 transition-transform" />
         <div class="min-w-0">
           <span class="text-[10px] text-ink-400 block leading-none font-medium">Giao đến</span>
-          <span class="font-semibold text-ink-800 truncate block mt-0.5" :title="selectedAddress">
+          <span
+            v-if="selectedAddress"
+            class="font-semibold text-ink-800 truncate block mt-0.5"
+            :title="selectedAddress"
+          >
             {{ selectedAddress }}
           </span>
+          <span
+            v-else
+            class="font-medium text-brand-600 group-hover:underline truncate block mt-0.5"
+          >
+            Chưa có địa chỉ (Thêm mới)
+          </span>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <!-- 2. Hero Search Banner (Royal Blue Gradient - FixHome Mobile Signature) -->
