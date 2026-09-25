@@ -357,10 +357,50 @@ export const ordersApi = {
       shippingFee?: number;
     },
   ): Promise<AdditionalCostRecord> {
-    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/service-orders/${orderId}/additional-costs`, {
-      ...body,
-      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
-    });
+    const payload: Record<string, unknown> = {
+      reason: body.reason.trim(),
+      items: body.items.map((item) => {
+        const isLabor = item.type === 'LABOR';
+        if (isLabor) {
+          return {
+            type: 'labor',
+            description: item.description.trim(),
+            quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+            unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          };
+        }
+        const partSource = item.partSource || 'technician';
+        const resItem: Record<string, unknown> = {
+          type: 'parts_equipment',
+          description: item.description.trim(),
+          quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+          unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          partSource,
+          partNameSnapshot: (item.partNameSnapshot || item.description).trim(),
+        };
+        if (partSource === 'fixhome' && item.partCatalogId) {
+          resItem.partCatalogId = item.partCatalogId;
+        }
+        if (item.warrantyDays !== undefined && item.warrantyDays !== null) {
+          resItem.warrantyDays = Math.round(Number(item.warrantyDays));
+        }
+        return resItem;
+      }),
+    };
+    if (body.evidenceUrls && body.evidenceUrls.length > 0) {
+      payload.evidenceUrls = body.evidenceUrls;
+    }
+    if (body.fulfillmentMethod) {
+      payload.fulfillmentMethod = body.fulfillmentMethod;
+    }
+    if (body.shippingFee !== undefined && body.shippingFee !== null) {
+      payload.shippingFee = Math.max(0, Math.round(Number(body.shippingFee)));
+    }
+
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(
+      `/service-orders/${orderId}/additional-costs`,
+      payload,
+    );
     return normalizeAdditionalCost(res.data.data);
   },
 
@@ -379,12 +419,53 @@ export const ordersApi = {
       shippingFee?: number;
     },
   ): Promise<AdditionalCostRecord> {
-    const res = await apiClient.post<{ data: AdditionalCostRecord }>(`/additional-costs/${id}/revise`, {
-      ...body,
-      items: body.items.map((item) => ({ ...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment' })),
-    });
+    const payload: Record<string, unknown> = {
+      reason: body.reason.trim(),
+      items: body.items.map((item) => {
+        const isLabor = item.type === 'LABOR';
+        if (isLabor) {
+          return {
+            type: 'labor',
+            description: item.description.trim(),
+            quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+            unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          };
+        }
+        const partSource = item.partSource || 'technician';
+        const resItem: Record<string, unknown> = {
+          type: 'parts_equipment',
+          description: item.description.trim(),
+          quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+          unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+          partSource,
+          partNameSnapshot: (item.partNameSnapshot || item.description).trim(),
+        };
+        if (partSource === 'fixhome' && item.partCatalogId) {
+          resItem.partCatalogId = item.partCatalogId;
+        }
+        if (item.warrantyDays !== undefined && item.warrantyDays !== null) {
+          resItem.warrantyDays = Math.round(Number(item.warrantyDays));
+        }
+        return resItem;
+      }),
+    };
+    if (body.evidenceUrls && body.evidenceUrls.length > 0) {
+      payload.evidenceUrls = body.evidenceUrls;
+    }
+    if (body.fulfillmentMethod) {
+      payload.fulfillmentMethod = body.fulfillmentMethod;
+    }
+    if (body.shippingFee !== undefined && body.shippingFee !== null) {
+      payload.shippingFee = Math.max(0, Math.round(Number(body.shippingFee)));
+    }
+
+    const res = await apiClient.post<{ data: AdditionalCostRecord }>(
+      `/additional-costs/${id}/revise`,
+      payload,
+    );
     return normalizeAdditionalCost(res.data.data);
   },
+
 
   // ── Spec v1.2: Cash Settlement Dual-Confirmation ──
 

@@ -573,7 +573,13 @@ const selectPartForAc = (part: FixHomePart) => {
     partSku: part.sku ?? undefined,
   };
 
-  if (acTargetItemIndex.value !== null && acItems.value[acTargetItemIndex.value]) {
+  if (
+    acItems.value.length === 1 &&
+    !acItems.value[0].description.trim() &&
+    acItems.value[0].unitPrice === 0
+  ) {
+    acItems.value = [newItem];
+  } else if (acTargetItemIndex.value !== null && acItems.value[acTargetItemIndex.value]) {
     acItems.value[acTargetItemIndex.value] = {
       ...acItems.value[acTargetItemIndex.value],
       ...newItem,
@@ -644,15 +650,41 @@ async function handleSubmitAdditionalCost() {
     actionMessage.value = { type: 'error', text: 'Vui lòng mô tả lý do phát sinh.' };
     return;
   }
+
+  // Filter out any unused blank items (e.g. initial empty labor row)
+  const validItems = acItems.value.filter((i) => {
+    const hasDesc = !!i.description?.trim();
+    const hasPart = i.type === 'PARTS' && !!i.partCatalogId;
+    return hasDesc || hasPart;
+  });
+
+  if (validItems.length === 0) {
+    actionMessage.value = {
+      type: 'error',
+      text: 'Vui lòng thêm ít nhất 1 hạng mục chi phí phát sinh (nhập mô tả công hoặc chọn linh kiện).',
+    };
+    return;
+  }
+
+  // Verify every item has a non-empty description
+  const hasEmptyDesc = validItems.some((i) => !i.description?.trim());
+  if (hasEmptyDesc) {
+    actionMessage.value = {
+      type: 'error',
+      text: 'Vui lòng nhập đầy đủ mô tả cho tất cả các hạng mục phát sinh.',
+    };
+    return;
+  }
+
   acSubmitting.value = true;
   try {
-    const hasParts = acItems.value.some((i) => i.type === 'PARTS');
-    const shipping = (hasParts && acFulfillmentMethod.value === 'delivery') ? Number(acShippingFee.value || 0) : 0;
+    const hasFixHomeParts = validItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome');
+    const shipping = (hasFixHomeParts && acFulfillmentMethod.value === 'delivery') ? Number(acShippingFee.value || 0) : 0;
     const body = {
       reason: acReason.value.trim(),
-      items: acItems.value,
-      evidenceUrls: acEvidenceUrls.value,
-      fulfillmentMethod: hasParts ? acFulfillmentMethod.value : undefined,
+      items: validItems,
+      evidenceUrls: acEvidenceUrls.value.length > 0 ? acEvidenceUrls.value : undefined,
+      fulfillmentMethod: hasFixHomeParts ? acFulfillmentMethod.value : undefined,
       shippingFee: shipping,
     };
     const saved = acReviseId.value
@@ -661,8 +693,14 @@ async function handleSubmitAdditionalCost() {
     additionalCosts.value = [saved, ...additionalCosts.value.filter((c) => c.id !== acReviseId.value)];
     showAdditionalCostForm.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu chi phí phát sinh, chờ khách duyệt.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu chi phí phát sinh.' };
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
+    const msg = axiosErr?.response?.data?.message;
+    const text = Array.isArray(msg) ? msg.join(', ') : msg;
+    actionMessage.value = {
+      type: 'error',
+      text: text || (err as Error)?.message || 'Không thể gửi yêu cầu chi phí phát sinh (Lỗi 400).',
+    };
   } finally {
     acSubmitting.value = false;
   }
