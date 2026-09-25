@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   Package,
   Plus,
@@ -11,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Eye,
+  History,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -49,6 +52,12 @@ const pageSize = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 let latestRequest = 0;
+
+const router = useRouter();
+const detailPart = ref<FixHomePart | null>(null);
+const openDetail = (part: FixHomePart) => {
+  detailPart.value = part;
+};
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -285,13 +294,24 @@ async function submitForm() {
           Quản lý catalog linh kiện do FixHome cung cấp: giá bán, bảo hành và trạng thái hoạt động.
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <FhButton variant="secondary" size="sm" @click="router.push('/console/part-requests')">
+          <History :size="15" /> Lịch sử Parts Request (Audit)
+        </FhButton>
         <FhButton variant="secondary" size="sm" :loading="loading" @click="loadParts">
           <RefreshCw :size="15" /> Làm mới
         </FhButton>
         <FhButton variant="primary" size="sm" @click="openCreate">
           <Plus :size="15" /> Thêm linh kiện
         </FhButton>
+      </div>
+    </div>
+
+    <!-- Scope disclaimer banner -->
+    <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-[var(--radius-sm)] text-xs text-blue-900 flex items-start gap-2">
+      <Package :size="16" class="text-blue-600 mt-0.5 shrink-0" />
+      <div>
+        <span class="font-bold">Phạm vi Catalog FixHome:</span> Quản lý bảng giá niêm yết, chính sách bảo hành và trạng thái hoạt động của từng linh kiện. Hệ thống vận hành theo cơ chế <em>Parts Request & Handover Tracking</em>, không triển khai quản lý kho bãi / tồn kho (không quản lý nhập/xuất kho hay nhà cung cấp).
       </div>
     </div>
 
@@ -385,6 +405,14 @@ async function submitForm() {
 
         <template #cell-actions="{ row }">
           <div class="flex items-center gap-1">
+            <button
+              class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
+              title="Xem chi tiết"
+              type="button"
+              @click="openDetail(row)"
+            >
+              <Eye :size="14" />
+            </button>
             <button
               class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
               title="Chỉnh sửa"
@@ -607,5 +635,89 @@ async function submitForm() {
         </div>
       </div>
     </Teleport>
+
+    <!-- Part Detail Modal -->
+    <div
+      v-if="detailPart"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+      @click.self="detailPart = null"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <div class="flex items-center justify-between border-b pb-3">
+          <div class="flex items-center gap-2">
+            <Package class="text-brand-600" :size="20" />
+            <h3 class="font-bold text-ink-900 text-base">Chi tiết Linh kiện Catalog</h3>
+          </div>
+          <button class="text-ink-400 hover:text-ink-700 text-lg font-bold" @click="detailPart = null">✕</button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-2 p-3 bg-ink-50 rounded border border-ink-200">
+            <div>
+              <span class="text-ink-400 block text-[11px]">Mã SKU:</span>
+              <span class="font-mono font-bold text-ink-900">{{ detailPart.sku || 'Chưa đặt SKU' }}</span>
+            </div>
+            <div>
+              <span class="text-ink-400 block text-[11px]">Trạng thái:</span>
+              <FhStatusPill
+                :status="detailPart.isActive ? 'active' : 'inactive'"
+                :label="detailPart.isActive ? 'Đang hoạt động' : 'Đã vô hiệu'"
+              />
+            </div>
+            <div class="col-span-2">
+              <span class="text-ink-400 block text-[11px]">Tên linh kiện:</span>
+              <span class="font-semibold text-sm text-ink-900">{{ detailPart.name }}</span>
+            </div>
+            <div>
+              <span class="text-ink-400 block text-[11px]">Giá bán niêm yết:</span>
+              <span class="font-bold text-brand-700 text-sm font-num">{{ formatPrice(Number(detailPart.sellingPrice)) }} đ</span>
+            </div>
+            <div>
+              <span class="text-ink-400 block text-[11px]">Thời gian bảo hành:</span>
+              <span class="font-semibold text-ink-800">{{ detailPart.warrantyDays != null ? `${detailPart.warrantyDays} ngày` : 'Không bảo hành' }}</span>
+            </div>
+          </div>
+
+          <div v-if="detailPart.description" class="space-y-1">
+            <span class="text-ink-500 font-medium block">Mô tả linh kiện:</span>
+            <div class="p-2.5 bg-white border border-ink-200 rounded text-ink-700 whitespace-pre-line leading-relaxed">
+              {{ detailPart.description }}
+            </div>
+          </div>
+
+          <div v-if="detailPart.warrantyPolicy" class="space-y-1">
+            <span class="text-ink-500 font-medium block">Chính sách bảo hành:</span>
+            <div class="p-2.5 bg-ink-50 border border-ink-200 rounded text-ink-700 whitespace-pre-line leading-relaxed">
+              {{ detailPart.warrantyPolicy }}
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-ink-400 pt-1 border-t border-ink-100">
+            <span>Ngày tạo: {{ new Date(detailPart.createdAt).toLocaleDateString('vi-VN') }}</span>
+            <span>Cập nhật: {{ new Date(detailPart.updatedAt).toLocaleDateString('vi-VN') }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-ink-100">
+          <button
+            type="button"
+            class="text-xs text-brand-600 hover:underline flex items-center gap-1 font-semibold"
+            @click="detailPart = null; router.push('/console/part-requests')"
+          >
+            <History :size="13" /> Xem lịch sử yêu cầu của linh kiện này
+          </button>
+          <div class="flex gap-2">
+            <FhButton variant="secondary" size="sm" @click="detailPart = null">Đóng</FhButton>
+            <FhButton
+              variant="primary"
+              size="sm"
+              @click="const p = detailPart; detailPart = null; if (p) openEdit(p)"
+            >
+              <Pencil :size="13" /> Chỉnh sửa
+            </FhButton>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

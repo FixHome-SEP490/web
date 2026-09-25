@@ -22,4 +22,5 @@ export { default as MapTilerMap } from './common/MapTilerMap.vue';
 export type { MapMarker } from './common/MapTilerMap.vue';
 export type { TableColumn } from './FhTable.vue';
 export type { TimelineStep } from './FhTimeline.vue';
+export { default as TechnicianPartsSection } from './TechnicianPartsSection.vue';
 
