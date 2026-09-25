@@ -14,6 +14,7 @@ import {
   MessageSquare,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
+import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { toast } from 'vue-sonner';
 
 const router = useRouter();
@@ -102,8 +103,8 @@ const handleLogout = async () => {
           </nav>
         </div>
 
-        <!-- Right Side: Booking CTA + Avatar Menu -->
-        <div class="flex items-center gap-4">
+        <!-- Right Side: Booking CTA + Notifications + Avatar Menu -->
+        <div class="flex items-center gap-2.5 sm:gap-4">
           <!-- Create Booking Button -->
           <FhButton
             variant="primary"
@@ -115,6 +116,9 @@ const handleLogout = async () => {
             <CalendarPlus :size="16" />
             <span class="hidden sm:inline">Đặt thợ ngay</span>
           </FhButton>
+
+          <!-- Notification Bell Icon Dropdown -->
+          <NotificationBellDropdown />
 
           <!-- User Avatar Dropdown -->
           <div class="relative">
