@@ -341,7 +341,14 @@ const goToNextStepFrom2 = async () => {
     return;
   }
   try {
-    bookingSchedule(preferredDate.value, preferredTime.value);
+    const schedule = bookingSchedule(preferredDate.value, preferredTime.value);
+    if (preferredTime.value !== 'EARLIEST') {
+      const startMs = new Date(schedule.preferredStartAt).getTime();
+      if (startMs <= Date.now()) {
+        window.alert('Khung giờ bạn chọn đã qua. Vui lòng chọn giờ sau thời điểm hiện tại hoặc chọn ngày khác.');
+        return;
+      }
+    }
   } catch (err) {
     window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ.');
     return;
@@ -381,10 +388,24 @@ const createAndFindTech = async () => {
     return;
   }
 
+  // Pre-validate schedule before API call to prevent 422 if time expired while on confirmation screen
+  let schedule;
+  try {
+    schedule = bookingSchedule(preferredDate.value, preferredTime.value);
+    if (new Date(schedule.preferredStartAt).getTime() <= Date.now()) {
+      window.alert('Khung giờ hẹn đã trôi qua trong lúc bạn xem lại thông tin. Vui lòng chọn lại thời gian hẹn.');
+      step.value = 2;
+      return;
+    }
+  } catch (err) {
+    window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ. Vui lòng chọn lại.');
+    step.value = 2;
+    return;
+  }
+
   loading.value = true;
   try {
     if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
-    const schedule = bookingSchedule(preferredDate.value, preferredTime.value);
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
@@ -395,8 +416,32 @@ const createAndFindTech = async () => {
       photoUploadIds,
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
-  } catch (error) {
-    window.alert(error instanceof Error ? error.message : 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
+  } catch (error: any) {
+    console.error('[NewBookingWizardPage] createBooking failed:', error);
+    const backendMessage =
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.message;
+
+    let friendlyMessage = 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.';
+    if (backendMessage) {
+      if (
+        backendMessage.includes('valid future') ||
+        backendMessage.includes('khung giờ') ||
+        backendMessage.includes('future')
+      ) {
+        friendlyMessage = 'Khung giờ hẹn đã trôi qua hoặc không hợp lệ. Vui lòng chọn lại thời gian hẹn.';
+        step.value = 2;
+      } else if (backendMessage.includes('Address and positive integer quantity required')) {
+        friendlyMessage = 'Vui lòng kiểm tra lại địa chỉ và số lượng yêu cầu.';
+      } else if (backendMessage.includes('suspended')) {
+        friendlyMessage = 'Tài khoản của bạn tạm thời bị tạm dừng đặt lịch.';
+      } else {
+        friendlyMessage = backendMessage;
+      }
+    } else if (error instanceof Error && !error.message.includes('status code')) {
+      friendlyMessage = error.message;
+    }
+    window.alert(friendlyMessage);
   } finally {
     loading.value = false;
   }
