@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -28,6 +29,38 @@ const fillDemo = (email: string) => {
   errorMessage.value = '';
 };
 
+/** Đăng nhập bằng mật khẩu hay bằng Google thì chặng sau đều giống nhau. */
+const goAfterLogin = (user: { fullName?: string; role?: string }) => {
+  const redirect = (route.query.redirect as string) || '';
+  if (redirect) {
+    router.push(redirect);
+    return;
+  }
+
+  toast.success('Đăng nhập thành công!', { description: `Chào mừng ${user.fullName || 'bạn'} quay lại.` });
+
+  const role = user.role?.toUpperCase();
+  if (role === 'ADMIN' || role === 'SERVICE_MANAGER') {
+    router.push('/console');
+  } else if (role === 'TECHNICIAN') {
+    router.push('/tech');
+  } else {
+    router.push('/app');
+  }
+};
+
+const handleGoogleCredential = async (idToken: string) => {
+  errorMessage.value = '';
+  try {
+    goAfterLogin(await authStore.loginWithGoogle(idToken));
+  } catch (err: unknown) {
+    const error = err as { response?: { data?: { error?: { message?: string } } } };
+    errorMessage.value =
+      error?.response?.data?.error?.message || 'Đăng nhập bằng Google thất bại';
+    toast.error(errorMessage.value);
+  }
+};
+
 const handleLogin = async () => {
   if (!identifier.value || !password.value) {
     errorMessage.value = 'Vui lòng điền đầy đủ email/SĐT và mật khẩu';
@@ -36,29 +69,13 @@ const handleLogin = async () => {
 
   errorMessage.value = '';
   try {
-    const user = await authStore.login({
-      email: identifier.value,
-      identifier: identifier.value,
-      password: password.value,
-    });
-
-    // Redirect based on role or original intended route
-    const redirect = (route.query.redirect as string) || '';
-    if (redirect) {
-      router.push(redirect);
-      return;
-    }
-
-    toast.success('Đăng nhập thành công!', { description: `Chào mừng ${user.fullName || 'bạn'} quay lại.` });
-
-    const role = user.role?.toUpperCase();
-    if (role === 'ADMIN' || role === 'SERVICE_MANAGER') {
-      router.push('/console');
-    } else if (role === 'TECHNICIAN') {
-      router.push('/tech');
-    } else {
-      router.push('/app');
-    }
+    goAfterLogin(
+      await authStore.login({
+        email: identifier.value,
+        identifier: identifier.value,
+        password: password.value,
+      }),
+    );
   } catch (err: unknown) {
     const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
     errorMessage.value =
@@ -147,6 +164,12 @@ const handleLogin = async () => {
         <span v-else>Đăng nhập</span>
       </button>
     </form>
+
+    <GoogleSignInButton
+      text="signin_with"
+      @credential="handleGoogleCredential"
+      @error="(message: string) => (errorMessage = message)"
+    />
 
     <!-- Demo Account Quick Selector -->
     <div class="pt-8">
