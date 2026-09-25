@@ -416,11 +416,12 @@ const createAndFindTech = async () => {
       photoUploadIds,
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[NewBookingWizardPage] createBooking failed:', error);
+    const errObj = error as { response?: { data?: { error?: { message?: string }; message?: string } } } | undefined;
     const backendMessage =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message;
+      errObj?.response?.data?.error?.message ||
+      errObj?.response?.data?.message;
 
     let friendlyMessage = 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.';
     if (backendMessage) {
