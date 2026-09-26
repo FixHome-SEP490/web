@@ -1,0 +1,47 @@
+# Chạy web FixHome bằng Docker.
+#
+#   docker compose up -d      bật lên, mở http://localhost:5173
+#   docker compose logs -f    xem log
+#   docker compose down       tắt đi
+#
+# Backend là repo riêng và có compose riêng. Bật backend trước, rồi mới bật cái
+# này. Hai bên nói chuyện với nhau qua `localhost` của máy thật chứ không qua
+# mạng nội bộ của Docker, vì bên gọi API là trình duyệt chứ không phải container.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Tầng `dev` có máy chủ phát triển của Vite, sửa code là trình duyệt tự
+      # cập nhật. Muốn thử bản tĩnh như lúc triển khai thật thì đổi sang
+      # `runner`, nhớ đổi cả `ports` thành '5173:80'.
+      target: dev
+    container_name: fixhome-web
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - '5173:5173'
+
+    volumes:
+      # Chỉ gắn mã nguồn, cố ý không gắn cả thư mục gốc — gắn cả thư mục thì
+      # `node_modules` của Windows đè lên bản Linux trong container.
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+
+      # Vite đọc biến VITE_* từ chính file `.env` trên đĩa. Gắn vào dạng chỉ đọc
+      # để trong container thấy đúng giá trị như khi chạy `npm run dev` ngoài
+      # máy. File này không nằm trong image vì đã bị `.dockerignore` loại ra.
+      - ./.env:/app/.env:ro
+
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:5173/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

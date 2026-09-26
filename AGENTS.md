@@ -28,6 +28,34 @@ If the technical guide has not been read, implementation must not begin.
 - Never expose server secrets through `VITE_*`; all such values are public at build time.
 - Coordinate contract changes with Backend, Mobile, AI, and Docs repositories.
 
+## Keep Docker working
+
+This repository ships a `docker-compose.yml` that other developers run daily.
+
+Vite inlines every `VITE_*` variable at **build** time, not at run time. So whenever you add one to
+`.env.example`, add the matching pair to the `builder` stage of `Dockerfile` as well:
+
+```dockerfile
+ARG VITE_YOUR_NEW_VAR
+ENV VITE_YOUR_NEW_VAR=${VITE_YOUR_NEW_VAR}
+```
+
+Skipping that has already broken a feature once: `VITE_GOOGLE_CLIENT_ID` was missing from the
+Dockerfile, so the Google button worked under `npm run dev` and silently disappeared in the Docker
+build, with no way to fix it at startup.
+
+Also keep in mind:
+
+- Adding or removing a dependency changes the image. Tell the team to run
+  `docker compose up -d --build`; the mounted volumes only carry `src`, `public` and `index.html`.
+- Never mount the repository root into the container — the Windows `node_modules` would shadow the
+  Linux one built inside the image.
+- The dev server must keep `--host 0.0.0.0`, otherwise it only listens inside the container.
+
+After a change that touches the image or the runtime contract, verify with
+`docker compose up -d --build` and load `http://localhost:5173` before handing over.
+`docs/DOCKER.md` explains the setup for people new to Docker — keep it true when you change it.
+
 ## Required verification
 
 Run `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`. Review `git diff` and

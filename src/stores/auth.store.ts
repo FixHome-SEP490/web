@@ -45,6 +45,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Đăng nhập bằng Google; kết quả giống hệt đăng nhập thường. */
+  async function loginWithGoogle(idToken: string) {
+    loading.value = true;
+    try {
+      const response = await authApi.loginWithGoogle(idToken);
+      if (response.refreshToken) localStorage.setItem('refresh_token', response.refreshToken);
+      setAuth(response.accessToken, response.user);
+      return response.user;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function register(data: RegisterRequest) {
     loading.value = true;
     try {
@@ -141,6 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions,
     setAuth,
     login,
+    loginWithGoogle,
     register,
     verifyRegisterOtp,
     resendRegisterOtp,

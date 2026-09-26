@@ -4,9 +4,37 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff, CheckCircle2, Circle } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
+import {
+  extractApiErrorMessage,
+  validateEmail,
+  validateFullName,
+  validatePhoneNumber,
+} from '../../utils/input-validation';
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+/**
+ * Đăng ký bằng Google bỏ qua luôn bước nhập OTP, vì Google đã xác minh email.
+ * Tài khoản tạo ra là CUSTOMER và vào thẳng khu vực khách hàng.
+ */
+const handleGoogleCredential = async (idToken: string) => {
+  errorMessage.value = '';
+  try {
+    const user = await authStore.loginWithGoogle(idToken);
+    toast.success('Tạo tài khoản thành công!', {
+      description: `Chào mừng ${user.fullName || 'bạn'} đến với FixHome.`,
+    });
+    const role = user.role?.toUpperCase();
+    router.push(role === 'TECHNICIAN' ? '/tech' : '/app');
+  } catch (err: unknown) {
+    const error = err as { response?: { data?: { error?: { message?: string } } } };
+    errorMessage.value =
+      error?.response?.data?.error?.message || 'Đăng ký bằng Google thất bại';
+    toast.error(errorMessage.value);
+  }
+};
 
 const fullName = ref('');
 const email = ref('');
@@ -22,16 +50,14 @@ const touchedPhone = ref(false);
 const touchedPassword = ref(false);
 const isPasswordFocused = ref(false);
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^0[35789][0-9]{8}$/;
+// Luật ký tự giữ đúng bản backend, xem src/utils/input-validation.ts.
+const emailIssue = computed(() => validateEmail(email.value));
+const fullNameIssue = computed(() => validateFullName(fullName.value));
+const phoneIssue = computed(() => validatePhoneNumber(phoneNumber.value));
 
-const isEmailValid = computed(() => emailRegex.test(email.value.trim()));
-const isPhoneValid = computed(() => !phoneNumber.value.trim() || phoneRegex.test(phoneNumber.value.trim()));
-const isFullNameValid = computed(() => fullName.value.trim().length >= 2);
-
-const emailError = computed(() => touchedEmail.value ? (!email.value.trim() ? 'Email không được bỏ trống' : (!isEmailValid.value ? 'Email sai định dạng' : '')) : '');
-const fullNameError = computed(() => touchedFullName.value ? (!fullName.value.trim() ? 'Họ tên không được bỏ trống' : (!isFullNameValid.value ? 'Họ tên tối thiểu 2 ký tự' : '')) : '');
-const phoneError = computed(() => touchedPhone.value ? (phoneNumber.value.trim() && !isPhoneValid.value ? 'SĐT không hợp lệ (VD: 0901234567)' : '') : '');
+const emailError = computed(() => (touchedEmail.value ? emailIssue.value : ''));
+const fullNameError = computed(() => (touchedFullName.value ? fullNameIssue.value : ''));
+const phoneError = computed(() => (touchedPhone.value ? phoneIssue.value : ''));
 
 const passwordRules = computed(() => ({
   minLength: password.value.length >= 8,
@@ -85,11 +111,12 @@ const handleRegister = async () => {
       query: { email: (res?.email || email.value).trim().toLowerCase() },
     });
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.';
+    // Khi ValidationPipe chặn, `error.message` chỉ là "Validation failed"; lý do
+    // thật nằm trong mảng `details` nên phải đọc qua helper.
+    errorMessage.value = extractApiErrorMessage(
+      err,
+      'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.',
+    );
   }
 };
 </script>
@@ -265,6 +292,12 @@ const handleRegister = async () => {
         <span v-else>Đăng ký tài khoản</span>
       </button>
     </form>
+
+    <GoogleSignInButton
+      text="signup_with"
+      @credential="handleGoogleCredential"
+      @error="(message: string) => (errorMessage = message)"
+    />
 
     <div class="text-center text-xs text-slate-500 font-medium pt-4">
       Đã có tài khoản?
