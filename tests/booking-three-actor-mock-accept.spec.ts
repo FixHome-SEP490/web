@@ -135,7 +135,7 @@ async function sendTwoCustomerChoices() {
   expect(selections).toHaveLength(2);
   await selections[0].trigger('change');
   await selections[1].trigger('change');
-  const send = page.findAll('button').find(button => button.text().includes('Mời thợ ưu tiên số 1'));
+  const send = page.findAll('button').at(-1);
   expect(send?.exists()).toBe(true);
   await send!.trigger('click');
   await flushPromises();

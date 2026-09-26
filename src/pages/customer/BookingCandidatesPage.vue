@@ -42,7 +42,7 @@ const loadCandidates = async () => {
   try {
     const list = await bookingsApi.getCandidates(bookingId);
     candidates.value = list;
-    // The customer must choose both technicians and their order explicitly.
+    // The customer may choose one or two technicians; selection order is invitation priority.
     selectedIds.value = [];
   } catch {
     candidates.value = [];
@@ -59,7 +59,7 @@ const toggleSelect = (id: string) => {
     selectedIds.value = selectedIds.value.filter((x) => x !== id);
   } else {
     if (selectedIds.value.length >= 2) {
-      sendError.value = 'Chỉ được chọn đúng 2 kỹ thuật viên theo thứ tự ưu tiên.';
+      sendError.value = 'Chỉ được chọn tối đa 2 kỹ thuật viên theo thứ tự ưu tiên.';
       return;
     }
     sendError.value = '';
@@ -78,8 +78,8 @@ const handleCheckboxChange = (event: Event, id: string) => {
 
 const handleSendShortlist = async () => {
   if (sending.value || inviteSent.value || !bookingId) return;
-  if (selectedIds.value.length !== 2) {
-    sendError.value = 'Vui lòng chọn đúng 2 kỹ thuật viên theo thứ tự ưu tiên.';
+  if (selectedIds.value.length < 1 || selectedIds.value.length > 2) {
+    sendError.value = 'Vui lòng chọn 1 hoặc 2 kỹ thuật viên theo thứ tự ưu tiên.';
     return;
   }
   sendError.value = '';
@@ -95,6 +95,9 @@ const handleSendShortlist = async () => {
 };
 
 const selectedCount = computed(() => selectedIds.value.length);
+const successMessage = computed(() => selectedCount.value === 1
+  ? 'Đã gửi lời mời cho kỹ thuật viên đã chọn.'
+  : 'Đã gửi lời mời cho thợ ưu tiên số 1. Thợ số 2 sẽ chỉ nhận lời mời nếu thợ số 1 từ chối hoặc hết hạn phản hồi.');
 </script>
 
 <template>
@@ -133,7 +136,7 @@ const selectedCount = computed(() => selectedIds.value.length);
     <div class="p-3.5 rounded-[var(--radius-sm)] bg-brand-50/70 border border-brand-200 text-brand-900 flex items-start gap-2.5 text-xs">
       <ShieldCheck :size="16" class="text-brand-600 shrink-0 mt-0.5" />
       <div class="leading-relaxed">
-        <strong>Chọn đúng 2 thợ theo thứ tự ưu tiên:</strong> Hệ thống mời thợ số 1 trước. Chỉ khi thợ số 1 từ chối hoặc hết hạn phản hồi, thợ số 2 mới nhận lời mời.
+        <strong>Chọn 1 hoặc 2 thợ theo thứ tự ưu tiên:</strong> Nếu chọn 1 người, hệ thống mời người đó ngay. Nếu chọn 2 người, thợ số 1 được mời trước và thợ số 2 ở trạng thái dự phòng.
       </div>
     </div>
 
@@ -247,7 +250,7 @@ const selectedCount = computed(() => selectedIds.value.length);
         <CheckCircle2 :size="48" class="text-success-600 mx-auto" />
         <h3 class="text-lg font-bold text-ink-900">Đã gửi lời mời thành công!</h3>
         <p class="text-xs text-ink-600 leading-relaxed">
-          Đã gửi lời mời cho thợ ưu tiên số 1. Thợ số 2 sẽ chỉ nhận lời mời nếu thợ số 1 từ chối hoặc hết hạn phản hồi.
+          {{ successMessage }}
         </p>
         <FhButton data-testid="view-matching-booking" variant="primary" size="md"
           @click="router.push({ name: 'booking-detail', params: { id: bookingId } })">
@@ -260,17 +263,17 @@ const selectedCount = computed(() => selectedIds.value.length);
     <div class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 p-3.5 shadow-lg">
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4">
         <div class="text-xs text-ink-600">
-          Đã chọn <strong class="text-brand-700 font-num text-sm">{{ selectedCount }}</strong> kỹ thuật viên (Cần chọn đúng 2)
+          Đã chọn <strong class="text-brand-700 font-num text-sm">{{ selectedCount }}</strong> kỹ thuật viên (chọn 1 hoặc 2)
         </div>
 
         <FhButton
           variant="primary"
           size="md"
-          :disabled="selectedCount !== 2"
+          :disabled="selectedCount < 1"
           :loading="sending"
           @click="handleSendShortlist"
         >
-          <Send :size="15" class="mr-1.5" /> Mời thợ ưu tiên số 1
+          <Send :size="15" class="mr-1.5" /> Mời {{ selectedCount }} kỹ thuật viên
         </FhButton>
       </div>
     </div>

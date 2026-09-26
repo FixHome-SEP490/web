@@ -62,15 +62,15 @@ describe('WEB-WIZARD-TECH Accept must open the returned ServiceOrder', () => {
   });
 });
 
-describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
+describe('WEB-WIZARD-TECH customer-ranked one-or-two-technician shortlist', () => {
   const two = [
     { ...candidate, userId: 'user-1', technicianId: 'profile-1', fullName: 'Synthetic Tech 1' },
     { ...candidate, userId: 'user-2', technicianId: 'profile-2', fullName: 'Synthetic Tech 2' },
   ];
   const sendButton = (wrapper: ReturnType<typeof mount>) =>
-    wrapper.findAll('button').find(button => button.text().includes('Mời thợ ưu tiên số 1'))!;
+    wrapper.findAll('button').at(-1)!;
 
-  it('requires the customer to choose two and sends their chosen priority, never profile IDs', async () => {
+  it('allows one selected technician and sends the technician USER ID', async () => {
     mockGet.mockResolvedValue({ data: { data: two } });
     mockPost.mockResolvedValue({ data: { data: [] } });
     const wrapper = mount(BookingCandidatesPage, { global });
@@ -79,14 +79,12 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     expect(inputs).toHaveLength(2);
     expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
     await inputs[1].trigger('change');
-    expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
-    await inputs[0].trigger('change');
     expect(sendButton(wrapper).attributes('disabled')).toBeUndefined();
     await sendButton(wrapper).trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledTimes(1);
     expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
-      technicianIds: ['user-2', 'user-1'],
+      technicianIds: ['user-2'],
     });
     wrapper.unmount();
   });
@@ -103,7 +101,7 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     await inputs[1].trigger('change');
     await inputs[2].trigger('change');
     expect((inputs[2].element as HTMLInputElement).checked).toBe(false);
-    expect(wrapper.text()).toContain('Chỉ được chọn đúng 2');
+    expect(wrapper.text()).toContain('Chỉ được chọn tối đa 2');
     await sendButton(wrapper).trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
@@ -130,7 +128,7 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     expect((inputs[2].element as HTMLInputElement).checked).toBe(false);
     expect((inputs[0].element as HTMLInputElement).checked).toBe(true);
     expect((inputs[1].element as HTMLInputElement).checked).toBe(true);
-    expect(wrapper.text()).toContain('Chỉ được chọn đúng 2');
+    expect(wrapper.text()).toContain('Chỉ được chọn tối đa 2');
     (inputs[0].element as HTMLInputElement).checked = false;
     await inputs[0].trigger('change');
     (inputs[2].element as HTMLInputElement).checked = true;
@@ -145,13 +143,17 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     wrapper.unmount();
   });
 
-  it('disables send when fewer than two candidates are selected', async () => {
+  it('submits successfully when the Backend returns only one eligible candidate', async () => {
     mockGet.mockResolvedValue({ data: { data: [candidate] } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
     await wrapper.find('input[type="checkbox"]').trigger('change');
-    expect(sendButton(wrapper).attributes('disabled')).toBeDefined();
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(sendButton(wrapper).attributes('disabled')).toBeUndefined();
+    await sendButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/bookings/booking-from-route/shortlist', {
+      technicianIds: [candidate.userId],
+    });
     wrapper.unmount();
   });
 
@@ -185,8 +187,8 @@ describe('WEB-WIZARD-TECH customer-ranked two-technician shortlist', () => {
     mockGet.mockResolvedValue({ data: { data: two } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
-    expect(wrapper.text()).toContain('mời thợ số 1 trước');
-    expect(wrapper.text()).toContain('thợ số 2 mới nhận lời mời');
+    expect(wrapper.text()).toContain('Nếu chọn 1 người');
+    expect(wrapper.text()).toContain('thợ số 2 ở trạng thái dự phòng');
     expect(wrapper.text()).not.toContain('gửi lời mời đến các thợ bạn chọn cùng lúc');
     wrapper.unmount();
   });
