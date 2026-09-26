@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import { extractApiErrorMessage } from '../../utils/input-validation';
 
 const router = useRouter();
 const route = useRoute();
@@ -60,11 +61,10 @@ const handleLogin = async () => {
       router.push('/app');
     }
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      'Email/Số điện thoại hoặc mật khẩu không chính xác';
+    errorMessage.value = extractApiErrorMessage(
+      err,
+      'Email/Số điện thoại hoặc mật khẩu không chính xác',
+    );
     toast.error(errorMessage.value);
   }
 };
