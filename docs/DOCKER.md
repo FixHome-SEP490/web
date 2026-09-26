@@ -2,6 +2,23 @@
 
 Viết cho người chưa từng dùng Docker.
 
+## Đừng bấm nút Run trong giao diện Docker Desktop
+
+Thấy image trong tab Images rồi bấm **Run** thì Docker tạo container nhưng **bỏ
+qua toàn bộ `docker-compose.yml`** — tức là không ánh xạ cổng ra máy thật, không
+nạp `.env`, không gắn thư mục `src`. Container vẫn hiện "Up" nhìn như đang chạy,
+nhưng mở `localhost:5173` thì không vào được.
+
+Dấu hiệu nhận ra: container mang tên ngẫu nhiên kiểu `fervent_gagarin` thay vì
+`fixhome-web`, và cột Ports ghi `5173/tcp` trơ trọi thay vì
+`0.0.0.0:5173->5173/tcp`.
+
+Luôn khởi động bằng dòng lệnh, trong đúng thư mục repo:
+
+```
+docker compose up -d
+```
+
 ## Ba lệnh cần nhớ
 
 ```
