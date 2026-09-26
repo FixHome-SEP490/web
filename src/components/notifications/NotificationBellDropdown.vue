@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   Bell,
@@ -10,19 +10,50 @@ import {
   ExternalLink,
   Clock,
   Inbox,
+  DollarSign,
+  CheckCircle2,
+  XCircle,
+  Truck,
+  Package,
+  AlertTriangle,
+  ArrowRight,
 } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import { useAuthStore } from '../../stores/auth';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 
 const router = useRouter();
+const authStore = useAuthStore();
 const notifStore = useNotificationsStore();
 
 const isOpen = ref(false);
 const activeTab = ref<'all' | 'unread'>('all');
 const dropdownRef = ref<HTMLElement | null>(null);
 
+// Watch for incoming new unread notifications to alert user via toast
+let previousUnreadCount = -1;
+watch(
+  () => notifStore.unreadCount,
+  (newCount, oldCount) => {
+    if (previousUnreadCount !== -1 && newCount > oldCount && newCount > 0) {
+      const newest = notifStore.notifications[0];
+      if (newest && !newest.isRead) {
+        toast.info(newest.title, {
+          description: newest.message,
+          action: {
+            label: 'Xem ngay',
+            onClick: () => handleItemClick(newest),
+          },
+        });
+      }
+    }
+    previousUnreadCount = newCount;
+  }
+);
+
 onMounted(() => {
-  notifStore.startPolling();
+  notifStore.startPolling(20000);
   document.addEventListener('click', handleClickOutside);
 });
 
@@ -40,7 +71,7 @@ const handleClickOutside = (e: MouseEvent) => {
 const toggleDropdown = async () => {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
-    await notifStore.fetchNotifications(1, 20);
+    await notifStore.fetchNotifications(1, 25);
   }
 };
 
@@ -73,47 +104,95 @@ const handleItemClick = async (item: NotificationItem) => {
   }
   isOpen.value = false;
 
-  // Determine target navigation based on reference
+  const role = (authStore.userRole || '').toUpperCase();
+  const refType = (item.referenceType || '').toUpperCase();
+  const itemType = (item.type || '').toUpperCase();
+
+  // 1. TECHNICIAN navigation
+  if (role === 'TECHNICIAN') {
+    if (refType.includes('BOOKING') || itemType.includes('INVITATION')) {
+      router.push('/tech/invitations');
+      return;
+    }
+    if (item.referenceId) {
+      router.push(`/tech/jobs/${item.referenceId}`);
+      return;
+    }
+    if (itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
+      router.push('/tech/messages');
+      return;
+    }
+    router.push('/tech/jobs');
+    return;
+  }
+
+  // 2. SERVICE_MANAGER or ADMIN navigation
+  if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
+    if (refType.includes('PART_REQUEST') || itemType.startsWith('PART_REQUEST')) {
+      router.push('/console/part-requests');
+      return;
+    }
+    if (itemType.includes('CANCEL') || itemType.includes('DISPUTE')) {
+      router.push('/console/cancellations');
+      return;
+    }
+    if (refType.includes('BOOKING')) {
+      router.push('/console/bookings');
+      return;
+    }
+    if (item.referenceId) {
+      router.push(`/console/orders/${item.referenceId}`);
+      return;
+    }
+    router.push('/console/orders');
+    return;
+  }
+
+  // 3. CUSTOMER navigation (Default)
   if (item.referenceId) {
-    const refType = (item.referenceType || '').toUpperCase();
     if (refType.includes('BOOKING')) {
       router.push(`/app/bookings/${item.referenceId}`);
       return;
     }
-    // Default to service order detail
     router.push(`/app/orders/${item.referenceId}`);
     return;
   }
 
-  // Check if message mentions chat / tech
-  if (item.type?.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
+  if (itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
     router.push('/app/messages');
     return;
   }
 
-  // Default to notifications center
   router.push('/app/notifications');
 };
 
 const handleMarkAllRead = async () => {
   await notifStore.markAllAsRead();
+  toast.success('Đã đánh dấu tất cả thông báo là đã đọc');
 };
 
 const handleViewAll = () => {
   isOpen.value = false;
-  router.push('/app/notifications');
+  const role = (authStore.userRole || '').toUpperCase();
+  if (role === 'TECHNICIAN') {
+    router.push('/tech/jobs');
+  } else if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
+    router.push('/console/orders');
+  } else {
+    router.push('/app/notifications');
+  }
 };
 </script>
 
 <template>
-  <div ref="dropdownRef" class="relative">
+  <div ref="dropdownRef" class="relative inline-block text-left">
     <!-- Bell Button -->
     <button
       type="button"
-      id="customer-notifications-bell-btn"
+      id="fixhome-global-bell-btn"
       class="relative p-2 rounded-xl text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-all focus:outline-none focus:ring-2 focus:ring-brand-500/20"
       :class="{ 'bg-ink-100 text-brand-600': isOpen }"
-      title="Thông báo"
+      title="Thông báo hệ thống"
       @click="toggleDropdown"
     >
       <Bell :size="20" class="transition-transform group-hover:scale-105" />
@@ -206,7 +285,7 @@ const handleViewAll = () => {
             <p class="text-xs font-medium text-ink-500">
               {{ activeTab === 'unread' ? 'Không có thông báo chưa đọc nào' : 'Bạn chưa có thông báo nào' }}
             </p>
-            <span class="text-[11px] text-ink-400">Các thông báo từ Thợ, Quản lý và Hệ thống sẽ hiển thị tại đây</span>
+            <span class="text-[11px] text-ink-400">Các thông báo về tiến độ, phí phát sinh và hệ thống sẽ hiển thị tại đây</span>
           </div>
 
           <template v-else>
@@ -214,31 +293,26 @@ const handleViewAll = () => {
               v-for="item in displayedNotifications"
               :key="item.id"
               class="p-3.5 px-4 hover:bg-ink-50/80 transition-all cursor-pointer flex gap-3 relative group"
-              :class="{ 'bg-brand-50/30': !item.isRead }"
+              :class="{ 'bg-brand-50/25': !item.isRead }"
               @click="handleItemClick(item)"
             >
-              <!-- Role Icon Avatar -->
+              <!-- Dynamic Icon Avatar Based on Notification Category / Severity -->
               <div class="shrink-0 mt-0.5">
                 <div
-                  v-if="getNotificationCategory(item).category === 'TECHNICIAN'"
-                  class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center border border-blue-200 shadow-2xs"
-                  title="Thông báo từ Kỹ thuật viên"
+                  class="w-8 h-8 rounded-xl flex items-center justify-center border shadow-2xs transition-transform group-hover:scale-105"
+                  :class="[getNotificationCategory(item).iconBgClass, getNotificationCategory(item).iconColorClass]"
                 >
-                  <Wrench :size="15" />
-                </div>
-                <div
-                  v-else-if="getNotificationCategory(item).category === 'SERVICE_MANAGER'"
-                  class="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center border border-purple-200 shadow-2xs"
-                  title="Thông báo từ Quản lý dịch vụ (SM)"
-                >
-                  <Shield :size="15" />
-                </div>
-                <div
-                  v-else
-                  class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shadow-2xs"
-                  title="Thông báo từ Quản trị viên FixHome"
-                >
-                  <Sparkles :size="15" />
+                  <DollarSign v-if="getNotificationCategory(item).iconName === 'dollar'" :size="15" />
+                  <CheckCircle2 v-else-if="getNotificationCategory(item).iconName === 'check'" :size="15" />
+                  <XCircle v-else-if="getNotificationCategory(item).iconName === 'x'" :size="15" />
+                  <Truck v-else-if="getNotificationCategory(item).iconName === 'truck'" :size="15" />
+                  <Package v-else-if="getNotificationCategory(item).iconName === 'package'" :size="15" />
+                  <Clock v-else-if="getNotificationCategory(item).iconName === 'clock'" :size="15" />
+                  <Sparkles v-else-if="getNotificationCategory(item).iconName === 'sparkles'" :size="15" />
+                  <Shield v-else-if="getNotificationCategory(item).iconName === 'shield'" :size="15" />
+                  <Wrench v-else-if="getNotificationCategory(item).iconName === 'wrench'" :size="15" />
+                  <AlertTriangle v-else-if="getNotificationCategory(item).iconName === 'alert'" :size="15" />
+                  <Bell v-else :size="15" />
                 </div>
               </div>
 
@@ -282,7 +356,7 @@ const handleViewAll = () => {
                     v-if="item.referenceId"
                     class="text-brand-600 font-medium group-hover:underline inline-flex items-center gap-0.5 text-[10px]"
                   >
-                    Xem đơn
+                    Xem chi tiết
                     <ExternalLink :size="10" />
                   </span>
                 </div>
@@ -295,10 +369,11 @@ const handleViewAll = () => {
         <div class="p-2.5 px-4 bg-ink-50/80 border-t border-ink-100 flex items-center justify-between text-xs">
           <button
             type="button"
-            class="text-ink-600 hover:text-brand-600 font-medium transition-colors w-full text-center py-1 hover:underline"
+            class="text-ink-600 hover:text-brand-600 font-medium transition-colors w-full text-center py-1 hover:underline inline-flex items-center justify-center gap-1"
             @click="handleViewAll"
           >
-            Xem tất cả thông báo &rarr;
+            <span>Xem tất cả thông báo</span>
+            <ArrowRight :size="12" />
           </button>
         </div>
       </div>

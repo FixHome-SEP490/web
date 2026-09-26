@@ -16,6 +16,7 @@ import {
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget } from '../components';
+import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
 
@@ -186,6 +187,9 @@ const userInitial = computed(() => {
               {{ chatStore.totalUnreadCount > 9 ? '9+' : chatStore.totalUnreadCount }}
             </span>
           </router-link>
+
+          <!-- Notification Bell -->
+          <NotificationBellDropdown />
 
           <!-- Availability Switch (Online / Offline Toggle) -->
           <button
