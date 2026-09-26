@@ -5,6 +5,12 @@ import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff, CheckCircle2, Circle } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
+import {
+  extractApiErrorMessage,
+  validateEmail,
+  validateFullName,
+  validatePhoneNumber,
+} from '../../utils/input-validation';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -44,16 +50,14 @@ const touchedPhone = ref(false);
 const touchedPassword = ref(false);
 const isPasswordFocused = ref(false);
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^0[35789][0-9]{8}$/;
+// Luật ký tự giữ đúng bản backend, xem src/utils/input-validation.ts.
+const emailIssue = computed(() => validateEmail(email.value));
+const fullNameIssue = computed(() => validateFullName(fullName.value));
+const phoneIssue = computed(() => validatePhoneNumber(phoneNumber.value));
 
-const isEmailValid = computed(() => emailRegex.test(email.value.trim()));
-const isPhoneValid = computed(() => !phoneNumber.value.trim() || phoneRegex.test(phoneNumber.value.trim()));
-const isFullNameValid = computed(() => fullName.value.trim().length >= 2);
-
-const emailError = computed(() => touchedEmail.value ? (!email.value.trim() ? 'Email không được bỏ trống' : (!isEmailValid.value ? 'Email sai định dạng' : '')) : '');
-const fullNameError = computed(() => touchedFullName.value ? (!fullName.value.trim() ? 'Họ tên không được bỏ trống' : (!isFullNameValid.value ? 'Họ tên tối thiểu 2 ký tự' : '')) : '');
-const phoneError = computed(() => touchedPhone.value ? (phoneNumber.value.trim() && !isPhoneValid.value ? 'SĐT không hợp lệ (VD: 0901234567)' : '') : '');
+const emailError = computed(() => (touchedEmail.value ? emailIssue.value : ''));
+const fullNameError = computed(() => (touchedFullName.value ? fullNameIssue.value : ''));
+const phoneError = computed(() => (touchedPhone.value ? phoneIssue.value : ''));
 
 const passwordRules = computed(() => ({
   minLength: password.value.length >= 8,
@@ -107,11 +111,12 @@ const handleRegister = async () => {
       query: { email: (res?.email || email.value).trim().toLowerCase() },
     });
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.';
+    // Khi ValidationPipe chặn, `error.message` chỉ là "Validation failed"; lý do
+    // thật nằm trong mảng `details` nên phải đọc qua helper.
+    errorMessage.value = extractApiErrorMessage(
+      err,
+      'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.',
+    );
   }
 };
 </script>
