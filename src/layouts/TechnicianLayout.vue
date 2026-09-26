@@ -80,7 +80,7 @@ const userInitial = computed(() => {
       <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
         <!-- Left: Logo + Tech Tagline -->
         <div class="flex items-center gap-6 lg:gap-8">
-          <router-link to="/tech" class="inline-flex items-center gap-2.5 group">
+          <router-link to="/" class="inline-flex items-center gap-2.5 group">
             <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
             <div>
               <div class="text-lg sm:text-xl font-extrabold text-ink-900 tracking-tight leading-none">
