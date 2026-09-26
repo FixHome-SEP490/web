@@ -14,6 +14,7 @@
           <!-- Page title can be set via route meta -->
         </h2>
         <div class="flex items-center gap-4">
+          <NotificationBellDropdown />
           <span class="text-sm text-gray-600">
             {{ authStore.user?.fullName ?? 'User' }}
           </span>
@@ -32,6 +33,7 @@
 import { computed } from 'vue';
 import { useAuthStore } from '../stores';
 import { AppSidebar } from '../components';
+import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { LayoutDashboard } from 'lucide-vue-next';
 
 const authStore = useAuthStore();

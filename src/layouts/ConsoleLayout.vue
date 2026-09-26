@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { AppSidebar } from '../components';
+import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -84,7 +85,8 @@ const navigation = computed(() => [
           <span class="font-semibold text-ink-900">{{ route.meta?.title ?? 'Dashboard' }}</span>
         </div>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <NotificationBellDropdown />
           <div class="text-xs font-semibold px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200 uppercase">
             {{ authStore.user?.role }}
           </div>
