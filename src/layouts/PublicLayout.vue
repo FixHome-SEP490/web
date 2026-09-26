@@ -1,26 +1,51 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { PhoneCall, ShieldCheck, Search, Menu, X } from 'lucide-vue-next';
+import { useAuthStore } from '../stores/auth';
+import { PhoneCall, ShieldCheck, Search, Menu, X, LayoutDashboard, LogOut, ChevronDown } from 'lucide-vue-next';
 
 import { FhButton } from '../components';
 
 const router = useRouter();
+const authStore = useAuthStore();
 const isScrolled = ref(false);
 const mobileMenuOpen = ref(false);
+const avatarMenuOpen = ref(false);
 
 const handleScroll = () => {
   isScrolled.value = window.scrollY > 20;
 };
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('scroll', handleScroll);
   handleScroll();
+  // If token exists but profile not yet loaded, fetch it silently
+  if (authStore.token && !authStore.user) {
+    try {
+      await authStore.fetchProfile();
+    } catch {
+      // ignore – user simply appears as guest
+    }
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
 });
+
+/** Where the "Dashboard" button takes the logged-in user */
+const dashboardRoute = computed(() => {
+  const role = authStore.userRole;
+  if (role === 'ADMIN' || role === 'SERVICE_MANAGER') return '/console';
+  if (role === 'TECHNICIAN') return '/tech';
+  return '/app';
+});
+
+const handleLogout = async () => {
+  avatarMenuOpen.value = false;
+  await authStore.logout();
+  window.location.href = '/';
+};
 </script>
 
 <template>
@@ -56,14 +81,68 @@ onUnmounted(() => {
           </router-link>
         </nav>
 
-        <!-- Actions -->
+        <!-- Right Actions: auth-aware -->
         <div class="hidden sm:flex items-center gap-3">
-          <FhButton variant="ghost" size="sm" @click="router.push('/login')">
-            Đăng nhập
-          </FhButton>
-          <FhButton variant="primary" size="sm" @click="router.push('/register')">
-            Đăng ký ngay
-          </FhButton>
+          <!-- LOGGED IN: show Dashboard button + Avatar dropdown -->
+          <template v-if="authStore.isAuthenticated">
+            <FhButton variant="primary" size="sm" @click="router.push(dashboardRoute)">
+              <LayoutDashboard :size="16" />
+              Vào trang quản lý
+            </FhButton>
+
+            <!-- Avatar dropdown -->
+            <div class="relative">
+              <button
+                class="flex items-center gap-1.5 p-1 rounded-full hover:bg-ink-100 transition-colors"
+                @click="avatarMenuOpen = !avatarMenuOpen"
+              >
+                <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-200 overflow-hidden">
+                  <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
+                  <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
+                </div>
+                <ChevronDown :size="14" class="text-ink-500" />
+              </button>
+
+              <div
+                v-if="avatarMenuOpen"
+                class="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-ink-200 shadow-lg py-2 z-50 divide-y divide-ink-100"
+                @click="avatarMenuOpen = false"
+              >
+                <div class="px-4 py-2">
+                  <p class="text-sm font-semibold text-ink-900 truncate">{{ authStore.user?.fullName }}</p>
+                  <p class="text-xs text-ink-500 truncate">{{ authStore.user?.email }}</p>
+                </div>
+                <div class="py-1 text-sm text-ink-700">
+                  <button
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 w-full text-left"
+                    @click="router.push(dashboardRoute)"
+                  >
+                    <LayoutDashboard :size="16" />
+                    Trang quản lý
+                  </button>
+                </div>
+                <div class="py-1">
+                  <button
+                    class="flex items-center gap-2.5 px-4 py-2 text-sm text-danger-600 hover:bg-danger-50 w-full text-left"
+                    @click="handleLogout"
+                  >
+                    <LogOut :size="16" />
+                    Đăng xuất
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- GUEST: show login / register -->
+          <template v-else>
+            <FhButton variant="ghost" size="sm" @click="router.push('/login')">
+              Đăng nhập
+            </FhButton>
+            <FhButton variant="primary" size="sm" @click="router.push('/register')">
+              Đăng ký ngay
+            </FhButton>
+          </template>
         </div>
 
         <!-- Mobile Menu Trigger -->
@@ -92,12 +171,31 @@ onUnmounted(() => {
           </router-link>
         </div>
         <div class="pt-4 border-t border-ink-100 flex flex-col gap-2">
-          <FhButton variant="secondary" size="md" block @click="router.push('/login'); mobileMenuOpen = false;">
-            Đăng nhập
-          </FhButton>
-          <FhButton variant="primary" size="md" block @click="router.push('/register'); mobileMenuOpen = false;">
-            Đăng ký tài khoản
-          </FhButton>
+          <!-- Mobile: auth-aware buttons -->
+          <template v-if="authStore.isAuthenticated">
+            <div class="px-1 py-2 text-sm font-medium text-ink-700 flex items-center gap-2">
+              <div class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-xs border border-brand-200 overflow-hidden">
+                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
+                <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
+              </div>
+              <span class="truncate">{{ authStore.user?.fullName }}</span>
+            </div>
+            <FhButton variant="primary" size="md" block @click="router.push(dashboardRoute); mobileMenuOpen = false;">
+              <LayoutDashboard :size="16" />
+              Vào trang quản lý
+            </FhButton>
+            <FhButton variant="ghost" size="md" block @click="handleLogout; mobileMenuOpen = false;">
+              Đăng xuất
+            </FhButton>
+          </template>
+          <template v-else>
+            <FhButton variant="secondary" size="md" block @click="router.push('/login'); mobileMenuOpen = false;">
+              Đăng nhập
+            </FhButton>
+            <FhButton variant="primary" size="md" block @click="router.push('/register'); mobileMenuOpen = false;">
+              Đăng ký tài khoản
+            </FhButton>
+          </template>
         </div>
       </div>
     </header>
@@ -131,9 +229,9 @@ onUnmounted(() => {
             <h4 class="text-sm font-semibold text-ink-900 uppercase tracking-wider mb-4">Dịch vụ chính</h4>
             <ul class="space-y-2.5 text-sm text-ink-600">
               <li><router-link to="/services/dien-lanh" class="hover:text-brand-600 transition-colors">Sửa chữa máy lạnh</router-link></li>
-              <li><router-link to="/services/dien-nuoc" class="hover:text-brand-600 transition-colors">Điện & Nước dân dụng</router-link></li>
-              <li><router-link to="/services/thiet-bi-bep" class="hover:text-brand-600 transition-colors">Thiết bị bếp & gia dụng</router-link></li>
-              <li><router-link to="/services/khoa-cua" class="hover:text-brand-600 transition-colors">Khoá cửa & An ninh</router-link></li>
+              <li><router-link to="/services/dien-nuoc" class="hover:text-brand-600 transition-colors">Điện &amp; Nước dân dụng</router-link></li>
+              <li><router-link to="/services/thiet-bi-bep" class="hover:text-brand-600 transition-colors">Thiết bị bếp &amp; gia dụng</router-link></li>
+              <li><router-link to="/services/khoa-cua" class="hover:text-brand-600 transition-colors">Khoá cửa &amp; An ninh</router-link></li>
             </ul>
           </div>
 
@@ -143,7 +241,7 @@ onUnmounted(() => {
             <ul class="space-y-2.5 text-sm text-ink-600">
               <li><router-link to="/how-it-works" class="hover:text-brand-600 transition-colors">Quy trình sửa chữa</router-link></li>
               <li><router-link to="/for-technicians" class="hover:text-brand-600 transition-colors">Gia nhập đội ngũ thợ</router-link></li>
-              <li><router-link to="/pricing-policy" class="hover:text-brand-600 transition-colors">Chính sách công & vật tư</router-link></li>
+              <li><router-link to="/pricing-policy" class="hover:text-brand-600 transition-colors">Chính sách công &amp; vật tư</router-link></li>
               <li><router-link to="/track" class="hover:text-brand-600 transition-colors">Tra cứu tiến độ đơn</router-link></li>
             </ul>
           </div>

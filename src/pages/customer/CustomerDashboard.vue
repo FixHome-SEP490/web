@@ -12,7 +12,6 @@ import {
   Users,
   Wrench,
   Bot,
-  ShoppingBag,
   Snowflake,
   Droplets,
   Cpu,
@@ -26,6 +25,11 @@ import {
   Award,
   Tag,
   Flame,
+  BadgeCheck,
+  Timer,
+  BookOpen,
+  FileCheck,
+  CircleDollarSign,
 } from 'lucide-vue-next';
 import { FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
@@ -41,7 +45,7 @@ const addresses = ref<UserAddress[]>([]);
 const selectedAddress = ref('');
 const loading = ref(true);
 
-// 8 Popular Services matching Mobile
+// Popular Services – curated list
 const popularServices = [
   {
     id: 'ac_clean',
@@ -161,6 +165,16 @@ const recentOrders = computed(() => {
   return orders.value.slice(0, 3);
 });
 
+// Stats summary
+const orderStats = computed(() => {
+  const total = orders.value.length;
+  const completed = orders.value.filter((o) => o.status === 'COMPLETED').length;
+  const inProgress = orders.value.filter((o) =>
+    ['EN_ROUTE', 'UNDER_REPAIR', 'ACCEPTED', 'IN_PROGRESS'].includes(o.status),
+  ).length;
+  return { total, completed, inProgress };
+});
+
 function handleSearch() {
   const q = searchQuery.value.trim();
   router.push({ path: '/app/bookings/new', query: q ? { q } : {} });
@@ -259,10 +273,11 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </div>
 
     <!-- 2. Hero Search Banner (Royal Blue Gradient - FixHome Mobile Signature) -->
-    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 p-6 sm:p-8 text-white shadow-md">
-      <!-- Translucent Glassmorphism Decorative Circles -->
-      <div class="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-      <div class="absolute -left-12 -bottom-12 w-64 h-64 rounded-full bg-blue-900/20 blur-xl pointer-events-none"></div>
+    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-6 sm:p-8 text-white shadow-lg">
+      <!-- Glassmorphism decorative elements -->
+      <div class="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
+      <div class="absolute -left-12 -bottom-12 w-56 h-56 rounded-full bg-blue-900/20 blur-xl pointer-events-none"></div>
+      <div class="absolute right-8 bottom-8 w-32 h-32 rounded-full bg-indigo-400/10 blur-xl pointer-events-none"></div>
 
       <div class="relative z-10 max-w-2xl space-y-4">
         <!-- Slogan -->
@@ -339,61 +354,75 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </button>
     </div>
 
-    <!-- 5. 3 Hero Feature Cards (Đặt thợ, AI Soi lỗi, Vật tư Mall) -->
+    <!-- 5. Three Hero Feature Cards (Đặt thợ & AI Chẩn đoán, Bảng giá tham khảo, Bảo hành) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <!-- Card 1: Đặt thợ -->
+      <!-- Card 1: Đặt thợ & AI Chẩn đoán (unified) -->
       <div
-        class="relative p-5 rounded-2xl bg-[#E0F2FE] border border-[#BAE6FD] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+        class="relative p-5 rounded-2xl bg-gradient-to-br from-[#E0F2FE] to-[#F0E6FF] border border-[#BAE6FD] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
         @click="router.push('/app/bookings/new')"
       >
         <div>
-          <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#0284C7] text-white text-[11px] font-bold mb-3 shadow-xs">
-            Thợ giỏi gần bạn
-          </span>
-          <h3 class="text-xl font-extrabold text-[#0369A1] tracking-tight">Đặt thợ</h3>
-          <p class="text-xs text-[#0284C7] font-medium mt-0.5">Có mặt chỉ sau 15 phút</p>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#0284C7] text-white text-[11px] font-bold shadow-xs">
+              Thợ giỏi gần bạn
+            </span>
+            <span class="inline-block px-2 py-0.5 rounded-full bg-[#7C3AED] text-white text-[10px] font-bold shadow-xs">
+              AI 30s
+            </span>
+          </div>
+          <h3 class="text-xl font-extrabold text-[#0369A1] tracking-tight">Đặt thợ & AI Chẩn đoán</h3>
+          <p class="text-xs text-[#0284C7] font-medium mt-1 leading-relaxed">
+            Mô tả hoặc chụp ảnh sự cố → AI bắt bệnh & báo giá → Thợ có mặt chỉ sau 15 phút
+          </p>
         </div>
-        <div class="flex justify-end mt-4">
-          <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#0284C7] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <Wrench :size="24" />
+        <div class="flex justify-end mt-4 gap-2">
+          <div class="w-11 h-11 rounded-2xl bg-white/80 backdrop-blur-sm text-[#7C3AED] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+            <Bot :size="22" />
+          </div>
+          <div class="w-11 h-11 rounded-2xl bg-white/80 backdrop-blur-sm text-[#0284C7] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+            <Wrench :size="22" />
           </div>
         </div>
       </div>
 
-      <!-- Card 2: AI Soi lỗi -->
-      <div
-        class="relative p-5 rounded-2xl bg-[#F3E8FF] border border-[#E9D5FF] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-        @click="router.push({ path: '/app/bookings/new', query: { ai: 'true' } })"
-      >
-        <div>
-          <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#7C3AED] text-white text-[11px] font-bold mb-3 shadow-xs">
-            AI 30 giây
-          </span>
-          <h3 class="text-xl font-extrabold text-[#6D28D9] tracking-tight">AI Soi lỗi</h3>
-          <p class="text-xs text-[#7C3AED] font-medium mt-0.5">Bắt bệnh & báo giá ngay</p>
-        </div>
-        <div class="flex justify-end mt-4">
-          <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#7C3AED] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <Bot :size="24" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Card 3: Vật tư Mall -->
+      <!-- Card 2: Bảng giá dịch vụ tham khảo (was "Vật tư Mall") -->
       <div
         class="relative p-5 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
         @click="router.push('/services')"
       >
         <div>
           <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#D97706] text-white text-[11px] font-bold mb-3 shadow-xs">
-            Chính hãng
+            Giá cố định minh bạch
           </span>
-          <h3 class="text-xl font-extrabold text-[#B45309] tracking-tight">Vật tư Mall</h3>
-          <p class="text-xs text-[#D97706] font-medium mt-0.5">Bảo hành dài hạn 12 tháng</p>
+          <h3 class="text-xl font-extrabold text-[#B45309] tracking-tight">Bảng giá tham khảo</h3>
+          <p class="text-xs text-[#D97706] font-medium mt-1 leading-relaxed">
+            Xem bảng giá dịch vụ cố định, vật tư chính hãng & bảo hành dài hạn 12 tháng
+          </p>
         </div>
         <div class="flex justify-end mt-4">
           <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#D97706] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <ShoppingBag :size="24" />
+            <CircleDollarSign :size="24" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Bảo hành điện tử -->
+      <div
+        class="relative p-5 rounded-2xl bg-[#ECFDF5] border border-[#A7F3D0] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+        @click="router.push('/app/warranties')"
+      >
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#059669] text-white text-[11px] font-bold mb-3 shadow-xs">
+            Tra cứu nhanh
+          </span>
+          <h3 class="text-xl font-extrabold text-[#047857] tracking-tight">Bảo hành điện tử</h3>
+          <p class="text-xs text-[#059669] font-medium mt-1 leading-relaxed">
+            Xem phiếu bảo hành, yêu cầu bảo hành lại & theo dõi tiến trình xử lý
+          </p>
+        </div>
+        <div class="flex justify-end mt-4">
+          <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#059669] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+            <FileCheck :size="24" />
           </div>
         </div>
       </div>
@@ -458,7 +487,38 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </div>
     </div>
 
-    <!-- 7. Popular Services Grid (8 Dịch vụ bục 3D Isometric chuẩn Mobile) -->
+    <!-- 7. Quick Stats Summary (compact) -->
+    <div v-if="!loading && orders.length > 0" class="grid grid-cols-3 gap-3">
+      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
+        <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <BookOpen :size="18" />
+        </div>
+        <div>
+          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.total }}</div>
+          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Tổng đơn</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
+        <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <Timer :size="18" />
+        </div>
+        <div>
+          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.inProgress }}</div>
+          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Đang xử lý</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
+        <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <BadgeCheck :size="18" />
+        </div>
+        <div>
+          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.completed }}</div>
+          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Hoàn thành</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Popular Services Grid -->
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -475,7 +535,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </div>
 
       <!-- Grid 4 cột trên desktop, 2 cột trên mobile -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         <button
           v-for="srv in popularServices"
           :key="srv.id"
@@ -486,10 +546,10 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <!-- 3D Isometric Pedestal Effect -->
           <div class="relative mb-3">
             <div
-              class="w-16 h-16 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105"
+              class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105"
               :style="{ backgroundColor: srv.pedestalBg }"
             >
-              <component :is="srv.icon" :size="28" :style="{ color: srv.iconColor }" />
+              <component :is="srv.icon" :size="26" :style="{ color: srv.iconColor }" />
             </div>
             <!-- Hot Badge -->
             <span
@@ -516,11 +576,10 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             Khảo sát tận nơi
           </span>
         </button>
-
       </div>
     </div>
 
-    <!-- 8. Promotional Campaign Banner (Dark Slate to Royal Blue) -->
+    <!-- 9. Promotional Campaign Banner -->
     <div
       class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
       @click="router.push('/app/bookings/new')"
@@ -547,7 +606,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </button>
     </div>
 
-    <!-- 9. Recent Orders History (3 đơn gần nhất) -->
+    <!-- 10. Recent Orders History -->
     <div v-if="recentOrders.length > 0" class="space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-base font-bold text-ink-900">Lịch sử sửa chữa gần đây</h2>
@@ -588,7 +647,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </div>
     </div>
 
-    <!-- 10. FixHome Trust Section (3 Cam kết vàng) -->
+    <!-- 11. FixHome Trust Section (3 Cam kết vàng) -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-6 rounded-2xl bg-white border border-ink-200 shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-ink-100 text-center">
       <div class="pt-3 sm:pt-0 sm:px-4 space-y-1">
         <div class="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
