@@ -27,6 +27,20 @@ export const authApi = {
     return 'data' in res.data ? (res.data as ApiResponse<RegisterResponse>).data : res.data;
   },
 
+  /**
+   * Gửi ID token nhận từ Google Identity Services lên backend đổi lấy phiên.
+   *
+   * Trình duyệt không tự tin được token này; backend mới là nơi kiểm chữ ký và
+   * kiểm `aud` đúng CLIENT_ID của FixHome.
+   */
+  loginWithGoogle: async (idToken: string): Promise<LoginResponse> => {
+    const res = await apiClient.post<ApiResponse<LoginResponse> | LoginResponse>('/auth/google', {
+      idToken,
+      deviceInfo: `Web - ${navigator.userAgent.slice(0, 200)}`,
+    });
+    return 'data' in res.data ? (res.data as ApiResponse<LoginResponse>).data : res.data;
+  },
+
   verifyRegisterOtp: async (data: VerifyOtpRequest): Promise<LoginResponse> => {
     const res = await apiClient.post<ApiResponse<LoginResponse> | LoginResponse>('/auth/verify-register-otp', data);
     return 'data' in res.data ? (res.data as ApiResponse<LoginResponse>).data : res.data;

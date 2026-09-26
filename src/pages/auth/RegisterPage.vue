@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff, CheckCircle2, Circle } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 import {
   extractApiErrorMessage,
   validateEmail,
@@ -13,6 +14,27 @@ import {
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+/**
+ * Đăng ký bằng Google bỏ qua luôn bước nhập OTP, vì Google đã xác minh email.
+ * Tài khoản tạo ra là CUSTOMER và vào thẳng khu vực khách hàng.
+ */
+const handleGoogleCredential = async (idToken: string) => {
+  errorMessage.value = '';
+  try {
+    const user = await authStore.loginWithGoogle(idToken);
+    toast.success('Tạo tài khoản thành công!', {
+      description: `Chào mừng ${user.fullName || 'bạn'} đến với FixHome.`,
+    });
+    const role = user.role?.toUpperCase();
+    router.push(role === 'TECHNICIAN' ? '/tech' : '/app');
+  } catch (err: unknown) {
+    const error = err as { response?: { data?: { error?: { message?: string } } } };
+    errorMessage.value =
+      error?.response?.data?.error?.message || 'Đăng ký bằng Google thất bại';
+    toast.error(errorMessage.value);
+  }
+};
 
 const fullName = ref('');
 const email = ref('');
@@ -270,6 +292,12 @@ const handleRegister = async () => {
         <span v-else>Đăng ký tài khoản</span>
       </button>
     </form>
+
+    <GoogleSignInButton
+      text="signup_with"
+      @credential="handleGoogleCredential"
+      @error="(message: string) => (errorMessage = message)"
+    />
 
     <div class="text-center text-xs text-slate-500 font-medium pt-4">
       Đã có tài khoản?
