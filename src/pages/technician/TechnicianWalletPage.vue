@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   Wallet,
   ArrowUpRight,
@@ -158,11 +159,31 @@ watch(activeTab, (newTab) => {
   }
 });
 
+const route = useRoute();
+const router = useRouter();
+const returnBanner = ref<{ type: 'success' | 'error'; message: string } | null>(null);
+
 onMounted(async () => {
   loading.value = true;
   await loadWallet();
   await loadTransactions();
   loading.value = false;
+
+  if (route.query.payment === 'success') {
+    returnBanner.value = {
+      type: 'success',
+      message: 'Giao dịch nạp tiền qua cổng VNPay thành công! Số dư ví của bạn đã được cập nhật.',
+    };
+    await loadWallet();
+    await loadTransactions();
+    router.replace({ query: {} });
+  } else if (route.query.payment === 'failed') {
+    returnBanner.value = {
+      type: 'error',
+      message: 'Giao dịch nạp tiền qua VNPay không thành công hoặc đã bị hủy. Vui lòng thử lại.',
+    };
+    router.replace({ query: {} });
+  }
 });
 
 // Top-up Handler
@@ -180,6 +201,14 @@ const handleTopUp = async () => {
   topUpSuccessMsg.value = null;
   try {
     const res = await walletApi.topUp(topUpAmount.value);
+    if (res.paymentUrl) {
+      topUpSuccessMsg.value = 'Đang chuyển hướng tới cổng thanh toán VNPay...';
+      setTimeout(() => {
+        window.location.href = res.paymentUrl!;
+      }, 500);
+      return;
+    }
+
     topUpSuccessMsg.value = res.message || 'Nạp tiền vào ví thành công';
     await loadWallet();
     await loadTransactions();
@@ -275,6 +304,30 @@ const handleWithdraw = async () => {
           Làm mới
         </FhButton>
       </div>
+    </div>
+
+    <!-- VNPay Return Alert Banner -->
+    <div
+      v-if="returnBanner"
+      :class="[
+        'p-4 sm:p-5 rounded-2xl border flex items-center justify-between gap-3 shadow-xs transition-all',
+        returnBanner.type === 'success'
+          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+          : 'bg-rose-50 border-rose-300 text-rose-950',
+      ]"
+    >
+      <div class="flex items-center gap-3">
+        <CheckCircle2 v-if="returnBanner.type === 'success'" :size="22" class="text-emerald-600 shrink-0" />
+        <XCircle v-else :size="22" class="text-rose-600 shrink-0" />
+        <span class="text-xs sm:text-sm font-semibold">{{ returnBanner.message }}</span>
+      </div>
+      <button
+        type="button"
+        class="text-xs font-bold text-ink-500 hover:text-ink-800 p-1.5 cursor-pointer"
+        @click="returnBanner = null"
+      >
+        Đóng
+      </button>
     </div>
 
     <!-- Loading Skeleton -->
@@ -754,6 +807,16 @@ const handleWithdraw = async () => {
             </div>
           </div>
 
+          <div class="p-3 rounded-xl bg-blue-50 border border-blue-100 flex items-start gap-2.5 text-blue-900 text-xs">
+            <Info :size="16" class="text-brand-600 shrink-0 mt-0.5" />
+            <div>
+              <span class="font-bold">Cổng thanh toán điện tử VNPay:</span>
+              <p class="text-blue-700 text-[11px] mt-0.5">
+                Hỗ trợ ứng dụng ngân hàng quét mã VNPAY-QR, thẻ ATM nội địa & Mobile Banking. Giao dịch bảo mật và số dư ví được ghi nhận tức thì.
+              </p>
+            </div>
+          </div>
+
           <div class="flex items-center justify-end gap-3 pt-2">
             <FhButton variant="secondary" size="md" @click="showTopUpModal = false">
               Huỷ bỏ
@@ -764,7 +827,7 @@ const handleWithdraw = async () => {
               :loading="topUpSubmitting"
               @click="handleTopUp"
             >
-              Xác nhận nạp tiền
+              Nạp tiền qua VNPay
             </FhButton>
           </div>
         </div>

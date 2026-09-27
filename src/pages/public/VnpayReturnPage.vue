@@ -4,9 +4,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-vue-next';
 import { FhButton } from '../../components';
 import { ordersApi } from '../../api/orders.api';
+import { useAuthStore } from '../../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
+const isTechnician = authStore.user?.role === 'TECHNICIAN';
 
 // VNPay's own response code (signature-verified server-side) tells us whether
 // the bank accepted the charge, but paymentStatus only flips once the async
@@ -70,8 +73,14 @@ onUnmounted(() => {
           : 'Giao dịch VNPay không thành công hoặc đã bị hủy. Bạn có thể thử lại từ trang đơn hàng.'
         }}
       </p>
-      <FhButton variant="primary" size="md" class="w-full" :disabled="phase === 'checking'" @click="router.push('/app/orders')">
-        Xem đơn hàng của tôi
+      <FhButton
+        variant="primary"
+        size="md"
+        class="w-full"
+        :disabled="phase === 'checking'"
+        @click="router.push(isTechnician ? '/tech/wallet' : '/app/orders')"
+      >
+        {{ isTechnician ? 'Xem ví kỹ thuật viên' : 'Xem đơn hàng của tôi' }}
       </FhButton>
     </div>
   </div>

@@ -101,21 +101,23 @@ export const walletApi = {
   async topUp(
     amount: number,
     idempotencyKey?: string,
-  ): Promise<{ success: boolean; paymentId: string; balanceAfter: number; message: string }> {
+  ): Promise<{ success: boolean; paymentId: string; balanceAfter: number | null; paymentUrl?: string | null; message: string }> {
     const key =
       idempotencyKey ||
       `TOPUP_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const res = await apiClient.post<{
-      data?: { success?: boolean; paymentId?: string; balanceAfter?: number; message?: string };
+      data?: { success?: boolean; paymentId?: string; balanceAfter?: number | null; paymentUrl?: string | null; message?: string };
       paymentId?: string;
-      balanceAfter?: number;
+      balanceAfter?: number | null;
+      paymentUrl?: string | null;
       message?: string;
     }>('/technician/wallet/top-up', { amount: Number(amount), idempotencyKey: key });
     const payload = res.data?.data || res.data;
     return {
       success: true,
       paymentId: payload?.paymentId || '',
-      balanceAfter: Number(payload?.balanceAfter ?? 0),
+      paymentUrl: payload?.paymentUrl || null,
+      balanceAfter: payload?.balanceAfter !== undefined && payload?.balanceAfter !== null ? Number(payload.balanceAfter) : null,
       message: payload?.message || 'Nạp tiền vào ví thành công',
     };
   },
