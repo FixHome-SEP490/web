@@ -57,6 +57,14 @@ const showTopUpModal = ref(false);
 const topUpAmount = ref<number>(200000);
 const topUpSubmitting = ref(false);
 const topUpSuccessMsg = ref<string | null>(null);
+const topUpError = ref<string | null>(null);
+
+watch(showTopUpModal, (open) => {
+  if (open) {
+    topUpError.value = null;
+    topUpSuccessMsg.value = null;
+  }
+});
 
 const showWithdrawModal = ref(false);
 const withdrawAmount = ref<number>(100000);
@@ -159,8 +167,13 @@ onMounted(async () => {
 
 // Top-up Handler
 const handleTopUp = async () => {
+  topUpError.value = null;
   if (!topUpAmount.value || topUpAmount.value < 10000) {
-    alert('Số tiền nạp tối thiểu là 10.000 ₫');
+    topUpError.value = 'Số tiền nạp tối thiểu là 10.000 ₫';
+    return;
+  }
+  if (topUpAmount.value > 50000000) {
+    topUpError.value = 'Số tiền nạp tối đa mỗi lần là 50.000.000 ₫';
     return;
   }
   topUpSubmitting.value = true;
@@ -173,12 +186,31 @@ const handleTopUp = async () => {
     setTimeout(() => {
       showTopUpModal.value = false;
       topUpSuccessMsg.value = null;
+      topUpError.value = null;
     }, 1500);
   } catch (err: unknown) {
-    alert(
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Nạp tiền thất bại, vui lòng thử lại',
-    );
+    const errorObj = err as {
+      response?: {
+        data?: {
+          message?: string | string[];
+          error?: { message?: string; details?: string[] | string };
+        };
+      };
+    };
+    const errorDetails = errorObj?.response?.data?.error?.details;
+    const detailMsg = Array.isArray(errorDetails)
+      ? errorDetails.join(', ')
+      : typeof errorDetails === 'string'
+        ? errorDetails
+        : null;
+    topUpError.value =
+      detailMsg ||
+      errorObj?.response?.data?.error?.message ||
+      (typeof errorObj?.response?.data?.message === 'string'
+        ? errorObj.response.data.message
+        : Array.isArray(errorObj?.response?.data?.message)
+          ? errorObj.response.data.message.join(', ')
+          : 'Nạp tiền thất bại, vui lòng thử lại');
   } finally {
     topUpSubmitting.value = false;
   }
@@ -665,6 +697,11 @@ const handleWithdraw = async () => {
 
         <div v-if="topUpSuccessMsg" class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold flex items-center gap-2">
           <CheckCircle2 :size="18" /> {{ topUpSuccessMsg }}
+        </div>
+
+        <div v-if="topUpError" class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2">
+          <AlertCircle :size="16" class="shrink-0 mt-0.5" />
+          <span>{{ topUpError }}</span>
         </div>
 
         <div v-else class="space-y-4">

@@ -102,10 +102,22 @@ export const walletApi = {
     amount: number,
     idempotencyKey?: string,
   ): Promise<{ success: boolean; paymentId: string; balanceAfter: number; message: string }> {
+    const key =
+      idempotencyKey ||
+      `TOPUP_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const res = await apiClient.post<{
-      data: { success: boolean; paymentId: string; balanceAfter: number; message: string };
-    }>('/technician/wallet/top-up', { amount, idempotencyKey });
-    return res.data.data;
+      data?: { success?: boolean; paymentId?: string; balanceAfter?: number; message?: string };
+      paymentId?: string;
+      balanceAfter?: number;
+      message?: string;
+    }>('/technician/wallet/top-up', { amount: Number(amount), idempotencyKey: key });
+    const payload = res.data?.data || res.data;
+    return {
+      success: true,
+      paymentId: payload?.paymentId || '',
+      balanceAfter: Number(payload?.balanceAfter ?? 0),
+      message: payload?.message || 'Nạp tiền vào ví thành công',
+    };
   },
 
   async requestWithdrawal(dto: {

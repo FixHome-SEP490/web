@@ -16,7 +16,8 @@ import {
   Droplets,
   Thermometer,
   Flame,
-  Zap as ZapIcon
+  Zap as ZapIcon,
+  Sparkles
 } from 'lucide-vue-next';
 import Marquee from '@selemondev/vue3-marquee';
 import '@selemondev/vue3-marquee/style.css';
