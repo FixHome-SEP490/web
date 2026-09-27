@@ -13,6 +13,7 @@ import {
   ChevronDown,
   MessageSquare,
   Zap,
+  Wallet,
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget } from '../components';
@@ -145,6 +146,15 @@ const userInitial = computed(() => {
             </router-link>
 
             <router-link
+              to="/tech/wallet"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5"
+              active-class="bg-brand-50 text-brand-700 font-extrabold"
+            >
+              <Wallet :size="15" />
+              Ví thợ
+            </router-link>
+
+            <router-link
               to="/tech/messages"
               class="px-3 py-2 rounded-xl hover:bg-ink-100 hover:text-ink-900 transition-all flex items-center gap-1.5 relative"
               active-class="bg-brand-50 text-brand-700 font-extrabold"
@@ -235,6 +245,10 @@ const userInitial = computed(() => {
               </div>
 
               <div class="py-1 text-ink-700 font-semibold">
+                <router-link to="/tech/wallet" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600">
+                  <Wallet :size="15" />
+                  Ví thợ & Rút tiền
+                </router-link>
                 <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600">
                   <User :size="15" />
                   Hồ sơ thợ & Kỹ năng

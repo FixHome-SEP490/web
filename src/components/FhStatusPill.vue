@@ -102,11 +102,33 @@ const statusConfig = computed(() => {
     case 'ACTIVE':
     case 'APPROVED':
     case 'PAID':
+    case 'SUCCESS':
       return {
         bg: 'bg-success-50',
         text: 'text-success-600',
         dot: 'bg-success-600',
-        defaultLabel: s === 'PAID' ? 'Đã thanh toán' : 'Hoạt động',
+        defaultLabel: s === 'PAID' ? 'Đã thanh toán' : s === 'SUCCESS' ? 'Thành công' : 'Hoạt động',
+      };
+    case 'ELIGIBLE':
+      return {
+        bg: 'bg-success-50',
+        text: 'text-success-600',
+        dot: 'bg-success-600',
+        defaultLabel: 'Đủ điều kiện nhận việc',
+      };
+    case 'INELIGIBLE':
+      return {
+        bg: 'bg-danger-50',
+        text: 'text-danger-600',
+        dot: 'bg-danger-600',
+        defaultLabel: 'Không đủ điều kiện',
+      };
+    case 'FAILED':
+      return {
+        bg: 'bg-danger-50',
+        text: 'text-danger-600',
+        dot: 'bg-danger-600',
+        defaultLabel: 'Thất bại',
       };
     case 'PENDING':
     case 'UNPAID':
