@@ -11,6 +11,12 @@ import {
   Search,
   Inbox,
   ArrowRight,
+  DollarSign,
+  CheckCircle2,
+  XCircle,
+  Truck,
+  Package,
+  AlertTriangle,
 } from 'lucide-vue-next';
 import { FhButton, FhCard } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
@@ -220,22 +226,20 @@ const formatFullDate = (dateStr: string): string => {
           <!-- Category Avatar -->
           <div class="shrink-0 mt-0.5">
             <div
-              v-if="getNotificationCategory(item).category === 'TECHNICIAN'"
-              class="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center border border-blue-200 shadow-xs"
+              class="w-10 h-10 rounded-xl flex items-center justify-center border shadow-xs"
+              :class="[getNotificationCategory(item).iconBgClass, getNotificationCategory(item).iconColorClass]"
             >
-              <Wrench :size="18" />
-            </div>
-            <div
-              v-else-if="getNotificationCategory(item).category === 'SERVICE_MANAGER'"
-              class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center border border-purple-200 shadow-xs"
-            >
-              <Shield :size="18" />
-            </div>
-            <div
-              v-else
-              class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shadow-xs"
-            >
-              <Sparkles :size="18" />
+              <DollarSign v-if="getNotificationCategory(item).iconName === 'dollar'" :size="18" />
+              <CheckCircle2 v-else-if="getNotificationCategory(item).iconName === 'check'" :size="18" />
+              <XCircle v-else-if="getNotificationCategory(item).iconName === 'x'" :size="18" />
+              <Truck v-else-if="getNotificationCategory(item).iconName === 'truck'" :size="18" />
+              <Package v-else-if="getNotificationCategory(item).iconName === 'package'" :size="18" />
+              <Clock v-else-if="getNotificationCategory(item).iconName === 'clock'" :size="18" />
+              <Sparkles v-else-if="getNotificationCategory(item).iconName === 'sparkles'" :size="18" />
+              <Shield v-else-if="getNotificationCategory(item).iconName === 'shield'" :size="18" />
+              <Wrench v-else-if="getNotificationCategory(item).iconName === 'wrench'" :size="18" />
+              <AlertTriangle v-else-if="getNotificationCategory(item).iconName === 'alert'" :size="18" />
+              <Bell v-else :size="18" />
             </div>
           </div>
 

@@ -122,6 +122,16 @@ const handleChatWithCustomer = async (job: ServiceOrderItem) => {
   await chatStore.openConversationForBooking(bookingId);
   chatStore.toggleWidget(true);
 };
+
+const getGoogleMapsUrl = (job: ServiceOrderItem) => {
+  if (job.destination?.lat != null && job.destination?.lng != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${job.destination.lat},${job.destination.lng}`;
+  }
+  if (job.addressSummary) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.addressSummary)}`;
+  }
+  return null;
+};
 </script>
 
 <template>
@@ -307,6 +317,20 @@ const handleChatWithCustomer = async (job: ServiceOrderItem) => {
               <Navigation :size="14" />
               <span>Bắt đầu di chuyển</span>
             </button>
+
+            <!-- Google Maps Directions Link -->
+            <a
+              v-if="getGoogleMapsUrl(job)"
+              :href="getGoogleMapsUrl(job)!"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="px-2.5 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 active:scale-95 text-ink-700 text-xs font-bold flex items-center gap-1.5 transition-all"
+              title="Mở chỉ đường trên Google Maps"
+              @click.stop
+            >
+              <Navigation :size="13" class="text-brand-600" />
+              <span>Chỉ đường</span>
+            </a>
 
             <!-- Quick Chat with Customer Button -->
             <button
