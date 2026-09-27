@@ -49,7 +49,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-ink-50 text-ink-900">
+  <div class="min-h-screen flex flex-col bg-white text-ink-900">
     <!-- Header: Transparent -> Solid on scroll per P6.1 -->
     <header
       class="fixed top-0 left-0 right-0 z-40 transition-all duration-200"
