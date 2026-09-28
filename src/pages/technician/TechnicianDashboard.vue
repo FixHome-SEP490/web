@@ -27,6 +27,7 @@ import {
   Check,
   Radio,
   ExternalLink,
+  AlertCircle,
 } from 'lucide-vue-next';
 
 import {
@@ -37,6 +38,7 @@ import {
 import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
+import { walletApi, type WalletSummary } from '../../api/wallet.api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -48,11 +50,20 @@ const jobs = ref<ServiceOrderItem[]>([]);
 const isAvailable = ref<boolean | null>(null);
 const profile = ref<TechnicianProfileView | null>(null);
 const invitations = ref<InvitationItem[]>([]);
+const wallet = ref<WalletSummary | null>(null);
 const decliningInvitation = ref(false);
 const acceptingInvitation = ref(false);
 const togglingAvailability = ref(false);
 
 const topInvitation = computed(() => invitations.value[0] ?? null);
+
+const loadWallet = async () => {
+  try {
+    wallet.value = await walletApi.getMyWallet();
+  } catch {
+    wallet.value = null;
+  }
+};
 
 const loadInvitations = async () => {
   try {
@@ -132,6 +143,7 @@ const loadData = async () => {
   }
 
   await loadInvitations();
+  await loadWallet();
   await profileRequest;
 };
 
@@ -334,6 +346,29 @@ const currentDateFormatted = computed(() => {
       </div>
     </div>
 
+    <!-- Low Balance / Ineligible Alert Banner -->
+    <div
+      v-if="wallet && !wallet.eligibleForJobs"
+      class="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+    >
+      <div class="flex items-center gap-3">
+        <AlertCircle :size="22" class="text-amber-600 shrink-0" />
+        <div class="text-xs sm:text-sm">
+          <strong class="font-extrabold text-amber-900">
+            Số dư ví hiện tại ({{ (wallet.balance).toLocaleString('vi-VN') }} ₫) đang thấp hơn mức ký quỹ tối thiểu ({{ (wallet.minimumBalance).toLocaleString('vi-VN') }} ₫).
+          </strong>
+          <span class="block sm:inline text-amber-800"> Tài khoản tạm dừng nhận lời mời việc mới cho đến khi nạp thêm tiền.</span>
+        </div>
+      </div>
+      <router-link
+        to="/tech/wallet"
+        class="shrink-0 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5"
+      >
+        <span>Nạp tiền ngay</span>
+        <ArrowRight :size="13" />
+      </router-link>
+    </div>
+
     <!-- 2. High Priority Alert: Urgent Invitation Card (If available) -->
     <div
       v-if="topInvitation"
@@ -393,27 +428,32 @@ const currentDateFormatted = computed(() => {
 
     <!-- 3. Key Performance Indicators (Bento Grid 4 Cards) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-      <!-- 1. Thu nhập khả dụng -->
+      <!-- 1. Ví tài khoản KTV -->
       <div class="bg-white rounded-3xl border border-ink-200/90 p-5 shadow-xs hover:border-brand-300 transition-all flex flex-col justify-between space-y-4">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-ink-500">Thu nhập tích lũy</span>
-          <div class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60 shadow-2xs">
+          <span class="text-xs font-bold uppercase tracking-wider text-ink-500">Ví tài khoản</span>
+          <div class="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-200/60 shadow-2xs">
             <Wallet :size="18" />
           </div>
         </div>
         <div>
-          <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight">
-            {{ totalEarnings.toLocaleString('vi-VN') }} <span class="text-sm font-bold text-ink-500 font-sans">đ</span>
+          <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight" :class="[wallet && wallet.balance < 0 ? 'text-rose-600' : '']">
+            {{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} <span class="text-sm font-bold text-ink-500 font-sans">₫</span>
           </div>
-          <p class="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            <CheckCircle2 :size="13" /> Thực nhận 85% doanh thu
+          <p class="text-xs font-semibold mt-1 flex items-center gap-1" :class="wallet?.eligibleForJobs ? 'text-emerald-600' : 'text-rose-600'">
+            <CheckCircle2 v-if="wallet?.eligibleForJobs" :size="13" />
+            <AlertCircle v-else :size="13" />
+            <span>{{ wallet?.eligibleForJobs ? 'Đủ điều kiện nhận việc' : 'Dưới mức ký quỹ' }}</span>
           </p>
+          <div class="text-[11px] text-ink-500 font-medium pt-0.5">
+            Tích lũy hoàn tất: <strong class="font-num text-ink-700">{{ totalEarnings.toLocaleString('vi-VN') }} ₫</strong>
+          </div>
         </div>
         <router-link
-          to="/tech/earnings"
+          to="/tech/wallet"
           class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 pt-2 border-t border-ink-100"
         >
-          <span>Xem chi tiết thu nhập</span>
+          <span>Vào ví & Nạp / Rút</span>
           <ArrowRight :size="13" />
         </router-link>
       </div>

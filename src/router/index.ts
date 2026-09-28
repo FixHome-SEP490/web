@@ -215,6 +215,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Báo cáo thu nhập' },
       },
       {
+        path: 'wallet',
+        name: 'tech-wallet',
+        component: () => import('../pages/technician/TechnicianWalletPage.vue'),
+        meta: { title: 'Ví Kỹ thuật viên' },
+      },
+      {
         path: 'profile',
         name: 'technician-profile',
         component: () => import('../pages/technician/TechnicianProfilePage.vue'),
@@ -264,6 +270,12 @@ const routes: RouteRecordRaw[] = [
         name: 'console-part-requests',
         component: () => import('../pages/console/ConsolePartRequestsPage.vue'),
         meta: { title: 'Yêu cầu linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
+        path: 'wallets',
+        name: 'console-wallets',
+        component: () => import('../pages/console/ConsoleWalletsPage.vue'),
+        meta: { title: 'Ví & Rút tiền KTV', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'technicians',
