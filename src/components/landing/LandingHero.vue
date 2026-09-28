@@ -88,8 +88,6 @@ const router = useRouter();
             Gợi ý nguyên nhân sơ bộ giúp kỹ thuật viên nắm rõ vấn đề và chuẩn bị linh kiện trước khi đến.
           </p>
         </div>
-
-        <p class="mt-3 px-4 text-center text-xs text-ink-500 lg:text-left">Ảnh minh họa quy trình thực tế</p>
       </div>
     </div>
 

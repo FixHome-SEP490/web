@@ -239,10 +239,8 @@ describe('Public landing page', () => {
     expect(wrapper.text()).toContain('Khoanh vùng nguyên nhân có thể gặp');
     expect(wrapper.text()).toContain('Gợi ý dịch vụ & kỹ thuật viên');
 
-    // Verify CTA and disclaimer
+    // Verify CTA
     expect(wrapper.text()).toContain('Phân tích sự cố bằng AI');
-    expect(wrapper.text()).toContain('Lưu ý:');
-    expect(wrapper.text()).toContain('Kết quả AI chỉ mang tính tham khảo sơ bộ');
     wrapper.unmount();
   });
 

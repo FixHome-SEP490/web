@@ -5,7 +5,6 @@ import {
   Sparkles,
   ArrowRight,
   CheckCircle2,
-  Info,
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
@@ -155,15 +154,6 @@ const stages = [
             </FhButton>
             <p class="mt-2 text-xs leading-5 text-ink-500">
               Đăng nhập để sử dụng AI trong quá trình đặt lịch. Bạn luôn có thể chọn dịch vụ thủ công bất kỳ lúc nào.
-            </p>
-          </div>
-
-          <!-- AI DISCLAIMER PER ISSUE 05 -->
-          <div class="flex items-start gap-2.5 rounded-xl bg-ink-50 p-3.5 text-xs leading-5 text-ink-600 border border-ink-100">
-            <Info :size="16" class="mt-0.5 shrink-0 text-brand-600" aria-hidden="true" />
-            <p>
-              <strong class="font-medium text-ink-800">Lưu ý:</strong>
-              Kết quả AI chỉ mang tính tham khảo sơ bộ. Kỹ thuật viên sẽ kiểm tra trực tiếp và xác nhận phương án xử lý tại nhà.
             </p>
           </div>
         </div>
