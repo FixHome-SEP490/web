@@ -836,22 +836,30 @@ const handleSaveAvatar = async () => {
       <!-- 2. METRICS OVERVIEW CARDS (Desktop 4-column KPI strip) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- KPI 1: Đánh giá -->
-        <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-300 transition-all flex items-center gap-4">
-          <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200">
+        <div
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-400 transition-all flex items-center gap-4 cursor-pointer group"
+          @click="activeTab = 'info'"
+          title="Bấm để xem thông tin chi tiết hồ sơ & đánh giá"
+        >
+          <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 group-hover:scale-105 transition-transform">
             <Star :size="24" class="fill-amber-500 text-amber-500" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold uppercase text-ink-500">Đánh giá khách hàng</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-ink-900">{{ technicianProfile.averageRating }}</span>
+              <span class="text-2xl font-black font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
               <span class="text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
             </div>
           </div>
         </div>
 
         <!-- KPI 2: Điểm tin cậy -->
-        <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-300 transition-all flex items-center gap-4">
-          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200">
+        <div
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-400 transition-all flex items-center gap-4 cursor-pointer group"
+          @click="activeTab = 'info'"
+          title="Bấm để xem hồ sơ xác thực và chỉ số uy tín"
+        >
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200 group-hover:scale-105 transition-transform">
             <ShieldCheck :size="24" />
           </div>
           <div class="min-w-0 flex-1">

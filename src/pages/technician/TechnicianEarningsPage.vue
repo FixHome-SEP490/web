@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { DollarSign, Calendar, Wallet, ArrowUpRight, Download } from 'lucide-vue-next';
 
 import { FhMoney, FhTable, FhButton } from '../../components';
 
+const router = useRouter();
 const showWalletDemo = import.meta.env.DEV;
 const payouts = ref([
   {
@@ -64,11 +66,15 @@ const payouts = ref([
     </div>
 
     <!-- Hero Wallet Balance Card (Mobile Style) -->
-    <div class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-blue-700 via-brand-600 to-indigo-700 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+    <div
+      class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-blue-700 via-brand-600 to-indigo-700 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-6 cursor-pointer hover:shadow-lg transition-all group"
+      @click="router?.push('/tech/wallet')"
+      title="Bấm để mở Ví Kỹ thuật viên & Quản lý số dư"
+    >
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 text-xs font-semibold text-blue-200">
           <Wallet :size="16" class="text-amber-300" />
-          <span>Số dư minh họa (DEMO — không thể rút)</span>
+          <span>Số dư minh họa (Bấm để xem Ví)</span>
         </div>
         <div class="text-3xl sm:text-4xl font-extrabold font-num tracking-tight">
           3.850.000 <span class="text-lg font-sans font-bold">VNĐ</span>
@@ -80,8 +86,10 @@ const payouts = ref([
 
       <button
         type="button"
-        class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-blue-50 active:scale-95 text-xs font-extrabold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2"
-        disabled aria-disabled="true" title="Chức năng rút tiền chưa được triển khai"
+        class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-blue-50 active:scale-95 text-xs font-extrabold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+        disabled
+        aria-disabled="true"
+        title="Chức năng rút tiền chưa được triển khai (DEMO)"
       >
         <span>Rút tiền chưa hỗ trợ (DEMO)</span>
         <ArrowUpRight :size="16" />
@@ -90,7 +98,11 @@ const payouts = ref([
 
     <!-- 4 Gradient Stat Cards (Matching Mobile Home Overview) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-sky-100 via-sky-50 to-white border border-sky-200/80 shadow-xs space-y-1">
+      <div
+        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-sky-100 via-sky-50 to-white border border-sky-200/80 shadow-xs space-y-1 cursor-pointer hover:border-sky-300 hover:shadow-sm transition-all"
+        @click="router?.push('/tech/wallet')"
+        title="Bấm để xem lịch sử biến động số dư"
+      >
         <span class="text-xs font-bold text-sky-800">Thực nhận tháng này</span>
         <div class="text-lg sm:text-2xl font-extrabold text-sky-950 font-num">
           12.450.000 <span class="text-xs font-sans font-bold text-sky-700">đ</span>
@@ -98,7 +110,11 @@ const payouts = ref([
         <p class="text-[11px] text-sky-600 font-medium">+15% so với tháng trước</p>
       </div>
 
-      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-100 via-amber-50 to-white border border-amber-200/80 shadow-xs space-y-1">
+      <div
+        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-100 via-amber-50 to-white border border-amber-200/80 shadow-xs space-y-1 cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all"
+        @click="router?.push('/tech/jobs')"
+        title="Bấm để mở danh sách đơn hoàn tất"
+      >
         <span class="text-xs font-bold text-amber-800">Đơn hoàn tất</span>
         <div class="text-lg sm:text-2xl font-extrabold text-amber-950 font-num">
           28 <span class="text-xs font-sans font-bold text-amber-700">đơn</span>
@@ -106,7 +122,11 @@ const payouts = ref([
         <p class="text-[11px] text-amber-600 font-medium">Tỷ lệ thành công 96%</p>
       </div>
 
-      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-100 via-emerald-50 to-white border border-emerald-200/80 shadow-xs space-y-1">
+      <div
+        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-100 via-emerald-50 to-white border border-emerald-200/80 shadow-xs space-y-1 cursor-pointer hover:border-emerald-300 hover:shadow-sm transition-all"
+        @click="router?.push('/tech/profile')"
+        title="Bấm để xem chi tiết hồ sơ & đánh giá"
+      >
         <span class="text-xs font-bold text-emerald-800">Đánh giá sao</span>
         <div class="text-lg sm:text-2xl font-extrabold text-emerald-950 font-num">
           4.95 <span class="text-xs font-sans font-bold text-emerald-700">★</span>
