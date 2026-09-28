@@ -8,6 +8,7 @@ import LandingHero from '../src/components/landing/LandingHero.vue';
 import LandingMobileApp from '../src/components/landing/LandingMobileApp.vue';
 import LandingDiagnosis from '../src/components/landing/LandingDiagnosis.vue';
 import LandingHowItWorks from '../src/components/landing/LandingHowItWorks.vue';
+import LandingTrust from '../src/components/landing/LandingTrust.vue';
 import ServicesPage from '../src/pages/public/ServicesPage.vue';
 import PublicLayout from '../src/layouts/PublicLayout.vue';
 import { authGuard } from '../src/router/guards';
@@ -245,22 +246,47 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders LandingHowItWorks with 2-column journey layout and mobile app preview', async () => {
+  it('renders LandingHowItWorks with 5 steps and dynamic phone screen switching', async () => {
     const context = await setup();
     const wrapper = mount(LandingHowItWorks, context);
 
     expect(wrapper.text()).toContain('Sửa chữa đơn giản, từng bước rõ ràng');
-    const img = wrapper.get('img[src="/UI mobile.png"]');
+    // Initially renders step 1 image
+    let img = wrapper.get('img[src="/images/steps/step-1-select-service.png"]');
     expect(img.exists()).toBe(true);
 
-    // Verify 4 steps
-    expect(wrapper.text()).toContain('Mô tả sự cố & gửi ảnh');
-    expect(wrapper.text()).toContain('Phân tích sơ bộ bằng AI');
-    expect(wrapper.text()).toContain('Chọn lịch & Ghép nối thợ');
-    expect(wrapper.text()).toContain('Duyệt báo giá & Hoàn tất');
+    // Verify all 5 steps exist
+    expect(wrapper.text()).toContain('Mở ứng dụng & Chọn dịch vụ');
+    expect(wrapper.text()).toContain('Gửi ảnh & Nhờ AI chẩn đoán');
+    expect(wrapper.text()).toContain('AI phân tích & Đưa kết quả');
+    expect(wrapper.text()).toContain('Chọn lịch & Tìm kiếm thợ');
+    expect(wrapper.text()).toContain('Duyệt báo giá & Nghiệm thu hoàn tất');
+
+    // Click step 3 card to switch screen
+    const stepCards = wrapper.findAll('.cursor-pointer');
+    expect(stepCards.length).toBeGreaterThanOrEqual(5);
+    await stepCards[2]!.trigger('click');
+    await flushPromises();
+
+    // Image switches to step 3 AI result
+    img = wrapper.get('img[src="/images/steps/step-3-ai-result.png"]');
+    expect(img.exists()).toBe(true);
 
     // Verify CTA
     expect(wrapper.text()).toContain('Bắt đầu đặt lịch ngay');
+    wrapper.unmount();
+  });
+
+  it('renders LandingTrust with text on the left and technician photo on the right', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingTrust, context);
+
+    expect(wrapper.text()).toContain('Đúng người thực hiện');
+    expect(wrapper.text()).toContain('Đúng chuẩn tay nghề');
+    expect(wrapper.text()).toContain('Kỹ thuật viên đã xác minh');
+
+    const img = wrapper.get('img[src="/images/technician-home-640.webp"]');
+    expect(img.exists()).toBe(true);
     wrapper.unmount();
   });
 });

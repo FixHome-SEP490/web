@@ -32,7 +32,39 @@ const trustPillars = [
 <template>
   <section id="trust" class="landing-section bg-ink-50 border-b border-ink-100" aria-labelledby="trust-title">
     <div class="landing-container grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-      <!-- Visual Column: Image with Trust Floating Card -->
+      <!-- Content Column (Left): Eyebrow, Title, Pillars, Link -->
+      <div>
+        <p class="landing-eyebrow">An tâm khi mở cửa đón thợ</p>
+        <h2 id="trust-title" class="trust-title">
+          Đúng người thực hiện.
+          <br />
+          Đúng chuẩn tay nghề.
+        </h2>
+        <p class="landing-description mt-3">
+          Tại FixHome, an toàn và sự an tâm của gia đình bạn luôn được đặt lên hàng đầu trong mỗi lượt phục vụ.
+        </p>
+
+        <ul class="mt-8 space-y-6">
+          <li v-for="item in trustPillars" :key="item.title" class="flex items-start gap-4">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white border border-ink-200/80 text-brand-600 shadow-2xs">
+              <component :is="item.icon" :size="20" :stroke-width="1.8" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-ink-900">{{ item.title }}</h3>
+              <p class="mt-1 text-sm leading-6 text-ink-600">{{ item.description }}</p>
+            </div>
+          </li>
+        </ul>
+
+        <div class="mt-8 pt-4 border-t border-ink-200/60">
+          <router-link to="/for-technicians" class="landing-text-link">
+            Bạn là kỹ thuật viên? Tìm hiểu cách gia nhập FixHome
+            <ArrowRight :size="18" aria-hidden="true" />
+          </router-link>
+        </div>
+      </div>
+
+      <!-- Visual Column (Right): Image with Trust Floating Card -->
       <div class="relative">
         <figure class="overflow-hidden rounded-2xl bg-white shadow-sm border border-ink-200/80">
           <img
@@ -64,38 +96,6 @@ const trustPillars = [
               Công nghệ kết nối người phù hợp. Con người mang đến sự an tâm và tay nghề chuẩn mực.
             </p>
           </div>
-        </div>
-      </div>
-
-      <!-- Trust Pillars Content -->
-      <div>
-        <p class="landing-eyebrow">An tâm khi mở cửa đón thợ</p>
-        <h2 id="trust-title" class="trust-title">
-          Đúng người thực hiện.
-          <br />
-          Đúng chuẩn tay nghề.
-        </h2>
-        <p class="landing-description mt-3">
-          Tại FixHome, an toàn và sự an tâm của gia đình bạn luôn được đặt lên hàng đầu trong mỗi lượt phục vụ.
-        </p>
-
-        <ul class="mt-8 space-y-6">
-          <li v-for="item in trustPillars" :key="item.title" class="flex items-start gap-4">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white border border-ink-200/80 text-brand-600 shadow-2xs">
-              <component :is="item.icon" :size="20" :stroke-width="1.8" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 class="text-base font-semibold text-ink-900">{{ item.title }}</h3>
-              <p class="mt-1 text-sm leading-6 text-ink-600">{{ item.description }}</p>
-            </div>
-          </li>
-        </ul>
-
-        <div class="mt-8 pt-4 border-t border-ink-200/60">
-          <router-link to="/for-technicians" class="landing-text-link">
-            Bạn là kỹ thuật viên? Tìm hiểu cách gia nhập FixHome
-            <ArrowRight :size="18" aria-hidden="true" />
-          </router-link>
         </div>
       </div>
     </div>
