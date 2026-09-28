@@ -71,8 +71,8 @@ function updateActiveStepOnScroll() {
   const stepEls = sectionRef.value.querySelectorAll<HTMLElement>('[data-step-index]');
   if (!stepEls || stepEls.length === 0) return;
 
-  // Trigger point at 42% of viewport height (ideal reading focal zone)
-  const triggerZone = window.innerHeight * 0.42;
+  // The center focal reading line of the viewport (45% from top)
+  const triggerZone = window.innerHeight * 0.45;
   let bestIndex = activeStep.value;
   let minDistance = Infinity;
 
@@ -133,7 +133,7 @@ onUnmounted(() => {
   >
     <div class="landing-container">
       <!-- Section Header -->
-      <div class="max-w-2xl">
+      <div class="max-w-2xl mb-8">
         <p class="landing-eyebrow">Hành trình sửa chữa</p>
         <h2 id="steps-title" class="steps-title">Sửa chữa đơn giản, từng bước rõ ràng</h2>
         <p class="landing-description">
@@ -142,9 +142,9 @@ onUnmounted(() => {
       </div>
 
       <!-- 2-Column Storytelling Grid: Left Functions, Right Pinned Phone Mockup -->
-      <div class="mt-12 grid items-start gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-        <!-- LEFT COLUMN: 5 Interactive Function Steps with Scroll Progression -->
-        <div class="space-y-6 sm:space-y-8">
+      <div class="grid items-start gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
+        <!-- LEFT COLUMN: 5 Interactive Function Steps with Ample Scroll Travel -->
+        <div class="space-y-8 sm:space-y-12 pb-24 lg:pb-44">
           <div
             v-for="(step, idx) in steps"
             :key="step.stepNum"
@@ -152,7 +152,7 @@ onUnmounted(() => {
             class="group cursor-pointer rounded-2xl border p-5 sm:p-6 transition-all duration-300"
             :class="[
               activeStep === idx
-                ? 'border-brand-600 bg-white shadow-(--shadow-e2) ring-2 ring-brand-100 scale-[1.01]'
+                ? 'border-brand-600 bg-white shadow-md ring-2 ring-brand-100 scale-[1.01]'
                 : 'border-ink-200/80 bg-white/70 hover:border-brand-300 hover:bg-white opacity-85 hover:opacity-100'
             ]"
             @click="selectStep(idx)"
@@ -210,20 +210,20 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- RIGHT COLUMN: Sticky Real Phone Mockup with 0 Background Layers -->
-        <div class="lg:sticky lg:top-28 flex flex-col items-center justify-center">
+        <!-- RIGHT COLUMN: Sticky Centered Phone Mockup with 0 Background Layers -->
+        <div class="lg:sticky lg:top-24 flex flex-col items-center justify-center">
           <!-- Step Badge on Top -->
           <div
-            class="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-4 py-1.5 shadow-xs transition-all duration-300"
+            class="mb-3 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3.5 py-1 shadow-xs transition-all duration-300"
           >
             <span class="flex h-2 w-2 rounded-full bg-brand-600 animate-pulse"></span>
             <span class="text-xs font-bold text-ink-900 font-num">Bước 0{{ activeStep + 1 }}/05:</span>
             <span class="text-xs font-semibold text-brand-700">{{ steps[activeStep]?.badge }}</span>
           </div>
 
-          <!-- Phone Device Showcase (No background layer, exact 512x1040 transparent canvas) -->
-          <div class="relative w-full max-w-[340px] sm:max-w-[370px] lg:max-w-[385px] mx-auto transition-transform duration-300 hover:scale-[1.01]">
-            <div class="relative aspect-[512/1040] w-full select-none">
+          <!-- Scaled Down Phone Showcase (Perfect 100% viewport fit, 0 background layers) -->
+          <div class="relative w-full max-w-[250px] sm:max-w-[270px] lg:max-w-[285px] mx-auto select-none transition-transform duration-300 hover:scale-[1.01]">
+            <div class="relative aspect-[512/1040] w-full max-h-[min(550px,65vh)]">
               <img
                 v-for="(st, sIdx) in steps"
                 :key="st.stepNum"
@@ -244,16 +244,16 @@ onUnmounted(() => {
           </div>
 
           <!-- Interactive Screen Indicator Navigation Dots -->
-          <div class="mt-5 flex items-center justify-center gap-2">
+          <div class="mt-4 flex items-center justify-center gap-2">
             <button
               v-for="(st, sIdx) in steps"
               :key="st.stepNum"
               type="button"
-              class="h-2.5 rounded-full transition-all duration-300"
+              class="h-2 rounded-full transition-all duration-300"
               :class="[
                 activeStep === sIdx
-                  ? 'w-8 bg-brand-600 shadow-xs'
-                  : 'w-2.5 bg-ink-300 hover:bg-ink-500'
+                  ? 'w-7 bg-brand-600 shadow-xs'
+                  : 'w-2 bg-ink-300 hover:bg-ink-500'
               ]"
               :aria-label="`Xem màn hình bước ${sIdx + 1}: ${st.title}`"
               @click="selectStep(sIdx)"
