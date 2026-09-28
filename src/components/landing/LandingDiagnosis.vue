@@ -152,9 +152,6 @@ const stages = [
               Phân tích sự cố bằng AI
               <ArrowRight :size="18" aria-hidden="true" />
             </FhButton>
-            <p class="mt-2 text-xs leading-5 text-ink-500">
-              Đăng nhập để sử dụng AI trong quá trình đặt lịch. Bạn luôn có thể chọn dịch vụ thủ công bất kỳ lúc nào.
-            </p>
           </div>
         </div>
       </div>

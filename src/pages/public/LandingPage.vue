@@ -294,7 +294,8 @@ onUnmounted(() => {
 
 .story-section-reveal.is-revealed {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
+  will-change: auto;
 }
 
 @media (max-width: 767px) {
