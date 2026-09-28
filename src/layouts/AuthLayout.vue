@@ -20,7 +20,7 @@ import { ShieldCheck } from 'lucide-vue-next';
           <router-link to="/" class="inline-flex items-center gap-3 group">
             <img :src="'/logo.png'" alt="FixHome" class="w-11 h-11 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
             <div>
-              <span class="text-xl font-extrabold tracking-tight text-slate-900">Fix<span class="text-brand-600">Home</span></span>
+              <span class="text-xl font-extrabold tracking-tight"><span class="text-brand-600">Fix</span><span class="text-green-600">Home</span></span>
               <span class="block text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none mt-0.5">Dịch vụ sửa nhà</span>
             </div>
           </router-link>
@@ -74,7 +74,7 @@ import { ShieldCheck } from 'lucide-vue-next';
         <div class="lg:hidden flex justify-center mb-6">
           <router-link to="/" class="inline-flex items-center gap-2.5">
             <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs" />
-            <span class="text-2xl font-black tracking-tight text-slate-900">Fix<span class="text-brand-600">Home</span></span>
+            <span class="text-2xl font-black tracking-tight"><span class="text-brand-600">Fix</span><span class="text-green-600">Home</span></span>
           </router-link>
         </div>
 
