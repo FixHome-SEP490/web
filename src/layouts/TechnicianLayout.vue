@@ -85,8 +85,8 @@ const userInitial = computed(() => {
           <router-link to="/" class="inline-flex items-center gap-2.5 group">
             <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
             <div>
-              <div class="text-lg sm:text-xl font-extrabold text-ink-900 tracking-tight leading-none">
-                Fix<span class="text-brand-600">Home</span>
+              <div class="text-lg sm:text-xl font-extrabold tracking-tight leading-none">
+                <span class="text-brand-600">Fix</span><span class="text-green-600">Home</span>
               </div>
               <span class="block text-[9px] font-extrabold text-brand-700 tracking-widest uppercase mt-0.5">
                 Kỹ thuật viên

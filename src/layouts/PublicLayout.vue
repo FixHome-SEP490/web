@@ -1,273 +1,459 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  Menu,
+  X,
+  ArrowRight,
+  LogOut,
+  LayoutGrid,
+  ChevronDown,
+  User,
+  ClipboardList,
+} from 'lucide-vue-next';
 import { useAuthStore } from '../stores/auth';
-import { PhoneCall, ShieldCheck, Search, Menu, X, LayoutDashboard, LogOut, ChevronDown } from 'lucide-vue-next';
-
 import { FhButton } from '../components';
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const isScrolled = ref(false);
 const mobileMenuOpen = ref(false);
-const avatarMenuOpen = ref(false);
+const userMenuOpen = ref(false);
+const menuTrigger = ref<HTMLButtonElement | null>(null);
+const header = ref<HTMLElement | null>(null);
+const isScrolled = ref(false);
 
-const handleScroll = () => {
-  isScrolled.value = window.scrollY > 20;
-};
+const navigation = [
+  { label: 'Dịch vụ', to: '/services' },
+  { label: 'Cách hoạt động', to: '/#how-it-works' },
+  { label: 'Phân tích sự cố bằng AI', to: '/#ai' },
+  { label: 'Về FixHome', to: '/#trust' },
+];
 
-onMounted(async () => {
-  window.addEventListener('scroll', handleScroll);
-  handleScroll();
-  // If token exists but profile not yet loaded, fetch it silently
-  if (authStore.token && !authStore.user) {
-    try {
-      await authStore.fetchProfile();
-    } catch {
-      // ignore – user simply appears as guest
-    }
-  }
-});
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll);
-});
-
-/** Where the "Dashboard" button takes the logged-in user */
-const dashboardRoute = computed(() => {
-  const role = authStore.userRole;
-  if (role === 'ADMIN' || role === 'SERVICE_MANAGER') return '/console';
-  if (role === 'TECHNICIAN') return '/tech';
+const accountRoute = computed(() => {
+  if (authStore.userRole === 'ADMIN' || authStore.userRole === 'SERVICE_MANAGER') return '/console';
+  if (authStore.userRole === 'TECHNICIAN') return '/tech';
   return '/app';
 });
 
-const handleLogout = async () => {
-  avatarMenuOpen.value = false;
+const userInitial = computed(() => {
+  return authStore.user?.fullName?.charAt(0)?.toUpperCase() || 'U';
+});
+
+const roleLabel = computed(() => {
+  switch (authStore.userRole) {
+    case 'ADMIN':
+      return 'Quản trị viên';
+    case 'SERVICE_MANAGER':
+      return 'Quản lý dịch vụ';
+    case 'TECHNICIAN':
+      return 'Kỹ thuật viên';
+    case 'CUSTOMER':
+      return 'Khách hàng';
+    default:
+      return 'Thành viên';
+  }
+});
+
+function handleScroll() {
+  isScrolled.value = window.scrollY > 20;
+}
+
+watch(
+  () => route.fullPath,
+  () => {
+    mobileMenuOpen.value = false;
+    userMenuOpen.value = false;
+  },
+);
+async function closeMenu(restoreFocus = false) {
+  mobileMenuOpen.value = false;
+  if (restoreFocus) {
+    await nextTick();
+    menuTrigger.value?.focus();
+  }
+}
+function handleEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    if (mobileMenuOpen.value) void closeMenu(true);
+    userMenuOpen.value = false;
+  }
+}
+function handleOutsideClick(event: MouseEvent) {
+  // Close mobile and user menus if click is outside header / user menu
+  if (header.value && !event.composedPath().includes(header.value)) {
+    void closeMenu();
+    userMenuOpen.value = false;
+  }
+}
+async function logout() {
+  mobileMenuOpen.value = false;
+  userMenuOpen.value = false;
   await authStore.logout();
-  window.location.href = '/';
-};
+  await router.push('/');
+}
+onMounted(() => {
+  handleScroll();
+  window.addEventListener('scroll', handleScroll, { passive: true });
+  document.addEventListener('keydown', handleEscape);
+  document.addEventListener('click', handleOutsideClick);
+});
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll);
+  document.removeEventListener('keydown', handleEscape);
+  document.removeEventListener('click', handleOutsideClick);
+});
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-white text-ink-900">
-    <!-- Header: Transparent -> Solid on scroll per P6.1 -->
+  <div class="public-shell flex min-h-screen flex-col bg-white text-ink-900">
+    <a href="#main-content" class="skip-link">Đến nội dung chính</a>
     <header
-      class="fixed top-0 left-0 right-0 z-40 transition-all duration-200"
-      :class="[
-        isScrolled
-          ? 'bg-white/95 backdrop-blur-md border-b border-ink-200 shadow-(--shadow-e1) py-3.5'
-          : 'bg-transparent py-5',
-      ]"
+      ref="header"
+      class="sticky top-0 z-40 border-b transition-all duration-300"
+      :class="isScrolled ? 'border-ink-200/80 bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200 bg-white'"
     >
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-        <!-- Logo -->
-        <router-link to="/" class="inline-flex items-center gap-2.5 group">
-          <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
-          <div>
-            <span class="text-xl font-extrabold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
-            <span class="block text-[10px] font-medium text-ink-500 -mt-0.5 tracking-wider uppercase">Sửa chữa gia đình</span>
-          </div>
+      <div
+        class="public-container flex items-center justify-between gap-4 transition-all duration-300"
+        :class="isScrolled ? 'min-h-[66px] py-2' : 'min-h-20 py-3'"
+      >
+        <router-link to="/" aria-label="FixHome — Trang chủ" class="inline-flex shrink-0 items-center gap-2.5">
+          <img :src="'/logo.png'" alt="" width="44" height="44" class="h-11 w-11 object-contain transition-transform duration-200 hover:scale-105" />
+          <span class="text-xl font-bold tracking-tight">
+            <span class="text-brand-600">Fix</span><span class="text-green-600">Home</span>
+          </span>
         </router-link>
-
-        <!-- Desktop Navigation Links -->
-        <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-ink-700">
-          <router-link to="/services" class="hover:text-brand-600 transition-colors">Dịch vụ</router-link>
-          <router-link to="/how-it-works" class="hover:text-brand-600 transition-colors">Cách hoạt động</router-link>
-          <router-link to="/for-technicians" class="hover:text-brand-600 transition-colors">Dành cho Thợ</router-link>
-          <router-link to="/pricing-policy" class="hover:text-brand-600 transition-colors">Chính sách giá</router-link>
-          <router-link to="/track" class="inline-flex items-center gap-1.5 hover:text-brand-600 transition-colors">
-            <Search :size="15" />
-            Tra cứu đơn
+        <nav aria-label="Điều hướng chính" class="hidden items-center gap-7 xl:flex">
+          <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="public-nav-link">
+            {{ item.label }}
           </router-link>
         </nav>
-
-        <!-- Right Actions: auth-aware -->
-        <div class="hidden sm:flex items-center gap-3">
-          <!-- LOGGED IN: show Dashboard button + Avatar dropdown -->
+        <div class="hidden items-center gap-3.5 xl:flex">
           <template v-if="authStore.isAuthenticated">
-            <FhButton variant="primary" size="sm" @click="router.push(dashboardRoute)">
-              <LayoutDashboard :size="16" />
-              Vào trang quản lý
+            <!-- Vào trang quản lý button matching user's design -->
+            <FhButton
+              variant="primary"
+              size="md"
+              class="flex items-center gap-2 shadow-xs"
+              @click="router.push(accountRoute)"
+            >
+              <LayoutGrid :size="18" aria-hidden="true" />
+              <span>Vào trang quản lý</span>
             </FhButton>
 
-            <!-- Avatar dropdown -->
+            <!-- User Avatar & Dropdown Menu -->
             <div class="relative">
               <button
-                class="flex items-center gap-1.5 p-1 rounded-full hover:bg-ink-100 transition-colors"
-                @click="avatarMenuOpen = !avatarMenuOpen"
+                type="button"
+                class="flex items-center gap-1.5 p-1 rounded-full hover:bg-ink-100 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-600 focus:ring-offset-2"
+                :aria-expanded="userMenuOpen"
+                aria-haspopup="true"
+                aria-label="Menu tài khoản"
+                @click="userMenuOpen = !userMenuOpen"
               >
-                <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-200 overflow-hidden">
-                  <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
-                  <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
+                <!-- Avatar circle -->
+                <div class="h-9 w-9 rounded-full border-2 border-brand-200 overflow-hidden bg-brand-50 flex items-center justify-center text-brand-700 font-bold text-sm shadow-xs">
+                  <img
+                    v-if="authStore.user?.avatarUrl"
+                    :src="authStore.user.avatarUrl"
+                    class="h-full w-full object-cover"
+                    alt="Avatar"
+                  />
+                  <span v-else>{{ userInitial }}</span>
                 </div>
-                <ChevronDown :size="14" class="text-ink-500" />
+                <!-- Chevron down -->
+                <ChevronDown
+                  :size="15"
+                  class="text-ink-600 transition-transform duration-200"
+                  :class="{ 'rotate-180': userMenuOpen }"
+                  aria-hidden="true"
+                />
               </button>
 
+              <!-- Dropdown Menu -->
               <div
-                v-if="avatarMenuOpen"
-                class="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-ink-200 shadow-lg py-2 z-50 divide-y divide-ink-100"
-                @click="avatarMenuOpen = false"
+                v-show="userMenuOpen"
+                class="absolute right-0 mt-2.5 w-60 rounded-xl border border-ink-200 bg-white py-2 shadow-(--shadow-e3) z-50 divide-y divide-ink-100"
               >
-                <div class="px-4 py-2">
-                  <p class="text-sm font-semibold text-ink-900 truncate">{{ authStore.user?.fullName }}</p>
-                  <p class="text-xs text-ink-500 truncate">{{ authStore.user?.email }}</p>
+                <!-- User Profile Header -->
+                <div class="px-4 py-2.5">
+                  <p class="text-sm font-bold text-ink-900 truncate">{{ authStore.user?.fullName || 'Người dùng' }}</p>
+                  <p class="text-xs text-ink-500 truncate mt-0.5">{{ authStore.user?.email || '' }}</p>
+                  <span class="inline-block mt-1.5 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-50 text-brand-700 border border-brand-100">
+                    {{ roleLabel }}
+                  </span>
                 </div>
-                <div class="py-1 text-sm text-ink-700">
-                  <button
-                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 w-full text-left"
-                    @click="router.push(dashboardRoute)"
+
+                <!-- Navigation Links in Dropdown -->
+                <div class="py-1.5 text-sm text-ink-700">
+                  <router-link
+                    :to="accountRoute"
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                    @click="userMenuOpen = false"
                   >
-                    <LayoutDashboard :size="16" />
-                    Trang quản lý
-                  </button>
+                    <LayoutGrid :size="16" class="text-ink-500" />
+                    <span>Tài khoản</span>
+                  </router-link>
+                  <router-link
+                    v-if="authStore.userRole === 'CUSTOMER'"
+                    to="/app/orders"
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                    @click="userMenuOpen = false"
+                  >
+                    <ClipboardList :size="16" class="text-ink-500" />
+                    <span>Đơn sửa chữa của tôi</span>
+                  </router-link>
+                  <router-link
+                    v-else-if="authStore.userRole === 'TECHNICIAN'"
+                    to="/tech/jobs"
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                    @click="userMenuOpen = false"
+                  >
+                    <ClipboardList :size="16" class="text-ink-500" />
+                    <span>Đơn nhận việc</span>
+                  </router-link>
+                  <router-link
+                    v-else-if="authStore.userRole === 'ADMIN' || authStore.userRole === 'SERVICE_MANAGER'"
+                    to="/console/orders"
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                    @click="userMenuOpen = false"
+                  >
+                    <ClipboardList :size="16" class="text-ink-500" />
+                    <span>Quản lý đơn</span>
+                  </router-link>
+                  <router-link
+                    v-if="authStore.userRole === 'CUSTOMER'"
+                    to="/app/profile"
+                    class="flex items-center gap-2.5 px-4 py-2 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                    @click="userMenuOpen = false"
+                  >
+                    <User :size="16" class="text-ink-500" />
+                    <span>Hồ sơ cá nhân</span>
+                  </router-link>
                 </div>
-                <div class="py-1">
+
+                <!-- Logout Action -->
+                <div class="pt-1.5 pb-1">
                   <button
-                    class="flex items-center gap-2.5 px-4 py-2 text-sm text-danger-600 hover:bg-danger-50 w-full text-left"
-                    @click="handleLogout"
+                    type="button"
+                    class="flex items-center gap-2.5 px-4 py-2 text-sm font-medium text-danger-600 hover:bg-danger-50 w-full text-left transition-colors"
+                    @click="logout"
                   >
                     <LogOut :size="16" />
-                    Đăng xuất
+                    <span>Đăng xuất</span>
                   </button>
                 </div>
               </div>
             </div>
           </template>
 
-          <!-- GUEST: show login / register -->
           <template v-else>
-            <FhButton variant="ghost" size="sm" @click="router.push('/login')">
-              Đăng nhập
-            </FhButton>
-            <FhButton variant="primary" size="sm" @click="router.push('/register')">
-              Đăng ký ngay
+            <router-link to="/login" class="public-nav-link">Đăng nhập</router-link>
+            <FhButton @click="router.push('/app/bookings/new')">
+              Đặt lịch sửa chữa
+              <ArrowRight :size="16" aria-hidden="true" />
             </FhButton>
           </template>
         </div>
 
-        <!-- Mobile Menu Trigger -->
-        <button
-          class="md:hidden p-2 text-ink-700 hover:text-ink-900 rounded-sm"
-          @click="mobileMenuOpen = !mobileMenuOpen"
-        >
-          <Menu v-if="!mobileMenuOpen" :size="24" />
-          <X v-else :size="24" />
-        </button>
-      </div>
-
-      <!-- Mobile Dropdown Menu -->
-      <div
-        v-if="mobileMenuOpen"
-        class="md:hidden bg-white border-b border-ink-200 px-4 py-6 space-y-4 shadow-(--shadow-e2)"
-      >
-        <div class="flex flex-col space-y-3 text-base font-medium">
-          <router-link to="/services" class="py-1 text-ink-800" @click="mobileMenuOpen = false">Dịch vụ</router-link>
-          <router-link to="/how-it-works" class="py-1 text-ink-800" @click="mobileMenuOpen = false">Cách hoạt động</router-link>
-          <router-link to="/for-technicians" class="py-1 text-ink-800" @click="mobileMenuOpen = false">Dành cho Thợ</router-link>
-          <router-link to="/pricing-policy" class="py-1 text-ink-800" @click="mobileMenuOpen = false">Chính sách giá</router-link>
-          <router-link to="/track" class="py-1 text-ink-800 flex items-center gap-2" @click="mobileMenuOpen = false">
-            <Search :size="16" />
-            Tra cứu đơn
-          </router-link>
-        </div>
-        <div class="pt-4 border-t border-ink-100 flex flex-col gap-2">
-          <!-- Mobile: auth-aware buttons -->
+        <div class="flex items-center gap-3 xl:hidden">
           <template v-if="authStore.isAuthenticated">
-            <div class="px-1 py-2 text-sm font-medium text-ink-700 flex items-center gap-2">
-              <div class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-xs border border-brand-200 overflow-hidden">
-                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
-                <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
-              </div>
-              <span class="truncate">{{ authStore.user?.fullName }}</span>
-            </div>
-            <FhButton variant="primary" size="md" block @click="router.push(dashboardRoute); mobileMenuOpen = false;">
-              <LayoutDashboard :size="16" />
-              Vào trang quản lý
-            </FhButton>
-            <FhButton variant="ghost" size="md" block @click="handleLogout; mobileMenuOpen = false;">
-              Đăng xuất
+            <FhButton size="sm" class="flex items-center gap-1.5" @click="router.push(accountRoute)">
+              <LayoutGrid :size="16" />
+              <span class="hidden sm:inline">Vào trang quản lý</span>
             </FhButton>
           </template>
-          <template v-else>
-            <FhButton variant="secondary" size="md" block @click="router.push('/login'); mobileMenuOpen = false;">
-              Đăng nhập
-            </FhButton>
-            <FhButton variant="primary" size="md" block @click="router.push('/register'); mobileMenuOpen = false;">
-              Đăng ký tài khoản
-            </FhButton>
-          </template>
+          <div v-else class="hidden sm:block">
+            <FhButton @click="router.push('/app/bookings/new')">Đặt lịch sửa chữa</FhButton>
+          </div>
+          <button
+            ref="menuTrigger"
+            type="button"
+            class="flex h-12 w-12 items-center justify-center rounded-sm border border-ink-200"
+            :aria-label="mobileMenuOpen ? 'Đóng menu' : 'Mở menu'"
+            :aria-expanded="mobileMenuOpen"
+            aria-controls="public-mobile-menu"
+            @click="mobileMenuOpen = !mobileMenuOpen"
+          >
+            <X v-if="mobileMenuOpen" :size="24" aria-hidden="true" />
+            <Menu v-else :size="24" aria-hidden="true" />
+          </button>
         </div>
       </div>
+      <nav
+        v-if="mobileMenuOpen"
+        id="public-mobile-menu"
+        aria-label="Điều hướng trên di động"
+        class="absolute inset-x-0 top-full max-h-[calc(100dvh-80px)] overflow-y-auto border-b border-ink-200 bg-white px-4 pb-6 shadow-(--shadow-e2) xl:hidden"
+      >
+        <router-link
+          v-for="item in navigation"
+          :key="item.to"
+          :to="item.to"
+          class="public-nav-link flex border-b border-ink-100 py-3"
+          @click="closeMenu()"
+        >
+          {{ item.label }}
+        </router-link>
+        <router-link to="/track" class="public-nav-link flex py-3" @click="closeMenu()">
+          Tra cứu đơn sửa chữa
+        </router-link>
+        <div class="mt-4 grid gap-3">
+          <template v-if="authStore.isAuthenticated">
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-ink-50 border border-ink-100">
+              <div class="h-10 w-10 rounded-full border-2 border-brand-200 overflow-hidden bg-brand-50 flex items-center justify-center text-brand-700 font-bold text-sm shrink-0">
+                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="h-full w-full object-cover" />
+                <span v-else>{{ userInitial }}</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-bold text-ink-900 truncate">{{ authStore.user?.fullName || 'Người dùng' }}</p>
+                <p class="text-xs text-ink-500 truncate">{{ authStore.user?.email || '' }}</p>
+                <span class="inline-block mt-0.5 text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+                  {{ roleLabel }}
+                </span>
+              </div>
+            </div>
+            <FhButton block class="flex items-center justify-center gap-2" @click="router.push(accountRoute); closeMenu();">
+              <LayoutGrid :size="16" />
+              <span>Vào trang quản lý</span>
+            </FhButton>
+            <router-link :to="accountRoute" class="public-nav-link justify-center font-medium" @click="closeMenu()">
+              Tài khoản
+            </router-link>
+            <FhButton variant="ghost" block @click="logout">Đăng xuất</FhButton>
+          </template>
+          <template v-else>
+            <FhButton block @click="router.push('/app/bookings/new')">Đặt lịch sửa chữa</FhButton>
+            <router-link to="/login" class="public-nav-link justify-center" @click="closeMenu()">
+              Đăng nhập
+            </router-link>
+          </template>
+        </div>
+      </nav>
     </header>
-
-    <!-- Main Content -->
-    <main class="flex-1 pt-20">
-      <router-view />
-    </main>
-
-    <!-- Comprehensive Footer per P6.1 -->
-    <footer class="bg-white border-t border-ink-200 pt-16 pb-12 mt-20">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-10">
-          <!-- Col 1: Brand -->
-          <div class="space-y-4 md:col-span-1">
-            <div class="inline-flex items-center gap-2.5">
-              <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-lg" />
-              <span class="text-xl font-extrabold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
-            </div>
-            <p class="text-sm text-ink-600 leading-relaxed">
-              Nền tảng công nghệ kết nối thợ sửa chữa gia đình hàng đầu. Minh bạch tiền công và vật tư.
-            </p>
-            <div class="inline-flex items-center gap-2 text-xs text-ink-500">
-              <ShieldCheck :size="16" class="text-success-600" />
-              Bảo vệ quyền lợi khách hàng 100%
-            </div>
-          </div>
-
-          <!-- Col 2: Services -->
+    <main id="main-content" tabindex="-1" class="min-w-0 flex-1"><router-view /></main>
+    <footer class="border-t border-ink-200 bg-ink-25 py-12">
+      <div class="public-container">
+        <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div>
-            <h4 class="text-sm font-semibold text-ink-900 uppercase tracking-wider mb-4">Dịch vụ chính</h4>
-            <ul class="space-y-2.5 text-sm text-ink-600">
-              <li><router-link to="/services/dien-lanh" class="hover:text-brand-600 transition-colors">Sửa chữa máy lạnh</router-link></li>
-              <li><router-link to="/services/dien-nuoc" class="hover:text-brand-600 transition-colors">Điện &amp; Nước dân dụng</router-link></li>
-              <li><router-link to="/services/thiet-bi-bep" class="hover:text-brand-600 transition-colors">Thiết bị bếp &amp; gia dụng</router-link></li>
-              <li><router-link to="/services/khoa-cua" class="hover:text-brand-600 transition-colors">Khoá cửa &amp; An ninh</router-link></li>
+            <router-link
+              to="/"
+              class="inline-flex min-h-12 items-center gap-2"
+              aria-label="FixHome — Trang chủ"
+            >
+              <img :src="'/logo.png'" alt="" width="44" height="44" class="h-11 w-11 object-contain" />
+              <span class="text-lg font-bold">
+                <span class="text-brand-600">Fix</span><span class="text-green-600">Home</span>
+              </span>
+            </router-link>
+            <p class="mt-4 max-w-xs text-sm leading-6 text-ink-600">
+              Kết nối kỹ thuật viên sửa chữa tại nhà, với AI hỗ trợ và chi phí minh bạch.
+            </p>
+          </div>
+          <div>
+            <h2 class="mb-3 text-sm font-semibold">Dịch vụ</h2>
+            <ul class="text-sm text-ink-600">
+              <li><router-link to="/services" class="public-footer-link">Danh mục dịch vụ</router-link></li>
+              <li>
+                <router-link to="/pricing-policy" class="public-footer-link">Chính sách giá</router-link>
+              </li>
+              <li>
+                <router-link to="/app/bookings/new" class="public-footer-link">Đặt lịch sửa chữa</router-link>
+              </li>
             </ul>
           </div>
-
-          <!-- Col 3: Links -->
           <div>
-            <h4 class="text-sm font-semibold text-ink-900 uppercase tracking-wider mb-4">Thông tin</h4>
-            <ul class="space-y-2.5 text-sm text-ink-600">
-              <li><router-link to="/how-it-works" class="hover:text-brand-600 transition-colors">Quy trình sửa chữa</router-link></li>
-              <li><router-link to="/for-technicians" class="hover:text-brand-600 transition-colors">Gia nhập đội ngũ thợ</router-link></li>
-              <li><router-link to="/pricing-policy" class="hover:text-brand-600 transition-colors">Chính sách công &amp; vật tư</router-link></li>
-              <li><router-link to="/track" class="hover:text-brand-600 transition-colors">Tra cứu tiến độ đơn</router-link></li>
+            <h2 class="mb-3 text-sm font-semibold">Về FixHome</h2>
+            <ul class="text-sm text-ink-600">
+              <li>
+                <router-link to="/how-it-works" class="public-footer-link">Quy trình hoạt động</router-link>
+              </li>
+              <li><router-link to="/#ai" class="public-footer-link">Phân tích sự cố bằng AI</router-link></li>
+              <li>
+                <router-link to="/for-technicians" class="public-footer-link">
+                  Dành cho kỹ thuật viên
+                </router-link>
+              </li>
             </ul>
           </div>
-
-          <!-- Col 4: Contact -->
-          <div class="space-y-3">
-            <h4 class="text-sm font-semibold text-ink-900 uppercase tracking-wider mb-4">Hỗ trợ khẩn cấp</h4>
-            <div class="flex items-center gap-3 text-brand-600 font-num font-bold text-lg">
-              <PhoneCall :size="20" />
-              1900 8888 (24/7)
-            </div>
-            <p class="text-xs text-ink-500">
-              Tổng đài xử lý sự cố khẩn cấp và bảo hành toàn quốc.
-            </p>
+          <div>
+            <h2 class="mb-3 text-sm font-semibold">Hỗ trợ</h2>
+            <ul class="text-sm text-ink-600">
+              <li>
+                <router-link to="/#questions" class="public-footer-link">Câu hỏi thường gặp</router-link>
+              </li>
+              <li><router-link to="/track" class="public-footer-link">Tra cứu đơn sửa chữa</router-link></li>
+              <li>
+                <router-link
+                  :to="authStore.isAuthenticated ? accountRoute : '/login'"
+                  class="public-footer-link"
+                >
+                  Tài khoản của bạn
+                </router-link>
+              </li>
+            </ul>
           </div>
         </div>
-
-        <div class="mt-12 pt-8 border-t border-ink-100 flex flex-col sm:flex-row items-center justify-between text-xs text-ink-500 gap-4">
-          <div>© 2026 FixHome Vietnam. Đồ án tốt nghiệp SEP490.</div>
-          <div class="flex gap-6">
-            <span>Điều khoản sử dụng</span>
-            <span>Chính sách bảo mật</span>
-            <span>Chính sách giải quyết tranh chấp</span>
-          </div>
+        <div
+          class="mt-10 flex flex-col justify-between gap-3 border-t border-ink-200 pt-6 text-xs leading-5 text-ink-600 sm:flex-row"
+        >
+          <span>© {{ new Date().getFullYear() }} FixHome. Đồ án tốt nghiệp SEP490.</span>
+          <span>Chăm sóc ngôi nhà, bắt đầu từ sự an tâm.</span>
         </div>
       </div>
     </footer>
   </div>
 </template>
+
+<style scoped>
+.public-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+.public-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink-700);
+  transition: color 0.15s ease;
+}
+.public-nav-link:hover,
+.public-footer-link:hover {
+  color: var(--color-brand-600);
+}
+.public-footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-block: 8px;
+}
+.public-shell :is(a, button):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 4px;
+}
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: -100px;
+  z-index: 50;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-600);
+  color: white;
+}
+.skip-link:focus {
+  top: 8px;
+}
+#main-content {
+  scroll-margin-top: 80px;
+}
+@media (max-width: 767px) {
+  .public-container {
+    padding-inline: 16px;
+  }
+}
+</style>

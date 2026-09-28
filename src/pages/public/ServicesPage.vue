@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
 import { Search, Clock } from 'lucide-vue-next';
 
@@ -8,12 +8,19 @@ import { FhButton, FhMoney, FhSkeleton, FhEmptyState } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 
 const router = useRouter();
+const route = useRoute();
 const selectedCategoryId = ref('ALL');
 const searchQuery = ref('');
 
 const loading = ref(true);
 const loadError = ref('');
 const categories = ref<ServiceCategory[]>([]);
+
+// Landing category links select the existing catalog filter, including on back/forward.
+watch([() => route.query.category, categories], ([category]) => {
+  selectedCategoryId.value = typeof category === 'string' && categories.value.some(item => item.id === category)
+    ? category : 'ALL';
+}, { immediate: true });
 
 useSmoothScroll();
 
