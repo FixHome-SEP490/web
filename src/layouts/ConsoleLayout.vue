@@ -20,6 +20,7 @@ import {
   Receipt,
   ScrollText,
   Boxes,
+  Wallet,
 } from 'lucide-vue-next';
 
 
@@ -37,6 +38,7 @@ const navigation = computed(() => [
       { label: 'Board đơn sửa chữa', path: '/console/orders', icon: KanbanSquare },
       { label: 'Yêu cầu linh kiện', path: '/console/part-requests', icon: Boxes },
       { label: 'Gán thợ thủ công', path: '/console/bookings', icon: UserPlus },
+      { label: 'Ví & Rút tiền KTV', path: '/console/wallets', icon: Wallet },
         ...(isServiceManager.value
         ? [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
