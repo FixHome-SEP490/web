@@ -6,6 +6,8 @@ import apiClient from '../src/api/client';
 import LandingServices from '../src/components/landing/LandingServices.vue';
 import LandingHero from '../src/components/landing/LandingHero.vue';
 import LandingMobileApp from '../src/components/landing/LandingMobileApp.vue';
+import LandingDiagnosis from '../src/components/landing/LandingDiagnosis.vue';
+import LandingHowItWorks from '../src/components/landing/LandingHowItWorks.vue';
 import ServicesPage from '../src/pages/public/ServicesPage.vue';
 import PublicLayout from '../src/layouts/PublicLayout.vue';
 import { authGuard } from '../src/router/guards';
@@ -218,6 +220,47 @@ describe('Public landing page', () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain('Hỗ trợ iOS 15+ & Android 10+');
+    wrapper.unmount();
+  });
+
+  it('renders LandingDiagnosis with the AI diagnosis infographic image and 4 stages', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingDiagnosis, context);
+
+    expect(wrapper.text()).toContain('Chưa rõ hỏng ở đâu?');
+    expect(wrapper.text()).toContain('Để AI hỗ trợ phân tích bước đầu');
+    const img = wrapper.get('img[src="/images/fixhome-ai-diagnosis.jpg"]');
+    expect(img.exists()).toBe(true);
+
+    // Verify 4 stages exist
+    expect(wrapper.text()).toContain('Gửi ảnh hoặc mô tả triệu chứng');
+    expect(wrapper.text()).toContain('AI nhận diện thiết bị & phân tích');
+    expect(wrapper.text()).toContain('Khoanh vùng nguyên nhân có thể gặp');
+    expect(wrapper.text()).toContain('Gợi ý dịch vụ & kỹ thuật viên');
+
+    // Verify CTA and disclaimer
+    expect(wrapper.text()).toContain('Phân tích sự cố bằng AI');
+    expect(wrapper.text()).toContain('Lưu ý:');
+    expect(wrapper.text()).toContain('Kết quả AI chỉ mang tính tham khảo sơ bộ');
+    wrapper.unmount();
+  });
+
+  it('renders LandingHowItWorks with 2-column journey layout and mobile app preview', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingHowItWorks, context);
+
+    expect(wrapper.text()).toContain('Sửa chữa đơn giản, từng bước rõ ràng');
+    const img = wrapper.get('img[src="/UI mobile.png"]');
+    expect(img.exists()).toBe(true);
+
+    // Verify 4 steps
+    expect(wrapper.text()).toContain('Mô tả sự cố & gửi ảnh');
+    expect(wrapper.text()).toContain('Phân tích sơ bộ bằng AI');
+    expect(wrapper.text()).toContain('Chọn lịch & Ghép nối thợ');
+    expect(wrapper.text()).toContain('Duyệt báo giá & Hoàn tất');
+
+    // Verify CTA
+    expect(wrapper.text()).toContain('Bắt đầu đặt lịch ngay');
     wrapper.unmount();
   });
 });
