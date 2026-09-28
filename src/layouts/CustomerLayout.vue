@@ -53,7 +53,7 @@ const handleLogout = async () => {
         <div class="flex items-center gap-8">
           <router-link to="/" class="inline-flex items-center gap-2.5 group">
             <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
-            <span class="text-xl font-extrabold text-ink-900 tracking-tight">Fix<span class="text-brand-600">Home</span></span>
+            <span class="text-xl font-extrabold tracking-tight"><span class="text-brand-600">Fix</span><span class="text-green-600">Home</span></span>
           </router-link>
 
           <!-- Nav Items -->
