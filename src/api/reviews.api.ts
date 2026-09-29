@@ -9,6 +9,7 @@ export interface Review {
   rating: number;
   comment?: string | null;
   createdAt: string;
+  customerName?: string;
 }
 
 export const reviewsApi = {
@@ -20,5 +21,15 @@ export const reviewsApi = {
   async createReview(orderId: string, body: { rating: number; comment?: string }): Promise<Review> {
     const res = await apiClient.post<{ data: Review }>(`/service-orders/${orderId}/reviews`, body);
     return res.data.data;
+  },
+
+  async getByTechnician(technicianId: string, page = 1, pageSize = 20): Promise<{ data: Review[]; total: number }> {
+    const res = await apiClient.get<{ data: Review[]; meta?: { total?: number } }>(`/technicians/${technicianId}/reviews`, {
+      params: { page, pageSize },
+    });
+    return {
+      data: res.data.data || [],
+      total: res.data.meta?.total ?? (res.data.data?.length ?? 0),
+    };
   },
 };

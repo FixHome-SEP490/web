@@ -17,6 +17,16 @@ import {
   Calendar as CalendarIcon,
   Clock,
   AlertTriangle,
+  Snowflake,
+  Droplets,
+  Zap,
+  Utensils,
+  Lock,
+  Flame,
+  Check,
+  Search,
+  X,
+  Minus,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -46,6 +56,13 @@ const selectedServiceId = ref('');
 const description = ref('');
 const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
 const quantity = ref(1);
+
+// UX Enhancements: Search, Filter, Sync
+const searchQuery = ref('');
+const serviceFilter = ref<'ALL' | 'FIXED' | 'INSPECTION'>('ALL');
+const userModifiedDescription = ref(false);
+const isDraggingPhoto = ref(false);
+
 interface BookingPhotoDraft {
   localId: number;
   previewUrl: string;
@@ -164,6 +181,176 @@ const totalFixedAmount = computed(() => {
   return price * quantity.value;
 });
 
+// Category Icon resolution with smart keywords
+function getCategoryIcon(cat?: ServiceCategory | null) {
+  if (!cat) return Wrench;
+  const key = (cat.iconKey || cat.code || cat.name || '').toLowerCase();
+  if (key.includes('lanh') || key.includes('lạnh') || key.includes('điều hòa') || key.includes('refriger')) return Snowflake;
+  if (key.includes('nước') || key.includes('nuoc') || key.includes('plumb') || key.includes('lavabo')) return Droplets;
+  if (key.includes('điện') || key.includes('dien') || key.includes('electr')) return Zap;
+  if (key.includes('bếp') || key.includes('bep') || key.includes('kitchen') || key.includes('nấu')) return Utensils;
+  if (key.includes('khóa') || key.includes('khoa') || key.includes('cửa') || key.includes('lock')) return Lock;
+  return Wrench;
+}
+
+// Current services for selected category
+const currentCategoryServices = computed(() => {
+  const cat = categories.value.find((c) => c.id === selectedCategoryId.value);
+  return cat?.services ?? services.value ?? [];
+});
+
+const fixedServicesCount = computed(() => {
+  return currentCategoryServices.value.filter((s) => {
+    const mode = s.pricingMode?.toLowerCase();
+    return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
+  }).length;
+});
+
+const inspectionServicesCount = computed(() => {
+  return currentCategoryServices.value.length - fixedServicesCount.value;
+});
+
+const filteredServices = computed(() => {
+  let list = currentCategoryServices.value;
+
+  if (serviceFilter.value === 'FIXED') {
+    list = list.filter((s) => {
+      const mode = s.pricingMode?.toLowerCase();
+      return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
+    });
+  } else if (serviceFilter.value === 'INSPECTION') {
+    list = list.filter((s) => {
+      const mode = s.pricingMode?.toLowerCase();
+      return mode !== 'fixed_price' && (s.fixedPrice == null || s.fixedPrice === 0);
+    });
+  }
+
+  const q = searchQuery.value.trim().toLowerCase();
+  if (q) {
+    list = list.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.description && s.description.toLowerCase().includes(q)) ||
+      (s.scopeDescription && s.scopeDescription.toLowerCase().includes(q))
+    );
+  }
+
+  return list;
+});
+
+const syncDefaultDescription = () => {
+  const svc = selectedService.value;
+  if (!svc) return;
+  const isFixed = svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0);
+  if (isFixed) {
+    description.value = `Yêu cầu dịch vụ niêm yết: ${svc.name}${quantity.value > 1 ? ` (${quantity.value} ${svc.unit || 'thiết bị'})` : ''}`;
+  } else {
+    description.value = `Yêu cầu dịch vụ: ${svc.name}`;
+  }
+};
+
+const selectService = (svc: ServiceItem) => {
+  selectedServiceId.value = svc.id;
+  if (!userModifiedDescription.value) {
+    syncDefaultDescription();
+  }
+};
+
+const updateQuantity = (delta: number) => {
+  quantity.value = Math.max(1, Math.min(99, quantity.value + delta));
+  if (!userModifiedDescription.value && isFixedPrice.value) {
+    syncDefaultDescription();
+  }
+};
+
+const categorySymptoms = computed<string[]>(() => {
+  const cat = categories.value.find((c) => c.id === selectedCategoryId.value);
+  const name = (cat?.name || '').toLowerCase();
+  if (name.includes('lạnh') || name.includes('điều hòa')) {
+    return [
+      'Máy không mát / kém lạnh',
+      'Chảy nước dàn lạnh',
+      'Kêu to / rung lắc mạnh',
+      'Mùi hôi ẩm mốc',
+      'Không nhận điều khiển',
+      'Bám tuyết ống đồng',
+    ];
+  }
+  if (name.includes('nước') || name.includes('điện')) {
+    return [
+      'Rò rỉ lavabo / bồn rửa',
+      'Nghẹt cống / thoát sàn chậm',
+      'Mất nước / áp lực nước yếu',
+      'Chập điện / nhảy aptomat',
+      'Hỏng van vòi xịt / vòi sen',
+    ];
+  }
+  if (name.includes('bếp')) {
+    return [
+      'Bếp từ báo lỗi không nóng',
+      'Hút mùi kêu to / hút yếu',
+      'Bếp mất nguồn',
+      'Rò điện khi chạm vỏ',
+      'Nứt mặt kính / kẹt cảm ứng',
+    ];
+  }
+  if (name.includes('cửa') || name.includes('khóa')) {
+    return [
+      'Khóa vân tay không nhận',
+      'Hết pin / mất nguồn khóa',
+      'Kẹt chốt / khó đóng mở',
+      'Xệ bản lề / kêu cót két',
+      'Cần đổi mã số / thẻ từ',
+    ];
+  }
+  return [
+    'Thiết bị không lên nguồn',
+    'Phát ra tiếng ồn lạ',
+    'Cần bảo dưỡng vệ sinh',
+    'Hỏng linh kiện / cần thay mới',
+  ];
+});
+
+function addSymptom(symptom: string) {
+  if (!description.value.trim() || description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:')) {
+    description.value = symptom;
+    userModifiedDescription.value = true;
+  } else if (!description.value.includes(symptom)) {
+    description.value = `${description.value.trim()}, ${symptom.toLowerCase()}`;
+    userModifiedDescription.value = true;
+  }
+}
+
+const urgencyList = [
+  {
+    key: 'LOW',
+    label: 'Bình thường',
+    hint: 'Trong 24–48h',
+    badge: 'Tiết kiệm',
+    icon: ShieldCheck,
+  },
+  {
+    key: 'NORMAL',
+    label: 'Tiêu chuẩn',
+    hint: 'Trong ngày',
+    badge: 'Phổ biến',
+    icon: Clock,
+  },
+  {
+    key: 'HIGH',
+    label: 'Khẩn cấp',
+    hint: 'Trong 1–2h',
+    badge: 'Ưu tiên',
+    icon: Zap,
+  },
+  {
+    key: 'EMERGENCY',
+    label: 'Cực khẩn',
+    hint: 'Dưới 30 phút',
+    badge: 'Hỏa tốc',
+    icon: Flame,
+  },
+] as const;
+
 onMounted(async () => {
   try {
     const [cats, addrs] = await Promise.all([
@@ -177,10 +364,6 @@ onMounted(async () => {
       let matchedCat = cats[0];
       let matchedSvc: ServiceItem | undefined;
 
-      // The assistant hands over the exact service id it recommended, so there
-      // is nothing to guess at. Name matching stays for every other caller,
-      // but a name is a poor key: the assistant's wording for a service and
-      // the catalogue's are written by different people.
       const wantedId = route.query.serviceId ? String(route.query.serviceId) : '';
       if (wantedId) {
         for (const c of cats) {
@@ -195,7 +378,6 @@ onMounted(async () => {
 
       if (!matchedSvc && q) {
         for (const c of cats) {
-          // If popular or fixed query is set, prioritize fixed_price service first
           const sFixed = c.services?.find((srv) =>
             srv.name.toLowerCase().includes(q) &&
             (srv.pricingMode?.toLowerCase() === 'fixed_price' || (srv.fixedPrice != null && srv.fixedPrice > 0))
@@ -223,6 +405,10 @@ onMounted(async () => {
         }
       } else if (services.value.length > 0) {
         selectedServiceId.value = services.value[0].id;
+        const first = services.value[0];
+        if (first.pricingMode?.toLowerCase() === 'fixed_price' || (first.fixedPrice != null && first.fixedPrice > 0)) {
+          description.value = `Yêu cầu dịch vụ niêm yết: ${first.name}`;
+        }
       }
     }
     addresses.value = addrs;
@@ -246,10 +432,15 @@ onBeforeUnmount(() => {
 
 const onCategorySelect = (catId: string) => {
   selectedCategoryId.value = catId;
+  searchQuery.value = '';
+  serviceFilter.value = 'ALL';
   const cat = categories.value.find((c) => c.id === catId);
   services.value = cat?.services ?? [];
   if (services.value.length > 0) {
     selectedServiceId.value = services.value[0].id;
+    if (!userModifiedDescription.value) {
+      syncDefaultDescription();
+    }
   } else {
     selectedServiceId.value = '';
   }
@@ -264,10 +455,7 @@ const openPhotoPicker = () => {
   photoInput.value?.click();
 };
 
-const handlePhotoSelected = async (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  input.value = '';
+const handlePhotoFiles = async (files: File[]) => {
   if (files.length === 0 || uploadingPhoto.value || isPhotoFlowDisposed.value) return;
 
   const remaining = 5 - uploadedPhotos.value.length;
@@ -314,10 +502,25 @@ const handlePhotoSelected = async (event: Event) => {
   }
 };
 
+const handlePhotoSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  input.value = '';
+  await handlePhotoFiles(files);
+};
+
+const onPhotoDrop = async (event: DragEvent) => {
+  isDraggingPhoto.value = false;
+  if (event.dataTransfer?.files) {
+    await handlePhotoFiles(Array.from(event.dataTransfer.files));
+  }
+};
+
 const removePhoto = (idx: number) => {
   const photo = uploadedPhotos.value[idx];
   if (photo) removePhotoByLocalId(photo.localId);
 };
+
 
 const goToStep2 = () => {
   if (!selectedServiceId.value) {
@@ -451,28 +654,28 @@ const createAndFindTech = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-6 pb-12">
-    <!-- Stepper Navigation Header (Style Mobile) -->
-    <div class="bg-white rounded-2xl border border-ink-200 p-4 shadow-xs">
+    <!-- Stepper Navigation Header (Style Mobile & Web) -->
+    <div class="bg-white rounded-2xl border border-ink-200/90 p-4 shadow-xs">
       <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2">
         <div class="flex items-center gap-2 shrink-0" :class="step >= 1 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 1 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">1</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 1 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">1</span>
           <span>{{ isFixedPrice ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Lỗi' }}</span>
         </div>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 2 ? 'bg-brand-600' : 'bg-ink-200'"></div>
+        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 2 ? 'bg-brand-600' : 'bg-ink-200'"></div>
         <div class="flex items-center gap-2 shrink-0" :class="step >= 2 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 2 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">2</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 2 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">2</span>
           <span>Địa chỉ & Giờ</span>
         </div>
         <template v-if="!isFixedPrice">
-          <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
+          <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
           <div class="flex items-center gap-2 shrink-0" :class="step >= 3 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
             <span>AI Soi lỗi</span>
           </div>
         </template>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0" :class="step >= 4 ? 'bg-brand-600' : 'bg-ink-200'"></div>
+        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 4 ? 'bg-brand-600' : 'bg-ink-200'"></div>
         <div class="flex items-center gap-2 shrink-0" :class="step >= 4 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ isFixedPrice ? '3' : '4' }}</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ isFixedPrice ? '3' : '4' }}</span>
           <span>Xác nhận</span>
         </div>
       </div>
@@ -481,92 +684,326 @@ const createAndFindTech = async () => {
 
     <!-- Step 1: Service & Issue Description -->
     <div v-if="step === 1" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
-            Nhà mình đang gặp vấn đề gì?
-          </h2>
-          <p class="text-xs text-ink-500 mt-1">
-            Thêm mô tả để thợ chuẩn bị tốt hơn. Bạn có thể thêm ảnh để nhận gợi ý kiểm tra.
+      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-7">
+        <!-- Title & Subtitle + Trust banner -->
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+              Nhà mình đang gặp vấn đề gì?
+            </h2>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
+              <ShieldCheck :size="14" class="text-brand-600" />
+              <span>Thợ tay nghề chuẩn • Báo giá minh bạch</span>
+            </span>
+          </div>
+          <p class="text-xs sm:text-sm text-ink-500 leading-relaxed">
+            Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
           </p>
         </div>
 
-        <div class="space-y-5 text-xs sm:text-sm">
-          <!-- Categories Pills -->
-          <div>
-            <label class="block font-bold text-ink-800 mb-2">Nhóm thiết bị / dịch vụ</label>
-            <div class="flex flex-wrap gap-2">
+        <div class="space-y-7 text-xs sm:text-sm">
+          <!-- 1. Categories Pills with Icons & Count -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-ink-900 text-xs sm:text-sm flex items-center gap-1.5">
+                <span>1. Chọn nhóm thiết bị / dịch vụ</span>
+                <span class="text-danger-600 font-bold">*</span>
+              </label>
+              <span class="text-[11px] text-ink-500">{{ categories.length }} nhóm khả dụng</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
                 v-for="cat in categories"
                 :key="cat.id"
                 type="button"
-                class="px-3.5 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95"
-                :class="selectedCategoryId === cat.id ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-50 text-ink-700 border border-ink-200 hover:bg-ink-100'"
+                class="group p-3 sm:p-3.5 rounded-2xl border text-left transition-all duration-200 active:scale-95 flex flex-col justify-between gap-2 relative overflow-hidden"
+                :class="selectedCategoryId === cat.id
+                  ? 'border-brand-600 bg-brand-600 text-white shadow-md shadow-brand-600/20 ring-2 ring-brand-500/20'
+                  : 'border-ink-200 bg-ink-50/60 hover:bg-white hover:border-brand-300 text-ink-800 hover:shadow-xs'"
                 @click="onCategorySelect(cat.id)"
               >
-                {{ cat.name }}
+                <div class="flex items-center justify-between w-full">
+                  <div
+                    class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
+                    :class="selectedCategoryId === cat.id ? 'bg-white/20 text-white' : 'bg-white text-brand-600 shadow-xs border border-ink-100 group-hover:text-brand-700'"
+                  >
+                    <component :is="getCategoryIcon(cat)" :size="17" />
+                  </div>
+                  <span
+                    class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    :class="selectedCategoryId === cat.id ? 'bg-white/20 text-white' : 'bg-ink-200/70 text-ink-600'"
+                  >
+                    {{ cat.services?.length || 0 }} dịch vụ
+                  </span>
+                </div>
+                <div>
+                  <div class="font-bold text-xs sm:text-[13px] leading-snug line-clamp-1">
+                    {{ cat.name }}
+                  </div>
+                  <div
+                    class="text-[10px] mt-0.5 line-clamp-1"
+                    :class="selectedCategoryId === cat.id ? 'text-blue-100' : 'text-ink-500'"
+                  >
+                    {{ cat.description || 'Sửa chữa & bảo dưỡng' }}
+                  </div>
+                </div>
               </button>
             </div>
           </div>
 
-          <!-- Specific Service Dropdown -->
-          <div>
-            <label class="block font-bold text-ink-800 mb-1.5">Dịch vụ cụ thể *</label>
-            <select
-              v-model="selectedServiceId"
-              class="w-full h-11 px-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm font-medium text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all"
-            >
-              <option v-for="svc in services" :key="svc.id" :value="svc.id">
-                {{ svc.name }} (~{{ svc.estimatedMinutes }} phút)
-              </option>
-            </select>
-          </div>
+          <!-- 2. Specific Services Explorer (The Core Focus!) -->
+          <div class="space-y-3 pt-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label class="font-bold text-ink-900 text-xs sm:text-sm flex items-center gap-1.5">
+                <span>2. Dịch vụ cụ thể trong nhóm</span>
+                <span class="text-danger-600 font-bold">*</span>
+                <span class="text-[11px] font-normal text-ink-500">
+                  ({{ filteredServices.length }} / {{ currentCategoryServices.length }} dịch vụ)
+                </span>
+              </label>
 
-          <!-- Fixed Price Package Box -->
-          <div v-if="isFixedPrice" class="p-4 rounded-2xl bg-brand-50 border border-brand-200 space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-600 text-white">
-                  Gói trọn gói chuẩn
-                </span>
-                <span class="font-bold text-xs text-brand-900">
-                  {{ selectedService?.name }}
-                </span>
-              </div>
-              <div class="text-xs font-bold text-brand-700 font-num">
-                <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" /> / {{ selectedService?.unit || 'thiết bị' }}
+              <!-- Filter mode pills -->
+              <div class="flex items-center gap-1.5 bg-ink-100/80 p-1 rounded-xl self-start sm:self-auto text-[11px]">
+                <button
+                  type="button"
+                  class="px-2.5 py-1 rounded-lg font-semibold transition-all"
+                  :class="serviceFilter === 'ALL' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
+                  @click="serviceFilter = 'ALL'"
+                >
+                  Tất cả ({{ currentCategoryServices.length }})
+                </button>
+                <button
+                  v-if="fixedServicesCount > 0"
+                  type="button"
+                  class="px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1"
+                  :class="serviceFilter === 'FIXED' ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
+                  @click="serviceFilter = 'FIXED'"
+                >
+                  <span>⚡ Giá niêm yết</span>
+                  <span class="text-[10px] opacity-80">({{ fixedServicesCount }})</span>
+                </button>
+                <button
+                  v-if="inspectionServicesCount > 0"
+                  type="button"
+                  class="px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1"
+                  :class="serviceFilter === 'INSPECTION' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
+                  @click="serviceFilter = 'INSPECTION'"
+                >
+                  <span>🔍 Khảo sát</span>
+                  <span class="text-[10px] opacity-80">({{ inspectionServicesCount }})</span>
+                </button>
               </div>
             </div>
 
-            <!-- Quantity Counter (Style Mobile [-] 1 [+]) -->
-            <div class="flex items-center justify-between pt-3 border-t border-brand-200 text-xs">
-              <label class="font-semibold text-ink-700">Số lượng thiết bị:</label>
-              <div class="flex items-center gap-3">
-                <button
-                  type="button"
-                  class="w-8 h-8 rounded-xl border border-ink-300 bg-white font-extrabold flex items-center justify-center hover:bg-ink-100 active:scale-95 shadow-xs"
-                  @click="quantity = Math.max(1, quantity - 1)"
-                >
-                  -
-                </button>
-                <span class="font-bold font-num text-base text-ink-900 min-w-[20px] text-center">{{ quantity }}</span>
-                <button
-                  type="button"
-                  class="w-8 h-8 rounded-xl border border-ink-300 bg-white font-extrabold flex items-center justify-center hover:bg-ink-100 active:scale-95 shadow-xs"
-                  @click="quantity++"
-                >
-                  +
-                </button>
-                <div class="ml-2 font-bold text-brand-700 font-num">
-                  = <FhMoney :amount="(selectedService?.fixedPrice || selectedService?.basePrice || 0) * quantity" />
+            <!-- Search input bar -->
+            <div class="relative">
+              <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Tìm dịch vụ theo tên, lỗi hoặc từ khóa (ví dụ: siphon, lavabo, máy lạnh, vệ sinh...)"
+                class="w-full h-11 pl-10 pr-9 bg-ink-50/80 border border-ink-200 rounded-xl text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:bg-white transition-all"
+              />
+              <button
+                v-if="searchQuery"
+                type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-0.5"
+                @click="searchQuery = ''"
+              >
+                <X :size="15" />
+              </button>
+            </div>
+
+            <!-- Service Cards Grid -->
+            <div v-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
+              <div
+                v-for="svc in filteredServices"
+                :key="svc.id"
+                class="group p-4 rounded-2xl border cursor-pointer transition-all duration-200 relative flex flex-col justify-between gap-3 text-left"
+                :class="selectedServiceId === svc.id
+                  ? 'border-brand-600 bg-brand-50/40 ring-2 ring-brand-500/20 shadow-xs'
+                  : 'border-ink-200 bg-white hover:border-brand-300 hover:bg-ink-50/40 shadow-xs'"
+                @click="selectService(svc)"
+              >
+                <!-- Card Header: Mode badge + duration + radio -->
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    >
+                      ⚡ Giá niêm yết
+                    </span>
+                    <span
+                      v-else
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ink-100 text-ink-700 border border-ink-200"
+                    >
+                      🔍 Khảo sát tận nơi
+                    </span>
+                    <span class="text-[11px] text-ink-500 inline-flex items-center gap-1 font-medium">
+                      <Clock :size="12" class="text-ink-400" />
+                      ~{{ svc.estimatedMinutes }} phút
+                    </span>
+                  </div>
+
+                  <!-- Radio circle indicator -->
+                  <div
+                    class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all"
+                    :class="selectedServiceId === svc.id ? 'bg-brand-600 text-white shadow-xs' : 'border-2 border-ink-300 bg-white group-hover:border-brand-400'"
+                  >
+                    <Check v-if="selectedServiceId === svc.id" :size="12" stroke-width="3" />
+                  </div>
+                </div>
+
+                <!-- Card Body: Name & Scope -->
+                <div class="space-y-1">
+                  <div class="font-bold text-xs sm:text-[14px] text-ink-900 group-hover:text-brand-600 transition-colors leading-snug">
+                    {{ svc.name }}
+                  </div>
+                  <div class="text-[11px] text-ink-500 line-clamp-2 leading-relaxed">
+                    {{ svc.scopeDescription || svc.description || 'Dịch vụ sửa chữa, bảo dưỡng chuyên nghiệp bởi kỹ thuật viên FixHome.' }}
+                  </div>
+                </div>
+
+                <!-- Card Footer: Price Display -->
+                <div class="pt-2 border-t border-ink-100 flex items-center justify-between">
+                  <div v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)" class="flex items-baseline gap-1">
+                    <span class="text-xs font-bold text-brand-700 font-num">
+                      <FhMoney :amount="svc.fixedPrice || svc.basePrice || 0" />
+                    </span>
+                    <span class="text-[11px] text-ink-500 font-normal">
+                      / {{ svc.unit || 'thiết bị' }}
+                    </span>
+                  </div>
+                  <div v-else class="text-[11px] font-semibold text-ink-600 bg-ink-100/80 px-2 py-0.5 rounded-lg">
+                    Báo giá trước khi sửa
+                  </div>
+
+                  <span
+                    v-if="selectedServiceId === svc.id"
+                    class="text-[11px] font-bold text-brand-600 flex items-center gap-1"
+                  >
+                    Đã chọn
+                  </span>
+                  <span
+                    v-else
+                    class="text-[11px] font-medium text-ink-400 group-hover:text-brand-600"
+                  >
+                    Chọn dịch vụ
+                  </span>
                 </div>
               </div>
             </div>
+
+            <!-- Empty Search State -->
+            <div
+              v-else
+              class="p-8 rounded-2xl bg-ink-50 border border-dashed border-ink-300 text-center space-y-2"
+            >
+              <div class="w-10 h-10 rounded-full bg-white text-ink-400 flex items-center justify-center mx-auto shadow-xs">
+                <Search :size="18" />
+              </div>
+              <p class="text-xs font-bold text-ink-800">Không tìm thấy dịch vụ phù hợp</p>
+              <p class="text-[11px] text-ink-500">
+                Thử tìm với từ khóa khác hoặc chuyển sang nhóm thiết bị khác.
+              </p>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-brand-600 bg-white border border-brand-200 rounded-xl hover:bg-brand-50"
+                @click="searchQuery = ''; serviceFilter = 'ALL'"
+              >
+                Xóa bộ lọc tìm kiếm
+              </button>
+            </div>
           </div>
 
-          <!-- Photo Upload Area (Mobile Dotted Box) -->
-          <div>
-            <label class="block font-bold text-ink-800 mb-1.5">Ảnh hiện trạng thiết bị</label>
+          <!-- 3. Fixed Price Package Detail & Quantity Configurator -->
+          <div
+            v-if="isFixedPrice"
+            class="p-5 rounded-2xl bg-gradient-to-br from-brand-50/80 to-blue-50/40 border border-brand-200 space-y-4"
+          >
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-600 text-white">
+                    Gói trọn gói chuẩn
+                  </span>
+                  <span class="font-extrabold text-xs sm:text-sm text-brand-950">
+                    {{ selectedService?.name }}
+                  </span>
+                </div>
+                <p class="text-[11px] text-brand-800">
+                  Đã bao gồm toàn bộ tiền công kỹ thuật viên chuẩn quy trình FixHome.
+                </p>
+              </div>
+
+              <div class="text-right">
+                <div class="text-[11px] text-ink-500">Đơn giá niêm yết</div>
+                <div class="text-sm sm:text-base font-extrabold text-brand-700 font-num">
+                  <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" />
+                  <span class="text-xs text-ink-500 font-normal"> / {{ selectedService?.unit || 'thiết bị' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quantity Counter with tactile stepper -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-brand-200/80 gap-3">
+              <div>
+                <label class="font-bold text-ink-800 text-xs">Số lượng thiết bị cần làm:</label>
+                <div class="text-[11px] text-ink-500">
+                  Tăng số lượng nếu nhà mình cần xử lý nhiều thiết bị cùng lúc.
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <div class="flex items-center bg-white border border-ink-200 rounded-xl p-1 shadow-xs">
+                  <button
+                    type="button"
+                    class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-ink-100 active:scale-95 text-ink-800"
+                    :disabled="quantity <= 1"
+                    @click="updateQuantity(-1)"
+                  >
+                    <Minus :size="14" />
+                  </button>
+                  <span class="w-10 text-center font-extrabold font-num text-sm text-ink-900">{{ quantity }}</span>
+                  <button
+                    type="button"
+                    class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all hover:bg-ink-100 active:scale-95 text-ink-800"
+                    @click="updateQuantity(1)"
+                  >
+                    <Plus :size="14" />
+                  </button>
+                </div>
+
+                <div class="text-right pl-2">
+                  <div class="text-[10px] text-ink-500 font-medium">Tổng tiền trọn gói:</div>
+                  <div class="font-extrabold text-base text-brand-700 font-num">
+                    <FhMoney :amount="totalFixedAmount" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Transparency Reassurance -->
+            <div class="pt-2 border-t border-brand-200/60 flex items-center gap-2 text-[11px] text-brand-900 font-medium">
+              <CheckCircle2 :size="15" class="text-emerald-600 shrink-0" />
+              <span>Chỉ thanh toán khi kỹ thuật viên hoàn thành và bạn nghiệm thu hài lòng. Không phát sinh phụ phí ẩn.</span>
+            </div>
+          </div>
+
+          <!-- 4. Photo Upload Area (Drag & Drop + Dotted Box) -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <Camera :size="15" class="text-brand-600" />
+                <span>3. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
+              </label>
+              <span class="text-[11px] text-ink-500 font-medium">
+                {{ uploadedPhotos.length }}/5 ảnh
+              </span>
+            </div>
+
             <input
               ref="photoInput"
               type="file"
@@ -575,32 +1012,53 @@ const createAndFindTech = async () => {
               class="hidden"
               @change="handlePhotoSelected"
             />
+
             <div
-              class="p-5 rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50/80 transition-colors text-center cursor-pointer flex flex-col items-center justify-center space-y-1.5"
-              :class="{ 'opacity-60 pointer-events-none': uploadingPhoto }"
+              class="p-6 rounded-2xl border-2 border-dashed transition-all duration-200 text-center cursor-pointer flex flex-col items-center justify-center space-y-2"
+              :class="[
+                isDraggingPhoto
+                  ? 'border-brand-600 bg-brand-50 ring-4 ring-brand-500/20'
+                  : 'border-brand-300 bg-brand-50/30 hover:bg-brand-50/70',
+                uploadingPhoto ? 'opacity-60 pointer-events-none' : ''
+              ]"
               @click="openPhotoPicker"
+              @dragover.prevent="isDraggingPhoto = true"
+              @dragleave.prevent="isDraggingPhoto = false"
+              @drop.prevent="onPhotoDrop"
             >
-              <div class="w-10 h-10 rounded-full bg-white text-brand-600 flex items-center justify-center shadow-xs">
-                <Camera :size="20" />
+              <div class="w-12 h-12 rounded-2xl bg-white text-brand-600 flex items-center justify-center shadow-xs border border-brand-100">
+                <Camera :size="22" />
               </div>
-              <p class="text-xs font-bold text-brand-700">
-                {{ uploadingPhoto ? 'Đang tải ảnh lên...' : 'Thêm ảnh thiết bị' }}
-              </p>
-              <p class="text-[11px] text-ink-500">Ảnh toàn cảnh hoặc vị trí hư hỏng (Tối đa 5 ảnh · JPG, PNG · 10 MB)</p>
+              <div>
+                <p class="text-xs sm:text-sm font-bold text-brand-700">
+                  {{ uploadingPhoto ? 'Đang tải ảnh lên...' : 'Bấm để chọn ảnh hoặc kéo thả vào đây' }}
+                </p>
+                <p class="text-[11px] text-ink-500 mt-0.5">
+                  Chụp toàn cảnh thiết bị hoặc vị trí đang gặp sự cố (Tối đa 5 ảnh · JPG, PNG, WebP · Dưới 10 MB)
+                </p>
+              </div>
             </div>
 
             <!-- Image previews -->
-            <div v-if="uploadedPhotos.length > 0" class="flex flex-wrap gap-2.5 mt-3">
+            <div v-if="uploadedPhotos.length > 0" class="flex flex-wrap gap-3 mt-3">
               <div
                 v-for="(photo, idx) in uploadedPhotos"
                 :key="photo.localId"
-                class="relative w-16 h-16 rounded-xl overflow-hidden border border-ink-200 shadow-xs group"
+                class="relative w-20 h-20 rounded-2xl overflow-hidden border border-ink-200 shadow-xs group bg-ink-100"
               >
                 <img :src="photo.previewUrl" alt="Ảnh thiết bị đã chọn" class="w-full h-full object-cover" />
 
+                <!-- Uploading spinner overlay -->
+                <div
+                  v-if="!photo.uploadId"
+                  class="absolute inset-0 bg-black/40 flex items-center justify-center text-white"
+                >
+                  <Sparkles class="animate-spin" :size="16" />
+                </div>
+
                 <button
                   type="button"
-                  class="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full hover:bg-danger-600 transition-colors"
+                  class="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white rounded-full hover:bg-danger-600 transition-colors shadow-xs"
                   @click.stop="removePhoto(idx)"
                 >
                   <Trash2 :size="12" />
@@ -609,54 +1067,122 @@ const createAndFindTech = async () => {
             </div>
           </div>
 
-          <!-- Issue Description -->
-          <div>
-            <label class="block font-bold text-ink-800 mb-1.5 flex items-center justify-between flex-wrap gap-1">
-              <span>Mô tả yêu cầu <span v-if="!isFixedPrice">*</span></span>
-              <span v-if="isFixedPrice" class="text-[11px] font-normal text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
+          <!-- 5. Issue Description & Symptom Suggestion Chips -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between flex-wrap gap-1">
+              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <span>4. Mô tả chi tiết yêu cầu</span>
+                <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
+              </label>
+              <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
                 ⚡ Giá niêm yết (Không bắt buộc mô tả lỗi)
               </span>
-            </label>
+              <span v-else class="text-[11px] text-ink-500">
+                Mô tả chi tiết để thợ chuẩn bị linh kiện sát nhất
+              </span>
+            </div>
+
+            <!-- Quick symptom chips for faster input -->
+            <div class="space-y-1.5">
+              <div class="text-[11px] text-ink-500 flex items-center gap-1">
+                <Sparkles :size="12" class="text-brand-600" />
+                <span>Gợi ý triệu chứng phổ biến (bấm để thêm nhanh vào mô tả):</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="sym in categorySymptoms"
+                  :key="sym"
+                  type="button"
+                  class="px-2.5 py-1 rounded-xl text-[11px] font-medium transition-all active:scale-95 border"
+                  :class="description.includes(sym)
+                    ? 'bg-brand-50 text-brand-700 border-brand-300 font-bold'
+                    : 'bg-ink-50 text-ink-700 border-ink-200 hover:bg-white hover:border-brand-200'"
+                  @click="addSymptom(sym)"
+                >
+                  + {{ sym }}
+                </button>
+              </div>
+            </div>
+
             <textarea
               v-model="description"
               rows="3"
-              class="w-full p-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all leading-relaxed"
-              :placeholder="isFixedPrice ? 'Ghi chú thêm cho thợ (ví dụ: Vị trí đặt máy, lưu ý khi tới...)' : 'Ví dụ: Điều hòa vẫn chạy nhưng không mát, quạt dàn lạnh có tiếng kêu rè rè và nhỏ nước xuống góc tường...'"
+              class="w-full p-3.5 bg-ink-50/80 border border-ink-200 rounded-2xl text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:bg-white transition-all leading-relaxed"
+              :placeholder="isFixedPrice
+                ? 'Ghi chú thêm cho thợ (ví dụ: Vị trí đặt thiết bị, lưu ý lúc tới nhà, tầng lầu...)'
+                : 'Mô tả hiện tượng hư hỏng (ví dụ: Máy lạnh chảy nước ở dàn lạnh trong nhà, quạt kêu to rè rè và không mát...)'"
+              @input="userModifiedDescription = true"
             ></textarea>
           </div>
 
+          <!-- 6. Urgency Level Selector -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <span>5. Mức độ khẩn cấp</span>
+              </label>
+              <span class="text-[11px] text-ink-500">Chọn mức độ mong muốn thợ có mặt</span>
+            </div>
 
-          <!-- Urgency Level -->
-          <div>
-            <label class="block font-bold text-ink-800 mb-2">Mức độ khẩn cấp</label>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
-                v-for="lvl in [
-                  { key: 'LOW', label: 'Bình thường', hint: 'Trong 24–48h' },
-                  { key: 'NORMAL', label: 'Tiêu chuẩn', hint: 'Trong ngày' },
-                  { key: 'HIGH', label: 'Khẩn cấp', hint: 'Trong 1–2h' },
-                  { key: 'EMERGENCY', label: 'Cực khẩn', hint: 'Dưới 30 phút' },
-                ]"
+                v-for="lvl in urgencyList"
                 :key="lvl.key"
                 type="button"
-                class="p-3 rounded-xl border text-left transition-all active:scale-95"
-                :class="urgency === lvl.key ? 'border-brand-600 bg-brand-50/80 text-brand-900 ring-2 ring-brand-500 font-bold' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+                class="p-3.5 rounded-2xl border text-left transition-all active:scale-95 flex flex-col justify-between gap-2"
+                :class="urgency === lvl.key
+                  ? 'border-brand-600 bg-brand-50/80 text-brand-900 ring-2 ring-brand-500 font-bold shadow-xs'
+                  : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
                 @click="urgency = (lvl.key as any)"
               >
-                <div class="text-xs">{{ lvl.label }}</div>
-                <div class="text-[10px] text-ink-400 mt-0.5 font-normal">{{ lvl.hint }}</div>
+                <div class="flex items-center justify-between w-full">
+                  <component
+                    :is="lvl.icon"
+                    :size="16"
+                    :class="urgency === lvl.key ? 'text-brand-600' : 'text-ink-400'"
+                  />
+                  <span
+                    class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    :class="urgency === lvl.key ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'"
+                  >
+                    {{ lvl.badge }}
+                  </span>
+                </div>
+                <div>
+                  <div class="text-xs sm:text-[13px] font-bold">{{ lvl.label }}</div>
+                  <div class="text-[10px] text-ink-500 mt-0.5 font-normal">{{ lvl.hint }}</div>
+                </div>
               </button>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="router.back()">
+        <!-- Step 1 Footer Action Bar -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-ink-100">
+          <FhButton variant="ghost" size="md" @click="router.back()" class="w-full sm:w-auto">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" @click="goToStep2">
-            Tiếp tục <ArrowRight :size="15" class="ml-1.5" />
-          </FhButton>
+
+          <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+            <!-- Selected summary on desktop -->
+            <div v-if="selectedService" class="text-right hidden sm:block">
+              <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
+              <div v-if="isFixedPrice" class="text-xs font-extrabold text-brand-700 font-num">
+                Tổng: <FhMoney :amount="totalFixedAmount" />
+              </div>
+              <div v-else class="text-[11px] font-semibold text-brand-600">Khảo sát & Báo giá tận nơi</div>
+            </div>
+
+            <FhButton
+              variant="primary"
+              size="lg"
+              class="w-full sm:w-auto px-7 shadow-xs"
+              :disabled="!selectedServiceId"
+              @click="goToStep2"
+            >
+              Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" />
+            </FhButton>
+          </div>
         </div>
       </div>
     </div>
