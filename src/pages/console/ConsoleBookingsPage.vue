@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { UserPlus, Star, MapPin, Clock, AlertTriangle, ChevronLeft, ChevronRight, RefreshCw, XCircle } from 'lucide-vue-next';
+import { UserPlus, Star, MapPin, Clock, AlertTriangle, RefreshCw } from 'lucide-vue-next';
 import { FhStatusPill, FhButton, FhSkeleton, FhTable, type TableColumn, FhMoney } from '../../components';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
 

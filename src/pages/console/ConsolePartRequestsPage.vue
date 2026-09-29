@@ -7,7 +7,6 @@ import {
   QrCode,
   CheckCircle,
   Truck,
-  RefreshCw,
   XCircle,
   Eye,
   Copy,
