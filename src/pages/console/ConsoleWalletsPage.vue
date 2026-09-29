@@ -574,7 +574,7 @@ onMounted(() => {
               {{ payoutOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(payoutOverview.sourceBalance) }}
             </div>
             <p class="text-[11px] text-ink-500">
-              {{ payoutOverview.provider === 'mock' ? 'Số dư giả lập' : 'Ví Bảo Kim liên kết payOS' }}
+              {{ payoutOverview.provider === 'mock' ? 'Số dư giả lập' : 'Ví payOS dùng để chi hộ' }}
             </p>
           </div>
           <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
