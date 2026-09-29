@@ -10,12 +10,15 @@ import {
   Send,
   Users,
   ArrowLeft,
+  Eye,
+  Check,
 } from 'lucide-vue-next';
 import {
   FhButton,
   FhStatusPill,
   FhEmptyState,
   FhMoney,
+  TechnicianProfileModal,
 } from '../../components';
 import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
 
@@ -30,6 +33,24 @@ const sendError = ref('');
 const candidates = ref<TechnicianCandidate[]>([]);
 const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
+
+// Technician profile drawer/modal state
+const selectedCandidateForModal = ref<TechnicianCandidate | null>(null);
+const isProfileModalOpen = ref(false);
+
+const openProfileModal = (tech: TechnicianCandidate) => {
+  selectedCandidateForModal.value = tech;
+  isProfileModalOpen.value = true;
+};
+
+const closeProfileModal = () => {
+  isProfileModalOpen.value = false;
+  selectedCandidateForModal.value = null;
+};
+
+const handleModalToggleSelect = (id: string) => {
+  toggleSelect(id);
+};
 
 const loadCandidates = async () => {
   if (!bookingId) {
@@ -174,14 +195,21 @@ const successMessage = computed(() => selectedCount.value === 1
       <div
         v-for="tech in candidates"
         :key="tech.id"
-        class="p-4 sm:p-5 rounded-[var(--radius-md)] border bg-white shadow-[var(--shadow-e1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
-        :class="selectedIds.includes(tech.id) ? 'border-brand-600 ring-2 ring-brand-500/20' : 'border-ink-200 hover:border-ink-300'"
+        role="button"
+        tabindex="0"
+        :aria-pressed="selectedIds.includes(tech.id)"
+        class="group p-4 sm:p-5 rounded-[var(--radius-md)] border bg-white shadow-[var(--shadow-e1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-150 cursor-pointer select-none"
+        :class="selectedIds.includes(tech.id) ? 'border-brand-600 bg-brand-50/20 ring-2 ring-brand-500/20' : 'border-ink-200 hover:border-brand-400 hover:shadow-md'"
+        @click="toggleSelect(tech.id)"
+        @keydown.enter.prevent="toggleSelect(tech.id)"
+        @keydown.space.prevent="toggleSelect(tech.id)"
       >
         <div class="flex items-center gap-4">
           <input
             type="checkbox"
             :checked="selectedIds.includes(tech.id)"
             class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 cursor-pointer"
+            @click.stop
             @change="handleCheckboxChange($event, tech.id)"
           />
 
@@ -192,6 +220,15 @@ const successMessage = computed(() => selectedCount.value === 1
               class="absolute -top-1 -right-1 w-5 h-5 bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white"
             >
               #{{ selectedIds.indexOf(tech.id) + 1 }}
+            </span>
+            <!-- Dấu chấm tròn xanh trạng thái đang hoạt động -->
+            <span
+              v-if="tech.isAvailable !== false"
+              class="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5"
+              title="Đang hoạt động"
+            >
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white shadow-xs" />
             </span>
           </div>
 
@@ -224,22 +261,47 @@ const successMessage = computed(() => selectedCount.value === 1
           </div>
         </div>
 
-        <div class="flex items-center gap-3 w-full sm:w-auto justify-end pt-3 sm:pt-0 border-t sm:border-t-0 border-ink-100">
-          <div class="text-right hidden sm:block">
+        <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end pt-3 sm:pt-0 border-t sm:border-t-0 border-ink-100">
+          <div class="text-right hidden sm:block mr-1">
             <div class="text-[11px] text-ink-400">Độ tin cậy:</div>
             <div class="text-xs font-bold text-success-600 font-num">{{ tech.reliabilityScore }}%</div>
           </div>
 
+          <!-- Nút Xem thông tin thợ -->
+          <FhButton
+            variant="secondary"
+            size="sm"
+            data-testid="view-profile-btn"
+            @click.stop="openProfileModal(tech)"
+          >
+            <Eye :size="14" class="mr-1 text-ink-500" /> Xem thông tin thợ
+          </FhButton>
+
+          <!-- Nút Chọn thợ -->
           <FhButton
             :variant="selectedIds.includes(tech.id) ? 'primary' : 'secondary'"
             size="sm"
-            @click="toggleSelect(tech.id)"
+            data-testid="select-technician-btn"
+            @click.stop="toggleSelect(tech.id)"
           >
+            <Check v-if="selectedIds.includes(tech.id)" :size="14" class="mr-1" />
             {{ selectedIds.includes(tech.id) ? `Ưu tiên #${selectedIds.indexOf(tech.id) + 1}` : 'Chọn thợ' }}
           </FhButton>
         </div>
       </div>
     </div>
+
+    <!-- Technician Profile Modal -->
+    <TechnicianProfileModal
+      v-if="isProfileModalOpen && selectedCandidateForModal"
+      :is-open="isProfileModalOpen"
+      :candidate="selectedCandidateForModal"
+      :is-selected="selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false"
+      :priority-index="selectedCandidateForModal ? selectedIds.indexOf(selectedCandidateForModal.id) : -1"
+      :can-select="selectedIds.length < 2 || (selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false)"
+      @close="closeProfileModal"
+      @toggle-select="handleModalToggleSelect"
+    />
 
     <!-- Success Feedback Modal -->
     <div
