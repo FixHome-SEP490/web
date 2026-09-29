@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Wallet,
   Loader2,
+  ShieldAlert,
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget } from '../components';
@@ -21,6 +22,7 @@ import NotificationBellDropdown from '../components/notifications/NotificationBe
 import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
 import { technicianProfileApi } from '../api/technician-profile.api';
+import { technicianOnboardingApi } from '../api/technician-onboarding.api';
 import { toast } from 'vue-sonner';
 
 const authStore = useAuthStore();
@@ -51,6 +53,20 @@ const loadAvailability = async () => {
   }
 };
 
+const onboardingStatus = ref<string | null>(null);
+const verificationStatus = ref<string | null>(null);
+
+const loadOnboardingStatus = async () => {
+  try {
+    const res = await technicianOnboardingApi.getStatus();
+    onboardingStatus.value = res.onboardingStatus;
+    verificationStatus.value = res.verificationStatus || null;
+  } catch {
+    onboardingStatus.value = null;
+    verificationStatus.value = null;
+  }
+};
+
 let invitationPoll: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
@@ -64,7 +80,7 @@ onMounted(async () => {
   } catch {
     // ignore
   }
-  await Promise.all([refreshInvitationCount(), loadAvailability()]);
+  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus()]);
   invitationPoll = setInterval(refreshInvitationCount, 30000);
 });
 
@@ -296,6 +312,37 @@ const userShortName = computed(() => {
         </div>
       </div>
     </header>
+
+    <!-- Onboarding status banner if not approved -->
+    <div
+      v-if="onboardingStatus && onboardingStatus !== 'approved' && verificationStatus !== 'verified'"
+      class="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white px-4 py-3 shadow-xs"
+    >
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2.5">
+          <ShieldAlert :size="18" class="shrink-0 text-amber-100" />
+          <span>
+            Hồ sơ thợ của bạn đang ở trạng thái
+            <strong class="uppercase font-black tracking-wide text-amber-100">
+              {{
+                onboardingStatus === 'submitted'
+                  ? 'Chờ xét duyệt'
+                  : onboardingStatus === 'rejected'
+                  ? 'Cần bổ sung'
+                  : 'Chưa hoàn tất'
+              }}
+            </strong>.
+            Vui lòng hoàn tất xác thực thông tin, CCCD và kỹ năng để nhận đơn sửa chữa.
+          </span>
+        </div>
+        <router-link
+          to="/tech/onboarding"
+          class="shrink-0 px-3.5 py-1.5 bg-white text-amber-950 font-bold rounded-xl hover:bg-amber-50 transition-colors shadow-2xs whitespace-nowrap"
+        >
+          Hoàn tất hồ sơ thợ →
+        </router-link>
+      </div>
+    </div>
 
     <!-- Main Content Area -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
