@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="TRow extends object">
-import { Loader2, Search } from 'lucide-vue-next';
+import { Loader2, Search, RefreshCw, MoreHorizontal } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 export interface TableColumn {
@@ -22,6 +22,7 @@ interface Props {
   searchable?: boolean;
   searchQuery?: string;
   searchPlaceholder?: string;
+  refreshable?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -32,18 +33,20 @@ const props = withDefaults(defineProps<Props>(), {
   searchable: false,
   searchQuery: '',
   searchPlaceholder: 'Tìm kiếm...',
+  refreshable: false,
 });
 
 const emit = defineEmits<{
   (e: 'update:selected', value: TRow[]): void;
   (e: 'sort', key: string): void;
   (e: 'update:searchQuery', value: string): void;
+  (e: 'refresh'): void;
 }>();
 
 defineSlots<{
   [name: string]: (props: { row: TRow; value: TRow[keyof TRow]; column: TableColumn }) => unknown;
   toolbar: () => unknown;
-  title: () => unknown;
+  'toolbar-left': () => unknown;
 }>();
 
 const getCellValue = (row: TRow, key: string): TRow[keyof TRow] =>
@@ -78,115 +81,147 @@ const toggleSelect = (row: TRow) => {
 </script>
 
 <template>
-  <div class="w-full overflow-x-auto rounded-md border border-ink-200 bg-white shadow-(--shadow-e1)">
-    <!-- Optional Toolbar/Header for Search & Filters -->
-    <div v-if="$slots.toolbar || searchable || $slots.title" class="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-ink-200 bg-white/50">
-      <div v-if="$slots.title" class="font-bold text-gray-900 tracking-tight">
-        <slot name="title"></slot>
+  <div class="w-full min-w-0 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-xl shadow-gray-200/40">
+    <!-- Premium Header Toolbar -->
+    <div v-if="$slots.toolbar || $slots['toolbar-left'] || searchable || refreshable" 
+         class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 lg:px-6 border-b border-gray-100 bg-white relative z-20">
+      
+      <!-- Left Area: Search Bar & Left Toolbar -->
+      <div class="flex flex-1 items-center gap-3 w-full sm:max-w-xl">
+        <div v-if="searchable" class="relative group w-full">
+          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+          <input 
+            :value="searchQuery"
+            @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+            type="search" 
+            :placeholder="searchPlaceholder" 
+            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
+          />
+        </div>
+        <slot name="toolbar-left"></slot>
       </div>
       
-      <div v-if="searchable" class="relative flex-1 max-w-sm" :class="{ 'ml-4': $slots.title }">
-        <Search :size="16" class="absolute left-3 top-2.5 text-gray-400" />
-        <input 
-          :value="searchQuery"
-          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
-          type="search" 
-          :placeholder="searchPlaceholder" 
-          class="w-full h-9 pl-9 pr-4 text-sm bg-gray-50 border-none rounded-md focus:ring-2 focus:ring-brand-100 transition-colors placeholder:text-gray-400"
-        />
-      </div>
+      <!-- Right Area: Custom Toolbar & Actions -->
+      <div class="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto">
 
-      <div v-if="$slots.toolbar" class="flex items-center gap-4 ml-auto">
-        <slot name="toolbar"></slot>
+        <!-- Custom Toolbar Slot -->
+        <div v-if="$slots.toolbar" class="flex items-center gap-2">
+          <slot name="toolbar"></slot>
+        </div>
+
+        <!-- Refresh Button -->
+        <button 
+          v-if="refreshable" 
+          @click="emit('refresh')"
+          class="flex items-center justify-center h-10 w-10 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-brand-600 transition-all shadow-sm focus:outline-none focus:ring-4 focus:ring-brand-500/10 active:scale-95"
+          :class="{ 'opacity-50 pointer-events-none': loading }"
+          title="Làm mới"
+        >
+          <RefreshCw :size="16" stroke-width="2.5" :class="{ 'animate-spin': loading }" />
+        </button>
+        
+        <!-- Default list options button (ellipsis) if user desires it -->
+        <button v-if="searchable || refreshable" class="flex sm:hidden items-center justify-center h-10 w-10 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 text-gray-600 transition-all shadow-sm">
+           <MoreHorizontal :size="16" />
+        </button>
       </div>
     </div>
 
-    <table class="w-full border-collapse text-left text-sm">
-      <!-- Sticky Overline Header -->
-      <thead class="sticky top-0 bg-white border-b border-ink-200 z-10">
-        <tr>
-          <th v-if="selectable" class="px-5 py-3 w-12.5 border-b border-ink-200 text-left">
-            <input 
-              type="checkbox" 
-              class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-              :checked="isAllSelected"
-              :indeterminate="isSomeSelected"
-              @change="toggleSelectAll"
-            />
-          </th>
-          <th
-            v-for="col in columns"
-            :key="col.key"
-            class="px-5 py-3 text-xs text-ink-500 uppercase font-semibold select-none border-b border-ink-200"
-            :class="[
-              col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-              col.sortable ? 'cursor-pointer hover:bg-gray-50' : ''
-            ]"
-            :style="{ width: col.width }"
-            @click="col.sortable ? emit('sort', col.key) : undefined"
-          >
-            <div class="flex items-center gap-1.5" :class="[col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start']">
-              <slot :name="`header-${col.key}`" :column="col" :row="{} as TRow" :value="'' as TRow[keyof TRow]">
-                {{ col.label }}
-              </slot>
-              <div v-if="col.sortable" class="flex flex-col opacity-50">
-                <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-ink-400">
-                  <path d="M4 0L8 4H0L4 0Z" :fill="sortBy === col.key && !sortDesc ? '#4F46E5' : 'currentColor'" />
-                  <path d="M4 10L0 6H8L4 10Z" :fill="sortBy === col.key && sortDesc ? '#4F46E5' : 'currentColor'" />
-                </svg>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-left text-sm whitespace-nowrap">
+        <!-- Sticky Header -->
+        <thead class="bg-gray-50/80 border-b border-gray-100">
+          <tr>
+            <th v-if="selectable" class="px-6 py-4 w-12 border-b border-gray-100 text-left">
+              <input 
+                type="checkbox" 
+                class="w-4.5 h-4.5 rounded-[4px] border-gray-300 text-brand-600 focus:ring-brand-500/20 focus:ring-offset-0 cursor-pointer shadow-sm transition-all"
+                :checked="isAllSelected"
+                :indeterminate="isSomeSelected"
+                @change="toggleSelectAll"
+              />
+            </th>
+            <th
+              v-for="col in columns"
+              :key="col.key"
+              class="px-6 py-4 text-[11px] text-gray-500 uppercase tracking-wider font-bold select-none border-b border-gray-100"
+              :class="[
+                col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
+                col.sortable ? 'cursor-pointer hover:bg-gray-200/50 transition-colors' : ''
+              ]"
+              :style="{ width: col.width }"
+              @click="col.sortable ? emit('sort', col.key) : undefined"
+            >
+              <div class="flex items-center gap-2" :class="[col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start']">
+                <slot :name="`header-${col.key}`" :column="col" :row="{} as TRow" :value="'' as TRow[keyof TRow]">
+                  {{ col.label }}
+                </slot>
+                <div v-if="col.sortable" class="flex flex-col opacity-50">
+                  <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-gray-400">
+                    <path d="M4 0L8 4H0L4 0Z" :fill="sortBy === col.key && !sortDesc ? '#4F46E5' : 'currentColor'" />
+                    <path d="M4 10L0 6H8L4 10Z" :fill="sortBy === col.key && sortDesc ? '#4F46E5' : 'currentColor'" />
+                  </svg>
+                </div>
               </div>
-            </div>
-          </th>
-        </tr>
-      </thead>
+            </th>
+          </tr>
+        </thead>
 
-      <!-- Body: 56px rows, hover ink-25, no zebra -->
-      <tbody class="divide-y divide-ink-100">
-        <tr v-if="loading">
-          <td :colspan="columns.length" class="h-40 text-center text-ink-500">
-            <div class="inline-flex items-center gap-2">
-              <Loader2 class="animate-spin text-brand-600" :size="20" />
-              <span>Đang tải dữ liệu...</span>
-            </div>
-          </td>
-        </tr>
+        <!-- Body -->
+        <tbody class="divide-y divide-gray-100">
+          <tr v-if="loading">
+            <td :colspan="selectable ? columns.length + 1 : columns.length" class="h-48 text-center text-gray-500 bg-white">
+              <div class="flex flex-col items-center justify-center gap-3">
+                <div class="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center">
+                  <Loader2 class="animate-spin text-brand-600" :size="20" stroke-width="2.5" />
+                </div>
+                <span class="font-medium text-sm">Đang tải dữ liệu...</span>
+              </div>
+            </td>
+          </tr>
 
-        <tr v-else-if="rows.length === 0">
-          <td :colspan="columns.length" class="h-32 text-center text-ink-500">
-            {{ emptyText }}
-          </td>
-        </tr>
+          <tr v-else-if="rows.length === 0">
+            <td :colspan="selectable ? columns.length + 1 : columns.length" class="h-48 text-center text-gray-500 bg-white">
+              <div class="flex flex-col items-center justify-center gap-3">
+                <div class="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
+                  <Search class="text-gray-400" :size="24" stroke-width="1.5" />
+                </div>
+                <span class="font-medium text-sm">{{ emptyText }}</span>
+              </div>
+            </td>
+          </tr>
 
-        <tr
-          v-for="(row, rIdx) in rows"
-          v-else
-          :key="rIdx"
-          class="h-16 transition-colors duration-100 hover:bg-gray-50 border-b border-ink-100 last:border-0 bg-white"
-        >
-          <td v-if="selectable" class="px-5 py-3 border-b border-ink-100 text-left">
-            <input 
-              type="checkbox" 
-              class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-              :checked="selected.includes(row)"
-              @change="toggleSelect(row)"
-            />
-          </td>
-          <td
-            v-for="col in columns"
-            :key="col.key"
-            class="px-5 py-3 text-ink-900 border-b border-ink-100"
-            :class="[
-              col.align === 'right' ? 'text-right font-num' : col.align === 'center' ? 'text-center' : 'text-left',
-            ]"
+          <tr
+            v-for="(row, rIdx) in rows"
+            v-else
+            :key="rIdx"
+            class="group h-16 transition-all duration-200 hover:bg-brand-50/30 bg-white hover:shadow-[inset_4px_0_0_0_#4F46E5]"
           >
-            <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col.key)" :column="col">
-              <slot :name="`cell(${col.key})`" :row="row" :value="getCellValue(row, col.key)" :column="col">
-                {{ getCellValue(row, col.key) }}
+            <td v-if="selectable" class="px-6 py-4 text-left">
+              <input 
+                type="checkbox" 
+                class="w-4.5 h-4.5 rounded-[4px] border-gray-300 text-brand-600 focus:ring-brand-500/20 focus:ring-offset-0 cursor-pointer shadow-sm transition-all"
+                :checked="selected.includes(row)"
+                @change="toggleSelect(row)"
+              />
+            </td>
+            <td
+              v-for="col in columns"
+              :key="col.key"
+              class="px-6 py-4 text-gray-800"
+              :class="[
+                col.align === 'right' ? 'text-right font-num' : col.align === 'center' ? 'text-center' : 'text-left',
+              ]"
+            >
+              <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col.key)" :column="col">
+                <slot :name="`cell(${col.key})`" :row="row" :value="getCellValue(row, col.key)" :column="col">
+                  <span class="font-medium">{{ getCellValue(row, col.key) }}</span>
+                </slot>
               </slot>
-            </slot>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
