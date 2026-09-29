@@ -13,6 +13,7 @@ import {
   Award,
   Ban,
   ShieldAlert,
+  ShieldCheck,
   FolderKanban,
   Package,
   Sliders,
@@ -42,6 +43,7 @@ const navigation = computed(() => [
         ...(isServiceManager.value
         ? [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
+            { label: 'Yêu cầu bảo hành', path: '/console/warranty', icon: ShieldCheck },
             { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
             { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
             { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
