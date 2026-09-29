@@ -10,6 +10,7 @@ export interface RegisterRequest {
   password: string;
   fullName: string;
   phoneNumber?: string;
+  role?: 'customer' | 'technician';
 }
 
 export interface RegisterResponse {

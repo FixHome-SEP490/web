@@ -106,7 +106,8 @@ const handleDecline = async (inv: InvitationItem) => {
       <FhCard
         v-for="inv in invitations"
         :key="inv.id"
-        class="border-l-4 border-l-brand-600 space-y-4"
+        class="border-l-4 border-l-brand-600 space-y-4 cursor-pointer hover:border-brand-500 hover:shadow-md transition-all group"
+        @click="detailInvitation = inv"
       >
         <!-- Top: TTL Countdown & Priority -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
@@ -132,10 +133,10 @@ const handleDecline = async (inv: InvitationItem) => {
           @click="detailInvitation = inv"
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="font-bold text-base text-ink-900">
+            <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
               {{ inv.booking?.serviceName }}
             </h3>
-            <span class="text-xs font-semibold text-brand-600 flex items-center gap-1 shrink-0">
+            <span class="text-xs font-semibold text-brand-600 flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
               Xem chi tiết <ChevronRight :size="14" />
             </span>
           </div>
@@ -151,7 +152,7 @@ const handleDecline = async (inv: InvitationItem) => {
           <FhButton
             variant="ghost"
             size="md"
-            @click="handleDecline(inv)"
+            @click.stop="handleDecline(inv)"
           >
             <XCircle :size="16" class="mr-1.5 text-ink-400" /> Bỏ qua
           </FhButton>
@@ -160,7 +161,7 @@ const handleDecline = async (inv: InvitationItem) => {
             variant="primary"
             size="md"
             :loading="responding"
-            @click="handleAccept(inv)"
+            @click.stop="handleAccept(inv)"
           >
             <CheckCircle2 :size="16" class="mr-1.5" /> Chấp nhận đơn này
           </FhButton>

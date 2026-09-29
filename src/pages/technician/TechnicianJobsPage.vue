@@ -245,7 +245,8 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
       <div
         v-for="job in filteredJobs"
         :key="job.id"
-        class="bg-white rounded-3xl border border-ink-200/80 p-5 sm:p-6 shadow-xs hover:border-brand-300 hover:shadow-md transition-all space-y-4"
+        class="bg-white rounded-3xl border border-ink-200/80 p-5 sm:p-6 shadow-xs hover:border-brand-400 hover:shadow-md transition-all space-y-4 cursor-pointer group"
+        @click="router.push(`/tech/jobs/${job.id}`)"
       >
         <!-- Card Top Bar: Code + Badge + Schedule -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3.5">
@@ -269,7 +270,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         <!-- Service Info & Customer Info Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <h3 class="font-extrabold text-base text-ink-900">
+            <h3 class="font-extrabold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
               {{ job.serviceName }}
             </h3>
             <p class="text-xs text-ink-600 flex items-start gap-1.5 leading-relaxed">
@@ -286,6 +287,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
             <a
               :href="`tel:${job.customerPhone}`"
               class="inline-flex items-center gap-1 text-xs font-mono font-bold text-brand-600 hover:underline"
+              @click.stop
             >
               <Phone :size="12" /> {{ job.customerPhone }}
             </a>
@@ -344,7 +346,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
             </button>
 
             <!-- Primary Open Workspace Button -->
-            <FhButton variant="primary" size="sm" @click="router.push(`/tech/jobs/${job.id}`)">
+            <FhButton variant="primary" size="sm" @click.stop="router.push(`/tech/jobs/${job.id}`)">
               Vào Workspace <ChevronRight :size="14" class="ml-0.5" />
             </FhButton>
           </div>
@@ -352,13 +354,14 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
       </div>
       <div v-for="entry in visibleHistoricalJobs" :key="entry.id"
         data-testid="technician-historical-order"
-        class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2">
+        class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
+        @click="router.push(`/tech/jobs/${entry.id}`)">
         <p class="text-xs font-bold text-ink-900">Mã đơn: {{ entry.code }}</p>
         <p class="text-xs text-ink-600">Trạng thái: {{ getStatusBadge(entry.status).label }}</p>
         <p class="text-xs text-ink-500">Ngày ghi nhận: {{ new Date(entry.createdAt).toLocaleDateString('vi-VN') }}</p>
         <p class="text-xs text-ink-500">Lịch sử công việc rút gọn. Không còn quyền xem thông tin riêng tư của khách.</p>
-        <button type="button" class="text-xs font-semibold text-brand-700 underline"
-          @click="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>
+        <button type="button" class="text-xs font-semibold text-brand-700 underline group-hover:text-brand-800"
+          @click.stop="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>
       </div>
     </div>
   </div>

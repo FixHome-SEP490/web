@@ -138,12 +138,17 @@ const handleVerify = async () => {
   successMessage.value = '';
 
   try {
-    await authStore.verifyRegisterOtp({
+    const verifiedUser = await authStore.verifyRegisterOtp({
       email: email.value.trim().toLowerCase(),
       otp: otpCode.value,
     });
-    // Successful verify triggers login session and redirects to customer app
-    router.push('/app');
+    // Check if user is technician: route to onboarding wizard
+    const role = (verifiedUser?.role || (route.query.role as string) || '').toUpperCase();
+    if (role === 'TECHNICIAN') {
+      router.push('/tech/onboarding');
+    } else {
+      router.push('/app');
+    }
   } catch (err: unknown) {
     const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
     errorMessage.value =

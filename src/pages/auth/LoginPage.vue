@@ -30,8 +30,10 @@ const fillDemo = (email: string) => {
   errorMessage.value = '';
 };
 
+import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
+
 /** Đăng nhập bằng mật khẩu hay bằng Google thì chặng sau đều giống nhau. */
-const goAfterLogin = (user: { fullName?: string; role?: string }) => {
+const goAfterLogin = async (user: { fullName?: string; role?: string }) => {
   const redirect = (route.query.redirect as string) || '';
   if (redirect) {
     router.push(redirect);
@@ -44,6 +46,15 @@ const goAfterLogin = (user: { fullName?: string; role?: string }) => {
   if (role === 'ADMIN' || role === 'SERVICE_MANAGER') {
     router.push('/console');
   } else if (role === 'TECHNICIAN') {
+    try {
+      const statusRes = await technicianOnboardingApi.getStatus();
+      if (statusRes.onboardingStatus !== 'approved' && statusRes.verificationStatus !== 'verified') {
+        router.push('/tech/onboarding');
+        return;
+      }
+    } catch {
+      // ignore, fallback to /tech
+    }
     router.push('/tech');
   } else {
     router.push('/app');
