@@ -14,7 +14,9 @@ import {
   ChevronDown,
   Wrench,
   UserCheck,
+  Phone,
 } from 'lucide-vue-next';
+import { useCallStore } from '../../stores/call.store';
 
 const props = withDefaults(
   defineProps<{
@@ -68,6 +70,18 @@ const canSend = computed(() => {
   // alone, which is why it worked.
   return conversation.value.canSend !== false;
 });
+
+const callStore = useCallStore();
+
+const callButtonTitle = computed(() => {
+  if (callStore.isActive) return 'Đang có cuộc gọi khác';
+  if (!chatStore.isSocketConnected) return 'Mất kết nối, chưa gọi được';
+  return 'Gọi thoại';
+});
+
+function startVoiceCall() {
+  void callStore.startCall(props.conversationId);
+}
 
 const counterpartRoleLabel = computed(() => {
   const role = conversation.value?.counterpart?.role?.toUpperCase();
@@ -229,6 +243,22 @@ function handleDelete(messageId: string) {
 
       <!-- Header Actions -->
       <div class="flex items-center gap-1">
+        <!--
+          Calling follows the same rule as sending: only while the conversation
+          is open. Hiding it on a closed thread avoids offering a button the
+          server would refuse anyway.
+        -->
+        <button
+          v-if="canSend"
+          type="button"
+          class="p-1.5 text-ink-500 hover:text-brand-600 rounded-md hover:bg-ink-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          :disabled="callStore.isActive || !chatStore.isSocketConnected"
+          :title="callButtonTitle"
+          :aria-label="callButtonTitle"
+          @click="startVoiceCall"
+        >
+          <Phone :size="18" />
+        </button>
         <button
           v-if="showExpandButton"
           type="button"
