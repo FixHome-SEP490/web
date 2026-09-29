@@ -95,6 +95,22 @@ describe('Wallet Formatters & Logic (Design System Conformance)', () => {
         label: 'Đã từ chối',
         color: 'rose',
       });
+      // Automatic payouts: approved and moving, and a transfer the bank refused.
+      expect(formatWithdrawalStatus('PROCESSING')).toEqual({
+        label: 'Đang chuyển tiền',
+        color: 'blue',
+      });
+      expect(formatWithdrawalStatus('FAILED')).toEqual({
+        label: 'Chuyển thất bại',
+        color: 'rose',
+      });
+    });
+
+    it('shows a refunded payout as money coming back in', () => {
+      expect(formatWalletTxType('WITHDRAW_REFUND')).toEqual({
+        label: 'Hoàn tiền rút không thành công',
+        isCredit: true,
+      });
     });
   });
 });
