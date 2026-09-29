@@ -42,6 +42,7 @@ import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
+import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -1469,6 +1470,13 @@ const confirmWork = async () => {
           </div>
         </div>
       </FhCard>
+
+      <!-- Khiếu nại về đơn hàng (mọi trạng thái đơn) -->
+      <OrderComplaintPanel
+        :order-id="orderId"
+        :order-status="order.status"
+        :completed-at="order.completedAt"
+      />
     </div>
 
     <!-- Confirm Cancel Modal -->

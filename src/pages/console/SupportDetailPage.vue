@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ArrowLeft, CheckCircle2, ExternalLink, FileText, LifeBuoy, LockKeyhole, ReceiptText } from 'lucide-vue-next';
+import { ordersApi } from '../../api/orders.api';
 import { useRoute, useRouter } from 'vue-router';
 import {
   FhButton,
@@ -22,6 +23,10 @@ import {
   getSupportErrorMessage,
   isCashCase,
   isSafeEvidenceLink,
+  isResponseOverdue,
+  liablePartyLabels,
+  RESOLUTION_CODES,
+  resolutionCodeLabels,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
 } from './support-cases.utils';
@@ -43,6 +48,15 @@ const formError = ref('');
 const showConfirm = ref(false);
 const pendingPayload = ref<SupportCaseResolvePayload | null>(null);
 const submitting = ref(false);
+const liableParty = ref<'' | 'technician' | 'customer' | 'platform' | 'shared'>('');
+const amountText = ref<string | number>('');
+const actionBusy = ref(false);
+
+const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
+const canHold = computed(() => !!supportCase.value?.serviceOrderId && !isTerminal.value);
+const overdue = computed(() =>
+  supportCase.value ? isResponseOverdue(supportCase.value.status, supportCase.value.respondBy) : false,
+);
 
 const isTerminal = computed(() =>
   supportCase.value ? ['resolved', 'rejected'].includes(supportCase.value.status) : false,
@@ -64,6 +78,51 @@ async function loadCase(id: string) {
   }
 }
 
+async function runAction(action: () => Promise<SupportCaseDetail>, success: string) {
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+  error.value = '';
+  successMessage.value = '';
+  try {
+    supportCase.value = await action();
+    successMessage.value = success;
+  } catch (reason) {
+    error.value = getSupportErrorMessage(reason, 'Chưa xác nhận được kết quả. Vui lòng tải lại trước khi thực hiện lại.');
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+const startReview = () => supportCase.value
+  && runAction(() => supportCasesApi.startReview(supportCase.value!.id), 'Bạn đã nhận xử lý case này.');
+
+const toggleHold = () => {
+  const current = supportCase.value;
+  if (!current) return;
+  return runAction(
+    () => supportCasesApi.setHold(current.id, !current.holdCompletion),
+    current.holdCompletion ? 'Đã bỏ giữ hoàn tất đơn.' : 'Đơn sẽ không tự hoàn tất cho đến khi case được xử lý hoặc bạn bỏ giữ.',
+  );
+};
+
+async function retryCompletion() {
+  const orderId = supportCase.value?.serviceOrderId;
+  if (!orderId || actionBusy.value) return;
+  actionBusy.value = true;
+  error.value = '';
+  successMessage.value = '';
+  try {
+    const result = await ordersApi.retryCompletion(orderId);
+    successMessage.value = result.completed
+      ? 'Đơn đã được hoàn tất.'
+      : 'Đơn chưa đủ điều kiện hoàn tất (thiếu xác nhận của khách hoặc thanh toán).';
+  } catch (reason) {
+    error.value = getSupportErrorMessage(reason, 'Không thể kiểm tra lại hoàn tất đơn.');
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
 function buildResolvePayload(): SupportCaseResolvePayload | null {
   const code = resolutionCode.value.trim();
   const reason = resolutionReason.value.trim();
@@ -78,6 +137,16 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
   }
   if (code.length > 128) {
     formError.value = 'Mã xử lý không được vượt quá 128 ký tự.';
+    return null;
+  }
+  if (usesStandardCodes.value && !RESOLUTION_CODES.includes(code)) {
+    formError.value = 'Vui lòng chọn kết quả xử lý trong danh sách.';
+    return null;
+  }
+  const rawAmount = String(amountText.value ?? '').trim();
+  const amount = rawAmount === '' ? undefined : Number(rawAmount);
+  if (amount !== undefined && (!Number.isInteger(amount) || amount < 0)) {
+    formError.value = 'Số tiền ghi nhận phải là số nguyên không âm (VND).';
     return null;
   }
   if (reason.length < 10) {
@@ -103,6 +172,10 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     reason,
   };
   if (evidenceRefs.length > 0) payload.evidenceRefs = evidenceRefs;
+  if (usesStandardCodes.value) {
+    if (liableParty.value) payload.liableParty = liableParty.value;
+    if (amount !== undefined) payload.amount = amount;
+  }
   return payload;
 }
 
@@ -176,6 +249,9 @@ watch(caseId, (id) => {
           <div class="mb-2 flex flex-wrap items-center gap-2">
             <span class="rounded bg-brand-50 px-2 py-1 font-mono text-[11px] font-semibold text-brand-700">{{ supportCase.id }}</span>
             <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
+            <span v-if="supportCase.isUrgent && !isTerminal" class="rounded bg-danger-50 px-2 py-1 text-[11px] font-semibold text-danger-700">Cần xử lý ngay</span>
+            <span v-if="overdue" class="rounded bg-warning-50 px-2 py-1 text-[11px] font-semibold text-warning-700">Quá hạn phản hồi ({{ formatSupportDate(supportCase.respondBy) }})</span>
+            <span v-if="supportCase.holdCompletion" class="rounded bg-info-50 px-2 py-1 text-[11px] font-semibold text-info-600">Đang giữ đơn không tự hoàn tất</span>
           </div>
           <h1 class="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink-900">
             <LifeBuoy class="text-brand-600" :size="24" />
@@ -201,6 +277,25 @@ watch(caseId, (id) => {
         <CheckCircle2 :size="16" />
         {{ successMessage }}
       </div>
+
+      <FhCard v-if="!isTerminal">
+        <h2 class="mb-1 text-h2 text-ink-900">Can thiệp</h2>
+        <p class="mb-4 text-xs text-ink-500">Đơn vẫn tiếp tục thực hiện. Bạn chỉ chặn được việc đơn tự hoàn tất và tự thanh toán khi cần xem xét kỹ.</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <FhButton v-if="supportCase.status === 'open'" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="startReview">
+            Nhận xử lý case này
+          </FhButton>
+          <FhButton v-if="canHold" variant="secondary" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="toggleHold">
+            {{ supportCase.holdCompletion ? 'Bỏ giữ hoàn tất đơn' : 'Giữ đơn không tự hoàn tất' }}
+          </FhButton>
+          <FhButton v-if="canHold && !supportCase.holdCompletion" variant="ghost" size="sm" :disabled="actionBusy" @click="retryCompletion">
+            Kiểm tra lại hoàn tất đơn
+          </FhButton>
+          <FhButton v-if="supportCase.serviceOrderId" variant="ghost" size="sm" @click="router.push(`/console/orders/${supportCase.serviceOrderId}`)">
+            Xem đơn sửa chữa
+          </FhButton>
+        </div>
+      </FhCard>
 
       <div class="grid gap-4 lg:grid-cols-2">
         <FhCard>
@@ -267,7 +362,7 @@ watch(caseId, (id) => {
 
       <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" class="border-success-200">
         <h2 class="mb-3 flex items-center gap-2 text-h2 text-ink-900"><CheckCircle2 :size="18" class="text-success-600" /> Kết quả đã ghi nhận</h2>
-        <dl class="grid gap-3 text-xs sm:grid-cols-3"><div><dt class="text-ink-500">Mã xử lý</dt><dd class="mt-1 font-mono font-semibold text-ink-900">{{ supportCase.resolutionCode ?? '—' }}</dd></div><div><dt class="text-ink-500">Thời điểm</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.resolvedAt) }}</dd></div><div class="sm:col-span-1"><dt class="text-ink-500">Lý do</dt><dd class="mt-1 leading-relaxed text-ink-700">{{ supportCase.resolutionReason ?? '—' }}</dd></div></dl>
+        <dl class="grid gap-3 text-xs sm:grid-cols-3"><div><dt class="text-ink-500">Mã xử lý</dt><dd class="mt-1 font-mono font-semibold text-ink-900">{{ supportCase.resolutionCode ?? '—' }}</dd></div><div><dt class="text-ink-500">Thời điểm</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.resolvedAt) }}</dd></div><div class="sm:col-span-1"><dt class="text-ink-500">Lý do</dt><dd class="mt-1 leading-relaxed text-ink-700">{{ supportCase.resolutionReason ?? '—' }}</dd></div><div v-if="supportCase.liableParty"><dt class="text-ink-500">Bên chịu trách nhiệm</dt><dd class="mt-1 text-ink-700">{{ liablePartyLabels[supportCase.liableParty] ?? supportCase.liableParty }}</dd></div><div v-if="supportCase.amount != null"><dt class="text-ink-500">Số tiền ghi nhận</dt><dd class="mt-1"><FhMoney :amount="supportCase.amount" /></dd></div></dl>
       </FhCard>
 
       <FhCard v-if="!isTerminal" class="border-brand-200">
@@ -283,9 +378,28 @@ watch(caseId, (id) => {
               </select>
             </label>
             <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              Resolution code <span class="text-danger-600">*</span>
-              <input v-model="resolutionCode" maxlength="128" type="text" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Ví dụ: CASH_CONFIRMED" />
-              <span class="font-normal text-ink-400">Tối đa 128 ký tự · {{ resolutionCode.length }}/128</span>
+              {{ usesStandardCodes ? 'Kết quả xử lý' : 'Resolution code' }} <span class="text-danger-600">*</span>
+              <select v-if="usesStandardCodes" v-model="resolutionCode" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <option value="" disabled>Chọn kết quả xử lý</option>
+                <option v-for="code in RESOLUTION_CODES" :key="code" :value="code">{{ resolutionCodeLabels[code] }}</option>
+              </select>
+              <template v-else>
+                <input v-model="resolutionCode" maxlength="128" type="text" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Ví dụ: CASH_CONFIRMED" />
+                <span class="font-normal text-ink-400">Tối đa 128 ký tự · {{ resolutionCode.length }}/128</span>
+              </template>
+            </label>
+          </div>
+          <div v-if="usesStandardCodes" class="grid gap-4 sm:grid-cols-2">
+            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
+              Bên chịu trách nhiệm <span class="font-normal text-ink-400">(ghi nhận, không tự động chuyển tiền)</span>
+              <select v-model="liableParty" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <option value="">Chưa xác định</option>
+                <option v-for="(label, value) in liablePartyLabels" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
+              Số tiền ghi nhận (VND) <span class="font-normal text-ink-400">(không bắt buộc)</span>
+              <input v-model="amountText" type="number" min="0" step="1000" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" />
             </label>
           </div>
           <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">

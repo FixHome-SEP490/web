@@ -61,6 +61,7 @@ export interface ServiceOrderItem {
   grandTotal: number;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'unpaid' | 'paid' | 'refunded';
   createdAt: string;
+  completedAt?: string | null;
   timeline?: {
     status: string;
     title: string;
@@ -684,6 +685,13 @@ export const ordersApi = {
     );
 
     return groups.sort((a, b) => new Date(b.maxExpiresAt).getTime() - new Date(a.maxExpiresAt).getTime());
+  },
+
+  async retryCompletion(orderId: string): Promise<{ completed: boolean; status: string }> {
+    const res = await apiClient.post<{ data: { completed: boolean; status: string } }>(
+      `/service-orders/${orderId}/retry-completion`,
+    );
+    return res.data.data;
   },
 
   async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {
