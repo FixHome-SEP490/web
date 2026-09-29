@@ -185,6 +185,10 @@ const handleClose = () => {
                 <h2 id="modal-technician-name" class="text-xl font-extrabold text-ink-900 tracking-tight">
                   {{ candidate.fullName }}
                 </h2>
+                <FhStatusPill
+                  :status="candidate.isAvailable !== false ? 'ACTIVE' : 'INACTIVE'"
+                  :label="candidate.isAvailable !== false ? 'Hoạt động' : 'Tạm nghỉ'"
+                />
                 <FhStatusPill status="VERIFIED" label="ĐÃ XÁC THỰC" />
               </div>
 
@@ -210,7 +214,7 @@ const handleClose = () => {
 
           <!-- Selection status chip on top-right -->
           <div v-if="isSelected" class="self-start sm:self-auto mb-1">
-            <FhStatusPill status="ACCEPTED" :label="`Đã chọn #${priorityIndex + 1}`" />
+            <FhStatusPill status="ACTIVE" :label="`Đã chọn #${priorityIndex + 1}`" />
           </div>
         </div>
 
@@ -632,13 +636,13 @@ const handleClose = () => {
       <!-- Sticky Floating Action Footer with Glassmorphism -->
       <div class="p-4 px-6 border-t border-ink-150 bg-white/95 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 shadow-lg">
         <div class="text-xs text-ink-600">
-          <span v-if="isSelected" class="text-brand-700 font-bold flex items-center gap-1.5">
-            <CheckCircle2 :size="15" class="text-brand-600" />
+          <span v-if="isSelected" class="text-success-700 font-bold flex items-center gap-1.5">
+            <CheckCircle2 :size="15" class="text-success-600" />
             Đang chọn làm <strong>Ưu tiên #{{ priorityIndex + 1 }}</strong>
           </span>
           <span v-else class="text-ink-500 flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Thợ đang rảnh lịch và sẵn sàng tiếp nhận
+            Thợ đang hoạt động và sẵn sàng tiếp nhận
           </span>
         </div>
 

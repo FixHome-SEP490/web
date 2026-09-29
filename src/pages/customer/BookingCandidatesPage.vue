@@ -221,11 +221,24 @@ const successMessage = computed(() => selectedCount.value === 1
             >
               #{{ selectedIds.indexOf(tech.id) + 1 }}
             </span>
+            <!-- Online active beacon (green when active) -->
+            <span
+              v-if="tech.isAvailable !== false"
+              class="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5"
+              title="Đang hoạt động"
+            >
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success-400 opacity-75" />
+              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-success-500 border-2 border-white" />
+            </span>
           </div>
 
           <div class="space-y-1">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h3 class="font-bold text-sm text-ink-900">{{ tech.fullName }}</h3>
+              <FhStatusPill
+                :status="tech.isAvailable !== false ? 'ACTIVE' : 'INACTIVE'"
+                :label="tech.isAvailable !== false ? 'Hoạt động' : 'Tạm nghỉ'"
+              />
               <FhStatusPill status="COMPLETED" label="ĐÃ XÁC THỰC" />
             </div>
 
