@@ -169,13 +169,14 @@ const handleClose = () => {
               >
                 {{ candidate.fullName.charAt(0) }}
               </div>
-              <!-- Online Status Beacon -->
+              <!-- Dấu chấm tròn xanh trạng thái đang hoạt động -->
               <span
+                v-if="candidate.isAvailable !== false"
                 class="absolute -bottom-1 -right-1 flex h-4 w-4"
-                title="Đang rảnh lịch và sẵn sàng tiếp nhận yêu cầu"
+                title="Đang hoạt động"
               >
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success-400 opacity-75" />
-                <span class="relative inline-flex rounded-full h-4 w-4 bg-success-500 border-2 border-white" />
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span class="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white shadow-xs" />
               </span>
             </div>
 
@@ -185,10 +186,6 @@ const handleClose = () => {
                 <h2 id="modal-technician-name" class="text-xl font-extrabold text-ink-900 tracking-tight">
                   {{ candidate.fullName }}
                 </h2>
-                <FhStatusPill
-                  :status="candidate.isAvailable !== false ? 'ACTIVE' : 'INACTIVE'"
-                  :label="candidate.isAvailable !== false ? 'Hoạt động' : 'Tạm nghỉ'"
-                />
                 <FhStatusPill status="VERIFIED" label="ĐÃ XÁC THỰC" />
               </div>
 
