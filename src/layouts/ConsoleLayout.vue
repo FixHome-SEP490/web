@@ -23,7 +23,6 @@ import {
   Wallet,
   Home,
   ChevronRight,
-  Search,
 } from 'lucide-vue-next';
 
 
