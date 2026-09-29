@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Sliders, Edit2, Search, RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, type TableColumn } from '../../../components';
+import { Sliders, Edit2, RefreshCw } from 'lucide-vue-next';
+import { FhButton, FhTable, FhSkeleton, type TableColumn } from '../../../components';
 import {
   adminConfigApi,
   type AdminConfigItem,
@@ -54,11 +54,11 @@ const configDefinitions: ConfigDefinition[] = [
 ];
 
 const columns: TableColumn[] = [
-  { key: 'key', label: 'Config key', width: '250px' },
-  { key: 'value', label: 'Giá trị', width: '160px' },
+  { key: 'key', label: 'Config key', width: '220px' },
+  { key: 'value', label: 'Giá trị', width: '120px' },
   { key: 'description', label: 'Ý nghĩa nghiệp vụ' },
-  { key: 'effectStatus', label: 'Hiệu lực', width: '150px' },
-  { key: 'actions', label: 'Thao tác', width: '90px' },
+  { key: 'effectStatus', label: 'Hiệu lực', width: '120px' },
+  { key: 'actions', label: 'Thao tác', width: '80px' },
 ];
 
 const searchQuery = ref('');
@@ -99,6 +99,24 @@ const configRows = computed<ConfigRow[]>(() => {
   return [...knownRows, ...unknownRows].filter((row) =>
     !query || `${row.key} ${row.description} ${row.effectStatus}`.toLowerCase().includes(query),
   );
+});
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredConfigRows = computed<(ConfigRow & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: 8 }).map((_, i) => ({
+      key: `skeleton-${i}`,
+      _isSkeleton: true,
+      description: '',
+      valueType: 'string',
+      effectStatus: 'ACTIVE',
+      value: null,
+      updatedAt: '',
+      available: false,
+    } as unknown as ConfigRow & { _isSkeleton: boolean }));
+  }
+  return configRows.value;
 });
 
 const loadConfigs = async () => {
@@ -226,44 +244,57 @@ const statusClass = (status: ConfigEffectStatus) => ({
       {{ successMessage }}
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <label class="sr-only" for="config-search">Tìm config</label>
-        <input id="config-search" v-model="searchQuery" type="search" placeholder="Tìm theo key, mô tả hoặc trạng thái..." class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white" />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-      <div class="flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
-        <span class="px-2 py-1 rounded bg-success-50 text-success-700">ACTIVE</span>
-        <span class="px-2 py-1 rounded bg-warning-50 text-warning-700">TO_WIRE</span>
-        <span class="px-2 py-1 rounded bg-ink-100 text-ink-600">NOT IMPLEMENTED</span>
-        <span class="px-2 py-1 rounded bg-danger-50 text-danger-700">STALE / REVIEW</span>
-      </div>
-    </div>
+    <FhTable
+      :columns="columns"
+      :rows="filteredConfigRows"
+      :loading="loading"
+      searchable
+      v-model:searchQuery="searchQuery"
+      search-placeholder="Tìm theo key, mô tả hoặc trạng thái..."
+      :empty-text="error ? 'Không thể hiển thị cấu hình.' : 'Không có config phù hợp.'"
+    >
+      <template #toolbar>
+        <div class="flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
+          <span class="px-2 py-1 rounded bg-success-50 text-success-700 font-semibold">ACTIVE</span>
+          <span class="px-2 py-1 rounded bg-warning-50 text-warning-700 font-semibold">TO_WIRE</span>
+          <span class="px-2 py-1 rounded bg-ink-100 text-ink-600 font-semibold">NOT IMPLEMENTED</span>
+          <span class="px-2 py-1 rounded bg-danger-50 text-danger-700 font-semibold">STALE / REVIEW</span>
+        </div>
+      </template>
 
-    <FhCard>
-      <FhTable :columns="columns" :rows="configRows" :loading="loading" :empty-text="error ? 'Không thể hiển thị cấu hình.' : 'Không có config phù hợp.'">
-        <template #cell-key="{ row }">
+      <template #cell-key="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="180px" height="16px" class="mb-1" />
+          <FhSkeleton width="60px" height="12px" />
+        </div>
+        <div v-else>
           <code class="text-xs font-mono font-bold text-brand-800">{{ row.key }}</code>
           <span class="text-[10px] text-ink-400 block font-mono">Kiểu: {{ row.valueType }}</span>
-        </template>
-        <template #cell-value="{ row }">
-          <span v-if="row.value !== null" class="font-mono text-xs font-bold text-ink-900 bg-ink-100 px-2 py-0.5 rounded">{{ row.value }}</span>
-          <span v-else class="text-xs italic text-ink-400">Chưa tải từ Backend</span>
-        </template>
-        <template #cell-description="{ row }">
+        </div>
+      </template>
+      <template #cell-value="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="60px" height="20px" class="rounded" />
+        <span v-else-if="row.value !== null" class="font-mono text-xs font-bold text-ink-900 bg-ink-100 px-2 py-0.5 rounded">{{ row.value }}</span>
+        <span v-else class="text-xs italic text-ink-400">Chưa tải từ Backend</span>
+      </template>
+      <template #cell-description="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="260px" height="16px" />
+        <div v-else class="max-w-[320px] whitespace-normal">
           <span class="text-xs text-ink-600 leading-relaxed">{{ row.description }}</span>
           <span v-if="row.consumerEvidence" class="block mt-1 text-[10px] text-ink-400">{{ row.consumerEvidence }}</span>
-        </template>
-        <template #cell-effectStatus="{ row }">
-          <span class="px-2 py-1 rounded text-[10px] font-semibold whitespace-nowrap" :class="statusClass(row.effectStatus)">{{ statusLabel(row.effectStatus) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <button class="p-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-ink-500 hover:text-brand-600 hover:bg-ink-100" type="button" title="Chỉnh sửa cấu hình" :disabled="!canEdit(row)" @click="openEdit(row)">
-            <Edit2 :size="15" />
-          </button>
-        </template>
-      </FhTable>
-    </FhCard>
+        </div>
+      </template>
+      <template #cell-effectStatus="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="20px" class="rounded" />
+        <span v-else class="px-2 py-1 rounded text-[10px] font-semibold whitespace-nowrap" :class="statusClass(row.effectStatus)">{{ statusLabel(row.effectStatus) }}</span>
+      </template>
+      <template #cell-actions="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="32px" height="32px" class="rounded" />
+        <button v-else class="p-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-ink-500 hover:text-brand-600 hover:bg-ink-100" type="button" title="Chỉnh sửa cấu hình" :disabled="!canEdit(row)" @click="openEdit(row)">
+          <Edit2 :size="15" />
+        </button>
+      </template>
+    </FhTable>
 
     <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4">
       <div class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-4 text-xs">

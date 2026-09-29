@@ -3,7 +3,6 @@ import { ref, onMounted, computed } from 'vue';
 import { Plus, Edit2, Power, FolderKanban, Wrench } from 'lucide-vue-next';
 import {
   FhButton,
-  FhCard,
   FhTable,
   FhStatusPill,
   FhMoney,
@@ -343,7 +342,7 @@ const handleConfirm = async () => {
 
 
     <!-- Tab 1: Categories Table -->
-    <FhCard v-if="activeTab === 'categories'">
+    <template v-if="activeTab === 'categories'">
       <FhTable
         :columns="[
           { key: 'sortOrder', label: 'STT', width: '60px' },
@@ -420,10 +419,10 @@ const handleConfirm = async () => {
           </div>
         </template>
       </FhTable>
-    </FhCard>
+    </template>
 
     <!-- Tab 2: Services Table -->
-    <FhCard v-if="activeTab === 'services'">
+    <template v-if="activeTab === 'services'">
       <FhTable
         :columns="[
           { key: 'name', label: 'Tên dịch vụ' },
@@ -524,7 +523,7 @@ const handleConfirm = async () => {
           </div>
         </template>
       </FhTable>
-    </FhCard>
+    </template>
 
     <!-- Modal: Category Edit/Create -->
     <div
