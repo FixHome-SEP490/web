@@ -45,4 +45,12 @@ export interface OnboardingStatusResponse {
   longitude?: number;
   serviceRadiusKm?: number;
   serviceAreas?: ServiceAreaItem[];
+  fullName?: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  citizenIdNumber?: string;
+  phoneNumber?: string;
+  yearsExperience?: number;
+  bio?: string;
+  selectedServiceIds?: string[];
 }
