@@ -282,61 +282,54 @@ const getUsageBadgeClass = (status: string) => {
     </div>
 
     <p class="text-xs text-ink-500">Thống kê trên trang hiện tại</p>
-    <!-- Premium Stats Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
-      <div class="relative overflow-hidden p-4 bg-gradient-to-br from-amber-50/50 to-white border border-amber-100 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-        <div class="absolute -right-2 -top-2 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-          <Package :size="64" class="text-amber-600" />
+    <!-- Stats Timeline -->
+    <div class="flex items-center justify-between w-full bg-white px-8 py-6 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
+      <!-- Background Connecting Line -->
+      <div class="absolute top-12 left-16 right-16 h-1 bg-gray-100 rounded-full z-0"></div>
+      
+      <!-- Step 1 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-amber-50 border-2 border-amber-200 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Package :size="24" />
         </div>
-        <div class="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Chờ chuẩn bị</div>
-        <div class="text-3xl font-extrabold text-amber-900 font-num mt-1.5 flex items-baseline gap-1">
-          {{ stats.requested }}
-          <span class="text-[11px] font-medium text-amber-500">yêu cầu</span>
-        </div>
+        <div class="text-[11px] font-bold text-amber-700 uppercase tracking-wider text-center">Chờ chuẩn bị</div>
+        <div class="text-xl font-extrabold text-amber-900 font-num mt-1">{{ stats.requested }} <span class="text-[10px] font-medium text-amber-500">đơn</span></div>
       </div>
       
-      <div class="relative overflow-hidden p-4 bg-gradient-to-br from-blue-50/50 to-white border border-blue-100 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-        <div class="absolute -right-2 -top-2 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-          <CheckCircle :size="64" class="text-blue-600" />
+      <!-- Step 2 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-blue-50 border-2 border-blue-200 text-blue-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <CheckCircle :size="24" />
         </div>
-        <div class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Sẵn sàng (READY)</div>
-        <div class="text-3xl font-extrabold text-blue-900 font-num mt-1.5 flex items-baseline gap-1">
-          {{ stats.ready }}
-          <span class="text-[11px] font-medium text-blue-500">yêu cầu</span>
-        </div>
+        <div class="text-[11px] font-bold text-blue-700 uppercase tracking-wider text-center">Sẵn sàng</div>
+        <div class="text-xl font-extrabold text-blue-900 font-num mt-1">{{ stats.ready }} <span class="text-[10px] font-medium text-blue-500">đơn</span></div>
       </div>
       
-      <div class="relative overflow-hidden p-4 bg-gradient-to-br from-purple-50/50 to-white border border-purple-100 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-        <div class="absolute -right-2 -top-2 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-          <Truck :size="64" class="text-purple-600" />
+      <!-- Step 3 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-purple-50 border-2 border-purple-200 text-purple-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Truck :size="24" />
         </div>
-        <div class="text-[11px] font-bold text-purple-600 uppercase tracking-wider">Đang giao</div>
-        <div class="text-3xl font-extrabold text-purple-900 font-num mt-1.5 flex items-baseline gap-1">
-          {{ stats.delivering }}
-          <span class="text-[11px] font-medium text-purple-500">yêu cầu</span>
-        </div>
+        <div class="text-[11px] font-bold text-purple-700 uppercase tracking-wider text-center">Đang giao</div>
+        <div class="text-xl font-extrabold text-purple-900 font-num mt-1">{{ stats.delivering }} <span class="text-[10px] font-medium text-purple-500">đơn</span></div>
       </div>
       
-      <div class="relative overflow-hidden p-4 bg-gradient-to-br from-emerald-50/50 to-white border border-emerald-100 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-        <div class="absolute -right-2 -top-2 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-          <Layers :size="64" class="text-emerald-600" />
+      <!-- Step 4 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Layers :size="24" />
         </div>
-        <div class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Đã bàn giao</div>
-        <div class="text-3xl font-extrabold text-emerald-900 font-num mt-1.5 flex items-baseline gap-1">
-          {{ stats.received }}
-          <span class="text-[11px] font-medium text-emerald-500">yêu cầu</span>
-        </div>
+        <div class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider text-center">Đã bàn giao</div>
+        <div class="text-xl font-extrabold text-emerald-900 font-num mt-1">{{ stats.received }} <span class="text-[10px] font-medium text-emerald-500">đơn</span></div>
       </div>
       
-      <div class="relative overflow-hidden p-4 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-        <div class="absolute -right-2 -top-2 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-          <Check :size="64" class="text-gray-600" />
+      <!-- Step 5 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-gray-50 border-2 border-gray-200 text-gray-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Check :size="24" />
         </div>
-        <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Hoàn tất</div>
-        <div class="text-3xl font-extrabold text-gray-800 font-num mt-1.5 flex items-baseline gap-1">
-          {{ stats.completed }}
-          <span class="text-[11px] font-medium text-gray-400">yêu cầu</span>
-        </div>
+        <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center">Hoàn tất</div>
+        <div class="text-xl font-extrabold text-gray-800 font-num mt-1">{{ stats.completed }} <span class="text-[10px] font-medium text-gray-400">đơn</span></div>
       </div>
     </div>
 

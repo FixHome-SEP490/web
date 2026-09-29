@@ -172,6 +172,14 @@ const routes: RouteRecordRaw[] = [
     ],
   },
 
+  // ---- 3.5. Technician Onboarding Route ----
+  {
+    path: '/tech/onboarding',
+    name: 'technician-onboarding',
+    component: () => import('../pages/technician/TechnicianOnboardingPage.vue'),
+    meta: { requiresAuth: true, roles: ['TECHNICIAN'], title: 'Đăng ký & Xác minh Hồ sơ Thợ' },
+  },
+
   // ---- 4. Technician Routes (TechnicianLayout) ----
   {
     path: '/tech',
@@ -281,7 +289,7 @@ const routes: RouteRecordRaw[] = [
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['ADMIN'] },
+        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'cancellations',

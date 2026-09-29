@@ -152,12 +152,34 @@ const confirmReject = async () => {
   }
 };
 
-const openDocument = (document: TechnicianVerification['documents'][number]) => {
-  if (!document.fileUrl) {
-    error.value = 'Tài liệu này chưa có đường dẫn truy cập từ Backend.';
+const previewUrl = ref('');
+const showPreviewModal = ref(false);
+const previewTitle = ref('');
+const previewLoading = ref(false);
+
+const openDocument = async (
+  verification: TechnicianVerification,
+  document: TechnicianVerification['documents'][number],
+) => {
+  if (!document.id) {
+    error.value = 'Tài liệu này chưa có mã định danh từ Backend.';
     return;
   }
-  window.open(document.fileUrl, '_blank', 'noopener,noreferrer');
+  
+  previewTitle.value = formatDocumentType(document.documentType);
+  previewUrl.value = '';
+  showPreviewModal.value = true;
+  previewLoading.value = true;
+  
+  try {
+    const url = await adminVerificationsApi.getDocumentAccess(verification.id, document.id);
+    previewUrl.value = url;
+  } catch (reason) {
+    showPreviewModal.value = false;
+    error.value = getErrorMessage(reason, 'Không thể tải tài liệu KYC.');
+  } finally {
+    previewLoading.value = false;
+  }
 };
 
 const formatDocumentType = (value: string) => {
@@ -279,7 +301,7 @@ const formatDate = (value: string) => {
             :key="document.id || document.fileName"
             class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-gray-50 text-gray-700 hover:bg-brand-50 hover:text-brand-700 border border-gray-200 hover:border-brand-200 transition-colors w-fit text-left"
             type="button"
-            @click="openDocument(document)"
+            @click="openDocument(row, document)"
           >
             <FileText :size="12" class="opacity-70 shrink-0" />
             <span class="truncate max-w-[200px]">{{ formatDocumentType(document.documentType) }}</span>
@@ -368,5 +390,59 @@ const formatDate = (value: string) => {
         <p v-if="rejectReasonError" class="mt-1.5 text-xs font-medium text-red-600" role="alert">{{ rejectReasonError }}</p>
       </div>
     </FhConfirmDialog>
+
+    <!-- Document Preview Modal -->
+    <div
+      v-if="showPreviewModal"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8"
+      @click.self="showPreviewModal = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full flex flex-col max-h-[95vh] overflow-hidden">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <h3 class="font-bold text-gray-900 flex items-center gap-2">
+            <FileText :size="20" class="text-brand-600" />
+            {{ previewTitle }}
+          </h3>
+          <button 
+            class="text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors focus:outline-none" 
+            @click="showPreviewModal = false"
+            title="Đóng"
+          >
+            <XCircle :size="20" />
+          </button>
+        </div>
+        
+        <!-- Modal Body (Preview Container) -->
+        <div class="flex-1 overflow-auto bg-gray-100 flex items-center justify-center p-6 relative min-h-[500px]">
+          <div v-if="previewLoading" class="flex flex-col items-center justify-center text-gray-500 gap-3">
+            <Loader2 :size="32" class="animate-spin text-brand-600" />
+            <span class="text-sm font-medium">Đang tải tài liệu bảo mật...</span>
+          </div>
+          <template v-else-if="previewUrl">
+            <video 
+              v-if="previewTitle.toLowerCase().includes('video')" 
+              :src="previewUrl" 
+              controls 
+              autoplay 
+              class="max-w-full max-h-[700px] rounded-lg shadow-lg bg-black"
+            ></video>
+            
+            <img 
+              v-else-if="previewTitle.toLowerCase().includes('ảnh') || previewTitle.toLowerCase().includes('cccd')" 
+              :src="previewUrl" 
+              class="max-w-full max-h-[700px] object-contain rounded-lg shadow-lg border border-gray-200 bg-white" 
+              alt="KYC Document" 
+            />
+            
+            <iframe 
+              v-else 
+              :src="previewUrl" 
+              class="w-full h-[700px] border-0 rounded-lg shadow-lg bg-white"
+            ></iframe>
+          </template>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

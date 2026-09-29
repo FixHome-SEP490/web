@@ -16,6 +16,7 @@ const MIME_EXTENSIONS: Record<KycMimeType, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'application/pdf': 'pdf',
   'video/webm': 'webm',
 };
 

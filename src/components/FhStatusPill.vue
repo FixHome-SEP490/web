@@ -103,11 +103,36 @@ const statusConfig = computed(() => {
     case 'APPROVED':
     case 'PAID':
     case 'SUCCESS':
+    case 'ONLINE':
+    case 'AVAILABLE':
+    case 'HOẠT ĐỘNG':
+    case 'ĐANG HOẠT ĐỘNG':
+    case 'HOAT_DONG':
+    case 'DANG_HOAT_DONG':
       return {
         bg: 'bg-success-50',
         text: 'text-success-600',
         dot: 'bg-success-600',
-        defaultLabel: s === 'PAID' ? 'Đã thanh toán' : s === 'SUCCESS' ? 'Thành công' : 'Hoạt động',
+        defaultLabel:
+          s === 'PAID'
+            ? 'Đã thanh toán'
+            : s === 'SUCCESS'
+            ? 'Thành công'
+            : s === 'ONLINE' || s === 'AVAILABLE' || s === 'ĐANG HOẠT ĐỘNG' || s === 'DANG_HOAT_DONG'
+            ? 'Đang hoạt động'
+            : 'Hoạt động',
+      };
+    case 'INACTIVE':
+    case 'OFFLINE':
+    case 'UNAVAILABLE':
+    case 'TẠM NGHỈ':
+    case 'TẠM DỪNG':
+    case 'KHÔNG HOẠT ĐỘNG':
+      return {
+        bg: 'bg-ink-100',
+        text: 'text-ink-600',
+        dot: 'bg-ink-400',
+        defaultLabel: s === 'TẠM DỪNG' ? 'Tạm dừng' : s === 'TẠM NGHỈ' ? 'Tạm nghỉ' : 'Không hoạt động',
       };
     case 'ELIGIBLE':
       return {

@@ -4,8 +4,20 @@ import apiClient from './client';
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 type BackendVerificationStatus = 'pending' | 'approved' | 'verified' | 'rejected';
 
-export type KycDocumentType = 'citizen_id_front' | 'citizen_id_back' | 'face_video';
-export type KycMimeType = 'image/jpeg' | 'image/png' | 'image/webp' | 'video/webm';
+export type KycDocumentType =
+  | 'citizen_id_front'
+  | 'citizen_id_back'
+  | 'face_photo'
+  | 'face_video'
+  | 'certificate'
+  | 'portfolio'
+  | 'other';
+export type KycMimeType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'application/pdf'
+  | 'video/webm';
 
 export interface MyVerificationDocument {
   documentType: string;

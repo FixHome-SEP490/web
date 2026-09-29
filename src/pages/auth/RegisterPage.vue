@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Eye, EyeOff, CheckCircle2, Circle } from 'lucide-vue-next';
+import { Eye, EyeOff, CheckCircle2, Circle, User, Wrench, ShieldCheck } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 import {
@@ -14,6 +14,8 @@ import {
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+const selectedRole = ref<'customer' | 'technician'>('customer');
 
 /**
  * Đăng ký bằng Google bỏ qua luôn bước nhập OTP, vì Google đã xác minh email.
@@ -105,10 +107,14 @@ const handleRegister = async () => {
       email: email.value,
       phoneNumber: phoneNumber.value || undefined,
       password: password.value,
+      role: selectedRole.value,
     });
     router.push({
       path: '/verify-otp',
-      query: { email: (res?.email || email.value).trim().toLowerCase() },
+      query: {
+        email: (res?.email || email.value).trim().toLowerCase(),
+        role: selectedRole.value,
+      },
     });
   } catch (err: unknown) {
     // Khi ValidationPipe chặn, `error.message` chỉ là "Validation failed"; lý do
@@ -128,12 +134,71 @@ const handleRegister = async () => {
       Trang chủ / Đăng ký
     </div>
 
+    <!-- Role Selection Tabs -->
+    <div class="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+      <button
+        type="button"
+        @click="selectedRole = 'customer'"
+        :class="[
+          'flex flex-col items-center justify-center py-2.5 px-3 rounded-xl transition-all text-center',
+          selectedRole === 'customer'
+            ? 'bg-white text-brand-700 shadow-xs border border-brand-200/80 font-bold'
+            : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-white/40'
+        ]"
+      >
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <User :size="16" :class="selectedRole === 'customer' ? 'text-brand-600' : 'text-slate-400'" />
+          <span class="text-xs sm:text-sm">Khách hàng</span>
+        </div>
+        <span class="text-[10px] sm:text-[11px] text-slate-500 font-normal">Đặt thợ sửa chữa</span>
+      </button>
+
+      <button
+        type="button"
+        @click="selectedRole = 'technician'"
+        :class="[
+          'flex flex-col items-center justify-center py-2.5 px-3 rounded-xl transition-all text-center',
+          selectedRole === 'technician'
+            ? 'bg-white text-brand-700 shadow-xs border border-brand-200/80 font-bold'
+            : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-white/40'
+        ]"
+      >
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <Wrench :size="16" :class="selectedRole === 'technician' ? 'text-brand-600' : 'text-slate-400'" />
+          <span class="text-xs sm:text-sm">Thợ sửa chữa</span>
+        </div>
+        <span class="text-[10px] sm:text-[11px] text-slate-500 font-normal">Gia nhập FixHome</span>
+      </button>
+    </div>
+
     <!-- Header -->
-    <div class="space-y-1 text-left mb-4">
-      <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Tạo tài khoản khách hàng</h2>
+    <div class="space-y-1 text-left mb-2">
+      <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        {{ selectedRole === 'technician' ? 'Đăng ký Tài khoản Thợ' : 'Tạo tài khoản khách hàng' }}
+      </h2>
       <p class="text-sm text-slate-500 font-medium">
-        Đặt lịch sửa chữa nhanh chóng và quản lý bảo hành dễ dàng.
+        {{
+          selectedRole === 'technician'
+            ? 'Gia nhập đội ngũ thợ lành nghề FixHome, chủ động nhận việc và phát triển thu nhập.'
+            : 'Đặt lịch sửa chữa nhanh chóng và quản lý bảo hành dễ dàng.'
+        }}
       </p>
+    </div>
+
+    <!-- Technician Onboarding Notice -->
+    <div
+      v-if="selectedRole === 'technician'"
+      class="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5 leading-relaxed"
+    >
+      <ShieldCheck :size="18" class="text-blue-600 shrink-0 mt-0.5" />
+      <div>
+        <strong class="font-bold">Quy trình đăng ký thợ gồm 2 giai đoạn:</strong>
+        <p class="text-blue-700 text-[11px] mt-0.5">
+          1. Đăng ký & xác thực email bằng OTP.
+          <br />
+          2. Điền thông tin cá nhân, chụp ảnh CCCD & khuôn mặt, chọn chuyên môn và địa chỉ hoạt động để được ban quản trị xét duyệt.
+        </p>
+      </div>
     </div>
 
     <form class="space-y-5" @submit.prevent="handleRegister">

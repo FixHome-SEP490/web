@@ -82,6 +82,9 @@ export interface TechnicianCandidate {
   isAvailable: boolean;
   listedLaborPrice?: number | null;
   typicalWarrantyDays?: number;
+  bio?: string | null;
+  completedOrdersCount?: number;
+  completionRate?: number;
 }
 
 // DiagnosisResult and diagnoseAI lived here and are gone. They described a
