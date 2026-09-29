@@ -15,15 +15,21 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
+import CallOverlay from '../components/chat/CallOverlay.vue';
+import { useCallStore } from '../stores/call.store';
 import { toast } from 'vue-sonner';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const avatarMenuOpen = ref(false);
 
 onMounted(() => {
   chatStore.initSocket();
+  // Listening for calls is separate from opening the chat widget: a call has to
+  // reach the customer wherever they are in the app.
+  callStore.initCallSignalling();
 });
 
 const isSuspended = computed<boolean>(() => {
@@ -196,6 +202,7 @@ const handleLogout = async () => {
 
     <!-- Global Floating Chat Widget -->
     <ChatFloatingWidget />
+    <CallOverlay />
     <AiAssistantWidget />
   </div>
 </template>
