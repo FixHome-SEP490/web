@@ -3,8 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, useId, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import {
-  ChevronLeft,
-  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   LogOut,
 } from 'lucide-vue-next';
 
@@ -101,24 +101,54 @@ const isActive = (path: string) => {
       isCollapsed ? 'sidebar-collapsed w-20' : 'sidebar-expanded w-64',
     ]"
   >
-    <!-- Collapse Trigger -->
-    <button
-      class="absolute -right-3 top-8 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center text-white shadow-md hover:bg-brand-500 transition-colors z-50 focus:outline-none"
-      @click="isCollapsed = !isCollapsed"
-    >
-      <component :is="isCollapsed ? ChevronRight : ChevronLeft" :size="14" stroke-width="3" />
-    </button>
+    <div class="flex-1 min-h-0 flex flex-col pt-6">
+      <!-- Header Area (Logo & Trigger) -->
+      <div 
+        class="relative mb-8 flex items-center h-12 transition-all duration-200"
+        :class="isCollapsed ? 'justify-center px-0' : 'px-5'"
+      >
+        <!-- Expanded Mode: Logo & Brand on left -->
+        <template v-if="!isCollapsed">
+          <div class="flex items-center gap-3 pr-10 min-w-0">
+            <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs" />
+            <span class="text-lg font-bold text-slate-900 tracking-wide whitespace-nowrap truncate">
+              {{ title }}
+            </span>
+          </div>
 
-    <div class="flex-1 min-h-0 flex flex-col pt-8">
-      <!-- Brand Logo -->
-      <div class="px-6 mb-10 flex items-center gap-3">
-        <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs" />
-        <span 
-          class="text-xl font-bold text-white tracking-wide transition-opacity duration-300"
-          :class="isCollapsed ? 'opacity-0 w-0 invisible absolute' : 'opacity-100'"
+          <!-- Collapse Trigger: Separate in Top-Right Corner -->
+          <button
+            type="button"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600 transition-all duration-200 focus:outline-none flex items-center justify-center p-2 rounded-lg hover:bg-brand-50 cursor-pointer"
+            title="Thu gọn Sidebar"
+            @click="isCollapsed = true"
+          >
+            <PanelLeftClose :size="20" />
+          </button>
+        </template>
+
+        <!-- Collapsed Mode: Top Logo Button with Hover-to-Open -->
+        <button
+          v-else
+          type="button"
+          class="group/logo relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 hover:bg-brand-50 cursor-pointer focus:outline-none"
+          title="Mở rộng Sidebar"
+          @click="isCollapsed = false"
+          @mouseenter="(e) => showTooltip(e, 'Mở rộng Sidebar')"
+          @mouseleave="hideTooltip"
         >
-          {{ title }}
-        </span>
+          <!-- Default: Logo -->
+          <img 
+            :src="'/logo.png'" 
+            alt="FixHome" 
+            class="w-9 h-9 object-contain rounded-xl bg-white p-0.5 shadow-xs transition-opacity duration-200 group-hover/logo:opacity-0" 
+          />
+          <!-- Hover: PanelLeftOpen Icon (only on hovering this logo section) -->
+          <PanelLeftOpen 
+            :size="20" 
+            class="absolute text-slate-400 group-hover/logo:text-brand-600 opacity-0 group-hover/logo:opacity-100 transition-opacity duration-200" 
+          />
+        </button>
       </div>
 
       <!-- Navigation -->
@@ -126,7 +156,7 @@ const isActive = (path: string) => {
         <div v-for="(group, idx) in navigation" :key="idx" class="mb-4">
           <div
             v-if="group.group"
-            class="px-8 text-[10px] font-bold uppercase tracking-wider text-[#6b6f99] mb-3 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
+            class="px-8 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
             :class="isCollapsed ? 'opacity-0 h-0 invisible' : 'opacity-100 h-auto'"
           >
             {{ group.group }}
@@ -168,10 +198,10 @@ const isActive = (path: string) => {
         <button
           ref="profileTrigger"
           type="button"
-          class="profile-trigger flex w-full items-center gap-3 rounded-xl p-2 text-white transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="profile-trigger flex w-full items-center gap-3 rounded-xl p-2 text-slate-700 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
           :class="[
             isCollapsed ? 'justify-center' : 'text-left',
-            showProfileDropdown ? 'bg-white/25 shadow-inner' : 'bg-transparent hover:bg-white/10'
+            showProfileDropdown ? 'bg-slate-100 shadow-inner' : 'bg-transparent hover:bg-slate-50'
           ]"
           :aria-label="fullName"
           :aria-expanded="showProfileDropdown"
@@ -189,15 +219,15 @@ const isActive = (path: string) => {
           <div
             v-if="showProfileDropdown"
             :id="profileMenuId"
-            class="profile-dropdown absolute bottom-full left-0 z-50 mb-2 overflow-hidden rounded-xl border border-[#474a6b] bg-[#272a44] p-1.5 text-sm shadow-2xl backdrop-blur-md"
+            class="profile-dropdown absolute bottom-full left-0 z-50 mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"
             :class="isCollapsed ? 'w-48' : 'w-full'"
           >
             <button
               type="button"
-              class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-300 transition-all duration-200 hover:bg-rose-500/20 hover:text-rose-100 active:bg-rose-500/40 focus-visible:outline-2"
+              class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-600 transition-all duration-200 hover:bg-rose-50 hover:text-rose-700 active:bg-rose-100 focus-visible:outline-2"
               @click="handleLogout"
             >
-              <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-400 transition-colors group-hover:text-rose-300" />
+              <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-500 transition-colors group-hover:text-rose-600" />
               <span>Logout</span>
             </button>
           </div>
@@ -209,7 +239,7 @@ const isActive = (path: string) => {
     <Teleport to="body">
       <div 
         v-if="hoveredItem && isCollapsed"
-        class="fixed left-24 px-3 py-2 bg-[#272a44] text-white text-xs font-semibold rounded-lg z-[9999] shadow-xl border border-[#353854] pointer-events-none transform -translate-y-1/2 whitespace-nowrap"
+        class="fixed left-24 px-3 py-2 bg-slate-800 text-white text-xs font-semibold rounded-lg z-[9999] shadow-xl border border-slate-700 pointer-events-none transform -translate-y-1/2 whitespace-nowrap"
         :style="{ top: hoveredItem.top + 'px' }"
       >
         {{ hoveredItem.label }}
@@ -220,24 +250,18 @@ const isActive = (path: string) => {
 
 <style scoped>
 .sidebar-root {
-  --sidebar-accent: #5b5fd8;
-  background-color: #353854;
-  color: #a0a3bd;
+  --sidebar-accent: #3b82f6;
+  background-color: #ffffff;
+  color: #64748b;
+  border-right: 1px solid #e2e8f0;
 }
 
 /* Custom Scrollbar for Nav */
+.nav-container {
+  scrollbar-width: none;
+}
 .nav-container::-webkit-scrollbar {
-  width: 4px;
-}
-.nav-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-.nav-container::-webkit-scrollbar-thumb {
-  background: #474a6b;
-  border-radius: 4px;
-}
-.nav-container:hover::-webkit-scrollbar-thumb {
-  background: #5b5fd8;
+  display: none;
 }
 
 /* Nav Item Base */
@@ -245,27 +269,29 @@ const isActive = (path: string) => {
   display: flex;
   align-items: center;
   gap: 1rem;
-  color: #a0a3bd;
-  transition: all 0.3s ease;
+  color: #64748b;
+  transition: all 0.2s ease;
   font-weight: 600;
   font-size: 0.9rem;
   position: relative;
 }
 
 .nav-item:hover:not(.active) {
-  color: #ffffff;
+  color: #0f172a;
+  background-color: #f1f5f9;
 }
 
 /* --- Expanded State --- */
 .sidebar-expanded .nav-item {
   padding: 0.875rem 1.5rem;
   border-radius: 24px 0 0 24px;
-  width: 100%;
+  width: calc(100% + 1px);
 }
 
 .sidebar-expanded .nav-item.active {
-  background-color: #272a44;
-  color: #ffffff;
+  background-color: #eff6ff; /* Matches brand blue-50 */
+  color: #2563eb; /* Brand text */
+  border-right: 1px solid #eff6ff;
 }
 
 /* Inverted Border Radius for Expanded Active Item */
@@ -273,13 +299,12 @@ const isActive = (path: string) => {
 .sidebar-expanded .nav-item::after {
   content: '';
   position: absolute;
-  right: 0;
+  right: 1px;
   width: 24px;
   height: 24px;
   background-color: transparent;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.3s ease;
 }
 
 .sidebar-expanded .nav-item.active::before,
@@ -290,13 +315,13 @@ const isActive = (path: string) => {
 .sidebar-expanded .nav-item::before {
   top: -24px;
   border-bottom-right-radius: 24px;
-  box-shadow: 12px 12px 0 12px #272a44;
+  box-shadow: 12px 12px 0 12px #eff6ff;
 }
 
 .sidebar-expanded .nav-item::after {
   bottom: -24px;
   border-top-right-radius: 24px;
-  box-shadow: 12px -12px 0 12px #272a44;
+  box-shadow: 12px -12px 0 12px #eff6ff;
 }
 
 /* --- Collapsed State --- */
@@ -314,9 +339,9 @@ const isActive = (path: string) => {
 }
 
 .sidebar-collapsed .nav-item.active {
-  background-color: #272a44;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .profile-trigger,

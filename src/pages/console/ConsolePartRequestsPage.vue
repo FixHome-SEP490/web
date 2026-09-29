@@ -335,9 +335,6 @@ const getUsageBadgeClass = (status: string) => {
 
     <!-- Table -->
     <div v-if="loadError" class="p-8 text-center text-danger-700 bg-white rounded-[var(--radius-sm)] border border-danger-200" role="alert">{{ loadError }}</div>
-    <div v-else-if="!loading && filteredRequests.length === 0" class="p-8 text-center text-xs text-ink-400 bg-white rounded-[var(--radius-sm)] border border-ink-200">
-      Không tìm thấy yêu cầu linh kiện nào phù hợp với bộ lọc.
-    </div>
     <FhTable
       v-else
       :columns="[

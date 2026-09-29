@@ -138,9 +138,9 @@ const filteredOrders = computed<(ServiceOrderItem & { _isSkeleton?: boolean })[]
           <FhSkeleton width="160px" height="16px" class="mb-1" />
           <FhSkeleton width="120px" height="12px" />
         </div>
-        <div v-else>
-          <div class="font-semibold text-xs text-ink-900">{{ row.serviceName }}</div>
-          <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.addressSummary }}</div>
+        <div v-else class="max-w-[260px] whitespace-normal">
+          <div class="font-semibold text-xs text-ink-900 leading-tight">{{ row.serviceName }}</div>
+          <div class="text-[11px] text-ink-400 mt-0.5 leading-relaxed">{{ row.addressSummary }}</div>
         </div>
       </template>
 
