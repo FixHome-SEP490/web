@@ -44,6 +44,7 @@ const navigation = computed(() => [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
             { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
             { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
+            { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
           ]
         : []),
     ],
@@ -53,7 +54,6 @@ const navigation = computed(() => [
         {
           group: 'Quản trị & governance',
           items: [
-            { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
             { label: 'Duyệt kỹ năng thợ', path: '/console/admin/skill-verifications', icon: Award },
             { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
             { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },

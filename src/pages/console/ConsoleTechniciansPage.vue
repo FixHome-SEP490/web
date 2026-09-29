@@ -152,12 +152,24 @@ const confirmReject = async () => {
   }
 };
 
-const openDocument = (document: TechnicianVerification['documents'][number]) => {
-  if (!document.fileUrl) {
-    error.value = 'Tài liệu này chưa có đường dẫn truy cập từ Backend.';
+const openDocument = async (
+  verification: TechnicianVerification,
+  document: TechnicianVerification['documents'][number],
+) => {
+  if (!document.id) {
+    error.value = 'Tài liệu này chưa có mã định danh từ Backend.';
     return;
   }
-  window.open(document.fileUrl, '_blank', 'noopener,noreferrer');
+  // Open synchronously so the popup isn't blocked, then point it at the signed URL.
+  const popup = window.open('', '_blank');
+  try {
+    const url = await adminVerificationsApi.getDocumentAccess(verification.id, document.id);
+    if (popup) popup.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (reason) {
+    popup?.close();
+    error.value = getErrorMessage(reason, 'Không thể mở tài liệu KYC.');
+  }
 };
 
 const formatDocumentType = (value: string) => {
@@ -255,7 +267,7 @@ const formatDate = (value: string) => {
               :key="document.id || document.fileName"
               class="flex items-center gap-1 text-left text-brand-600 hover:underline"
               type="button"
-              @click="openDocument(document)"
+              @click="openDocument(row, document)"
             >
               <FileText :size="12" />
               <span>{{ formatDocumentType(document.documentType) }} · {{ document.fileName }}</span>

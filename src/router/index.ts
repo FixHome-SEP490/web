@@ -281,7 +281,7 @@ const routes: RouteRecordRaw[] = [
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['ADMIN'] },
+        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['SERVICE_MANAGER'] },
       },
       {
         path: 'cancellations',
