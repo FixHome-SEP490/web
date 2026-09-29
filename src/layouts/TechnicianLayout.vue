@@ -18,6 +18,8 @@ import {
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget } from '../components';
+import CallOverlay from '../components/chat/CallOverlay.vue';
+import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
@@ -27,6 +29,7 @@ import { toast } from 'vue-sonner';
 
 const authStore = useAuthStore();
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const isAvailable = ref(true);
 const togglingAvailability = ref(false);
 const avatarMenuOpen = ref(false);
@@ -71,6 +74,8 @@ let invitationPoll: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
   chatStore.initSocket();
+  // A technician must be reachable by voice from any screen, not only the chat.
+  callStore.initCallSignalling();
   try {
     const jobs = await ordersApi.getTechnicianJobs();
     const active = jobs.filter((j) =>
@@ -417,5 +422,6 @@ const userShortName = computed(() => {
 
     <!-- Global Floating Chat Widget -->
     <ChatFloatingWidget />
+    <CallOverlay />
   </div>
 </template>
