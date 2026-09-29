@@ -225,7 +225,8 @@ describe('ConsoleWarrantyPage', () => {
     expect(text).toContain('Chờ quản lý dịch vụ duyệt');
     expect(text).toContain('Chưa có kỹ thuật viên');
     expect(text).toContain('Gửi sau khi hết hạn');
-    expect(text).toContain('Khách đã đồng ý');
+    expect(text).toContain('Đã đồng ý, chờ quản lý dịch vụ đóng');
+    expect(text).not.toContain('Khách đã đồng ý');
     expect(text).toContain('Duyệt kết luận');
     expect(text).toContain('Phân công kỹ thuật viên');
     expect(text).toContain('Đóng yêu cầu');

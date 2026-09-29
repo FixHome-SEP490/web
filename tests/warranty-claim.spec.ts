@@ -14,7 +14,7 @@ vi.mock('../src/api/media.api', () => ({
 import { ordersApi, type WarrantyClaimView } from '../src/api/orders.api';
 import WarrantyClaimCard from '../src/components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../src/components/customer/WarrantyClaimModal.vue';
-import { claimStatusMeta, isOpenClaim } from '../src/utils/warranty-claim';
+import { claimDisplayMeta, claimStatusMeta, isOpenClaim } from '../src/utils/warranty-claim';
 
 const claim = (overrides: Partial<WarrantyClaimView> = {}): WarrantyClaimView => ({
   id: 'claim-1',
@@ -50,6 +50,16 @@ describe('warranty claim status meta', () => {
   it('never shows a raw enum for an unknown status and does not treat it as open', () => {
     expect(claimStatusMeta('made_up')).toEqual({ label: 'Trạng thái chưa xác định', tone: 'neutral' });
     expect(isOpenClaim('made_up')).toBe(false);
+  });
+});
+
+describe('claim display label', () => {
+  it('shows one status: waiting for the customer only until the customer answers', () => {
+    expect(claimDisplayMeta({ status: 'awaiting_customer', customerResponse: null }).label).toBe('Chờ khách hàng phản hồi');
+    expect(claimDisplayMeta({ status: 'awaiting_customer', customerResponse: 'agreed' }).label).toBe(
+      'Đã đồng ý, chờ quản lý dịch vụ đóng',
+    );
+    expect(claimDisplayMeta({ status: 'accepted', customerResponse: 'agreed' }).label).toBe('Kỹ thuật viên đã nhận');
   });
 });
 

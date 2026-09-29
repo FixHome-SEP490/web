@@ -11,7 +11,7 @@ import {
 import { useAuthStore } from '../../stores/auth';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
-  claimStatusMeta,
+  claimDisplayMeta,
   inspectionResultLabels,
   notCoveredReasonLabels,
   warrantyClaimStatusMeta,
@@ -108,7 +108,7 @@ function onDone(updated: StaffWarrantyClaim) {
 }
 
 const pct = (value: number | null) => (value === null ? '—' : `${Math.round(value * 100)}%`);
-const meta = (claim: StaffWarrantyClaim) => claimStatusMeta(claim.status);
+const meta = (claim: StaffWarrantyClaim) => claimDisplayMeta(claim);
 const closed = (claim: StaffWarrantyClaim) => ['resolved', 'rejected'].includes(claim.status);
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
@@ -190,7 +190,6 @@ onMounted(() => void loadQueue());
               </span>
               <span v-if="!claim.technician && !closed(claim)" class="rounded bg-danger-50 px-2 py-0.5 text-[11px] font-semibold text-danger-700">Chưa có kỹ thuật viên</span>
               <span v-if="claim.submittedAfterExpiry" class="rounded bg-warning-50 px-2 py-0.5 text-[11px] font-semibold text-warning-700">Gửi sau khi hết hạn</span>
-              <span v-if="claim.customerResponse === 'agreed'" class="rounded bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700">Khách đã đồng ý</span>
             </div>
 
             <p class="text-xs text-ink-600">

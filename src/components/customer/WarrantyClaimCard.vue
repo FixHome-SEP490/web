@@ -4,7 +4,7 @@ import FhButton from '../FhButton.vue';
 import { ordersApi, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { formatDateTimeVN } from '../../utils/formatters';
-import { claimStatusMeta, warrantyClaimToneClasses } from '../../utils/warranty-claim';
+import { claimDisplayMeta, warrantyClaimToneClasses } from '../../utils/warranty-claim';
 
 const props = defineProps<{
   claim: WarrantyClaimView;
@@ -15,7 +15,7 @@ const emit = defineEmits<{ (e: 'updated', claim: WarrantyClaimView): void }>();
 
 const MIN_NOTE = 10;
 
-const meta = computed(() => claimStatusMeta(props.claim.status));
+const meta = computed(() => claimDisplayMeta(props.claim));
 const waitingForMe = computed(
   () => props.claim.status === 'awaiting_customer' && !props.claim.customerResponse,
 );

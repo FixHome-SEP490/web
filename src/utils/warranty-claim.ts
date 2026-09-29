@@ -47,6 +47,17 @@ export function claimStatusMeta(status: string): { label: string; tone: ClaimTon
     : { label: 'Trạng thái chưa xác định', tone: 'neutral' };
 }
 
+/** One label per claim: once the customer agreed, "waiting for the customer" would contradict the facts. */
+export function claimDisplayMeta(claim: {
+  status: string;
+  customerResponse?: 'agreed' | 'disputed' | null;
+}): { label: string; tone: ClaimTone } {
+  if (claim.status === 'awaiting_customer' && claim.customerResponse === 'agreed') {
+    return { label: 'Đã đồng ý, chờ quản lý dịch vụ đóng', tone: 'info' };
+  }
+  return claimStatusMeta(claim.status);
+}
+
 export type InspectionResult = 'covered_workmanship' | 'covered_part' | 'not_covered';
 
 export const inspectionResultLabels: Record<InspectionResult, string> = {

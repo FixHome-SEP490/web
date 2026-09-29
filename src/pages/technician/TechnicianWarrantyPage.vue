@@ -9,7 +9,7 @@ import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-c
 import { getSupportErrorMessage } from '../console/support-cases.utils';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
-  claimStatusMeta,
+  claimDisplayMeta,
   inspectionResultLabels,
   notCoveredReasonLabels,
   warrantyClaimToneClasses,
@@ -116,7 +116,7 @@ async function checkIn(claim: StaffWarrantyClaim) {
   }
 }
 
-const meta = (claim: StaffWarrantyClaim) => claimStatusMeta(claim.status);
+const meta = (claim: StaffWarrantyClaim) => claimDisplayMeta(claim);
 const checkedIn = (claim: StaffWarrantyClaim) => claim.visit?.status === 'checked_in';
 
 onMounted(load);
