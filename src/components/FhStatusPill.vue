@@ -148,6 +148,13 @@ const statusConfig = computed(() => {
         dot: 'bg-danger-600',
         defaultLabel: 'Không đủ điều kiện',
       };
+    case 'PROCESSING':
+      return {
+        bg: 'bg-info-50',
+        text: 'text-info-600',
+        dot: 'bg-info-600',
+        defaultLabel: 'Đang xử lý',
+      };
     case 'FAILED':
       return {
         bg: 'bg-danger-50',
