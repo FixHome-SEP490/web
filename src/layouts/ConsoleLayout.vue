@@ -21,6 +21,8 @@ import {
   ScrollText,
   Boxes,
   Wallet,
+  Home,
+  ChevronRight,
 } from 'lucide-vue-next';
 
 
@@ -78,19 +80,30 @@ const navigation = computed(() => [
 
     <!-- Main Workspace -->
     <div class="flex-1 flex flex-col min-w-0">
-      <!-- Topbar with Breadcrumbs per P6.1 -->
-      <header class="h-16 bg-white border-b border-ink-200 px-6 sm:px-8 flex items-center justify-between shadow-(--shadow-e1)">
+      <!-- Premium Topbar -->
+      <header class="h-16 lg:h-[72px] bg-white/80 backdrop-blur-md border-b border-ink-200/80 px-6 lg:px-10 flex items-center justify-between sticky top-0 z-20 shadow-sm transition-all">
         <!-- Breadcrumb / Route Title -->
-        <div class="flex items-center gap-2 text-sm text-ink-500">
-          <span class="font-medium text-ink-700">Console</span>
-          <span>/</span>
-          <span class="font-semibold text-ink-900">{{ route.meta?.title ?? 'Dashboard' }}</span>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ink-50 text-ink-500 text-sm font-medium hover:bg-ink-100 hover:text-ink-700 transition-colors cursor-pointer border border-transparent hover:border-ink-200">
+            <Home :size="16" />
+            <span class="hidden sm:inline">Console</span>
+          </div>
+          <ChevronRight :size="16" class="text-ink-300" />
+          <h1 class="text-base sm:text-lg font-bold text-ink-900 tracking-tight">{{ route.meta?.title ?? 'Dashboard' }}</h1>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 sm:gap-5">
+
+          <div class="w-px h-6 bg-ink-200 hidden md:block"></div>
+
           <NotificationBellDropdown />
-          <div class="text-xs font-semibold px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200 uppercase">
-            {{ authStore.user?.role }}
+          
+          <div class="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-brand-50 border border-brand-200/60 shadow-xs">
+            <div class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-500"></span>
+            </div>
+            <span class="text-xs font-bold text-brand-700 uppercase tracking-wider">{{ authStore.user?.role }}</span>
           </div>
         </div>
       </header>
