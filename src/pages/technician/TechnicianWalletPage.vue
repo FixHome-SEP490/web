@@ -350,12 +350,14 @@ const handleWithdraw = async () => {
       <!-- Ineligible / Low Balance Banner -->
       <div
         v-if="!wallet.eligibleForJobs"
-        class="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+        class="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-amber-100/70 hover:border-amber-400 transition-all group"
+        @click="showTopUpModal = true"
+        title="Bấm để mở nạp tiền nhanh"
       >
         <div class="flex items-start gap-3">
           <AlertCircle :size="22" class="text-amber-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-amber-900">
+            <div class="font-extrabold text-amber-900 group-hover:text-amber-950 transition-colors">
               Số dư ví dưới mức tối thiểu quy định ({{ formatCurrencyVND(wallet.minimumBalance) }})
             </div>
             <p class="text-amber-800">
@@ -363,7 +365,7 @@ const handleWithdraw = async () => {
             </p>
           </div>
         </div>
-        <FhButton size="sm" class="shrink-0" @click="showTopUpModal = true">
+        <FhButton size="sm" class="shrink-0" @click.stop="showTopUpModal = true">
           <PlusCircle :size="15" class="mr-1.5" />
           Nạp tiền ngay
         </FhButton>
@@ -372,12 +374,14 @@ const handleWithdraw = async () => {
       <!-- Negative Balance Critical Banner -->
       <div
         v-if="wallet.balance < 0"
-        class="p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+        class="p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-rose-100/70 hover:border-rose-400 transition-all group"
+        @click="showTopUpModal = true"
+        title="Bấm để mở thanh toán công nợ"
       >
         <div class="flex items-start gap-3">
           <AlertCircle :size="22" class="text-rose-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-rose-900">
+            <div class="font-extrabold text-rose-900 group-hover:text-rose-950 transition-colors">
               Ví của bạn đang có số dư âm do khấu trừ phí đơn tiền mặt
             </div>
             <p class="text-rose-800">
@@ -385,7 +389,7 @@ const handleWithdraw = async () => {
             </p>
           </div>
         </div>
-        <FhButton size="sm" variant="danger" class="shrink-0" @click="showTopUpModal = true">
+        <FhButton size="sm" variant="danger" class="shrink-0" @click.stop="showTopUpModal = true">
           <PlusCircle :size="15" class="mr-1.5" />
           Thanh toán công nợ
         </FhButton>
@@ -451,12 +455,16 @@ const handleWithdraw = async () => {
       <!-- Stat Cards Breakdown -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <!-- Card 1: Withdrawable Balance -->
-        <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5">
+        <div
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
+          @click="wallet.withdrawableBalance > 0 && wallet.pendingWithdrawal <= 0 ? (showWithdrawModal = true) : null"
+          :title="wallet.withdrawableBalance > 0 && wallet.pendingWithdrawal <= 0 ? 'Bấm để yêu cầu rút tiền' : undefined"
+        >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Số dư có thể rút</span>
             <CreditCard :size="16" class="text-brand-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900">
+          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
             {{ formatCurrencyVND(wallet.withdrawableBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -465,12 +473,16 @@ const handleWithdraw = async () => {
         </div>
 
         <!-- Card 2: Minimum Required -->
-        <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5">
+        <div
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-amber-400 hover:shadow-sm transition-all group"
+          @click="showTopUpModal = true"
+          title="Bấm để nạp thêm tiền vào ví"
+        >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Mức ký quỹ duy trì</span>
             <Info :size="16" class="text-amber-500" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900">
+          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-amber-700 transition-colors">
             {{ formatCurrencyVND(wallet.minimumBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -479,12 +491,16 @@ const handleWithdraw = async () => {
         </div>
 
         <!-- Card 3: Pending Withdrawal -->
-        <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5">
+        <div
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-violet-400 hover:shadow-sm transition-all group"
+          @click="activeTab = 'withdrawals'"
+          title="Bấm để xem danh sách lệnh rút tiền"
+        >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Đang chờ duyệt rút</span>
             <Clock :size="16" class="text-violet-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900">
+          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-violet-700 transition-colors">
             {{ formatCurrencyVND(wallet.pendingWithdrawal) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -583,12 +599,19 @@ const handleWithdraw = async () => {
             <div
               v-for="tx in transactions"
               :key="tx.id"
-              class="py-3.5 flex items-center justify-between gap-4 hover:bg-ink-50/50 px-2 rounded-xl transition-colors"
+              class="py-3.5 flex items-center justify-between gap-4 px-2 rounded-xl transition-all"
+              :class="[
+                tx.referenceType === 'SERVICE_ORDER' && tx.referenceId
+                  ? 'cursor-pointer hover:bg-brand-50/50 hover:shadow-2xs group'
+                  : 'hover:bg-ink-50/50'
+              ]"
+              @click="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId ? router.push(`/tech/jobs/${tx.referenceId}`) : null"
+              :title="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId ? 'Bấm để mở chi tiết đơn hàng liên quan' : undefined"
             >
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Icon badge -->
                 <div
-                  class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+                  class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
                   :class="[
                     formatWalletTxType(tx.type).isCredit
                       ? 'bg-emerald-50 text-emerald-600'
@@ -602,14 +625,15 @@ const handleWithdraw = async () => {
                 <!-- Info -->
                 <div class="min-w-0 space-y-0.5">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs sm:text-sm font-extrabold text-ink-900 truncate">
+                    <span class="text-xs sm:text-sm font-extrabold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
                       {{ formatWalletTxType(tx.type).label }}
                     </span>
                     <span
                       v-if="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId"
-                      class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700"
+                      class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 group-hover:bg-brand-600 group-hover:text-white transition-colors flex items-center gap-1"
                     >
-                      Đơn hàng
+                      <span>Đơn hàng</span>
+                      <ArrowRight :size="10" />
                     </span>
                   </div>
                   <p class="text-xs text-ink-500 truncate">
