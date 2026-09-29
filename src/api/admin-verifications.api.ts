@@ -150,6 +150,15 @@ export const adminVerificationsApi = {
     return unwrapVerification(response.data);
   },
 
+  async getDocumentAccess(verificationId: string, documentId: string): Promise<string> {
+    const response = await apiClient.get<{ signedUrl?: string; data?: { signedUrl?: string } }>(
+      `/admin/technician-verifications/${verificationId}/documents/${documentId}/access`,
+    );
+    const url = response.data.signedUrl ?? response.data.data?.signedUrl;
+    if (!url) throw new Error('Backend did not return a signed document URL.');
+    return url;
+  },
+
   async approveVerification(id: string): Promise<TechnicianVerification> {
     const response = await apiClient.patch<unknown>(
       `/admin/technician-verifications/${id}/approve`,
