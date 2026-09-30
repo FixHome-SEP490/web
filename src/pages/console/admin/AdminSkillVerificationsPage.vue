@@ -223,9 +223,9 @@ const formatDate = (value: string) => {
           <span class="text-xs text-ink-500">Trạng thái:</span>
           <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600">
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">PENDING</option>
-            <option value="VERIFIED">VERIFIED</option>
-            <option value="REJECTED">REJECTED</option>
+            <option value="PENDING">Đang chờ duyệt</option>
+            <option value="VERIFIED">Đã duyệt</option>
+            <option value="REJECTED">Đã từ chối</option>
           </select>
         </div>
       </template>

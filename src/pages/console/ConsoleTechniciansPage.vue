@@ -56,7 +56,7 @@ const loadVerifications = async () => {
     if (requestId !== latestRequest) return;
     verifications.value = [];
     total.value = 0;
-    error.value = getErrorMessage(reason, 'Không thể tải hồ sơ KYC từ Backend.');
+    error.value = getErrorMessage(reason, 'Không thể tải danh sách hồ sơ KYC.');
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -162,7 +162,7 @@ const openDocument = async (
   document: TechnicianVerification['documents'][number],
 ) => {
   if (!document.id) {
-    error.value = 'Tài liệu này chưa có mã định danh từ Backend.';
+    error.value = 'Tài liệu này chưa có mã định danh hợp lệ.';
     return;
   }
   
@@ -264,9 +264,9 @@ const formatDate = (value: string) => {
             style="background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3E%3C/svg%3E'); background-size: 20px 20px; background-position: right 0.5rem center; background-repeat: no-repeat;"
           >
             <option value="ALL">Tất cả</option>
-            <option value="PENDING">Đang chờ (PENDING)</option>
-            <option value="VERIFIED">Đã duyệt (VERIFIED)</option>
-            <option value="REJECTED">Từ chối (REJECTED)</option>
+            <option value="PENDING">Đang chờ duyệt</option>
+            <option value="VERIFIED">Đã duyệt</option>
+            <option value="REJECTED">Đã từ chối</option>
           </select>
         </div>
       </template>
@@ -372,7 +372,7 @@ const formatDate = (value: string) => {
       :open="showRejectModal"
       :loading="actionLoadingId === verificationToReject?.id"
       title="Từ chối hồ sơ KYC"
-      consequence="Hồ sơ sẽ không được chuyển sang VERIFIED. Lý do được gửi lên Backend để lưu cùng quyết định review."
+      consequence="Hồ sơ sẽ được chuyển sang trạng thái cần bổ sung. Lý do từ chối sẽ được gửi đến kỹ thuật viên để cập nhật lại thông tin."
       confirm-text="Xác nhận từ chối"
       cancel-text="Quay lại"
       @confirm="confirmReject"
