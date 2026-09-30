@@ -43,7 +43,7 @@ const payouts = ref([
   <div class="max-w-4xl mx-auto space-y-6">
     <template v-if="showWalletDemo">
     <div data-testid="wallet-demo-notice" role="note" class="rounded-xl border border-warning-300 bg-warning-50 p-4 text-sm text-warning-900">
-      <strong>DEMO — Dữ liệu minh họa, không phải tiền thật.</strong>
+      <strong>Dữ liệu minh họa, không phải tiền thật.</strong>
       Số dư, doanh thu, phí nền tảng và lịch sử bên dưới là ví dụ giao diện; chưa kết nối Wallet hoặc ngân hàng. Trang này không thể rút tiền hay tạo giao dịch. Quy tắc Linh kiện/Wallet đang chờ nhóm chốt.
     </div>
     <!-- Header -->
@@ -60,7 +60,7 @@ const payouts = ref([
 
       <div class="flex items-center gap-2">
         <FhButton variant="secondary" size="sm" disabled>
-          <Download :size="14" class="mr-1.5" /> Xuất đối soát (DEMO — chưa hỗ trợ)
+          <Download :size="14" class="mr-1.5" /> Xuất đối soát (chưa hỗ trợ)
         </FhButton>
       </div>
     </div>
@@ -86,12 +86,12 @@ const payouts = ref([
 
       <button
         type="button"
-        class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs font-bold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+        class="h-11 px-5 rounded-xl bg-white text-brand-700 text-sm font-semibold shrink-0 inline-flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-75 disabled:cursor-not-allowed"
         disabled
         aria-disabled="true"
-        title="Chức năng rút tiền chưa được triển khai (DEMO)"
+        title="Trang minh họa không thể rút tiền. Rút tiền thật trong trang Ví của tôi."
       >
-        <span>Rút tiền chưa hỗ trợ (DEMO)</span>
+        <span>Rút tiền chưa hỗ trợ (minh họa)</span>
         <ArrowUpRight :size="16" />
       </button>
     </div>
@@ -135,7 +135,7 @@ const payouts = ref([
       </div>
 
       <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white border border-brand-200/80 shadow-xs space-y-1">
-        <span class="text-xs font-bold text-brand-800">Phí nền tảng (DEMO)</span>
+        <span class="text-xs font-bold text-brand-800">Phí nền tảng (minh họa)</span>
         <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
           Chưa chốt
         </div>
@@ -196,7 +196,7 @@ const payouts = ref([
     </div>
     </template>
     <div v-else role="status" class="rounded-xl border border-ink-200 bg-ink-50 p-5 text-sm text-ink-700">
-      Thu nhập và Wallet đang chờ nhóm chốt nghiệp vụ và tích hợp Backend. Không hiển thị số dư hoặc giao dịch giả trong bản phát hành.
+      Báo cáo thu nhập chi tiết sẽ sớm có mặt. Số dư và lịch sử giao dịch của bạn xem trong trang Ví của tôi.
     </div>
   </div>
 </template>

@@ -777,7 +777,7 @@ const createAndFindTech = async () => {
                   :class="serviceFilter === 'FIXED' ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'FIXED'"
                 >
-                  <span>⚡ Giá niêm yết</span>
+                  <Zap :size="14" /><span>Giá niêm yết</span>
                   <span class="text-[10px] opacity-80">({{ fixedServicesCount }})</span>
                 </button>
                 <button
@@ -787,7 +787,7 @@ const createAndFindTech = async () => {
                   :class="serviceFilter === 'INSPECTION' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'INSPECTION'"
                 >
-                  <span>🔍 Khảo sát</span>
+                  <Search :size="14" /><span>Khảo sát</span>
                   <span class="text-[10px] opacity-80">({{ inspectionServicesCount }})</span>
                 </button>
               </div>
@@ -830,13 +830,13 @@ const createAndFindTech = async () => {
                       v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
                       class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200"
                     >
-                      ⚡ Giá niêm yết
+                      <Zap :size="12" /> Giá niêm yết
                     </span>
                     <span
                       v-else
                       class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-200"
                     >
-                      🔍 Khảo sát tận nơi
+                      <Search :size="12" /> Khảo sát tận nơi
                     </span>
                     <span class="text-[11px] text-ink-500 inline-flex items-center gap-1 font-medium">
                       <Clock :size="12" class="text-ink-400" />
@@ -1072,7 +1072,7 @@ const createAndFindTech = async () => {
                 <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
               </label>
               <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
-                ⚡ Giá niêm yết (Không bắt buộc mô tả lỗi)
+                <Zap :size="12" class="inline -mt-0.5" /> Giá niêm yết (Không bắt buộc mô tả lỗi)
               </span>
               <span v-else class="text-[11px] text-ink-500">
                 Mô tả chi tiết để thợ chuẩn bị linh kiện sát nhất

@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   PackageCheck,
   Loader2,
+  X,
 } from 'lucide-vue-next';
 import { FhButton, FhCard } from '../../components';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
@@ -136,9 +137,10 @@ onMounted(() => {
       <button
         type="button"
         class="text-ink-400 hover:text-ink-700 ml-2"
+        aria-label="Đóng"
         @click="actionMessage = null"
       >
-        ✕
+        <X :size="18" />
       </button>
     </div>
 

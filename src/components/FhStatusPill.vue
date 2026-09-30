@@ -200,7 +200,7 @@ const displayLabel = computed(() => props.label || statusConfig.value.defaultLab
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 h-[24px] px-2 rounded-[var(--radius-sm)] text-[12px] font-medium select-none"
+    class="inline-flex items-center gap-1.5 h-[24px] px-2 rounded-[var(--radius-sm)] text-[12px] font-medium select-none whitespace-nowrap shrink-0"
     :class="[statusConfig.bg, statusConfig.text]"
   >
     <span

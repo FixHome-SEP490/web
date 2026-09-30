@@ -146,7 +146,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
           <span>Đơn Nhận Việc & Thực Thi</span>
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Quản lý tiến trình xử lý đơn hàng: di chuyển, check-in GPS, lập báo giá và hoàn tất nghiệm thu.
+          Quản lý tiến trình xử lý đơn hàng: di chuyển, xác nhận đến nơi, lập báo giá và hoàn tất nghiệm thu.
         </p>
       </div>
 
@@ -349,7 +349,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
 
             <!-- Primary Open Workspace Button -->
             <FhButton variant="primary" size="sm" @click.stop="router.push(`/tech/jobs/${job.id}`)">
-              Vào Workspace <ChevronRight :size="14" class="ml-0.5" />
+              Mở công việc <ChevronRight :size="14" class="ml-0.5" />
             </FhButton>
           </div>
         </div>

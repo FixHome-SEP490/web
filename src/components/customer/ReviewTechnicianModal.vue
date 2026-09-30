@@ -42,7 +42,7 @@ const activeRating = computed(() => hoverRating.value || selectedRating.value);
 // Dynamic suggestion chips per star level
 const SUGGESTIONS_MAP: Record<number, string[]> = {
   5: [
-    'Xuất sắc 🌟',
+    'Xuất sắc',
     'Rất nhiệt tình & tận tâm',
     'Đúng giờ & chuẩn hẹn',
     'Tay nghề chuyên môn cao',
@@ -102,7 +102,7 @@ watch(
     if (val) {
       selectedRating.value = 5;
       hoverRating.value = 0;
-      selectedChips.value = ['Xuất sắc 🌟', 'Rất nhiệt tình & tận tâm'];
+      selectedChips.value = ['Xuất sắc', 'Rất nhiệt tình & tận tâm'];
       comment.value = '';
       errorMsg.value = '';
       isSuccess.value = false;
@@ -112,12 +112,12 @@ watch(
   { immediate: true }
 );
 
-const ratingLabels: Record<number, { text: string; tone: string; emoji: string }> = {
-  5: { text: 'Xuất sắc — Rất hài lòng', tone: 'text-warning-600', emoji: '🤩' },
-  4: { text: 'Hài lòng — Dịch vụ tốt', tone: 'text-success-600', emoji: '😊' },
-  3: { text: 'Bình thường — Tạm ổn', tone: 'text-warning-600', emoji: '😐' },
-  2: { text: 'Chưa hài lòng', tone: 'text-warning-600', emoji: '🙁' },
-  1: { text: 'Rất không hài lòng', tone: 'text-danger-600', emoji: '😞' },
+const ratingLabels: Record<number, { text: string; tone: string }> = {
+  5: { text: 'Xuất sắc — Rất hài lòng', tone: 'text-warning-600' },
+  4: { text: 'Hài lòng — Dịch vụ tốt', tone: 'text-success-600' },
+  3: { text: 'Bình thường — Tạm ổn', tone: 'text-warning-600' },
+  2: { text: 'Chưa hài lòng', tone: 'text-warning-600' },
+  1: { text: 'Rất không hài lòng', tone: 'text-danger-600' },
 };
 
 const currentLabel = computed(() => {
@@ -286,7 +286,6 @@ const handleSubmit = async () => {
           <!-- Emotional Label -->
           <div class="h-6 flex items-center justify-center">
             <span class="text-sm font-semibold flex items-center gap-1.5 transition-all" :class="currentLabel.tone">
-              <span>{{ currentLabel.emoji }}</span>
               <span>{{ currentLabel.text }}</span>
             </span>
           </div>

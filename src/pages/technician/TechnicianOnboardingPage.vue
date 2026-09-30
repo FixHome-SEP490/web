@@ -1779,10 +1779,10 @@ const handleLogout = async () => {
                     <CheckCircle2 :size="12" /> Đã xác định vị trí nhà thợ
                   </span>
                   <span v-if="detectedProvinceName" class="font-semibold text-brand-900">
-                    🏙️ {{ detectedProvinceName }}
+                    {{ detectedProvinceName }}
                   </span>
                   <span v-if="detectedDistrictName" class="font-semibold text-ink-700">
-                    • 📍 {{ detectedDistrictName }}
+                    · {{ detectedDistrictName }}
                   </span>
                 </div>
                 <p class="text-[11px] text-ink-600 truncate max-w-xl">
@@ -1875,7 +1875,7 @@ const handleLogout = async () => {
               class="px-4 py-2 rounded-xl bg-warning-500 hover:bg-warning-600 text-white text-xs font-bold shadow-xs transition-colors shrink-0 flex items-center justify-center gap-1.5 self-start sm:self-auto"
             >
               <Zap :size="14" />
-              <span>⚡ Chọn tất cả {{ inRadiusDistricts.length }} quận trong bán kính</span>
+              <span>Chọn tất cả {{ inRadiusDistricts.length }} quận trong bán kính</span>
             </button>
           </div>
 
@@ -2046,7 +2046,7 @@ const handleLogout = async () => {
                 Đã chọn: <strong class="text-brand-700 font-num text-sm font-bold">{{ countSelectedInProvince(activeProvince?.code || 0) }}</strong> / {{ activeProvince?.districts?.length || 0 }} quận/huyện tiếp nhận việc tại {{ activeProvince?.name }}
               </div>
               <div v-if="inRadiusDistricts.length > 0" class="text-[11px] text-success-700 font-medium">
-                ⚡ Có {{ inRadiusDistricts.length }} quận/huyện nằm trong bán kính {{ serviceRadiusKm }} km
+                Có {{ inRadiusDistricts.length }} quận/huyện nằm trong bán kính {{ serviceRadiusKm }} km
               </div>
             </div>
           </div>

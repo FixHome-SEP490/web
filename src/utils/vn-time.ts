@@ -93,14 +93,20 @@ const withZone = (options?: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOpti
   timeZone: VN_TIME_ZONE,
 });
 
+/** Without options: dd/MM/yyyy, the FixHome date format. */
 export function vnDateString(input: DateInput, options?: Intl.DateTimeFormatOptions): string {
-  return new Date(input).toLocaleDateString('vi-VN', withZone(options));
+  return new Date(input).toLocaleDateString('vi-VN', withZone(options ?? { day: '2-digit', month: '2-digit', year: 'numeric' }));
 }
 
+/** Without options: HH:mm. */
 export function vnTimeString(input: DateInput, options?: Intl.DateTimeFormatOptions): string {
-  return new Date(input).toLocaleTimeString('vi-VN', withZone(options));
+  return new Date(input).toLocaleTimeString('vi-VN', withZone(options ?? { hour: '2-digit', minute: '2-digit' }));
 }
 
+/** Without options: HH:mm dd/MM/yyyy. */
 export function vnDateTimeString(input: DateInput, options?: Intl.DateTimeFormatOptions): string {
-  return new Date(input).toLocaleString('vi-VN', withZone(options));
+  return new Date(input).toLocaleString(
+    'vi-VN',
+    withZone(options ?? { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+  );
 }

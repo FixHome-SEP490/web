@@ -109,7 +109,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Bạn đang trên đường di chuyển tới nhà khách hàng');
-    expect(wrapper.text()).toContain('Check-in GPS ngay khi đến nơi');
+    expect(wrapper.text()).toContain('Xác nhận đến nơi ngay khi tới địa chỉ');
 
     wrapper.unmount();
   });
@@ -127,7 +127,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Đã check-in hiện trường — Chụp ảnh hiện trạng lỗi (BEFORE)');
+    expect(wrapper.text()).toContain('Đã xác nhận đến nơi — Chụp ảnh hiện trạng trước sửa chữa');
 
     wrapper.unmount();
   });

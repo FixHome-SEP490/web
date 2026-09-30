@@ -24,6 +24,7 @@ import {
   Package,
   Info,
   Sparkles,
+  BadgeCheck,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -48,6 +49,7 @@ import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
+import { toTimelineSteps } from '../../utils/order-timeline';
 
 const route = useRoute();
 const router = useRouter();
@@ -223,17 +225,8 @@ const cashMismatchNote = ref('');
 
 // Render only the timeline entries actually returned by the Backend API.
 // No locally invented states or progression — an empty timeline is shown honestly.
-const timelineSteps = computed<TimelineStep[]>(() => {
-  const entries = order.value?.timeline ?? [];
-  return entries.map((entry, index) => ({
-    key: `${entry.status}-${index}`,
-    label: entry.title || entry.status,
-    timestamp: entry.timestamp,
-    actor: entry.actor,
-    completed: index < entries.length - 1,
-    current: index === entries.length - 1,
-  }));
-});
+// Status labels, times and roles in plain Vietnamese (utils/order-timeline.ts).
+const timelineSteps = computed<TimelineStep[]>(() => toTimelineSteps(order.value?.timeline ?? []));
 
 const trackingMarkers = computed<MapMarker[]>(() => {
   const markers: MapMarker[] = [];
@@ -636,7 +629,7 @@ const confirmWork = async () => {
     </div>
 
     <div v-if="loading" class="text-center py-16 text-ink-400">
-      Đang tải chi tiết đơn hàng...
+      Đang tải chi tiết đơn hàng…
     </div>
 
     <div v-else-if="order" class="space-y-6">
@@ -645,75 +638,78 @@ const confirmWork = async () => {
         <div class="space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 pb-4">
             <div>
-              <div class="text-[11px] text-ink-400 font-mono">MÃ ĐƠN HÀNG:</div>
-              <h1 class="text-xl font-bold font-mono text-ink-900">{{ order.code }}</h1>
+              <div class="text-sm text-ink-500">Chi tiết đơn sửa chữa</div>
+              <h1 class="text-xl font-bold text-ink-900 font-num">{{ order.code }}</h1>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center gap-2">
               <FhStatusPill :status="order.status" />
               <FhStatusPill
                 :status="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'COMPLETED' : 'PENDING'"
-                :label="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'ĐÃ THANH TOÁN' : 'CHƯA THANH TOÁN'"
+                :label="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'"
               />
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div class="space-y-2">
-              <div class="font-bold text-sm text-ink-900">{{ order.serviceName }}</div>
-              <div class="text-ink-600 flex items-center gap-1.5">
-                <MapPin :size="14" class="text-brand-600 shrink-0" />
-                {{ order.addressSummary }}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
+            <div class="space-y-2 min-w-0">
+              <div class="font-semibold text-base text-ink-900">{{ order.serviceName }}</div>
+              <div class="text-ink-600 flex items-start gap-1.5">
+                <MapPin :size="16" class="text-ink-400 shrink-0 mt-0.5" />
+                <span class="text-pretty">{{ order.addressSummary }}</span>
               </div>
-              <div class="text-ink-500 flex items-center gap-1.5">
-                <Calendar :size="14" />
-                Hẹn lúc: {{ vnDateTimeString(order.scheduledAt) }}
+              <div class="text-ink-600 flex items-center gap-1.5">
+                <Calendar :size="16" class="text-ink-400" />
+                Hẹn lúc: <strong class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ vnDateTimeString(order.scheduledAt) }}</strong>
               </div>
             </div>
 
             <!-- Technician Box (Style Mobile) -->
-            <div v-if="order.technician" class="p-4 rounded-2xl bg-brand-50/60 border border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-              <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs border-2 border-white">
+            <div v-if="order.technician" class="p-4 rounded-2xl bg-ink-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-base shrink-0">
                   {{ order.technician.fullName.charAt(0) }}
                 </div>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <div class="font-bold text-ink-900 text-sm">{{ order.technician.fullName }}</div>
-                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-success-100 text-success-800 text-[10px] font-bold">
-                      ✓ Đã xác minh
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <div class="font-semibold text-ink-900 text-sm">{{ order.technician.fullName }}</div>
+                    <span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-md bg-success-50 text-success-700 text-[11px] font-medium whitespace-nowrap">
+                      <BadgeCheck :size="12" /> Đã xác minh
                     </span>
                   </div>
-                  <div class="text-xs text-warning-600 flex items-center gap-1 font-semibold mt-0.5">
-                    <span>★ {{ order.technician.averageRating || '5.0' }}</span>
-                    <span class="text-ink-400 font-normal">• Kỹ thuật viên chính</span>
+                  <div class="text-sm text-ink-600 flex flex-wrap items-center gap-x-1 mt-0.5">
+                    <span class="text-warning-500">★</span>
+                    <span class="font-medium text-ink-900">{{ order.technician.averageRating || '5.0' }}</span>
+                    <span class="text-ink-500">· Kỹ thuật viên chính</span>
                   </div>
                 </div>
               </div>
 
-              <div class="flex items-center gap-2 self-end sm:self-center">
+              <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
                 <button
                   v-if="(order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
                   type="button"
-                  class="p-2 rounded-xl bg-white border border-ink-200 text-brand-700 hover:bg-brand-50 transition-colors shadow-xs"
+                  class="w-10 h-10 rounded-xl bg-white border border-ink-200 text-ink-600 hover:bg-ink-100 transition-colors flex items-center justify-center"
                   title="Xem vị trí thợ trên bản đồ"
+                  aria-label="Xem vị trí thợ trên bản đồ"
                   @click="showTrackingModal = true"
                 >
                   <MapIcon :size="16" />
                 </button>
                 <button
                   type="button"
-                  class="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 shadow-xs"
+                  class="h-10 px-3.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
                   @click="handleChatWithTech"
                 >
-                  <MessageSquare :size="14" />
+                  <MessageSquare :size="16" />
                   <span>Nhắn tin</span>
                 </button>
                 <a
                   v-if="order.technician.phoneNumber"
                   :href="`tel:${order.technician.phoneNumber}`"
-                  class="p-2 rounded-xl bg-white border border-ink-200 text-brand-700 hover:bg-brand-50 transition-colors shadow-xs"
+                  class="w-10 h-10 rounded-xl bg-white border border-ink-200 text-ink-600 hover:bg-ink-100 transition-colors flex items-center justify-center"
                   title="Gọi thợ"
+                  aria-label="Gọi thợ"
                 >
                   <Phone :size="16" />
                 </a>
@@ -726,11 +722,11 @@ const confirmWork = async () => {
       <!-- Banner Đánh giá dịch vụ khi đơn đã hoàn tất mà chưa đánh giá -->
       <div
         v-if="order && (order.status === 'COMPLETED' || (order.status as string) === 'completed') && !existingReview"
-        class="p-5 rounded-2xl bg-gradient-to-r from-brand-50 via-brand-50/40 to-warning-50/50 border border-brand-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in"
+        class="p-5 rounded-2xl bg-white border border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div class="flex items-start gap-3.5">
           <div class="w-10 h-10 rounded-xl bg-warning-100 text-warning-600 flex items-center justify-center shrink-0 border border-warning-200 shadow-xs">
-            <Star :size="22" class="fill-warning-400 text-warning-500 animate-pulse" />
+            <Star :size="22" class="fill-warning-400 text-warning-500" />
           </div>
           <div class="space-y-1">
             <h3 class="text-sm font-bold text-ink-900 flex items-center gap-1.5">
@@ -928,10 +924,10 @@ const confirmWork = async () => {
       </FhCard>
 
       <!-- Status Timeline (FhTimeline) -->
-      <FhCard title="Tiến trình thực hiện (theo dữ liệu Backend)">
+      <FhCard title="Tiến trình thực hiện">
         <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
         <p v-else class="text-xs text-ink-400 italic">
-          Backend không trả về mục lịch sử nào cho đơn này.
+          Chưa có cập nhật tiến trình cho đơn này.
         </p>
       </FhCard>
 
@@ -957,7 +953,7 @@ const confirmWork = async () => {
             <button
               type="button"
               class="px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0"
-              :class="evidenceFilter === 'ALL' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'"
+              :class="evidenceFilter === 'ALL' ? 'bg-brand-600 text-white' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50'"
               @click="evidenceFilter = 'ALL'"
             >
               Tất cả ảnh ({{ evidences.length }})
@@ -1111,7 +1107,7 @@ const confirmWork = async () => {
                 <Info :size="14" class="text-brand-600" />
                 Vấn đề &amp; Hiện trạng thiết bị ban đầu:
               </span>
-              <span class="text-[11px] font-semibold text-ink-500 font-mono">Dịch vụ: {{ order.serviceName }}</span>
+              <span class="text-sm text-ink-500">Dịch vụ: {{ order.serviceName }}</span>
             </div>
             <p class="text-ink-700 leading-relaxed bg-white p-2.5 rounded-lg border border-ink-100">
               {{ order.scopeDescription || bookingDetails?.description || 'Kiểm tra, chẩn đoán sự cố và tiến hành khắc phục kỹ thuật tại nhà.' }}
@@ -1133,7 +1129,7 @@ const confirmWork = async () => {
             <div class="flex items-center justify-between">
               <h4 class="font-bold text-xs text-ink-900 flex items-center gap-1.5">
                 <Wrench :size="14" class="text-brand-600" />
-                1. Công việc kỹ thuật &amp; Tiền công (Labor):
+                1. Công việc kỹ thuật &amp; Tiền công
               </h4>
               <span class="font-bold font-num text-brand-700">
                 Tổng công: <FhMoney :amount="order.laborTotal" />
@@ -1179,7 +1175,7 @@ const confirmWork = async () => {
             <div class="flex items-center justify-between">
               <h4 class="font-bold text-xs text-ink-900 flex items-center gap-1.5">
                 <Package :size="14" class="text-brand-600" />
-                2. Linh kiện &amp; Phụ tùng thay thế (Parts &amp; Equipment):
+                2. Linh kiện &amp; Phụ tùng thay thế
               </h4>
               <span class="font-bold font-num text-brand-700">
                 Tổng phụ tùng: <FhMoney :amount="order.partsTotal" />
@@ -1243,33 +1239,36 @@ const confirmWork = async () => {
           </div>
 
           <!-- 5. Grand Summary Box -->
-          <div class="p-4 rounded-xl bg-gradient-to-r from-ink-900 to-ink-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div class="p-4 sm:p-5 rounded-xl bg-brand-50 border border-brand-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div class="space-y-1">
-              <div class="text-[11px] text-ink-300 font-semibold">TỔNG KẾT THANH TOÁN ĐƠN SỬA CHỮA:</div>
-              <div class="flex items-baseline gap-2">
-                <span class="text-2xl font-bold font-num text-white">
+              <div class="text-sm font-medium text-ink-600">Tổng kết thanh toán đơn sửa chữa</div>
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-2xl font-semibold font-num text-ink-900 whitespace-nowrap">
                   <FhMoney :amount="order.grandTotal" />
                 </span>
-                <span class="text-xs text-ink-300">
+                <span class="text-sm text-ink-600">
                   (Công: <FhMoney :amount="order.laborTotal" /> + Linh kiện: <FhMoney :amount="order.partsTotal" />)
                 </span>
               </div>
             </div>
 
-            <div class="flex items-center gap-2 self-start sm:self-center">
-              <div class="text-right">
-                <div class="text-[10px] text-ink-300">Trạng thái thanh toán:</div>
-                <div class="text-xs font-bold" :class="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'text-success-400' : 'text-warning-300'">
-                  {{ order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? '✓ ĐÃ THANH TOÁN' : '⏳ CHƯA THANH TOÁN' }}
-                </div>
+            <div class="sm:text-right">
+              <div class="text-sm text-ink-500">Trạng thái thanh toán</div>
+              <div
+                class="text-sm font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+                :class="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'text-success-700' : 'text-warning-800'"
+              >
+                <CheckCircle2 v-if="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid'" :size="16" />
+                <Clock v-else :size="16" />
+                {{ order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán' }}
               </div>
             </div>
           </div>
         </div>
       </FhCard>
 
-      <!-- Quotation & D-02 Cost Breakdown Card -->
-      <FhCard title="Báo giá chi tiết & Linh kiện thay thế (D-02 Standard)">
+      <!-- Quotation & cost breakdown card -->
+      <FhCard title="Báo giá chi tiết & Linh kiện thay thế">
         <template #action>
           <span class="text-xs font-semibold text-brand-700">Tách riêng Công & Phụ tùng</span>
         </template>
@@ -1302,7 +1301,7 @@ const confirmWork = async () => {
                   <td class="p-2.5 font-medium text-ink-900">
                     {{ item.description }}
                     <span v-if="item.warrantyDays" class="block text-[10px] text-success-600 font-semibold">
-                      ✓ Bảo hành {{ item.warrantyDays }} ngày
+                      Bảo hành {{ item.warrantyDays }} ngày
                     </span>
                   </td>
                   <td class="p-2.5">
@@ -1702,13 +1701,13 @@ const confirmWork = async () => {
               v-if="lightboxEvidence.type?.toLowerCase() === 'before'"
               class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white shadow-xs"
             >
-              Ảnh trước khi làm (BEFORE)
+              Ảnh trước khi làm
             </span>
             <span
               v-else-if="lightboxEvidence.type?.toLowerCase() === 'after'"
               class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-success-600 text-white shadow-xs"
             >
-              Ảnh sau khi hoàn thành (AFTER)
+              Ảnh sau khi hoàn thành
             </span>
             <span
               v-else

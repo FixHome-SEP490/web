@@ -216,7 +216,7 @@ function handleDelete(messageId: string) {
           <span
             class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
             :class="chatStore.isSocketConnected ? 'bg-success-600' : 'bg-ink-300'"
-            :title="chatStore.isSocketConnected ? 'Đã kết nối realtime' : 'Đang kết nối lại...'"
+            :title="chatStore.isSocketConnected ? 'Đã kết nối' : 'Đang kết nối lại…'"
           ></span>
         </div>
 

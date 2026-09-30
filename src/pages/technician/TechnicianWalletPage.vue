@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Landmark,
   Pencil,
+  X,
 } from 'lucide-vue-next';
 import {
   walletApi,
@@ -895,14 +896,15 @@ const handleWithdraw = async () => {
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <ArrowDownLeft class="text-brand-600" :size="20" />
-            <span>Nạp tiền vào ví KTV</span>
+            <span>Nạp tiền vào ví kỹ thuật viên</span>
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            aria-label="Đóng"
             @click="showTopUpModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 
@@ -1005,10 +1007,11 @@ const handleWithdraw = async () => {
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            aria-label="Đóng"
             @click="showWithdrawModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 
@@ -1099,11 +1102,11 @@ const handleWithdraw = async () => {
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
             aria-label="Đóng"
             @click="showBankModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 

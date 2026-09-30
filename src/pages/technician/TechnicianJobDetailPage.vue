@@ -301,7 +301,7 @@ const heroAction = computed(() => {
     const hasAfter = afterPhotoUploaded.value || afterEvidences.value.length > 0;
     if (!hasAfter) {
       return {
-        title: 'Đang tiến hành sửa chữa — Cần chụp ảnh hoàn thành (AFTER)',
+        title: 'Đang tiến hành sửa chữa — Cần chụp ảnh sau sửa chữa',
         subtitle: 'Thực hiện công việc, sau đó chụp ít nhất 1 ảnh thiết bị sau khi sửa chữa xong.',
         badge: 'ĐANG SỬA CHỮA',
         badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
@@ -331,7 +331,7 @@ const heroAction = computed(() => {
     const hasBefore = beforePhotoUploaded.value || beforeEvidences.value.length > 0;
     if (!hasBefore) {
       return {
-        title: 'Đã check-in hiện trường — Chụp ảnh hiện trạng lỗi (BEFORE)',
+        title: 'Đã xác nhận đến nơi — Chụp ảnh hiện trạng trước sửa chữa',
         subtitle: 'Bắt buộc chụp ít nhất 1 ảnh hiện trạng hư hỏng trước khi bắt đầu tháo máy sửa chữa.',
         badge: 'CẦN ẢNH HIỆN TRẠNG',
         badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
@@ -374,10 +374,10 @@ const heroAction = computed(() => {
   if (s === 'EN_ROUTE' && !gpsCheckedIn.value) {
     return {
       title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
-      subtitle: 'Khi tới nơi trong bán kính ≤ 200m, hãy bấm nút Check-in GPS để mở khóa chụp ảnh.',
+      subtitle: 'Khi tới nơi trong bán kính 200 m, hãy bấm Xác nhận đến nơi để mở khóa chụp ảnh.',
       badge: 'ĐANG DI CHUYỂN',
       badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-      btnText: 'Check-in GPS ngay khi đến nơi',
+      btnText: 'Xác nhận đến nơi ngay khi tới địa chỉ',
       btnAction: () => handleCheckIn(),
       btnIcon: 'map-pin',
       btnVariant: 'primary' as const,
@@ -1169,7 +1169,7 @@ const refreshJobStatus = async () => {
       <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
       <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
       <span class="flex-1">{{ actionMessage.text }}</span>
-      <button type="button" class="text-ink-400 hover:text-ink-700" @click="actionMessage = null">✕</button>
+      <button type="button" class="text-ink-400 hover:text-ink-700" @click="actionMessage = null" aria-label="Đóng"><X :size="16" /></button>
     </div>
 
     <!-- Loading State -->
@@ -1424,7 +1424,7 @@ const refreshJobStatus = async () => {
               <CheckCircle2 v-if="gpsCheckedIn" :size="13" class="text-success-600" />
               <MapPin v-else :size="13" :class="currentStepNumber === 2 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
-            <div class="text-xs font-bold truncate">Check-in GPS</div>
+            <div class="text-xs font-bold truncate">Xác nhận đến nơi</div>
           </button>
 
           <button
@@ -1536,14 +1536,14 @@ const refreshJobStatus = async () => {
 
         <!-- STEP 2: GPS Geofence Check-in -->
         <div id="step-check-in">
-          <FhCard title="2. Xác nhận có mặt tại hiện trường (GPS Geofence Check-in)">
+          <FhCard title="2. Xác nhận có mặt tại hiện trường">
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
               <div class="space-y-1 max-w-md">
                 <p class="text-ink-600">
-                  Bắt buộc check-in GPS trong bán kính ≤ 200m từ địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
+                  Cần xác nhận vị trí trong bán kính 200 m quanh địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
                 </p>
                 <div v-if="gpsCheckedIn" class="text-success-700 font-medium flex items-center gap-1.5">
-                  <CheckCircle2 :size="14" /> Bạn đã check-in thành công tại hiện trường.
+                  <CheckCircle2 :size="14" /> Bạn đã xác nhận có mặt tại hiện trường.
                 </div>
               </div>
 
@@ -1556,7 +1556,7 @@ const refreshJobStatus = async () => {
                 >
                   <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
                   <MapPin v-else :size="15" class="mr-1.5" />
-                  {{ gpsCheckedIn ? 'Đã check-in thành công' : 'Bấm Check-in GPS' }}
+                  {{ gpsCheckedIn ? 'Đã xác nhận đến nơi' : 'Xác nhận đến nơi' }}
                 </FhButton>
 
                 <!-- DEV demo shortcut -->
@@ -1566,10 +1566,10 @@ const refreshJobStatus = async () => {
                   size="sm"
                   class="border border-dashed border-warning-400 text-warning-700"
                   :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
-                  title="Chỉ để test: check-in luôn bằng đúng toạ độ địa chỉ khách, bỏ qua GPS thật"
+                  title="Chỉ để thử: xác nhận bằng đúng toạ độ địa chỉ khách, bỏ qua vị trí thật"
                   @click="handleCheckInDevExact"
                 >
-                  Check-in GPS (DEV demo)
+                  Xác nhận đến nơi (chỉ để thử)
                 </FhButton>
               </div>
             </div>
@@ -1578,11 +1578,11 @@ const refreshJobStatus = async () => {
 
         <!-- STEP 3: Evidence BEFORE -->
         <div id="step-before-evidence">
-          <FhCard title="3. Bằng chứng hiện trạng lỗi (Evidence Gating BEFORE)">
+          <FhCard title="3. Ảnh hiện trạng trước sửa chữa">
             <div class="space-y-3 text-xs">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-ink-600">
-                  Quy chuẩn bắt buộc: Phải có ít nhất 1 ảnh BEFORE trước khi lập báo giá nhằm tránh tranh chấp.
+                  Quy chuẩn bắt buộc: Phải có ít nhất 1 ảnh trước sửa chữa trước khi lập báo giá nhằm tránh tranh chấp.
                 </p>
                 <span
                   v-if="beforeEvidences.length > 0"
@@ -2118,7 +2118,7 @@ const refreshJobStatus = async () => {
 
         <!-- STEP 5: Evidence AFTER & Complete Repair -->
         <div id="step-completion">
-          <FhCard title="5. Ảnh hoàn tất AFTER & Yêu cầu nghiệm thu">
+          <FhCard title="5. Ảnh sau sửa chữa & Yêu cầu nghiệm thu">
             <div class="space-y-4 text-xs">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-ink-600">
@@ -2241,7 +2241,7 @@ const refreshJobStatus = async () => {
             <FhCard title="6. Khách hàng Nghiệm thu & Thanh toán (Spec v1.2)">
               <div class="space-y-4 text-xs">
                 <p class="text-ink-600 leading-relaxed">
-                  Quy chuẩn thực thi: <strong>1. Khách nghiệm thu dịch vụ đạt chuẩn ➡️ 2. Tiến hành thanh toán (Tiền mặt hoặc Online) ➡️ 3. Hệ thống hoàn tất ca.</strong>
+                  Quy chuẩn thực thi: <strong>1. Khách nghiệm thu dịch vụ đạt chuẩn → 2. Tiến hành thanh toán (Tiền mặt hoặc Online) → 3. Hệ thống hoàn tất ca.</strong>
                 </p>
 
                 <!-- Case: COMPLETED -->
@@ -2306,7 +2306,7 @@ const refreshJobStatus = async () => {
 
                     <div v-if="!job?.customerConfirmed" class="space-y-2">
                       <p class="text-ink-600 text-[11px] leading-relaxed">
-                        💡 <strong>Hướng dẫn thợ:</strong> Mời khách hàng kiểm tra thực tế hoạt động của thiết bị/công việc vừa hoàn thành và mở ứng dụng FixHome bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong>. Khách hàng nghiệm thu OK rồi mới tiến hành thanh toán.
+                        <strong>Hướng dẫn thợ:</strong> Mời khách hàng kiểm tra thực tế hoạt động của thiết bị/công việc vừa hoàn thành và mở ứng dụng FixHome bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong>. Khách hàng nghiệm thu OK rồi mới tiến hành thanh toán.
                       </p>
                       <div class="flex items-center gap-2">
                         <FhButton variant="secondary" size="sm" :disabled="refreshingStatus" @click="refreshJobStatus">
@@ -2317,7 +2317,7 @@ const refreshJobStatus = async () => {
                     </div>
 
                     <div v-else class="text-[11px] text-success-800 font-medium">
-                      ✓ Khách hàng đã kiểm tra và bấm xác nhận nghiệm thu dịch vụ đạt chuẩn! Hãy chuyển sang bước thanh toán bên dưới.
+                      Khách hàng đã kiểm tra và bấm xác nhận nghiệm thu dịch vụ đạt chuẩn! Hãy chuyển sang bước thanh toán bên dưới.
                     </div>
                   </div>
 
@@ -2456,7 +2456,7 @@ const refreshJobStatus = async () => {
                         </div>
 
                         <p class="text-ink-600 text-[11px] leading-relaxed">
-                          💡 <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> và thực hiện <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
+                          <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> và thực hiện <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
                         </p>
 
                         <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-brand-100">
@@ -2607,7 +2607,7 @@ const refreshJobStatus = async () => {
                 </p>
 
                 <p class="text-[11px] text-ink-500 italic">
-                  💡 Điểm đánh giá này đã được hệ thống tính vào chỉ số uy tín trung bình (Average Rating) trong hồ sơ nhận việc của bạn.
+                  Điểm đánh giá này đã được hệ thống tính vào chỉ số uy tín trung bình trong hồ sơ nhận việc của bạn.
                 </p>
               </div>
 
@@ -2685,7 +2685,7 @@ const refreshJobStatus = async () => {
         </div>
 
         <div class="p-3 bg-warning-50 rounded-2xl border border-warning-200 text-warning-900 text-xs leading-relaxed">
-          ⚠️ <strong>Lưu ý:</strong> Khi bạn rút khỏi đơn, hệ thống FixHome sẽ tự động điều phối thợ tiếp theo trong danh sách ưu tiên của khách. Vui lòng chọn lý do chính xác để không ảnh hưởng đến điểm uy tín kỹ thuật viên.
+          <strong>Lưu ý:</strong> Khi bạn rút khỏi đơn, hệ thống FixHome sẽ tự động điều phối thợ tiếp theo trong danh sách ưu tiên của khách. Vui lòng chọn lý do chính xác để không ảnh hưởng đến điểm uy tín kỹ thuật viên.
         </div>
 
         <div class="space-y-2 text-xs">
@@ -2751,9 +2751,10 @@ const refreshJobStatus = async () => {
             <button
               type="button"
               class="bg-ink-100 hover:bg-ink-200 text-ink-700 w-7 h-7 rounded-full flex items-center justify-center transition-colors font-bold text-xs"
+              aria-label="Đóng"
               @click="previewModalUrl = null"
             >
-              ✕
+              <X :size="18" />
             </button>
           </div>
         </div>

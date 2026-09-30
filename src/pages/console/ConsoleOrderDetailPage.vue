@@ -114,7 +114,7 @@ const timelineSteps = computed<TimelineStep[]>(() => {
   return entries.map((entry, index) => ({
     key: `${entry.status}-${index}`,
     label: entry.title || entry.status,
-    timestamp: entry.timestamp,
+    timestamp: entry.timestamp ? vnDateTimeString(entry.timestamp) : undefined,
     actor: entry.actor,
     completed: index < entries.length - 1,
     current: index === entries.length - 1,

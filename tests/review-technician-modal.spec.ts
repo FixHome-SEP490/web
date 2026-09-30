@@ -51,7 +51,7 @@ describe('ReviewTechnicianModal', () => {
     });
 
     // Default 5 stars has 5-star chips
-    expect(wrapper.text()).toContain('Xuất sắc 🌟');
+    expect(wrapper.text()).toContain('Tay nghề chuyên môn cao');
     expect(wrapper.text()).toContain('Rất nhiệt tình & tận tâm');
 
     // Click 1 star button
@@ -63,7 +63,7 @@ describe('ReviewTechnicianModal', () => {
     expect(wrapper.text()).toContain('Rất không hài lòng');
     expect(wrapper.text()).toContain('Thái độ chưa tốt');
     expect(wrapper.text()).toContain('Tay nghề kém');
-    expect(wrapper.text()).not.toContain('Xuất sắc 🌟');
+    expect(wrapper.text()).not.toContain('Tay nghề chuyên môn cao');
   });
 
   it('toggles suggestion chips selection and includes them in review submission', async () => {
@@ -73,7 +73,7 @@ describe('ReviewTechnicianModal', () => {
       customerId: 'cust-1',
       technicianId: 'tech-1',
       rating: 5,
-      comment: '[Xuất sắc 🌟, Đúng giờ & chuẩn hẹn] Thợ làm rất có tâm!',
+      comment: '[Xuất sắc, Đúng giờ & chuẩn hẹn] Thợ làm rất có tâm!',
       createdAt: new Date().toISOString(),
     };
     vi.mocked(reviewsApi.createReview).mockResolvedValue(mockCreatedReview);

@@ -47,7 +47,7 @@ const partsPct = computed(() => 100 - laborPct.value);
       <div class="flex items-center justify-between gap-2">
         <span class="flex flex-1 items-center gap-2 text-ink-700 min-w-0">
           <span class="w-2.5 h-2.5 rounded-full bg-brand-400 shrink-0" />
-          <span class="truncate">Tiền công thợ (Labor)</span>
+          <span class="truncate">Tiền công thợ</span>
         </span>
         <FhMoney :amount="laborNum" class="shrink-0 font-num" />
       </div>
@@ -55,7 +55,7 @@ const partsPct = computed(() => 100 - laborPct.value);
       <div class="flex items-center justify-between gap-2 mt-1.5">
         <span class="flex flex-1 items-center gap-2 text-ink-700 min-w-0">
           <span class="w-2.5 h-2.5 rounded-full bg-info-600 shrink-0" />
-          <span class="truncate">Thiết bị & vật tư (Parts)</span>
+          <span class="truncate">Thiết bị & vật tư</span>
         </span>
         <FhMoney :amount="partsNum" class="shrink-0 font-num" />
       </div>
