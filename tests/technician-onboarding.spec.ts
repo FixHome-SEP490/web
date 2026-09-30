@@ -45,6 +45,23 @@ vi.mock('../src/api/vietnam-provinces.api', () => ({
   },
 }));
 
+vi.mock('../src/api/wallet.api', () => ({
+  walletApi: {
+    getMyWallet: vi.fn().mockResolvedValue({
+      id: 'mock-wallet-id',
+      technicianId: 'tech-id',
+      balance: 0,
+      pendingWithdrawal: 0,
+      processingWithdrawal: 0,
+      minimumBalance: 200000,
+      minimumWithdrawal: 10000,
+      availableBalance: 0,
+      withdrawableBalance: 0,
+      eligibleForJobs: false,
+    }),
+  },
+}));
+
 vi.mock('vue-sonner', () => ({
   toast: {
     success: vi.fn(),
