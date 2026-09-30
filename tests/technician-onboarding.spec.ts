@@ -22,6 +22,16 @@ vi.mock('../src/api/technician-onboarding.api', () => ({
   },
 }));
 
+vi.mock('../src/api/technician-verification.api', () => ({
+  technicianVerificationApi: {
+    getMyVerification: vi.fn().mockResolvedValue(null),
+    requestUploadUrl: vi.fn(),
+    uploadToSignedUrl: vi.fn(),
+    submit: vi.fn(),
+    getDocumentAccess: vi.fn().mockResolvedValue(''),
+  },
+}));
+
 vi.mock('../src/api/catalog.api', () => ({
   catalogApi: {
     getCategories: vi.fn().mockResolvedValue([]),
@@ -145,5 +155,75 @@ describe('TechnicianOnboardingPage', () => {
     // Review mode banner is displayed, wizard step 1 is visible
     expect(wrapper.text()).toContain('Bạn đang ở chế độ xem lại hồ sơ đã nộp chờ phê duyệt');
     expect(wrapper.text()).toContain('Bước 1: Thông tin cá nhân & Số CCCD');
+  });
+
+  it('renders Rejected screen when status is rejected, allows editing, and updates to Submitted screen upon resubmit', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({
+      onboardingStatus: 'rejected',
+      verificationStatus: 'rejected',
+      rejectionReason: 'Ảnh CCCD mặt sau bị mờ, vui lòng chụp lại rõ nét.',
+      currentStep: 5,
+      personalInfoCompleted: true,
+      kycSubmitted: true,
+      skillsSelected: true,
+      addressSet: true,
+      fullName: 'minh CU',
+      dateOfBirth: '1995-08-20',
+      gender: 'male',
+      citizenIdNumber: '001200001111',
+      fullAddress: '123 Đường Cầu Giấy, Hà Nội',
+      yearsExperience: 5,
+    });
+
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+
+    // Must show Rejected screen (Image 1)
+    expect(wrapper.text()).toContain('Hồ sơ chưa đạt yêu cầu');
+    expect(wrapper.text()).toContain('Ảnh CCCD mặt sau bị mờ, vui lòng chụp lại rõ nét.');
+    expect(wrapper.text()).toContain('Chỉnh sửa lại hồ sơ');
+
+    // Click "Chỉnh sửa lại hồ sơ"
+    const editBtn = wrapper.findAll('button').find((b) => b.text().includes('Chỉnh sửa lại hồ sơ'));
+    expect(editBtn).toBeDefined();
+    await editBtn!.trigger('click');
+    await flushPromises();
+
+    // Form is now visible in editing mode
+    expect(wrapper.text()).toContain('Hồ sơ cần cập nhật lại: Ảnh CCCD mặt sau bị mờ');
+    expect(wrapper.text()).toContain('Bước 1: Thông tin cá nhân & Số CCCD');
+
+    // Mock API submit response returning updated status as 'submitted' / 'pending'
+    vi.mocked(technicianOnboardingApi.submit).mockResolvedValueOnce({
+      onboardingStatus: 'submitted',
+      verificationStatus: 'pending',
+      currentStep: 5,
+      personalInfoCompleted: true,
+      kycSubmitted: true,
+      skillsSelected: true,
+      addressSet: true,
+      fullName: 'minh CU',
+    });
+
+    // Jump to Step 5 via stepper
+    const stepperSteps = wrapper.findAll('.grid.grid-cols-5 > div');
+    expect(stepperSteps.length).toBe(5);
+    await stepperSteps[4].trigger('click');
+    await flushPromises();
+
+    // Verify button says "Gửi lại hồ sơ xét duyệt"
+    const submitBtn = wrapper.findAll('button').find((b) => b.text().includes('Gửi lại hồ sơ xét duyệt'));
+    expect(submitBtn).toBeDefined();
+
+    // Click submit
+    await submitBtn!.trigger('click');
+    await flushPromises();
+
+    expect(technicianOnboardingApi.submit).toHaveBeenCalledTimes(1);
+
+    // After resubmitting, MUST display Submitted/Pending screen and NOT Rejected screen
+    expect(wrapper.text()).toContain('Hồ sơ thợ đã được tiếp nhận!');
+    expect(wrapper.text()).toContain('Đang chờ ban quản trị phê duyệt');
+    expect(wrapper.text()).not.toContain('Hồ sơ chưa đạt yêu cầu');
   });
 });

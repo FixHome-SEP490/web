@@ -140,6 +140,10 @@ interface KycSlot {
   previewUrl: string | null;
   uploaded: boolean;
   storageObjectPath?: string;
+  existingFileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  optional?: boolean;
 }
 
 const slots = ref<KycSlot[]>([
@@ -296,10 +300,15 @@ const getKycUploadMeta = (
 
 const uploadKycDocuments = async (): Promise<boolean> => {
   for (const slot of slots.value) {
-    if (!slot.file) {
+    if (!slot.file && !slot.uploaded && !slot.optional) {
       toast.error(`Vui lòng tải lên ${slot.label}`);
       return false;
     }
+  }
+
+  const hasNewFiles = slots.value.some((s) => !!s.file);
+  if (!hasNewFiles) {
+    return true;
   }
 
   saving.value = true;
@@ -307,37 +316,37 @@ const uploadKycDocuments = async (): Promise<boolean> => {
     const uploadPayloads: SubmitDocumentPayload[] = [];
 
     for (const slot of slots.value) {
-      if (!slot.file) continue;
+      if (slot.file) {
+        const { mimeType, fileName } = getKycUploadMeta(slot.file, slot.documentType);
 
-      const { mimeType, fileName } = getKycUploadMeta(slot.file, slot.documentType);
+        // Request short-lived signed upload URL from backend
+        const slotInfo = await technicianVerificationApi.requestUploadUrl(mimeType);
 
-      if (slot.uploaded && slot.storageObjectPath) {
+        // Upload file directly to Supabase Storage signed URL
+        await technicianVerificationApi.uploadToSignedUrl(slotInfo.uploadUrl, mimeType, slot.file);
+
+        slot.storageObjectPath = slotInfo.storageObjectPath;
+        slot.uploaded = true;
+        slot.existingFileName = fileName;
+        slot.fileSize = slot.file.size;
+        slot.mimeType = mimeType;
+
         uploadPayloads.push({
           documentType: slot.documentType,
-          storageObjectPath: slot.storageObjectPath,
+          storageObjectPath: slotInfo.storageObjectPath,
           fileName,
           fileSize: slot.file.size,
           mimeType,
         });
-        continue;
+      } else if (slot.uploaded && slot.storageObjectPath) {
+        uploadPayloads.push({
+          documentType: slot.documentType,
+          storageObjectPath: slot.storageObjectPath,
+          fileName: slot.existingFileName || `${slot.documentType}.jpg`,
+          fileSize: slot.fileSize || 500000,
+          mimeType: (slot.mimeType as KycMimeType) || 'image/jpeg',
+        });
       }
-
-      // Request short-lived signed upload URL from backend
-      const slotInfo = await technicianVerificationApi.requestUploadUrl(mimeType);
-
-      // Upload file directly to Supabase Storage signed URL
-      await technicianVerificationApi.uploadToSignedUrl(slotInfo.uploadUrl, mimeType, slot.file);
-
-      slot.storageObjectPath = slotInfo.storageObjectPath;
-      slot.uploaded = true;
-
-      uploadPayloads.push({
-        documentType: slot.documentType,
-        storageObjectPath: slotInfo.storageObjectPath,
-        fileName,
-        fileSize: slot.file.size,
-        mimeType,
-      });
     }
 
     try {
@@ -838,14 +847,14 @@ const isApproved = computed(
 );
 const isRejected = computed(
   () =>
-    statusData.value?.onboardingStatus === 'rejected' ||
-    statusData.value?.verificationStatus === 'rejected',
+    (statusData.value?.onboardingStatus === 'rejected' ||
+      statusData.value?.verificationStatus === 'rejected') &&
+    statusData.value?.onboardingStatus !== 'submitted',
 );
 const isSubmitted = computed(
   () =>
     statusData.value?.onboardingStatus === 'submitted' &&
-    !isApproved.value &&
-    !isRejected.value,
+    !isApproved.value,
 );
 
 const handleReviewSubmitted = () => {
@@ -865,16 +874,37 @@ const handleReturnToStatus = () => {
 const loadInitialData = async () => {
   loading.value = true;
   try {
-    const [statusRes, catRes, servicesRes, vnProvincesRes] = await Promise.all([
+    const [statusRes, catRes, servicesRes, vnProvincesRes, myVerificationRes] = await Promise.all([
       technicianOnboardingApi.getStatus().catch(() => null),
       catalogApi.getCategories(true).catch(() => []),
       catalogApi.getServices({ limit: 100 }).catch(() => ({ data: [] })),
       vietnamProvincesApi.getProvincesWithDistricts().catch(() => []),
+      technicianVerificationApi.getMyVerification().catch(() => null),
     ]);
 
     categories.value = catRes;
     allServices.value = servicesRes.data;
     provinces.value = vnProvincesRes;
+
+    if (myVerificationRes?.documents && myVerificationRes.documents.length > 0) {
+      for (const doc of myVerificationRes.documents) {
+        const docTypeLower = doc.documentType.toLowerCase();
+        const slot = slots.value.find((s) => s.documentType.toLowerCase() === docTypeLower);
+        if (slot) {
+          slot.uploaded = true;
+          if (doc.storageObjectPath) slot.storageObjectPath = doc.storageObjectPath;
+          if (doc.fileName) slot.existingFileName = doc.fileName;
+          if (doc.id) {
+            technicianVerificationApi
+              .getDocumentAccess(doc.id)
+              .then((url) => {
+                if (url && !slot.previewUrl) slot.previewUrl = url;
+              })
+              .catch(() => {});
+          }
+        }
+      }
+    }
 
     if (statusRes) {
       statusData.value = statusRes;
@@ -1157,7 +1187,7 @@ const handleLogout = async () => {
           </div>
           <div class="flex items-center justify-between">
             <span class="font-medium text-slate-500">Trạng thái:</span>
-            <span class="font-bold text-amber-600">Chờ duyệt (Pending Review)</span>
+            <span class="font-bold text-amber-600">Đang chờ xét duyệt</span>
           </div>
         </div>
 
@@ -1245,19 +1275,19 @@ const handleLogout = async () => {
               v-for="step in STEPS"
               :key="step.id"
               class="flex flex-col items-center text-center cursor-pointer group"
-              @click="currentStep >= step.id ? (currentStep = step.id) : null"
+              @click="(isReviewing || isRejected || currentStep >= step.id) ? (currentStep = step.id) : null"
             >
               <div
                 class="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all font-bold text-xs sm:text-sm mb-1.5 shadow-2xs"
                 :class="[
                   currentStep === step.id
                     ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-black scale-105'
-                    : currentStep > step.id
+                    : currentStep > step.id || (isReviewing && currentStep !== step.id)
                     ? 'bg-emerald-500 text-white'
                     : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
                 ]"
               >
-                <Check v-if="currentStep > step.id" :size="18" />
+                <Check v-if="currentStep > step.id || (isReviewing && currentStep !== step.id)" :size="18" />
                 <component v-else :is="step.icon" :size="18" />
               </div>
               <span
@@ -2171,14 +2201,14 @@ const handleLogout = async () => {
               <span>Quay lại</span>
             </FhButton>
             <FhButton
-              v-if="!isSubmitted || isRejected"
+              v-if="!isSubmitted || isRejected || isReviewing"
               variant="primary"
               size="lg"
               :loading="saving"
               @click="handleFinalSubmit"
             >
               <CheckCircle2 :size="16" class="mr-2" />
-              <span>{{ isRejected ? 'Gửi lại hồ sơ xét duyệt' : 'Gửi hồ sơ xét duyệt' }}</span>
+              <span>{{ (isRejected || isReviewing) ? 'Gửi lại hồ sơ xét duyệt' : 'Gửi hồ sơ xét duyệt' }}</span>
             </FhButton>
             <FhButton
               v-else

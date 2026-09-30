@@ -20,8 +20,10 @@ export type KycMimeType =
   | 'video/webm';
 
 export interface MyVerificationDocument {
+  id?: string;
   documentType: string;
   fileName: string;
+  storageObjectPath?: string;
 }
 
 export interface MyVerification {
@@ -70,8 +72,11 @@ function normalizeStatus(value: unknown): VerificationStatus {
 function normalizeDocument(payload: unknown): MyVerificationDocument {
   const document = isRecord(payload) ? payload : {};
   return {
+    id: document.id != null ? String(document.id) : undefined,
     documentType: String(document.documentType ?? 'other'),
     fileName: String(document.fileName ?? ''),
+    storageObjectPath:
+      document.storageObjectPath != null ? String(document.storageObjectPath) : undefined,
   };
 }
 
@@ -136,5 +141,12 @@ export const technicianVerificationApi = {
   /** Withdraws the technician's own still-PENDING request so they can resubmit. */
   async withdraw(): Promise<void> {
     await apiClient.delete('/technicians/me/verification');
+  },
+
+  async getDocumentAccess(documentId: string): Promise<string> {
+    const res = await apiClient.get<{ data: { signedUrl: string } }>(
+      `/technicians/me/verification/documents/${documentId}/access`,
+    );
+    return res.data?.data?.signedUrl || '';
   },
 };
