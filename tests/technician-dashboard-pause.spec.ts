@@ -42,6 +42,21 @@ describe('WEB-WIZARD-TECH real pause state on technician dashboard', () => {
     getMyProfile.mockResolvedValue({ isAvailable });
     const wrapper = mount(TechnicianDashboard, { global: { stubs: { FhButton: true, FhStatusPill: true, FhCountdown: true, 'router-link': true } } });
     await flushPromises();
+    const indicator = wrapper.find(badge);
+    expect(indicator.exists()).toBe(true);
+    expect(indicator.attributes('title')).toBe(label);
+    expect(getMyProfile).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it('does not claim the technician is available when profile loading fails', async () => {
+    getMyProfile.mockRejectedValue(new Error('Synthetic network failure'));
+    const wrapper = mount(TechnicianDashboard, { global: { stubs: { FhButton: true, FhStatusPill: true, FhCountdown: true, 'router-link': true } } });
+    await flushPromises();
+    const indicator = wrapper.find(badge);
+    expect(indicator.exists()).toBe(true);
+    expect(indicator.attributes('title')).toBe('Chưa xác định trạng thái nhận đơn');
+    expect(indicator.classes()).not.toContain('bg-emerald-500');
     wrapper.unmount();
   });
 
