@@ -199,7 +199,7 @@ const handleClose = () => {
             <!-- Name and Verification -->
             <div class="space-y-1">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 id="modal-technician-name" class="text-xl font-extrabold text-ink-900 tracking-tight">
+                <h2 id="modal-technician-name" class="text-xl font-bold text-ink-900 tracking-tight">
                   {{ candidate.fullName }}
                 </h2>
                 <FhStatusPill status="VERIFIED" label="ĐÃ XÁC THỰC" />
@@ -241,7 +241,7 @@ const handleClose = () => {
                 <CheckCircle2 :size="13" class="text-success-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-success-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-bold text-success-800 font-num tracking-tight mt-0.5">
               {{ completionRate }}%
             </div>
             <span class="text-[10px] text-success-600/90 font-medium mt-0.5">Đúng hẹn & chuẩn hẹn</span>
@@ -255,7 +255,7 @@ const handleClose = () => {
                 <Clock :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-brand-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-bold text-brand-800 font-num tracking-tight mt-0.5">
               {{ responseTimeText }}
             </div>
             <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Tiếp nhận đơn nhanh</span>
@@ -269,7 +269,7 @@ const handleClose = () => {
                 <Briefcase :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-brand-900 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-bold text-brand-900 font-num tracking-tight mt-0.5">
               {{ completedOrdersCount }} <span class="text-xs font-semibold text-brand-700">đơn</span>
             </div>
             <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Đơn hoàn thành thực tế</span>
@@ -283,7 +283,7 @@ const handleClose = () => {
                 <ShieldCheck :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-brand-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-bold text-brand-800 font-num tracking-tight mt-0.5">
               {{ candidate.reliabilityScore }}%
             </div>
             <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Chuẩn FixHome Pro</span>
@@ -353,7 +353,7 @@ const handleClose = () => {
                 <Quote :size="14" />
               </div>
               <div class="space-y-1">
-                <h4 class="text-xs font-bold text-brand-950 uppercase tracking-wider">Giới thiệu kỹ thuật viên</h4>
+                <h4 class="text-xs font-bold text-brand-950">Giới thiệu kỹ thuật viên</h4>
                 <p class="text-xs text-ink-700 leading-relaxed italic">
                   "{{ candidate.bio }}"
                 </p>
@@ -363,7 +363,7 @@ const handleClose = () => {
 
           <!-- Section title -->
           <div class="flex items-center justify-between pt-1">
-            <h3 class="text-xs font-bold text-ink-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h3 class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
               <ShieldCheck :size="15" class="text-brand-600" />
               Tiêu chuẩn kiểm duyệt FixHome
             </h3>
@@ -473,7 +473,7 @@ const handleClose = () => {
               class="p-5 rounded-2xl bg-gradient-to-br from-ink-25 to-white border border-ink-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-6"
             >
               <div class="text-center sm:text-left sm:border-r border-ink-200 sm:pr-8 shrink-0">
-                <div class="text-4xl font-extrabold text-ink-900 font-num tracking-tight">
+                <div class="text-4xl font-bold text-ink-900 font-num tracking-tight">
                   {{ candidate.averageRating }}<span class="text-base font-normal text-ink-400">/5.0</span>
                 </div>
                 <div class="flex items-center justify-center sm:justify-start gap-1 text-warning-500 mt-1.5">
@@ -577,13 +577,13 @@ const handleClose = () => {
                   <Wrench :size="16" />
                 </div>
                 <div>
-                  <h4 class="font-bold text-xs text-brand-950 uppercase tracking-wider">Giá công tham chiếu</h4>
+                  <h4 class="font-bold text-xs text-brand-950">Giá công tham chiếu</h4>
                   <p class="text-[11px] text-ink-600">Đơn giá tham chiếu cho dịch vụ sửa chữa</p>
                 </div>
               </div>
 
               <div class="text-right">
-                <div class="text-lg font-extrabold text-brand-700 font-num">
+                <div class="text-lg font-bold text-brand-700 font-num">
                   <FhMoney v-if="candidate.listedLaborPrice" :amount="candidate.listedLaborPrice" />
                   <span v-else class="text-xs text-ink-500">Theo báo giá thực tế</span>
                 </div>
@@ -612,7 +612,7 @@ const handleClose = () => {
 
           <!-- Transparent 4-step workflow guarantee -->
           <div class="p-4 rounded-xl border border-ink-200 bg-white space-y-3 shadow-xs">
-            <h5 class="text-xs font-bold text-ink-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h5 class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
               <CheckCircle2 :size="15" class="text-success-600" />
               Quy trình phục vụ chuẩn mực 4 bước:
             </h5>

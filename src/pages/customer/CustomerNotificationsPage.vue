@@ -100,7 +100,7 @@ const formatFullDate = (dateStr: string): string => {
             <Bell :size="22" />
           </div>
           <div>
-            <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
               Trung tâm thông báo
             </h1>
             <p class="text-xs text-ink-500">

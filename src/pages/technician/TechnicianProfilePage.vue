@@ -761,7 +761,7 @@ const handleSaveAvatar = async () => {
                 "
               >
                 <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" alt="Avatar" />
-                <span v-else class="text-4xl font-extrabold font-num">
+                <span v-else class="text-4xl font-bold font-num">
                   {{ authStore.user?.fullName?.charAt(0) ?? 'T' }}
                 </span>
               </div>
@@ -780,7 +780,7 @@ const handleSaveAvatar = async () => {
             <!-- Identity Information -->
             <div class="text-center sm:text-left space-y-2">
               <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-                <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">
                   {{ authStore.user?.fullName || 'Kỹ thuật viên' }}
                 </h1>
 
@@ -843,7 +843,7 @@ const handleSaveAvatar = async () => {
 
           <!-- Right: Availability Master Switch & Quick Action -->
           <div class="flex flex-col items-center lg:items-end gap-3 shrink-0 pt-2 lg:pt-0">
-            <div class="text-xs font-bold uppercase tracking-wider text-ink-400">
+            <div class="text-xs font-bold text-ink-400">
               Trạng thái tiếp nhận việc:
             </div>
 
@@ -903,9 +903,9 @@ const handleSaveAvatar = async () => {
             <Star :size="24" class="fill-warning-500 text-warning-500" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold uppercase text-ink-500">Đánh giá khách hàng</div>
+            <div class="text-xs font-semibold text-ink-500">Đánh giá khách hàng</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
+              <span class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
               <span class="text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
             </div>
           </div>
@@ -921,9 +921,9 @@ const handleSaveAvatar = async () => {
             <ShieldCheck :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold uppercase text-ink-500">Điểm độ tin cậy</div>
+            <div class="text-xs font-semibold text-ink-500">Điểm độ tin cậy</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
+              <span class="text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
               <span class="text-xs font-semibold text-success-600">Chuẩn nhận việc</span>
             </div>
           </div>
@@ -938,9 +938,9 @@ const handleSaveAvatar = async () => {
             <FileCheck2 :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold uppercase text-ink-500">Dịch vụ nhận làm</div>
+            <div class="text-xs font-semibold text-ink-500">Dịch vụ nhận làm</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-ink-900">{{ technicianProfile.skills.length }}</span>
+              <span class="text-2xl font-bold font-num text-ink-900">{{ technicianProfile.skills.length }}</span>
               <span class="text-xs text-brand-600 font-bold hover:underline">Quản lý giá &rarr;</span>
             </div>
           </div>
@@ -955,9 +955,9 @@ const handleSaveAvatar = async () => {
             <Navigation :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold uppercase text-ink-500">Bán kính quét đơn</div>
+            <div class="text-xs font-semibold text-ink-500">Bán kính quét đơn</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
+              <span class="text-2xl font-bold font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
               <span class="text-xs text-brand-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
             </div>
           </div>
@@ -1352,7 +1352,7 @@ const handleSaveAvatar = async () => {
                   <div class="flex items-center gap-2">
                     <h3 class="font-bold text-ink-900 text-base">{{ service.name }}</h3>
                     <span
-                      class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold"
                       :class="
                         String(service.pricingMode).toLowerCase() === 'fixed_price'
                           ? 'bg-brand-50 text-brand-700 border border-brand-200'
@@ -1658,7 +1658,7 @@ const handleSaveAvatar = async () => {
 
             <!-- Time Off List -->
             <div class="space-y-2.5 pt-2">
-              <div class="text-xs font-bold uppercase tracking-wider text-ink-500">
+              <div class="text-xs font-bold text-ink-500">
                 Các đợt nghỉ đã lên lịch ({{ timeOffList.length }})
               </div>
 
@@ -1826,8 +1826,8 @@ const handleSaveAvatar = async () => {
 
             <!-- Big Rating Score Box -->
             <div class="p-6 rounded-2xl bg-gradient-to-br from-warning-50/80 via-white to-warning-50/40 border border-warning-200/80 text-center space-y-2 shadow-xs">
-              <div class="text-xs font-bold uppercase tracking-wider text-warning-700">Điểm trung bình</div>
-              <div class="text-5xl font-black font-num text-ink-900 flex items-center justify-center gap-1.5">
+              <div class="text-xs font-bold text-warning-700">Điểm trung bình</div>
+              <div class="text-5xl font-bold font-num text-ink-900 flex items-center justify-center gap-1.5">
                 <span>{{ technicianProfile.averageRating }}</span>
                 <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
               </div>

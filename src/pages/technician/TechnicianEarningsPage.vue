@@ -49,7 +49,7 @@ const payouts = ref([
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <DollarSign class="text-brand-600" :size="24" />
           <span>Thu Nhập & Quyết Toán</span>
         </h1>
@@ -76,7 +76,7 @@ const payouts = ref([
           <Wallet :size="16" class="text-warning-300" />
           <span>Số dư minh họa (Bấm để xem Ví)</span>
         </div>
-        <div class="text-3xl sm:text-4xl font-extrabold font-num tracking-tight">
+        <div class="text-3xl sm:text-4xl font-bold font-num tracking-tight">
           3.850.000 <span class="text-lg font-sans font-bold">VNĐ</span>
         </div>
         <p class="text-xs text-brand-100 flex items-center gap-1.5 pt-1">
@@ -86,7 +86,7 @@ const payouts = ref([
 
       <button
         type="button"
-        class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs font-extrabold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+        class="px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs font-bold shrink-0 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
         disabled
         aria-disabled="true"
         title="Chức năng rút tiền chưa được triển khai (DEMO)"
@@ -104,7 +104,7 @@ const payouts = ref([
         title="Bấm để xem lịch sử biến động số dư"
       >
         <span class="text-xs font-bold text-brand-800">Thực nhận tháng này</span>
-        <div class="text-lg sm:text-2xl font-extrabold text-brand-900 font-num">
+        <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
           12.450.000 <span class="text-xs font-sans font-bold text-brand-700">đ</span>
         </div>
         <p class="text-[11px] text-brand-600 font-medium">+15% so với tháng trước</p>
@@ -116,7 +116,7 @@ const payouts = ref([
         title="Bấm để mở danh sách đơn hoàn tất"
       >
         <span class="text-xs font-bold text-warning-800">Đơn hoàn tất</span>
-        <div class="text-lg sm:text-2xl font-extrabold text-warning-900 font-num">
+        <div class="text-lg sm:text-2xl font-bold text-warning-900 font-num">
           28 <span class="text-xs font-sans font-bold text-warning-700">đơn</span>
         </div>
         <p class="text-[11px] text-warning-600 font-medium">Tỷ lệ thành công 96%</p>
@@ -128,7 +128,7 @@ const payouts = ref([
         title="Bấm để xem chi tiết hồ sơ & đánh giá"
       >
         <span class="text-xs font-bold text-success-800">Đánh giá sao</span>
-        <div class="text-lg sm:text-2xl font-extrabold text-success-900 font-num">
+        <div class="text-lg sm:text-2xl font-bold text-success-900 font-num">
           4.95 <span class="text-xs font-sans font-bold text-success-700">★</span>
         </div>
         <p class="text-[11px] text-success-600 font-medium">Từ 148 khách hàng</p>
@@ -136,7 +136,7 @@ const payouts = ref([
 
       <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white border border-brand-200/80 shadow-xs space-y-1">
         <span class="text-xs font-bold text-brand-800">Phí nền tảng (DEMO)</span>
-        <div class="text-lg sm:text-2xl font-extrabold text-brand-900 font-num">
+        <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
           Chưa chốt
         </div>
         <p class="text-[11px] text-brand-600 font-medium">Chỉ minh họa giao diện, không phải quy tắc tính phí</p>
@@ -188,7 +188,7 @@ const payouts = ref([
         </template>
 
         <template #cell-net="{ row }">
-          <span class="font-num text-xs font-extrabold text-success-600">
+          <span class="font-num text-xs font-bold text-success-600">
             +<FhMoney :amount="row.net" />
           </span>
         </template>

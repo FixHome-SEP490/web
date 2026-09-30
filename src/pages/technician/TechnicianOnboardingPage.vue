@@ -1063,10 +1063,10 @@ const handleLogout = async () => {
         <router-link to="/" class="flex items-center gap-2.5">
           <img :src="'/logo.png'" alt="FixHome" class="w-8 h-8 object-contain rounded-lg" />
           <div class="flex flex-col">
-            <span class="text-base font-extrabold tracking-tight">
+            <span class="text-base font-bold tracking-tight">
               <span class="text-brand-600">Fix</span><span class="text-success-600">Home</span>
             </span>
-            <span class="text-[9px] font-bold uppercase tracking-wider text-ink-500">Đối tác thợ</span>
+            <span class="text-[9px] font-bold text-ink-500">Đối tác thợ</span>
           </div>
         </router-link>
 
@@ -1103,7 +1103,7 @@ const handleLogout = async () => {
           <CheckCircle2 :size="42" />
         </div>
         <div class="space-y-2">
-          <h2 class="text-2xl sm:text-3xl font-black text-ink-900">Hồ sơ đã được phê duyệt!</h2>
+          <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ đã được phê duyệt!</h2>
           <p class="text-ink-600 text-sm max-w-md mx-auto">
             Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome. Bạn có thể bắt đầu nhận việc ngay.
           </p>
@@ -1123,10 +1123,10 @@ const handleLogout = async () => {
           <Clock :size="42" />
         </div>
         <div class="space-y-2">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-100 text-warning-800 text-xs font-bold uppercase tracking-wider">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-100 text-warning-800 text-xs font-bold">
             <Clock :size="13" /> Đang chờ ban quản trị phê duyệt
           </div>
-          <h2 class="text-2xl sm:text-3xl font-black text-ink-900">Hồ sơ thợ đã được tiếp nhận!</h2>
+          <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ thợ đã được tiếp nhận!</h2>
           <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
             Hồ sơ xác thực căn cước công dân, video khuôn mặt, kỹ năng chuyên môn và địa chỉ của bạn đã được lưu an toàn.
             Ban kiểm duyệt FixHome sẽ xem xét và kích hoạt tài khoản trong vòng <strong>24 giờ làm việc</strong>.
@@ -1168,10 +1168,10 @@ const handleLogout = async () => {
           <AlertCircle :size="42" />
         </div>
         <div class="space-y-2">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-danger-100 text-danger-800 text-xs font-bold uppercase tracking-wider">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-danger-100 text-danger-800 text-xs font-bold">
             <AlertCircle :size="13" /> Hồ sơ cần bổ sung / chỉnh sửa
           </div>
-          <h2 class="text-2xl sm:text-3xl font-black text-ink-900">Hồ sơ chưa đạt yêu cầu</h2>
+          <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ chưa đạt yêu cầu</h2>
           <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
             {{ statusData?.rejectionReason || 'Hồ sơ xác thực danh tính hoặc thông tin thợ chưa đạt tiêu chuẩn. Vui lòng kiểm tra lại ảnh chụp CCCD, video khuôn mặt và thông tin liên quan.' }}
           </p>
@@ -1214,10 +1214,10 @@ const handleLogout = async () => {
 
         <!-- Wizard Title & Subtitle -->
         <div class="text-center space-y-2">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold uppercase tracking-wider">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold">
             <Sparkles :size="13" /> Đăng ký trở thành đối tác FixHome
           </div>
-          <h1 class="text-2xl sm:text-3xl font-black text-ink-900 tracking-tight">
+          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">
             Xác minh & Hoàn tất Hồ sơ Kỹ thuật viên
           </h1>
           <p class="text-sm text-ink-500 max-w-xl mx-auto">
@@ -1238,7 +1238,7 @@ const handleLogout = async () => {
                 class="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all font-bold text-xs sm:text-sm mb-1.5 shadow-2xs"
                 :class="[
                   currentStep === step.id
-                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-black scale-105'
+                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-bold scale-105'
                     : currentStep > step.id
                     ? 'bg-success-500 text-white'
                     : 'bg-ink-100 text-ink-400 group-hover:bg-ink-200'
@@ -1541,7 +1541,7 @@ const handleLogout = async () => {
           <!-- Services Grid by Category -->
           <div class="space-y-5 max-h-[380px] overflow-y-auto pr-2 border border-ink-100 rounded-2xl p-4 bg-ink-50/50">
             <div v-for="group in groupedServices" :key="group.category.id" class="space-y-2">
-              <h4 class="text-xs font-bold uppercase tracking-wider text-ink-500 flex items-center gap-1.5">
+              <h4 class="text-xs font-bold text-ink-500 flex items-center gap-1.5">
                 <span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
                 {{ group.category.name }}
               </h4>
@@ -1808,7 +1808,7 @@ const handleLogout = async () => {
                 </p>
               </div>
               <div class="text-right">
-                <span class="inline-block font-extrabold text-brand-700 font-num text-base sm:text-lg bg-brand-50 px-3 py-1 rounded-xl border border-brand-200">
+                <span class="inline-block font-bold text-brand-700 font-num text-base sm:text-lg bg-brand-50 px-3 py-1 rounded-xl border border-brand-200">
                   {{ serviceRadiusKm }} km
                 </span>
               </div>

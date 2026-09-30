@@ -13,9 +13,10 @@
 // nothing to do with today's question.
 
 import { computed, nextTick, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { Bot, X, Image as ImageIcon, Send, RotateCcw, CalendarPlus, AlertTriangle } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
+import { useChatStore } from '../../stores/chat.store';
 import {
   aiApi,
   looksLikeAQuestion,
@@ -50,7 +51,19 @@ interface ChatMessage {
 
 const router = useRouter();
 
-const isOpen = ref(false);
+const chatStore = useChatStore();
+const route = useRoute();
+
+// Sits above the chat launcher; takes its place while open (the chat launcher
+// hides then) or where there is no chat launcher, on the messages page.
+const stackedAboveChat = computed(
+  () => !isOpen.value && !/^\/(app|tech)\/messages/.test(route.path),
+);
+// Shared with the chat panel so the two never open together.
+const isOpen = computed({
+  get: () => chatStore.isAiPanelOpen,
+  set: (open: boolean) => chatStore.toggleAiPanel(open),
+});
 const messages = ref<ChatMessage[]>([{ id: 'greeting', sender: 'bot', text: GREETING }]);
 const input = ref('');
 const pending = ref<PickedImage[]>([]);
@@ -244,7 +257,10 @@ function priceLabel(reply: AiReply): string | null {
 </script>
 
 <template>
-  <div class="fixed bottom-5 right-24 z-40 flex flex-col items-end">
+  <div
+    class="fixed right-4 sm:right-5 z-40 flex flex-col items-end"
+    :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
+  >
     <transition
       enter-active-class="transition duration-200 ease-out"
       enter-from-class="opacity-0 translate-y-2"
@@ -253,7 +269,7 @@ function priceLabel(reply: AiReply): string | null {
     >
       <div
         v-if="isOpen"
-        class="mb-3 w-[22rem] sm:w-[26rem] h-[32rem] rounded-2xl bg-white shadow-2xl border border-ink-100 flex flex-col overflow-hidden"
+        class="mb-3 w-[calc(100vw_-_2rem)] sm:w-[26rem] h-[32rem] max-h-[calc(100dvh_-_var(--fh-dock,1.25rem)_-_6rem)] rounded-2xl bg-white shadow-(--shadow-e3) border border-ink-200 flex flex-col overflow-hidden"
       >
         <!-- Header -->
         <div class="flex items-center gap-2 px-4 py-3 border-b border-ink-100">
@@ -332,7 +348,7 @@ function priceLabel(reply: AiReply): string | null {
                   >
                     <div class="flex items-center gap-1.5 mb-1">
                       <AlertTriangle :size="14" class="text-danger-700" />
-                      <span class="text-xs font-extrabold text-danger-700">
+                      <span class="text-xs font-bold text-danger-700">
                         Anh/chị làm ngay giúp em
                       </span>
                     </div>
@@ -352,7 +368,7 @@ function priceLabel(reply: AiReply): string | null {
                   </div>
 
                   <div v-if="message.reply.suspectedFaults?.length">
-                    <p class="text-[10px] font-bold uppercase tracking-wide text-ink-500 mb-1">
+                    <p class="text-[10px] font-bold tracking-wide text-ink-500 mb-1">
                       Có thể là
                     </p>
                     <p
@@ -367,7 +383,7 @@ function priceLabel(reply: AiReply): string | null {
                   <div
                     v-if="message.reply.urgency !== 'HIGH' && message.reply.suggestedActionsVi?.length"
                   >
-                    <p class="text-[10px] font-bold uppercase tracking-wide text-ink-500 mb-1">
+                    <p class="text-[10px] font-bold tracking-wide text-ink-500 mb-1">
                       Anh/chị có thể làm trước
                     </p>
                     <p
@@ -380,7 +396,7 @@ function priceLabel(reply: AiReply): string | null {
                   </div>
 
                   <div v-if="message.reply.clarification?.questionsVi?.length">
-                    <p class="text-[10px] font-bold uppercase tracking-wide text-ink-500 mb-1">
+                    <p class="text-[10px] font-bold tracking-wide text-ink-500 mb-1">
                       Em hỏi thêm một chút ạ
                     </p>
                     <p
@@ -397,7 +413,7 @@ function priceLabel(reply: AiReply): string | null {
                     class="flex items-center justify-between pt-2 border-t border-ink-100"
                   >
                     <span class="text-xs text-ink-500">Chi phí tham khảo</span>
-                    <span class="text-sm font-extrabold text-ink-900 font-num">
+                    <span class="text-sm font-bold text-ink-900 font-num">
                       {{ priceLabel(message.reply) }}
                     </span>
                   </div>
@@ -425,7 +441,7 @@ function priceLabel(reply: AiReply): string | null {
           class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
         >
           <div class="flex-1 min-w-0">
-            <p class="text-[10px] font-bold uppercase tracking-wide text-brand-700">
+            <p class="text-[10px] font-bold tracking-wide text-brand-700">
               Dịch vụ đang chọn
             </p>
             <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>
@@ -496,11 +512,13 @@ function priceLabel(reply: AiReply): string | null {
       </div>
     </transition>
 
-    <!-- Its own button, violet and a robot, so it is never mistaken for the
-         thread that reaches a real technician. -->
+    <!-- Its own look, white with a robot, so it is never mistaken for the
+         solid chat button that reaches a real technician. -->
     <button
+      v-if="!chatStore.isWidgetOpen"
       type="button"
-      class="w-13 h-13 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-lg hover:bg-brand-700 hover:shadow-xl hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-4 focus:ring-brand-200"
+      class="w-13 h-13 rounded-full bg-white border border-ink-200 text-brand-600 flex items-center justify-center shadow-(--shadow-e2) hover:bg-brand-50 active:scale-95 transition-[background-color,transform] duration-150"
+      :aria-label="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
       :title="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
       @click="toggle"
     >

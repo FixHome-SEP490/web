@@ -716,7 +716,7 @@ const getStatusBadgeClass = (status: string) => {
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <!-- Price block -->
                 <div class="bg-white p-2.5 rounded-lg border border-brand-200/60 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-ink-500 flex items-center gap-1">
+                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
                     <Tag :size="12" class="text-brand-600" /> Giá niêm yết FixHome
                   </span>
                   <div class="text-base font-bold text-brand-700 font-num">
@@ -726,11 +726,11 @@ const getStatusBadgeClass = (status: string) => {
 
                 <!-- Warranty duration block -->
                 <div class="bg-white p-2.5 rounded-lg border border-success-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-success-800 flex items-center gap-1">
+                  <span class="text-[10px] font-bold text-success-800 flex items-center gap-1">
                     <ShieldCheck :size="12" class="text-success-600" /> Thời hạn bảo hành
                   </span>
                   <div class="text-xs font-bold text-success-700 flex items-center gap-1">
-                    <span class="text-sm font-extrabold">
+                    <span class="text-sm font-bold">
                       {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}
                     </span>
                   </div>
@@ -738,7 +738,7 @@ const getStatusBadgeClass = (status: string) => {
 
                 <!-- Warranty policy block -->
                 <div class="bg-white p-2.5 rounded-lg border border-ink-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-ink-500 flex items-center gap-1">
+                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
                     <Clock :size="12" class="text-ink-500" /> Chính sách bảo hành
                   </span>
                   <p class="text-[11px] text-ink-700 font-medium line-clamp-2">
@@ -893,7 +893,7 @@ const getStatusBadgeClass = (status: string) => {
                     <td colspan="4" class="p-2.5 font-bold text-brand-900 text-right">
                       Tổng giá trị linh kiện dự kiến mang theo:
                     </td>
-                    <td class="p-2.5 text-right font-num font-extrabold text-brand-700 text-sm">
+                    <td class="p-2.5 text-right font-num font-bold text-brand-700 text-sm">
                       <FhMoney :amount="selectedTotalPrice" />
                     </td>
                     <td colspan="2" class="p-2.5 text-[11px] text-ink-500 italic">
@@ -948,7 +948,7 @@ const getStatusBadgeClass = (status: string) => {
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-2">
             <div class="flex items-center gap-2">
               <span
-                class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border"
+                class="px-2 py-0.5 rounded text-[10px] font-bold border"
                 :class="getStatusBadgeClass(pr.status)"
               >
                 {{ formatStatusText(pr.status) }}

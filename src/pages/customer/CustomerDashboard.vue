@@ -287,7 +287,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <Sparkles :size="14" class="text-warning-300 fill-warning-300" />
         </div>
 
-        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">
           Cần sửa gì hôm nay? <br class="hidden sm:inline" />
           <span class="text-brand-100 font-semibold">Thợ giỏi FixHome sẵn sàng tới ngay</span>
         </h1>
@@ -371,7 +371,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
               AI 30s
             </span>
           </div>
-          <h3 class="text-xl font-extrabold text-[#0369A1] tracking-tight">Đặt thợ & AI Chẩn đoán</h3>
+          <h3 class="text-xl font-bold text-[#0369A1] tracking-tight">Đặt thợ & AI Chẩn đoán</h3>
           <p class="text-xs text-[#0284C7] font-medium mt-1 leading-relaxed">
             Mô tả hoặc chụp ảnh sự cố → AI bắt bệnh & báo giá → Thợ có mặt chỉ sau 15 phút
           </p>
@@ -395,7 +395,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#D97706] text-white text-[11px] font-bold mb-3 shadow-xs">
             Giá cố định minh bạch
           </span>
-          <h3 class="text-xl font-extrabold text-[#B45309] tracking-tight">Bảng giá tham khảo</h3>
+          <h3 class="text-xl font-bold text-[#B45309] tracking-tight">Bảng giá tham khảo</h3>
           <p class="text-xs text-[#D97706] font-medium mt-1 leading-relaxed">
             Xem bảng giá dịch vụ cố định, vật tư chính hãng & bảo hành dài hạn 12 tháng
           </p>
@@ -416,7 +416,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#059669] text-white text-[11px] font-bold mb-3 shadow-xs">
             Tra cứu nhanh
           </span>
-          <h3 class="text-xl font-extrabold text-[#047857] tracking-tight">Bảo hành điện tử</h3>
+          <h3 class="text-xl font-bold text-[#047857] tracking-tight">Bảo hành điện tử</h3>
           <p class="text-xs text-[#059669] font-medium mt-1 leading-relaxed">
             Xem phiếu bảo hành, yêu cầu bảo hành lại & theo dõi tiến trình xử lý
           </p>
@@ -495,7 +495,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <BookOpen :size="18" />
         </div>
         <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.total }}</div>
+          <div class="text-lg font-bold text-ink-900 font-num leading-none">{{ orderStats.total }}</div>
           <div class="text-[11px] text-ink-500 font-medium mt-0.5">Tổng đơn</div>
         </div>
       </div>
@@ -504,7 +504,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <Timer :size="18" />
         </div>
         <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.inProgress }}</div>
+          <div class="text-lg font-bold text-ink-900 font-num leading-none">{{ orderStats.inProgress }}</div>
           <div class="text-[11px] text-ink-500 font-medium mt-0.5">Đang xử lý</div>
         </div>
       </div>
@@ -513,7 +513,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <BadgeCheck :size="18" />
         </div>
         <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.completed }}</div>
+          <div class="text-lg font-bold text-ink-900 font-num leading-none">{{ orderStats.completed }}</div>
           <div class="text-[11px] text-ink-500 font-medium mt-0.5">Hoàn thành</div>
         </div>
       </div>
@@ -555,7 +555,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             <!-- Hot Badge -->
             <span
               v-if="srv.badge"
-              class="absolute -top-1.5 -right-2 px-1.5 py-0.2 rounded-full bg-danger-600 text-white text-[9px] font-bold uppercase tracking-wider shadow-xs"
+              class="absolute -top-1.5 -right-2 px-1.5 py-0.2 rounded-full bg-danger-600 text-white text-[9px] font-bold shadow-xs"
             >
               {{ srv.badge }}
             </span>
@@ -566,7 +566,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           </span>
           <span
             v-if="srv.price"
-            class="mt-1.5 text-[10px] font-extrabold text-brand-700 bg-brand-50 border border-brand-200/80 px-2 py-0.5 rounded-full font-num"
+            class="mt-1.5 text-[10px] font-bold text-brand-700 bg-brand-50 border border-brand-200/80 px-2 py-0.5 rounded-full font-num"
           >
             Từ {{ srv.price.toLocaleString('vi-VN') }}đ
           </span>
@@ -586,11 +586,11 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       @click="router.push('/app/bookings/new')"
     >
       <div class="space-y-2 text-center sm:text-left">
-        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-500/30 text-brand-200 border border-brand-400/40 text-[10px] font-bold uppercase tracking-wider">
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-500/30 text-brand-200 border border-brand-400/40 text-[10px] font-bold">
           <Flame :size="12" class="text-warning-400" />
           ĐẶT THỢ NGAY
         </span>
-        <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight">
+        <h3 class="text-xl sm:text-2xl font-bold tracking-tight">
           Giảm 30% cho đơn sửa chữa đầu tiên
         </h3>
         <p class="text-xs sm:text-sm text-ink-300">

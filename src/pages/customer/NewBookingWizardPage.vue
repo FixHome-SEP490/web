@@ -685,7 +685,7 @@ const createAndFindTech = async () => {
         <!-- Title & Subtitle + Trust banner -->
         <div class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+            <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
               Nhà mình đang gặp vấn đề gì?
             </h2>
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
@@ -828,13 +828,13 @@ const createAndFindTech = async () => {
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span
                       v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-success-50 text-success-700 border border-success-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200"
                     >
                       ⚡ Giá niêm yết
                     </span>
                     <span
                       v-else
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ink-100 text-ink-700 border border-ink-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-200"
                     >
                       🔍 Khảo sát tận nơi
                     </span>
@@ -923,10 +923,10 @@ const createAndFindTech = async () => {
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-600 text-white">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
                     Gói trọn gói chuẩn
                   </span>
-                  <span class="font-extrabold text-xs sm:text-sm text-brand-950">
+                  <span class="font-bold text-xs sm:text-sm text-brand-950">
                     {{ selectedService?.name }}
                   </span>
                 </div>
@@ -937,7 +937,7 @@ const createAndFindTech = async () => {
 
               <div class="text-right">
                 <div class="text-[11px] text-ink-500">Đơn giá niêm yết</div>
-                <div class="text-sm sm:text-base font-extrabold text-brand-700 font-num">
+                <div class="text-sm sm:text-base font-bold text-brand-700 font-num">
                   <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" />
                   <span class="text-xs text-ink-500 font-normal"> / {{ selectedService?.unit || 'thiết bị' }}</span>
                 </div>
@@ -963,7 +963,7 @@ const createAndFindTech = async () => {
                   >
                     <Minus :size="14" />
                   </button>
-                  <span class="w-10 text-center font-extrabold font-num text-sm text-ink-900">{{ quantity }}</span>
+                  <span class="w-10 text-center font-bold font-num text-sm text-ink-900">{{ quantity }}</span>
                   <button
                     type="button"
                     class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all hover:bg-ink-100 active:scale-95 text-ink-800"
@@ -975,7 +975,7 @@ const createAndFindTech = async () => {
 
                 <div class="text-right pl-2">
                   <div class="text-[10px] text-ink-500 font-medium">Tổng tiền trọn gói:</div>
-                  <div class="font-extrabold text-base text-brand-700 font-num">
+                  <div class="font-bold text-base text-brand-700 font-num">
                     <FhMoney :amount="totalFixedAmount" />
                   </div>
                 </div>
@@ -1139,7 +1139,7 @@ const createAndFindTech = async () => {
                     :class="urgency === lvl.key ? 'text-brand-600' : 'text-ink-400'"
                   />
                   <span
-                    class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    class="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                     :class="urgency === lvl.key ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'"
                   >
                     {{ lvl.badge }}
@@ -1164,7 +1164,7 @@ const createAndFindTech = async () => {
             <!-- Selected summary on desktop -->
             <div v-if="selectedService" class="text-right hidden sm:block">
               <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
-              <div v-if="isFixedPrice" class="text-xs font-extrabold text-brand-700 font-num">
+              <div v-if="isFixedPrice" class="text-xs font-bold text-brand-700 font-num">
                 Tổng: <FhMoney :amount="totalFixedAmount" />
               </div>
               <div v-else class="text-[11px] font-semibold text-brand-600">Khảo sát & Báo giá tận nơi</div>
@@ -1188,7 +1188,7 @@ const createAndFindTech = async () => {
     <div v-if="step === 2" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Thông tin lịch hẹn & Địa chỉ
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1272,7 +1272,7 @@ const createAndFindTech = async () => {
             <Bot :size="14" />
             <span>AI Chẩn đoán FixHome</span>
           </div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Gợi ý phán đoán sự cố từ AI
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1311,7 +1311,7 @@ const createAndFindTech = async () => {
               v-if="aiUrgentActions.length"
               class="p-5 rounded-2xl bg-danger-50 border border-danger-200 space-y-2"
             >
-              <div class="flex items-center gap-1.5 font-extrabold text-danger-700 text-xs">
+              <div class="flex items-center gap-1.5 font-bold text-danger-700 text-xs">
                 <AlertTriangle :size="15" /> Anh/chị làm ngay giúp em
               </div>
               <p
@@ -1376,7 +1376,7 @@ const createAndFindTech = async () => {
                     <template v-else>Ước tính công thợ, chưa gồm linh kiện</template>
                   </div>
                 </div>
-                <div class="text-lg font-extrabold font-num text-brand-700 mt-2">
+                <div class="text-lg font-bold font-num text-brand-700 mt-2">
                   {{ aiPriceLabel }}
                 </div>
               </div>
@@ -1420,7 +1420,7 @@ const createAndFindTech = async () => {
     <div v-if="step === 4" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Xác nhận yêu cầu sửa chữa
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1449,7 +1449,7 @@ const createAndFindTech = async () => {
               </div>
               <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
                 <span class="font-bold text-brand-950">Tổng thanh toán niêm yết:</span>
-                <span class="font-extrabold text-brand-700 text-base font-num">
+                <span class="font-bold text-brand-700 text-base font-num">
                   <FhMoney :amount="totalFixedAmount" />
                 </span>
               </div>
@@ -1468,7 +1468,7 @@ const createAndFindTech = async () => {
 
             <div class="flex items-center justify-between pt-2">
               <span class="text-ink-500">Mức độ khẩn cấp:</span>
-              <span class="font-bold text-brand-700 uppercase">{{ urgency }}</span>
+              <span class="font-bold text-brand-700">{{ urgency }}</span>
             </div>
           </div>
 

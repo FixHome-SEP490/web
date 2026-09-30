@@ -465,7 +465,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         <!-- Card Top: Code, Date & Mobile-like Pastel Status Badge -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-extrabold text-ink-900 bg-ink-100 px-2 py-0.5 rounded-md">
+            <span class="font-mono text-xs font-bold text-ink-900 bg-ink-100 px-2 py-0.5 rounded-md">
               {{ order.code }}
             </span>
             <span class="text-ink-400 text-xs">•</span>
@@ -541,8 +541,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
           <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0">
             <div class="text-right">
-              <span class="text-[10px] text-ink-400 uppercase tracking-wider block font-bold">Tổng chi phí:</span>
-              <span class="text-base font-extrabold font-num text-brand-700">
+              <span class="text-[10px] text-ink-400 block font-bold">Tổng chi phí:</span>
+              <span class="text-base font-bold font-num text-brand-700">
                 <FhMoney :amount="order.grandTotal" />
               </span>
             </div>

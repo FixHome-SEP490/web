@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // src/components/chat/ChatFloatingWidget.vue
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useChatStore } from '../../stores/chat.store';
 import { useAuthStore } from '../../stores/auth.store';
 import ChatThread from './ChatThread.vue';
@@ -14,6 +14,11 @@ import {
 import { isSameVnDay, vnDateString, vnTimeString } from '../../utils/vn-time';
 
 const router = useRouter();
+const route = useRoute();
+
+// The messages page already is the full chat; a second launcher there only
+// duplicates it.
+const onMessagesPage = computed(() => /^\/(app|tech)\/messages/.test(route.path));
 const chatStore = useChatStore();
 const authStore = useAuthStore();
 
@@ -57,7 +62,10 @@ function handleExpandToPage() {
 </script>
 
 <template>
-  <div v-if="authStore.isAuthenticated" class="fixed bottom-5 right-5 z-40 flex flex-col items-end">
+  <div
+    v-if="authStore.isAuthenticated && !onMessagesPage"
+    class="fixed bottom-[var(--fh-dock,1.25rem)] right-4 sm:right-5 z-40 flex flex-col items-end"
+  >
     <!-- Chat Window Popup -->
     <transition
       enter-active-class="transition duration-200 ease-out"
@@ -69,7 +77,7 @@ function handleExpandToPage() {
     >
       <div
         v-if="chatStore.isWidgetOpen"
-        class="mb-3 w-[370px] sm:w-[400px] h-[520px] max-h-[calc(100vh-100px)] bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) flex flex-col overflow-hidden"
+        class="mb-3 w-[calc(100vw_-_2rem)] sm:w-[400px] h-[520px] max-h-[calc(100dvh_-_var(--fh-dock,1.25rem)_-_6rem)] bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) flex flex-col overflow-hidden"
       >
         <!-- Mode 1: Active Thread View -->
         <ChatThread
@@ -220,7 +228,9 @@ function handleExpandToPage() {
     <!-- Floating Action Button (FAB) -->
     <button
       type="button"
-      class="relative w-13 h-13 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-lg hover:bg-brand-700 hover:shadow-xl hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-4 focus:ring-brand-200"
+      v-if="!chatStore.isAiPanelOpen"
+      class="relative w-13 h-13 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-(--shadow-e2) hover:bg-brand-700 active:scale-95 transition-[background-color,transform] duration-150"
+      :aria-label="chatStore.isWidgetOpen ? 'Đóng tin nhắn' : 'Mở tin nhắn'"
       @click="chatStore.toggleWidget()"
       :title="chatStore.isWidgetOpen ? 'Đóng chat' : 'Mở tin nhắn hỗ trợ'"
     >
@@ -230,7 +240,7 @@ function handleExpandToPage() {
       <!-- Total Unread Badge -->
       <span
         v-if="!chatStore.isWidgetOpen && chatStore.totalUnreadCount > 0"
-        class="absolute -top-1 -right-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-danger-600 text-white font-num leading-none shadow-sm border-2 border-white animate-pulse"
+        class="absolute -top-1 -right-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-danger-600 text-white font-num leading-none border-2 border-white"
       >
         {{ chatStore.totalUnreadCount > 99 ? '99+' : chatStore.totalUnreadCount }}
       </span>

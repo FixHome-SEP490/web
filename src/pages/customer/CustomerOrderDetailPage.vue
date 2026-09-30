@@ -674,7 +674,7 @@ const confirmWork = async () => {
             <!-- Technician Box (Style Mobile) -->
             <div v-if="order.technician" class="p-4 rounded-2xl bg-brand-50/60 border border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
               <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-full bg-brand-700 text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs border-2 border-white">
+                <div class="w-12 h-12 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs border-2 border-white">
                   {{ order.technician.fullName.charAt(0) }}
                 </div>
                 <div>
@@ -1034,19 +1034,19 @@ const confirmWork = async () => {
                 <div class="absolute top-2.5 left-2.5">
                   <span
                     v-if="ev.type?.toLowerCase() === 'before'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-brand-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-brand-600 text-white shadow-xs"
                   >
                     Trước khi làm
                   </span>
                   <span
                     v-else-if="ev.type?.toLowerCase() === 'after'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-success-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-success-600 text-white shadow-xs"
                   >
                     Sau khi sửa
                   </span>
                   <span
                     v-else
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-warning-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-warning-600 text-white shadow-xs"
                   >
                     Phát sinh
                   </span>
@@ -1063,7 +1063,7 @@ const confirmWork = async () => {
               <div class="p-3 flex-1 flex flex-col justify-between space-y-2 bg-white">
                 <!-- Technician Note -->
                 <div>
-                  <div class="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-0.5 flex items-center gap-1">
+                  <div class="text-[10px] font-bold text-ink-400 mb-0.5 flex items-center gap-1">
                     <MessageSquare :size="11" />
                     <span>Ghi chú của thợ:</span>
                   </div>
@@ -1245,9 +1245,9 @@ const confirmWork = async () => {
           <!-- 5. Grand Summary Box -->
           <div class="p-4 rounded-xl bg-gradient-to-r from-ink-900 to-ink-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
             <div class="space-y-1">
-              <div class="text-[11px] text-ink-300 uppercase tracking-wider font-semibold">TỔNG KẾT THANH TOÁN ĐƠN SỬA CHỮA:</div>
+              <div class="text-[11px] text-ink-300 font-semibold">TỔNG KẾT THANH TOÁN ĐƠN SỬA CHỮA:</div>
               <div class="flex items-baseline gap-2">
-                <span class="text-2xl font-black font-num text-white">
+                <span class="text-2xl font-bold font-num text-white">
                   <FhMoney :amount="order.grandTotal" />
                 </span>
                 <span class="text-xs text-ink-300">
@@ -1395,13 +1395,13 @@ const confirmWork = async () => {
                 <div class="flex items-center gap-1.5">
                   <span
                     v-if="item.partSource === 'external'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-warning-100 text-warning-900 border border-warning-300 uppercase"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-warning-100 text-warning-900 border border-warning-300"
                   >
                     LK Ngoài
                   </span>
                   <span
                     v-else-if="item.partSource === 'fixhome'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800 uppercase"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800"
                   >
                     LK FixHome
                   </span>
@@ -1480,7 +1480,7 @@ const confirmWork = async () => {
         </template>
         <template #action>
           <span
-            class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
+            class="px-2.5 py-0.5 rounded-full text-[11px] font-bold"
             :class="
               activeWarrantyClaim
                 ? 'bg-warning-100 text-warning-900 border border-warning-300'
@@ -1700,19 +1700,19 @@ const confirmWork = async () => {
           <div class="flex items-center gap-2.5">
             <span
               v-if="lightboxEvidence.type?.toLowerCase() === 'before'"
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-brand-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white shadow-xs"
             >
               Ảnh trước khi làm (BEFORE)
             </span>
             <span
               v-else-if="lightboxEvidence.type?.toLowerCase() === 'after'"
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-success-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-success-600 text-white shadow-xs"
             >
               Ảnh sau khi hoàn thành (AFTER)
             </span>
             <span
               v-else
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-warning-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-warning-600 text-white shadow-xs"
             >
               Ảnh chi tiết phát sinh
             </span>

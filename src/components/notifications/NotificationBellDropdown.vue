@@ -201,7 +201,7 @@ const handleViewAll = () => {
       <!-- Unread Badge with Ping Animation -->
       <span
         v-if="notifStore.unreadCount > 0"
-        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-extrabold text-white bg-danger-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
+        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-bold text-white bg-danger-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
       >
         <span
           class="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-400 opacity-75"
@@ -329,7 +329,7 @@ const handleViewAll = () => {
                     </span>
                     <h4
                       class="text-xs font-bold text-ink-900 truncate"
-                      :class="{ 'text-brand-900 font-extrabold': !item.isRead }"
+                      :class="{ 'text-brand-900 font-bold': !item.isRead }"
                     >
                       {{ item.title }}
                     </h4>

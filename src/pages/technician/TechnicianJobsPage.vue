@@ -141,7 +141,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Wrench class="text-brand-600" :size="24" />
           <span>Đơn Nhận Việc & Thực Thi</span>
         </h1>
@@ -162,7 +162,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'all'
-            ? 'bg-white text-brand-700 shadow-xs font-extrabold'
+            ? 'bg-white text-brand-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'all'"
@@ -178,7 +178,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'pending'
-            ? 'bg-white text-warning-700 shadow-xs font-extrabold'
+            ? 'bg-white text-warning-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'pending'"
@@ -194,7 +194,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'in_progress'
-            ? 'bg-white text-brand-700 shadow-xs font-extrabold'
+            ? 'bg-white text-brand-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'in_progress'"
@@ -210,7 +210,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'completed'
-            ? 'bg-white text-ink-900 shadow-xs font-extrabold'
+            ? 'bg-white text-ink-900 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'completed'"
@@ -236,7 +236,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
       <div class="w-16 h-16 rounded-2xl bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
         <Briefcase :size="32" />
       </div>
-      <h3 class="text-base font-extrabold text-ink-900">Chưa có công việc nào</h3>
+      <h3 class="text-base font-bold text-ink-900">Chưa có công việc nào</h3>
       <p class="text-xs text-ink-500 max-w-sm mx-auto">
         Các đơn sửa chữa mới từ khách hàng hoặc lời mời phù hợp sẽ hiển thị ở đây khi bạn sẵn sàng nhận việc.
       </p>
@@ -272,7 +272,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         <!-- Service Info & Customer Info Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <h3 class="font-extrabold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
+            <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
               {{ job.serviceName }}
             </h3>
             <p class="text-xs text-ink-600 flex items-start gap-1.5 leading-relaxed">
@@ -305,7 +305,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
           <div class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
             <div class="text-right mr-1">
               <span class="text-[11px] text-ink-400 block font-medium">Dự kiến thu:</span>
-              <span class="text-sm sm:text-base font-extrabold font-num text-brand-700">
+              <span class="text-sm sm:text-base font-bold font-num text-brand-700">
                 <FhMoney :amount="job.grandTotal" />
               </span>
             </div>

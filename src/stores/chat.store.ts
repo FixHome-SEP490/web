@@ -1,6 +1,6 @@
 // src/stores/chat.store.ts
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   messagingApi,
   type ConversationItem,
@@ -22,6 +22,18 @@ export const useChatStore = defineStore('chat', () => {
   const loadingMessages = ref(false);
   const loadingMore = ref(false);
   const isWidgetOpen = ref(false);
+  /**
+   * The AI assistant panel. It lives here, next to the chat panel, because only
+   * one floating panel may be open at a time: opening either closes the other,
+   * whatever path opened it.
+   */
+  const isAiPanelOpen = ref(false);
+  watch(isWidgetOpen, (open) => {
+    if (open) isAiPanelOpen.value = false;
+  });
+  watch(isAiPanelOpen, (open) => {
+    if (open) isWidgetOpen.value = false;
+  });
   const isSocketConnected = ref(false);
   const isInitialized = ref(false);
 
@@ -362,6 +374,10 @@ export const useChatStore = defineStore('chat', () => {
     isWidgetOpen.value = false;
   }
 
+  function toggleAiPanel(open?: boolean) {
+    isAiPanelOpen.value = open !== undefined ? open : !isAiPanelOpen.value;
+  }
+
   return {
     conversations,
     activeConversationId,
@@ -370,6 +386,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingMessages,
     loadingMore,
     isWidgetOpen,
+    isAiPanelOpen,
     isSocketConnected,
     totalUnreadCount,
     activeConversation,
@@ -388,5 +405,6 @@ export const useChatStore = defineStore('chat', () => {
     openConversationForBooking,
     toggleWidget,
     closeWidget,
+    toggleAiPanel,
   };
 });

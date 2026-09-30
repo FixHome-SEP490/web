@@ -376,7 +376,7 @@ const handleWithdraw = async () => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Wallet class="text-brand-600" :size="24" />
           <span>Ví Kỹ thuật viên</span>
         </h1>
@@ -444,7 +444,7 @@ const handleWithdraw = async () => {
         <div class="flex items-start gap-3">
           <AlertCircle :size="22" class="text-warning-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-warning-900 group-hover:text-warning-900 transition-colors">
+            <div class="font-bold text-warning-900 group-hover:text-warning-900 transition-colors">
               Số dư ví dưới mức tối thiểu quy định ({{ formatCurrencyVND(wallet.minimumBalance) }})
             </div>
             <p class="text-warning-800">
@@ -468,7 +468,7 @@ const handleWithdraw = async () => {
         <div class="flex items-start gap-3">
           <AlertCircle :size="22" class="text-danger-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-danger-900 group-hover:text-danger-900 transition-colors">
+            <div class="font-bold text-danger-900 group-hover:text-danger-900 transition-colors">
               Ví của bạn đang có số dư âm do khấu trừ phí đơn tiền mặt
             </div>
             <p class="text-danger-800">
@@ -486,7 +486,7 @@ const handleWithdraw = async () => {
       <div class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-700 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div class="space-y-2">
           <div class="flex items-center gap-2.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
+            <span class="text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
               Ví FixHome Kỹ thuật viên
             </span>
             <span
@@ -504,7 +504,7 @@ const handleWithdraw = async () => {
           </div>
 
           <div class="text-xs text-brand-100 font-medium">Tổng số dư thực tế</div>
-          <div class="text-3xl sm:text-5xl font-extrabold font-num tracking-tight">
+          <div class="text-3xl sm:text-5xl font-bold font-num tracking-tight">
             {{ formatCurrencyVND(wallet.balance) }}
           </div>
 
@@ -519,7 +519,7 @@ const handleWithdraw = async () => {
         <div class="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs sm:text-sm font-extrabold transition-all shadow-sm flex items-center justify-center gap-2"
+            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2"
             @click="showTopUpModal = true"
           >
             <ArrowDownLeft :size="16" />
@@ -528,7 +528,7 @@ const handleWithdraw = async () => {
 
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-extrabold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="!!withdrawBlockedReason"
             :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
             @click="openWithdraw"
@@ -551,7 +551,7 @@ const handleWithdraw = async () => {
             <span>Số dư có thể rút</span>
             <CreditCard :size="16" class="text-brand-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
             {{ formatCurrencyVND(wallet.withdrawableBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -569,7 +569,7 @@ const handleWithdraw = async () => {
             <span>Mức ký quỹ duy trì</span>
             <Info :size="16" class="text-warning-500" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-warning-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-warning-700 transition-colors">
             {{ formatCurrencyVND(wallet.minimumBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -587,7 +587,7 @@ const handleWithdraw = async () => {
             <span>Đang chuyển về ngân hàng</span>
             <Clock :size="16" class="text-brand-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
             {{ formatCurrencyVND(wallet.pendingWithdrawal + (wallet.processingWithdrawal ?? 0)) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -608,13 +608,13 @@ const handleWithdraw = async () => {
           </div>
           <div v-if="bankAccount" class="min-w-0">
             <div class="text-xs font-bold text-ink-500">Tài khoản nhận tiền rút</div>
-            <div class="text-sm font-extrabold text-ink-900 truncate">
+            <div class="text-sm font-bold text-ink-900 truncate">
               {{ bankAccount.bankName }} · <span class="font-num">{{ maskedAccountNumber }}</span>
             </div>
             <div class="text-[11px] text-ink-500 truncate">{{ bankAccount.accountName }}</div>
           </div>
           <div v-else class="min-w-0">
-            <div class="text-sm font-extrabold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
+            <div class="text-sm font-bold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
             <p class="text-[11px] text-ink-500">
               Khai một lần, tên chủ tài khoản phải trùng tên đã xác minh danh tính
             </p>
@@ -636,7 +636,7 @@ const handleWithdraw = async () => {
         <div class="flex items-center border-b border-ink-200 px-6 pt-4 gap-6">
           <button
             type="button"
-            class="pb-3 text-sm font-extrabold border-b-2 transition-all flex items-center gap-2"
+            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
             :class="[
               activeTab === 'transactions'
                 ? 'border-brand-600 text-brand-600'
@@ -652,7 +652,7 @@ const handleWithdraw = async () => {
 
           <button
             type="button"
-            class="pb-3 text-sm font-extrabold border-b-2 transition-all flex items-center gap-2"
+            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
             :class="[
               activeTab === 'withdrawals'
                 ? 'border-brand-600 text-brand-600'
@@ -691,7 +691,7 @@ const handleWithdraw = async () => {
                 class="px-2.5 py-1 rounded-lg text-xs transition-all"
                 :class="[
                   txFilterType === f.id
-                    ? 'bg-brand-50 text-brand-700 font-extrabold border border-brand-200'
+                    ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200'
                     : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
                 ]"
                 @click="txFilterType = f.id"
@@ -747,7 +747,7 @@ const handleWithdraw = async () => {
                 <!-- Info -->
                 <div class="min-w-0 space-y-0.5">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs sm:text-sm font-extrabold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
+                    <span class="text-xs sm:text-sm font-bold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
                       {{ formatWalletTxType(tx.type).label }}
                     </span>
                     <span
@@ -772,7 +772,7 @@ const handleWithdraw = async () => {
               <!-- Amount -->
               <div class="text-right shrink-0">
                 <div
-                  class="text-sm sm:text-base font-extrabold font-num"
+                  class="text-sm sm:text-base font-bold font-num"
                   :class="[
                     formatWalletTxType(tx.type).isCredit ? 'text-success-600' : 'text-danger-600'
                   ]"
@@ -830,7 +830,7 @@ const handleWithdraw = async () => {
           <!-- Table -->
           <div v-else class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-ink-50 text-ink-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-ink-100">
+              <thead class="bg-ink-50 text-ink-600 font-bold text-[10px] border-b border-ink-100">
                 <tr>
                   <th class="py-3 px-3">Thời gian</th>
                   <th class="py-3 px-3">Số tiền</th>
@@ -844,7 +844,7 @@ const handleWithdraw = async () => {
                   <td class="py-3.5 px-3 text-ink-600 whitespace-nowrap">
                     {{ formatDateTimeVN(w.requestedAt) }}
                   </td>
-                  <td class="py-3.5 px-3 font-extrabold font-num text-ink-900 whitespace-nowrap">
+                  <td class="py-3.5 px-3 font-bold font-num text-ink-900 whitespace-nowrap">
                     {{ formatCurrencyVND(w.amount) }}
                   </td>
                   <td class="py-3.5 px-3">
@@ -893,7 +893,7 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <ArrowDownLeft class="text-brand-600" :size="20" />
             <span>Nạp tiền vào ví KTV</span>
           </h3>
@@ -923,7 +923,7 @@ const handleWithdraw = async () => {
                 v-for="amt in topUpPresets"
                 :key="amt"
                 type="button"
-                class="py-2.5 px-3 rounded-xl border text-xs font-extrabold font-num transition-all"
+                class="py-2.5 px-3 rounded-xl border text-xs font-bold font-num transition-all"
                 :class="[
                   topUpAmount === amt
                     ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
@@ -945,7 +945,7 @@ const handleWithdraw = async () => {
                 min="10000"
                 step="10000"
                 placeholder="200000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-extrabold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
               <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
             </div>
@@ -955,11 +955,11 @@ const handleWithdraw = async () => {
           <div class="p-3.5 rounded-xl bg-ink-50 text-xs space-y-1 border border-ink-100">
             <div class="flex items-center justify-between text-ink-600">
               <span>Số dư hiện tại:</span>
-              <span class="font-extrabold font-num">{{ formatCurrencyVND(wallet?.balance) }}</span>
+              <span class="font-bold font-num">{{ formatCurrencyVND(wallet?.balance) }}</span>
             </div>
             <div class="flex items-center justify-between text-ink-900 font-bold">
               <span>Số dư dự kiến sau nạp:</span>
-              <span class="font-extrabold font-num text-success-600">
+              <span class="font-bold font-num text-success-600">
                 {{ formatCurrencyVND((wallet?.balance ?? 0) + (topUpAmount || 0)) }}
               </span>
             </div>
@@ -999,7 +999,7 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <ArrowUpRight class="text-brand-600" :size="20" />
             <span>Rút tiền về ngân hàng</span>
           </h3>
@@ -1020,7 +1020,7 @@ const handleWithdraw = async () => {
           <div class="p-3.5 rounded-xl bg-brand-50 text-xs space-y-1 border border-brand-100">
             <div class="flex items-center justify-between text-brand-900 font-bold">
               <span>Khả dụng để rút:</span>
-              <span class="font-extrabold font-num text-brand-700 text-sm">
+              <span class="font-bold font-num text-brand-700 text-sm">
                 {{ formatCurrencyVND(wallet?.withdrawableBalance) }}
               </span>
             </div>
@@ -1039,7 +1039,7 @@ const handleWithdraw = async () => {
                 :max="wallet?.withdrawableBalance ?? 0"
                 step="10000"
                 placeholder="100000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-extrabold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
               <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
             </div>
@@ -1058,7 +1058,7 @@ const handleWithdraw = async () => {
                 Đổi
               </button>
             </div>
-            <div class="font-extrabold text-ink-900">
+            <div class="font-bold text-ink-900">
               {{ bankAccount.bankName }} · <span class="font-num">{{ bankAccount.accountNumber }}</span>
             </div>
             <div class="text-ink-500">{{ bankAccount.accountName }}</div>
@@ -1093,7 +1093,7 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <Landmark class="text-brand-600" :size="20" />
             <span>Tài khoản nhận tiền rút</span>
           </h3>
@@ -1154,7 +1154,7 @@ const handleWithdraw = async () => {
               maxlength="128"
               autocomplete="off"
               placeholder="VD: NGUYEN VAN A"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             />
             <p class="text-[11px] text-ink-500">
               Phải trùng họ tên đã xác minh danh tính. Gõ có dấu hay không dấu đều được.

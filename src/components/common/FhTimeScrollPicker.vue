@@ -345,7 +345,7 @@ const endTimeDisplay = computed(() => {
       </div>
 
       <!-- Column Headers -->
-      <div class="grid grid-cols-2 text-center text-[11px] font-bold text-ink-500 uppercase tracking-wider pt-1">
+      <div class="grid grid-cols-2 text-center text-[11px] font-bold text-ink-500 pt-1">
         <span>Giờ</span>
         <span>Phút</span>
       </div>
@@ -361,7 +361,7 @@ const endTimeDisplay = computed(() => {
         <div
           class="absolute top-[70px] left-3 right-3 h-10 rounded-xl bg-brand-500/10 border-y-2 border-brand-500/50 pointer-events-none z-10 flex items-center justify-center"
         >
-          <span class="text-brand-700 font-extrabold text-base select-none leading-none opacity-40">:</span>
+          <span class="text-brand-700 font-bold text-base select-none leading-none opacity-40">:</span>
         </div>
 
         <!-- Bottom Gradient Fade Overlay -->
@@ -384,7 +384,7 @@ const endTimeDisplay = computed(() => {
               class="h-10 flex items-center justify-center snap-center cursor-pointer transition-all text-base select-none"
               :class="
                 selectedHour === h
-                  ? 'font-extrabold text-brand-800 text-lg scale-110'
+                  ? 'font-bold text-brand-800 text-lg scale-110'
                   : 'font-semibold text-ink-400 hover:text-ink-700 text-sm'
               "
               @click="selectHour(h)"
@@ -405,7 +405,7 @@ const endTimeDisplay = computed(() => {
               class="h-10 flex items-center justify-center snap-center cursor-pointer transition-all text-base select-none"
               :class="
                 selectedMinute === m
-                  ? 'font-extrabold text-brand-800 text-lg scale-110'
+                  ? 'font-bold text-brand-800 text-lg scale-110'
                   : 'font-semibold text-ink-400 hover:text-ink-700 text-sm'
               "
               @click="selectMinute(m)"

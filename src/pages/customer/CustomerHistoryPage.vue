@@ -70,13 +70,13 @@ const historyItems = ref([
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div class="space-y-1.5">
-            <div class="text-[11px] text-ink-400 uppercase font-semibold">Thiết bị & Dịch vụ:</div>
+            <div class="text-[11px] text-ink-400 font-semibold">Thiết bị & Dịch vụ:</div>
             <div class="font-bold text-sm text-ink-900">{{ item.device }}</div>
             <div class="text-ink-600">{{ item.service }}</div>
           </div>
 
           <div class="space-y-1.5 sm:text-right">
-            <div class="text-[11px] text-ink-400 uppercase font-semibold">Kỹ thuật viên thực hiện:</div>
+            <div class="text-[11px] text-ink-400 font-semibold">Kỹ thuật viên thực hiện:</div>
             <div class="font-semibold text-ink-900 flex items-center gap-1.5 sm:justify-end">
               <Wrench :size="13" class="text-brand-600" /> {{ item.technicianName }}
             </div>

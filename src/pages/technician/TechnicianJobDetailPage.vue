@@ -1214,7 +1214,7 @@ const refreshJobStatus = async () => {
 
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
           <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border font-mono" :class="heroAction.badgeClass">
+            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide border font-mono" :class="heroAction.badgeClass">
               {{ heroAction.badge }}
             </span>
             <span class="text-white/40 text-xs">•</span>
@@ -1227,7 +1227,7 @@ const refreshJobStatus = async () => {
         </div>
 
         <div class="space-y-1.5">
-          <h2 class="text-lg sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+          <h2 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <span>{{ heroAction.title }}</span>
           </h2>
           <p class="text-xs sm:text-sm text-brand-100/90 leading-relaxed max-w-2xl">
@@ -1302,7 +1302,7 @@ const refreshJobStatus = async () => {
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 pb-3">
             <div>
               <p class="text-[11px] font-mono text-ink-400">MÃ ĐƠN HÀNG: {{ job.code }}</p>
-              <h1 class="text-base font-extrabold text-ink-900 mt-0.5 flex items-center gap-2">
+              <h1 class="text-base font-bold text-ink-900 mt-0.5 flex items-center gap-2">
                 <span>{{ job.customerName }}</span>
                 <span class="text-xs font-medium text-ink-400 font-mono">({{ job.customerPhone }})</span>
               </h1>
@@ -1329,7 +1329,7 @@ const refreshJobStatus = async () => {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div class="space-y-1.5">
               <span class="text-ink-400 text-[11px] block">Dịch vụ yêu cầu:</span>
-              <h2 class="font-extrabold text-sm text-ink-900">{{ job.serviceName }}</h2>
+              <h2 class="font-bold text-sm text-ink-900">{{ job.serviceName }}</h2>
               <p class="text-ink-500 flex items-center gap-1 font-medium">
                 <Calendar :size="13" class="text-brand-600" />
                 Lịch hẹn: {{ vnDateTimeString(job.scheduledAt) }}
@@ -1380,7 +1380,7 @@ const refreshJobStatus = async () => {
       <!-- 🚦 5-STEP INTERACTIVE WORKFLOW PIPELINE -->
       <div class="space-y-4">
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-extrabold text-ink-900 uppercase tracking-wide flex items-center gap-2">
+          <h3 class="text-sm font-bold text-ink-900 tracking-wide flex items-center gap-2">
             <span>Quy trình thực thi đơn hàng</span>
           </h3>
           <span class="text-xs text-ink-500 font-medium">Bấm vào bước để xem chi tiết</span>
@@ -1394,7 +1394,7 @@ const refreshJobStatus = async () => {
               currentStepNumber > 1
                 ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 1
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
+                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
             "
             @click="scrollToStep('step-en-route')"
@@ -1414,7 +1414,7 @@ const refreshJobStatus = async () => {
               gpsCheckedIn
                 ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 2
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
+                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
             "
             @click="scrollToStep('step-check-in')"
@@ -1434,7 +1434,7 @@ const refreshJobStatus = async () => {
               beforePhotoUploaded || String(job.status).toUpperCase() === 'UNDER_REPAIR' || currentStepNumber > 3
                 ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 3
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
+                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
             "
             @click="scrollToStep('step-before-evidence')"
@@ -1454,7 +1454,7 @@ const refreshJobStatus = async () => {
               completionRequested || currentStepNumber > 4
                 ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 4
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
+                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
             "
             @click="scrollToStep('step-under-repair')"
@@ -1474,7 +1474,7 @@ const refreshJobStatus = async () => {
               isCompleted
                 ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 5
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
+                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
             "
             @click="scrollToStep('step-completion')"
@@ -1742,7 +1742,7 @@ const refreshJobStatus = async () => {
                   class="p-2.5 rounded-xl bg-ink-50 border border-ink-200 flex items-center gap-2"
                 >
                   <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                     :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-ink-200 text-ink-800'"
                   >
                     {{ item.type === 'LABOR' ? 'Công' : 'Linh kiện' }}
@@ -1901,7 +1901,7 @@ const refreshJobStatus = async () => {
                   >
                     <div class="flex items-center gap-1.5 shrink-0">
                       <span
-                        class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                        class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                         :class="
                           item.type === 'LABOR'
                             ? 'bg-brand-100 text-brand-800'
@@ -2671,7 +2671,7 @@ const refreshJobStatus = async () => {
               <LogOut :size="20" />
             </div>
             <div>
-              <h3 class="text-base font-extrabold text-ink-900">Rút khỏi đơn nhận việc</h3>
+              <h3 class="text-base font-bold text-ink-900">Rút khỏi đơn nhận việc</h3>
               <p class="text-xs text-ink-500">Chỉ áp dụng khi bạn gặp sự cố trước khi đến nơi</p>
             </div>
           </div>
@@ -2866,7 +2866,7 @@ const refreshJobStatus = async () => {
 
             <div class="text-right shrink-0 flex items-center gap-3">
               <div>
-                <span class="font-extrabold text-sm text-brand-700 font-num block">
+                <span class="font-bold text-sm text-brand-700 font-num block">
                   <FhMoney :amount="part.sellingPrice" />
                 </span>
                 <span class="text-[10px] text-ink-400 block">Đơn giá niêm yết</span>

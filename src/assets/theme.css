@@ -159,21 +159,24 @@
   background-color: var(--color-ink-50);
 }
 
-.fh-app body {
-  background-color: var(--color-ink-50);
-  color: var(--color-ink-900);
-}
+/* Base rules sit in the base layer so any utility on an element still wins. */
+@layer base {
+  .fh-app body {
+    background-color: var(--color-ink-50);
+    color: var(--color-ink-900);
+  }
 
-/* Headings break into even lines; running text avoids a lone last word. */
-.fh-app :where(h1, h2, h3, h4) {
-  text-wrap: balance;
-}
-.fh-app :where(p, li, dd) {
-  text-wrap: pretty;
-}
-.fh-app :where(button, a, [role="tab"], input, select, textarea):focus-visible {
-  outline: 2px solid var(--color-brand-600);
-  outline-offset: 2px;
+  /* Headings break into even lines; running text avoids a lone last word. */
+  .fh-app :where(h1, h2, h3, h4) {
+    text-wrap: balance;
+  }
+  .fh-app :where(p, li, dd) {
+    text-wrap: pretty;
+  }
+  .fh-app :where(button, a, [role="tab"], input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
 }
 
 /* Custom Utilities for FixHome Typography and Micro-interactions */
