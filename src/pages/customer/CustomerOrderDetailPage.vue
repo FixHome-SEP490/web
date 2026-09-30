@@ -561,15 +561,15 @@ const confirmWork = async () => {
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-12">
     <!-- Breadcrumb & Back Button -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <button
-        class="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
+        class="whitespace-nowrap inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
         @click="router.push('/app/orders')"
       >
         <ArrowLeft :size="14" /> Quay lại danh sách đơn
       </button>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2">
         <FhButton
           v-if="order && order.status === 'COMPLETED' && !existingReview"
           variant="primary"
@@ -582,7 +582,7 @@ const confirmWork = async () => {
         </FhButton>
         <span
           v-else-if="order && order.status === 'COMPLETED' && existingReview"
-          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-warning-50 text-warning-800 border border-warning-200"
+          class="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-warning-50 text-warning-800 border border-warning-200"
         >
           <Star :size="13" class="text-warning-500 fill-warning-500" /> Bạn đã đánh giá {{ existingReview.rating }}/5 sao
         </span>

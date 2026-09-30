@@ -730,7 +730,7 @@ const getStatusBadgeClass = (status: string) => {
                     <ShieldCheck :size="12" class="text-success-600" /> Thời hạn bảo hành
                   </span>
                   <div class="text-xs font-bold text-success-700 flex items-center gap-1">
-                    <span class="text-sm font-bold">
+                    <span class="whitespace-nowrap text-sm font-bold">
                       {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}
                     </span>
                   </div>
@@ -1152,7 +1152,7 @@ const getStatusBadgeClass = (status: string) => {
                     <td v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right space-x-1">
                       <button
                         type="button"
-                        class="px-2 py-1 rounded text-[11px] font-semibold transition-colors"
+                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
                         :class="
                           item.usageStatus === 'used'
                             ? 'bg-success-600 text-white'
@@ -1161,11 +1161,11 @@ const getStatusBadgeClass = (status: string) => {
                         :disabled="actionLoading"
                         @click="handleUpdateUsage(pr.id, item.id, 'used')"
                       >
-                        Đã Dùng
+                        Đã dùng
                       </button>
                       <button
                         type="button"
-                        class="px-2 py-1 rounded text-[11px] font-semibold transition-colors"
+                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
                         :class="
                           item.usageStatus === 'returned'
                             ? 'bg-warning-600 text-white'
@@ -1174,7 +1174,7 @@ const getStatusBadgeClass = (status: string) => {
                         :disabled="actionLoading"
                         @click="handleUpdateUsage(pr.id, item.id, 'returned')"
                       >
-                        Hoàn Trả
+                        Hoàn trả
                       </button>
                     </td>
                   </tr>

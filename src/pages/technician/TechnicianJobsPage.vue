@@ -253,7 +253,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         <!-- Card Top Bar: Code + Badge + Schedule -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3.5">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-bold text-ink-900">#{{ job.code }}</span>
+            <span class="font-num text-sm text-ink-600 whitespace-nowrap">#{{ job.code }}</span>
             <span class="text-ink-300 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
               <Calendar :size="13" class="text-brand-600" />
@@ -297,12 +297,12 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         </div>
 
         <!-- Cost Breakdown Bar & Action Buttons -->
-        <div class="pt-4 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="pt-4 border-t border-ink-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div class="flex-1 max-w-sm">
             <FhCostBreakdown :labor-total="job.laborTotal" :parts-total="job.partsTotal" />
           </div>
 
-          <div class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
+          <div class="flex items-center justify-between xl:justify-end gap-2.5 flex-wrap">
             <div class="text-right mr-1">
               <span class="text-[11px] text-ink-400 block font-medium">Dự kiến thu:</span>
               <span class="text-sm sm:text-base font-bold font-num text-brand-700">

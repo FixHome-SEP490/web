@@ -1170,7 +1170,7 @@ const handleSaveAvatar = async () => {
               <p>Bạn đã hoàn tất đối soát CCCD 2 mặt và video nhận diện khuôn mặt FPT.AI. Tài khoản có độ tin cậy tuyệt đối.</p>
               <router-link
                 to="/tech/kyc"
-                class="inline-flex items-center gap-1 font-bold text-success-700 hover:text-success-900 underline pt-1"
+                class="whitespace-nowrap inline-flex items-center gap-1 font-bold text-success-700 hover:text-success-900 underline pt-1"
               >
                 Xem chi tiết hồ sơ KYC &rarr;
               </router-link>

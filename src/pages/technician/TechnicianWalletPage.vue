@@ -484,15 +484,15 @@ const handleWithdraw = async () => {
       </div>
 
       <!-- Hero Wallet Balance Card -->
-      <div class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-6">
         <div class="space-y-2">
-          <div class="flex items-center gap-2.5">
-            <span class="text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="whitespace-nowrap text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
               Ví FixHome Kỹ thuật viên
             </span>
             <span
               v-if="wallet.eligibleForJobs"
-              class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-400/20 text-success-200 border border-success-300/30"
+              class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-400/20 text-success-200 border border-success-300/30"
             >
               <CheckCircle2 :size="12" /> Đủ điều kiện nhận việc
             </span>
@@ -517,7 +517,7 @@ const handleWithdraw = async () => {
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
+        <div class="flex flex-wrap items-center gap-3">
           <button
             type="button"
             class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2"

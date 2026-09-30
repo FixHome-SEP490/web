@@ -410,9 +410,9 @@ const shortcuts = [
           <Wallet :size="18" class="text-ink-400" />
         </span>
         <span class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap" :class="{ 'text-danger-600': wallet && wallet.balance < 0 }">
-          {{ money(wallet?.balance ?? 0) }}
+          {{ wallet ? money(wallet.balance) : '—' }}
         </span>
-        <span class="text-sm flex items-center gap-1.5" :class="wallet?.eligibleForJobs ? 'text-success-700' : 'text-danger-600'">
+        <span v-if="wallet" class="text-sm flex items-center gap-1.5" :class="wallet?.eligibleForJobs ? 'text-success-700' : 'text-danger-600'">
           <CheckCircle2 v-if="wallet?.eligibleForJobs" :size="15" />
           <AlertCircle v-else :size="15" />
           {{ wallet?.eligibleForJobs ? 'Đủ điều kiện nhận việc' : 'Dưới mức ký quỹ' }}

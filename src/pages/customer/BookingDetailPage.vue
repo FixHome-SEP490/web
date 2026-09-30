@@ -461,7 +461,7 @@ const confirmMatchingExtension = async () => {
   <div class="max-w-2xl mx-auto space-y-6 pb-12">
     <div class="flex items-center justify-between">
       <button
-        class="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
+        class="whitespace-nowrap inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
         @click="router.push('/app/orders')"
       >
         <ArrowLeft :size="14" /> Quay lại danh sách đơn

@@ -764,7 +764,7 @@ const createAndFindTech = async () => {
               <div class="flex items-center gap-1.5 bg-ink-100/80 p-1 rounded-xl self-start sm:self-auto text-[11px]">
                 <button
                   type="button"
-                  class="px-2.5 py-1 rounded-lg font-semibold transition-all"
+                  class="whitespace-nowrap px-2.5 py-1 rounded-lg font-semibold transition-all"
                   :class="serviceFilter === 'ALL' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'ALL'"
                 >

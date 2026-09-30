@@ -183,7 +183,7 @@ onMounted(() => {
               title="Bấm để xem chi tiết đơn hàng này"
               @click="goToOrderDetail(order.orderId)"
             >
-              <span>{{ order.orderCode }}</span>
+              <span class="whitespace-nowrap">{{ order.orderCode }}</span>
               <ArrowUpRight :size="13" class="opacity-60 group-hover:opacity-100 transition-opacity" />
             </button>
 

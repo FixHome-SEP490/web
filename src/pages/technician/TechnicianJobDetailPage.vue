@@ -1212,7 +1212,7 @@ const refreshJobStatus = async () => {
 
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
           <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide border font-mono" :class="heroAction.badgeClass">
+            <span class="whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide border font-mono" :class="heroAction.badgeClass">
               {{ heroAction.badge }}
             </span>
             <span class="text-white/40 text-xs">•</span>
@@ -1342,7 +1342,7 @@ const refreshJobStatus = async () => {
                   :href="googleMapsUrl"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-[11px] font-bold text-brand-600 hover:underline flex items-center gap-1"
+                  class="whitespace-nowrap text-[11px] font-bold text-brand-600 hover:underline flex items-center gap-1"
                 >
                   <Navigation :size="11" /> Chỉ đường Maps
                 </a>
@@ -1512,7 +1512,7 @@ const refreshJobStatus = async () => {
                   :href="googleMapsUrl"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="px-3 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold text-xs flex items-center gap-1 transition-colors"
+                  class="whitespace-nowrap px-3 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold text-xs flex items-center gap-1 transition-colors"
                 >
                   <Navigation :size="13" class="text-brand-600" /> Chỉ đường Maps
                 </a>
@@ -1937,7 +1937,7 @@ const refreshJobStatus = async () => {
                             {{ item.partSku }}
                           </span>
                           <span
-                            class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 shrink-0"
+                            class="whitespace-nowrap inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 shrink-0"
                             :title="item.warrantyPolicy || undefined"
                           >
                             <ShieldCheck :size="11" />
@@ -2252,7 +2252,7 @@ const refreshJobStatus = async () => {
                       <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
                       <span>Đơn hàng đã hoàn tất thành công (COMPLETED)!</span>
                     </div>
-                    <span class="text-xs font-bold text-success-800 bg-success-100 px-2.5 py-0.5 rounded-full border border-success-300">
+                    <span class="whitespace-nowrap text-xs font-bold text-success-800 bg-success-100 px-2.5 py-0.5 rounded-full border border-success-300">
                       Hoàn tất
                     </span>
                   </div>
@@ -2271,7 +2271,7 @@ const refreshJobStatus = async () => {
                     </div>
                   </div>
                   <div class="pt-2 flex justify-end">
-                    <FhButton variant="primary" size="sm" @click="router.push('/tech/jobs')">
+                    <FhButton class="whitespace-nowrap" variant="primary" size="sm" @click="router.push('/tech/jobs')">
                       <CheckCircle2 :size="14" class="mr-1.5" />
                       Hoàn tất ca & Về danh sách việc
                     </FhButton>
@@ -2295,7 +2295,7 @@ const refreshJobStatus = async () => {
                         <span>Giai đoạn 1: Khách hàng Nghiệm thu dịch vụ</span>
                       </div>
                       <span
-                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                        class="whitespace-nowrap text-[11px] font-semibold px-2 py-0.5 rounded-full"
                         :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800'"
                       >
                         {{ job?.customerConfirmed ? 'Đã nghiệm thu đạt' : 'Chờ khách bấm nghiệm thu' }}
@@ -2334,7 +2334,7 @@ const refreshJobStatus = async () => {
                       </span>
                       <span
                         v-else
-                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-800"
+                        class="whitespace-nowrap text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-800"
                       >
                         Chưa thanh toán
                       </span>
@@ -2435,7 +2435,7 @@ const refreshJobStatus = async () => {
                             <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
                             <div>
                               <div class="font-bold text-ink-800">2. Khách nghiệm thu</div>
-                              <div class="text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-warning-700'">
+                              <div class="whitespace-nowrap text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-warning-700'">
                                 {{ job?.customerConfirmed ? 'Đã xác nhận dịch vụ' : 'Chờ khách bấm xác nhận' }}
                               </div>
                             </div>
@@ -2631,7 +2631,7 @@ const refreshJobStatus = async () => {
           @click="heroAction.btnAction"
         >
           <Loader2 v-if="heroAction.btnLoading" :size="15" class="animate-spin text-white" />
-          <span class="truncate">{{ heroAction.btnText }}</span>
+          <span class="whitespace-nowrap truncate">{{ heroAction.btnText }}</span>
         </button>
 
         <a
@@ -2855,7 +2855,7 @@ const refreshJobStatus = async () => {
                   {{ part.sku }}
                 </span>
                 <span
-                  class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
+                  class="whitespace-nowrap inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
                 >
                   <ShieldCheck :size="11" /> {{ formatAcWarrantyBadge(part.warrantyDays) }}
                 </span>

@@ -56,7 +56,7 @@ const historyItems = ref([
       >
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-bold text-ink-900">{{ item.orderCode }}</span>
+            <span class="font-num text-sm text-ink-600 whitespace-nowrap">{{ item.orderCode }}</span>
             <span class="text-ink-400 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1">
               <Calendar :size="13" /> {{ item.date }}
