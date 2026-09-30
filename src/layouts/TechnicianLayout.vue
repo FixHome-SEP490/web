@@ -27,6 +27,7 @@ import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
 import { technicianProfileApi } from '../api/technician-profile.api';
 import { technicianOnboardingApi } from '../api/technician-onboarding.api';
+import { walletApi, type WalletSummary } from '../api/wallet.api';
 import { toast } from 'vue-sonner';
 
 const authStore = useAuthStore();
@@ -72,6 +73,16 @@ const loadOnboardingStatus = async () => {
   }
 };
 
+const walletSummary = ref<WalletSummary | null>(null);
+
+const loadWalletSummary = async () => {
+  try {
+    walletSummary.value = await walletApi.getMyWallet();
+  } catch {
+    walletSummary.value = null;
+  }
+};
+
 let invitationPoll: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
@@ -87,7 +98,7 @@ onMounted(async () => {
   } catch {
     // ignore
   }
-  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus()]);
+  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus(), loadWalletSummary()]);
   invitationPoll = setInterval(refreshInvitationCount, 30000);
 });
 
@@ -416,6 +427,91 @@ const tabItems: NavItem[] = [
           />
         </router-link>
       </div>
+    </div>
+
+    <!-- Deposit required banner when approved but wallet balance is below minimum -->
+    <div
+      v-else-if="(onboardingStatus === 'approved' || verificationStatus === 'verified') && walletSummary && !walletSummary.eligibleForJobs"
+      class="bg-gradient-to-r from-blue-600 via-indigo-600 to-brand-700 text-white px-4 py-3 shadow-xs"
+    >
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2.5">
+          <Wallet :size="18" class="shrink-0 text-blue-200" />
+          <span>
+            Hồ sơ thợ đã được duyệt! Số dư ví hiện tại là <strong>{{ Number(walletSummary.balance).toLocaleString('vi-VN') }} ₫</strong>.
+            Vui lòng nạp tối thiểu <strong>{{ Number(walletSummary.minimumBalance).toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để đủ điều kiện tiếp nhận đơn sửa chữa mới.
+          </span>
+        </div>
+        <router-link
+          to="/tech/wallet"
+          class="shrink-0 px-3.5 py-1.5 bg-white text-blue-900 font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-2xs whitespace-nowrap flex items-center gap-1.5"
+        >
+          <span>Nạp tiền vào ví ngay</span>
+          <span>→</span>
+        </router-link>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <router-view />
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar (Matching Mobile App Experience) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 flex items-center justify-around py-2 px-1 shadow-lg">
+      <router-link
+        to="/tech"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+        exact-active-class="text-brand-600"
+      >
+        <Briefcase :size="18" />
+        <span>Tổng quan</span>
+      </router-link>
+
+      <router-link
+        to="/tech/jobs"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
+        active-class="text-brand-600"
+      >
+        <Wrench :size="18" />
+        <span>Công việc</span>
+        <span
+          v-if="activeJobs > 0"
+          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-brand-600 ring-2 ring-white"
+        />
+      </router-link>
+
+      <router-link
+        to="/tech/invitations"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
+        active-class="text-brand-600"
+      >
+        <Inbox :size="18" />
+        <span>Thư mời</span>
+        <span
+          v-if="invitationCount > 0"
+          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"
+        />
+      </router-link>
+
+      <router-link
+        to="/tech/earnings"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+      >
+        <DollarSign :size="18" />
+        <span>Thu nhập</span>
+      </router-link>
+
+      <router-link
+        to="/tech/profile"
+        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
+        active-class="text-brand-600"
+      >
+        <User :size="18" />
+        <span>Hồ sơ</span>
+      </router-link>
     </nav>
 
     <ChatFloatingWidget />

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat.store';
 import {
@@ -114,6 +115,16 @@ const handleAcceptTopInvitation = async () => {
 
 const toggleAvailability = async () => {
   if (isAvailable.value === null || togglingAvailability.value) return;
+  if (!isAvailable.value && wallet.value && !wallet.value.eligibleForJobs) {
+    toast.error('Chưa đủ điều kiện nhận việc', {
+      description: `Số dư ví hiện tại (${wallet.value.balance.toLocaleString('vi-VN')} ₫) chưa đạt mức ký quỹ tối thiểu (${wallet.value.minimumBalance.toLocaleString('vi-VN')} ₫). Vui lòng nạp tiền vào ví trước khi bật trạng thái nhận việc.`,
+      action: {
+        label: 'Nạp tiền ngay',
+        onClick: () => router.push('/tech/wallet'),
+      },
+    });
+    return;
+  }
   togglingAvailability.value = true;
   const newStatus = !isAvailable.value;
   try {
