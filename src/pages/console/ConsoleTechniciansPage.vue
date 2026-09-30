@@ -7,13 +7,13 @@ import {
   type TechnicianVerification,
   type VerificationStatus,
 } from '../../api/admin-verifications.api';
+import TechnicianVerificationDrawer from '../../components/console/TechnicianVerificationDrawer.vue';
 
 const columns: TableColumn[] = [
   { key: 'technician', label: 'Kỹ thuật viên' },
-  { key: 'submittedAt', label: 'Ngày gửi', width: '120px' },
-  { key: 'documents', label: 'Hồ sơ KYC' },
-  { key: 'status', label: 'Trạng thái', width: '140px' },
-  { key: 'actions', label: 'Thao tác', width: '160px', align: 'right' },
+  { key: 'submittedAt', label: 'Ngày gửi' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'actions', label: 'Thao tác', width: '140px', align: 'right' },
 ];
 
 const statusFilter = ref<VerificationStatus | 'ALL'>('ALL');
@@ -103,6 +103,23 @@ const rejectReason = ref('');
 const rejectReasonError = ref('');
 const actionLoadingId = ref<string | null>(null);
 
+const showDrawer = ref(false);
+const selectedVerification = ref<TechnicianVerification | null>(null);
+
+const openDrawer = async (verification: TechnicianVerification) => {
+  selectedVerification.value = verification;
+  showDrawer.value = true;
+  
+  try {
+    const fullVerification = await adminVerificationsApi.getVerification(verification.id);
+    if (showDrawer.value && selectedVerification.value?.id === fullVerification.id) {
+      selectedVerification.value = fullVerification;
+    }
+  } catch (e) {
+    console.error('Không thể tải chi tiết KYC', e);
+  }
+};
+
 const approveVerification = async (verification: TechnicianVerification) => {
   if (actionLoadingId.value) return;
   actionLoadingId.value = verification.id;
@@ -124,6 +141,7 @@ const openReject = (verification: TechnicianVerification) => {
   rejectReason.value = '';
   rejectReasonError.value = '';
   showRejectModal.value = true;
+  // If drawer is open, we can keep it open or close it. Let's keep it open, the reject modal will show on top.
 };
 
 const confirmReject = async () => {
@@ -144,6 +162,7 @@ const confirmReject = async () => {
     successMessage.value = `Đã từ chối hồ sơ của ${verificationToReject.value.technician?.fullName ?? verificationToReject.value.technicianId}.`;
     showRejectModal.value = false;
     verificationToReject.value = null;
+    showDrawer.value = false; // Close drawer if it was open
     await loadVerifications();
   } catch (reason) {
     error.value = getErrorMessage(reason, 'Không thể từ chối hồ sơ KYC.');
@@ -157,22 +176,15 @@ const showPreviewModal = ref(false);
 const previewTitle = ref('');
 const previewLoading = ref(false);
 
-const openDocument = async (
-  verification: TechnicianVerification,
-  document: TechnicianVerification['documents'][number],
-) => {
-  if (!document.id) {
-    error.value = 'Tài liệu này chưa có mã định danh hợp lệ.';
-    return;
-  }
-  
-  previewTitle.value = formatDocumentType(document.documentType);
+const openDocumentAccess = async (title: string, documentId: string) => {
+  if (!selectedVerification.value) return;
+  previewTitle.value = title;
   previewUrl.value = '';
   showPreviewModal.value = true;
   previewLoading.value = true;
   
   try {
-    const url = await adminVerificationsApi.getDocumentAccess(verification.id, document.id);
+    const url = await adminVerificationsApi.getDocumentAccess(selectedVerification.value.id, documentId);
     previewUrl.value = url;
   } catch (reason) {
     showPreviewModal.value = false;
@@ -182,20 +194,7 @@ const openDocument = async (
   }
 };
 
-const formatDocumentType = (value: string) => {
-  switch (value.toLowerCase()) {
-    case 'citizen_id_front':
-      return 'CCCD mặt trước';
-    case 'citizen_id_back':
-      return 'CCCD mặt sau';
-    case 'face_photo':
-      return 'Ảnh khuôn mặt';
-    case 'face_video':
-      return 'Video xác minh khuôn mặt';
-    default:
-      return value;
-  }
-};
+
 
 const formatDate = (value: string) => {
   if (!value) return '—';
@@ -250,6 +249,7 @@ const formatDate = (value: string) => {
       searchPlaceholder="Tìm theo tên, email, SĐT..."
       refreshable
       @refresh="loadVerifications"
+      @row-click="openDrawer"
       tableTitle="Danh sách chờ duyệt"
       tableSubtitle="Các kỹ thuật viên vừa nộp hồ sơ KYC"
     >
@@ -294,50 +294,40 @@ const formatDate = (value: string) => {
         </div>
       </template>
 
-      <template #cell-documents="{ row }">
-        <div class="flex flex-col gap-1.5 py-1">
-          <button
-            v-for="document in row.documents"
-            :key="document.id || document.fileName"
-            class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-gray-50 text-gray-700 hover:bg-brand-50 hover:text-brand-700 border border-gray-200 hover:border-brand-200 transition-colors w-fit text-left"
-            type="button"
-            @click="openDocument(row, document)"
-          >
-            <FileText :size="12" class="opacity-70 shrink-0" />
-            <span class="truncate max-w-[200px]">{{ formatDocumentType(document.documentType) }}</span>
-          </button>
-          <span v-if="row.documents.length === 0" class="text-xs text-gray-400 font-medium italic">Chưa có tài liệu</span>
-        </div>
-      </template>
+
 
       <template #cell-status="{ row }">
         <FhStatusPill :status="String(row.status)" class="shadow-sm" />
       </template>
 
       <template #cell-actions="{ row }">
-        <div v-if="row.status === 'PENDING'" class="flex items-center justify-end gap-2">
+        <div class="flex items-center justify-end gap-2">
           <button 
-            class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 transition-colors disabled:opacity-50"
-            :disabled="Boolean(actionLoadingId)"
-            @click="approveVerification(row)"
-            title="Duyệt hồ sơ"
+            class="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 font-medium hover:bg-gray-100 transition-colors text-xs border border-gray-200"
+            @click.stop="openDrawer(row)"
           >
-            <Loader2 v-if="actionLoadingId === row.id" class="animate-spin" :size="16" />
-            <CheckCircle2 v-else :size="16" stroke-width="2.5" />
+            Xem chi tiết
           </button>
-          <button 
-            class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors disabled:opacity-50"
-            :disabled="Boolean(actionLoadingId)"
-            @click="openReject(row)"
-            title="Từ chối"
-          >
-            <XCircle :size="16" stroke-width="2.5" />
-          </button>
-        </div>
-        <div v-else class="flex justify-end">
-          <span class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-50 px-2.5 py-1 rounded-md border border-gray-100">
-            Đã xử lý
-          </span>
+          
+          <template v-if="row.status === 'PENDING'">
+            <button 
+              class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 transition-colors disabled:opacity-50"
+              :disabled="Boolean(actionLoadingId)"
+              @click.stop="approveVerification(row)"
+              title="Duyệt hồ sơ"
+            >
+              <Loader2 v-if="actionLoadingId === row.id" class="animate-spin" :size="16" />
+              <CheckCircle2 v-else :size="16" stroke-width="2.5" />
+            </button>
+            <button 
+              class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors disabled:opacity-50"
+              :disabled="Boolean(actionLoadingId)"
+              @click.stop="openReject(row)"
+              title="Từ chối"
+            >
+              <XCircle :size="16" stroke-width="2.5" />
+            </button>
+          </template>
         </div>
       </template>
     </FhTable>
@@ -444,5 +434,15 @@ const formatDate = (value: string) => {
         </div>
       </div>
     </div>
+    
+    <!-- Technician Verification Drawer -->
+    <TechnicianVerificationDrawer
+      v-model:open="showDrawer"
+      :verification="selectedVerification"
+      :loadingApprove="actionLoadingId === selectedVerification?.id"
+      @approve="approveVerification"
+      @reject="openReject"
+      @preview="openDocumentAccess"
+    />
   </div>
 </template>
