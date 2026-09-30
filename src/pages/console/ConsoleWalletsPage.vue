@@ -348,7 +348,7 @@ onMounted(() => {
           <span>Quản lý Ví & Rút tiền Kỹ thuật viên</span>
         </h1>
         <p class="text-xs sm:text-sm text-ink-500 mt-1">
-          Giám sát số dư ký quỹ thợ, duyệt yêu cầu rút tiền về ngân hàng và điều chỉnh số dư kiểm toán
+          Giám sát số dư ký quỹ thợ, theo dõi tiền rút tự động qua payOS và điều chỉnh số dư kiểm toán
         </p>
       </div>
 
