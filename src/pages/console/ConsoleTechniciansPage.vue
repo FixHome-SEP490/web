@@ -7,6 +7,7 @@ import {
   type TechnicianVerification,
   type VerificationStatus,
 } from '../../api/admin-verifications.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const columns: TableColumn[] = [
   { key: 'technician', label: 'Kỹ thuật viên' },
@@ -200,7 +201,7 @@ const formatDocumentType = (value: string) => {
 const formatDate = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN');
+  return Number.isNaN(date.getTime()) ? value : vnDateString(date);
 };
 </script>
 

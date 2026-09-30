@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Landmark,
   Pencil,
+  X,
 } from 'lucide-vue-next';
 import {
   walletApi,
@@ -38,6 +39,7 @@ import {
 } from '../../utils/formatters';
 import { extractApiErrorMessage } from '../../utils/input-validation';
 import { toast } from 'vue-sonner';
+import { userFacingError, withoutCodes } from '../../utils/user-facing-error';
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -121,9 +123,7 @@ const loadWallet = async () => {
     error.value = null;
     wallet.value = await walletApi.getMyWallet();
   } catch (err: unknown) {
-    error.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Không thể tải thông tin ví. Vui lòng thử lại.';
+    error.value = userFacingError(err, 'Không thể tải thông tin ví. Vui lòng thử lại.');
   }
 };
 
@@ -263,28 +263,7 @@ const handleTopUp = async () => {
       topUpError.value = null;
     }, 1500);
   } catch (err: unknown) {
-    const errorObj = err as {
-      response?: {
-        data?: {
-          message?: string | string[];
-          error?: { message?: string; details?: string[] | string };
-        };
-      };
-    };
-    const errorDetails = errorObj?.response?.data?.error?.details;
-    const detailMsg = Array.isArray(errorDetails)
-      ? errorDetails.join(', ')
-      : typeof errorDetails === 'string'
-        ? errorDetails
-        : null;
-    topUpError.value =
-      detailMsg ||
-      errorObj?.response?.data?.error?.message ||
-      (typeof errorObj?.response?.data?.message === 'string'
-        ? errorObj.response.data.message
-        : Array.isArray(errorObj?.response?.data?.message)
-          ? errorObj.response.data.message.join(', ')
-          : 'Nạp tiền thất bại, vui lòng thử lại');
+    topUpError.value = userFacingError(err, 'Nạp tiền thất bại. Vui lòng thử lại.');
   } finally {
     topUpSubmitting.value = false;
   }
@@ -377,7 +356,7 @@ const handleWithdraw = async () => {
           : undefined,
       });
     } else if (result.status === 'FAILED') {
-      toast.error(result.message, { description: result.failureReason ?? undefined });
+      toast.error(result.message, { description: withoutCodes(result.failureReason) || undefined });
     } else {
       toast.info(result.message);
     }
@@ -398,7 +377,7 @@ const handleWithdraw = async () => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Wallet class="text-brand-600" :size="24" />
           <span>Ví Kỹ thuật viên</span>
         </h1>
@@ -421,13 +400,13 @@ const handleWithdraw = async () => {
       :class="[
         'p-4 sm:p-5 rounded-2xl border flex items-center justify-between gap-3 shadow-xs transition-all',
         returnBanner.type === 'success'
-          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-          : 'bg-rose-50 border-rose-300 text-rose-950',
+          ? 'bg-success-50 border-success-300 text-success-900'
+          : 'bg-danger-50 border-danger-300 text-danger-900',
       ]"
     >
       <div class="flex items-center gap-3">
-        <CheckCircle2 v-if="returnBanner.type === 'success'" :size="22" class="text-emerald-600 shrink-0" />
-        <XCircle v-else :size="22" class="text-rose-600 shrink-0" />
+        <CheckCircle2 v-if="returnBanner.type === 'success'" :size="22" class="text-success-600 shrink-0" />
+        <XCircle v-else :size="22" class="text-danger-600 shrink-0" />
         <span class="text-xs sm:text-sm font-semibold">{{ returnBanner.message }}</span>
       </div>
       <button
@@ -459,17 +438,17 @@ const handleWithdraw = async () => {
       <!-- Ineligible / Low Balance Banner -->
       <div
         v-if="!wallet.eligibleForJobs"
-        class="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-amber-100/70 hover:border-amber-400 transition-all group"
+        class="p-4 sm:p-5 rounded-2xl bg-warning-50 border border-warning-300 text-warning-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-warning-100/70 hover:border-warning-400 transition-all group"
         @click="showTopUpModal = true"
         title="Bấm để mở nạp tiền nhanh"
       >
         <div class="flex items-start gap-3">
-          <AlertCircle :size="22" class="text-amber-600 shrink-0 mt-0.5" />
+          <AlertCircle :size="22" class="text-warning-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-amber-900 group-hover:text-amber-950 transition-colors">
+            <div class="font-bold text-warning-900 group-hover:text-warning-900 transition-colors">
               Số dư ví dưới mức tối thiểu quy định ({{ formatCurrencyVND(wallet.minimumBalance) }})
             </div>
-            <p class="text-amber-800">
+            <p class="text-warning-800">
               Tài khoản của bạn tạm dừng nhận các lời mời sửa chữa mới. Vui lòng nạp thêm tiền để kích hoạt lại điều kiện nhận việc.
             </p>
           </div>
@@ -483,18 +462,18 @@ const handleWithdraw = async () => {
       <!-- Negative Balance Critical Banner -->
       <div
         v-if="wallet.balance < 0"
-        class="p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-rose-100/70 hover:border-rose-400 transition-all group"
+        class="p-4 sm:p-5 rounded-2xl bg-danger-50 border border-danger-300 text-danger-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-danger-100/70 hover:border-danger-400 transition-all group"
         @click="showTopUpModal = true"
         title="Bấm để mở thanh toán công nợ"
       >
         <div class="flex items-start gap-3">
-          <AlertCircle :size="22" class="text-rose-600 shrink-0 mt-0.5" />
+          <AlertCircle :size="22" class="text-danger-600 shrink-0 mt-0.5" />
           <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-extrabold text-rose-900 group-hover:text-rose-950 transition-colors">
+            <div class="font-bold text-danger-900 group-hover:text-danger-900 transition-colors">
               Ví của bạn đang có số dư âm do khấu trừ phí đơn tiền mặt
             </div>
-            <p class="text-rose-800">
-              Số dư hiện tại là <span class="font-bold text-rose-900">{{ formatCurrencyVND(wallet.balance) }}</span>. Vui lòng nạp tiền để hoàn tất công nợ với nền tảng.
+            <p class="text-danger-800">
+              Số dư hiện tại là <span class="font-bold text-danger-900">{{ formatCurrencyVND(wallet.balance) }}</span>. Vui lòng nạp tiền để hoàn tất công nợ với nền tảng.
             </p>
           </div>
         </div>
@@ -505,32 +484,32 @@ const handleWithdraw = async () => {
       </div>
 
       <!-- Hero Wallet Balance Card -->
-      <div class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-blue-700 via-brand-600 to-indigo-700 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-6">
         <div class="space-y-2">
-          <div class="flex items-center gap-2.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-blue-200 bg-white/10 px-2.5 py-0.5 rounded-full">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="whitespace-nowrap text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
               Ví FixHome Kỹ thuật viên
             </span>
             <span
               v-if="wallet.eligibleForJobs"
-              class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-300/30"
+              class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-400/20 text-success-200 border border-success-300/30"
             >
               <CheckCircle2 :size="12" /> Đủ điều kiện nhận việc
             </span>
             <span
               v-else
-              class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-400/20 text-rose-200 border border-rose-300/30"
+              class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-danger-400/20 text-danger-200 border border-danger-300/30"
             >
               <XCircle :size="12" /> Dưới mức ký quỹ
             </span>
           </div>
 
-          <div class="text-xs text-blue-100 font-medium">Tổng số dư thực tế</div>
-          <div class="text-3xl sm:text-5xl font-extrabold font-num tracking-tight">
+          <div class="text-xs text-brand-100 font-medium">Tổng số dư thực tế</div>
+          <div class="text-3xl sm:text-5xl font-bold font-num tracking-tight">
             {{ formatCurrencyVND(wallet.balance) }}
           </div>
 
-          <div class="text-xs text-blue-100/90 flex flex-wrap items-center gap-3 pt-1">
+          <div class="text-xs text-brand-100/90 flex flex-wrap items-center gap-3 pt-1">
             <span>Ký quỹ tối thiểu: <strong class="text-white">{{ formatCurrencyVND(wallet.minimumBalance) }}</strong></span>
             <span>•</span>
             <span>Khả dụng để rút: <strong class="text-white">{{ formatCurrencyVND(wallet.withdrawableBalance) }}</strong></span>
@@ -538,10 +517,10 @@ const handleWithdraw = async () => {
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
+        <div class="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-blue-50 active:scale-95 text-xs sm:text-sm font-extrabold transition-all shadow-sm flex items-center justify-center gap-2"
+            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2"
             @click="showTopUpModal = true"
           >
             <ArrowDownLeft :size="16" />
@@ -550,7 +529,7 @@ const handleWithdraw = async () => {
 
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-extrabold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="!!withdrawBlockedReason"
             :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
             @click="openWithdraw"
@@ -573,7 +552,7 @@ const handleWithdraw = async () => {
             <span>Số dư có thể rút</span>
             <CreditCard :size="16" class="text-brand-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
             {{ formatCurrencyVND(wallet.withdrawableBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -583,15 +562,15 @@ const handleWithdraw = async () => {
 
         <!-- Card 2: Minimum Required -->
         <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-amber-400 hover:shadow-sm transition-all group"
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-warning-400 hover:shadow-sm transition-all group"
           @click="showTopUpModal = true"
           title="Bấm để nạp thêm tiền vào ví"
         >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Mức ký quỹ duy trì</span>
-            <Info :size="16" class="text-amber-500" />
+            <Info :size="16" class="text-warning-500" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-amber-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-warning-700 transition-colors">
             {{ formatCurrencyVND(wallet.minimumBalance) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -601,15 +580,15 @@ const handleWithdraw = async () => {
 
         <!-- Card 3: Pending Withdrawal -->
         <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-violet-400 hover:shadow-sm transition-all group"
+          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
           @click="activeTab = 'withdrawals'"
           title="Bấm để xem danh sách lệnh rút tiền"
         >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Đang chuyển về ngân hàng</span>
-            <Clock :size="16" class="text-violet-600" />
+            <Clock :size="16" class="text-brand-600" />
           </div>
-          <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-violet-700 transition-colors">
+          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
             {{ formatCurrencyVND(wallet.pendingWithdrawal + (wallet.processingWithdrawal ?? 0)) }}
           </div>
           <p class="text-[11px] text-ink-500">
@@ -630,13 +609,13 @@ const handleWithdraw = async () => {
           </div>
           <div v-if="bankAccount" class="min-w-0">
             <div class="text-xs font-bold text-ink-500">Tài khoản nhận tiền rút</div>
-            <div class="text-sm font-extrabold text-ink-900 truncate">
+            <div class="text-sm font-bold text-ink-900 truncate">
               {{ bankAccount.bankName }} · <span class="font-num">{{ maskedAccountNumber }}</span>
             </div>
             <div class="text-[11px] text-ink-500 truncate">{{ bankAccount.accountName }}</div>
           </div>
           <div v-else class="min-w-0">
-            <div class="text-sm font-extrabold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
+            <div class="text-sm font-bold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
             <p class="text-[11px] text-ink-500">
               Khai một lần, tên chủ tài khoản phải trùng tên đã xác minh danh tính
             </p>
@@ -658,7 +637,7 @@ const handleWithdraw = async () => {
         <div class="flex items-center border-b border-ink-200 px-6 pt-4 gap-6">
           <button
             type="button"
-            class="pb-3 text-sm font-extrabold border-b-2 transition-all flex items-center gap-2"
+            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
             :class="[
               activeTab === 'transactions'
                 ? 'border-brand-600 text-brand-600'
@@ -674,7 +653,7 @@ const handleWithdraw = async () => {
 
           <button
             type="button"
-            class="pb-3 text-sm font-extrabold border-b-2 transition-all flex items-center gap-2"
+            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
             :class="[
               activeTab === 'withdrawals'
                 ? 'border-brand-600 text-brand-600'
@@ -685,7 +664,7 @@ const handleWithdraw = async () => {
             <span>Lịch sử rút tiền</span>
             <span
               v-if="wallet.pendingWithdrawal > 0"
-              class="w-2 h-2 rounded-full bg-amber-500"
+              class="w-2 h-2 rounded-full bg-warning-500"
             />
           </button>
         </div>
@@ -713,7 +692,7 @@ const handleWithdraw = async () => {
                 class="px-2.5 py-1 rounded-lg text-xs transition-all"
                 :class="[
                   txFilterType === f.id
-                    ? 'bg-brand-50 text-brand-700 font-extrabold border border-brand-200'
+                    ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200'
                     : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
                 ]"
                 @click="txFilterType = f.id"
@@ -758,8 +737,8 @@ const handleWithdraw = async () => {
                   class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
                   :class="[
                     formatWalletTxType(tx.type).isCredit
-                      ? 'bg-emerald-50 text-emerald-600'
-                      : 'bg-rose-50 text-rose-600'
+                      ? 'bg-success-50 text-success-600'
+                      : 'bg-danger-50 text-danger-600'
                   ]"
                 >
                   <ArrowDownLeft v-if="formatWalletTxType(tx.type).isCredit" :size="18" />
@@ -769,19 +748,19 @@ const handleWithdraw = async () => {
                 <!-- Info -->
                 <div class="min-w-0 space-y-0.5">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs sm:text-sm font-extrabold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
+                    <span class="text-xs sm:text-sm font-bold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
                       {{ formatWalletTxType(tx.type).label }}
                     </span>
                     <span
                       v-if="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId"
-                      class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 group-hover:bg-brand-600 group-hover:text-white transition-colors flex items-center gap-1"
+                      class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 group-hover:bg-brand-600 group-hover:text-white transition-colors flex items-center gap-1"
                     >
                       <span>Đơn hàng</span>
                       <ArrowRight :size="10" />
                     </span>
                   </div>
                   <p class="text-xs text-ink-500 truncate">
-                    {{ tx.description || 'Giao dịch ví FixHome' }}
+                    {{ withoutCodes(tx.description) || 'Giao dịch ví FixHome' }}
                   </p>
                   <div class="text-[11px] text-ink-400 flex items-center gap-2">
                     <span>{{ formatDateTimeVN(tx.createdAt) }}</span>
@@ -794,9 +773,9 @@ const handleWithdraw = async () => {
               <!-- Amount -->
               <div class="text-right shrink-0">
                 <div
-                  class="text-sm sm:text-base font-extrabold font-num"
+                  class="text-sm sm:text-base font-bold font-num"
                   :class="[
-                    formatWalletTxType(tx.type).isCredit ? 'text-emerald-600' : 'text-rose-600'
+                    formatWalletTxType(tx.type).isCredit ? 'text-success-600' : 'text-danger-600'
                   ]"
                 >
                   {{ formatWalletTxType(tx.type).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
@@ -852,7 +831,7 @@ const handleWithdraw = async () => {
           <!-- Table -->
           <div v-else class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-ink-50 text-ink-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-ink-100">
+              <thead class="bg-ink-50 text-ink-600 font-bold text-[10px] border-b border-ink-100">
                 <tr>
                   <th class="py-3 px-3">Thời gian</th>
                   <th class="py-3 px-3">Số tiền</th>
@@ -866,7 +845,7 @@ const handleWithdraw = async () => {
                   <td class="py-3.5 px-3 text-ink-600 whitespace-nowrap">
                     {{ formatDateTimeVN(w.requestedAt) }}
                   </td>
-                  <td class="py-3.5 px-3 font-extrabold font-num text-ink-900 whitespace-nowrap">
+                  <td class="py-3.5 px-3 font-bold font-num text-ink-900 whitespace-nowrap">
                     {{ formatCurrencyVND(w.amount) }}
                   </td>
                   <td class="py-3.5 px-3">
@@ -877,11 +856,11 @@ const handleWithdraw = async () => {
                     <FhStatusPill :status="w.status" :label="formatWithdrawalStatus(w.status).label" />
                   </td>
                   <td class="py-3.5 px-3 text-ink-500 max-w-xs">
-                    <span v-if="w.status === 'REJECTED' && w.rejectReason" class="text-rose-600 font-medium">
-                      Lý do: {{ w.rejectReason }}
+                    <span v-if="w.status === 'REJECTED' && w.rejectReason" class="text-danger-600 font-medium">
+                      Lý do: {{ withoutCodes(w.rejectReason) }}
                     </span>
-                    <span v-else-if="w.status === 'FAILED'" class="text-rose-600 font-medium">
-                      Không chuyển được<template v-if="w.failureReason">: {{ w.failureReason }}</template>.
+                    <span v-else-if="w.status === 'FAILED'" class="text-danger-600 font-medium">
+                      Không chuyển được<template v-if="w.failureReason">: {{ withoutCodes(w.failureReason) }}</template>.
                       Tiền đã được hoàn lại vào ví.
                     </span>
                     <span v-else-if="w.status === 'SUCCESS'">
@@ -915,24 +894,25 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <ArrowDownLeft class="text-brand-600" :size="20" />
-            <span>Nạp tiền vào ví KTV</span>
+            <span>Nạp tiền vào ví kỹ thuật viên</span>
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            aria-label="Đóng"
             @click="showTopUpModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 
-        <div v-if="topUpSuccessMsg" class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold flex items-center gap-2">
+        <div v-if="topUpSuccessMsg" class="p-4 rounded-2xl bg-success-50 border border-success-200 text-success-800 text-sm font-bold flex items-center gap-2">
           <CheckCircle2 :size="18" /> {{ topUpSuccessMsg }}
         </div>
 
-        <div v-if="topUpError" class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2">
+        <div v-if="topUpError" class="p-3.5 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-start gap-2">
           <AlertCircle :size="16" class="shrink-0 mt-0.5" />
           <span>{{ topUpError }}</span>
         </div>
@@ -945,7 +925,7 @@ const handleWithdraw = async () => {
                 v-for="amt in topUpPresets"
                 :key="amt"
                 type="button"
-                class="py-2.5 px-3 rounded-xl border text-xs font-extrabold font-num transition-all"
+                class="py-2.5 px-3 rounded-xl border text-xs font-bold font-num transition-all"
                 :class="[
                   topUpAmount === amt
                     ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
@@ -967,7 +947,7 @@ const handleWithdraw = async () => {
                 min="10000"
                 step="10000"
                 placeholder="200000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-extrabold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
               <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
             </div>
@@ -977,21 +957,21 @@ const handleWithdraw = async () => {
           <div class="p-3.5 rounded-xl bg-ink-50 text-xs space-y-1 border border-ink-100">
             <div class="flex items-center justify-between text-ink-600">
               <span>Số dư hiện tại:</span>
-              <span class="font-extrabold font-num">{{ formatCurrencyVND(wallet?.balance) }}</span>
+              <span class="font-bold font-num">{{ formatCurrencyVND(wallet?.balance) }}</span>
             </div>
             <div class="flex items-center justify-between text-ink-900 font-bold">
               <span>Số dư dự kiến sau nạp:</span>
-              <span class="font-extrabold font-num text-emerald-600">
+              <span class="font-bold font-num text-success-600">
                 {{ formatCurrencyVND((wallet?.balance ?? 0) + (topUpAmount || 0)) }}
               </span>
             </div>
           </div>
 
-          <div class="p-3 rounded-xl bg-blue-50 border border-blue-100 flex items-start gap-2.5 text-blue-900 text-xs">
+          <div class="p-3 rounded-xl bg-brand-50 border border-brand-100 flex items-start gap-2.5 text-brand-900 text-xs">
             <Info :size="16" class="text-brand-600 shrink-0 mt-0.5" />
             <div>
               <span class="font-bold">Cổng thanh toán điện tử VNPay:</span>
-              <p class="text-blue-700 text-[11px] mt-0.5">
+              <p class="text-brand-700 text-[11px] mt-0.5">
                 Hỗ trợ ứng dụng ngân hàng quét mã VNPAY-QR, thẻ ATM nội địa & Mobile Banking. Giao dịch bảo mật và số dư ví được ghi nhận tức thì.
               </p>
             </div>
@@ -1021,32 +1001,33 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <ArrowUpRight class="text-brand-600" :size="20" />
             <span>Rút tiền về ngân hàng</span>
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            aria-label="Đóng"
             @click="showWithdrawModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 
-        <div v-if="withdrawError" class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+        <div v-if="withdrawError" class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-800 text-xs font-bold flex items-center gap-2">
           <AlertCircle :size="16" /> {{ withdrawError }}
         </div>
 
         <div class="space-y-4">
-          <div class="p-3.5 rounded-xl bg-blue-50 text-xs space-y-1 border border-blue-100">
-            <div class="flex items-center justify-between text-blue-900 font-bold">
+          <div class="p-3.5 rounded-xl bg-brand-50 text-xs space-y-1 border border-brand-100">
+            <div class="flex items-center justify-between text-brand-900 font-bold">
               <span>Khả dụng để rút:</span>
-              <span class="font-extrabold font-num text-brand-700 text-sm">
+              <span class="font-bold font-num text-brand-700 text-sm">
                 {{ formatCurrencyVND(wallet?.withdrawableBalance) }}
               </span>
             </div>
-            <p class="text-[11px] text-blue-700">
+            <p class="text-[11px] text-brand-700">
               Đã giữ lại mức ký quỹ duy trì tối thiểu {{ formatCurrencyVND(wallet?.minimumBalance) }}
             </p>
           </div>
@@ -1061,7 +1042,7 @@ const handleWithdraw = async () => {
                 :max="wallet?.withdrawableBalance ?? 0"
                 step="10000"
                 placeholder="100000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-extrabold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
               <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
             </div>
@@ -1080,7 +1061,7 @@ const handleWithdraw = async () => {
                 Đổi
               </button>
             </div>
-            <div class="font-extrabold text-ink-900">
+            <div class="font-bold text-ink-900">
               {{ bankAccount.bankName }} · <span class="font-num">{{ bankAccount.accountNumber }}</span>
             </div>
             <div class="text-ink-500">{{ bankAccount.accountName }}</div>
@@ -1115,28 +1096,28 @@ const handleWithdraw = async () => {
     >
       <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
             <Landmark class="text-brand-600" :size="20" />
             <span>Tài khoản nhận tiền rút</span>
           </h3>
           <button
             type="button"
-            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
             aria-label="Đóng"
             @click="showBankModal = false"
           >
-            ✕
+            <X :size="18" />
           </button>
         </div>
 
         <p
           v-if="bankNeededForWithdraw"
-          class="p-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-900"
+          class="p-3 rounded-xl bg-brand-50 border border-brand-100 text-xs text-brand-900"
         >
           Bạn cần khai báo tài khoản nhận tiền trước khi rút. Khai một lần, lần sau hệ thống điền sẵn.
         </p>
 
-        <div v-if="bankError" class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2">
+        <div v-if="bankError" class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-800 text-xs font-bold flex items-start gap-2">
           <AlertCircle :size="16" class="shrink-0 mt-0.5" /> <span>{{ bankError }}</span>
         </div>
 
@@ -1176,7 +1157,7 @@ const handleWithdraw = async () => {
               maxlength="128"
               autocomplete="off"
               placeholder="VD: NGUYEN VAN A"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             />
             <p class="text-[11px] text-ink-500">
               Phải trùng họ tên đã xác minh danh tính. Gõ có dấu hay không dấu đều được.

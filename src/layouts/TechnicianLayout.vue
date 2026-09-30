@@ -5,8 +5,8 @@ import { useChatStore } from '../stores/chat.store';
 import {
   Wrench,
   Inbox,
-  Briefcase,
-  DollarSign,
+  LayoutDashboard,
+  Banknote,
   LogOut,
   User,
   ShieldCheck,
@@ -15,6 +15,8 @@ import {
   Wallet,
   Loader2,
   ShieldAlert,
+  BadgeCheck,
+  ChevronRight,
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget } from '../components';
@@ -121,306 +123,301 @@ const userShortName = computed(() => {
   const parts = authStore.user?.fullName?.trim().split(/\s+/) || [];
   return parts.length > 0 ? parts[parts.length - 1] : 'Thợ';
 });
+
+const unread = computed(() => (chatStore.totalUnreadCount > 99 ? '99+' : String(chatStore.totalUnreadCount)));
+
+/** Rejected profiles are blocked until fixed (red); pending ones only wait (yellow). */
+const onboardingBanner = computed(() => {
+  if (!onboardingStatus.value || onboardingStatus.value === 'approved' || verificationStatus.value === 'verified') {
+    return null;
+  }
+  if (onboardingStatus.value === 'rejected') {
+    return { tone: 'alert' as const, state: 'Cần bổ sung' };
+  }
+  return { tone: 'note' as const, state: onboardingStatus.value === 'submitted' ? 'Chờ xét duyệt' : 'Chưa hoàn tất' };
+});
+
+type NavItem = { to: string; label: string; icon: typeof Wrench; exact?: boolean; badge?: () => string | null };
+
+const navGroups: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Công việc',
+    items: [
+      { to: '/tech', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
+      {
+        to: '/tech/invitations',
+        label: 'Lời mời nhận việc',
+        icon: Inbox,
+        badge: () => (invitationCount.value > 0 ? String(invitationCount.value) : null),
+      },
+      {
+        to: '/tech/jobs',
+        label: 'Công việc',
+        icon: Wrench,
+        badge: () => (activeJobs.value > 0 ? String(activeJobs.value) : null),
+      },
+      { to: '/tech/warranty', label: 'Bảo hành', icon: ShieldCheck },
+    ],
+  },
+  {
+    title: 'Tài chính',
+    items: [
+      { to: '/tech/earnings', label: 'Thu nhập', icon: Banknote },
+      { to: '/tech/wallet', label: 'Ví của tôi', icon: Wallet },
+    ],
+  },
+  {
+    title: 'Liên lạc',
+    items: [
+      {
+        to: '/tech/messages',
+        label: 'Tin nhắn',
+        icon: MessageSquare,
+        badge: () => (chatStore.totalUnreadCount > 0 ? unread.value : null),
+      },
+    ],
+  },
+  {
+    title: 'Tài khoản',
+    items: [
+      { to: '/tech/profile', label: 'Hồ sơ kỹ thuật viên', icon: User },
+      { to: '/tech/kyc', label: 'Xác minh danh tính', icon: BadgeCheck },
+    ],
+  },
+];
+
+/** Bottom tabs below lg, the same five the mobile app shows first. */
+const tabItems: NavItem[] = [
+  { to: '/tech', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
+  { to: '/tech/jobs', label: 'Công việc', icon: Wrench, badge: () => (activeJobs.value > 0 ? '' : null) },
+  { to: '/tech/invitations', label: 'Thư mời', icon: Inbox, badge: () => (invitationCount.value > 0 ? '' : null) },
+  { to: '/tech/earnings', label: 'Thu nhập', icon: Banknote },
+  { to: '/tech/profile', label: 'Hồ sơ', icon: User },
+];
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-ink-50/50 text-ink-900 pb-16 md:pb-0">
-    <!-- Top Navigation Bar (Sleek SaaS Standard) -->
-    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80 shadow-xs">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        <!-- Left: Logo + Desktop Navigation -->
-        <div class="flex items-center gap-6 lg:gap-8 min-w-0">
-          <!-- Logo & Brand Tagline -->
-          <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0 group">
-            <img
-              src="/logo.png"
-              alt="FixHome"
-              class="w-9 h-9 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform"
-            />
-            <div class="flex flex-col">
-              <div class="text-lg font-extrabold tracking-tight leading-none">
-                <span class="text-brand-600">Fix</span><span class="text-emerald-600">Home</span>
-              </div>
-              <span class="inline-block text-[9px] font-extrabold text-brand-700 tracking-wider uppercase mt-0.5">
-                Kỹ thuật viên
-              </span>
-            </div>
-          </router-link>
+  <!-- --fh-dock lifts floating buttons above the bottom tab bar on narrow screens. -->
+  <div class="min-h-screen bg-ink-50 text-ink-900 [--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]">
+    <!-- Sidebar, wide screens -->
+    <aside class="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 flex-col bg-white border-r border-ink-200">
+      <router-link to="/" class="h-16 px-5 flex items-center gap-2.5 border-b border-ink-100 shrink-0" aria-label="FixHome - Trang chủ">
+        <img src="/logo.png" alt="" class="w-9 h-9 object-contain rounded-xl" />
+        <span class="flex flex-col leading-tight">
+          <span class="text-lg font-bold tracking-tight whitespace-nowrap"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
+          <span class="text-xs text-ink-500 whitespace-nowrap">Kỹ thuật viên</span>
+        </span>
+      </router-link>
 
-          <!-- Desktop Navigation Links (Primary Work Hub) -->
-          <nav class="hidden md:flex items-center gap-1 lg:gap-1.5 text-xs lg:text-[13px] font-semibold text-ink-600">
+      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-5" aria-label="Điều hướng chính">
+        <div v-for="group in navGroups" :key="group.title">
+          <p class="px-3 mb-1.5 text-xs font-medium text-ink-400">{{ group.title }}</p>
+          <div class="space-y-0.5">
             <router-link
-              to="/tech"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-              exact-active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="h-10 px-3 rounded-xl flex items-center gap-3 text-sm font-medium text-ink-600 whitespace-nowrap hover:bg-ink-50 hover:text-ink-900 transition-colors"
+              :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
+              :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
             >
-              <Briefcase :size="16" />
-              <span>Tổng quan</span>
-            </router-link>
-
-            <router-link
-              to="/tech/jobs"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-            >
-              <Wrench :size="16" />
-              <span>Đơn nhận việc</span>
+              <component :is="item.icon" :size="18" :stroke-width="1.75" class="shrink-0" />
+              <span class="flex-1 truncate">{{ item.label }}</span>
               <span
-                v-if="activeJobs > 0"
-                class="px-1.5 py-0.5 min-w-4 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none text-center shadow-xs"
+                v-if="item.badge && item.badge()"
+                class="min-w-5 h-5 px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold font-num inline-flex items-center justify-center"
               >
-                {{ activeJobs }}
+                {{ item.badge() }}
               </span>
             </router-link>
-
-            <router-link
-              to="/tech/invitations"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-            >
-              <Inbox :size="16" />
-              <span>Hộp thư mời</span>
-              <span
-                v-if="invitationCount > 0"
-                class="px-1.5 py-0.5 min-w-4 text-[10px] font-bold rounded-full bg-amber-500 text-white font-num leading-none text-center shadow-xs"
-              >
-                {{ invitationCount }}
-              </span>
-            </router-link>
-
-            <router-link
-              to="/tech/earnings"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-            >
-              <DollarSign :size="16" />
-              <span>Thu nhập</span>
-            </router-link>
-
-            <router-link
-              to="/tech/wallet"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-            >
-              <Wallet :size="16" />
-              <span>Ví thợ</span>
-            </router-link>
-
-            <router-link
-              to="/tech/warranty"
-              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
-              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
-            >
-              <ShieldCheck :size="16" />
-              <span>Bảo hành</span>
-            </router-link>
-          </nav>
+          </div>
         </div>
+      </nav>
 
-        <!-- Right: Utility Cluster (Chat, Notifications, Availability & Profile) -->
-        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-          <!-- Chat shortcut with unread badge -->
-          <router-link
-            to="/tech/messages"
-            class="relative w-9 h-9 rounded-xl bg-ink-100/70 hover:bg-ink-200/80 text-ink-700 hover:text-brand-600 flex items-center justify-center transition-colors border border-ink-200/50"
-            title="Trò chuyện với khách hàng"
-            active-class="bg-brand-50 text-brand-600 border-brand-200"
-          >
-            <MessageSquare :size="18" />
-            <span
-              v-if="chatStore.totalUnreadCount > 0"
-              class="absolute -top-1 -right-1 px-1.5 min-w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white leading-none font-num shadow-xs"
-            >
-              {{ chatStore.totalUnreadCount > 9 ? '9+' : chatStore.totalUnreadCount }}
-            </span>
+      <div class="p-3 border-t border-ink-100 shrink-0">
+        <button
+          type="button"
+          class="w-full h-10 px-3 rounded-xl flex items-center gap-3 text-sm font-medium text-danger-600 hover:bg-danger-50 transition-colors whitespace-nowrap"
+          @click="handleLogout"
+        >
+          <LogOut :size="18" :stroke-width="1.75" />
+          Đăng xuất
+        </button>
+      </div>
+    </aside>
+
+    <div class="lg:pl-64 min-h-screen flex flex-col">
+      <header class="sticky top-0 z-20 bg-white border-b border-ink-200">
+        <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+          <!-- Logo only when the sidebar is hidden -->
+          <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0" aria-label="FixHome - Trang chủ">
+            <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg" />
+            <span class="text-lg font-bold tracking-tight whitespace-nowrap hidden sm:inline"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
           </router-link>
+          <div class="hidden lg:block" />
 
-          <!-- Notification Bell Dropdown -->
-          <NotificationBellDropdown />
+          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <!-- Messages live in the sidebar on wide screens -->
+            <router-link
+              to="/tech/messages"
+              class="lg:hidden relative w-10 h-10 rounded-xl text-ink-600 hover:bg-ink-100 flex items-center justify-center transition-colors"
+              aria-label="Tin nhắn với khách hàng"
+              active-class="bg-brand-50 text-brand-700"
+            >
+              <MessageSquare :size="20" :stroke-width="1.75" />
+              <span
+                v-if="chatStore.totalUnreadCount > 0"
+                class="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-danger-600 text-white text-[10px] font-semibold font-num inline-flex items-center justify-center"
+              >
+                {{ unread }}
+              </span>
+            </router-link>
 
-          <!-- Availability Switch (Online / Offline Toggle) -->
-          <button
-            type="button"
-            class="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold whitespace-nowrap shadow-2xs"
-            :class="
-              isAvailable
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/80'
-                : 'bg-ink-100 border-ink-200 text-ink-600 hover:bg-ink-200/70'
-            "
-            :disabled="togglingAvailability"
-            @click="toggleAvailability"
-            :title="isAvailable ? 'Đang sẵn sàng nhận đơn mới (Nhấn để tạm nghỉ)' : 'Đang tạm nghỉ (Nhấn để nhận việc)'"
-          >
-            <Loader2 v-if="togglingAvailability" :size="10" class="animate-spin text-ink-500" />
-            <span
-              v-else
-              class="w-2 h-2 rounded-full transition-all"
-              :class="isAvailable ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-300/50' : 'bg-ink-400'"
-            />
-            <span class="hidden sm:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
-          </button>
+            <NotificationBellDropdown />
 
-          <!-- Avatar Dropdown Menu -->
-          <div class="relative">
             <button
               type="button"
-              class="flex items-center gap-2 p-1 pl-1 sm:pr-2.5 rounded-full hover:bg-ink-100 transition-colors border border-transparent hover:border-ink-200"
-              @click="avatarMenuOpen = !avatarMenuOpen"
+              class="h-9 px-3 rounded-full border flex items-center gap-2 text-sm font-medium whitespace-nowrap transition-colors"
+              :class="
+                isAvailable
+                  ? 'bg-success-50 border-success-200 text-success-700 hover:bg-success-100'
+                  : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
+              "
+              :disabled="togglingAvailability"
+              :title="isAvailable ? 'Đang sẵn sàng nhận đơn mới (Nhấn để tạm nghỉ)' : 'Đang tạm nghỉ (Nhấn để nhận việc)'"
+              @click="toggleAvailability"
             >
-              <div class="relative w-8 h-8 rounded-full bg-brand-600 text-white font-bold flex items-center justify-center text-xs shadow-xs overflow-hidden shrink-0">
-                <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
-                <span v-else>{{ userInitial }}</span>
-              </div>
-              <span class="hidden lg:inline text-xs font-bold text-ink-800 max-w-[100px] truncate">
-                {{ userShortName }}
-              </span>
-              <ChevronDown :size="14" class="text-ink-400 hidden sm:block" />
+              <Loader2 v-if="togglingAvailability" :size="14" class="animate-spin" />
+              <span v-else class="w-2 h-2 rounded-full" :class="isAvailable ? 'bg-success-500' : 'bg-ink-400'" />
+              <span class="hidden min-[360px]:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
             </button>
 
-            <!-- Backdrop to close dropdown -->
-            <div
-              v-if="avatarMenuOpen"
-              class="fixed inset-0 z-40"
-              @click="avatarMenuOpen = false"
-            />
+            <div class="relative">
+              <button
+                type="button"
+                class="flex items-center gap-2 p-1 sm:pr-2 rounded-full hover:bg-ink-100 transition-colors"
+                aria-label="Tài khoản"
+                :aria-expanded="avatarMenuOpen"
+                @click="avatarMenuOpen = !avatarMenuOpen"
+              >
+                <span class="w-8 h-8 rounded-full bg-brand-50 text-brand-700 border border-brand-100 font-semibold flex items-center justify-center text-sm overflow-hidden shrink-0">
+                  <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
+                  <span v-else>{{ userInitial }}</span>
+                </span>
+                <span class="hidden xl:inline text-sm font-medium text-ink-800 max-w-32 truncate">{{ userShortName }}</span>
+                <ChevronDown :size="16" class="text-ink-400 hidden sm:block" />
+              </button>
 
-            <!-- Dropdown Menu -->
-            <div
-              v-if="avatarMenuOpen"
-              class="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-ink-200 shadow-xl py-2 z-50 divide-y divide-ink-100 text-xs"
-              @click="avatarMenuOpen = false"
-            >
-              <div class="px-4 py-3">
-                <p class="font-bold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
-                <p class="text-[11px] text-ink-500 font-medium">Kỹ thuật viên FixHome</p>
-              </div>
+              <div v-if="avatarMenuOpen" class="fixed inset-0 z-40" @click="avatarMenuOpen = false" />
 
-              <div class="py-1 text-ink-700 font-semibold">
-                <router-link to="/tech/wallet" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600 transition-colors">
-                  <Wallet :size="15" />
-                  Ví thợ & Rút tiền
-                </router-link>
-                <router-link to="/tech/profile" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600 transition-colors">
-                  <User :size="15" />
-                  Hồ sơ thợ & Kỹ năng
-                </router-link>
-                <router-link to="/tech/kyc" class="flex items-center gap-2.5 px-4 py-2 hover:bg-ink-50 hover:text-brand-600 transition-colors">
-                  <ShieldCheck :size="15" />
-                  Xác minh danh tính (KYC)
-                </router-link>
-              </div>
+              <div
+                v-if="avatarMenuOpen"
+                class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100 text-sm"
+                @click="avatarMenuOpen = false"
+              >
+                <div class="px-4 py-2.5">
+                  <p class="font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
+                  <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
+                </div>
 
-              <div class="py-1">
-                <button
-                  type="button"
-                  class="flex items-center gap-2.5 px-4 py-2 text-rose-600 hover:bg-rose-50 w-full text-left font-bold transition-colors"
-                  @click="handleLogout"
-                >
-                  <LogOut :size="15" />
-                  Đăng xuất
-                </button>
+                <div class="py-1 text-ink-700">
+                  <router-link to="/tech/wallet" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <Wallet :size="16" class="text-ink-500" />
+                    Ví & Rút tiền
+                  </router-link>
+                  <router-link to="/tech/profile" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <User :size="16" class="text-ink-500" />
+                    Hồ sơ & Kỹ năng
+                  </router-link>
+                  <router-link to="/tech/kyc" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <BadgeCheck :size="16" class="text-ink-500" />
+                    Xác minh danh tính
+                  </router-link>
+                  <router-link to="/tech/warranty" class="flex lg:hidden items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <ShieldCheck :size="16" class="text-ink-500" />
+                    Bảo hành
+                  </router-link>
+                  <router-link to="/tech/messages" class="flex lg:hidden items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <MessageSquare :size="16" class="text-ink-500" />
+                    Tin nhắn
+                  </router-link>
+                </div>
+
+                <div class="py-1">
+                  <button
+                    type="button"
+                    class="flex items-center gap-3 px-4 py-2.5 text-danger-600 hover:bg-danger-50 w-full text-left"
+                    @click="handleLogout"
+                  >
+                    <LogOut :size="16" />
+                    Đăng xuất
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <!-- Onboarding status banner if not approved -->
-    <div
-      v-if="onboardingStatus && onboardingStatus !== 'approved' && verificationStatus !== 'verified'"
-      class="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white px-4 py-3 shadow-xs"
-    >
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div class="flex items-center gap-2.5">
-          <ShieldAlert :size="18" class="shrink-0 text-amber-100" />
-          <span>
-            Hồ sơ thợ của bạn đang ở trạng thái
-            <strong class="uppercase font-black tracking-wide text-amber-100">
-              {{
-                onboardingStatus === 'submitted'
-                  ? 'Chờ xét duyệt'
-                  : onboardingStatus === 'rejected'
-                  ? 'Cần bổ sung'
-                  : 'Chưa hoàn tất'
-              }}
-            </strong>.
-            Vui lòng hoàn tất xác thực thông tin, CCCD và kỹ năng để nhận đơn sửa chữa.
-          </span>
+      <!-- Profile not approved yet: waiting is a note (yellow), rejected is an alert (red). -->
+      <div
+        v-if="onboardingBanner"
+        class="border-b px-4 sm:px-6 lg:px-8 py-3"
+        :class="onboardingBanner.tone === 'alert' ? 'bg-danger-50 border-danger-200' : 'bg-warning-50 border-warning-200'"
+        :role="onboardingBanner.tone === 'alert' ? 'alert' : 'status'"
+      >
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+          <p
+            class="flex items-start gap-2.5 text-pretty"
+            :class="onboardingBanner.tone === 'alert' ? 'text-danger-700' : 'text-warning-800'"
+          >
+            <ShieldAlert :size="18" class="shrink-0 mt-0.5" :class="onboardingBanner.tone === 'alert' ? 'text-danger-600' : 'text-warning-600'" />
+            <span>
+              Hồ sơ kỹ thuật viên của bạn đang ở trạng thái
+              <strong class="font-semibold whitespace-nowrap">{{ onboardingBanner.state }}</strong>.
+              Vui lòng hoàn tất thông tin, CCCD và kỹ năng để nhận đơn sửa chữa.
+            </span>
+          </p>
+          <router-link
+            to="/tech/onboarding"
+            class="shrink-0 h-9 px-4 inline-flex items-center gap-1 rounded-xl bg-white border text-sm font-semibold whitespace-nowrap transition-colors"
+            :class="onboardingBanner.tone === 'alert' ? 'border-danger-200 text-danger-700 hover:bg-danger-100' : 'border-warning-200 text-warning-800 hover:bg-warning-100'"
+          >
+            Hoàn tất hồ sơ
+            <ChevronRight :size="16" />
+          </router-link>
         </div>
-        <router-link
-          to="/tech/onboarding"
-          class="shrink-0 px-3.5 py-1.5 bg-white text-amber-950 font-bold rounded-xl hover:bg-amber-50 transition-colors shadow-2xs whitespace-nowrap"
-        >
-          Hoàn tất hồ sơ thợ →
-        </router-link>
       </div>
+
+      <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-28 lg:pb-10">
+        <router-view />
+      </main>
     </div>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-      <router-view />
-    </main>
-
-    <!-- Mobile Bottom Navigation Bar (Matching Mobile App Experience) -->
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 flex items-center justify-around py-2 px-1 shadow-lg">
-      <router-link
-        to="/tech"
-        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
-        active-class="text-brand-600"
-        exact-active-class="text-brand-600"
-      >
-        <Briefcase :size="18" />
-        <span>Tổng quan</span>
-      </router-link>
-
-      <router-link
-        to="/tech/jobs"
-        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
-        active-class="text-brand-600"
-      >
-        <Wrench :size="18" />
-        <span>Công việc</span>
-        <span
-          v-if="activeJobs > 0"
-          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-brand-600 ring-2 ring-white"
-        />
-      </router-link>
-
-      <router-link
-        to="/tech/invitations"
-        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all relative"
-        active-class="text-brand-600"
-      >
-        <Inbox :size="18" />
-        <span>Thư mời</span>
-        <span
-          v-if="invitationCount > 0"
-          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"
-        />
-      </router-link>
-
-      <router-link
-        to="/tech/earnings"
-        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
-        active-class="text-brand-600"
-      >
-        <DollarSign :size="18" />
-        <span>Thu nhập</span>
-      </router-link>
-
-      <router-link
-        to="/tech/profile"
-        class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-ink-500 py-1 px-2.5 rounded-xl transition-all"
-        active-class="text-brand-600"
-      >
-        <User :size="18" />
-        <span>Hồ sơ</span>
-      </router-link>
+    <!-- Bottom tabs on narrow screens, the way the mobile app navigates. -->
+    <nav
+      class="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-ink-200 pb-[env(safe-area-inset-bottom)]"
+      aria-label="Điều hướng chính"
+    >
+      <div class="grid grid-cols-5">
+        <router-link
+          v-for="item in tabItems"
+          :key="item.to"
+          :to="item.to"
+          class="relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-ink-500 whitespace-nowrap"
+          :active-class="item.exact ? '' : 'text-brand-600'"
+          :exact-active-class="item.exact ? 'text-brand-600' : ''"
+        >
+          <component :is="item.icon" :size="22" :stroke-width="1.75" />
+          <span>{{ item.label }}</span>
+          <span
+            v-if="item.badge && item.badge() !== null"
+            class="absolute top-2.5 left-1/2 ml-2.5 w-2 h-2 rounded-full bg-brand-600 ring-2 ring-white"
+          />
+        </router-link>
+      </div>
     </nav>
 
-    <!-- Global Floating Chat Widget -->
     <ChatFloatingWidget />
     <CallOverlay />
   </div>

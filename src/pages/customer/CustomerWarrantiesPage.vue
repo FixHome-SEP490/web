@@ -11,12 +11,14 @@ import {
   ArrowUpRight,
   PackageCheck,
   Loader2,
+  X,
 } from 'lucide-vue-next';
 import { FhButton, FhCard } from '../../components';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../../components/customer/WarrantyClaimModal.vue';
 import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
 import { isOpenClaim } from '../../utils/warranty-claim';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 
@@ -55,7 +57,7 @@ const formatDate = (val?: string | null) => {
   if (!val) return '—';
   try {
     const d = new Date(val);
-    return isNaN(d.getTime()) ? val : d.toLocaleDateString('vi-VN');
+    return isNaN(d.getTime()) ? val : vnDateString(d);
   } catch {
     return val;
   }
@@ -102,7 +104,7 @@ onMounted(() => {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <ShieldCheck class="text-emerald-600" :size="26" />
+          <ShieldCheck class="text-success-600" :size="26" />
           Bảo hành Điện tử theo Đơn hàng
         </h1>
         <p class="text-xs text-ink-500 mt-1">
@@ -121,23 +123,24 @@ onMounted(() => {
       class="p-3.5 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all shadow-xs"
       :class="
         actionMessage.type === 'success'
-          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-          : 'bg-rose-50 text-rose-800 border border-rose-200'
+          ? 'bg-success-50 text-success-800 border border-success-200'
+          : 'bg-danger-50 text-danger-800 border border-danger-200'
       "
     >
       <CheckCircle2
         v-if="actionMessage.type === 'success'"
         :size="16"
-        class="text-emerald-600 shrink-0"
+        class="text-success-600 shrink-0"
       />
-      <AlertCircle v-else :size="16" class="text-rose-600 shrink-0" />
+      <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
       <span class="flex-1">{{ actionMessage.text }}</span>
       <button
         type="button"
         class="text-ink-400 hover:text-ink-700 ml-2"
+        aria-label="Đóng"
         @click="actionMessage = null"
       >
-        ✕
+        <X :size="18" />
       </button>
     </div>
 
@@ -180,7 +183,7 @@ onMounted(() => {
               title="Bấm để xem chi tiết đơn hàng này"
               @click="goToOrderDetail(order.orderId)"
             >
-              <span>{{ order.orderCode }}</span>
+              <span class="whitespace-nowrap">{{ order.orderCode }}</span>
               <ArrowUpRight :size="13" class="opacity-60 group-hover:opacity-100 transition-opacity" />
             </button>
 
@@ -188,22 +191,22 @@ onMounted(() => {
             <div class="flex items-center gap-1.5">
               <span
                 v-if="hasOpenClaim(order)"
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300"
+                class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-100 text-warning-900 border border-warning-300"
               >
-                ĐANG XỬ LÝ BẢO HÀNH
+                Đang xử lý bảo hành
               </span>
               <span
                 v-else-if="order.hasActiveCoverage"
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"
+                class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-100 text-success-800 border border-success-300 flex items-center gap-1"
               >
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-                CÒN HIỆU LỰC (Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày)
+                <span class="w-1.5 h-1.5 rounded-full bg-success-500 inline-block animate-pulse"></span>
+                Còn hiệu lực (Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày)
               </span>
               <span
                 v-else
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-300"
+                class="px-2 py-0.5 rounded text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-300"
               >
-                HẾT HẠN BẢO HÀNH
+                Hết hạn bảo hành
               </span>
             </div>
           </div>
@@ -237,7 +240,7 @@ onMounted(() => {
                 class="flex items-center justify-between text-xs py-1 px-2 rounded bg-white border border-ink-150 shadow-2xs"
               >
                 <div class="flex items-center gap-1.5 font-medium text-ink-900 truncate mr-2">
-                  <CheckCircle2 :size="13" class="text-emerald-600 shrink-0" />
+                  <CheckCircle2 :size="13" class="text-success-600 shrink-0" />
                   <span class="truncate" :title="item.itemDescription">{{ item.itemDescription }}</span>
                 </div>
                 <div class="flex items-center gap-2 text-[11px] shrink-0 font-num">
@@ -246,8 +249,8 @@ onMounted(() => {
                     class="px-1.5 py-0.2 rounded text-[10px] font-semibold"
                     :class="
                       item.status === 'ACTIVE'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-gray-100 text-gray-500'
+                        ? 'bg-success-50 text-success-700 border border-success-200'
+                        : 'bg-ink-100 text-ink-500'
                     "
                   >
                     {{ item.status === 'ACTIVE' ? 'Còn hạn' : 'Hết hạn' }}
@@ -297,8 +300,8 @@ onMounted(() => {
 
         <!-- Footer Actions -->
         <div class="pt-3 border-t border-ink-100 flex items-center justify-between gap-2">
-          <span class="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-            <ShieldCheck :size="13" class="text-emerald-600" />
+          <span class="text-[11px] text-success-700 font-semibold flex items-center gap-1">
+            <ShieldCheck :size="13" class="text-success-600" />
             100% miễn phí công thợ
           </span>
 

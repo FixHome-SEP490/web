@@ -21,6 +21,8 @@ import {
 } from '../../components';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type CanonicalOrderStatus } from '../../api/orders.api';
 import { useChatStore } from '../../stores/chat.store';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -54,16 +56,16 @@ const getStatusBadge = (status: CanonicalOrderStatus) => {
   const s = String(status).toUpperCase();
   switch (s) {
     case 'ACCEPTED':
-      return { label: 'Chờ di chuyển', bg: 'bg-amber-100 text-amber-800 border-amber-200' };
+      return { label: 'Chờ di chuyển', bg: 'bg-warning-100 text-warning-800 border-warning-200' };
     case 'EN_ROUTE':
-      return { label: 'Đang trên đường', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      return { label: 'Đang trên đường', bg: 'bg-success-100 text-success-800 border-success-200' };
     case 'UNDER_REPAIR':
     case 'IN_PROGRESS':
-      return { label: 'Đang sửa chữa', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+      return { label: 'Đang sửa chữa', bg: 'bg-brand-100 text-brand-800 border-brand-200' };
     case 'COMPLETED':
       return { label: 'Hoàn thành', bg: 'bg-ink-100 text-ink-700 border-ink-200' };
     case 'CANCELLED':
-      return { label: 'Đã huỷ', bg: 'bg-rose-100 text-rose-700 border-rose-200' };
+      return { label: 'Đã huỷ', bg: 'bg-danger-100 text-danger-700 border-danger-200' };
     default:
       return { label: s, bg: 'bg-ink-100 text-ink-700 border-ink-200' };
   }
@@ -110,7 +112,7 @@ const handleEnRoute = async (job: ServiceOrderItem) => {
     window.alert('Đã cập nhật: Bạn đang trên đường di chuyển tới nhà khách hàng.');
     await loadJobs();
   } catch (err: unknown) {
-    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Không thể cập nhật trạng thái di chuyển.';
+    const message = userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.');
     window.alert(message);
   } finally {
     actionLoading.value = null;
@@ -139,12 +141,12 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Wrench class="text-brand-600" :size="24" />
           <span>Đơn Nhận Việc & Thực Thi</span>
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Quản lý tiến trình xử lý đơn hàng: di chuyển, check-in GPS, lập báo giá và hoàn tất nghiệm thu.
+          Quản lý tiến trình xử lý đơn hàng: di chuyển, xác nhận đến nơi, lập báo giá và hoàn tất nghiệm thu.
         </p>
       </div>
 
@@ -160,7 +162,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'all'
-            ? 'bg-white text-brand-700 shadow-xs font-extrabold'
+            ? 'bg-white text-brand-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'all'"
@@ -176,13 +178,13 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'pending'
-            ? 'bg-white text-amber-700 shadow-xs font-extrabold'
+            ? 'bg-white text-warning-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'pending'"
       >
         <span>Cần di chuyển</span>
-        <span v-if="pendingCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-amber-100 text-amber-800">
+        <span v-if="pendingCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-warning-100 text-warning-800">
           {{ pendingCount }}
         </span>
       </button>
@@ -192,13 +194,13 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'in_progress'
-            ? 'bg-white text-blue-700 shadow-xs font-extrabold'
+            ? 'bg-white text-brand-700 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'in_progress'"
       >
         <span>Đang sửa chữa</span>
-        <span v-if="inProgressCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-blue-100 text-blue-800">
+        <span v-if="inProgressCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-brand-100 text-brand-800">
           {{ inProgressCount }}
         </span>
       </button>
@@ -208,7 +210,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'completed'
-            ? 'bg-white text-ink-900 shadow-xs font-extrabold'
+            ? 'bg-white text-ink-900 shadow-xs font-bold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'completed'"
@@ -234,7 +236,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
       <div class="w-16 h-16 rounded-2xl bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
         <Briefcase :size="32" />
       </div>
-      <h3 class="text-base font-extrabold text-ink-900">Chưa có công việc nào</h3>
+      <h3 class="text-base font-bold text-ink-900">Chưa có công việc nào</h3>
       <p class="text-xs text-ink-500 max-w-sm mx-auto">
         Các đơn sửa chữa mới từ khách hàng hoặc lời mời phù hợp sẽ hiển thị ở đây khi bạn sẵn sàng nhận việc.
       </p>
@@ -251,11 +253,11 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         <!-- Card Top Bar: Code + Badge + Schedule -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3.5">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-bold text-ink-900">#{{ job.code }}</span>
+            <span class="font-num text-sm text-ink-600 whitespace-nowrap">#{{ job.code }}</span>
             <span class="text-ink-300 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
               <Calendar :size="13" class="text-brand-600" />
-              {{ new Date(job.scheduledAt).toLocaleDateString('vi-VN') }}
+              {{ vnDateString(job.scheduledAt) }}
             </span>
           </div>
 
@@ -270,7 +272,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         <!-- Service Info & Customer Info Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <h3 class="font-extrabold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
+            <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
               {{ job.serviceName }}
             </h3>
             <p class="text-xs text-ink-600 flex items-start gap-1.5 leading-relaxed">
@@ -295,15 +297,15 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         </div>
 
         <!-- Cost Breakdown Bar & Action Buttons -->
-        <div class="pt-4 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="pt-4 border-t border-ink-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div class="flex-1 max-w-sm">
             <FhCostBreakdown :labor-total="job.laborTotal" :parts-total="job.partsTotal" />
           </div>
 
-          <div class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
+          <div class="flex items-center justify-between xl:justify-end gap-2.5 flex-wrap">
             <div class="text-right mr-1">
               <span class="text-[11px] text-ink-400 block font-medium">Dự kiến thu:</span>
-              <span class="text-sm sm:text-base font-extrabold font-num text-brand-700">
+              <span class="text-sm sm:text-base font-bold font-num text-brand-700">
                 <FhMoney :amount="job.grandTotal" />
               </span>
             </div>
@@ -313,7 +315,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
               v-if="String(job.status).toUpperCase() === 'ACCEPTED'"
               type="button"
               :disabled="actionLoading === job.id"
-              class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+              class="px-3.5 py-2 rounded-xl bg-warning-500 hover:bg-warning-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
               @click.stop="handleEnRoute(job)"
             >
               <Navigation :size="14" />
@@ -347,7 +349,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
 
             <!-- Primary Open Workspace Button -->
             <FhButton variant="primary" size="sm" @click.stop="router.push(`/tech/jobs/${job.id}`)">
-              Vào Workspace <ChevronRight :size="14" class="ml-0.5" />
+              Mở công việc <ChevronRight :size="14" class="ml-0.5" />
             </FhButton>
           </div>
         </div>
@@ -358,7 +360,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         @click="router.push(`/tech/jobs/${entry.id}`)">
         <p class="text-xs font-bold text-ink-900">Mã đơn: {{ entry.code }}</p>
         <p class="text-xs text-ink-600">Trạng thái: {{ getStatusBadge(entry.status).label }}</p>
-        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ new Date(entry.createdAt).toLocaleDateString('vi-VN') }}</p>
+        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ vnDateString(entry.createdAt) }}</p>
         <p class="text-xs text-ink-500">Lịch sử công việc rút gọn. Không còn quyền xem thông tin riêng tư của khách.</p>
         <button type="button" class="text-xs font-semibold text-brand-700 underline group-hover:text-brand-800"
           @click.stop="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>

@@ -8,6 +8,7 @@ import {
   type AdminUserRole,
   type AdminUserStatus,
 } from '../../../api/admin-users.api';
+import { parseDayKey, vnParts } from '../../../utils/vn-time';
 
 const columns: TableColumn[] = [
   { key: 'name', label: 'HỌ VÀ TÊN', sortable: true },
@@ -183,11 +184,13 @@ const getStatusColor = (status: string) => {
 const formatDate = (value: string) => {
   if (!value) return '—';
 
-  const date = new Date(value);
+  // A plain calendar date stays that date; an instant is read in Vietnam time.
+  const calendar = parseDayKey(value);
+  const p = calendar ?? vnParts(value);
 
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
+  const day = String(p.day).padStart(2, '0');
+  const month = String(p.month).padStart(2, '0');
+  const year = p.year;
 
   return `${day}/${month}/${year}`;
 };

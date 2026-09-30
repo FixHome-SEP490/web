@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { UserPlus, Star, MapPin, Clock, AlertTriangle, RefreshCw } from 'lucide-vue-next';
 import { FhStatusPill, FhButton, FhSkeleton, FhTable, type TableColumn, FhMoney } from '../../components';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
+import { vnDateTimeString } from '../../utils/vn-time';
 
 const activeTab = ref<'actionable' | 'expired'>('actionable');
 
@@ -95,7 +96,7 @@ async function openAssign(booking: BookingItem) {
   showAssignModal.value = true;
 
   if (isExpired(booking)) {
-    candidatesError.value = `Khung giờ hẹn của booking này (${new Date(booking.preferredEndAt || booking.preferredAt).toLocaleString('vi-VN')}) đã qua nên không thợ nào còn đủ điều kiện. Không thể gán thợ cho khung giờ đã trôi qua — liên hệ khách để họ đặt lại lịch mới (rebook).`;
+    candidatesError.value = `Khung giờ hẹn của booking này (${vnDateTimeString(booking.preferredEndAt || booking.preferredAt)}) đã qua nên không thợ nào còn đủ điều kiện. Không thể gán thợ cho khung giờ đã trôi qua — liên hệ khách để họ đặt lại lịch mới (rebook).`;
     return;
   }
 
@@ -212,7 +213,7 @@ onMounted(loadBookings);
         <template #cell-time="{ row }">
           <div class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
             <Clock :size="13" class="text-brand-600 shrink-0" />
-            <span>{{ new Date(row.preferredAt).toLocaleString('vi-VN') }}</span>
+            <span>{{ vnDateTimeString(row.preferredAt) }}</span>
           </div>
           <div class="text-[11px] text-brand-600 font-semibold mt-0.5 ml-5">
             {{ relativeTime(row.preferredAt) }}
@@ -255,7 +256,7 @@ onMounted(loadBookings);
         <template #cell-time="{ row }">
           <div class="text-xs font-bold text-ink-600 flex items-center gap-1.5 line-through decoration-ink-300">
             <Clock :size="13" class="shrink-0" />
-            <span>{{ new Date(row.preferredAt).toLocaleString('vi-VN') }}</span>
+            <span>{{ vnDateTimeString(row.preferredAt) }}</span>
           </div>
           <div class="text-[11px] text-rose-600 font-bold mt-0.5 flex items-center gap-1">
             <AlertTriangle :size="11" />

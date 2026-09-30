@@ -1,4 +1,6 @@
 import type { SupportCaseStatus, SupportCaseType } from '../../api/support-cases.api';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateTimeString } from '../../utils/vn-time';
 
 export const supportCaseTypeLabels: Record<SupportCaseType, string> = {
   matching_exhausted: 'Cạn ứng viên matching',
@@ -62,25 +64,11 @@ export function isCashCase(caseType: SupportCaseType): boolean {
 export function formatSupportDate(value: string | null | undefined): string {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('vi-VN');
+  return Number.isNaN(date.getTime()) ? value : vnDateTimeString(date);
 }
 
 export function getSupportErrorMessage(reason: unknown, fallback: string): string {
-  if (typeof reason !== 'object' || reason === null || !('response' in reason)) return fallback;
-  const response = (reason as { response?: unknown }).response;
-  if (typeof response !== 'object' || response === null || !('data' in response)) return fallback;
-  const data = (response as { data?: unknown }).data;
-  if (typeof data !== 'object' || data === null) return fallback;
-
-  const message = (data as { message?: unknown }).message;
-  if (typeof message === 'string' && message.trim()) return message;
-  const error = (data as { error?: unknown }).error;
-  if (typeof error === 'string' && error.trim()) return error;
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const errorMessage = (error as { message?: unknown }).message;
-    if (typeof errorMessage === 'string' && errorMessage.trim()) return errorMessage;
-  }
-  return fallback;
+  return userFacingError(reason, fallback);
 }
 
 export function isSafeEvidenceLink(value: string): boolean {

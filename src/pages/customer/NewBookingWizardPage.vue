@@ -40,6 +40,8 @@ import { bookingsApi } from '../../api/bookings.api';
 import { aiApi, type AiReply } from '../../api/ai.api';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 
 
 const route = useRoute();
@@ -97,10 +99,10 @@ const removePhotoByLocalId = (localId: number) => {
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
-const today = new Date();
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
-const todayIso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+// Today in Vietnam, whatever zone the browser is in.
+const todayIso = vnDayKey();
 
 const preferredDate = ref(todayIso);
 const preferredTime = ref('EARLIEST');
@@ -113,9 +115,8 @@ const formattedScheduleDisplay = computed(() => {
     dateText = 'Ngày mai';
   } else if (/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value)) {
     const [y, m, d] = preferredDate.value.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
     const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
-    dateText = `${dayNames[dt.getDay()]}, ${pad(d)}/${pad(m)}/${y}`;
+    dateText = `${dayNames[weekdayOfKey(preferredDate.value)]}, ${pad(d)}/${pad(m)}/${y}`;
   }
 
   let timeText = preferredTime.value;
@@ -553,7 +554,7 @@ const goToNextStepFrom2 = async () => {
       }
     }
   } catch (err) {
-    window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ.');
+    window.alert(userFacingError(err, 'Khung giờ hoặc ngày hẹn không hợp lệ.'));
     return;
   }
 
@@ -601,7 +602,7 @@ const createAndFindTech = async () => {
       return;
     }
   } catch (err) {
-    window.alert(err instanceof Error ? err.message : 'Khung giờ hoặc ngày hẹn không hợp lệ. Vui lòng chọn lại.');
+    window.alert(userFacingError(err, 'Khung giờ hoặc ngày hẹn không hợp lệ. Vui lòng chọn lại.'));
     step.value = 2;
     return;
   }
@@ -626,8 +627,8 @@ const createAndFindTech = async () => {
       errObj?.response?.data?.error?.message ||
       errObj?.response?.data?.message;
 
-    let friendlyMessage = 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.';
-    if (backendMessage) {
+    let friendlyMessage = userFacingError(error, 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
+    if (typeof backendMessage === 'string') {
       if (
         backendMessage.includes('valid future') ||
         backendMessage.includes('khung giờ') ||
@@ -639,11 +640,7 @@ const createAndFindTech = async () => {
         friendlyMessage = 'Vui lòng kiểm tra lại địa chỉ và số lượng yêu cầu.';
       } else if (backendMessage.includes('suspended')) {
         friendlyMessage = 'Tài khoản của bạn tạm thời bị tạm dừng đặt lịch.';
-      } else {
-        friendlyMessage = backendMessage;
       }
-    } else if (error instanceof Error && !error.message.includes('status code')) {
-      friendlyMessage = error.message;
     }
     window.alert(friendlyMessage);
   } finally {
@@ -688,7 +685,7 @@ const createAndFindTech = async () => {
         <!-- Title & Subtitle + Trust banner -->
         <div class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+            <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
               Nhà mình đang gặp vấn đề gì?
             </h2>
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
@@ -743,7 +740,7 @@ const createAndFindTech = async () => {
                   </div>
                   <div
                     class="text-[10px] mt-0.5 line-clamp-1"
-                    :class="selectedCategoryId === cat.id ? 'text-blue-100' : 'text-ink-500'"
+                    :class="selectedCategoryId === cat.id ? 'text-brand-100' : 'text-ink-500'"
                   >
                     {{ cat.description || 'Sửa chữa & bảo dưỡng' }}
                   </div>
@@ -767,7 +764,7 @@ const createAndFindTech = async () => {
               <div class="flex items-center gap-1.5 bg-ink-100/80 p-1 rounded-xl self-start sm:self-auto text-[11px]">
                 <button
                   type="button"
-                  class="px-2.5 py-1 rounded-lg font-semibold transition-all"
+                  class="whitespace-nowrap px-2.5 py-1 rounded-lg font-semibold transition-all"
                   :class="serviceFilter === 'ALL' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'ALL'"
                 >
@@ -780,7 +777,7 @@ const createAndFindTech = async () => {
                   :class="serviceFilter === 'FIXED' ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'FIXED'"
                 >
-                  <span>⚡ Giá niêm yết</span>
+                  <Zap :size="14" /><span>Giá niêm yết</span>
                   <span class="text-[10px] opacity-80">({{ fixedServicesCount }})</span>
                 </button>
                 <button
@@ -790,7 +787,7 @@ const createAndFindTech = async () => {
                   :class="serviceFilter === 'INSPECTION' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
                   @click="serviceFilter = 'INSPECTION'"
                 >
-                  <span>🔍 Khảo sát</span>
+                  <Search :size="14" /><span>Khảo sát</span>
                   <span class="text-[10px] opacity-80">({{ inspectionServicesCount }})</span>
                 </button>
               </div>
@@ -831,15 +828,15 @@ const createAndFindTech = async () => {
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span
                       v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200"
                     >
-                      ⚡ Giá niêm yết
+                      <Zap :size="12" /> Giá niêm yết
                     </span>
                     <span
                       v-else
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ink-100 text-ink-700 border border-ink-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-200"
                     >
-                      🔍 Khảo sát tận nơi
+                      <Search :size="12" /> Khảo sát tận nơi
                     </span>
                     <span class="text-[11px] text-ink-500 inline-flex items-center gap-1 font-medium">
                       <Clock :size="12" class="text-ink-400" />
@@ -921,15 +918,15 @@ const createAndFindTech = async () => {
           <!-- 3. Fixed Price Package Detail & Quantity Configurator -->
           <div
             v-if="isFixedPrice"
-            class="p-5 rounded-2xl bg-gradient-to-br from-brand-50/80 to-blue-50/40 border border-brand-200 space-y-4"
+            class="p-5 rounded-2xl bg-brand-50 border border-brand-200 space-y-4"
           >
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-600 text-white">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
                     Gói trọn gói chuẩn
                   </span>
-                  <span class="font-extrabold text-xs sm:text-sm text-brand-950">
+                  <span class="font-bold text-xs sm:text-sm text-brand-950">
                     {{ selectedService?.name }}
                   </span>
                 </div>
@@ -940,7 +937,7 @@ const createAndFindTech = async () => {
 
               <div class="text-right">
                 <div class="text-[11px] text-ink-500">Đơn giá niêm yết</div>
-                <div class="text-sm sm:text-base font-extrabold text-brand-700 font-num">
+                <div class="text-sm sm:text-base font-bold text-brand-700 font-num">
                   <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" />
                   <span class="text-xs text-ink-500 font-normal"> / {{ selectedService?.unit || 'thiết bị' }}</span>
                 </div>
@@ -966,7 +963,7 @@ const createAndFindTech = async () => {
                   >
                     <Minus :size="14" />
                   </button>
-                  <span class="w-10 text-center font-extrabold font-num text-sm text-ink-900">{{ quantity }}</span>
+                  <span class="w-10 text-center font-bold font-num text-sm text-ink-900">{{ quantity }}</span>
                   <button
                     type="button"
                     class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all hover:bg-ink-100 active:scale-95 text-ink-800"
@@ -978,7 +975,7 @@ const createAndFindTech = async () => {
 
                 <div class="text-right pl-2">
                   <div class="text-[10px] text-ink-500 font-medium">Tổng tiền trọn gói:</div>
-                  <div class="font-extrabold text-base text-brand-700 font-num">
+                  <div class="font-bold text-base text-brand-700 font-num">
                     <FhMoney :amount="totalFixedAmount" />
                   </div>
                 </div>
@@ -987,7 +984,7 @@ const createAndFindTech = async () => {
 
             <!-- Transparency Reassurance -->
             <div class="pt-2 border-t border-brand-200/60 flex items-center gap-2 text-[11px] text-brand-900 font-medium">
-              <CheckCircle2 :size="15" class="text-emerald-600 shrink-0" />
+              <CheckCircle2 :size="15" class="text-success-600 shrink-0" />
               <span>Chỉ thanh toán khi kỹ thuật viên hoàn thành và bạn nghiệm thu hài lòng. Không phát sinh phụ phí ẩn.</span>
             </div>
           </div>
@@ -1075,7 +1072,7 @@ const createAndFindTech = async () => {
                 <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
               </label>
               <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
-                ⚡ Giá niêm yết (Không bắt buộc mô tả lỗi)
+                <Zap :size="12" class="inline -mt-0.5" /> Giá niêm yết (Không bắt buộc mô tả lỗi)
               </span>
               <span v-else class="text-[11px] text-ink-500">
                 Mô tả chi tiết để thợ chuẩn bị linh kiện sát nhất
@@ -1142,7 +1139,7 @@ const createAndFindTech = async () => {
                     :class="urgency === lvl.key ? 'text-brand-600' : 'text-ink-400'"
                   />
                   <span
-                    class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    class="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                     :class="urgency === lvl.key ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'"
                   >
                     {{ lvl.badge }}
@@ -1167,7 +1164,7 @@ const createAndFindTech = async () => {
             <!-- Selected summary on desktop -->
             <div v-if="selectedService" class="text-right hidden sm:block">
               <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
-              <div v-if="isFixedPrice" class="text-xs font-extrabold text-brand-700 font-num">
+              <div v-if="isFixedPrice" class="text-xs font-bold text-brand-700 font-num">
                 Tổng: <FhMoney :amount="totalFixedAmount" />
               </div>
               <div v-else class="text-[11px] font-semibold text-brand-600">Khảo sát & Báo giá tận nơi</div>
@@ -1191,7 +1188,7 @@ const createAndFindTech = async () => {
     <div v-if="step === 2" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Thông tin lịch hẹn & Địa chỉ
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1271,11 +1268,11 @@ const createAndFindTech = async () => {
     <div v-if="step === 3" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-bold mb-2">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-bold mb-2">
             <Bot :size="14" />
             <span>AI Chẩn đoán FixHome</span>
           </div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Gợi ý phán đoán sự cố từ AI
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1289,7 +1286,7 @@ const createAndFindTech = async () => {
         </div>
 
         <div v-if="loading" class="text-center py-12 space-y-3">
-          <Sparkles class="animate-spin text-purple-600 mx-auto" :size="36" />
+          <Sparkles class="animate-spin text-brand-600 mx-auto" :size="36" />
           <p class="text-xs text-ink-600 font-bold">AI đang phân tích mô tả của bạn...</p>
         </div>
 
@@ -1298,7 +1295,7 @@ const createAndFindTech = async () => {
                invented, and the booking carries on regardless. -->
           <div
             v-if="aiResult.status === 'unavailable'"
-            class="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900"
+            class="p-5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900"
           >
             <p class="font-bold text-xs mb-1">Trợ lý đang tạm thời không kết nối được</p>
             <p class="text-xs leading-relaxed">
@@ -1314,7 +1311,7 @@ const createAndFindTech = async () => {
               v-if="aiUrgentActions.length"
               class="p-5 rounded-2xl bg-danger-50 border border-danger-200 space-y-2"
             >
-              <div class="flex items-center gap-1.5 font-extrabold text-danger-700 text-xs">
+              <div class="flex items-center gap-1.5 font-bold text-danger-700 text-xs">
                 <AlertTriangle :size="15" /> Anh/chị làm ngay giúp em
               </div>
               <p
@@ -1326,28 +1323,28 @@ const createAndFindTech = async () => {
               </p>
             </div>
 
-            <div class="p-5 rounded-2xl bg-purple-50 border border-purple-200 space-y-3">
+            <div class="p-5 rounded-2xl bg-brand-50 border border-brand-200 space-y-3">
               <div class="flex items-center justify-between">
-                <span class="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
-                  <Sparkles :size="15" class="text-purple-600" />
+                <span class="font-bold text-brand-900 flex items-center gap-1.5 text-xs">
+                  <Sparkles :size="15" class="text-brand-600" />
                   <template v-if="aiResult.device">{{ aiResult.device.nameVi }}</template>
                   <template v-else>Gợi ý sơ bộ</template>
                 </span>
                 <span
                   v-if="aiResult.confidence"
-                  class="text-[10px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200"
+                  class="text-[10px] font-bold text-brand-700 bg-white px-2 py-0.5 rounded-full border border-brand-200"
                 >
                   Mức tin cậy {{ Math.round(aiResult.confidence * 100) }}%
                 </span>
               </div>
 
-              <p v-if="aiResult.messageVi" class="text-xs text-purple-950 leading-relaxed">
+              <p v-if="aiResult.messageVi" class="text-xs text-brand-900 leading-relaxed">
                 {{ aiResult.messageVi }}
               </p>
 
               <div v-if="aiResult.suspectedFaults?.length">
-                <div class="text-xs font-bold text-purple-950 mb-1.5">Có thể là:</div>
-                <ul class="list-disc list-inside space-y-1 text-xs text-purple-900 font-medium">
+                <div class="text-xs font-bold text-brand-900 mb-1.5">Có thể là:</div>
+                <ul class="list-disc list-inside space-y-1 text-xs text-brand-900 font-medium">
                   <li v-for="fault in aiResult.suspectedFaults" :key="fault.faultCode">
                     {{ fault.nameVi }}
                   </li>
@@ -1379,7 +1376,7 @@ const createAndFindTech = async () => {
                     <template v-else>Ước tính công thợ, chưa gồm linh kiện</template>
                   </div>
                 </div>
-                <div class="text-lg font-extrabold font-num text-brand-700 mt-2">
+                <div class="text-lg font-bold font-num text-brand-700 mt-2">
                   {{ aiPriceLabel }}
                 </div>
               </div>
@@ -1401,7 +1398,7 @@ const createAndFindTech = async () => {
 
             <p
               v-if="aiResult.disclaimerVi"
-              class="text-[11px] text-ink-500 italic bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-800"
+              class="text-[11px] text-ink-500 italic bg-warning-50 p-3 rounded-xl border border-warning-200 text-warning-800"
             >
               {{ aiResult.disclaimerVi }}
             </p>
@@ -1423,7 +1420,7 @@ const createAndFindTech = async () => {
     <div v-if="step === 4" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
-          <h2 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
+          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
             Xác nhận yêu cầu sửa chữa
           </h2>
           <p class="text-xs text-ink-500 mt-1">
@@ -1452,7 +1449,7 @@ const createAndFindTech = async () => {
               </div>
               <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
                 <span class="font-bold text-brand-950">Tổng thanh toán niêm yết:</span>
-                <span class="font-extrabold text-brand-700 text-base font-num">
+                <span class="font-bold text-brand-700 text-base font-num">
                   <FhMoney :amount="totalFixedAmount" />
                 </span>
               </div>
@@ -1471,23 +1468,23 @@ const createAndFindTech = async () => {
 
             <div class="flex items-center justify-between pt-2">
               <span class="text-ink-500">Mức độ khẩn cấp:</span>
-              <span class="font-bold text-brand-700 uppercase">{{ urgency }}</span>
+              <span class="font-bold text-brand-700">{{ urgency }}</span>
             </div>
           </div>
 
           <!-- Trust guarantee -->
           <div
             v-if="isFixedPrice"
-            class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-3"
+            class="p-4 rounded-2xl bg-success-50 border border-success-200 text-success-900 flex items-start gap-3"
           >
-            <CheckCircle2 :size="18" class="text-emerald-600 shrink-0 mt-0.5" />
+            <CheckCircle2 :size="18" class="text-success-600 shrink-0 mt-0.5" />
             <p class="text-xs leading-relaxed">
               <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi nghiệm thu hài lòng, không phát sinh chi phí khảo sát.
             </p>
           </div>
           <div
             v-else
-            class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 flex items-start gap-3"
+            class="p-4 rounded-2xl bg-brand-50 border border-brand-200 text-brand-900 flex items-start gap-3"
           >
             <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
             <p class="text-xs leading-relaxed">

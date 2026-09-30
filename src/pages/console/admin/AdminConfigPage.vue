@@ -8,6 +8,7 @@ import {
   type ConfigEffectStatus,
   type ConfigValueType,
 } from '../../../api/admin-config.api';
+import { userFacingError } from '../../../utils/user-facing-error';
 
 interface ConfigDefinition {
   key: string;
@@ -192,7 +193,7 @@ const saveConfig = async () => {
     showEditModal.value = false;
     configToEdit.value = null;
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : 'Không thể cập nhật cấu hình.';
+    error.value = userFacingError(reason, 'Không thể cập nhật cấu hình.');
   } finally {
     saveLoading.value = false;
   }

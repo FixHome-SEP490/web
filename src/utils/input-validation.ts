@@ -8,6 +8,8 @@
 // tiếng Anh từ server. Sửa luật ở backend thì sửa cả ở đây và ở bản mobile
 // tương ứng.
 
+import { userFacingError } from './user-facing-error';
+
 /** Ký tự điều khiển C0/C1. */
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
@@ -91,25 +93,7 @@ export function validatePhoneNumber(value: string): string {
  * nằm trong mảng `details`, nên phải đọc `details` trước.
  */
 export function extractApiErrorMessage(err: unknown, fallback: string): string {
-  const response = (
-    err as {
-      response?: {
-        data?: {
-          error?: { message?: string; details?: unknown };
-          message?: string | string[];
-        };
-      };
-    }
-  )?.response?.data;
-
-  const details = response?.error?.details;
-  if (Array.isArray(details) && details.length > 0) {
-    return details.join('. ');
-  }
-
-  const message = response?.error?.message ?? response?.message;
-  if (Array.isArray(message)) return message.join('. ');
-  if (typeof message === 'string' && message) return message;
-
-  return fallback;
+  // Validation details, then the server sentence, then the screen fallback;
+  // codes and library wording never reach the person (user-facing-error.ts).
+  return userFacingError(err, fallback);
 }

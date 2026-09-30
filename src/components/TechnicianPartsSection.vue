@@ -29,6 +29,7 @@ import {
 } from '../api/part-requests.api';
 import { partsCatalogApi } from '../api/parts-catalog.api';
 import type { FixHomePart } from '../api/admin-parts.api';
+import { vnDateTimeString } from '../utils/vn-time';
 
 const props = defineProps<{
   orderId: string;
@@ -379,7 +380,7 @@ const handleTestReceive = async (requestId: string) => {
     });
 
     actionSuccess.value =
-      '🧪 [Test Mode] Xác nhận đã quét mã QR thành công! Linh kiện đã chuyển sang trạng thái ĐÃ NHẬN (RECEIVED).';
+      'Xác nhận đã quét mã QR thành công. Linh kiện đã chuyển sang trạng thái đã nhận.';
     showQrInput.value = null;
     qrTokenInput.value = '';
     await loadPartRequests();
@@ -407,7 +408,7 @@ const handleUpdateUsage = async (
     });
 
     actionSuccess.value =
-      status === 'used' ? 'Đã ghi nhận linh kiện ĐÃ DÙNG.' : 'Đã ghi nhận linh kiện HOÀN TRẢ.';
+      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện hoàn trả.';
     await loadPartRequests();
     emit('parts-updated');
   } catch (err: unknown) {
@@ -441,17 +442,17 @@ const formatStatusText = (status: string) => {
 const getStatusBadgeClass = (status: string) => {
   switch (status.toLowerCase()) {
     case 'requested':
-      return 'bg-amber-100 text-amber-800 border-amber-200';
+      return 'bg-warning-100 text-warning-800 border-warning-200';
     case 'ready':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-brand-100 text-brand-800 border-brand-200';
     case 'delivering':
-      return 'bg-purple-100 text-purple-800 border-purple-200';
+      return 'bg-brand-100 text-brand-800 border-brand-200';
     case 'received':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-success-100 text-success-800 border-success-200';
     case 'completed':
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-ink-100 text-ink-800 border-ink-200';
     case 'cancelled':
-      return 'bg-rose-100 text-rose-800 border-rose-200';
+      return 'bg-danger-100 text-danger-800 border-danger-200';
     default:
       return 'bg-ink-100 text-ink-800 border-ink-200';
   }
@@ -459,7 +460,7 @@ const getStatusBadgeClass = (status: string) => {
 </script>
 
 <template>
-  <FhCard title="Linh kiện sửa chữa (Flow 1 & 2)">
+  <FhCard title="Linh kiện sửa chữa">
     <div class="space-y-4 text-xs">
       <!-- Alerts -->
       <div
@@ -482,7 +483,7 @@ const getStatusBadgeClass = (status: string) => {
       <div class="rounded-lg bg-brand-50/70 border border-brand-200 p-3 text-brand-900 space-y-1.5">
         <p class="font-bold flex items-center gap-1.5 text-[11px] text-brand-800">
           <Package :size="14" class="text-brand-600" />
-          QUY TẮC QUẢN LÝ LINH KIỆN FIXHOME:
+          Quy tắc quản lý linh kiện FixHome:
         </p>
         <ul class="list-disc list-inside space-y-0.5 text-[11px] text-ink-700">
           <li>
@@ -491,10 +492,10 @@ const getStatusBadgeClass = (status: string) => {
           </li>
           <li>
             <strong>Tính phí khách hàng:</strong> Khách chỉ thanh toán cho linh kiện
-            <em>thực tế được sử dụng (USED)</em> và đã được khách duyệt qua Báo giá / Chi phí phát sinh.
+            <em>thực tế được sử dụng</em> và đã được khách duyệt qua Báo giá / Chi phí phát sinh.
           </li>
           <li>
-            <strong>Linh kiện không dùng:</strong> Đánh dấu <em>Hoàn trả (RETURNED)</em> mang về kho, hoàn toàn
+            <strong>Linh kiện không dùng:</strong> Đánh dấu <em>Hoàn trả</em> mang về kho, hoàn toàn
             không tính vào chi phí đơn hàng.
           </li>
         </ul>
@@ -663,7 +664,7 @@ const getStatusBadgeClass = (status: string) => {
                       <FhMoney :amount="part.sellingPrice" />
                     </div>
                     <span
-                      class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
                     >
                       <ShieldCheck :size="12" />
                       {{ getWarrantyBadge(part.warrantyDays) }}
@@ -715,7 +716,7 @@ const getStatusBadgeClass = (status: string) => {
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <!-- Price block -->
                 <div class="bg-white p-2.5 rounded-lg border border-brand-200/60 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-ink-500 flex items-center gap-1">
+                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
                     <Tag :size="12" class="text-brand-600" /> Giá niêm yết FixHome
                   </span>
                   <div class="text-base font-bold text-brand-700 font-num">
@@ -724,12 +725,12 @@ const getStatusBadgeClass = (status: string) => {
                 </div>
 
                 <!-- Warranty duration block -->
-                <div class="bg-white p-2.5 rounded-lg border border-emerald-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                    <ShieldCheck :size="12" class="text-emerald-600" /> Thời hạn bảo hành
+                <div class="bg-white p-2.5 rounded-lg border border-success-200 shadow-xs space-y-0.5">
+                  <span class="text-[10px] font-bold text-success-800 flex items-center gap-1">
+                    <ShieldCheck :size="12" class="text-success-600" /> Thời hạn bảo hành
                   </span>
-                  <div class="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                    <span class="text-sm font-extrabold">
+                  <div class="text-xs font-bold text-success-700 flex items-center gap-1">
+                    <span class="whitespace-nowrap text-sm font-bold">
                       {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}
                     </span>
                   </div>
@@ -737,7 +738,7 @@ const getStatusBadgeClass = (status: string) => {
 
                 <!-- Warranty policy block -->
                 <div class="bg-white p-2.5 rounded-lg border border-ink-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-ink-500 flex items-center gap-1">
+                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
                     <Clock :size="12" class="text-ink-500" /> Chính sách bảo hành
                   </span>
                   <p class="text-[11px] text-ink-700 font-medium line-clamp-2">
@@ -839,7 +840,7 @@ const getStatusBadgeClass = (status: string) => {
                     </td>
                     <td class="p-2.5 text-center">
                       <span
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
                         :title="item.warrantyPolicy || undefined"
                       >
                         <ShieldCheck :size="11" />
@@ -892,7 +893,7 @@ const getStatusBadgeClass = (status: string) => {
                     <td colspan="4" class="p-2.5 font-bold text-brand-900 text-right">
                       Tổng giá trị linh kiện dự kiến mang theo:
                     </td>
-                    <td class="p-2.5 text-right font-num font-extrabold text-brand-700 text-sm">
+                    <td class="p-2.5 text-right font-num font-bold text-brand-700 text-sm">
                       <FhMoney :amount="selectedTotalPrice" />
                     </td>
                     <td colspan="2" class="p-2.5 text-[11px] text-ink-500 italic">
@@ -947,7 +948,7 @@ const getStatusBadgeClass = (status: string) => {
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-2">
             <div class="flex items-center gap-2">
               <span
-                class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border"
+                class="px-2 py-0.5 rounded text-[10px] font-bold border"
                 :class="getStatusBadgeClass(pr.status)"
               >
                 {{ formatStatusText(pr.status) }}
@@ -955,13 +956,13 @@ const getStatusBadgeClass = (status: string) => {
 
               <span
                 v-if="pr.requestType === 'pre_repair'"
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-50 text-warning-700 border border-warning-200"
               >
                 Trước sửa chữa
               </span>
               <span
                 v-else
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200"
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
               >
                 Phát sinh khi sửa
               </span>
@@ -974,7 +975,7 @@ const getStatusBadgeClass = (status: string) => {
             </div>
 
             <span class="text-[11px] text-ink-400 font-num">
-              {{ new Date(pr.createdAt).toLocaleString('vi-VN') }}
+              {{ vnDateTimeString(pr.createdAt) }}
             </span>
           </div>
 
@@ -991,21 +992,21 @@ const getStatusBadgeClass = (status: string) => {
           <!-- Pending Preparation State with Test Helper Bypass -->
           <div
             v-if="pr.status === 'requested'"
-            class="p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 flex flex-wrap items-center justify-between gap-2"
+            class="p-2.5 rounded-lg bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
           >
-            <div class="flex items-center gap-2 text-xs text-amber-800">
-              <Clock :size="14" class="text-amber-600 shrink-0" />
+            <div class="flex items-center gap-2 text-xs text-warning-800">
+              <Clock :size="14" class="text-warning-600 shrink-0" />
               <span>Đang chờ Quản lý kho chuẩn bị linh kiện...</span>
             </div>
             <FhButton
               variant="secondary"
               size="sm"
-              class="border-dashed border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200 text-xs font-semibold"
+              class="border-dashed border-warning-500 bg-warning-100 text-warning-900 hover:bg-warning-200 text-xs font-semibold"
               :disabled="actionLoading"
               title="Bỏ qua chờ kho chuẩn bị, giả lập đã quét mã QR để chuyển ngay sang trạng thái ĐÃ NHẬN"
               @click="handleTestReceive(pr.id)"
             >
-              <CheckCircle2 :size="14" class="mr-1 text-amber-700" />
+              <CheckCircle2 :size="14" class="mr-1 text-warning-700" />
               [Test] Giả lập đã quét nhận
             </FhButton>
           </div>
@@ -1016,11 +1017,11 @@ const getStatusBadgeClass = (status: string) => {
               (pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') ||
               (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering')
             "
-            class="p-3 rounded-lg bg-blue-50 border border-blue-200 space-y-2"
+            class="p-3 rounded-lg bg-brand-50 border border-brand-200 space-y-2"
           >
             <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2 text-blue-900 font-bold">
-                <QrCode :size="16" class="text-blue-600 shrink-0" />
+              <div class="flex items-center gap-2 text-brand-900 font-bold">
+                <QrCode :size="16" class="text-brand-600 shrink-0" />
                 <span>Linh kiện đã sẵn sàng bàn giao!</span>
               </div>
               <div class="flex items-center gap-2">
@@ -1035,18 +1036,18 @@ const getStatusBadgeClass = (status: string) => {
                 <FhButton
                   variant="secondary"
                   size="sm"
-                  class="border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200 font-semibold"
+                  class="border-warning-400 bg-warning-100 text-warning-900 hover:bg-warning-200 font-semibold"
                   :disabled="actionLoading"
                   title="Giả lập đã quét mã QR nhận hàng để chuyển ngay sang ĐÃ NHẬN"
                   @click="handleTestReceive(pr.id)"
                 >
-                  <CheckCircle2 :size="14" class="mr-1 text-amber-700" />
+                  <CheckCircle2 :size="14" class="mr-1 text-warning-700" />
                   [Test] Đã quét nhận hàng
                 </FhButton>
               </div>
             </div>
 
-            <p class="text-[11px] text-blue-800">
+            <p class="text-[11px] text-brand-800">
               Quản lý dịch vụ đã chuẩn bị xong. Khi bạn đến kho hoặc nhận từ người giao, hãy quét hoặc nhập mã QR token để xác nhận:
             </p>
 
@@ -1056,7 +1057,7 @@ const getStatusBadgeClass = (status: string) => {
                 v-model="qrTokenInput"
                 type="text"
                 placeholder="Nhập mã QR token (VD: FH-PR-...)"
-                class="flex-1 min-w-[200px] text-xs rounded border border-blue-300 p-2 bg-white"
+                class="flex-1 min-w-[200px] text-xs rounded border border-brand-300 p-2 bg-white"
               />
               <FhButton
                 variant="primary"
@@ -1069,7 +1070,7 @@ const getStatusBadgeClass = (status: string) => {
               <FhButton
                 variant="secondary"
                 size="sm"
-                class="border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                class="border-warning-400 bg-warning-50 text-warning-800 hover:bg-warning-100"
                 :disabled="actionLoading"
                 @click="handleTestReceive(pr.id)"
               >
@@ -1082,10 +1083,10 @@ const getStatusBadgeClass = (status: string) => {
           <!-- Received Badge -->
           <div
             v-if="pr.receivedAt"
-            class="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 p-2 rounded flex items-center gap-1.5"
+            class="text-[11px] text-success-800 bg-success-50 border border-success-200 p-2 rounded flex items-center gap-1.5"
           >
-            <CheckCircle2 :size="14" class="text-emerald-600" />
-            <span>Đã nhận bàn giao lúc: {{ new Date(pr.receivedAt).toLocaleString('vi-VN') }}</span>
+            <CheckCircle2 :size="14" class="text-success-600" />
+            <span>Đã nhận bàn giao lúc: {{ vnDateTimeString(pr.receivedAt) }}</span>
           </div>
 
           <!-- Items list in this request -->
@@ -1115,7 +1116,7 @@ const getStatusBadgeClass = (status: string) => {
                     <td class="p-2 text-center">
                       <span
                         v-if="getPartWarrantyFromHistory(item)"
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
                       >
                         <ShieldCheck :size="11" />
                         {{ getPartWarrantyFromHistory(item) }}
@@ -1130,15 +1131,15 @@ const getStatusBadgeClass = (status: string) => {
                     <td class="p-2 text-center">
                       <span
                         v-if="item.usageStatus === 'used'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"
+                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-50 text-success-700 border border-success-200 inline-flex items-center gap-1"
                       >
-                        <Check :size="11" /> ĐÃ DÙNG
+                        <Check :size="11" /> Đã dùng
                       </span>
                       <span
                         v-else-if="item.usageStatus === 'returned'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1"
+                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-50 text-warning-700 border border-warning-200 inline-flex items-center gap-1"
                       >
-                        <RotateCcw :size="11" /> HOÀN TRẢ
+                        <RotateCcw :size="11" /> Hoàn trả
                       </span>
                       <span
                         v-else
@@ -1151,29 +1152,29 @@ const getStatusBadgeClass = (status: string) => {
                     <td v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right space-x-1">
                       <button
                         type="button"
-                        class="px-2 py-1 rounded text-[11px] font-semibold transition-colors"
+                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
                         :class="
                           item.usageStatus === 'used'
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300'
+                            ? 'bg-success-600 text-white'
+                            : 'bg-success-50 text-success-700 hover:bg-success-100 border border-success-300'
                         "
                         :disabled="actionLoading"
                         @click="handleUpdateUsage(pr.id, item.id, 'used')"
                       >
-                        Đã Dùng
+                        Đã dùng
                       </button>
                       <button
                         type="button"
-                        class="px-2 py-1 rounded text-[11px] font-semibold transition-colors"
+                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
                         :class="
                           item.usageStatus === 'returned'
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-300'
+                            ? 'bg-warning-600 text-white'
+                            : 'bg-warning-50 text-warning-700 hover:bg-warning-100 border border-warning-300'
                         "
                         :disabled="actionLoading"
                         @click="handleUpdateUsage(pr.id, item.id, 'returned')"
                       >
-                        Hoàn Trả
+                        Hoàn trả
                       </button>
                     </td>
                   </tr>

@@ -10,6 +10,7 @@ import {
   FhSkeleton,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 
@@ -129,7 +130,7 @@ const filteredOrders = computed<(ServiceOrderItem & { _isSkeleton?: boolean })[]
         </div>
         <div v-else>
           <span class="font-mono text-xs font-bold text-ink-900">{{ row.code }}</span>
-          <div class="text-[10px] text-ink-400 font-num">{{ new Date(row.createdAt).toLocaleDateString('vi-VN') }}</div>
+          <div class="text-[10px] text-ink-400 font-num">{{ vnDateString(row.createdAt) }}</div>
         </div>
       </template>
 

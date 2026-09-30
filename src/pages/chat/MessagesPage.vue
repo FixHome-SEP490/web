@@ -9,6 +9,7 @@ import {
   Search,
   Filter,
 } from 'lucide-vue-next';
+import { isSameVnDay, vnDateString, vnTimeString } from '../../utils/vn-time';
 
 const route = useRoute();
 const chatStore = useChatStore();
@@ -36,11 +37,11 @@ function formatTime(isoString: string | null) {
   try {
     const d = new Date(isoString);
     const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
+    const isToday = isSameVnDay(d, now);
     if (isToday) {
-      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      return vnTimeString(d, { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' });
+    return vnDateString(d, { month: 'numeric', day: 'numeric' });
   } catch {
     return '';
   }

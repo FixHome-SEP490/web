@@ -78,7 +78,7 @@ const handleDecline = async (inv: InvitationItem) => {
         </p>
       </div>
 
-      <span class="text-xs font-bold font-num px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+      <span class="whitespace-nowrap text-xs font-bold font-num px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
         {{ invitations.length }} lời mời đang chờ
       </span>
     </div>

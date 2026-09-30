@@ -56,7 +56,7 @@ const historyItems = ref([
       >
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-bold text-ink-900">{{ item.orderCode }}</span>
+            <span class="font-num text-sm text-ink-600 whitespace-nowrap">{{ item.orderCode }}</span>
             <span class="text-ink-400 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1">
               <Calendar :size="13" /> {{ item.date }}
@@ -70,18 +70,18 @@ const historyItems = ref([
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div class="space-y-1.5">
-            <div class="text-[11px] text-ink-400 uppercase font-semibold">Thiết bị & Dịch vụ:</div>
+            <div class="text-[11px] text-ink-400 font-semibold">Thiết bị & Dịch vụ:</div>
             <div class="font-bold text-sm text-ink-900">{{ item.device }}</div>
             <div class="text-ink-600">{{ item.service }}</div>
           </div>
 
           <div class="space-y-1.5 sm:text-right">
-            <div class="text-[11px] text-ink-400 uppercase font-semibold">Kỹ thuật viên thực hiện:</div>
+            <div class="text-[11px] text-ink-400 font-semibold">Kỹ thuật viên thực hiện:</div>
             <div class="font-semibold text-ink-900 flex items-center gap-1.5 sm:justify-end">
               <Wrench :size="13" class="text-brand-600" /> {{ item.technicianName }}
             </div>
-            <div class="flex items-center gap-1 sm:justify-end text-amber-500 font-bold">
-              <Star v-for="i in item.technicianRating" :key="i" :size="12" class="fill-amber-400" />
+            <div class="flex items-center gap-1 sm:justify-end text-warning-500 font-bold">
+              <Star v-for="i in item.technicianRating" :key="i" :size="12" class="fill-warning-400" />
             </div>
           </div>
         </div>

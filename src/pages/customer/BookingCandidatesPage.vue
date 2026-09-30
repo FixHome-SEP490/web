@@ -227,8 +227,8 @@ const successMessage = computed(() => selectedCount.value === 1
               class="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5"
               title="Đang hoạt động"
             >
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white shadow-xs" />
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success-400 opacity-75" />
+              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-success-500 border-2 border-white shadow-xs" />
             </span>
           </div>
 
@@ -239,8 +239,8 @@ const successMessage = computed(() => selectedCount.value === 1
             </div>
 
             <div class="flex flex-wrap items-center gap-3 text-xs text-ink-500">
-              <span class="flex items-center gap-1 font-semibold text-amber-600">
-                <Star :size="13" class="fill-amber-400" /> {{ tech.averageRating }} ({{ tech.ratingCount }})
+              <span class="flex items-center gap-1 font-semibold text-warning-600">
+                <Star :size="13" class="fill-warning-400" /> {{ tech.averageRating }} ({{ tech.ratingCount }})
               </span>
               <span>•</span>
               <span class="flex items-center gap-1">
