@@ -18,6 +18,23 @@ export interface VerificationTechnician {
   fullName: string;
   email: string;
   phoneNumber: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  citizenIdNumber?: string | null;
+}
+
+export interface VerificationProfileSkill {
+  name: string;
+  level: string;
+}
+
+export interface VerificationProfile {
+  yearsExperience: number;
+  bio?: string | null;
+  serviceRadiusKm: number;
+  fullAddress?: string | null;
+  skills: VerificationProfileSkill[];
+  serviceAreas: string[];
 }
 
 export interface TechnicianVerification {
@@ -30,6 +47,18 @@ export interface TechnicianVerification {
   rejectionReason?: string | null;
   documents: VerificationDocument[];
   technician?: VerificationTechnician | null;
+  technicianProfile?: VerificationProfile | null;
+  
+  // Flattened for UI compatibility
+  identityCardNumber?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  yearsExperience?: number | null;
+  skills?: VerificationProfileSkill[];
+  bio?: string | null;
+  address?: string | null;
+  serviceRadiusKm?: number | null;
+  serviceAreas?: string[];
 }
 
 export interface VerificationQuery {
@@ -80,16 +109,23 @@ function normalizeDocument(payload: unknown): VerificationDocument {
 
 function normalizeTechnician(payload: unknown): VerificationTechnician | null {
   if (!isRecord(payload)) return null;
+  const t = payload as Record<string, unknown>;
   return {
-    id: String(payload.id ?? ''),
-    fullName: String(payload.fullName ?? ''),
-    email: String(payload.email ?? ''),
-    phoneNumber: payload.phoneNumber == null ? null : String(payload.phoneNumber),
+    id: String(t.id ?? ''),
+    fullName: String(t.fullName ?? ''),
+    email: String(t.email ?? ''),
+    phoneNumber: t.phoneNumber == null ? null : String(t.phoneNumber),
+    dateOfBirth: t.dateOfBirth == null ? null : String(t.dateOfBirth),
+    gender: t.gender == null ? null : String(t.gender),
+    citizenIdNumber: t.citizenIdNumber == null ? null : String(t.citizenIdNumber),
   };
 }
 
 function normalizeVerification(payload: unknown): TechnicianVerification {
   const verification = isRecord(payload) ? payload : {};
+  const t = isRecord(verification.technician) ? verification.technician : {};
+  const tp = isRecord(verification.technicianProfile) ? verification.technicianProfile : {};
+  
   return {
     id: String(verification.id ?? ''),
     technicianId: String(verification.technicianId ?? ''),
@@ -103,6 +139,17 @@ function normalizeVerification(payload: unknown): TechnicianVerification {
       ? verification.documents.map(normalizeDocument)
       : [],
     technician: normalizeTechnician(verification.technician),
+    
+    // Flattened profile data for UI compatibility
+    identityCardNumber: t.citizenIdNumber != null ? String(t.citizenIdNumber) : null,
+    dateOfBirth: t.dateOfBirth != null ? String(t.dateOfBirth) : null,
+    gender: t.gender != null ? String(t.gender) : null,
+    yearsExperience: tp.yearsExperience != null ? Number(tp.yearsExperience) : null,
+    skills: Array.isArray(tp.skills) ? (tp.skills as VerificationProfileSkill[]) : [],
+    bio: tp.bio != null ? String(tp.bio) : null,
+    address: tp.fullAddress != null ? String(tp.fullAddress) : null,
+    serviceRadiusKm: tp.serviceRadiusKm != null ? Number(tp.serviceRadiusKm) : null,
+    serviceAreas: Array.isArray(tp.serviceAreas) ? (tp.serviceAreas as string[]) : [],
   };
 }
 

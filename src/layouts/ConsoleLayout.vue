@@ -83,7 +83,7 @@ const navigation = computed(() => [
     <!-- Main Workspace -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Premium Topbar -->
-      <header class="h-16 lg:h-[72px] bg-white/80 backdrop-blur-md border-b border-ink-200/80 px-6 lg:px-10 flex items-center justify-between sticky top-0 z-20 shadow-sm transition-all">
+      <header class="h-16 lg:h-[72px] bg-white/80 backdrop-blur-md border-b border-ink-200/80 px-6 lg:px-10 flex items-center justify-between sticky top-0 z-40 shadow-sm transition-all">
         <!-- Breadcrumb / Route Title -->
         <div class="flex items-center gap-2 sm:gap-3">
           <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ink-50 text-ink-500 text-sm font-medium hover:bg-ink-100 hover:text-ink-700 transition-colors cursor-pointer border border-transparent hover:border-ink-200">
