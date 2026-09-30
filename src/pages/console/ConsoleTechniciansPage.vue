@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { CheckCircle2, XCircle, FileText, ShieldCheck, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, FhStatusPill, FhConfirmDialog, type TableColumn } from '../../components';
+import { CheckCircle2, XCircle, FileText, ShieldCheck, ChevronLeft, ChevronRight, Calendar, Loader2 } from 'lucide-vue-next';
+import { FhTable, FhStatusPill, FhConfirmDialog, type TableColumn } from '../../components';
 import {
   adminVerificationsApi,
   type TechnicianVerification,
@@ -13,7 +13,7 @@ const columns: TableColumn[] = [
   { key: 'submittedAt', label: 'Ngày gửi', width: '120px' },
   { key: 'documents', label: 'Hồ sơ KYC' },
   { key: 'status', label: 'Trạng thái', width: '140px' },
-  { key: 'actions', label: 'Thao tác', width: '160px' },
+  { key: 'actions', label: 'Thao tác', width: '160px', align: 'right' },
 ];
 
 const statusFilter = ref<VerificationStatus | 'ALL'>('ALL');
@@ -152,6 +152,11 @@ const confirmReject = async () => {
   }
 };
 
+const previewUrl = ref('');
+const showPreviewModal = ref(false);
+const previewTitle = ref('');
+const previewLoading = ref(false);
+
 const openDocument = async (
   verification: TechnicianVerification,
   document: TechnicianVerification['documents'][number],
@@ -160,15 +165,20 @@ const openDocument = async (
     error.value = 'Tài liệu này chưa có mã định danh từ Backend.';
     return;
   }
-  // Open synchronously so the popup isn't blocked, then point it at the signed URL.
-  const popup = window.open('', '_blank');
+  
+  previewTitle.value = formatDocumentType(document.documentType);
+  previewUrl.value = '';
+  showPreviewModal.value = true;
+  previewLoading.value = true;
+  
   try {
     const url = await adminVerificationsApi.getDocumentAccess(verification.id, document.id);
-    if (popup) popup.location.href = url;
-    else window.open(url, '_blank', 'noopener,noreferrer');
+    previewUrl.value = url;
   } catch (reason) {
-    popup?.close();
-    error.value = getErrorMessage(reason, 'Không thể mở tài liệu KYC.');
+    showPreviewModal.value = false;
+    error.value = getErrorMessage(reason, 'Không thể tải tài liệu KYC.');
+  } finally {
+    previewLoading.value = false;
   }
 };
 
@@ -195,115 +205,169 @@ const formatDate = (value: string) => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <ShieldCheck class="text-brand-600" :size="24" />
-          Xác thực KYC Kỹ thuật viên
+  <div class="space-y-6 max-w-[1400px] mx-auto">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-8">
+      <div class="space-y-1.5">
+        <div class="inline-flex items-center gap-2.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold uppercase tracking-wider mb-2">
+          <ShieldCheck :size="14" stroke-width="2.5" />
+          Admin Console
+        </div>
+        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
+          Xác thực Kỹ thuật viên
         </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Admin kiểm tra CCCD và ảnh khuôn mặt trước khi Technician được đưa vào matching.
+        <p class="text-sm text-gray-500 font-medium max-w-xl">
+          Kiểm tra CCCD, ảnh khuôn mặt và thông tin cá nhân. Đảm bảo KTV đáp ứng đủ điều kiện trước khi đưa vào hệ thống matching dịch vụ.
         </p>
       </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadVerifications">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
     </div>
 
+    <!-- Feedback Messages -->
     <div
       v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      class="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm"
       role="alert"
     >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadVerifications">Thử lại</button>
+      <span class="flex-1 font-medium">{{ error }}</span>
+      <button class="font-semibold underline hover:text-red-900 transition-colors" type="button" @click="loadVerifications">Thử lại</button>
     </div>
     <div
       v-if="successMessage"
-      class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
+      class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 font-medium shadow-sm"
       role="status"
     >
       {{ successMessage }}
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <label class="sr-only" for="verification-search">Tìm hồ sơ KYC</label>
-        <input
-          id="verification-search"
-          v-model="searchQuery"
-          type="search"
-          placeholder="Tìm theo tên, email, SĐT hoặc mã hồ sơ..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-      <label class="flex items-center gap-2 text-xs text-ink-500">
-        Trạng thái:
-        <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700">
-          <option value="ALL">Tất cả trạng thái</option>
-          <option value="PENDING">PENDING</option>
-          <option value="VERIFIED">VERIFIED</option>
-          <option value="REJECTED">REJECTED</option>
-        </select>
-      </label>
-    </div>
+    <!-- Main Table -->
+    <FhTable 
+      :columns="columns" 
+      :rows="filteredVerifications" 
+      :loading="loading" 
+      :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có hồ sơ KYC phù hợp.'"
+      searchable
+      v-model:searchQuery="searchQuery"
+      searchPlaceholder="Tìm theo tên, email, SĐT..."
+      refreshable
+      @refresh="loadVerifications"
+      tableTitle="Danh sách chờ duyệt"
+      tableSubtitle="Các kỹ thuật viên vừa nộp hồ sơ KYC"
+    >
+      <template #toolbar>
+        <div class="flex items-center gap-2">
+          <label class="hidden md:flex items-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Trạng thái
+          </label>
+          <select 
+            v-model="statusFilter" 
+            class="h-10 pl-3 pr-8 text-sm bg-white border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 text-gray-700 font-medium appearance-none cursor-pointer shadow-sm transition-all hover:bg-gray-50"
+            style="background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3E%3C/svg%3E'); background-size: 20px 20px; background-position: right 0.5rem center; background-repeat: no-repeat;"
+          >
+            <option value="ALL">Tất cả</option>
+            <option value="PENDING">Đang chờ (PENDING)</option>
+            <option value="VERIFIED">Đã duyệt (VERIFIED)</option>
+            <option value="REJECTED">Từ chối (REJECTED)</option>
+          </select>
+        </div>
+      </template>
 
-    <FhCard>
-      <FhTable :columns="columns" :rows="filteredVerifications" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có hồ sơ KYC phù hợp.'">
-        <template #cell-technician="{ row }">
-          <div class="font-semibold text-xs text-ink-900">{{ row.technician?.fullName || row.technicianId }}</div>
-          <div class="text-[11px] text-ink-500">{{ row.technician?.email || '—' }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">{{ row.technician?.phoneNumber || '—' }}</div>
-        </template>
-        <template #cell-submittedAt="{ row }">
-          <span class="text-xs text-ink-500 font-num">{{ formatDate(String(row.submittedAt)) }}</span>
-        </template>
-        <template #cell-documents="{ row }">
-          <div class="space-y-1 text-[11px]">
-            <button
-              v-for="document in row.documents"
-              :key="document.id || document.fileName"
-              class="flex items-center gap-1 text-left text-brand-600 hover:underline"
-              type="button"
-              @click="openDocument(row, document)"
-            >
-              <FileText :size="12" />
-              <span>{{ formatDocumentType(document.documentType) }} · {{ document.fileName }}</span>
-            </button>
-            <span v-if="row.documents.length === 0" class="text-ink-400">Chưa có tài liệu</span>
+      <template #cell-technician="{ row }">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 flex items-center justify-center text-brand-700 font-bold border border-brand-200 shadow-sm shrink-0">
+            {{ (row.technician?.fullName || row.technicianId).charAt(0).toUpperCase() }}
           </div>
-        </template>
-        <template #cell-status="{ row }">
-          <FhStatusPill :status="String(row.status)" />
-        </template>
-        <template #cell-actions="{ row }">
-          <div v-if="row.status === 'PENDING'" class="flex items-center gap-2">
-            <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="approveVerification(row)">
-              <CheckCircle2 :size="14" /> Duyệt
-            </FhButton>
-            <FhButton variant="danger" size="sm" :disabled="Boolean(actionLoadingId)" @click="openReject(row)">
-              <XCircle :size="14" /> Từ chối
-            </FhButton>
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-gray-900 truncate">{{ row.technician?.fullName || row.technicianId }}</div>
+            <div class="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span class="truncate">{{ row.technician?.email || 'Chưa có email' }}</span>
+              <span class="w-1 h-1 rounded-full bg-gray-300 shrink-0"></span>
+              <span class="font-mono text-gray-600 truncate">{{ row.technician?.phoneNumber || '—' }}</span>
+            </div>
           </div>
-          <span v-else class="text-xs text-ink-400">Đã xử lý</span>
-        </template>
-      </FhTable>
-    </FhCard>
+        </div>
+      </template>
 
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} hồ sơ</span>
+      <template #cell-submittedAt="{ row }">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+          <Calendar :size="14" class="text-gray-400" />
+          <span>{{ formatDate(String(row.submittedAt)) }}</span>
+        </div>
+      </template>
+
+      <template #cell-documents="{ row }">
+        <div class="flex flex-col gap-1.5 py-1">
+          <button
+            v-for="document in row.documents"
+            :key="document.id || document.fileName"
+            class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-gray-50 text-gray-700 hover:bg-brand-50 hover:text-brand-700 border border-gray-200 hover:border-brand-200 transition-colors w-fit text-left"
+            type="button"
+            @click="openDocument(row, document)"
+          >
+            <FileText :size="12" class="opacity-70 shrink-0" />
+            <span class="truncate max-w-[200px]">{{ formatDocumentType(document.documentType) }}</span>
+          </button>
+          <span v-if="row.documents.length === 0" class="text-xs text-gray-400 font-medium italic">Chưa có tài liệu</span>
+        </div>
+      </template>
+
+      <template #cell-status="{ row }">
+        <FhStatusPill :status="String(row.status)" class="shadow-sm" />
+      </template>
+
+      <template #cell-actions="{ row }">
+        <div v-if="row.status === 'PENDING'" class="flex items-center justify-end gap-2">
+          <button 
+            class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 transition-colors disabled:opacity-50"
+            :disabled="Boolean(actionLoadingId)"
+            @click="approveVerification(row)"
+            title="Duyệt hồ sơ"
+          >
+            <Loader2 v-if="actionLoadingId === row.id" class="animate-spin" :size="16" />
+            <CheckCircle2 v-else :size="16" stroke-width="2.5" />
+          </button>
+          <button 
+            class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors disabled:opacity-50"
+            :disabled="Boolean(actionLoadingId)"
+            @click="openReject(row)"
+            title="Từ chối"
+          >
+            <XCircle :size="16" stroke-width="2.5" />
+          </button>
+        </div>
+        <div v-else class="flex justify-end">
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-50 px-2.5 py-1 rounded-md border border-gray-100">
+            Đã xử lý
+          </span>
+        </div>
+      </template>
+    </FhTable>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs font-medium text-gray-500 pt-2 px-1">
+      <span>Trang {{ page }} / {{ totalPages }} <span class="mx-1.5 text-gray-300">|</span> {{ total }} hồ sơ</span>
       <div class="flex items-center gap-2">
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" aria-label="Trang trước" @click="page--">
+        <button 
+          class="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/80 bg-white hover:bg-gray-50 text-gray-600 transition-colors disabled:opacity-40 shadow-sm" 
+          type="button" 
+          :disabled="page <= 1 || loading" 
+          aria-label="Trang trước" 
+          @click="page--"
+        >
           <ChevronLeft :size="16" />
         </button>
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" aria-label="Trang sau" @click="page++">
+        <button 
+          class="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/80 bg-white hover:bg-gray-50 text-gray-600 transition-colors disabled:opacity-40 shadow-sm" 
+          type="button" 
+          :disabled="page >= totalPages || loading" 
+          aria-label="Trang sau" 
+          @click="page++"
+        >
           <ChevronRight :size="16" />
         </button>
       </div>
     </div>
 
+    <!-- Reject Modal -->
     <FhConfirmDialog
       :open="showRejectModal"
       :loading="actionLoadingId === verificationToReject?.id"
@@ -314,17 +378,71 @@ const formatDate = (value: string) => {
       @confirm="confirmReject"
       @cancel="showRejectModal = false"
     >
-      <div>
-        <label class="block text-sm font-semibold text-ink-700 mb-1" for="reject-reason">Lý do từ chối *</label>
+      <div class="mt-4">
+        <label class="block text-sm font-bold text-gray-700 mb-2" for="reject-reason">Lý do từ chối <span class="text-red-500">*</span></label>
         <textarea
           id="reject-reason"
           v-model="rejectReason"
           rows="3"
-          class="w-full p-3 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
+          class="w-full p-3.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all resize-none"
           placeholder="Nêu rõ tài liệu hoặc thông tin cần bổ sung..."
         ></textarea>
-        <p v-if="rejectReasonError" class="mt-1 text-xs text-danger-600" role="alert">{{ rejectReasonError }}</p>
+        <p v-if="rejectReasonError" class="mt-1.5 text-xs font-medium text-red-600" role="alert">{{ rejectReasonError }}</p>
       </div>
     </FhConfirmDialog>
+
+    <!-- Document Preview Modal -->
+    <div
+      v-if="showPreviewModal"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8"
+      @click.self="showPreviewModal = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full flex flex-col max-h-[95vh] overflow-hidden">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <h3 class="font-bold text-gray-900 flex items-center gap-2">
+            <FileText :size="20" class="text-brand-600" />
+            {{ previewTitle }}
+          </h3>
+          <button 
+            class="text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors focus:outline-none" 
+            @click="showPreviewModal = false"
+            title="Đóng"
+          >
+            <XCircle :size="20" />
+          </button>
+        </div>
+        
+        <!-- Modal Body (Preview Container) -->
+        <div class="flex-1 overflow-auto bg-gray-100 flex items-center justify-center p-6 relative min-h-[500px]">
+          <div v-if="previewLoading" class="flex flex-col items-center justify-center text-gray-500 gap-3">
+            <Loader2 :size="32" class="animate-spin text-brand-600" />
+            <span class="text-sm font-medium">Đang tải tài liệu bảo mật...</span>
+          </div>
+          <template v-else-if="previewUrl">
+            <video 
+              v-if="previewTitle.toLowerCase().includes('video')" 
+              :src="previewUrl" 
+              controls 
+              autoplay 
+              class="max-w-full max-h-[700px] rounded-lg shadow-lg bg-black"
+            ></video>
+            
+            <img 
+              v-else-if="previewTitle.toLowerCase().includes('ảnh') || previewTitle.toLowerCase().includes('cccd')" 
+              :src="previewUrl" 
+              class="max-w-full max-h-[700px] object-contain rounded-lg shadow-lg border border-gray-200 bg-white" 
+              alt="KYC Document" 
+            />
+            
+            <iframe 
+              v-else 
+              :src="previewUrl" 
+              class="w-full h-[700px] border-0 rounded-lg shadow-lg bg-white"
+            ></iframe>
+          </template>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { ScrollText, RefreshCw, Search, ChevronLeft, ChevronRight, X } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, type TableColumn } from '../../../components';
+import { FhButton, FhTable, FhSkeleton, type TableColumn } from '../../../components';
 import { auditLogsApi, type AuditLogRecord } from '../../../api/admin-audit-logs.api';
 
 const columns: TableColumn[] = [
@@ -28,6 +28,28 @@ const detailLoading = ref(false);
 const detailError = ref('');
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredLogs = computed<(AuditLogRecord & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: pageSize }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      action: '',
+      resourceType: '',
+      resourceId: null,
+      actorUserId: null,
+      actorRole: null,
+      ip: null,
+      userAgent: null,
+      before: null,
+      after: null,
+      createdAt: '',
+    } as unknown as AuditLogRecord & { _isSkeleton: boolean }));
+  }
+  return logs.value;
+});
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -141,66 +163,86 @@ const formatSnapshot = (value: unknown) => {
       <button class="font-semibold underline" type="button" @click="loadLogs">Thử lại</button>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[200px]">
-        <label class="sr-only" for="audit-resource-type">Lọc theo loại tài nguyên</label>
-        <input
-          id="audit-resource-type"
-          v-model="resourceTypeFilter"
-          type="search"
-          maxlength="64"
-          placeholder="resourceType (tối đa 64 ký tự)..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-      <div class="flex-1 min-w-[200px]">
-        <label class="sr-only" for="audit-actor">Lọc theo actorUserId (UUID)</label>
-        <input
-          id="audit-actor"
-          v-model="actorUserIdFilter"
-          type="search"
-          placeholder="actorUserId (UUID)..."
-          class="w-full h-9 px-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-      </div>
-      <div class="flex-1 min-w-[200px]">
-        <label class="sr-only" for="audit-action">Lọc theo hành động</label>
-        <input
-          id="audit-action"
-          v-model="actionFilter"
-          type="search"
-          maxlength="128"
-          placeholder="action (tối đa 128 ký tự)..."
-          class="w-full h-9 px-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-      </div>
-    </div>
+    <FhTable :columns="columns" :rows="filteredLogs" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có bản ghi kiểm toán phù hợp.'">
+      <template #toolbar-left>
+        <div class="relative group flex-1 w-full min-w-[180px]">
+          <label class="sr-only" for="audit-resource-type">Lọc theo loại tài nguyên</label>
+          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+          <input
+            id="audit-resource-type"
+            v-model="resourceTypeFilter"
+            type="search"
+            maxlength="64"
+            placeholder="Tìm resourceType..."
+            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
+          />
+        </div>
+        <div class="relative group flex-1 w-full min-w-[180px]">
+          <label class="sr-only" for="audit-actor">Lọc theo actorUserId (UUID)</label>
+          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+          <input
+            id="audit-actor"
+            v-model="actorUserIdFilter"
+            type="search"
+            placeholder="Tìm actorUserId..."
+            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
+          />
+        </div>
+        <div class="relative group flex-1 w-full min-w-[180px]">
+          <label class="sr-only" for="audit-action">Lọc theo hành động</label>
+          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+          <input
+            id="audit-action"
+            v-model="actionFilter"
+            type="search"
+            maxlength="128"
+            placeholder="Tìm action..."
+            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
+          />
+        </div>
+      </template>
 
-    <FhCard>
-      <FhTable :columns="columns" :rows="logs" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có bản ghi kiểm toán phù hợp.'">
-        <template #cell-action="{ row }">
+      <template #cell-action="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="180px" height="16px" class="mb-1" />
+          <FhSkeleton width="100px" height="12px" />
+        </div>
+        <div v-else>
           <div class="font-bold text-xs text-ink-900 font-mono">{{ row.action }}</div>
           <div class="text-[11px] text-ink-400 font-mono">{{ row.resourceType }}</div>
-        </template>
-        <template #cell-actor="{ row }">
+        </div>
+      </template>
+      <template #cell-actor="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="160px" height="16px" class="mb-1" />
+          <FhSkeleton width="80px" height="12px" />
+        </div>
+        <div v-else>
           <div class="text-xs text-ink-700 font-mono">{{ row.actorUserId || '— (hệ thống)' }}</div>
           <div class="text-[11px] text-ink-400 font-mono">{{ row.actorRole || '—' }}</div>
-        </template>
-        <template #cell-resource="{ row }">
+        </div>
+      </template>
+      <template #cell-resource="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="140px" height="16px" class="mb-1" />
+          <FhSkeleton width="100px" height="12px" />
+        </div>
+        <div v-else>
           <div class="text-xs text-ink-700 font-mono">{{ row.resourceId || '—' }}</div>
           <div class="text-[11px] text-ink-400 font-mono">{{ row.ip || '—' }}</div>
-        </template>
-        <template #cell-createdAt="{ row }">
-          <span class="text-xs text-ink-500 font-num">{{ formatDateTime(String(row.createdAt)) }}</span>
-        </template>
-        <template #cell-detail="{ row }">
-          <button class="text-xs font-semibold text-brand-700 hover:text-brand-800 underline" type="button" @click="openDetail(row)">
-            Xem
-          </button>
-        </template>
-      </FhTable>
-    </FhCard>
+        </div>
+      </template>
+      <template #cell-createdAt="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="120px" height="16px" />
+        <span v-else class="text-xs text-ink-500 font-num">{{ formatDateTime(String(row.createdAt)) }}</span>
+      </template>
+      <template #cell-detail="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
+        <button v-else class="text-xs font-semibold text-brand-700 hover:text-brand-800 underline" type="button" @click="openDetail(row)">
+          Xem
+        </button>
+      </template>
+    </FhTable>
 
     <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
       <span>Trang {{ page }} / {{ totalPages }} · {{ total }} bản ghi</span>

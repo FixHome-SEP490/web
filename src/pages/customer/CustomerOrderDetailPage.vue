@@ -34,6 +34,7 @@ import {
   FhTimeline,
   FhConfirmDialog,
   MapTilerMap,
+  ReviewTechnicianModal,
   type MapMarker,
   type TimelineStep,
 } from '../../components';
@@ -206,9 +207,6 @@ const hasExternalParts = (cost: AdditionalCostRecord) => {
 // Review
 const showReviewModal = ref(false);
 const existingReview = ref<Review | null>(null);
-const reviewRating = ref(0);
-const reviewComment = ref('');
-const reviewSubmitting = ref(false);
 
 // Cash Settlement State
 const cashSettlement = ref<{
@@ -272,6 +270,13 @@ onMounted(async () => {
   await loadOrder();
   if (route.query.claimWarranty === 'true' || route.query.claimWarranty === '1') {
     showWarrantyClaimModal.value = true;
+  }
+  if (
+    (route.query.autoReview === 'true' || route.query.review === 'true') &&
+    (order.value?.status === 'COMPLETED' || (order.value?.status as string) === 'completed') &&
+    !existingReview.value
+  ) {
+    showReviewModal.value = true;
   }
 });
 
@@ -428,6 +433,9 @@ const handleConfirmCashPayment = async () => {
         type: 'success',
         text: 'Đã xác nhận thanh toán tiền mặt. Trạng thái đơn đã được cập nhật.',
       };
+      if (!existingReview.value) {
+        showReviewModal.value = true;
+      }
     } else {
       cashSettlement.value.status = 'disputed';
       actionMessage.value = {
@@ -491,23 +499,13 @@ const confirmCancel = async () => {
   }
 };
 
-const handleSubmitReview = async () => {
-  if (reviewRating.value < 1) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng chọn số sao đánh giá.' };
-    return;
-  }
-  try {
-    reviewSubmitting.value = true;
-    existingReview.value = await reviewsApi.createReview(orderId, {
-      rating: reviewRating.value,
-      comment: reviewComment.value.trim() || undefined,
-    });
-    showReviewModal.value = false;
-    actionMessage.value = { type: 'success', text: 'Cảm ơn bạn đã đánh giá kỹ thuật viên!' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi đánh giá.' };
-  } finally {
-    reviewSubmitting.value = false;
+const handleCloseReviewModal = () => {
+  showReviewModal.value = false;
+  if (route.query.autoReview || route.query.review) {
+    const nextQuery = { ...route.query };
+    delete nextQuery.autoReview;
+    delete nextQuery.review;
+    router.replace({ query: nextQuery });
   }
 };
 
@@ -522,6 +520,38 @@ const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
 const onWarrantyClaimUpdated = (claim: WarrantyClaimView) => {
   warrantyClaims.value = warrantyClaims.value.map((existing) => (existing.id === claim.id ? claim : existing));
 };
+
+const handleReviewSubmitted = (review: Review) => {
+  existingReview.value = review;
+  showReviewModal.value = false;
+  if (route.query.autoReview || route.query.review) {
+    const nextQuery = { ...route.query };
+    delete nextQuery.autoReview;
+    delete nextQuery.review;
+    router.replace({ query: nextQuery });
+  }
+  actionMessage.value = {
+    type: 'success',
+    text: 'Cảm ơn bạn đã đánh giá kỹ thuật viên! Đánh giá đã được ghi nhận thành công.',
+  };
+};
+
+const parsedReview = computed(() => {
+  if (!existingReview.value?.comment) {
+    return { tags: [] as string[], text: '' };
+  }
+  const raw = existingReview.value.comment.trim();
+  const match = raw.match(/^\[(.*?)\]\s*(.*)$/s);
+  if (match) {
+    const tags = match[1]
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const text = match[2]?.trim() || '';
+    return { tags, text };
+  }
+  return { tags: [] as string[], text: raw };
+});
 const confirmWork = async () => {
   actionLoading.value = true;
   try {
@@ -548,18 +578,19 @@ const confirmWork = async () => {
       <div class="flex items-center gap-2">
         <FhButton
           v-if="order && order.status === 'COMPLETED' && !existingReview"
-          variant="secondary"
+          variant="primary"
           size="sm"
+          class="shadow-xs"
           @click="showReviewModal = true"
         >
-          <Star :size="14" class="mr-1 text-amber-500" />
+          <Star :size="14" class="mr-1 fill-amber-300 text-amber-300" />
           Đánh giá thợ
         </FhButton>
         <span
           v-else-if="order && order.status === 'COMPLETED' && existingReview"
-          class="inline-flex items-center gap-1 text-xs font-semibold text-ink-600"
+          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200"
         >
-          <Star :size="14" class="text-amber-400 fill-amber-400" /> Bạn đã đánh giá {{ existingReview.rating }}/5
+          <Star :size="13" class="text-amber-500 fill-amber-500" /> Bạn đã đánh giá {{ existingReview.rating }}/5 sao
         </span>
 
         <FhButton
@@ -688,6 +719,91 @@ const confirmWork = async () => {
               </div>
             </div>
           </div>
+        </div>
+      </FhCard>
+
+      <!-- Banner Đánh giá dịch vụ khi đơn đã hoàn tất mà chưa đánh giá -->
+      <div
+        v-if="order && (order.status === 'COMPLETED' || (order.status as string) === 'completed') && !existingReview"
+        class="p-5 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-amber-50/50 border border-blue-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in"
+      >
+        <div class="flex items-start gap-3.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 shadow-xs">
+            <Star :size="22" class="fill-amber-400 text-amber-500 animate-pulse" />
+          </div>
+          <div class="space-y-1">
+            <h3 class="text-sm font-bold text-ink-900 flex items-center gap-1.5">
+              <span>Đánh giá trải nghiệm dịch vụ với Kỹ thuật viên</span>
+              <Sparkles :size="15" class="text-amber-500" />
+            </h3>
+            <p class="text-xs text-ink-600">
+              Đơn sửa chữa đã hoàn tất! Hãy dành 30 giây để chấm điểm sao và gửi nhận xét giúp thợ biết mức độ hài lòng của bạn và tăng độ uy tín.
+            </p>
+          </div>
+        </div>
+
+        <FhButton
+          variant="primary"
+          size="md"
+          class="shrink-0 shadow-sm self-start sm:self-center"
+          @click="showReviewModal = true"
+        >
+          <Star :size="15" class="mr-1.5 fill-amber-300 text-amber-300" />
+          Đánh giá ngay
+        </FhButton>
+      </div>
+
+      <!-- Card hiển thị Đánh giá của bạn khi đơn đã được đánh giá -->
+      <FhCard
+        v-else-if="order && (order.status === 'COMPLETED' || (order.status as string) === 'completed') && existingReview"
+        class="border border-amber-200 bg-amber-50/30 shadow-xs"
+      >
+        <template #header>
+          <div class="flex items-center justify-between w-full">
+            <div class="flex items-center gap-2">
+              <Star :size="18" class="text-amber-500 fill-amber-400" />
+              <span class="font-bold text-sm text-ink-900">Đánh giá của bạn về Kỹ thuật viên</span>
+            </div>
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <CheckCircle2 :size="12" /> Đã gửi đến kỹ thuật viên
+            </span>
+          </div>
+        </template>
+
+        <div class="space-y-3 text-xs">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-1">
+              <Star
+                v-for="s in 5"
+                :key="s"
+                :size="18"
+                :class="s <= existingReview.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+              />
+            </div>
+            <span class="font-bold text-ink-900 font-num text-sm">
+              {{ existingReview.rating }}/5 sao
+            </span>
+            <span v-if="existingReview.createdAt" class="text-ink-400 font-num text-[11px]">
+              • {{ formatFullTimestamp(existingReview.createdAt) }}
+            </span>
+          </div>
+
+          <!-- Suggestion Chips badges if present -->
+          <div v-if="parsedReview.tags.length > 0" class="flex flex-wrap gap-1.5 pt-1">
+            <span
+              v-for="tag in parsedReview.tags"
+              :key="tag"
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+            >
+              <Check :size="11" class="text-brand-600 stroke-[3]" />
+              {{ tag }}
+            </span>
+          </div>
+
+          <!-- Comment text -->
+          <p v-if="parsedReview.text" class="p-3 rounded-xl bg-white border border-ink-150 text-ink-800 leading-relaxed">
+            "{{ parsedReview.text }}"
+          </p>
         </div>
       </FhCard>
 
@@ -1483,53 +1599,15 @@ const confirmWork = async () => {
       @cancel="showCancelModal = false"
     />
 
-    <!-- Review Modal -->
-    <div
-      v-if="showReviewModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
-        <h3 class="text-base font-bold text-ink-900">Đánh giá kỹ thuật viên</h3>
-        <p class="text-xs text-ink-500">Bạn hài lòng với chất lượng dịch vụ ở mức nào?</p>
-
-        <div class="flex items-center justify-center gap-1.5 py-2">
-          <button
-            v-for="star in 5"
-            :key="star"
-            type="button"
-            class="p-1"
-            @click="reviewRating = star"
-          >
-            <Star
-              :size="28"
-              :class="star <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
-            />
-          </button>
-        </div>
-
-        <textarea
-          v-model="reviewComment"
-          rows="3"
-          placeholder="Nhận xét thêm (không bắt buộc)..."
-          class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-        ></textarea>
-
-        <div class="flex gap-2 pt-2">
-          <FhButton variant="ghost" size="sm" class="flex-1" @click="showReviewModal = false">
-            Đóng
-          </FhButton>
-          <FhButton
-            variant="primary"
-            size="sm"
-            class="flex-1"
-            :disabled="reviewSubmitting"
-            @click="handleSubmitReview"
-          >
-            Gửi đánh giá
-          </FhButton>
-        </div>
-      </div>
-    </div>
+    <!-- Review Modal Component -->
+    <ReviewTechnicianModal
+      :open="showReviewModal"
+      :order-id="orderId"
+      :order-code="order?.code"
+      :technician-name="order?.technician?.fullName || 'Kỹ thuật viên FixHome'"
+      @close="handleCloseReviewModal"
+      @submitted="handleReviewSubmitted"
+    />
 
     <!-- Warranty Claim Modal -->
     <WarrantyClaimModal

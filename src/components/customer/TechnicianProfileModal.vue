@@ -67,6 +67,21 @@ watch(
   { immediate: true }
 );
 
+const parseReviewContent = (rawComment?: string | null) => {
+  if (!rawComment) return { tags: [] as string[], text: '' };
+  const raw = rawComment.trim();
+  const match = raw.match(/^\[(.*?)\]\s*(.*)$/s);
+  if (match) {
+    const tags = match[1]
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const text = match[2]?.trim() || '';
+    return { tags, text };
+  }
+  return { tags: [] as string[], text: raw };
+};
+
 // Real star distribution computed strictly from actual reviews data
 const starStats = computed(() => {
   const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
@@ -517,11 +532,23 @@ const handleClose = () => {
                   </div>
                 </div>
 
-                <p v-if="r.comment" class="text-xs text-ink-700 leading-relaxed pl-10">
-                  "{{ r.comment }}"
+                <!-- Badges if customer selected suggestion tags -->
+                <div v-if="parseReviewContent(r.comment).tags.length > 0" class="flex flex-wrap gap-1.5 pl-10">
+                  <span
+                    v-for="tag in parseReviewContent(r.comment).tags"
+                    :key="tag"
+                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                  >
+                    <Sparkles :size="10" class="text-brand-600" />
+                    {{ tag }}
+                  </span>
+                </div>
+
+                <p v-if="parseReviewContent(r.comment).text" class="text-xs text-ink-700 leading-relaxed pl-10">
+                  "{{ parseReviewContent(r.comment).text }}"
                 </p>
-                <p v-else class="text-xs text-ink-400 italic pl-10">
-                  Khách hàng đánh giá {{ r.rating }} sao và không để lại bình luận.
+                <p v-else-if="parseReviewContent(r.comment).tags.length === 0" class="text-xs text-ink-400 italic pl-10">
+                  Khách hàng đánh giá {{ r.rating }} sao và không để lại bình luận thêm.
                 </p>
 
                 <div class="text-[10px] text-ink-400 pl-10 font-num">

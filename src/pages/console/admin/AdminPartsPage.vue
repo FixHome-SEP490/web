@@ -7,7 +7,6 @@ import {
   Pencil,
   PowerOff,
   Power,
-  Search,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
@@ -17,10 +16,10 @@ import {
 } from 'lucide-vue-next';
 import {
   FhButton,
-  FhCard,
   FhTable,
   FhStatusPill,
   FhConfirmDialog,
+  FhSkeleton,
   type TableColumn,
 } from '../../../components';
 import {
@@ -52,6 +51,24 @@ const pageSize = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 let latestRequest = 0;
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredParts = computed<(FixHomePart & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: pageSize }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      name: '',
+      sku: '',
+      sellingPrice: 0,
+      isActive: true,
+      createdAt: '',
+      updatedAt: '',
+    } as unknown as FixHomePart & { _isSkeleton: boolean }));
+  }
+  return parts.value;
+});
 
 const router = useRouter();
 const detailPart = ref<FixHomePart | null>(null);
@@ -334,111 +351,108 @@ async function submitForm() {
       {{ successMessage }}
     </div>
 
-    <!-- Filters -->
-    <div
-      class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]"
-    >
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <label class="sr-only" for="admin-parts-search">Tìm linh kiện</label>
-        <input
-          id="admin-parts-search"
-          v-model="searchQuery"
-          type="search"
-          maxlength="200"
-          placeholder="Tìm theo tên, SKU hoặc mô tả..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-
-      <label class="flex items-center gap-2 text-xs text-ink-500">
-        Trạng thái:
-        <select
-          v-model="activeFilter"
-          class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700"
-        >
-          <option value="ALL">Tất cả</option>
-          <option value="true">Đang hoạt động</option>
-          <option value="false">Đã vô hiệu</option>
-        </select>
-      </label>
-    </div>
-
     <!-- Table -->
-    <FhCard>
-      <FhTable
-        :columns="columns"
-        :rows="parts"
-        :loading="loading"
-        :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có linh kiện phù hợp.'"
-      >
-        <template #cell-sku="{ row }">
-          <span class="text-xs font-mono text-ink-500">{{ row.sku ?? '—' }}</span>
-        </template>
+    <FhTable
+      :columns="columns"
+      :rows="filteredParts"
+      :loading="loading"
+      searchable
+      v-model:searchQuery="searchQuery"
+      search-placeholder="Tìm theo tên, SKU hoặc mô tả..."
+      :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có linh kiện phù hợp.'"
+    >
+      <template #toolbar>
+        <div class="flex items-center gap-2 text-xs font-bold">
+          <span class="text-ink-500">Trạng thái:</span>
+          <select
+            v-model="activeFilter"
+            class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Tất cả</option>
+            <option value="true">Đang hoạt động</option>
+            <option value="false">Đã vô hiệu</option>
+          </select>
+        </div>
+      </template>
 
-        <template #cell-name="{ row }">
+      <template #cell-sku="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+        <span v-else class="text-xs font-mono text-ink-500">{{ row.sku ?? '—' }}</span>
+      </template>
+
+      <template #cell-name="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="160px" height="16px" class="mb-1" />
+          <FhSkeleton width="220px" height="12px" />
+        </div>
+        <div v-else>
           <div class="font-semibold text-xs text-ink-900">{{ row.name }}</div>
           <div v-if="row.description" class="text-[11px] text-ink-400 truncate max-w-[260px]">
             {{ row.description }}
           </div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-sellingPrice="{ row }">
-          <span class="text-xs font-num text-ink-800">
-            {{ formatPrice(Number(row.sellingPrice)) }} đ
-          </span>
-        </template>
+      <template #cell-sellingPrice="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="90px" height="16px" />
+        <span v-else class="text-xs font-num text-ink-800">
+          {{ formatPrice(Number(row.sellingPrice)) }} đ
+        </span>
+      </template>
 
-        <template #cell-warranty="{ row }">
-          <span v-if="row.warrantyDays != null" class="text-xs text-ink-700">
-            {{ row.warrantyDays }} ngày
-          </span>
-          <span v-else class="text-[11px] text-ink-400 italic">Không bảo hành</span>
-        </template>
+      <template #cell-warranty="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="70px" height="16px" />
+        <span v-else-if="row.warrantyDays != null" class="text-xs text-ink-700">
+          {{ row.warrantyDays }} ngày
+        </span>
+        <span v-else class="text-[11px] text-ink-400 italic">Không bảo hành</span>
+      </template>
 
-        <template #cell-status="{ row }">
-          <FhStatusPill
-            :status="row.isActive ? 'active' : 'inactive'"
-            :label="row.isActive ? 'Hoạt động' : 'Vô hiệu'"
-          />
-        </template>
+      <template #cell-status="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
+        <FhStatusPill
+          v-else
+          :status="row.isActive ? 'active' : 'inactive'"
+          :label="row.isActive ? 'Hoạt động' : 'Vô hiệu'"
+        />
+      </template>
 
-        <template #cell-actions="{ row }">
-          <div class="flex items-center gap-1">
-            <button
-              class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
-              title="Xem chi tiết"
-              type="button"
-              @click="openDetail(row)"
-            >
-              <Eye :size="14" />
-            </button>
-            <button
-              class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
-              title="Chỉnh sửa"
-              type="button"
-              @click="openEdit(row)"
-            >
-              <Pencil :size="14" />
-            </button>
-            <button
-              class="p-2 rounded transition-colors"
-              :class="
-                row.isActive
-                  ? 'text-danger-500 hover:bg-danger-50'
-                  : 'text-success-600 hover:bg-success-50'
-              "
-              :title="row.isActive ? 'Vô hiệu hoá' : 'Kích hoạt lại'"
-              type="button"
-              @click="triggerToggle(row)"
-            >
-              <PowerOff v-if="row.isActive" :size="14" />
-              <Power v-else :size="14" />
-            </button>
-          </div>
-        </template>
-      </FhTable>
-    </FhCard>
+      <template #cell-actions="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
+        <div v-else class="flex items-center gap-1">
+          <button
+            class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
+            title="Xem chi tiết"
+            type="button"
+            @click="openDetail(row)"
+          >
+            <Eye :size="14" />
+          </button>
+          <button
+            class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
+            title="Chỉnh sửa"
+            type="button"
+            @click="openEdit(row)"
+          >
+            <Pencil :size="14" />
+          </button>
+          <button
+            class="p-2 rounded transition-colors"
+            :class="
+              row.isActive
+                ? 'text-danger-500 hover:bg-danger-50'
+                : 'text-success-600 hover:bg-success-50'
+            "
+            :title="row.isActive ? 'Vô hiệu hoá' : 'Kích hoạt lại'"
+            type="button"
+            @click="triggerToggle(row)"
+          >
+            <PowerOff v-if="row.isActive" :size="14" />
+            <Power v-else :size="14" />
+          </button>
+        </div>
+      </template>
+    </FhTable>
 
     <!-- Pagination -->
     <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
