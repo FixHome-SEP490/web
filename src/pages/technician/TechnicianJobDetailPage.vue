@@ -30,6 +30,7 @@ import {
   LogOut,
   Calendar,
   Sparkles,
+  Star,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -53,6 +54,7 @@ import { partsCatalogApi } from '../../api/parts-catalog.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
+import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 
@@ -86,6 +88,24 @@ const beforePhotoUploaded = ref(false);
 const quotationSubmitted = ref(false);
 const afterPhotoUploaded = ref(false);
 const isCompleted = ref(false);
+const customerReview = ref<Review | null>(null);
+
+const parsedCustomerReview = computed(() => {
+  if (!customerReview.value?.comment) {
+    return { tags: [] as string[], text: '' };
+  }
+  const raw = customerReview.value.comment.trim();
+  const match = raw.match(/^\[(.*?)\]\s*(.*)$/s);
+  if (match) {
+    const tags = match[1]
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const text = match[2]?.trim() || '';
+    return { tags, text };
+  }
+  return { tags: [] as string[], text: raw };
+});
 
 // Cash Settlement State
 const declaredCashAmount = ref<number>(0);
@@ -516,6 +536,15 @@ const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {
       const costs = await ordersApi.getAdditionalCosts(requestedJobId);
       if (!isCurrent()) return;
       additionalCosts.value = costs;
+    }
+
+    if (data.status === 'COMPLETED') {
+      try {
+        const rev = await reviewsApi.getByOrder(requestedJobId);
+        if (isCurrent()) customerReview.value = rev;
+      } catch {
+        if (isCurrent()) customerReview.value = null;
+      }
     }
   } catch {
     if (isCurrent()) actionMessage.value = { type: 'error', text: 'Không thể tải công việc. Vui lòng thử lại.' };
@@ -2523,6 +2552,77 @@ const refreshJobStatus = async () => {
                     </div>
                   </div>
                 </template>
+              </div>
+            </FhCard>
+
+            <!-- Đánh giá từ khách hàng cho đơn này -->
+            <FhCard
+              v-if="isCompleted || String(job?.status).toUpperCase() === 'COMPLETED'"
+              class="border border-amber-200 bg-amber-50/20 shadow-xs"
+            >
+              <template #header>
+                <div class="flex items-center justify-between w-full">
+                  <div class="flex items-center gap-2">
+                    <Star :size="18" class="text-amber-500 fill-amber-400" />
+                    <span class="font-bold text-sm text-ink-900">Đánh giá từ khách hàng</span>
+                  </div>
+                  <span
+                    v-if="customerReview"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  >
+                    <CheckCircle2 :size="12" /> Đã cập nhật vào uy tín thợ
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-ink-100 text-ink-600"
+                  >
+                    Chờ khách hàng gửi đánh giá
+                  </span>
+                </div>
+              </template>
+
+              <div v-if="customerReview" class="space-y-3 text-xs">
+                <div class="flex flex-wrap items-center gap-3">
+                  <div class="flex items-center gap-1">
+                    <Star
+                      v-for="s in 5"
+                      :key="s"
+                      :size="20"
+                      :class="s <= customerReview.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                    />
+                  </div>
+                  <span class="font-bold text-ink-900 font-num text-sm">
+                    {{ customerReview.rating }}/5 sao
+                  </span>
+                  <span v-if="customerReview.createdAt" class="text-ink-400 font-num text-[11px]">
+                    • {{ new Date(customerReview.createdAt).toLocaleString('vi-VN') }}
+                  </span>
+                </div>
+
+                <!-- Tags from customer review -->
+                <div v-if="parsedCustomerReview.tags.length > 0" class="flex flex-wrap gap-1.5 pt-1">
+                  <span
+                    v-for="tag in parsedCustomerReview.tags"
+                    :key="tag"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                  >
+                    <Sparkles :size="11" class="text-brand-600" />
+                    {{ tag }}
+                  </span>
+                </div>
+
+                <!-- Review text -->
+                <p v-if="parsedCustomerReview.text" class="p-3.5 rounded-xl bg-white border border-ink-150 text-ink-800 leading-relaxed shadow-2xs">
+                  "{{ parsedCustomerReview.text }}"
+                </p>
+
+                <p class="text-[11px] text-ink-500 italic">
+                  💡 Điểm đánh giá này đã được hệ thống tính vào chỉ số uy tín trung bình (Average Rating) trong hồ sơ nhận việc của bạn.
+                </p>
+              </div>
+
+              <div v-else class="text-xs text-ink-500 py-3 text-center">
+                Đơn sửa chữa đã hoàn thành. Khách hàng sẽ nhận được thông báo để đánh giá số sao và để lại nhận xét cho bạn.
               </div>
             </FhCard>
           </div>

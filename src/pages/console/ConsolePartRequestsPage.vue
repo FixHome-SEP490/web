@@ -4,11 +4,9 @@ import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
 import {
   Boxes,
-  Search,
   QrCode,
   CheckCircle,
   Truck,
-  RefreshCw,
   XCircle,
   Eye,
   Copy,
@@ -17,10 +15,10 @@ import {
   Layers,
 } from 'lucide-vue-next';
 import {
-  FhCard,
   FhTable,
   FhMoney,
   FhButton,
+  FhSkeleton,
 } from '../../components';
 import {
   partRequestsApi,
@@ -99,7 +97,25 @@ onMounted(() => {
   void loadData();
 });
 
-const filteredRequests = requests;
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredRequests = computed<(PartRequest & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: pageSize }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      serviceOrderId: '',
+      technicianId: '',
+      requestType: 'pre_repair',
+      fulfillmentMethod: 'pickup',
+      items: [],
+      shippingFee: 0,
+      status: 'requested',
+      createdAt: '',
+    } as unknown as PartRequest & { _isSkeleton: boolean }));
+  }
+  return requests.value;
+});
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
   page.value = 1;
   const timer = setTimeout(() => { void loadData(); }, 250);
@@ -244,12 +260,6 @@ const getUsageBadgeClass = (status: string) => {
           {{ canOperate ? 'Chuẩn bị linh kiện và xác nhận bàn giao cho kỹ thuật viên.' : 'Xem trạng thái bàn giao và lịch sử USED / RETURNED.' }}
         </p>
       </div>
-
-      <div class="flex items-center gap-2">
-        <FhButton variant="secondary" size="sm" :disabled="loading" @click="loadData">
-          <RefreshCw :size="14" class="mr-1" :class="{ 'animate-spin': loading }" /> Làm mới
-        </FhButton>
-      </div>
     </div>
 
     <!-- Scope disclaimer banner -->
@@ -271,112 +281,129 @@ const getUsageBadgeClass = (status: string) => {
     </div>
 
     <p class="text-xs text-ink-500">Thống kê trên trang hiện tại</p>
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-      <div class="p-3 bg-white border border-amber-200 rounded-[var(--radius-sm)] shadow-xs">
-        <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Chờ chuẩn bị</div>
-        <div class="text-2xl font-extrabold text-amber-900 font-num mt-1">{{ stats.requested }}</div>
+    <!-- Stats Timeline -->
+    <div class="flex items-center justify-between w-full bg-white px-8 py-6 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
+      <!-- Background Connecting Line -->
+      <div class="absolute top-12 left-16 right-16 h-1 bg-gray-100 rounded-full z-0"></div>
+      
+      <!-- Step 1 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-amber-50 border-2 border-amber-200 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Package :size="24" />
+        </div>
+        <div class="text-[11px] font-bold text-amber-700 uppercase tracking-wider text-center">Chờ chuẩn bị</div>
+        <div class="text-xl font-extrabold text-amber-900 font-num mt-1">{{ stats.requested }} <span class="text-[10px] font-medium text-amber-500">đơn</span></div>
       </div>
-      <div class="p-3 bg-white border border-blue-200 rounded-[var(--radius-sm)] shadow-xs">
-        <div class="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">Sẵn sàng (READY)</div>
-        <div class="text-2xl font-extrabold text-blue-900 font-num mt-1">{{ stats.ready }}</div>
+      
+      <!-- Step 2 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-blue-50 border-2 border-blue-200 text-blue-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <CheckCircle :size="24" />
+        </div>
+        <div class="text-[11px] font-bold text-blue-700 uppercase tracking-wider text-center">Sẵn sàng</div>
+        <div class="text-xl font-extrabold text-blue-900 font-num mt-1">{{ stats.ready }} <span class="text-[10px] font-medium text-blue-500">đơn</span></div>
       </div>
-      <div class="p-3 bg-white border border-purple-200 rounded-[var(--radius-sm)] shadow-xs">
-        <div class="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">Đang giao hàng</div>
-        <div class="text-2xl font-extrabold text-purple-900 font-num mt-1">{{ stats.delivering }}</div>
+      
+      <!-- Step 3 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-purple-50 border-2 border-purple-200 text-purple-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Truck :size="24" />
+        </div>
+        <div class="text-[11px] font-bold text-purple-700 uppercase tracking-wider text-center">Đang giao</div>
+        <div class="text-xl font-extrabold text-purple-900 font-num mt-1">{{ stats.delivering }} <span class="text-[10px] font-medium text-purple-500">đơn</span></div>
       </div>
-      <div class="p-3 bg-white border border-emerald-200 rounded-[var(--radius-sm)] shadow-xs">
-        <div class="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Đã bàn giao (RECEIVED)</div>
-        <div class="text-2xl font-extrabold text-emerald-900 font-num mt-1">{{ stats.received }}</div>
+      
+      <!-- Step 4 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Layers :size="24" />
+        </div>
+        <div class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider text-center">Đã bàn giao</div>
+        <div class="text-xl font-extrabold text-emerald-900 font-num mt-1">{{ stats.received }} <span class="text-[10px] font-medium text-emerald-500">đơn</span></div>
       </div>
-      <div class="p-3 bg-white border border-gray-200 rounded-[var(--radius-sm)] shadow-xs">
-        <div class="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Hoàn tất (COMPLETED)</div>
-        <div class="text-2xl font-extrabold text-gray-800 font-num mt-1">{{ stats.completed }}</div>
-      </div>
-    </div>
-
-    <!-- Filter & Search Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-xs">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Tìm theo mã yêu cầu, mã đơn, tên linh kiện..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <select
-          v-model="statusFilter"
-          class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Tất cả trạng thái</option>
-          <option value="REQUESTED">Chờ chuẩn bị (REQUESTED)</option>
-          <option value="READY">Sẵn sàng nhận (READY)</option>
-          <option value="DELIVERING">Đang giao hàng (DELIVERING)</option>
-          <option value="RECEIVED">Đã nhận hàng (RECEIVED)</option>
-          <option value="COMPLETED">Đã hoàn tất (COMPLETED)</option>
-          <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-        </select>
-
-        <select
-          v-model="typeFilter"
-          class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Tất cả loại yêu cầu</option>
-          <option value="PRE_REPAIR">Trước sửa chữa (PRE_REPAIR)</option>
-          <option value="ADDITIONAL">Phát sinh (ADDITIONAL)</option>
-        </select>
-
-        <select
-          v-model="fulfillmentFilter"
-          class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Tất cả phương thức</option>
-          <option value="PICKUP">Lấy tại kho (PICKUP)</option>
-          <option value="DELIVERY">Giao tận nơi (DELIVERY)</option>
-        </select>
-
-        <select
-          v-model="dateFilter"
-          class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Mọi thời gian</option>
-          <option value="today">Hôm nay</option>
-          <option value="7days">7 ngày qua</option>
-          <option value="30days">30 ngày qua</option>
-        </select>
+      
+      <!-- Step 5 -->
+      <div class="flex-1 flex flex-col items-center relative z-10 group">
+        <div class="w-12 h-12 rounded-full bg-gray-50 border-2 border-gray-200 text-gray-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+          <Check :size="24" />
+        </div>
+        <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center">Hoàn tất</div>
+        <div class="text-xl font-extrabold text-gray-800 font-num mt-1">{{ stats.completed }} <span class="text-[10px] font-medium text-gray-400">đơn</span></div>
       </div>
     </div>
 
     <!-- Table -->
-    <FhCard>
-      <div v-if="loading" class="p-8 text-center text-xs text-ink-400">
-        <RefreshCw :size="20" class="mx-auto animate-spin mb-2" />
-        Đang tải dữ liệu yêu cầu linh kiện...
-      </div>
+    <div v-if="loadError" class="p-8 text-center text-danger-700 bg-white rounded-[var(--radius-sm)] border border-danger-200" role="alert">{{ loadError }}</div>
+    <FhTable
+      v-else
+      :columns="[
+        { key: 'code', label: 'Mã yêu cầu & Đơn hàng' },
+        { key: 'type', label: 'Loại & Hình thức' },
+        { key: 'items', label: 'Danh sách linh kiện' },
+        { key: 'status', label: 'Trạng thái', width: '150px' },
+        { key: 'time', label: 'Thời gian', width: '130px' },
+        { key: 'actions', label: 'Thao tác', width: '190px' },
+      ]"
+      :rows="filteredRequests"
+      :loading="loading"
+      searchable
+      v-model:searchQuery="searchQuery"
+      search-placeholder="Tìm theo mã yêu cầu, mã đơn, tên linh kiện..."
+      refreshable
+      @refresh="loadData"
+    >
+      <template #toolbar>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <select
+            v-model="statusFilter"
+            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="REQUESTED">Chờ chuẩn bị (REQUESTED)</option>
+            <option value="READY">Sẵn sàng nhận (READY)</option>
+            <option value="DELIVERING">Đang giao hàng (DELIVERING)</option>
+            <option value="RECEIVED">Đã nhận hàng (RECEIVED)</option>
+            <option value="COMPLETED">Đã hoàn tất (COMPLETED)</option>
+            <option value="CANCELLED">Đã hủy (CANCELLED)</option>
+          </select>
 
-      <div v-else-if="loadError" class="p-8 text-center text-danger-700" role="alert">{{ loadError }}</div>
+          <select
+            v-model="typeFilter"
+            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Tất cả loại yêu cầu</option>
+            <option value="PRE_REPAIR">Trước sửa chữa (PRE_REPAIR)</option>
+            <option value="ADDITIONAL">Phát sinh (ADDITIONAL)</option>
+          </select>
 
-      <div v-else-if="filteredRequests.length === 0" class="p-8 text-center text-xs text-ink-400">
-        Không tìm thấy yêu cầu linh kiện nào phù hợp với bộ lọc.
-      </div>
+          <select
+            v-model="fulfillmentFilter"
+            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Tất cả phương thức</option>
+            <option value="PICKUP">Lấy tại kho (PICKUP)</option>
+            <option value="DELIVERY">Giao tận nơi (DELIVERY)</option>
+          </select>
 
-      <FhTable
-        v-else
-        :columns="[
-          { key: 'code', label: 'Mã yêu cầu & Đơn hàng' },
-          { key: 'type', label: 'Loại & Hình thức' },
-          { key: 'items', label: 'Danh sách linh kiện' },
-          { key: 'status', label: 'Trạng thái', width: '150px' },
-          { key: 'time', label: 'Thời gian', width: '130px' },
-          { key: 'actions', label: 'Thao tác', width: '190px' },
-        ]"
-        :rows="filteredRequests"
-      >
-        <template #cell-code="{ row }">
+          <select
+            v-model="dateFilter"
+            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Mọi thời gian</option>
+            <option value="today">Hôm nay</option>
+            <option value="7days">7 ngày qua</option>
+            <option value="30days">30 ngày qua</option>
+          </select>
+        </div>
+      </template>
+
+      <template #cell-code="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="100px" height="16px" class="mb-1" />
+          <FhSkeleton width="120px" height="12px" class="mb-1" />
+          <FhSkeleton width="80px" height="12px" />
+        </div>
+        <div v-else>
           <div class="font-mono text-xs font-bold text-ink-900">
             PR-{{ row.id.substring(0, 8).toUpperCase() }}
           </div>
@@ -388,133 +415,154 @@ const getUsageBadgeClass = (status: string) => {
           <div class="text-[10px] text-ink-400 font-mono">
             Thợ: {{ row.technicianId.substring(0, 8) }}
           </div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-type="{ row }">
-          <div class="flex flex-col gap-1 items-start">
-            <span
-              class="text-[10px] font-bold px-2 py-0.5 rounded uppercase"
-              :class="row.requestType === 'pre_repair' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'"
-            >
-              {{ row.requestType === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh' }}
-            </span>
-            <span
-              class="text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1"
-              :class="row.fulfillmentMethod === 'delivery' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-700'"
-            >
-              <Truck v-if="row.fulfillmentMethod === 'delivery'" :size="11" />
-              <Package v-else :size="11" />
-              {{ row.fulfillmentMethod === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho' }}
-            </span>
-            <span v-if="row.fulfillmentMethod === 'delivery' && Number(row.shippingFee) > 0" class="text-[10px] text-ink-500 font-num">
-              Ship: <FhMoney :amount="row.shippingFee" />
-            </span>
-          </div>
-        </template>
+      <template #cell-type="{ row }">
+        <div v-if="isSkeleton(row)" class="flex flex-col gap-1 items-start">
+          <FhSkeleton width="80px" height="20px" class="rounded" />
+          <FhSkeleton width="90px" height="20px" class="rounded" />
+        </div>
+        <div v-else class="flex flex-col gap-1 items-start">
+          <span
+            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase"
+            :class="row.requestType === 'pre_repair' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'"
+          >
+            {{ row.requestType === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh' }}
+          </span>
+          <span
+            class="text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1"
+            :class="row.fulfillmentMethod === 'delivery' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-700'"
+          >
+            <Truck v-if="row.fulfillmentMethod === 'delivery'" :size="11" />
+            <Package v-else :size="11" />
+            {{ row.fulfillmentMethod === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho' }}
+          </span>
+          <span v-if="row.fulfillmentMethod === 'delivery' && Number(row.shippingFee) > 0" class="text-[10px] text-ink-500 font-num">
+            Ship: <FhMoney :amount="row.shippingFee" />
+          </span>
+        </div>
+      </template>
 
-        <template #cell-items="{ row }">
-          <div class="space-y-1 max-w-sm">
-            <div
-              v-for="item in (row.items || []).slice(0, 3)"
-              :key="item.id"
-              class="text-xs flex items-center justify-between gap-2"
-            >
-              <span class="font-medium text-ink-800 line-clamp-1">
-                • {{ item.partNameSnapshot }}
+      <template #cell-items="{ row }">
+        <div v-if="isSkeleton(row)" class="space-y-1 max-w-sm">
+          <FhSkeleton width="100%" height="16px" />
+          <FhSkeleton width="80%" height="16px" />
+        </div>
+        <div v-else class="space-y-1 max-w-sm">
+          <div
+            v-for="item in (row.items || []).slice(0, 3)"
+            :key="item.id"
+            class="text-xs flex items-center justify-between gap-2"
+          >
+            <span class="font-medium text-ink-800 line-clamp-1">
+              • {{ item.partNameSnapshot }}
+            </span>
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="text-ink-500 font-num text-[11px]">x{{ item.quantity }}</span>
+              <span
+                class="text-[9px] px-1 py-0.2 rounded border uppercase font-medium"
+                :class="getUsageBadgeClass(item.usageStatus)"
+              >
+                {{ item.usageStatus }}
               </span>
-              <div class="flex items-center gap-1 shrink-0">
-                <span class="text-ink-500 font-num text-[11px]">x{{ item.quantity }}</span>
-                <span
-                  class="text-[9px] px-1 py-0.2 rounded border uppercase font-medium"
-                  :class="getUsageBadgeClass(item.usageStatus)"
-                >
-                  {{ item.usageStatus }}
-                </span>
-              </div>
-            </div>
-            <div v-if="(row.items || []).length > 3" class="text-[10px] text-brand-600 font-semibold cursor-pointer hover:underline" @click="detailModalRequest = row">
-              + Xem thêm {{ (row.items || []).length - 3 }} linh kiện khác...
             </div>
           </div>
-        </template>
-
-        <template #cell-status="{ row }">
-          <div class="flex flex-col gap-1">
-            <span
-              class="text-[11px] font-bold px-2 py-0.5 rounded border inline-block text-center"
-              :class="getStatusBadgeClass(row.status)"
-            >
-              {{ getStatusLabel(row.status) }}
-            </span>
-            <div v-if="row.qrToken && (row.status === 'ready' || row.status === 'delivering')" class="text-[10px] text-blue-700 font-mono flex items-center gap-1 cursor-pointer hover:underline" @click="qrModalRequest = row">
-              <QrCode :size="12" /> Mã: {{ row.qrToken.substring(0, 10) }}...
-            </div>
+          <div v-if="(row.items || []).length > 3" class="text-[10px] text-brand-600 font-semibold cursor-pointer hover:underline" @click="detailModalRequest = row">
+            + Xem thêm {{ (row.items || []).length - 3 }} linh kiện khác...
           </div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-time="{ row }">
+      <template #cell-status="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="100px" height="20px" class="rounded" />
+        </div>
+        <div v-else class="flex flex-col gap-1">
+          <span
+            class="text-[11px] font-bold px-2 py-0.5 rounded border inline-block text-center"
+            :class="getStatusBadgeClass(row.status)"
+          >
+            {{ getStatusLabel(row.status) }}
+          </span>
+          <div v-if="row.qrToken && (row.status === 'ready' || row.status === 'delivering')" class="text-[10px] text-blue-700 font-mono flex items-center gap-1 cursor-pointer hover:underline" @click="qrModalRequest = row">
+            <QrCode :size="12" /> Mã: {{ row.qrToken.substring(0, 10) }}...
+          </div>
+        </div>
+      </template>
+
+      <template #cell-time="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="80px" height="16px" class="mb-1" />
+          <FhSkeleton width="60px" height="12px" />
+        </div>
+        <div v-else>
           <div class="text-[11px] text-ink-700 font-num">
             {{ new Date(row.createdAt).toLocaleDateString('vi-VN') }}
           </div>
           <div class="text-[10px] text-ink-400 font-num">
             {{ new Date(row.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}
           </div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-actions="{ row }">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <!-- Mark Ready (When REQUESTED) -->
-            <button
-              v-if="canOperate && row.status.toLowerCase() === 'requested'"
-              class="px-2 py-1 text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 rounded transition-colors flex items-center gap-1 shadow-xs"
-              :disabled="actionLoading"
-              @click="handleMarkReady(row)"
-            >
-              <CheckCircle :size="12" /> Chuẩn bị xong
-            </button>
+      <template #cell-actions="{ row }">
+        <div v-if="isSkeleton(row)" class="flex gap-2">
+          <FhSkeleton width="80px" height="28px" class="rounded" />
+          <FhSkeleton width="32px" height="28px" class="rounded" />
+        </div>
+        <div v-else class="flex items-center gap-1.5 flex-wrap">
+          <!-- Mark Ready (When REQUESTED) -->
+          <button
+            v-if="canOperate && row.status.toLowerCase() === 'requested'"
+            class="px-2 py-1 text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 rounded transition-colors flex items-center gap-1 shadow-xs"
+            :disabled="actionLoading"
+            @click="handleMarkReady(row)"
+          >
+            <CheckCircle :size="12" /> Chuẩn bị xong
+          </button>
 
-            <!-- View QR Handover (When READY or DELIVERING) -->
-            <button
-              v-if="['ready', 'delivering'].includes(row.status.toLowerCase()) && row.qrToken"
-              class="px-2 py-1 text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded transition-colors flex items-center gap-1"
-              @click="qrModalRequest = row"
-            >
-              <QrCode :size="12" /> Mã QR
-            </button>
+          <!-- View QR Handover (When READY or DELIVERING) -->
+          <button
+            v-if="['ready', 'delivering'].includes(row.status.toLowerCase()) && row.qrToken"
+            class="px-2 py-1 text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded transition-colors flex items-center gap-1"
+            @click="qrModalRequest = row"
+          >
+            <QrCode :size="12" /> Mã QR
+          </button>
 
-            <!-- Mark Delivering (When READY and delivery) -->
-            <button
-              v-if="canOperate && row.status.toLowerCase() === 'ready' && row.fulfillmentMethod === 'delivery'"
-              class="px-2 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded transition-colors flex items-center gap-1"
-              :disabled="actionLoading"
-              @click="handleMarkDelivering(row)"
-            >
-              <Truck :size="12" /> Giao hàng
-            </button>
+          <!-- Mark Delivering (When READY and delivery) -->
+          <button
+            v-if="canOperate && row.status.toLowerCase() === 'ready' && row.fulfillmentMethod === 'delivery'"
+            class="px-2 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded transition-colors flex items-center gap-1"
+            :disabled="actionLoading"
+            @click="handleMarkDelivering(row)"
+          >
+            <Truck :size="12" /> Giao hàng
+          </button>
 
-            <!-- Detail modal button -->
-            <button
-              class="p-1 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
-              title="Xem chi tiết linh kiện & sử dụng"
-              @click="detailModalRequest = row"
-            >
-              <Eye :size="15" />
-            </button>
+          <!-- Detail modal button -->
+          <button
+            class="p-1 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
+            title="Xem chi tiết linh kiện & sử dụng"
+            @click="detailModalRequest = row"
+          >
+            <Eye :size="15" />
+          </button>
 
-            <!-- Cancel button -->
-            <button
-              v-if="canOperate && ['requested', 'ready', 'delivering'].includes(row.status.toLowerCase())"
-              class="p-1 text-ink-400 hover:text-danger-600 rounded hover:bg-danger-50 transition-colors"
-              title="Hủy yêu cầu"
-              :disabled="actionLoading"
-              @click="handleCancelRequest(row)"
-            >
-              <XCircle :size="15" />
-            </button>
-          </div>
-        </template>
-      </FhTable>
-    </FhCard>
+          <!-- Cancel button -->
+          <button
+            v-if="canOperate && ['requested', 'ready', 'delivering'].includes(row.status.toLowerCase())"
+            class="p-1 text-ink-400 hover:text-danger-600 rounded hover:bg-danger-50 transition-colors"
+            title="Hủy yêu cầu"
+            :disabled="actionLoading"
+            @click="handleCancelRequest(row)"
+          >
+            <XCircle :size="15" />
+          </button>
+        </div>
+      </template>
+    </FhTable>
 
     <div class="flex items-center justify-between text-xs">
       <span>Trang {{ page }} • {{ totalCount }} yêu cầu</span>

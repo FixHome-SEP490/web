@@ -49,11 +49,12 @@ import {
   type MyVerification,
 } from '../../api/technician-verification.api';
 import { catalogApi, type ServiceItem, type ServiceCategory } from '../../api/catalog.api';
+import { reviewsApi, type Review } from '../../api/reviews.api';
 
 const authStore = useAuthStore();
 
 // ----------------- State & Navigation -----------------
-type TabKey = 'info' | 'services' | 'schedule' | 'location';
+type TabKey = 'info' | 'services' | 'schedule' | 'location' | 'reviews';
 const activeTab = ref<TabKey>('info');
 
 const loading = ref(true);
@@ -62,6 +63,62 @@ const technicianProfile = ref<TechnicianProfileView | null>(null);
 const kycVerification = ref<MyVerification | null>(null);
 const togglingAvailability = ref(false);
 const saveFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(null);
+
+// ----------------- Reviews State -----------------
+const reviewsList = ref<Review[]>([]);
+const loadingReviews = ref(false);
+const reviewsTotal = ref(0);
+
+const loadReviews = async () => {
+  const techUserId = authStore.user?.id;
+  if (!techUserId) return;
+  loadingReviews.value = true;
+  try {
+    const res = await reviewsApi.getByTechnician(techUserId, 1, 50);
+    reviewsList.value = res.data || [];
+    reviewsTotal.value = res.total;
+  } catch {
+    reviewsList.value = [];
+    reviewsTotal.value = 0;
+  } finally {
+    loadingReviews.value = false;
+  }
+};
+
+const starDistribution = computed(() => {
+  const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  const total = reviewsList.value.length;
+  for (const r of reviewsList.value) {
+    const score = Math.max(1, Math.min(5, Math.round(r.rating || 5)));
+    counts[score] = (counts[score] || 0) + 1;
+  }
+  return {
+    counts,
+    total,
+    percentages: {
+      5: total > 0 ? Math.round((counts[5] / total) * 100) : 0,
+      4: total > 0 ? Math.round((counts[4] / total) * 100) : 0,
+      3: total > 0 ? Math.round((counts[3] / total) * 100) : 0,
+      2: total > 0 ? Math.round((counts[2] / total) * 100) : 0,
+      1: total > 0 ? Math.round((counts[1] / total) * 100) : 0,
+    },
+  };
+});
+
+const parseReviewComment = (rawComment?: string | null) => {
+  if (!rawComment) return { tags: [] as string[], text: '' };
+  const raw = rawComment.trim();
+  const match = raw.match(/^\[(.*?)\]\s*(.*)$/s);
+  if (match) {
+    const tags = match[1]
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const text = match[2]?.trim() || '';
+    return { tags, text };
+  }
+  return { tags: [] as string[], text: raw };
+};
 
 let feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 const showFeedback = (message: string, type: 'success' | 'error' = 'success') => {
@@ -537,7 +594,7 @@ const loadProfile = async () => {
 onMounted(async () => {
   loading.value = true;
   await loadProfile();
-  await Promise.all([loadServicesAndOfferings(), loadTimeOff()]);
+  await Promise.all([loadServicesAndOfferings(), loadTimeOff(), loadReviews()]);
   loading.value = false;
 });
 
@@ -838,8 +895,8 @@ const handleSaveAvatar = async () => {
         <!-- KPI 1: Đánh giá -->
         <div
           class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-400 transition-all flex items-center gap-4 cursor-pointer group"
-          @click="activeTab = 'info'"
-          title="Bấm để xem thông tin chi tiết hồ sơ & đánh giá"
+          @click="activeTab = 'reviews'"
+          title="Bấm để xem danh sách đánh giá từ khách hàng"
         >
           <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 group-hover:scale-105 transition-transform">
             <Star :size="24" class="fill-amber-500 text-amber-500" />
@@ -969,6 +1026,27 @@ const handleSaveAvatar = async () => {
         >
           <MapPin :size="16" />
           <span>Khu vực &amp; Bản đồ quét</span>
+        </button>
+
+        <button
+          type="button"
+          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer relative"
+          :class="
+            activeTab === 'reviews'
+              ? 'bg-brand-600 text-white shadow-xs'
+              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
+          "
+          @click="activeTab = 'reviews'"
+        >
+          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-white text-white' : 'fill-amber-400 text-amber-400'" />
+          <span>Đánh giá &amp; Uy tín</span>
+          <span
+            v-if="technicianProfile.ratingCount > 0"
+            class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-num font-bold"
+            :class="activeTab === 'reviews' ? 'bg-white text-brand-700' : 'bg-amber-100 text-amber-800'"
+          >
+            {{ technicianProfile.ratingCount }}
+          </span>
         </button>
       </div>
 
@@ -1727,6 +1805,170 @@ const handleSaveAvatar = async () => {
                 height-class="h-80 sm:h-96"
                 @marker-move="onLocationMarkerMove"
               />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: ĐÁNH GIÁ & UY TÍN TỪ KHÁCH HÀNG -->
+      <div v-else-if="activeTab === 'reviews'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Thống kê & Biểu đồ sao (1 col) -->
+        <div class="space-y-6">
+          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
+            <div class="border-b border-ink-100 pb-4">
+              <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
+                <Star :size="18" class="text-amber-500 fill-amber-400" />
+                Tổng quan Uy tín &amp; Đánh giá
+              </h2>
+              <p class="text-xs text-ink-500 mt-0.5">Điểm số và mức độ hài lòng từ các khách hàng bạn đã phục vụ.</p>
+            </div>
+
+            <!-- Big Rating Score Box -->
+            <div class="p-6 rounded-2xl bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 border border-amber-200/80 text-center space-y-2 shadow-xs">
+              <div class="text-xs font-bold uppercase tracking-wider text-amber-700">Điểm trung bình</div>
+              <div class="text-5xl font-black font-num text-ink-900 flex items-center justify-center gap-1.5">
+                <span>{{ technicianProfile.averageRating }}</span>
+                <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
+              </div>
+              <div class="flex items-center justify-center gap-1 py-1">
+                <Star
+                  v-for="s in 5"
+                  :key="s"
+                  :size="22"
+                  :class="s <= Math.round(Number(technicianProfile.averageRating) || 5) ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                />
+              </div>
+              <p class="text-xs font-semibold text-ink-600">
+                Dựa trên {{ technicianProfile.ratingCount }} lượt đánh giá thực tế
+              </p>
+            </div>
+
+            <!-- Star Distribution Progress Bars -->
+            <div class="space-y-2.5 pt-2">
+              <div class="text-xs font-bold text-ink-700">Phân bổ số sao:</div>
+              <div
+                v-for="star in [5, 4, 3, 2, 1]"
+                :key="star"
+                class="flex items-center gap-2.5 text-xs"
+              >
+                <span class="w-10 font-bold font-num text-ink-700 flex items-center gap-0.5">
+                  {{ star }} <Star :size="12" class="fill-amber-400 text-amber-400" />
+                </span>
+                <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
+                  <div
+                    class="h-full rounded-full transition-all duration-500"
+                    :class="star >= 4 ? 'bg-amber-400' : star === 3 ? 'bg-yellow-400' : 'bg-rose-400'"
+                    :style="{ width: `${starDistribution.percentages[star]}%` }"
+                  ></div>
+                </div>
+                <span class="w-14 text-right font-num text-ink-500 text-[11px]">
+                  {{ starDistribution.counts[star] }} ({{ starDistribution.percentages[star] }}%)
+                </span>
+              </div>
+            </div>
+
+            <!-- Trust Badge Card -->
+            <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-1">
+              <div class="font-bold text-emerald-900 flex items-center gap-1.5">
+                <ShieldCheck :size="15" class="text-emerald-600" />
+                Chính sách tăng độ uy tín
+              </div>
+              <p class="text-[11px] text-emerald-800 leading-relaxed">
+                Đánh giá cao từ khách hàng sẽ giúp bạn được hệ thống ưu tiên đề xuất cho khách khi tìm thợ và tăng tỷ lệ nhận đơn mới.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Danh sách đánh giá chi tiết (2 cols) -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-5">
+            <div class="flex items-center justify-between border-b border-ink-100 pb-4">
+              <div>
+                <h3 class="text-base font-bold text-ink-900">Chi tiết phản hồi từ khách hàng</h3>
+                <p class="text-xs text-ink-500 mt-0.5">Những nhận xét và thẻ đánh giá khách đã để lại sau khi bạn hoàn thành ca sửa chữa.</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold font-num bg-ink-100 text-ink-700">
+                {{ reviewsList.length }} nhận xét
+              </span>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div v-if="loadingReviews" class="py-12 text-center text-xs text-ink-400 space-y-2">
+              <RefreshCw :size="24" class="animate-spin text-brand-600 mx-auto" />
+              <p>Đang tải danh sách đánh giá...</p>
+            </div>
+
+            <!-- Empty Reviews -->
+            <div
+              v-else-if="reviewsList.length === 0"
+              class="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-ink-200 space-y-3"
+            >
+              <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto border border-amber-200">
+                <Star :size="24" />
+              </div>
+              <div class="space-y-1">
+                <h4 class="text-sm font-bold text-ink-900">Chưa có đánh giá nào</h4>
+                <p class="text-xs text-ink-500 max-w-sm mx-auto">
+                  Hãy tiếp tục nhận việc và phục vụ khách hàng thật chu đáo để nhận được những đánh giá 5 sao đầu tiên!
+                </p>
+              </div>
+            </div>
+
+            <!-- Reviews List -->
+            <div v-else class="space-y-4 divide-y divide-ink-100">
+              <div
+                v-for="r in reviewsList"
+                :key="r.id"
+                class="pt-4 first:pt-0 space-y-2.5"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-full bg-brand-100 text-brand-800 font-bold text-xs flex items-center justify-center shrink-0">
+                      {{ (r.customerName || 'K').charAt(0) }}
+                    </div>
+                    <div>
+                      <div class="font-bold text-ink-900 text-xs">{{ r.customerName || 'Khách hàng FixHome' }}</div>
+                      <div class="flex items-center gap-1 mt-0.5">
+                        <Star
+                          v-for="s in 5"
+                          :key="s"
+                          :size="13"
+                          :class="s <= r.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                        />
+                        <span class="text-[11px] font-bold font-num text-ink-700 ml-1">{{ r.rating }}/5 sao</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <span class="text-[11px] font-num text-ink-400">
+                    {{ new Date(r.createdAt).toLocaleDateString('vi-VN') }}
+                  </span>
+                </div>
+
+                <!-- Chips / Tags -->
+                <div
+                  v-if="parseReviewComment(r.comment).tags.length > 0"
+                  class="flex flex-wrap gap-1.5 pt-0.5"
+                >
+                  <span
+                    v-for="tag in parseReviewComment(r.comment).tags"
+                    :key="tag"
+                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                  >
+                    <Check :size="10" class="text-brand-600 stroke-[3]" />
+                    {{ tag }}
+                  </span>
+                </div>
+
+                <!-- Text Comment -->
+                <p
+                  v-if="parseReviewComment(r.comment).text"
+                  class="text-xs text-ink-800 bg-ink-50/70 p-3 rounded-xl border border-ink-150 leading-relaxed"
+                >
+                  "{{ parseReviewComment(r.comment).text }}"
+                </p>
+              </div>
             </div>
           </div>
         </div>

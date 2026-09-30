@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { KanbanSquare, Search, Eye } from 'lucide-vue-next';
+import { KanbanSquare, Eye } from 'lucide-vue-next';
 import {
-  FhCard,
   FhTable,
   FhStatusPill,
   FhCostBreakdown,
   FhMoney,
+  FhSkeleton,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 
@@ -31,7 +31,27 @@ onMounted(async () => {
   }
 });
 
-const filteredOrders = computed(() => {
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredOrders = computed<(ServiceOrderItem & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: 10 }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      code: '',
+      serviceName: '',
+      addressSummary: '',
+      customerName: '',
+      customerPhone: '',
+      technician: null,
+      laborTotal: 0,
+      partsTotal: 0,
+      grandTotal: 0,
+      status: 'ACCEPTED',
+      createdAt: '',
+    } as unknown as ServiceOrderItem & { _isSkeleton: boolean }));
+  }
+
   return orders.value.filter((o) => {
     if (!isCanonicalServiceOrderState(String(o.status))) return false;
     const matchStatus = statusFilter.value === 'ALL' || o.status.toUpperCase() === statusFilter.value;
@@ -67,94 +87,117 @@ const filteredOrders = computed(() => {
       </div>
     </div>
 
-    <!-- Filter & Search Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Tìm theo mã đơn, khách hàng hoặc dịch vụ..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-ink-500">Trạng thái:</span>
-        <select
-          v-model="statusFilter"
-          class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-        >
-          <option value="ALL">Tất cả trạng thái</option>
-          <option value="ACCEPTED">Đã nhận đơn (ACCEPTED)</option>
-          <option value="EN_ROUTE">Đang di chuyển (EN_ROUTE)</option>
-          <option value="UNDER_REPAIR">Đang sửa chữa (UNDER_REPAIR)</option>
-          <option value="COMPLETED">Hoàn tất (COMPLETED)</option>
-          <option value="CANCELLED">Đã huỷ (CANCELLED)</option>
-        </select>
-      </div>
-    </div>
-
     <!-- Table -->
-    <FhCard>
-      <FhTable
-        :columns="[
-          { key: 'code', label: 'Mã đơn' },
-          { key: 'service', label: 'Dịch vụ & Địa chỉ' },
-          { key: 'customer', label: 'Khách hàng' },
-          { key: 'technician', label: 'Thợ phụ trách' },
-          { key: 'costs', label: 'Phân tách Công / Phụ tùng' },
-          { key: 'status', label: 'Trạng thái', width: '130px' },
-          { key: 'actions', label: 'Chi tiết', width: '90px' },
-        ]"
-        :rows="filteredOrders"
-      >
-        <template #cell-code="{ row }">
+    <FhTable
+      :columns="[
+        { key: 'code', label: 'Mã đơn', width: '130px' },
+        { key: 'service', label: 'Dịch vụ & Địa chỉ' },
+        { key: 'customer', label: 'Khách hàng', width: '150px' },
+        { key: 'technician', label: 'Thợ phụ trách', width: '150px' },
+        { key: 'costs', label: 'Phân tách Công / Phụ tùng' },
+        { key: 'status', label: 'Trạng thái', width: '130px' },
+        { key: 'actions', label: 'Chi tiết', width: '90px', align: 'right' },
+      ]"
+      :rows="filteredOrders"
+      :loading="loading"
+      searchable
+      v-model:searchQuery="searchQuery"
+      search-placeholder="Tìm theo mã đơn, khách hàng hoặc dịch vụ..."
+      :empty-text="'Không tìm thấy đơn nào phù hợp.'"
+    >
+      <template #toolbar>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-ink-500">Trạng thái:</span>
+          <select
+            v-model="statusFilter"
+            class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ACCEPTED">Đã nhận đơn (ACCEPTED)</option>
+            <option value="EN_ROUTE">Đang di chuyển (EN_ROUTE)</option>
+            <option value="UNDER_REPAIR">Đang sửa chữa (UNDER_REPAIR)</option>
+            <option value="COMPLETED">Hoàn tất (COMPLETED)</option>
+            <option value="CANCELLED">Đã huỷ (CANCELLED)</option>
+          </select>
+        </div>
+      </template>
+
+      <template #cell-code="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="100px" height="16px" class="mb-1" />
+          <FhSkeleton width="60px" height="12px" />
+        </div>
+        <div v-else>
           <span class="font-mono text-xs font-bold text-ink-900">{{ row.code }}</span>
           <div class="text-[10px] text-ink-400 font-num">{{ new Date(row.createdAt).toLocaleDateString('vi-VN') }}</div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-service="{ row }">
-          <div class="font-semibold text-xs text-ink-900">{{ row.serviceName }}</div>
-          <div class="text-[11px] text-ink-400 line-clamp-1">{{ row.addressSummary }}</div>
-        </template>
+      <template #cell-service="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="160px" height="16px" class="mb-1" />
+          <FhSkeleton width="120px" height="12px" />
+        </div>
+        <div v-else class="max-w-[260px] whitespace-normal">
+          <div class="font-semibold text-xs text-ink-900 leading-tight">{{ row.serviceName }}</div>
+          <div class="text-[11px] text-ink-400 mt-0.5 leading-relaxed">{{ row.addressSummary }}</div>
+        </div>
+      </template>
 
-        <template #cell-customer="{ row }">
+      <template #cell-customer="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="120px" height="16px" class="mb-1" />
+          <FhSkeleton width="90px" height="12px" />
+        </div>
+        <div v-else>
           <div class="text-xs font-medium text-ink-900">{{ row.customerName }}</div>
           <div class="text-[10px] text-ink-500 font-mono">{{ row.customerPhone }}</div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-technician="{ row }">
+      <template #cell-technician="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="130px" height="16px" class="mb-1" />
+          <FhSkeleton width="40px" height="12px" />
+        </div>
+        <div v-else>
           <div v-if="row.technician" class="text-xs font-medium text-ink-900">
             {{ row.technician.fullName }}
             <span class="text-[10px] text-amber-600 block">★ {{ row.technician.averageRating }}</span>
           </div>
           <span v-else class="text-[11px] text-amber-600 font-semibold">Chưa gán thợ</span>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-costs="{ row }">
-          <div class="w-48">
-            <FhCostBreakdown :labor-total="row.laborTotal" :parts-total="row.partsTotal" />
-            <div class="text-right text-[11px] font-bold text-brand-700 font-num mt-1">
-              <FhMoney :amount="row.grandTotal" />
-            </div>
+      <template #cell-costs="{ row }">
+        <div v-if="isSkeleton(row)" class="w-56">
+          <FhSkeleton width="100%" height="24px" class="mb-1 rounded" />
+          <FhSkeleton width="60px" height="16px" class="ml-auto" />
+        </div>
+        <div v-else class="max-w-[260px] min-w-[220px]">
+          <FhCostBreakdown :labor-total="row.laborTotal" :parts-total="row.partsTotal" />
+          <div class="text-right text-[11px] font-bold text-brand-700 font-num mt-1">
+            <FhMoney :amount="row.grandTotal" />
           </div>
-        </template>
+        </div>
+      </template>
 
-        <template #cell-status="{ row }">
-          <FhStatusPill :status="row.status" />
-        </template>
+      <template #cell-status="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="24px" class="rounded-full" />
+        <FhStatusPill v-else :status="row.status" />
+      </template>
 
-        <template #cell-actions="{ row }">
-          <button
-            class="p-1.5 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
-            title="Xem chi tiết"
-            @click="router.push(`/console/orders/${row.id}`)"
-          >
-            <Eye :size="16" />
-          </button>
-        </template>
-      </FhTable>
-    </FhCard>
+      <template #cell-actions="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="32px" height="32px" class="rounded-[var(--radius-sm)]" />
+        <button
+          v-else
+          class="p-1.5 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
+          title="Xem chi tiết"
+          @click="router.push(`/console/orders/${row.id}`)"
+        >
+          <Eye :size="16" />
+        </button>
+      </template>
+    </FhTable>
   </div>
 </template>

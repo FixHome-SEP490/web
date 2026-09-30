@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { UserPlus, Star, MapPin, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { FhCard, FhStatusPill, FhButton, FhSkeleton, FhEmptyState, FhMoney } from '../../components';
+import { UserPlus, Star, MapPin, Clock, AlertTriangle, RefreshCw } from 'lucide-vue-next';
+import { FhStatusPill, FhButton, FhSkeleton, FhTable, type TableColumn, FhMoney } from '../../components';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
+
+const activeTab = ref<'actionable' | 'expired'>('actionable');
+
+const columns: TableColumn[] = [
+  { key: 'service', label: 'Dịch vụ & Địa chỉ' },
+  { key: 'time', label: 'Thời gian hẹn', width: '250px' },
+  { key: 'status', label: 'Trạng thái', width: '150px' },
+  { key: 'actions', label: 'Thao tác', width: '120px', align: 'right' },
+];
 
 const loading = ref(true);
 const loadError = ref('');
@@ -125,140 +134,150 @@ onMounted(loadBookings);
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-        <UserPlus class="text-brand-600" :size="24" />
-        Gán thợ thủ công
-      </h1>
-      <p class="text-xs text-ink-500 mt-1">
-        Booking chưa có thợ nhận việc (hết lượt mời tuần tự hoặc chưa gửi shortlist). SM/Admin có thể gán thợ trực tiếp.
-      </p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
+          <UserPlus class="text-brand-600" :size="24" />
+          <span>Gán thợ thủ công</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-ink-500 mt-1">
+          Booking chưa có thợ nhận việc (hết lượt mời tuần tự hoặc chưa gửi shortlist). SM/Admin có thể gán thợ trực tiếp.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <FhButton variant="secondary" size="sm" @click="loadBookings">
+          <RefreshCw :size="14" class="mr-1.5" />
+          Làm mới
+        </FhButton>
+      </div>
     </div>
 
-    <div v-if="loading" class="space-y-3">
-      <FhSkeleton height="88px" :count="3" />
-    </div>
-    <FhEmptyState
-      v-else-if="loadError"
-      title="Không tải được danh sách"
-      :description="loadError"
-      action-text="Thử lại"
-      @action="loadBookings"
-    />
-    <FhEmptyState
-      v-else-if="bookings.length === 0"
-      title="Không có booking nào cần gán thợ"
-      description="Mọi booking hiện đều đã được ghép thợ hoặc đang trong hàng đợi mời tuần tự."
-    />
+    <!-- Tab Headers -->
+    <div class="flex items-center border-b border-ink-200 gap-6 text-sm font-extrabold">
+      <button
+        type="button"
+        class="pb-3 border-b-2 transition-all flex items-center gap-2"
+        :class="[
+          activeTab === 'actionable'
+            ? 'border-brand-600 text-brand-600'
+            : 'border-transparent text-ink-500 hover:text-ink-800'
+        ]"
+        @click="activeTab = 'actionable'"
+      >
+        <span>Cần gán thợ</span>
+        <span class="px-2 py-0.5 rounded-full text-xs font-num font-bold bg-ink-100 text-ink-700">
+          {{ actionableBookings.length }}
+        </span>
+      </button>
 
-    <template v-else>
-      <!-- Cần xử lý: khung giờ còn hiệu lực, gán được ngay -->
-      <div v-if="actionableBookings.length > 0" class="space-y-3">
-        <h2 class="text-xs font-bold text-ink-500 uppercase tracking-wider">
-          Cần gán thợ ({{ actionableBookings.length }})
-        </h2>
-        <FhCard
-          v-for="b in actionablePageItems"
-          :key="b.id"
-          padding="sm"
-          class="flex flex-col sm:flex-row sm:items-center gap-3"
-        >
-          <div class="flex-1 min-w-0 space-y-1.5">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="font-bold text-sm text-ink-900">{{ b.serviceName }}</h3>
-              <FhStatusPill :status="b.status" />
-            </div>
-            <p class="text-xs text-ink-500 flex items-start gap-1.5">
-              <MapPin :size="13" class="shrink-0 mt-0.5 text-brand-600" />
-              <span class="break-words">{{ b.addressSummary }}</span>
-            </p>
-            <p class="text-xs text-ink-500 flex items-center gap-1.5">
-              <Clock :size="13" class="shrink-0" />
-              <span>{{ new Date(b.preferredAt).toLocaleString('vi-VN') }} · {{ relativeTime(b.preferredAt) }}</span>
-            </p>
+      <button
+        type="button"
+        class="pb-3 border-b-2 transition-all flex items-center gap-2"
+        :class="[
+          activeTab === 'expired'
+            ? 'border-brand-600 text-brand-600'
+            : 'border-transparent text-ink-500 hover:text-ink-800'
+        ]"
+        @click="activeTab = 'expired'"
+      >
+        <span>Đã quá hạn</span>
+        <span class="px-2 py-0.5 rounded-full text-xs font-num font-bold bg-ink-100 text-ink-700">
+          {{ expiredBookings.length }}
+        </span>
+      </button>
+    </div>
+
+    <div
+      v-if="loadError"
+      class="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800 flex items-center gap-2 font-bold"
+    >
+      <AlertTriangle :size="16" /> {{ loadError }}
+    </div>
+    <!-- TAB 1: ACTIONABLE -->
+    <div v-if="activeTab === 'actionable'" class="space-y-4">
+      <FhTable
+        :columns="columns"
+        :rows="actionablePageItems"
+        :loading="loading"
+        empty-text="Mọi booking hiện đều đã được ghép thợ hoặc đang trong hàng đợi mời tuần tự."
+      >
+        <template #cell-service="{ row }">
+          <div class="font-extrabold text-sm text-ink-900">{{ row.serviceName }}</div>
+          <div class="text-[11px] text-ink-500 flex items-start gap-1 mt-1">
+            <MapPin :size="12" class="shrink-0 mt-0.5 text-brand-500" />
+            <span class="line-clamp-2">{{ row.addressSummary }}</span>
           </div>
-          <FhButton variant="primary" size="sm" class="shrink-0 self-start sm:self-center" @click="openAssign(b)">
+        </template>
+        <template #cell-time="{ row }">
+          <div class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
+            <Clock :size="13" class="text-brand-600 shrink-0" />
+            <span>{{ new Date(row.preferredAt).toLocaleString('vi-VN') }}</span>
+          </div>
+          <div class="text-[11px] text-brand-600 font-semibold mt-0.5 ml-5">
+            {{ relativeTime(row.preferredAt) }}
+          </div>
+        </template>
+        <template #cell-status="{ row }">
+          <FhStatusPill :status="row.status" />
+        </template>
+        <template #cell-actions="{ row }">
+          <FhButton variant="primary" size="sm" @click="openAssign(row)">
             <UserPlus :size="13" class="mr-1" /> Gán thợ
           </FhButton>
-        </FhCard>
+        </template>
+      </FhTable>
 
-        <div v-if="actionableTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
-          <span>Trang {{ actionablePage }} / {{ actionableTotalPages }}</span>
-          <div class="flex items-center gap-2">
-            <button
-              class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-              type="button"
-              aria-label="Trang trước"
-              :disabled="actionablePage <= 1"
-              @click="actionablePage--"
-            >
-              <ChevronLeft :size="16" />
-            </button>
-            <button
-              class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-              type="button"
-              aria-label="Trang sau"
-              :disabled="actionablePage >= actionableTotalPages"
-              @click="actionablePage++"
-            >
-              <ChevronRight :size="16" />
-            </button>
-          </div>
+      <div v-if="actionableTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
+        <span>Trang {{ actionablePage }} / {{ actionableTotalPages }}</span>
+        <div class="flex items-center gap-2">
+          <FhButton variant="secondary" size="sm" :disabled="actionablePage <= 1" @click="actionablePage--">Trước</FhButton>
+          <FhButton variant="secondary" size="sm" :disabled="actionablePage >= actionableTotalPages" @click="actionablePage++">Sau</FhButton>
         </div>
       </div>
+    </div>
 
-      <!-- Đã quá hạn: không gán được nữa, cần khách đặt lại lịch -->
-      <div v-if="expiredBookings.length > 0" class="space-y-3">
-        <h2 class="text-xs font-bold text-ink-400 uppercase tracking-wider">
-          Đã quá hạn, chờ khách đặt lại ({{ expiredBookings.length }})
-        </h2>
-        <FhCard
-          v-for="b in expiredPageItems"
-          :key="b.id"
-          padding="sm"
-          class="flex flex-col sm:flex-row sm:items-center gap-3 opacity-60"
-        >
-          <div class="flex-1 min-w-0 space-y-1.5">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="font-bold text-sm text-ink-900">{{ b.serviceName }}</h3>
-              <FhStatusPill :status="b.status" />
-            </div>
-            <p class="text-xs text-ink-500 flex items-start gap-1.5">
-              <MapPin :size="13" class="shrink-0 mt-0.5" />
-              <span class="break-words">{{ b.addressSummary }}</span>
-            </p>
-            <p class="text-xs text-danger-600 font-semibold flex items-center gap-1.5">
-              <AlertTriangle :size="13" class="shrink-0" />
-              <span>{{ new Date(b.preferredAt).toLocaleString('vi-VN') }} · {{ relativeTime(b.preferredAt) }}</span>
-            </p>
+    <!-- TAB 2: EXPIRED -->
+    <div v-if="activeTab === 'expired'" class="space-y-4 opacity-75 hover:opacity-100 transition-opacity">
+      <FhTable
+        :columns="columns"
+        :rows="expiredPageItems"
+        :loading="loading"
+        empty-text="Không có booking nào quá hạn."
+      >
+        <template #cell-service="{ row }">
+          <div class="font-extrabold text-sm text-ink-900">{{ row.serviceName }}</div>
+          <div class="text-[11px] text-ink-500 flex items-start gap-1 mt-1">
+            <MapPin :size="12" class="shrink-0 mt-0.5 text-ink-400" />
+            <span class="line-clamp-2">{{ row.addressSummary }}</span>
           </div>
-        </FhCard>
+        </template>
+        <template #cell-time="{ row }">
+          <div class="text-xs font-bold text-ink-600 flex items-center gap-1.5 line-through decoration-ink-300">
+            <Clock :size="13" class="shrink-0" />
+            <span>{{ new Date(row.preferredAt).toLocaleString('vi-VN') }}</span>
+          </div>
+          <div class="text-[11px] text-rose-600 font-bold mt-0.5 flex items-center gap-1">
+            <AlertTriangle :size="11" />
+            {{ relativeTime(row.preferredAt) }}
+          </div>
+        </template>
+        <template #cell-status="{ row }">
+          <FhStatusPill :status="row.status" />
+        </template>
+        <template #cell-actions>
+          <span class="text-[10px] text-ink-400 font-semibold italic">Chờ khách đặt lại</span>
+        </template>
+      </FhTable>
 
-        <div v-if="expiredTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
-          <span>Trang {{ expiredPage }} / {{ expiredTotalPages }}</span>
-          <div class="flex items-center gap-2">
-            <button
-              class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-              type="button"
-              aria-label="Trang trước"
-              :disabled="expiredPage <= 1"
-              @click="expiredPage--"
-            >
-              <ChevronLeft :size="16" />
-            </button>
-            <button
-              class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-              type="button"
-              aria-label="Trang sau"
-              :disabled="expiredPage >= expiredTotalPages"
-              @click="expiredPage++"
-            >
-              <ChevronRight :size="16" />
-            </button>
-          </div>
+      <div v-if="expiredTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
+        <span>Trang {{ expiredPage }} / {{ expiredTotalPages }}</span>
+        <div class="flex items-center gap-2">
+          <FhButton variant="secondary" size="sm" :disabled="expiredPage <= 1" @click="expiredPage--">Trước</FhButton>
+          <FhButton variant="secondary" size="sm" :disabled="expiredPage >= expiredTotalPages" @click="expiredPage++">Sau</FhButton>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Assign Modal -->
     <div
