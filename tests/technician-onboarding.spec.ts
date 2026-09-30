@@ -226,4 +226,28 @@ describe('TechnicianOnboardingPage', () => {
     expect(wrapper.text()).toContain('Đang chờ ban quản trị phê duyệt');
     expect(wrapper.text()).not.toContain('Hồ sơ chưa đạt yêu cầu');
   });
+
+  it('renders Approved screen with 0 VND initial balance notice and 200,000 VND deposit requirement', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({
+      onboardingStatus: 'approved',
+      verificationStatus: 'verified',
+      currentStep: 5,
+      personalInfoCompleted: true,
+      kycSubmitted: true,
+      skillsSelected: true,
+      addressSet: true,
+      fullName: 'minh CU',
+    });
+
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Hồ sơ đã được phê duyệt!');
+    expect(wrapper.text()).toContain('Thông báo số dư ví ban đầu & Điều kiện nhận đơn');
+    expect(wrapper.text()).toContain('0 ₫');
+    expect(wrapper.text()).toContain('200.000 ₫');
+    expect(wrapper.text()).toContain('Nạp tiền vào ví ngay');
+    expect(wrapper.text()).toContain('Vào Bàn làm việc Kỹ thuật viên');
+  });
 });
+

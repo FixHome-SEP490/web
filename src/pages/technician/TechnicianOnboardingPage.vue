@@ -24,6 +24,7 @@ import {
   Building2,
   Zap,
   Crosshair,
+  Wallet,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { FhButton } from '../../components';
@@ -1148,13 +1149,39 @@ const handleLogout = async () => {
         <div class="space-y-2">
           <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Hồ sơ đã được phê duyệt!</h2>
           <p class="text-slate-600 text-sm max-w-md mx-auto">
-            Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome. Bạn có thể bắt đầu nhận việc ngay.
+            Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome.
           </p>
         </div>
-        <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech')">
-          <span>Vào Bàn làm việc Kỹ thuật viên</span>
-          <ArrowRight :size="16" class="ml-2" />
-        </FhButton>
+
+        <!-- Wallet Top-Up Required Notice -->
+        <div class="p-5 rounded-2xl bg-amber-50/80 border border-amber-200 text-left space-y-3">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+              <Wallet :size="20" />
+            </div>
+            <div class="space-y-1">
+              <h4 class="text-sm font-bold text-amber-950">Thông báo số dư ví ban đầu & Điều kiện nhận đơn</h4>
+              <p class="text-xs text-amber-900 leading-relaxed">
+                Tài khoản mới tạo có số dư ví là <strong class="font-num">0 ₫</strong>. Theo quy định hệ thống, bạn cần nạp tối thiểu <strong class="font-num">200.000 ₫</strong> vào ví ký quỹ để kích hoạt quyền nhận việc và nhận lời mời đơn sửa chữa mới.
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2.5 border-t border-amber-200/60 text-xs text-amber-900 gap-1.5 font-medium">
+            <span>Số dư ví hiện tại: <strong class="text-slate-900 font-num">0 ₫</strong></span>
+            <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">200.000 ₫</strong></span>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech/wallet')">
+            <Wallet :size="16" class="mr-2" />
+            <span>Nạp tiền vào ví ngay</span>
+          </FhButton>
+          <FhButton variant="secondary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech')">
+            <span>Vào Bàn làm việc Kỹ thuật viên</span>
+            <ArrowRight :size="16" class="ml-2" />
+          </FhButton>
+        </div>
       </div>
 
       <!-- Pending / Submitted Screen -->
