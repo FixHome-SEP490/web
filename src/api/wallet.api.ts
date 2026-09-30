@@ -6,13 +6,23 @@ export interface WalletSummary {
   technicianId: string;
   balance: number;
   pendingWithdrawal: number;
+  /** Approved and already debited, on its way to the bank. */
+  processingWithdrawal: number;
   minimumBalance: number;
+  /** Smallest amount one withdrawal may be, set by the backend. */
+  minimumWithdrawal: number;
   availableBalance: number;
   withdrawableBalance: number;
   eligibleForJobs: boolean;
 }
 
-export type WalletTxType = 'TOP_UP' | 'WITHDRAW' | 'ONLINE_EARNING' | 'PLATFORM_FEE' | 'ADJUSTMENT';
+export type WalletTxType =
+  | 'TOP_UP'
+  | 'WITHDRAW'
+  | 'WITHDRAW_REFUND'
+  | 'ONLINE_EARNING'
+  | 'PLATFORM_FEE'
+  | 'ADJUSTMENT';
 
 export interface WalletTransaction {
   id: string;
@@ -29,21 +39,35 @@ export interface WalletTransaction {
   createdAt: string;
 }
 
-export type WithdrawalReqStatus = 'PENDING' | 'SUCCESS' | 'REJECTED' | 'FAILED';
+export type WithdrawalReqStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SUCCESS'
+  | 'REJECTED'
+  | 'FAILED';
 
 export interface WithdrawalRequest {
   id: string;
   walletId: string;
   technicianId: string;
   amount: number;
-  bankName: string;
-  bankAccountNumber: string;
-  bankAccountName: string;
+  bankBin?: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
   status: WithdrawalReqStatus;
   requestedAt: string;
   processedAt?: string | null;
   processedByUserId?: string | null;
   rejectReason?: string | null;
+  /** payOS payout trail. */
+  payoutId?: string | null;
+  payoutState?: string | null;
+  /** Reference the bank printed on the transfer: proof the money moved. */
+  payoutBankReference?: string | null;
+  payoutAttemptedAt?: string | null;
+  failureReason?: string | null;
+  refundTransactionId?: string | null;
   technician?: {
     id: string;
     fullName: string;
@@ -52,6 +76,37 @@ export interface WithdrawalRequest {
     avatarUrl?: string | null;
   } | null;
 }
+
+/** A bank that can receive payouts, keyed by the BIN payOS routes on. */
+export interface BankOption {
+  bin: string;
+  code: string;
+  shortName: string;
+  name: string;
+}
+
+/** The one account a technician's withdrawals are paid to. */
+export interface BankAccount {
+  bankBin: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  /** Upper case, no accents, exactly as the bank prints it. */
+  accountName: string;
+  updatedAt: string;
+}
+
+export interface PayoutOverview {
+  provider: 'payos' | 'mock';
+  sourceBalance: number | null;
+  paidOut: { count: number; amount: number };
+  processing: { count: number; amount: number };
+  pending: { count: number; amount: number };
+  failed: { count: number; amount: number };
+}
+
+/** What the approval endpoint answers: the withdrawal plus a sentence for the UI. */
+export type WithdrawalDecision = WithdrawalRequest & { message: string };
 
 export interface WalletListItem {
   id: string;
@@ -122,15 +177,40 @@ export const walletApi = {
     };
   },
 
-  async requestWithdrawal(dto: {
-    amount: number;
-    bankName: string;
-    bankAccountNumber: string;
-    bankAccountName: string;
-  }): Promise<WithdrawalRequest> {
+  // ---- BANK ACCOUNT ----
+  async listBanks(): Promise<BankOption[]> {
+    const res = await apiClient.get<{ data: BankOption[] }>('/technician/wallet/banks');
+    return res.data.data;
+  },
+
+  /** Null until the technician has saved one. */
+  async getMyBankAccount(): Promise<BankAccount | null> {
+    const res = await apiClient.get<{ data: BankAccount | null }>(
+      '/technician/wallet/bank-account',
+    );
+    return res.data.data ?? null;
+  },
+
+  async saveMyBankAccount(dto: {
+    bankBin: string;
+    accountNumber: string;
+    accountName: string;
+  }): Promise<BankAccount> {
+    const res = await apiClient.put<{ data: BankAccount }>(
+      '/technician/wallet/bank-account',
+      dto,
+    );
+    return res.data.data;
+  },
+
+  /**
+   * Only the amount travels: the money always goes to the saved account,
+   * which is the one checked against the KYC name.
+   */
+  async requestWithdrawal(amount: number): Promise<WithdrawalRequest> {
     const res = await apiClient.post<{ data: WithdrawalRequest }>(
       '/technician/wallet/withdrawals',
-      dto,
+      { amount },
     );
     return res.data.data;
   },
@@ -192,12 +272,29 @@ export const walletApi = {
     return res.data;
   },
 
-  async approveWithdrawal(
-    id: string,
-  ): Promise<{ success: boolean; id: string; status: string; message: string }> {
-    const res = await apiClient.patch<{
-      data: { success: boolean; id: string; status: string; message: string };
-    }>(`/service-manager/withdrawals/${id}/approve`);
+  /**
+   * Approve and pay out through payOS. Resolves with where the payout ended up:
+   * SUCCESS, PROCESSING (payOS still working) or FAILED (money refunded).
+   */
+  async approveWithdrawal(id: string): Promise<WithdrawalDecision> {
+    const res = await apiClient.patch<{ data: WithdrawalDecision }>(
+      `/service-manager/withdrawals/${id}/approve`,
+    );
+    return res.data.data;
+  },
+
+  /** Ask payOS again about a payout that is still PROCESSING. */
+  async reconcileWithdrawal(id: string): Promise<WithdrawalDecision> {
+    const res = await apiClient.post<{ data: WithdrawalDecision }>(
+      `/service-manager/withdrawals/${id}/reconcile`,
+    );
+    return res.data.data;
+  },
+
+  async getPayoutOverview(): Promise<PayoutOverview> {
+    const res = await apiClient.get<{ data: PayoutOverview }>(
+      '/service-manager/withdrawals/payout-overview',
+    );
     return res.data.data;
   },
 

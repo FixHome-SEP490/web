@@ -56,6 +56,7 @@ import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedi
 import { mediaApi } from '../../api/media.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
+import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 
 const showPartsDemo = import.meta.env.DEV;
 const route = useRoute();
@@ -1378,6 +1379,13 @@ const refreshJobStatus = async () => {
           :media="bookingMedia"
         />
       </div>
+
+      <OrderComplaintPanel
+        :order-id="job.id"
+        :order-status="job.status"
+        :completed-at="job.completedAt"
+        role="technician"
+      />
 
       <!-- 🚦 5-STEP INTERACTIVE WORKFLOW PIPELINE -->
       <div class="space-y-4">

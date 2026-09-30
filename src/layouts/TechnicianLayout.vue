@@ -206,6 +206,15 @@ const userShortName = computed(() => {
               <Wallet :size="16" />
               <span>Ví thợ</span>
             </router-link>
+
+            <router-link
+              to="/tech/warranty"
+              class="px-3 py-2 rounded-xl hover:bg-ink-100/80 hover:text-ink-900 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 border border-transparent"
+              active-class="bg-brand-50 text-brand-700 font-bold border-brand-200/60 shadow-2xs"
+            >
+              <ShieldCheck :size="16" />
+              <span>Bảo hành</span>
+            </router-link>
           </nav>
         </div>
 

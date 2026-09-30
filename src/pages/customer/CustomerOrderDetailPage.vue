@@ -38,11 +38,15 @@ import {
   type MapMarker,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
+import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
+import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
+import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
+import { isOpenClaim } from '../../utils/warranty-claim';
 
 const route = useRoute();
 const router = useRouter();
@@ -60,7 +64,6 @@ const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const showTrackingModal = ref(false);
-const warrantyClaimDescription = ref('');
 // Warranty Coverages & Claims for completed order
 interface OrderWarrantyRecord {
   id: string;
@@ -73,12 +76,29 @@ interface OrderWarrantyRecord {
 }
 
 const orderWarranties = ref<OrderWarrantyRecord[]>([]);
-const activeWarrantyClaim = ref<{
-  id: string;
-  description: string;
-  status: string;
-  submittedAt?: string;
-} | null>(null);
+const warrantyClaims = ref<WarrantyClaimView[]>([]);
+const activeWarrantyClaim = computed(
+  () => warrantyClaims.value.find((claim) => isOpenClaim(claim.status)) ?? null,
+);
+const busyCoverageIds = computed(() =>
+  warrantyClaims.value.filter((claim) => isOpenClaim(claim.status)).map((claim) => claim.warrantyCoverageId),
+);
+const claimableCoverages = computed<ClaimableCoverage[]>(() =>
+  orderWarranties.value
+    .filter((w) => w.status?.toUpperCase() !== 'VOIDED')
+    .map((w) => ({
+      id: w.id,
+      itemDescription: w.note || 'Bảo hành dịch vụ',
+      expiresAt: w.expiresAt,
+      status:
+        new Date(w.expiresAt).getTime() > Date.now() && w.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED',
+    })),
+);
+const hasClaimableCoverage = computed(() =>
+  claimableCoverages.value.some((coverage) => !busyCoverageIds.value.includes(coverage.id)),
+);
+const claimCoverageLabel = (claim: WarrantyClaimView) =>
+  claimableCoverages.value.find((coverage) => coverage.id === claim.warrantyCoverageId)?.itemDescription;
 
 const isOrderWarrantyActive = computed(() => {
   const now = new Date();
@@ -333,11 +353,7 @@ const loadOrder = async () => {
         // Ignore
       }
       try {
-        const claims = await ordersApi.getOrderWarrantyClaims(orderId);
-        activeWarrantyClaim.value =
-          claims.find((c) =>
-            ['SUBMITTED', 'ACCEPTED', 'IN_PROGRESS', 'submitted', 'accepted', 'in_progress'].includes(c.status)
-          ) || null;
+        warrantyClaims.value = await ordersApi.getOrderWarrantyClaims(orderId);
       } catch {
         // Ignore
       }
@@ -493,6 +509,18 @@ const handleCloseReviewModal = () => {
   }
 };
 
+const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
+  warrantyClaims.value = [claim, ...warrantyClaims.value];
+  showWarrantyClaimModal.value = false;
+  actionMessage.value = {
+    type: 'success',
+    text: 'Đã gửi yêu cầu bảo hành. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.',
+  };
+};
+const onWarrantyClaimUpdated = (claim: WarrantyClaimView) => {
+  warrantyClaims.value = warrantyClaims.value.map((existing) => (existing.id === claim.id ? claim : existing));
+};
+
 const handleReviewSubmitted = (review: Review) => {
   existingReview.value = review;
   showReviewModal.value = false;
@@ -524,33 +552,6 @@ const parsedReview = computed(() => {
   }
   return { tags: [] as string[], text: raw };
 });
-
-const handleCreateWarrantyClaim = async () => {
-  if (!warrantyClaimDescription.value.trim()) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng mô tả vấn đề cần bảo hành!' };
-    return;
-  }
-  try {
-    actionLoading.value = true;
-    await ordersApi.createWarrantyClaim(orderId, warrantyClaimDescription.value);
-    activeWarrantyClaim.value = {
-      id: 'new',
-      description: warrantyClaimDescription.value.trim(),
-      status: 'SUBMITTED',
-      submittedAt: new Date().toISOString(),
-    };
-    showWarrantyClaimModal.value = false;
-    warrantyClaimDescription.value = '';
-    actionMessage.value = {
-      type: 'success',
-      text: 'Đã gửi yêu cầu bảo hành điện tử thành công! Kỹ thuật viên sẽ liên hệ lại.',
-    };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể gửi yêu cầu bảo hành.' };
-  } finally {
-    actionLoading.value = false;
-  }
-};
 const confirmWork = async () => {
   actionLoading.value = true;
   try {
@@ -1552,27 +1553,20 @@ const confirmWork = async () => {
             </table>
           </div>
 
-          <!-- Active Claim State -->
-          <div
-            v-if="activeWarrantyClaim"
-            class="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 space-y-1"
-          >
-            <div class="flex items-center gap-1.5 font-bold">
-              <Clock :size="15" class="text-amber-600" />
-              <span>Đang có yêu cầu bảo hành đang được tiếp nhận &amp; xử lý</span>
-            </div>
-            <p class="text-[11px] text-amber-800">
-              Mô tả sự cố: "{{ activeWarrantyClaim.description }}"
-            </p>
-            <p class="text-[10px] text-ink-500 font-num">
-              Thời gian gửi: {{ formatDate(activeWarrantyClaim.submittedAt) }}
-            </p>
+          <div v-if="warrantyClaims.length" class="space-y-2">
+            <WarrantyClaimCard
+              v-for="claim in warrantyClaims"
+              :key="claim.id"
+              :claim="claim"
+              :coverage-label="claimCoverageLabel(claim)"
+              @updated="onWarrantyClaimUpdated"
+            />
           </div>
 
           <!-- Action Button -->
-          <div v-else-if="isOrderWarrantyActive" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
+          <div v-if="hasClaimableCoverage" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
             <span class="text-ink-500 text-[11px]">
-              Nếu thiết bị gặp sự cố hoặc hoạt động bất thường, bạn có thể yêu cầu kỹ thuật viên đến kiểm tra lại miễn phí.
+              Nếu thiết bị gặp sự cố hoặc hoạt động bất thường, bạn có thể gửi yêu cầu bảo hành cho từng hạng mục.
             </span>
             <FhButton
               variant="primary"
@@ -1580,11 +1574,18 @@ const confirmWork = async () => {
               @click="showWarrantyClaimModal = true"
             >
               <ShieldCheck :size="14" class="mr-1.5" />
-              Yêu cầu hỗ trợ bảo hành
+              Yêu cầu bảo hành
             </FhButton>
           </div>
         </div>
       </FhCard>
+
+      <!-- Khiếu nại về đơn hàng (mọi trạng thái đơn) -->
+      <OrderComplaintPanel
+        :order-id="orderId"
+        :order-status="order.status"
+        :completed-at="order.completedAt"
+      />
     </div>
 
     <!-- Confirm Cancel Modal -->
@@ -1609,38 +1610,18 @@ const confirmWork = async () => {
     />
 
     <!-- Warranty Claim Modal -->
-    <div
-      v-if="showWarrantyClaimModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
-        <h3 class="text-base font-bold text-ink-900">Yêu cầu Bảo hành Điện tử</h3>
-        <p class="text-xs text-ink-500">
-          Mô tả hiện tượng lỗi tái phát hoặc sự cố thiết bị:
-        </p>
-        <textarea
-          v-model="warrantyClaimDescription"
-          rows="3"
-          placeholder="Mô tả sự cố cần bảo hành..."
-          class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-        ></textarea>
-
-        <div class="flex gap-2 pt-2">
-          <FhButton variant="ghost" size="sm" class="flex-1" @click="showWarrantyClaimModal = false">
-            Đóng
-          </FhButton>
-          <FhButton
-            variant="primary"
-            size="sm"
-            class="flex-1"
-            :disabled="actionLoading"
-            @click="handleCreateWarrantyClaim"
-          >
-            Gửi yêu cầu
-          </FhButton>
-        </div>
-      </div>
-    </div>
+    <WarrantyClaimModal
+      v-if="order"
+      :open="showWarrantyClaimModal"
+      :order-id="orderId"
+      :order-code="order.code"
+      :service-name="order.serviceName"
+      :technician-name="order.technician?.fullName || 'Kỹ thuật viên FixHome'"
+      :coverages="claimableCoverages"
+      :busy-coverage-ids="busyCoverageIds"
+      @close="showWarrantyClaimModal = false"
+      @submitted="onWarrantyClaimSubmitted"
+    />
 
     <!-- Tracking Modal -->
     <div

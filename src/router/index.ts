@@ -217,6 +217,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Workspace thực thi công việc' },
       },
       {
+        path: 'warranty',
+        name: 'tech-warranty',
+        component: () => import('../pages/technician/TechnicianWarrantyPage.vue'),
+        meta: { title: 'Bảo hành' },
+      },
+      {
         path: 'earnings',
         name: 'tech-earnings',
         component: () => import('../pages/technician/TechnicianEarningsPage.vue'),
@@ -308,6 +314,12 @@ const routes: RouteRecordRaw[] = [
         name: 'support-queue',
         component: () => import('../pages/console/SupportQueuePage.vue'),
         meta: { title: 'Hàng đợi hỗ trợ', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'warranty',
+        name: 'console-warranty',
+        component: () => import('../pages/console/ConsoleWarrantyPage.vue'),
+        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER'] },
       },
       {
         path: 'support/cash/:id',

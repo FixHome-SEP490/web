@@ -10,13 +10,16 @@ import {
   AlertCircle,
   FileText,
   ShieldAlert,
+  Landmark,
 } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import {
   walletApi,
   type WalletListItem,
   type WithdrawalRequest,
   type WalletTransaction,
   type WalletConfig,
+  type PayoutOverview,
 } from '../../api/wallet.api';
 import {
   FhButton,
@@ -29,7 +32,9 @@ import {
   formatCurrencyVND,
   formatDateTimeVN,
   formatWalletTxType,
+  formatWithdrawalStatus,
 } from '../../utils/formatters';
+import { extractApiErrorMessage } from '../../utils/input-validation';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.userRole === 'ADMIN');
@@ -124,6 +129,11 @@ const showRejectModal = ref(false);
 const rejectReason = ref('');
 const actionSubmitting = ref(false);
 
+// Automatic payouts: what has left, what is moving, and what the source holds.
+const payoutOverview = ref<PayoutOverview | null>(null);
+/** Id of the withdrawal whose payout is being re-checked with payOS. */
+const reconcilingId = ref<string | null>(null);
+
 // Admin Adjust Modal
 const showAdjustModal = ref(false);
 const selectedWalletForAdjust = ref<WalletListItem | null>(null);
@@ -176,6 +186,14 @@ const loadWithdrawals = async () => {
   }
 };
 
+const loadPayoutOverview = async () => {
+  try {
+    payoutOverview.value = await walletApi.getPayoutOverview();
+  } catch (err) {
+    console.error('Failed to load payout overview:', err);
+  }
+};
+
 const loadConfig = async () => {
   if (!isAdmin.value) return;
   configLoading.value = true;
@@ -218,18 +236,48 @@ const openApprove = (wd: WithdrawalRequest) => {
   showApproveModal.value = true;
 };
 
+/** Say exactly where the payout ended up; each outcome needs a different reaction. */
+const announcePayout = (result: WithdrawalRequest & { message: string }) => {
+  if (result.status === 'SUCCESS') {
+    toast.success(result.message, {
+      description: result.payoutBankReference
+        ? `Mã giao dịch ngân hàng: ${result.payoutBankReference}`
+        : undefined,
+    });
+  } else if (result.status === 'FAILED') {
+    toast.error(result.message, { description: result.failureReason ?? undefined });
+  } else {
+    toast.info(result.message);
+  }
+};
+
 const handleApprove = async () => {
   if (!selectedWd.value) return;
   actionSubmitting.value = true;
   try {
-    await walletApi.approveWithdrawal(selectedWd.value.id);
+    const result = await walletApi.approveWithdrawal(selectedWd.value.id);
     showApproveModal.value = false;
-    await loadWithdrawals();
-    await loadWallets();
+    announcePayout(result);
+    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
   } catch (err: unknown) {
-    alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Phê duyệt thất bại');
+    // Refusals such as a short payout source leave the request PENDING and
+    // nothing debited, so the message is what the manager needs to act on.
+    toast.error(extractApiErrorMessage(err, 'Duyệt chi thất bại'));
   } finally {
     actionSubmitting.value = false;
+  }
+};
+
+const handleReconcile = async (wd: WithdrawalRequest) => {
+  reconcilingId.value = wd.id;
+  try {
+    const result = await walletApi.reconcileWithdrawal(wd.id);
+    announcePayout(result);
+    await Promise.all([loadWithdrawals(), loadPayoutOverview()]);
+  } catch (err: unknown) {
+    toast.error(extractApiErrorMessage(err, 'Không kiểm tra được với payOS'));
+  } finally {
+    reconcilingId.value = null;
   }
 };
 
@@ -249,10 +297,9 @@ const handleReject = async () => {
   try {
     await walletApi.rejectWithdrawal(selectedWd.value.id, rejectReason.value.trim());
     showRejectModal.value = false;
-    await loadWithdrawals();
-    await loadWallets();
+    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
   } catch (err: unknown) {
-    alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Từ chối thất bại');
+    toast.error(extractApiErrorMessage(err, 'Từ chối thất bại'));
   } finally {
     actionSubmitting.value = false;
   }
@@ -325,13 +372,17 @@ watch(wdStatusFilter, () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'wallets') loadWallets();
-  if (tab === 'withdrawals') loadWithdrawals();
+  if (tab === 'withdrawals') {
+    loadWithdrawals();
+    loadPayoutOverview();
+  }
   if (tab === 'config') loadConfig();
 });
 
 onMounted(() => {
   loadWallets();
   loadWithdrawals();
+  loadPayoutOverview();
   if (isAdmin.value) {
     loadConfig();
   }
@@ -549,6 +600,54 @@ onMounted(() => {
 
     <!-- TAB 2: YÊU CẦU RÚT TIỀN -->
     <div v-else-if="activeTab === 'withdrawals'" class="space-y-4">
+      <!-- Payout overview -->
+      <div v-if="payoutOverview" class="space-y-3">
+        <div
+          v-if="payoutOverview.provider === 'mock'"
+          class="p-3 rounded-xl bg-warning-50 border border-warning-600/20 text-warning-600 text-xs font-bold flex items-center gap-2"
+        >
+          <AlertCircle :size="15" class="shrink-0" />
+          <span>Đang chạy chế độ giả lập chi hộ: duyệt chi không chuyển tiền thật.</span>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="flex items-center justify-between text-[11px] font-bold text-ink-500">
+              <span>Ví nguồn chi hộ</span>
+              <Landmark :size="14" class="text-brand-600" />
+            </div>
+            <div class="text-lg font-extrabold font-num text-ink-900">
+              {{ payoutOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(payoutOverview.sourceBalance) }}
+            </div>
+            <p class="text-[11px] text-ink-500">
+              {{ payoutOverview.provider === 'mock' ? 'Số dư giả lập' : 'Ví payOS dùng để chi hộ' }}
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Đã chuyển cho kỹ thuật viên</div>
+            <div class="text-lg font-extrabold font-num text-success-600">
+              {{ formatCurrencyVND(payoutOverview.paidOut.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">{{ payoutOverview.paidOut.count }} lệnh thành công</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Đang chuyển</div>
+            <div class="text-lg font-extrabold font-num text-info-600">
+              {{ formatCurrencyVND(payoutOverview.processing.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">{{ payoutOverview.processing.count }} lệnh chờ payOS xác nhận</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Chờ duyệt</div>
+            <div class="text-lg font-extrabold font-num text-warning-600">
+              {{ formatCurrencyVND(payoutOverview.pending.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">
+              {{ payoutOverview.pending.count }} yêu cầu · {{ payoutOverview.failed.count }} lệnh chuyển thất bại
+            </p>
+          </div>
+        </div>
+      </div>
+
       <FhTable
         :columns="wdColumns"
         :rows="filteredWithdrawals"
@@ -563,9 +662,11 @@ onMounted(() => {
               class="h-9 px-3 rounded-sm border border-ink-200 text-xs text-ink-700 focus:outline-none focus:border-brand-600"
             >
               <option value="ALL">Tất cả trạng thái</option>
-              <option value="PENDING">Chờ duyệt chi (PENDING)</option>
-              <option value="SUCCESS">Đã chi tiền (SUCCESS)</option>
-              <option value="REJECTED">Đã từ chối (REJECTED)</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="PROCESSING">Đang chuyển tiền</option>
+              <option value="SUCCESS">Đã chi tiền</option>
+              <option value="FAILED">Chuyển thất bại</option>
+              <option value="REJECTED">Đã từ chối</option>
             </select>
           </div>
         </template>
@@ -613,12 +714,21 @@ onMounted(() => {
         <template #cell-status="{ row }">
           <FhSkeleton v-if="isSkeleton(row)" width="100px" height="24px" class="rounded-full" />
           <div v-else>
-            <FhStatusPill :status="row.status" />
-            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="text-[10px] text-rose-600 mt-1 max-w-xs">
+            <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
+            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="text-[10px] text-rose-600 mt-1 max-w-xs whitespace-normal">
               Lý do: {{ row.rejectReason }}
             </div>
-            <div v-if="row.status === 'SUCCESS' && row.processedAt" class="text-[10px] text-ink-400 mt-1">
-              {{ formatDateTimeVN(row.processedAt) }}
+            <div v-if="row.status === 'FAILED'" class="text-[10px] text-rose-600 mt-1 max-w-xs whitespace-normal">
+              {{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví
+            </div>
+            <div v-if="row.status === 'PROCESSING' && row.failureReason" class="text-[10px] text-info-600 mt-1 max-w-xs whitespace-normal">
+              {{ row.failureReason }}
+            </div>
+            <div v-if="row.status === 'SUCCESS'" class="text-[10px] text-ink-400 mt-1">
+              <template v-if="row.payoutBankReference">
+                Mã GD: <span class="font-num font-bold text-ink-600">{{ row.payoutBankReference }}</span>
+              </template>
+              <template v-else-if="row.processedAt">{{ formatDateTimeVN(row.processedAt) }}</template>
             </div>
           </div>
         </template>
@@ -632,13 +742,23 @@ onMounted(() => {
             <template v-if="row.status === 'PENDING'">
               <FhButton variant="primary" size="sm" @click="openApprove(row)">
                 <CheckCircle2 :size="13" class="mr-1" />
-                Duyệt chi
+                Duyệt và chi
               </FhButton>
               <FhButton variant="danger" size="sm" @click="openReject(row)">
                 <XCircle :size="13" class="mr-1" />
                 Từ chối
               </FhButton>
             </template>
+            <FhButton
+              v-else-if="row.status === 'PROCESSING'"
+              variant="secondary"
+              size="sm"
+              :loading="reconcilingId === row.id"
+              @click="handleReconcile(row)"
+            >
+              <RefreshCw :size="13" class="mr-1" />
+              Kiểm tra lại
+            </FhButton>
             <span v-else class="text-ink-400 text-xs italic">Đã giải quyết</span>
           </div>
         </template>
@@ -746,7 +866,7 @@ onMounted(() => {
       <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <h3 class="text-base font-extrabold text-ink-900 flex items-center gap-2">
           <CheckCircle2 class="text-emerald-600" :size="20" />
-          <span>Xác nhận duyệt chi tiền</span>
+          <span>Duyệt và chi tiền tự động</span>
         </h3>
 
         <div class="p-4 rounded-2xl bg-ink-50 border border-ink-100 space-y-2 text-xs">
@@ -773,7 +893,14 @@ onMounted(() => {
         </div>
 
         <p class="text-xs text-ink-500">
-          Vui lòng xác nhận bạn đã hoàn tất lệnh chuyển khoản đến tài khoản ngân hàng trên. Hệ thống sẽ ghi nhận trạng thái THÀNH CÔNG và trừ chính thức số dư ký quỹ của kỹ thuật viên.
+          Hệ thống sẽ trừ ví kỹ thuật viên rồi tự chuyển khoản qua payOS tới tài khoản trên — bạn không cần chuyển tay.
+          Nếu ngân hàng không nhận, số tiền được hoàn lại vào ví kỹ thuật viên. Tài khoản này đã được đối chiếu tên với hồ sơ xác minh danh tính.
+        </p>
+        <p
+          v-if="payoutOverview?.provider === 'mock'"
+          class="text-[11px] font-bold text-warning-600"
+        >
+          Đang ở chế độ giả lập: không có tiền thật được chuyển.
         </p>
 
         <div class="flex items-center justify-end gap-3 pt-2">
@@ -786,7 +913,7 @@ onMounted(() => {
             :loading="actionSubmitting"
             @click="handleApprove"
           >
-            Xác nhận đã chi tiền
+            Duyệt và chi tiền
           </FhButton>
         </div>
       </div>

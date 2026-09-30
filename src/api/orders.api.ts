@@ -1,5 +1,6 @@
 // src/api/orders.api.ts
 import apiClient from './client';
+import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -61,6 +62,7 @@ export interface ServiceOrderItem {
   grandTotal: number;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'unpaid' | 'paid' | 'refunded';
   createdAt: string;
+  completedAt?: string | null;
   timeline?: {
     status: string;
     title: string;
@@ -184,13 +186,29 @@ export interface OrderWarrantyGroup {
   maxExpiresAt: string;
   hasActiveCoverage: boolean;
   status: 'ACTIVE' | 'EXPIRED';
-  activeClaim?: {
-    id: string;
-    description: string;
-    status: string;
-    submittedAt?: string;
-    createdAt?: string;
-  } | null;
+  claims: WarrantyClaimView[];
+}
+
+export interface WarrantyClaimView {
+  id: string;
+  serviceOrderId: string;
+  warrantyCoverageId: string;
+  status: WarrantyClaimStatus | string;
+  description: string;
+  evidenceRefs: string[] | null;
+  submittedAfterExpiry: boolean;
+  customerResponse: 'agreed' | 'disputed' | null;
+  awaitingPrompt: 'conclusion' | 'completion' | null;
+  resolutionNotes: string | null;
+  submittedAt: string;
+  resolvedAt: string | null;
+  technician: { id: string; fullName: string } | null;
+}
+
+export interface CreateWarrantyClaimPayload {
+  warrantyCoverageId: string;
+  description: string;
+  evidenceRefs?: string[];
 }
 
 export interface ApiResponse<T = unknown> {
@@ -571,24 +589,8 @@ export const ordersApi = {
     return res.data?.data || [];
   },
 
-  async getOrderWarrantyClaims(orderId: string): Promise<{
-    id: string;
-    serviceOrderId: string;
-    description: string;
-    status: string;
-    submittedAt?: string;
-    createdAt?: string;
-  }[]> {
-    const res = await apiClient.get<{
-      data: {
-        id: string;
-        serviceOrderId: string;
-        description: string;
-        status: string;
-        submittedAt?: string;
-        createdAt?: string;
-      }[];
-    }>(`/service-orders/${orderId}/warranty-claims`);
+  async getOrderWarrantyClaims(orderId: string): Promise<WarrantyClaimView[]> {
+    const res = await apiClient.get<{ data: WarrantyClaimView[] }>(`/service-orders/${orderId}/warranty-claims`);
     return res.data?.data || [];
   },
 
@@ -633,26 +635,11 @@ export const ordersApi = {
             }
           });
 
-          // Check if there are active warranty claims for this order
-          let activeClaim: OrderWarrantyGroup['activeClaim'] = null;
+          let claims: WarrantyClaimView[] = [];
           try {
-            const claimsRes = await apiClient.get<{
-              data: {
-                id: string;
-                description: string;
-                status: string;
-                submittedAt?: string;
-                createdAt?: string;
-              }[];
-            }>(`/service-orders/${order.id}/warranty-claims`);
-            const pending = (claimsRes.data?.data || []).find((c) =>
-              ['SUBMITTED', 'ACCEPTED', 'IN_PROGRESS', 'submitted', 'accepted', 'in_progress'].includes(c.status)
-            );
-            if (pending) {
-              activeClaim = pending;
-            }
+            claims = await this.getOrderWarrantyClaims(order.id);
           } catch {
-            // ignore claim fetch error
+            // a claims fetch error must not hide the warranty itself
           }
 
           groups.push({
@@ -675,7 +662,7 @@ export const ordersApi = {
             maxExpiresAt: maxExpires,
             hasActiveCoverage: hasActive,
             status: hasActive ? 'ACTIVE' : 'EXPIRED',
-            activeClaim,
+            claims,
           });
         } catch {
           // ignore error for single order
@@ -686,11 +673,31 @@ export const ordersApi = {
     return groups.sort((a, b) => new Date(b.maxExpiresAt).getTime() - new Date(a.maxExpiresAt).getTime());
   },
 
-  async createWarrantyClaim(orderId: string, description: string): Promise<Record<string, unknown>> {
-    const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/warranty-claims`, {
-      description,
-    });
-    return (res.data?.data || res.data || {}) as Record<string, unknown>;
+  async retryCompletion(orderId: string): Promise<{ completed: boolean; status: string }> {
+    const res = await apiClient.post<{ data: { completed: boolean; status: string } }>(
+      `/service-orders/${orderId}/retry-completion`,
+    );
+    return res.data.data;
+  },
+
+  async createWarrantyClaim(orderId: string, payload: CreateWarrantyClaimPayload): Promise<WarrantyClaimView> {
+    const res = await apiClient.post<{ data: WarrantyClaimView }>(
+      `/service-orders/${orderId}/warranty-claims`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  async respondWarrantyClaim(
+    orderId: string,
+    claimId: string,
+    payload: { decision: 'agree' | 'dispute'; note?: string },
+  ): Promise<WarrantyClaimView> {
+    const res = await apiClient.post<{ data: WarrantyClaimView }>(
+      `/service-orders/${orderId}/warranty-claims/${claimId}/respond`,
+      payload,
+    );
+    return res.data.data;
   },
 
   // ── SM/Admin: Cancellations & Strikes ──

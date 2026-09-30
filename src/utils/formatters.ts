@@ -68,6 +68,8 @@ export function formatWalletTxType(type: string): { label: string; isCredit: boo
       return { label: 'Khấu trừ phí nền tảng (Đơn tiền mặt)', isCredit: false };
     case 'WITHDRAW':
       return { label: 'Rút tiền về ngân hàng', isCredit: false };
+    case 'WITHDRAW_REFUND':
+      return { label: 'Hoàn tiền rút không thành công', isCredit: true };
     case 'ADJUSTMENT':
       return { label: 'Điều chỉnh bởi Admin', isCredit: false };
     default:
@@ -82,12 +84,14 @@ export function formatWithdrawalStatus(status: string): { label: string; color: 
   switch (status) {
     case 'PENDING':
       return { label: 'Chờ duyệt', color: 'amber' };
+    case 'PROCESSING':
+      return { label: 'Đang chuyển tiền', color: 'blue' };
     case 'SUCCESS':
       return { label: 'Đã chi tiền', color: 'emerald' };
     case 'REJECTED':
       return { label: 'Đã từ chối', color: 'rose' };
     case 'FAILED':
-      return { label: 'Thất bại', color: 'rose' };
+      return { label: 'Chuyển thất bại', color: 'rose' };
     default:
       return { label: status, color: 'gray' };
   }

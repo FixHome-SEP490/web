@@ -19,6 +19,7 @@ import {
   formatSupportDate,
   getSupportErrorMessage,
   isCashCase,
+  isResponseOverdue,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
 } from './support-cases.utils';
@@ -43,6 +44,10 @@ const caseTypes: SupportCaseType[] = [
   'parts_dispute',
   'warranty_dispute',
   'mid_job_interruption',
+  'property_damage',
+  'quality',
+  'pricing_dispute',
+  'conduct',
   'other',
 ];
 const statuses: SupportCaseStatus[] = ['open', 'in_review', 'resolved', 'rejected'];
@@ -69,6 +74,7 @@ async function loadCases() {
       caseType: caseTypeFilter.value || undefined,
       status: statusFilter.value || undefined,
       search: searchQuery.value.trim() || undefined,
+      sort: 'priority',
     });
     if (requestId !== latestRequest) return;
     cases.value = response.data;
@@ -209,6 +215,11 @@ watch(page, (nextPage, previousPage) => {
         </template>
         <template #cell-status="{ row }">
           <FhStatusPill :status="row.status" :label="supportCaseStatusLabels[row.status]" />
+          <div class="mt-1 flex flex-wrap gap-1">
+            <span v-if="row.isUrgent && (row.status === 'open' || row.status === 'in_review')" class="rounded bg-danger-50 px-1.5 py-0.5 text-[10px] font-semibold text-danger-700">Cần xử lý ngay</span>
+            <span v-if="isResponseOverdue(row.status, row.respondBy)" class="rounded bg-warning-50 px-1.5 py-0.5 text-[10px] font-semibold text-warning-700">Quá hạn phản hồi</span>
+            <span v-if="row.holdCompletion" class="rounded bg-info-50 px-1.5 py-0.5 text-[10px] font-semibold text-info-600">Đang giữ đơn</span>
+          </div>
         </template>
         <template #cell-reason="{ row }">
           <div class="max-w-[360px] text-xs font-medium leading-relaxed text-ink-800 line-clamp-2">{{ row.reason }}</div>

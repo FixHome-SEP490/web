@@ -148,6 +148,13 @@ const statusConfig = computed(() => {
         dot: 'bg-danger-600',
         defaultLabel: 'Không đủ điều kiện',
       };
+    case 'PROCESSING':
+      return {
+        bg: 'bg-info-50',
+        text: 'text-info-600',
+        dot: 'bg-info-600',
+        defaultLabel: 'Đang xử lý',
+      };
     case 'FAILED':
       return {
         bg: 'bg-danger-50',
@@ -155,13 +162,28 @@ const statusConfig = computed(() => {
         dot: 'bg-danger-600',
         defaultLabel: 'Thất bại',
       };
+    case 'IN_REVIEW':
+      return {
+        bg: 'bg-info-50',
+        text: 'text-info-600',
+        dot: 'bg-info-600',
+        defaultLabel: 'Đang xem xét',
+      };
+    case 'RESOLVED':
+      return {
+        bg: 'bg-success-50',
+        text: 'text-success-600',
+        dot: 'bg-success-600',
+        defaultLabel: 'Đã giải quyết',
+      };
+    case 'OPEN':
     case 'PENDING':
     case 'UNPAID':
       return {
         bg: 'bg-warning-50',
         text: 'text-warning-600',
         dot: 'bg-warning-600',
-        defaultLabel: s === 'UNPAID' ? 'Chưa thanh toán' : 'Đang chờ',
+        defaultLabel: s === 'UNPAID' ? 'Chưa thanh toán' : s === 'OPEN' ? 'Đang mở' : 'Đang chờ',
       };
     default:
       return {
