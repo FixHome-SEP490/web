@@ -22,6 +22,7 @@ import { FhButton, FhCard } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 import { toast } from 'vue-sonner';
+import { vnDateTimeString } from '../../utils/vn-time';
 
 const router = useRouter();
 const notifStore = useNotificationsStore();
@@ -79,7 +80,7 @@ const handleMarkAllRead = async () => {
 const formatFullDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  return date.toLocaleString('vi-VN', {
+  return vnDateTimeString(date, {
     hour: '2-digit',
     minute: '2-digit',
     day: '2-digit',
@@ -165,7 +166,7 @@ const formatFullDate = (dateStr: string): string => {
           <button
             type="button"
             class="px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0 flex items-center gap-1.5"
-            :class="selectedCategory === 'TECHNICIAN' ? 'bg-blue-600 text-white shadow-xs' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'"
+            :class="selectedCategory === 'TECHNICIAN' ? 'bg-brand-600 text-white shadow-xs' : 'bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200'"
             @click="selectedCategory = 'TECHNICIAN'"
           >
             <Wrench :size="14" />
@@ -175,7 +176,7 @@ const formatFullDate = (dateStr: string): string => {
           <button
             type="button"
             class="px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0 flex items-center gap-1.5"
-            :class="selectedCategory === 'SERVICE_MANAGER' ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'"
+            :class="selectedCategory === 'SERVICE_MANAGER' ? 'bg-brand-600 text-white shadow-xs' : 'bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200'"
             @click="selectedCategory = 'SERVICE_MANAGER'"
           >
             <Shield :size="14" />
@@ -185,7 +186,7 @@ const formatFullDate = (dateStr: string): string => {
           <button
             type="button"
             class="px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0 flex items-center gap-1.5"
-            :class="selectedCategory === 'ADMIN' ? 'bg-amber-600 text-white shadow-xs' : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'"
+            :class="selectedCategory === 'ADMIN' ? 'bg-warning-600 text-white shadow-xs' : 'bg-warning-50 text-warning-800 hover:bg-warning-100 border border-warning-200'"
             @click="selectedCategory = 'ADMIN'"
           >
             <Sparkles :size="14" />

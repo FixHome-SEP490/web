@@ -21,16 +21,16 @@ const toggle = (id: string) => {
 </script>
 
 <template>
-  <section data-testid="parts-quotation-demo" role="note" class="rounded-xl border border-sky-300 bg-sky-50 p-3 space-y-3 text-xs text-sky-950">
+  <section data-testid="parts-quotation-demo" role="note" class="rounded-xl border border-brand-300 bg-brand-50 p-3 space-y-3 text-xs text-brand-900">
     <h4 class="font-bold text-sm">DEMO — Chọn linh kiện để xem trước báo giá mẫu</h4>
     <p>Đây là dữ liệu giả để hình dung cách chọn linh kiện và cộng tiền công. Không lấy từ kho/cửa hàng, không có giá hoặc bảo hành chính thức; <strong>không thêm vào báo giá thật và không gửi API</strong>.</p>
     <div role="group" aria-label="Danh sách linh kiện mẫu" class="grid sm:grid-cols-3 gap-2">
-      <label v-for="part in demoParts" :key="part.id" class="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-white p-2 cursor-pointer">
+      <label v-for="part in demoParts" :key="part.id" class="flex items-center justify-between gap-2 rounded-lg border border-brand-200 bg-white p-2 cursor-pointer">
         <span class="flex items-center gap-2"><input type="checkbox" :checked="selectedIds.includes(part.id)" @change="toggle(part.id)" />{{ part.name }}</span>
         <strong class="font-num whitespace-nowrap">{{ vnd(part.unitPrice) }}</strong>
       </label>
     </div>
-    <div class="rounded-lg bg-white border border-sky-200 p-3 space-y-1" data-testid="parts-demo-cost-breakdown">
+    <div class="rounded-lg bg-white border border-brand-200 p-3 space-y-1" data-testid="parts-demo-cost-breakdown">
       <p>Tiền công mẫu: <strong>{{ vnd(sampleLaborVnd) }}</strong></p>
       <p data-testid="parts-demo-selected">Linh kiện mẫu đã chọn: <strong>{{ selectedParts.length }}</strong> — {{ vnd(demoPartsTotal) }}</p>
       <p data-testid="parts-demo-total">Tổng báo giá mẫu: <strong>{{ vnd(demoTotal) }}</strong></p>

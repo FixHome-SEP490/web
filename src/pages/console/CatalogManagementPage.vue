@@ -14,6 +14,7 @@ import {
   type ServiceCategory,
   type ServiceItem,
 } from '../../api/catalog.api';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const activeTab = ref<'categories' | 'services'>('categories');
 const loading = ref(true);
@@ -190,7 +191,7 @@ const saveCategory = async () => {
     successMessage.value = 'Đã lưu danh mục từ Backend.';
     await loadData();
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : 'Không thể lưu danh mục. Vui lòng kiểm tra mã hoặc quyền truy cập.';
+    error.value = userFacingError(reason, 'Không thể lưu danh mục. Vui lòng kiểm tra mã hoặc quyền truy cập.');
   }
 };
 
@@ -249,7 +250,7 @@ const saveService = async () => {
     successMessage.value = 'Đã lưu dịch vụ từ Backend.';
     await loadData();
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : 'Không thể lưu dịch vụ. Vui lòng kiểm tra dữ liệu.';
+    error.value = userFacingError(reason, 'Không thể lưu dịch vụ. Vui lòng kiểm tra dữ liệu.');
   }
 };
 
@@ -273,7 +274,7 @@ const handleConfirm = async () => {
     successMessage.value = confirmSuccessMessage.value;
     showConfirmModal.value = false;
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : 'Không thể cập nhật trạng thái.';
+    error.value = userFacingError(reason, 'Không thể cập nhật trạng thái.');
   } finally {
     confirmLoading.value = false;
   }

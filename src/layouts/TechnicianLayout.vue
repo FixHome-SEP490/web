@@ -139,7 +139,7 @@ const userShortName = computed(() => {
             />
             <div class="flex flex-col">
               <div class="text-lg font-extrabold tracking-tight leading-none">
-                <span class="text-brand-600">Fix</span><span class="text-emerald-600">Home</span>
+                <span class="text-brand-600">Fix</span><span class="text-success-600">Home</span>
               </div>
               <span class="inline-block text-[9px] font-extrabold text-brand-700 tracking-wider uppercase mt-0.5">
                 Kỹ thuật viên
@@ -183,7 +183,7 @@ const userShortName = computed(() => {
               <span>Hộp thư mời</span>
               <span
                 v-if="invitationCount > 0"
-                class="px-1.5 py-0.5 min-w-4 text-[10px] font-bold rounded-full bg-amber-500 text-white font-num leading-none text-center shadow-xs"
+                class="px-1.5 py-0.5 min-w-4 text-[10px] font-bold rounded-full bg-warning-500 text-white font-num leading-none text-center shadow-xs"
               >
                 {{ invitationCount }}
               </span>
@@ -230,7 +230,7 @@ const userShortName = computed(() => {
             <MessageSquare :size="18" />
             <span
               v-if="chatStore.totalUnreadCount > 0"
-              class="absolute -top-1 -right-1 px-1.5 min-w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white leading-none font-num shadow-xs"
+              class="absolute -top-1 -right-1 px-1.5 min-w-4 h-4 rounded-full bg-danger-600 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white leading-none font-num shadow-xs"
             >
               {{ chatStore.totalUnreadCount > 9 ? '9+' : chatStore.totalUnreadCount }}
             </span>
@@ -245,7 +245,7 @@ const userShortName = computed(() => {
             class="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold whitespace-nowrap shadow-2xs"
             :class="
               isAvailable
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/80'
+                ? 'bg-success-50 border-success-200 text-success-800 hover:bg-success-100/80'
                 : 'bg-ink-100 border-ink-200 text-ink-600 hover:bg-ink-200/70'
             "
             :disabled="togglingAvailability"
@@ -256,7 +256,7 @@ const userShortName = computed(() => {
             <span
               v-else
               class="w-2 h-2 rounded-full transition-all"
-              :class="isAvailable ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-300/50' : 'bg-ink-400'"
+              :class="isAvailable ? 'bg-success-500 animate-pulse ring-2 ring-success-300/50' : 'bg-ink-400'"
             />
             <span class="hidden sm:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
           </button>
@@ -314,7 +314,7 @@ const userShortName = computed(() => {
               <div class="py-1">
                 <button
                   type="button"
-                  class="flex items-center gap-2.5 px-4 py-2 text-rose-600 hover:bg-rose-50 w-full text-left font-bold transition-colors"
+                  class="flex items-center gap-2.5 px-4 py-2 text-danger-600 hover:bg-danger-50 w-full text-left font-bold transition-colors"
                   @click="handleLogout"
                 >
                   <LogOut :size="15" />
@@ -330,14 +330,14 @@ const userShortName = computed(() => {
     <!-- Onboarding status banner if not approved -->
     <div
       v-if="onboardingStatus && onboardingStatus !== 'approved' && verificationStatus !== 'verified'"
-      class="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white px-4 py-3 shadow-xs"
+      class="bg-gradient-to-r from-warning-500 via-warning-600 to-warning-700 text-white px-4 py-3 shadow-xs"
     >
       <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-2.5">
-          <ShieldAlert :size="18" class="shrink-0 text-amber-100" />
+          <ShieldAlert :size="18" class="shrink-0 text-warning-100" />
           <span>
             Hồ sơ thợ của bạn đang ở trạng thái
-            <strong class="uppercase font-black tracking-wide text-amber-100">
+            <strong class="uppercase font-black tracking-wide text-warning-100">
               {{
                 onboardingStatus === 'submitted'
                   ? 'Chờ xét duyệt'
@@ -351,7 +351,7 @@ const userShortName = computed(() => {
         </div>
         <router-link
           to="/tech/onboarding"
-          class="shrink-0 px-3.5 py-1.5 bg-white text-amber-950 font-bold rounded-xl hover:bg-amber-50 transition-colors shadow-2xs whitespace-nowrap"
+          class="shrink-0 px-3.5 py-1.5 bg-white text-warning-900 font-bold rounded-xl hover:bg-warning-50 transition-colors shadow-2xs whitespace-nowrap"
         >
           Hoàn tất hồ sơ thợ →
         </router-link>
@@ -397,7 +397,7 @@ const userShortName = computed(() => {
         <span>Thư mời</span>
         <span
           v-if="invitationCount > 0"
-          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"
+          class="absolute top-0 right-2 w-2 h-2 rounded-full bg-warning-500 ring-2 ring-white"
         />
       </router-link>
 

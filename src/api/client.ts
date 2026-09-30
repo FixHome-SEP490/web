@@ -1,5 +1,6 @@
 // src/api/client.ts
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosResponse, type AxiosError } from 'axios';
+import { transportMessage } from '../utils/user-facing-error';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
@@ -59,17 +60,27 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+/**
+ * Replace library wording ('Request failed with status code 500', 'Network
+ * Error') with what the person can use, or with '' so the screen's own
+ * fallback shows. Response data is left intact for code that reads it.
+ */
+function humanize(error: unknown): unknown {
+  if (error instanceof Error) error.message = transportMessage(error);
+  return error;
+}
+
 // Response interceptor – handle errors
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    if (getHttpStatus(error) !== 401) return Promise.reject(error);
+    if (getHttpStatus(error) !== 401) return Promise.reject(humanize(error));
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
-    if (original?.url === '/auth/login' || original?.url === '/auth/register') return Promise.reject(error);
+    if (original?.url === '/auth/login' || original?.url === '/auth/register') return Promise.reject(humanize(error));
     const refreshToken = localStorage.getItem('refresh_token');
     if (!original || original._retry || !refreshToken) {
       invalidateAuthSession();
-      return Promise.reject(error);
+      return Promise.reject(humanize(error));
     }
     original._retry = true;
     try {
@@ -87,7 +98,7 @@ apiClient.interceptors.response.use(
       return apiClient(original);
     } catch (refreshError) {
       invalidateAuthSession();
-      return Promise.reject(refreshError);
+      return Promise.reject(humanize(refreshError));
     }
   },
 );

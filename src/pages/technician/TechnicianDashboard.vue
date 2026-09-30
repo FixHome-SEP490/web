@@ -230,7 +230,7 @@ const currentDateFormatted = computed(() => {
       <div class="flex items-start sm:items-center gap-4 sm:gap-5 relative z-10">
         <!-- Avatar with online badge -->
         <div class="relative shrink-0">
-          <div class="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-gradient-to-br from-brand-50 to-blue-50 border-2 border-brand-200 text-brand-700 font-extrabold flex items-center justify-center text-2xl overflow-hidden shadow-sm">
+          <div class="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-50 border-2 border-brand-200 text-brand-700 font-extrabold flex items-center justify-center text-2xl overflow-hidden shadow-sm">
             <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" class="w-full h-full object-cover" />
             <span v-else>{{ authStore.user?.fullName?.charAt(0) || 'T' }}</span>
           </div>
@@ -239,7 +239,7 @@ const currentDateFormatted = computed(() => {
           <span
             data-testid="technician-receive-status"
             class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white transition-colors shadow-xs"
-            :class="isAvailable === true ? 'bg-emerald-500' : 'bg-ink-400'"
+            :class="isAvailable === true ? 'bg-success-500' : 'bg-ink-400'"
             :title="isAvailable === null ? 'Chưa xác định trạng thái nhận đơn' : isAvailable ? 'Đang nhận đơn mới' : 'Tạm ngưng nhận đơn mới'"
           />
         </div>
@@ -251,8 +251,8 @@ const currentDateFormatted = computed(() => {
               <ShieldCheck :size="13" class="text-brand-600" />
               Đã xác thực KYC
             </span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
-              <Award :size="13" class="text-amber-600" />
+            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-warning-700 bg-warning-50 border border-warning-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
+              <Award :size="13" class="text-warning-600" />
               Thợ Chuyên Nghiệp
             </span>
           </div>
@@ -271,14 +271,14 @@ const currentDateFormatted = computed(() => {
             </span>
             <span class="text-ink-300">•</span>
             <span class="flex items-center gap-1 text-ink-600 font-medium">
-              <Star :size="14" class="text-amber-500 fill-amber-500 shrink-0" />
+              <Star :size="14" class="text-warning-500 fill-warning-500 shrink-0" />
               Đánh giá: <strong class="text-ink-800 font-bold font-num">{{ profile?.averageRating ? profile.averageRating.toFixed(1) : '5.0' }}★</strong>
               <span class="text-ink-400">({{ profile?.ratingCount ?? 0 }})</span>
             </span>
             <span class="text-ink-300">•</span>
             <span class="flex items-center gap-1 text-ink-600 font-medium">
-              <Sparkles :size="14" class="text-emerald-600 shrink-0" />
-              Độ tin cậy: <strong class="text-emerald-700 font-bold font-num">{{ profile?.reliabilityScore ?? 100 }}%</strong>
+              <Sparkles :size="14" class="text-success-600 shrink-0" />
+              Độ tin cậy: <strong class="text-success-700 font-bold font-num">{{ profile?.reliabilityScore ?? 100 }}%</strong>
             </span>
           </div>
         </div>
@@ -292,7 +292,7 @@ const currentDateFormatted = computed(() => {
           class="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border transition-all duration-200 text-xs font-bold shadow-2xs hover:shadow-xs active:scale-98"
           :class="
             isAvailable === true
-              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-800 hover:bg-emerald-100/80'
+              ? 'bg-success-50/90 border-success-300 text-success-800 hover:bg-success-100/80'
               : isAvailable === false
                 ? 'bg-ink-100/90 border-ink-300 text-ink-700 hover:bg-ink-200/80'
                 : 'bg-ink-50 border-ink-200 text-ink-500'
@@ -302,7 +302,7 @@ const currentDateFormatted = computed(() => {
         >
           <span
             class="w-2.5 h-2.5 rounded-full transition-colors"
-            :class="isAvailable === true ? 'bg-emerald-500 animate-pulse' : 'bg-ink-400'"
+            :class="isAvailable === true ? 'bg-success-500 animate-pulse' : 'bg-ink-400'"
           />
           <span class="flex flex-col text-left">
             <span class="text-[10px] uppercase tracking-wider font-extrabold text-ink-400">Trạng thái ca</span>
@@ -338,7 +338,7 @@ const currentDateFormatted = computed(() => {
           <Zap :size="15" class="mr-1.5" /> Thư mời nhận đơn
           <span
             v-if="invitations.length > 0"
-            class="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-400 text-amber-950 text-[10px] font-extrabold font-num leading-none"
+            class="ml-1.5 px-1.5 py-0.2 rounded-full bg-warning-400 text-warning-900 text-[10px] font-extrabold font-num leading-none"
           >
             {{ invitations.length }}
           </span>
@@ -349,16 +349,16 @@ const currentDateFormatted = computed(() => {
     <!-- Low Balance / Ineligible Alert Banner -->
     <div
       v-if="wallet && !wallet.eligibleForJobs"
-      class="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-amber-100/60 hover:border-amber-400 transition-all group"
+      class="p-4 sm:p-5 rounded-2xl bg-warning-50 border border-warning-300 text-warning-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-warning-100/60 hover:border-warning-400 transition-all group"
       @click="router.push('/tech/wallet')"
     >
       <div class="flex items-center gap-3">
-        <AlertCircle :size="22" class="text-amber-600 shrink-0" />
+        <AlertCircle :size="22" class="text-warning-600 shrink-0" />
         <div class="text-xs sm:text-sm">
-          <strong class="font-extrabold text-amber-900">
+          <strong class="font-extrabold text-warning-900">
             Số dư ví hiện tại ({{ (wallet.balance).toLocaleString('vi-VN') }} ₫) đang thấp hơn mức ký quỹ tối thiểu ({{ (wallet.minimumBalance).toLocaleString('vi-VN') }} ₫).
           </strong>
-          <span class="block sm:inline text-amber-800"> Tài khoản tạm dừng nhận lời mời việc mới cho đến khi nạp thêm tiền.</span>
+          <span class="block sm:inline text-warning-800"> Tài khoản tạm dừng nhận lời mời việc mới cho đến khi nạp thêm tiền.</span>
         </div>
       </div>
       <router-link
@@ -374,17 +374,17 @@ const currentDateFormatted = computed(() => {
     <!-- 2. High Priority Alert: Urgent Invitation Card (If available) -->
     <div
       v-if="topInvitation"
-      class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-white border-2 border-amber-300 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative overflow-hidden cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group"
+      class="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-warning-500/10 via-warning-50/70 to-white border-2 border-warning-300 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative overflow-hidden cursor-pointer hover:border-warning-400 hover:shadow-md transition-all group"
       @click="router.push('/tech/invitations')"
     >
       <div class="space-y-1.5 max-w-2xl">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-white text-xs font-black uppercase tracking-wider shadow-xs">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-500 text-white text-xs font-black uppercase tracking-wider shadow-xs">
             <Zap :size="13" class="fill-white" />
             Có thư mời nhận đơn mới!
           </span>
           <FhCountdown :expires-at="topInvitation.expiresAt" />
-          <span v-if="invitations.length > 1" class="text-xs font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-lg">
+          <span v-if="invitations.length > 1" class="text-xs font-bold text-warning-800 bg-warning-100/90 px-2 py-0.5 rounded-lg">
             + {{ invitations.length - 1 }} lời mời khác
           </span>
         </div>
@@ -410,7 +410,7 @@ const currentDateFormatted = computed(() => {
         <FhButton
           variant="secondary"
           size="md"
-          class="flex-1 md:flex-none border-amber-300 hover:bg-amber-100/50"
+          class="flex-1 md:flex-none border-warning-300 hover:bg-warning-100/50"
           :loading="decliningInvitation"
           @click.stop="declineTopInvitation"
         >
@@ -419,7 +419,7 @@ const currentDateFormatted = computed(() => {
         <FhButton
           variant="primary"
           size="md"
-          class="flex-1 md:flex-none bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+          class="flex-1 md:flex-none bg-warning-600 hover:bg-warning-700 text-white shadow-sm"
           :loading="acceptingInvitation"
           @click.stop="handleAcceptTopInvitation"
         >
@@ -443,10 +443,10 @@ const currentDateFormatted = computed(() => {
           </div>
         </div>
         <div>
-          <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight" :class="[wallet && wallet.balance < 0 ? 'text-rose-600' : '']">
+          <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight" :class="[wallet && wallet.balance < 0 ? 'text-danger-600' : '']">
             {{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} <span class="text-sm font-bold text-ink-500 font-sans">₫</span>
           </div>
-          <p class="text-xs font-semibold mt-1 flex items-center gap-1" :class="wallet?.eligibleForJobs ? 'text-emerald-600' : 'text-rose-600'">
+          <p class="text-xs font-semibold mt-1 flex items-center gap-1" :class="wallet?.eligibleForJobs ? 'text-success-600' : 'text-danger-600'">
             <CheckCircle2 v-if="wallet?.eligibleForJobs" :size="13" />
             <AlertCircle v-else :size="13" />
             <span>{{ wallet?.eligibleForJobs ? 'Đủ điều kiện nhận việc' : 'Dưới mức ký quỹ' }}</span>
@@ -470,7 +470,7 @@ const currentDateFormatted = computed(() => {
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold uppercase tracking-wider text-ink-500">Công việc đang làm</span>
-          <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200/60 shadow-2xs group-hover:scale-105 transition-transform">
+          <div class="w-10 h-10 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center border border-brand-200/60 shadow-2xs group-hover:scale-105 transition-transform">
             <Wrench :size="18" />
           </div>
         </div>
@@ -478,7 +478,7 @@ const currentDateFormatted = computed(() => {
           <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight">
             {{ activeJobs.length }} <span class="text-sm font-bold text-ink-500 font-sans">đơn</span>
           </div>
-          <p class="text-xs text-blue-600 font-semibold mt-1">
+          <p class="text-xs text-brand-600 font-semibold mt-1">
             {{ enRouteJobs.length }} đang di chuyển • {{ underRepairJobs.length }} đang sửa
           </p>
         </div>
@@ -492,12 +492,12 @@ const currentDateFormatted = computed(() => {
 
       <!-- 3. Tiến độ hoàn thành -->
       <div
-        class="bg-white rounded-3xl border border-ink-200/90 p-5 shadow-xs hover:border-purple-400 hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer group active:scale-[0.99]"
+        class="bg-white rounded-3xl border border-ink-200/90 p-5 shadow-xs hover:border-brand-400 hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer group active:scale-[0.99]"
         @click="router.push('/tech/earnings')"
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold uppercase tracking-wider text-ink-500">Mục tiêu tuần</span>
-          <div class="w-10 h-10 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center border border-purple-200/60 shadow-2xs group-hover:scale-105 transition-transform">
+          <div class="w-10 h-10 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center border border-brand-200/60 shadow-2xs group-hover:scale-105 transition-transform">
             <CheckCircle2 :size="18" />
           </div>
         </div>
@@ -506,37 +506,37 @@ const currentDateFormatted = computed(() => {
             <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight">
               {{ completedCount }} <span class="text-xs font-bold text-ink-500 font-sans">/ 20 đơn</span>
             </div>
-            <span class="text-xs font-black text-purple-700 font-num">{{ targetPercentage }}%</span>
+            <span class="text-xs font-black text-brand-700 font-num">{{ targetPercentage }}%</span>
           </div>
           <div class="w-full h-2 bg-ink-100 rounded-full overflow-hidden">
             <div
-              class="h-full bg-gradient-to-r from-purple-500 to-brand-600 rounded-full transition-all duration-500"
+              class="h-full bg-gradient-to-r from-brand-500 to-brand-600 rounded-full transition-all duration-500"
               :style="{ width: `${targetPercentage}%` }"
             />
           </div>
         </div>
         <div class="text-xs text-ink-500 font-medium pt-2 border-t border-ink-100 flex items-center justify-between">
           <span>Còn <strong class="text-ink-800">{{ Math.max(0, 20 - completedCount) }}</strong> đơn để đạt thưởng</span>
-          <ArrowRight :size="13" class="text-purple-600 group-hover:translate-x-0.5 transition-transform" />
+          <ArrowRight :size="13" class="text-brand-600 group-hover:translate-x-0.5 transition-transform" />
         </div>
       </div>
 
       <!-- 4. Đánh giá & Uy tín -->
       <div
-        class="bg-white rounded-3xl border border-ink-200/90 p-5 shadow-xs hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer group active:scale-[0.99]"
+        class="bg-white rounded-3xl border border-ink-200/90 p-5 shadow-xs hover:border-warning-400 hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer group active:scale-[0.99]"
         @click="router.push('/tech/profile')"
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold uppercase tracking-wider text-ink-500">Chỉ số uy tín</span>
-          <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200/60 shadow-2xs group-hover:scale-105 transition-transform">
+          <div class="w-10 h-10 rounded-2xl bg-warning-50 text-warning-700 flex items-center justify-center border border-warning-200/60 shadow-2xs group-hover:scale-105 transition-transform">
             <Star :size="18" />
           </div>
         </div>
         <div>
           <div class="text-2xl sm:text-3xl font-black text-ink-900 font-num tracking-tight">
-            {{ profile?.averageRating ? profile.averageRating.toFixed(2) : '4.95' }} <span class="text-base font-bold text-amber-500 font-sans">★</span>
+            {{ profile?.averageRating ? profile.averageRating.toFixed(2) : '4.95' }} <span class="text-base font-bold text-warning-500 font-sans">★</span>
           </div>
-          <p class="text-xs text-amber-700 font-semibold mt-1">
+          <p class="text-xs text-warning-700 font-semibold mt-1">
             Độ tin cậy: {{ profile?.reliabilityScore ?? 100 }}/100
           </p>
         </div>
@@ -557,7 +557,7 @@ const currentDateFormatted = computed(() => {
         <div class="bg-white rounded-3xl border border-ink-200/90 shadow-xs overflow-hidden">
           <div class="p-5 sm:p-6 border-b border-ink-100 flex items-center justify-between">
             <div class="flex items-center gap-2.5">
-              <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+              <span class="w-3 h-3 rounded-full bg-success-500 animate-pulse" />
               <h2 class="text-base sm:text-lg font-black text-ink-900 tracking-tight">
                 Không gian làm việc các đơn đang xử lý
               </h2>
@@ -621,7 +621,7 @@ const currentDateFormatted = computed(() => {
                     title="Gọi cho khách hàng"
                     @click.stop
                   >
-                    <Phone :size="14" class="text-emerald-600" />
+                    <Phone :size="14" class="text-success-600" />
                     <span class="hidden sm:inline">Gọi điện</span>
                   </a>
 
@@ -668,18 +668,18 @@ const currentDateFormatted = computed(() => {
                   class="p-2.5 rounded-xl border flex items-center gap-2"
                   :class="
                     job.arrivalVerified || ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED'].includes(String(job.status).toUpperCase())
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      ? 'bg-success-50 text-success-800 border-success-200'
                       : String(job.status).toUpperCase() === 'EN_ROUTE'
-                        ? 'bg-blue-50 text-blue-800 border-blue-200 animate-pulse'
+                        ? 'bg-brand-50 text-brand-800 border-brand-200 animate-pulse'
                         : 'bg-ink-50 text-ink-500 border-ink-200'
                   "
                 >
                   <CheckCircle2
                     v-if="job.arrivalVerified || ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED'].includes(String(job.status).toUpperCase())"
                     :size="15"
-                    class="text-emerald-600 shrink-0"
+                    class="text-success-600 shrink-0"
                   />
-                  <Radio v-else :size="15" class="text-blue-600 shrink-0" />
+                  <Radio v-else :size="15" class="text-brand-600 shrink-0" />
                   <span class="truncate">1. Đến nơi & GPS</span>
                 </div>
 
@@ -688,7 +688,7 @@ const currentDateFormatted = computed(() => {
                   class="p-2.5 rounded-xl border flex items-center gap-2"
                   :class="
                     (job.beforeEvidenceCount ?? 0) > 0 || ['COMPLETED'].includes(String(job.status).toUpperCase())
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      ? 'bg-success-50 text-success-800 border-success-200'
                       : ['UNDER_REPAIR', 'IN_PROGRESS'].includes(String(job.status).toUpperCase())
                         ? 'bg-brand-50 text-brand-800 border-brand-200 font-bold'
                         : 'bg-ink-50 text-ink-500 border-ink-200'
@@ -697,7 +697,7 @@ const currentDateFormatted = computed(() => {
                   <CheckCircle2
                     v-if="(job.beforeEvidenceCount ?? 0) > 0 || ['COMPLETED'].includes(String(job.status).toUpperCase())"
                     :size="15"
-                    class="text-emerald-600 shrink-0"
+                    class="text-success-600 shrink-0"
                   />
                   <Clock v-else :size="15" class="text-ink-400 shrink-0" />
                   <span class="truncate">2. Ảnh hiện trạng</span>
@@ -708,7 +708,7 @@ const currentDateFormatted = computed(() => {
                   class="p-2.5 rounded-xl border flex items-center gap-2"
                   :class="
                     ['COMPLETED'].includes(String(job.status).toUpperCase())
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      ? 'bg-success-50 text-success-800 border-success-200'
                       : ['UNDER_REPAIR', 'IN_PROGRESS'].includes(String(job.status).toUpperCase())
                         ? 'bg-brand-50 text-brand-800 border-brand-200 font-bold'
                         : 'bg-ink-50 text-ink-500 border-ink-200'
@@ -717,7 +717,7 @@ const currentDateFormatted = computed(() => {
                   <CheckCircle2
                     v-if="['COMPLETED'].includes(String(job.status).toUpperCase())"
                     :size="15"
-                    class="text-emerald-600 shrink-0"
+                    class="text-success-600 shrink-0"
                   />
                   <Wrench v-else :size="15" class="text-brand-600 shrink-0" />
                   <span class="truncate">3. Báo giá & Sửa</span>
@@ -728,14 +728,14 @@ const currentDateFormatted = computed(() => {
                   class="p-2.5 rounded-xl border flex items-center gap-2"
                   :class="
                     job.customerConfirmed || String(job.status).toUpperCase() === 'COMPLETED'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      ? 'bg-success-50 text-success-800 border-success-200'
                       : 'bg-ink-50 text-ink-500 border-ink-200'
                   "
                 >
                   <CheckCircle2
                     v-if="job.customerConfirmed || String(job.status).toUpperCase() === 'COMPLETED'"
                     :size="15"
-                    class="text-emerald-600 shrink-0"
+                    class="text-success-600 shrink-0"
                   />
                   <Clock v-else :size="15" class="text-ink-400 shrink-0" />
                   <span class="truncate">4. Nghiệm thu</span>
@@ -769,7 +769,7 @@ const currentDateFormatted = computed(() => {
         <div v-if="completedJobs.length > 0" class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-5 sm:p-6 space-y-4">
           <div class="flex items-center justify-between">
             <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-              <CheckCircle2 :size="18" class="text-emerald-600" />
+              <CheckCircle2 :size="18" class="text-success-600" />
               Công việc đã hoàn thành gần đây
             </h2>
             <router-link to="/tech/jobs" class="text-xs font-bold text-brand-600 hover:text-brand-700">
@@ -787,7 +787,7 @@ const currentDateFormatted = computed(() => {
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
                   <span class="font-mono text-xs font-bold text-ink-700">#{{ job.code || job.id.slice(0, 8) }}</span>
-                  <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-extrabold">
+                  <span class="px-2 py-0.5 rounded-full bg-success-50 text-success-800 text-[10px] font-extrabold">
                     Hoàn tất
                   </span>
                 </div>
@@ -800,7 +800,7 @@ const currentDateFormatted = computed(() => {
                   <div class="text-sm font-black text-ink-900 font-num">
                     +{{ (job.laborTotal || job.grandTotal || 0).toLocaleString('vi-VN') }} đ
                   </div>
-                  <span class="text-[10px] text-emerald-600 font-bold">Đã thanh toán</span>
+                  <span class="text-[10px] text-success-600 font-bold">Đã thanh toán</span>
                 </div>
 
                 <FhButton variant="secondary" size="sm" @click.stop="router.push(`/tech/jobs/${job.id}`)">
@@ -815,22 +815,22 @@ const currentDateFormatted = computed(() => {
       <!-- Right/Side Utilities & Support (4 cols) -->
       <div class="lg:col-span-4 space-y-6">
         <!-- 1. Weekly Milestone & Tier Card -->
-        <div class="p-6 rounded-3xl bg-gradient-to-br from-brand-900 via-indigo-950 to-ink-900 text-white shadow-md space-y-5 relative overflow-hidden">
+        <div class="p-6 rounded-3xl bg-gradient-to-br from-brand-900 via-brand-900 to-ink-900 text-white shadow-md space-y-5 relative overflow-hidden">
           <div class="absolute -right-8 -bottom-8 w-40 h-40 bg-brand-500/10 rounded-full blur-xl pointer-events-none" />
 
           <div class="flex items-center justify-between">
             <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white text-[10px] font-extrabold uppercase tracking-wider backdrop-blur-xs">
-              <Trophy :size="13" class="text-amber-300" />
+              <Trophy :size="13" class="text-warning-300" />
               ĐUA TOP KTV FIXHOME
             </div>
-            <span class="text-xs font-bold text-indigo-200">Cấp bậc: Vàng</span>
+            <span class="text-xs font-bold text-brand-200">Cấp bậc: Vàng</span>
           </div>
 
           <div class="space-y-2">
             <h3 class="text-lg font-black tracking-tight text-white">
               Chỉ tiêu hoàn thành tuần
             </h3>
-            <p class="text-xs text-indigo-100/80 leading-relaxed">
+            <p class="text-xs text-brand-100/80 leading-relaxed">
               Hoàn thành 20 đơn/tuần với đánh giá trên 4.8★ để nâng hạn mức nhận việc ưu tiên và nhận voucher thưởng định kỳ.
             </p>
           </div>
@@ -838,12 +838,12 @@ const currentDateFormatted = computed(() => {
           <!-- Progress Bar -->
           <div class="space-y-2 bg-white/5 p-3.5 rounded-2xl border border-white/10">
             <div class="flex items-center justify-between text-xs font-bold">
-              <span class="text-indigo-200">Tiến độ tuần</span>
-              <span class="text-amber-300 font-num">{{ completedCount }}/20 đơn ({{ targetPercentage }}%)</span>
+              <span class="text-brand-200">Tiến độ tuần</span>
+              <span class="text-warning-300 font-num">{{ completedCount }}/20 đơn ({{ targetPercentage }}%)</span>
             </div>
             <div class="w-full h-2.5 bg-white/20 rounded-full overflow-hidden">
               <div
-                class="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all duration-500"
+                class="h-full bg-gradient-to-r from-warning-400 to-success-400 rounded-full transition-all duration-500"
                 :style="{ width: `${targetPercentage}%` }"
               />
             </div>
@@ -890,16 +890,16 @@ const currentDateFormatted = computed(() => {
               class="w-full p-3.5 rounded-2xl border border-ink-200/80 hover:border-brand-400 hover:bg-brand-50/30 transition-all text-left flex items-center gap-3.5 group"
               @click="router.push('/tech/profile')"
             >
-              <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+              <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
                 <Calendar :size="18" />
               </div>
               <div class="flex-1 min-w-0">
-                <h4 class="text-xs font-bold text-ink-900 group-hover:text-purple-600 transition-colors">
+                <h4 class="text-xs font-bold text-ink-900 group-hover:text-brand-600 transition-colors">
                   Lịch ca trực & Xin nghỉ phép
                 </h4>
                 <p class="text-[11px] text-ink-500 truncate">Cài đặt giờ nhận việc và ngày bận</p>
               </div>
-              <ArrowRight :size="14" class="text-ink-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all" />
+              <ArrowRight :size="14" class="text-ink-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all" />
             </button>
 
             <!-- Cài đặt kỹ năng & Giá nhân công -->
@@ -908,16 +908,16 @@ const currentDateFormatted = computed(() => {
               class="w-full p-3.5 rounded-2xl border border-ink-200/80 hover:border-brand-400 hover:bg-brand-50/30 transition-all text-left flex items-center gap-3.5 group"
               @click="router.push('/tech/profile')"
             >
-              <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+              <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
                 <Wrench :size="18" />
               </div>
               <div class="flex-1 min-w-0">
-                <h4 class="text-xs font-bold text-ink-900 group-hover:text-blue-600 transition-colors">
+                <h4 class="text-xs font-bold text-ink-900 group-hover:text-brand-600 transition-colors">
                   Kỹ năng & Đơn giá nhân công
                 </h4>
                 <p class="text-[11px] text-ink-500 truncate">Cập nhật dịch vụ nhận sửa & giá niêm yết</p>
               </div>
-              <ArrowRight :size="14" class="text-ink-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+              <ArrowRight :size="14" class="text-ink-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all" />
             </button>
 
             <!-- Thu nhập & Rút tiền -->
@@ -926,33 +926,33 @@ const currentDateFormatted = computed(() => {
               class="w-full p-3.5 rounded-2xl border border-ink-200/80 hover:border-brand-400 hover:bg-brand-50/30 transition-all text-left flex items-center gap-3.5 group"
               @click="router.push('/tech/earnings')"
             >
-              <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+              <div class="w-10 h-10 rounded-xl bg-success-50 text-success-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
                 <Wallet :size="18" />
               </div>
               <div class="flex-1 min-w-0">
-                <h4 class="text-xs font-bold text-ink-900 group-hover:text-emerald-600 transition-colors">
+                <h4 class="text-xs font-bold text-ink-900 group-hover:text-success-600 transition-colors">
                   Ví thu nhập & Rút tiền
                 </h4>
                 <p class="text-[11px] text-ink-500 truncate">Xem bảng kê chi tiết và lịch sử chuyển khoản</p>
               </div>
-              <ArrowRight :size="14" class="text-ink-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
+              <ArrowRight :size="14" class="text-ink-400 group-hover:text-success-600 group-hover:translate-x-0.5 transition-all" />
             </button>
           </div>
         </div>
 
         <!-- 3. Technician Support Desk & Safety Hotline -->
-        <div class="p-5 rounded-3xl bg-amber-50/60 border border-amber-200/80 space-y-3.5">
+        <div class="p-5 rounded-3xl bg-warning-50/60 border border-warning-200/80 space-y-3.5">
           <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl bg-amber-200/80 text-amber-800 flex items-center justify-center">
+            <div class="w-8 h-8 rounded-xl bg-warning-200/80 text-warning-800 flex items-center justify-center">
               <Headphones :size="16" />
             </div>
             <div>
               <h4 class="text-xs font-bold text-ink-900">Hỗ trợ Kỹ thuật viên 24/7</h4>
-              <p class="text-[11px] text-amber-800">Khi gặp tranh chấp hoặc sự cố an toàn</p>
+              <p class="text-[11px] text-warning-800">Khi gặp tranh chấp hoặc sự cố an toàn</p>
             </div>
           </div>
 
-          <div class="p-3 bg-white rounded-2xl border border-amber-200/60 flex items-center justify-between text-xs">
+          <div class="p-3 bg-white rounded-2xl border border-warning-200/60 flex items-center justify-between text-xs">
             <div>
               <span class="text-[10px] text-ink-500 uppercase tracking-wider font-bold block">Tổng đài đối tác</span>
               <a href="tel:1900888666" class="font-extrabold text-brand-700 font-num text-sm hover:underline">

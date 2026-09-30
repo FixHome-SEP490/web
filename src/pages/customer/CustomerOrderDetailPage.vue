@@ -47,6 +47,7 @@ import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.v
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
 import { isOpenClaim } from '../../utils/warranty-claim';
+import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
@@ -122,7 +123,7 @@ const formatDate = (val?: string | null) => {
   if (!val) return '—';
   try {
     const d = new Date(val);
-    return isNaN(d.getTime()) ? val : d.toLocaleDateString('vi-VN');
+    return isNaN(d.getTime()) ? val : vnDateString(d);
   } catch {
     return val;
   }
@@ -134,7 +135,7 @@ const formatFullTimestamp = (val?: string | null) => {
     const d = new Date(val);
     return isNaN(d.getTime())
       ? val
-      : d.toLocaleString('vi-VN', {
+      : vnDateTimeString(d, {
           hour: '2-digit',
           minute: '2-digit',
           day: '2-digit',
@@ -583,14 +584,14 @@ const confirmWork = async () => {
           class="shadow-xs"
           @click="showReviewModal = true"
         >
-          <Star :size="14" class="mr-1 fill-amber-300 text-amber-300" />
+          <Star :size="14" class="mr-1 fill-warning-300 text-warning-300" />
           Đánh giá thợ
         </FhButton>
         <span
           v-else-if="order && order.status === 'COMPLETED' && existingReview"
-          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200"
+          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-warning-50 text-warning-800 border border-warning-200"
         >
-          <Star :size="13" class="text-amber-500 fill-amber-500" /> Bạn đã đánh giá {{ existingReview.rating }}/5 sao
+          <Star :size="13" class="text-warning-500 fill-warning-500" /> Bạn đã đánh giá {{ existingReview.rating }}/5 sao
         </span>
 
         <FhButton
@@ -666,7 +667,7 @@ const confirmWork = async () => {
               </div>
               <div class="text-ink-500 flex items-center gap-1.5">
                 <Calendar :size="14" />
-                Hẹn lúc: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}
+                Hẹn lúc: {{ vnDateTimeString(order.scheduledAt) }}
               </div>
             </div>
 
@@ -679,11 +680,11 @@ const confirmWork = async () => {
                 <div>
                   <div class="flex items-center gap-1.5">
                     <div class="font-bold text-ink-900 text-sm">{{ order.technician.fullName }}</div>
-                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-success-100 text-success-800 text-[10px] font-bold">
                       ✓ Đã xác minh
                     </span>
                   </div>
-                  <div class="text-xs text-amber-600 flex items-center gap-1 font-semibold mt-0.5">
+                  <div class="text-xs text-warning-600 flex items-center gap-1 font-semibold mt-0.5">
                     <span>★ {{ order.technician.averageRating || '5.0' }}</span>
                     <span class="text-ink-400 font-normal">• Kỹ thuật viên chính</span>
                   </div>
@@ -725,16 +726,16 @@ const confirmWork = async () => {
       <!-- Banner Đánh giá dịch vụ khi đơn đã hoàn tất mà chưa đánh giá -->
       <div
         v-if="order && (order.status === 'COMPLETED' || (order.status as string) === 'completed') && !existingReview"
-        class="p-5 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-amber-50/50 border border-blue-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in"
+        class="p-5 rounded-2xl bg-gradient-to-r from-brand-50 via-brand-50/40 to-warning-50/50 border border-brand-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in"
       >
         <div class="flex items-start gap-3.5">
-          <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 shadow-xs">
-            <Star :size="22" class="fill-amber-400 text-amber-500 animate-pulse" />
+          <div class="w-10 h-10 rounded-xl bg-warning-100 text-warning-600 flex items-center justify-center shrink-0 border border-warning-200 shadow-xs">
+            <Star :size="22" class="fill-warning-400 text-warning-500 animate-pulse" />
           </div>
           <div class="space-y-1">
             <h3 class="text-sm font-bold text-ink-900 flex items-center gap-1.5">
               <span>Đánh giá trải nghiệm dịch vụ với Kỹ thuật viên</span>
-              <Sparkles :size="15" class="text-amber-500" />
+              <Sparkles :size="15" class="text-warning-500" />
             </h3>
             <p class="text-xs text-ink-600">
               Đơn sửa chữa đã hoàn tất! Hãy dành 30 giây để chấm điểm sao và gửi nhận xét giúp thợ biết mức độ hài lòng của bạn và tăng độ uy tín.
@@ -748,7 +749,7 @@ const confirmWork = async () => {
           class="shrink-0 shadow-sm self-start sm:self-center"
           @click="showReviewModal = true"
         >
-          <Star :size="15" class="mr-1.5 fill-amber-300 text-amber-300" />
+          <Star :size="15" class="mr-1.5 fill-warning-300 text-warning-300" />
           Đánh giá ngay
         </FhButton>
       </div>
@@ -756,15 +757,15 @@ const confirmWork = async () => {
       <!-- Card hiển thị Đánh giá của bạn khi đơn đã được đánh giá -->
       <FhCard
         v-else-if="order && (order.status === 'COMPLETED' || (order.status as string) === 'completed') && existingReview"
-        class="border border-amber-200 bg-amber-50/30 shadow-xs"
+        class="border border-warning-200 bg-warning-50/30 shadow-xs"
       >
         <template #header>
           <div class="flex items-center justify-between w-full">
             <div class="flex items-center gap-2">
-              <Star :size="18" class="text-amber-500 fill-amber-400" />
+              <Star :size="18" class="text-warning-500 fill-warning-400" />
               <span class="font-bold text-sm text-ink-900">Đánh giá của bạn về Kỹ thuật viên</span>
             </div>
-            <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-success-100 text-success-800 border border-success-200">
               <CheckCircle2 :size="12" /> Đã gửi đến kỹ thuật viên
             </span>
           </div>
@@ -777,7 +778,7 @@ const confirmWork = async () => {
                 v-for="s in 5"
                 :key="s"
                 :size="18"
-                :class="s <= existingReview.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                :class="s <= existingReview.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
               />
             </div>
             <span class="font-bold text-ink-900 font-num text-sm">
@@ -793,7 +794,7 @@ const confirmWork = async () => {
             <span
               v-for="tag in parsedReview.tags"
               :key="tag"
-              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200"
             >
               <Check :size="11" class="text-brand-600 stroke-[3]" />
               {{ tag }}
@@ -964,30 +965,30 @@ const confirmWork = async () => {
             <button
               type="button"
               class="px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0 flex items-center gap-1"
-              :class="evidenceFilter === 'BEFORE' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'"
+              :class="evidenceFilter === 'BEFORE' ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200'"
               @click="evidenceFilter = 'BEFORE'"
             >
               <span>Trước khi làm</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'BEFORE' ? 'bg-white/20' : 'bg-blue-200'">{{ beforeEvidences.length }}</span>
+              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'BEFORE' ? 'bg-white/20' : 'bg-brand-200'">{{ beforeEvidences.length }}</span>
             </button>
             <button
               type="button"
               class="px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0 flex items-center gap-1"
-              :class="evidenceFilter === 'AFTER' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'"
+              :class="evidenceFilter === 'AFTER' ? 'bg-success-600 text-white' : 'bg-success-50 text-success-700 hover:bg-success-100 border border-success-200'"
               @click="evidenceFilter = 'AFTER'"
             >
               <span>Sau khi hoàn thành</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'AFTER' ? 'bg-white/20' : 'bg-emerald-200'">{{ afterEvidences.length }}</span>
+              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'AFTER' ? 'bg-white/20' : 'bg-success-200'">{{ afterEvidences.length }}</span>
             </button>
             <button
               v-if="additionalEvidences.length > 0"
               type="button"
               class="px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0 flex items-center gap-1"
-              :class="evidenceFilter === 'ADDITIONAL' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'"
+              :class="evidenceFilter === 'ADDITIONAL' ? 'bg-warning-600 text-white' : 'bg-warning-50 text-warning-800 hover:bg-warning-100 border border-warning-200'"
               @click="evidenceFilter = 'ADDITIONAL'"
             >
               <span>Phát sinh</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'ADDITIONAL' ? 'bg-white/20' : 'bg-amber-200'">{{ additionalEvidences.length }}</span>
+              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'ADDITIONAL' ? 'bg-white/20' : 'bg-warning-200'">{{ additionalEvidences.length }}</span>
             </button>
           </div>
 
@@ -1033,19 +1034,19 @@ const confirmWork = async () => {
                 <div class="absolute top-2.5 left-2.5">
                   <span
                     v-if="ev.type?.toLowerCase() === 'before'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-blue-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-brand-600 text-white shadow-xs"
                   >
                     Trước khi làm
                   </span>
                   <span
                     v-else-if="ev.type?.toLowerCase() === 'after'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-emerald-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-success-600 text-white shadow-xs"
                   >
                     Sau khi sửa
                   </span>
                   <span
                     v-else
-                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-amber-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-warning-600 text-white shadow-xs"
                   >
                     Phát sinh
                   </span>
@@ -1226,14 +1227,14 @@ const confirmWork = async () => {
           <!-- 4. Approved Additional Costs (if any) -->
           <div v-if="approvedAdditionalCosts.length > 0" class="space-y-2">
             <h4 class="font-bold text-xs text-ink-900 flex items-center gap-1.5">
-              <Sparkles :size="14" class="text-amber-600" />
+              <Sparkles :size="14" class="text-warning-600" />
               3. Hạng mục phát sinh đã được bạn đồng ý (Approved Additions):
             </h4>
-            <div class="border border-amber-200 rounded-xl bg-amber-50/40 p-3 space-y-2">
+            <div class="border border-warning-200 rounded-xl bg-warning-50/40 p-3 space-y-2">
               <div v-for="cost in approvedAdditionalCosts" :key="cost.id" class="text-xs">
                 <div class="flex items-center justify-between font-medium">
                   <span class="text-ink-800">Lý do phát sinh: "{{ cost.reason }}"</span>
-                  <span class="font-bold font-num text-amber-900">
+                  <span class="font-bold font-num text-warning-900">
                     +<FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta) + Number(cost.shippingFee || 0)" />
                   </span>
                 </div>
@@ -1258,7 +1259,7 @@ const confirmWork = async () => {
             <div class="flex items-center gap-2 self-start sm:self-center">
               <div class="text-right">
                 <div class="text-[10px] text-ink-300">Trạng thái thanh toán:</div>
-                <div class="text-xs font-bold" :class="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'text-emerald-400' : 'text-amber-300'">
+                <div class="text-xs font-bold" :class="order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? 'text-success-400' : 'text-warning-300'">
                   {{ order.paymentStatus === 'PAID' || order.paymentStatus === 'paid' ? '✓ ĐÃ THANH TOÁN' : '⏳ CHƯA THANH TOÁN' }}
                 </div>
               </div>
@@ -1355,7 +1356,7 @@ const confirmWork = async () => {
 
               <span
                 v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && !order.customerConfirmed"
-                class="text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 font-medium"
+                class="text-xs text-warning-700 bg-warning-50 px-2.5 py-1 rounded border border-warning-200 font-medium"
               >
                 Cần xác nhận nghiệm thu trước khi thanh toán
               </span>
@@ -1394,13 +1395,13 @@ const confirmWork = async () => {
                 <div class="flex items-center gap-1.5">
                   <span
                     v-if="item.partSource === 'external'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-warning-100 text-warning-900 border border-warning-300 uppercase"
                   >
                     LK Ngoài
                   </span>
                   <span
                     v-else-if="item.partSource === 'fixhome'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 uppercase"
+                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800 uppercase"
                   >
                     LK FixHome
                   </span>
@@ -1410,7 +1411,7 @@ const confirmWork = async () => {
               </li>
 
               <!-- Shipping fee if any -->
-              <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between text-xs pt-1 border-t border-ink-100 text-purple-700 font-medium">
+              <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between text-xs pt-1 border-t border-ink-100 text-brand-700 font-medium">
                 <span class="flex items-center gap-1">
                   <Truck :size="12" /> Phí giao linh kiện tận nơi:
                 </span>
@@ -1421,25 +1422,25 @@ const confirmWork = async () => {
             <!-- External Parts Warning & Checkbox (Flow 2 requirement) -->
             <div
               v-if="hasExternalParts(cost)"
-              class="p-2.5 rounded bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1.5"
+              class="p-2.5 rounded bg-warning-50 border border-warning-300 text-warning-900 text-xs space-y-1.5"
             >
-              <div class="flex items-start gap-1.5 font-bold text-amber-900">
-                <AlertTriangle :size="15" class="text-amber-600 shrink-0 mt-0.5" />
+              <div class="flex items-start gap-1.5 font-bold text-warning-900">
+                <AlertTriangle :size="15" class="text-warning-600 shrink-0 mt-0.5" />
                 <span>Lưu ý về linh kiện ngoài (EXTERNAL):</span>
               </div>
-              <p class="text-[11px] text-amber-800 leading-relaxed">
+              <p class="text-[11px] text-warning-800 leading-relaxed">
                 Yêu cầu này có chứa linh kiện mua ngoài. <strong>Linh kiện này không được cung cấp bởi FixHome và không thuộc chính sách bảo hành của FixHome</strong>.
               </p>
               <label
                 v-if="cost.status === 'PENDING_APPROVAL'"
-                class="flex items-start gap-2 pt-1 cursor-pointer select-none border-t border-amber-200/80 mt-1"
+                class="flex items-start gap-2 pt-1 cursor-pointer select-none border-t border-warning-200/80 mt-1"
               >
                 <input
                   type="checkbox"
                   v-model="externalDisclaimerAccepted[cost.id]"
-                  class="mt-0.5 h-3.5 w-3.5 text-brand-600 rounded border-amber-400 focus:ring-amber-500"
+                  class="mt-0.5 h-3.5 w-3.5 text-brand-600 rounded border-warning-400 focus:ring-warning-500"
                 />
-                <span class="text-[11px] font-medium text-amber-950">
+                <span class="text-[11px] font-medium text-warning-900">
                   Tôi đã hiểu và chấp nhận rủi ro đối với linh kiện ngoài không có bảo hành từ FixHome.
                 </span>
               </label>
@@ -1473,7 +1474,7 @@ const confirmWork = async () => {
       <FhCard v-if="order.status === 'COMPLETED' && orderWarranties.length > 0">
         <template #title>
           <div class="flex items-center gap-2">
-            <ShieldCheck class="text-emerald-600" :size="20" />
+            <ShieldCheck class="text-success-600" :size="20" />
             <span>Bảo hành Điện tử của Đơn hàng</span>
           </div>
         </template>
@@ -1482,10 +1483,10 @@ const confirmWork = async () => {
             class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
             :class="
               activeWarrantyClaim
-                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                ? 'bg-warning-100 text-warning-900 border border-warning-300'
                 : isOrderWarrantyActive
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : 'bg-gray-100 text-gray-600 border border-gray-300'
+                ? 'bg-success-100 text-success-800 border border-success-300'
+                : 'bg-ink-100 text-ink-600 border border-ink-300'
             "
           >
             {{
@@ -1500,19 +1501,19 @@ const confirmWork = async () => {
 
         <div class="space-y-4 text-xs">
           <!-- Summary banner -->
-          <div class="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 flex flex-wrap items-center justify-between gap-2">
+          <div class="p-3 rounded-lg bg-success-50/70 border border-success-200 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p class="font-bold text-emerald-950 flex items-center gap-1.5">
-                <ShieldCheck :size="15" class="text-emerald-600 shrink-0" />
+              <p class="font-bold text-success-900 flex items-center gap-1.5">
+                <ShieldCheck :size="15" class="text-success-600 shrink-0" />
                 Chính sách bảo hành điện tử chính hãng FixHome
               </p>
-              <p class="text-[11px] text-emerald-800 mt-0.5">
+              <p class="text-[11px] text-success-800 mt-0.5">
                 100% miễn phí công thợ khi bảo hành sự cố tái phát trong thời hạn bảo hành.
               </p>
             </div>
             <div class="text-right">
               <span class="text-[11px] text-ink-500 block">Hạn bảo hành tối đa:</span>
-              <span class="font-bold text-emerald-900 font-num text-sm">
+              <span class="font-bold text-success-900 font-num text-sm">
                 {{ formatDate(maxWarrantyExpiresAt) }}
               </span>
             </div>
@@ -1543,7 +1544,7 @@ const confirmWork = async () => {
                   <td class="p-2.5 text-right">
                     <span
                       class="px-2 py-0.5 rounded text-[10px] font-bold"
-                      :class="new Date(w.expiresAt) > new Date() ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'"
+                      :class="new Date(w.expiresAt) > new Date() ? 'bg-success-100 text-success-800' : 'bg-ink-100 text-ink-600'"
                     >
                       {{ new Date(w.expiresAt) > new Date() ? 'Còn hiệu lực' : 'Đã hết hạn' }}
                     </span>
@@ -1634,7 +1635,7 @@ const confirmWork = async () => {
             <MapPin :size="16" class="text-brand-600" /> Vị trí kỹ thuật viên
           </h3>
           <span v-if="order?.technicianLocation" class="text-[11px] text-ink-400">
-            Cập nhật lúc {{ order.technicianLocation.updatedAt ? new Date(order.technicianLocation.updatedAt).toLocaleTimeString('vi-VN') : '--' }}
+            Cập nhật lúc {{ order.technicianLocation.updatedAt ? vnTimeString(order.technicianLocation.updatedAt) : '--' }}
           </span>
         </div>
         <MapTilerMap
@@ -1699,19 +1700,19 @@ const confirmWork = async () => {
           <div class="flex items-center gap-2.5">
             <span
               v-if="lightboxEvidence.type?.toLowerCase() === 'before'"
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-blue-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-brand-600 text-white shadow-xs"
             >
               Ảnh trước khi làm (BEFORE)
             </span>
             <span
               v-else-if="lightboxEvidence.type?.toLowerCase() === 'after'"
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-emerald-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-success-600 text-white shadow-xs"
             >
               Ảnh sau khi hoàn thành (AFTER)
             </span>
             <span
               v-else
-              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-amber-600 text-white shadow-xs"
+              class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-warning-600 text-white shadow-xs"
             >
               Ảnh chi tiết phát sinh
             </span>

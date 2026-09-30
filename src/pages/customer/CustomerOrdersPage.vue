@@ -24,6 +24,7 @@ import {
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { useChatStore } from '../../stores/chat.store';
+import { vnDateString } from '../../utils/vn-time';
 
 const PAGE_SIZE = 20;
 
@@ -346,7 +347,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       <div
         v-if="ordersError"
         data-testid="orders-error-banner"
-        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700"
+        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-700"
       >
         <span class="flex items-center gap-1.5">
           <AlertCircle :size="14" />
@@ -365,7 +366,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       <div
         v-if="bookingsError"
         data-testid="bookings-error-banner"
-        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
+        class="flex items-center justify-between gap-3 p-3 rounded-xl bg-warning-50 border border-warning-200 text-xs text-warning-700"
       >
         <span class="flex items-center gap-1.5">
           <AlertCircle :size="14" />
@@ -417,19 +418,19 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         :key="booking.id"
         :data-testid="`booking-card-${booking.id}`"
         class="p-5 rounded-2xl bg-white border border-dashed space-y-3 cursor-pointer transition-all"
-        :class="booking.status === 'CANCELLED' ? 'border-red-200 hover:border-red-300' : isOverdue(booking) ? 'border-red-300 hover:border-red-400' : 'border-amber-300 hover:border-amber-400'"
+        :class="booking.status === 'CANCELLED' ? 'border-danger-200 hover:border-danger-300' : isOverdue(booking) ? 'border-danger-300 hover:border-danger-400' : 'border-warning-300 hover:border-warning-400'"
         @click="router.push(`/app/bookings/${booking.id}`)"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
             <Calendar :size="13" />
-            <span>{{ new Date(booking.createdAt).toLocaleDateString('vi-VN') }}</span>
+            <span>{{ vnDateString(booking.createdAt) }}</span>
           </span>
           <div
             class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
-            :class="booking.status === 'CANCELLED' ? 'bg-red-50 text-red-700' : isOverdue(booking) ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'"
+            :class="booking.status === 'CANCELLED' ? 'bg-danger-50 text-danger-700' : isOverdue(booking) ? 'bg-danger-50 text-danger-700' : 'bg-warning-50 text-warning-700'"
           >
-            <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-red-400' : isOverdue(booking) ? 'bg-red-500' : 'bg-amber-500'"></span>
+            <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-danger-400' : isOverdue(booking) ? 'bg-danger-500' : 'bg-warning-500'"></span>
             <span>{{ pendingLabel(booking) }}</span>
           </div>
         </div>
@@ -444,7 +445,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       <div v-if="hasMoreBookings" class="flex justify-center">
         <button
           type="button"
-          class="px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          class="px-4 py-2 rounded-xl border border-warning-300 text-warning-700 text-xs font-semibold hover:bg-warning-50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
           :disabled="fetchingMoreBookings || loadingBookings"
           data-testid="load-more-bookings"
           @click="loadMoreBookings"
@@ -470,7 +471,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             <span class="text-ink-400 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
               <Calendar :size="13" />
-              <span>{{ new Date(order.createdAt).toLocaleDateString('vi-VN') }}</span>
+              <span>{{ vnDateString(order.createdAt) }}</span>
             </span>
           </div>
 
@@ -504,8 +505,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               </div>
               <div class="text-xs">
                 <div class="font-bold text-ink-900">{{ order.technician.fullName }}</div>
-                <div class="text-[11px] text-amber-600 flex items-center gap-0.5 font-semibold">
-                  <Star :size="11" class="fill-amber-500 text-amber-500" />
+                <div class="text-[11px] text-warning-600 flex items-center gap-0.5 font-semibold">
+                  <Star :size="11" class="fill-warning-500 text-warning-500" />
                   <span>{{ order.technician.averageRating || '5.0' }}</span>
                   <span class="text-ink-400 font-normal ml-0.5">• Thợ chính</span>
                 </div>
@@ -523,7 +524,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             </button>
           </div>
 
-          <div v-else class="text-xs text-amber-700 flex items-center gap-1.5 sm:justify-end font-semibold bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+          <div v-else class="text-xs text-warning-700 flex items-center gap-1.5 sm:justify-end font-semibold bg-warning-50 p-2.5 rounded-xl border border-warning-200">
             <User :size="14" />
             <span>Đang tự động điều phối thợ phù hợp...</span>
           </div>

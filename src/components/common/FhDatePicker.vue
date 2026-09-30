@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-vue-next';
+import { addDaysToKey, vnParts, weekdayOfKey } from '../../utils/vn-time';
 
 const props = withDefaults(
   defineProps<{
@@ -16,22 +17,17 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
 }>();
 
-const now = new Date();
-const todayYear = now.getFullYear();
-const todayMonth = now.getMonth();
-const todayDate = now.getDate();
+// Today, tomorrow and the weekend are Vietnam days, whatever the browser zone.
+const now = vnParts();
+const todayYear = now.year;
+const todayMonth = now.month - 1;
+const todayDate = now.day;
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const todayIso = `${todayYear}-${pad(todayMonth + 1)}-${pad(todayDate)}`;
 
-// Calculate tomorrow and weekend ISO
-const tomorrowDate = new Date(now);
-tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-const tomorrowIso = `${tomorrowDate.getFullYear()}-${pad(tomorrowDate.getMonth() + 1)}-${pad(tomorrowDate.getDate())}`;
-
-const weekendDate = new Date(now);
-weekendDate.setDate(weekendDate.getDate() + ((6 - weekendDate.getDay() + 7) % 7 || 7));
-const weekendIso = `${weekendDate.getFullYear()}-${pad(weekendDate.getMonth() + 1)}-${pad(weekendDate.getDate())}`;
+const tomorrowIso = addDaysToKey(todayIso, 1);
+const weekendIso = addDaysToKey(todayIso, (6 - weekdayOfKey(todayIso) + 7) % 7 || 7);
 
 // Active view month/year
 const currentYear = ref(todayYear);
@@ -258,7 +254,7 @@ const selectedFormatted = computed(() => {
 
     <!-- Days of Week Header -->
     <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-ink-400 py-1">
-      <div v-for="d in dayNamesVi" :key="d" :class="d === 'CN' ? 'text-rose-500' : ''">
+      <div v-for="d in dayNamesVi" :key="d" :class="d === 'CN' ? 'text-danger-500' : ''">
         {{ d }}
       </div>
     </div>

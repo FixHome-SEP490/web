@@ -12,6 +12,7 @@ import {
   type TimelineStep,
 } from '../../components';
 import { ordersApi, type PublicTrackResult } from '../../api/orders.api';
+import { vnDateTimeString } from '../../utils/vn-time';
 
 const orderCode = ref('');
 const phone = ref('');
@@ -36,7 +37,7 @@ const timelineSteps = computed<TimelineStep[]>(() => {
   return entries.map((entry, index) => ({
     key: `${entry.status}-${index}`,
     label: STATUS_LABEL[entry.status.toUpperCase()] || entry.status,
-    timestamp: new Date(entry.timestamp).toLocaleString('vi-VN'),
+    timestamp: vnDateTimeString(entry.timestamp),
     completed: index < entries.length - 1,
     current: index === entries.length - 1,
   }));

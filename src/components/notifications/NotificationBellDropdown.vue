@@ -22,6 +22,7 @@ import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -95,7 +96,7 @@ const formatTimeAgo = (dateStr: string): string => {
   if (diffHours < 24) return `${diffHours} giờ trước`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays} ngày trước`;
-  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  return vnDateString(date, { day: '2-digit', month: '2-digit' });
 };
 
 const handleItemClick = async (item: NotificationItem) => {
@@ -200,10 +201,10 @@ const handleViewAll = () => {
       <!-- Unread Badge with Ping Animation -->
       <span
         v-if="notifStore.unreadCount > 0"
-        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-extrabold text-white bg-red-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
+        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-extrabold text-white bg-danger-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
       >
         <span
-          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"
+          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-400 opacity-75"
         ></span>
         <span class="relative">
           {{ notifStore.unreadCount > 99 ? '99+' : notifStore.unreadCount }}

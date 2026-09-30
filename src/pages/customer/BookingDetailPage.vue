@@ -5,6 +5,10 @@ import { useRoute, useRouter } from 'vue-router';
 import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
 import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker } from '../../components';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateTimeString } from '../../utils/vn-time';
+import { scheduleFieldsOf } from '../../utils/booking-schedule';
+import { vnKeyAndClockToDate } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
@@ -66,7 +70,7 @@ const canExtendMatching = computed(() => !!booking.value
   && !extensionCompleted.value);
 
 const formatServerDate = (value: string | null | undefined) => value
-  ? new Date(value).toLocaleString('vi-VN')
+  ? vnDateTimeString(value)
   : '';
 
 const pendingInvitationIds = (nextBooking: BookingItem | null) => new Set(
@@ -252,11 +256,8 @@ const chooseTechnicians = () => {
 const scheduleSelection = (timestamp: string) => {
   const start = new Date(timestamp);
   if (!Number.isFinite(start.getTime())) return { day: '', time: '' };
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return {
-    day: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
-    time: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
-  };
+  // The form edits Vietnam days and clock times, whatever the browser zone.
+  return scheduleFieldsOf(start);
 };
 
 const scheduleForSave = (item: BookingItem) => {
@@ -274,8 +275,9 @@ const scheduleForSave = (item: BookingItem) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value) || !/^\d{2}:\d{2}$/.test(preferredTime.value)) {
     throw new Error('Vui lòng chọn ngày và giờ bắt đầu hợp lệ cho khung giờ đến.');
   }
-  const nextStart = new Date(`${preferredDate.value}T${preferredTime.value}:00`);
-  const selected = scheduleSelection(nextStart.toString());
+  const [hour, minute] = preferredTime.value.split(':').map(Number);
+  const nextStart = vnKeyAndClockToDate(preferredDate.value, hour, minute);
+  const selected = scheduleSelection(nextStart.toISOString());
   if (!Number.isFinite(nextStart.getTime()) || selected.day !== preferredDate.value ||
       selected.time !== preferredTime.value || nextStart.getTime() <= Date.now()) {
     throw new Error('Khung giờ đã qua hoặc không hợp lệ. Vui lòng chọn giờ hoặc ngày khác.');
@@ -359,7 +361,7 @@ const handleSave = async () => {
       router.push('/app/orders');
     }
   } catch (err) {
-    saveError.value = err instanceof Error ? err.message : 'Không thể lưu thay đổi. Vui lòng thử lại.';
+    saveError.value = userFacingError(err, 'Không thể lưu thay đổi. Vui lòng thử lại.');
   } finally {
     saving.value = false;
   }
@@ -490,8 +492,8 @@ const confirmMatchingExtension = async () => {
         <span>{{ booking.addressSummary }}</span>
       </div>
 
-      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 w-fit">
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 w-fit">
+        <span class="w-1.5 h-1.5 rounded-full bg-warning-500"></span>
         <span>{{ statusLabel(booking.status) }}</span>
       </div>
 
@@ -540,7 +542,7 @@ const confirmMatchingExtension = async () => {
           Mở chi tiết đơn dịch vụ
         </FhButton>
       </div>
-      <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+      <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="rounded-xl border border-warning-200 bg-warning-50/60 p-4 space-y-2">
         <p class="text-xs text-ink-700">Chưa nhận được mã đơn dịch vụ từ hệ thống. Bạn có thể kiểm tra lại khi kỹ thuật viên đã nhận đơn.</p>
         <button
           type="button"

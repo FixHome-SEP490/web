@@ -41,6 +41,32 @@
   --color-violet-50:   #F3EEFE;
   --color-violet-600:  #6335D9;
 
+  /* Full steps for the three state tones, so screens never reach for a raw
+     palette (emerald, amber, rose...). Steps above keep their original values;
+     the added ones follow the matching Tailwind scale. */
+  --color-success-100: #D1FAE5;
+  --color-success-200: #A7F3D0;
+  --color-success-300: #6EE7B7;
+  --color-success-700: #047857;
+  --color-success-800: #065F46;
+  --color-success-900: #064E3B;
+  --color-warning-100: #FEF3C7;
+  --color-warning-200: #FDE68A;
+  --color-warning-300: #FCD34D;
+  --color-warning-400: #FBBF24;
+  --color-warning-500: #F59E0B;
+  --color-warning-700: #92400E;
+  --color-warning-800: #78350F;
+  --color-warning-900: #451A03;
+  --color-danger-100:  #FEE2E2;
+  --color-danger-200:  #FECACA;
+  --color-danger-300:  #FCA5A5;
+  --color-danger-400:  #F87171;
+  --color-danger-500:  #EF4444;
+  --color-danger-700:  #B91C1C;
+  --color-danger-800:  #991B1B;
+  --color-danger-900:  #7F1D1D;
+
   /* ---- Radius: 3 bậc ---- */
   --radius-sm: 8px;    /* badge, input, icon tile */
   --radius-md: 14px;   /* card, button lớn */
@@ -62,6 +88,92 @@
   --text-lg: 20px;
   --text-xl: 28px;
   --text-2xl: 36px;
+}
+
+/*
+ * Customer and technician areas: the same look as the mobile app.
+ *
+ * App.vue puts `fh-app` on <html> while the route is under /app or /tech, so
+ * teleported dialogs and toasts pick it up too. Only token values change here:
+ * - neutrals take the cool slate scale of mobile `lightTheme`;
+ * - state tones take the mobile values (emerald, amber, red);
+ * - violet and info fold into the brand blue, leaving four meaningful tones:
+ *   blue = action/information, green = success, yellow = note, red = alert.
+ * Console and the landing page keep the warm neutrals above.
+ */
+.fh-app {
+  --color-ink-25:  #FBFCFD;
+  --color-ink-50:  #F8FAFC;
+  --color-ink-100: #F1F5F9;
+  --color-ink-200: #E2E8F0;
+  --color-ink-300: #CBD5E1;
+  --color-ink-400: #94A3B8;
+  --color-ink-500: #64748B;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1E293B;
+  --color-ink-900: #0F172A;
+
+  --color-success-50:  #ECFDF5;
+  --color-success-100: #D1FAE5;
+  --color-success-200: #A7F3D0;
+  --color-success-300: #6EE7B7;
+  --color-success-400: #34D399;
+  --color-success-500: #10B981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065F46;
+  --color-success-900: #064E3B;
+
+  --color-warning-50:  #FFFBEB;
+  --color-warning-100: #FEF3C7;
+  --color-warning-200: #FDE68A;
+  --color-warning-300: #FCD34D;
+  --color-warning-400: #FBBF24;
+  --color-warning-500: #F59E0B;
+  --color-warning-600: #D97706;
+  --color-warning-700: #B45309;
+  --color-warning-800: #92400E;
+  --color-warning-900: #78350F;
+
+  --color-danger-50:  #FEF2F2;
+  --color-danger-100: #FEE2E2;
+  --color-danger-200: #FECACA;
+  --color-danger-300: #FCA5A5;
+  --color-danger-400: #F87171;
+  --color-danger-500: #EF4444;
+  --color-danger-600: #DC2626;
+  --color-danger-700: #B91C1C;
+  --color-danger-800: #991B1B;
+  --color-danger-900: #7F1D1D;
+
+  --color-info-50:    #EFF6FF;
+  --color-info-600:   #1D4ED8;
+  --color-violet-50:  #EFF6FF;
+  --color-violet-600: #1D4ED8;
+
+  --shadow-e1: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .05);
+  --shadow-e2: 0 4px 10px rgba(15, 23, 42, .06), 0 2px 4px rgba(15, 23, 42, .04);
+  --shadow-e3: 0 16px 36px rgba(15, 23, 42, .12), 0 4px 10px rgba(15, 23, 42, .06);
+
+  background-color: var(--color-ink-50);
+}
+
+.fh-app body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+}
+
+/* Headings break into even lines; running text avoids a lone last word. */
+.fh-app :where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+.fh-app :where(p, li, dd) {
+  text-wrap: pretty;
+}
+.fh-app :where(button, a, [role="tab"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
 }
 
 /* Custom Utilities for FixHome Typography and Micro-interactions */

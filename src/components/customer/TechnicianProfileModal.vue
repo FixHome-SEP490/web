@@ -20,6 +20,7 @@ import {
 import { FhButton, FhStatusPill, FhMoney, FhEmptyState } from '../index';
 import type { TechnicianCandidate } from '../../api/bookings.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
+import { vnDateString } from '../../utils/vn-time';
 
 interface Props {
   candidate: TechnicianCandidate | null;
@@ -150,14 +151,14 @@ const handleClose = () => {
       class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-ink-200/80 animate-in fade-in zoom-in-95 duration-200 relative"
     >
       <!-- Top Decorative Gradient Header Banner -->
-      <div class="relative bg-gradient-to-r from-brand-700 via-brand-600 to-indigo-700 px-6 pt-5 pb-16 text-white overflow-hidden shrink-0">
+      <div class="relative bg-gradient-to-r from-brand-700 via-brand-600 to-brand-700 px-6 pt-5 pb-16 text-white overflow-hidden shrink-0">
         <!-- Ambient lighting decorative circles -->
         <div class="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
         <div class="absolute bottom-0 right-1/4 w-36 h-36 bg-brand-400/20 rounded-full blur-xl pointer-events-none" />
 
         <div class="relative z-10 flex items-center justify-between">
           <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-md text-white text-xs font-semibold border border-white/20">
-            <Sparkles :size="13" class="text-amber-300" />
+            <Sparkles :size="13" class="text-warning-300" />
             <span>Kỹ thuật viên đối tác FixHome Pro</span>
           </div>
 
@@ -180,7 +181,7 @@ const handleClose = () => {
             <!-- Large Avatar with Double Ring -->
             <div class="relative shrink-0">
               <div
-                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-700 to-indigo-800 text-white flex items-center justify-center font-bold text-2xl shadow-xl ring-4 ring-white border border-brand-200"
+                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-700 to-brand-800 text-white flex items-center justify-center font-bold text-2xl shadow-xl ring-4 ring-white border border-brand-200"
               >
                 {{ candidate.fullName.charAt(0) }}
               </div>
@@ -190,8 +191,8 @@ const handleClose = () => {
                 class="absolute -bottom-1 -right-1 flex h-4 w-4"
                 title="Đang hoạt động"
               >
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span class="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white shadow-xs" />
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success-400 opacity-75" />
+                <span class="relative inline-flex rounded-full h-4 w-4 bg-success-500 border-2 border-white shadow-xs" />
               </span>
             </div>
 
@@ -206,8 +207,8 @@ const handleClose = () => {
 
               <!-- Rating & Trust metrics -->
               <div class="flex flex-wrap items-center gap-3 text-xs text-ink-600">
-                <div class="flex items-center gap-1 font-bold text-amber-600 bg-amber-50/80 px-2 py-0.5 rounded-md border border-amber-200/60">
-                  <Star :size="13" class="fill-amber-400 text-amber-500" />
+                <div class="flex items-center gap-1 font-bold text-warning-600 bg-warning-50/80 px-2 py-0.5 rounded-md border border-warning-200/60">
+                  <Star :size="13" class="fill-warning-400 text-warning-500" />
                   <span class="font-num text-sm">{{ candidate.averageRating }}</span>
                   <span class="text-ink-500 font-normal font-num">({{ candidate.ratingCount }} đánh giá)</span>
                 </div>
@@ -233,59 +234,59 @@ const handleClose = () => {
         <!-- 4 Bento Grid KPI Cards with Space Grotesk -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
           <!-- Card 1: Completion Rate -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-emerald-50/80 to-teal-50/30 border border-emerald-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
-            <div class="flex items-center justify-between text-emerald-800 mb-1">
+          <div class="p-3 rounded-xl bg-gradient-to-br from-success-50/80 to-success-50/30 border border-success-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+            <div class="flex items-center justify-between text-success-800 mb-1">
               <span class="text-[11px] font-semibold">Tỷ lệ hoàn thành</span>
-              <div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle2 :size="13" class="text-emerald-700" />
+              <div class="w-6 h-6 rounded-full bg-success-100 flex items-center justify-center">
+                <CheckCircle2 :size="13" class="text-success-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-emerald-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-extrabold text-success-800 font-num tracking-tight mt-0.5">
               {{ completionRate }}%
             </div>
-            <span class="text-[10px] text-emerald-600/90 font-medium mt-0.5">Đúng hẹn & chuẩn hẹn</span>
+            <span class="text-[10px] text-success-600/90 font-medium mt-0.5">Đúng hẹn & chuẩn hẹn</span>
           </div>
 
           <!-- Card 2: Response Time -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-blue-50/80 to-sky-50/30 border border-blue-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
-            <div class="flex items-center justify-between text-blue-800 mb-1">
+          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+            <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Thời gian phản hồi</span>
-              <div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
-                <Clock :size="13" class="text-blue-700" />
+              <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
+                <Clock :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-blue-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-extrabold text-brand-800 font-num tracking-tight mt-0.5">
               {{ responseTimeText }}
             </div>
-            <span class="text-[10px] text-blue-600/90 font-medium mt-0.5">Tiếp nhận đơn nhanh</span>
+            <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Tiếp nhận đơn nhanh</span>
           </div>
 
           <!-- Card 3: Total Orders Completed -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-indigo-50/80 to-purple-50/30 border border-indigo-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
-            <div class="flex items-center justify-between text-indigo-800 mb-1">
+          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+            <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Đơn đã thực hiện</span>
-              <div class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center">
-                <Briefcase :size="13" class="text-indigo-700" />
+              <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
+                <Briefcase :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-indigo-900 font-num tracking-tight mt-0.5">
-              {{ completedOrdersCount }} <span class="text-xs font-semibold text-indigo-700">đơn</span>
+            <div class="text-xl font-extrabold text-brand-900 font-num tracking-tight mt-0.5">
+              {{ completedOrdersCount }} <span class="text-xs font-semibold text-brand-700">đơn</span>
             </div>
-            <span class="text-[10px] text-indigo-600/90 font-medium mt-0.5">Đơn hoàn thành thực tế</span>
+            <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Đơn hoàn thành thực tế</span>
           </div>
 
           <!-- Card 4: Reliability Score -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-purple-50/80 to-fuchsia-50/30 border border-purple-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
-            <div class="flex items-center justify-between text-purple-800 mb-1">
+          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+            <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Độ tin cậy</span>
-              <div class="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center">
-                <ShieldCheck :size="13" class="text-purple-700" />
+              <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
+                <ShieldCheck :size="13" class="text-brand-700" />
               </div>
             </div>
-            <div class="text-xl font-extrabold text-purple-800 font-num tracking-tight mt-0.5">
+            <div class="text-xl font-extrabold text-brand-800 font-num tracking-tight mt-0.5">
               {{ candidate.reliabilityScore }}%
             </div>
-            <span class="text-[10px] text-purple-600/90 font-medium mt-0.5">Chuẩn FixHome Pro</span>
+            <span class="text-[10px] text-brand-600/90 font-medium mt-0.5">Chuẩn FixHome Pro</span>
           </div>
         </div>
       </div>
@@ -313,7 +314,7 @@ const handleClose = () => {
               : 'text-ink-600 hover:text-ink-900 hover:bg-white/50'"
             @click="activeTab = 'reviews'"
           >
-            <Star :size="15" :class="activeTab === 'reviews' ? 'text-amber-500 fill-amber-400' : 'text-ink-400'" />
+            <Star :size="15" :class="activeTab === 'reviews' ? 'text-warning-500 fill-warning-400' : 'text-ink-400'" />
             Đánh giá từ khách
             <span
               class="px-1.5 py-0.2 rounded-full text-[10px] font-num"
@@ -344,7 +345,7 @@ const handleClose = () => {
           <!-- Real Bio Highlight Card if present -->
           <div
             v-if="candidate.bio"
-            class="p-4 rounded-xl border border-brand-200 bg-gradient-to-r from-brand-50/60 to-indigo-50/40 relative overflow-hidden shadow-xs"
+            class="p-4 rounded-xl border border-brand-200 bg-gradient-to-r from-brand-50/60 to-brand-50/40 relative overflow-hidden shadow-xs"
           >
             <Quote :size="36" class="absolute -bottom-2 -right-2 text-brand-200/50 pointer-events-none" />
             <div class="flex items-start gap-2.5">
@@ -372,14 +373,14 @@ const handleClose = () => {
           <!-- Bento Grid Checklist with Pastel Icon Badges -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <!-- Item 1: KYC -->
-            <div class="p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/40 hover:bg-emerald-50/70 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+            <div class="p-3.5 rounded-xl border border-success-200/80 bg-success-50/40 hover:bg-success-50/70 transition-colors flex items-start gap-3 shadow-xs">
+              <div class="w-9 h-9 rounded-xl bg-success-100 text-success-700 flex items-center justify-center shrink-0 border border-success-200">
                 <CheckCircle2 :size="18" />
               </div>
               <div>
                 <h4 class="font-bold text-xs text-ink-900 flex items-center gap-1">
                   Định danh điện tử (KYC)
-                  <span class="text-[10px] text-emerald-700 font-medium">• Chuẩn Bộ Công An</span>
+                  <span class="text-[10px] text-success-700 font-medium">• Chuẩn Bộ Công An</span>
                 </h4>
                 <p class="text-[11px] text-ink-600 mt-1 leading-relaxed">
                   Căn cước công dân gắn chip và khuôn mặt đã được đối soát chính xác với Cơ sở dữ liệu Quốc gia.
@@ -388,14 +389,14 @@ const handleClose = () => {
             </div>
 
             <!-- Item 2: Skill Verification -->
-            <div class="p-3.5 rounded-xl border border-blue-200/80 bg-blue-50/40 hover:bg-blue-50/70 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200">
+            <div class="p-3.5 rounded-xl border border-brand-200/80 bg-brand-50/40 hover:bg-brand-50/70 transition-colors flex items-start gap-3 shadow-xs">
+              <div class="w-9 h-9 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0 border border-brand-200">
                 <Award :size="18" />
               </div>
               <div>
                 <h4 class="font-bold text-xs text-ink-900 flex items-center gap-1">
                   Chứng nhận tay nghề kỹ thuật
-                  <span class="text-[10px] text-blue-700 font-medium">• Đã kiểm duyệt</span>
+                  <span class="text-[10px] text-brand-700 font-medium">• Đã kiểm duyệt</span>
                 </h4>
                 <p class="text-[11px] text-ink-600 mt-1 leading-relaxed">
                   Vượt qua bài sát hạch tay nghề thực tế và quy trình sửa chữa thiết bị gia dụng tiêu chuẩn.
@@ -405,7 +406,7 @@ const handleClose = () => {
 
             <!-- Item 3: Tools & Safety -->
             <div class="p-3.5 rounded-xl border border-ink-200 bg-white hover:border-brand-300 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div class="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 border border-brand-100">
                 <Wrench :size="18" />
               </div>
               <div>
@@ -418,7 +419,7 @@ const handleClose = () => {
 
             <!-- Item 4: Warranty -->
             <div class="p-3.5 rounded-xl border border-ink-200 bg-white hover:border-brand-300 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-100">
+              <div class="w-9 h-9 rounded-xl bg-warning-50 text-warning-700 flex items-center justify-center shrink-0 border border-warning-100">
                 <Shield :size="18" />
               </div>
               <div>
@@ -431,7 +432,7 @@ const handleClose = () => {
 
             <!-- Item 5: Transparent Pricing -->
             <div class="p-3.5 rounded-xl border border-ink-200 bg-white hover:border-brand-300 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
+              <div class="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 border border-brand-100">
                 <ThumbsUp :size="18" />
               </div>
               <div>
@@ -444,7 +445,7 @@ const handleClose = () => {
 
             <!-- Item 6: Professional Demeanor -->
             <div class="p-3.5 rounded-xl border border-ink-200 bg-white hover:border-brand-300 transition-colors flex items-start gap-3 shadow-xs">
-              <div class="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+              <div class="w-9 h-9 rounded-xl bg-success-50 text-success-700 flex items-center justify-center shrink-0 border border-success-100">
                 <UserCheck :size="18" />
               </div>
               <div>
@@ -475,8 +476,8 @@ const handleClose = () => {
                 <div class="text-4xl font-extrabold text-ink-900 font-num tracking-tight">
                   {{ candidate.averageRating }}<span class="text-base font-normal text-ink-400">/5.0</span>
                 </div>
-                <div class="flex items-center justify-center sm:justify-start gap-1 text-amber-500 mt-1.5">
-                  <Star v-for="s in 5" :key="s" :size="16" class="fill-amber-400 text-amber-500" />
+                <div class="flex items-center justify-center sm:justify-start gap-1 text-warning-500 mt-1.5">
+                  <Star v-for="s in 5" :key="s" :size="16" class="fill-warning-400 text-warning-500" />
                 </div>
                 <p class="text-xs text-ink-500 mt-1.5 font-medium">
                   {{ reviews.length }} nhận xét từ khách hàng
@@ -493,7 +494,7 @@ const handleClose = () => {
                   <span class="w-10 font-num font-semibold text-[11px] shrink-0">{{ star }} sao</span>
                   <div class="flex-1 h-2 rounded-full bg-ink-150 overflow-hidden">
                     <div
-                      class="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-300"
+                      class="h-full bg-gradient-to-r from-warning-400 to-warning-500 rounded-full transition-all duration-300"
                       :style="{ width: `${starStats.percentages[star as 1|2|3|4|5]}%` }"
                     />
                   </div>
@@ -513,21 +514,21 @@ const handleClose = () => {
               >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-600 to-brand-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                       {{ (r.customerName || 'K').charAt(0) }}
                     </div>
                     <div>
                       <div class="text-xs font-bold text-ink-900">
                         {{ r.customerName || 'Khách hàng FixHome' }}
                       </div>
-                      <div class="text-[10px] text-emerald-700 flex items-center gap-1 font-medium">
+                      <div class="text-[10px] text-success-700 flex items-center gap-1 font-medium">
                         <CheckCircle2 :size="11" /> Khách hàng đã sử dụng dịch vụ
                       </div>
                     </div>
                   </div>
 
-                  <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-num text-xs font-bold">
-                    <Star :size="12" class="fill-amber-400 text-amber-500" />
+                  <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-50 border border-warning-200 text-warning-700 font-num text-xs font-bold">
+                    <Star :size="12" class="fill-warning-400 text-warning-500" />
                     {{ r.rating }}/5
                   </div>
                 </div>
@@ -537,7 +538,7 @@ const handleClose = () => {
                   <span
                     v-for="tag in parseReviewContent(r.comment).tags"
                     :key="tag"
-                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200"
                   >
                     <Sparkles :size="10" class="text-brand-600" />
                     {{ tag }}
@@ -552,7 +553,7 @@ const handleClose = () => {
                 </p>
 
                 <div class="text-[10px] text-ink-400 pl-10 font-num">
-                  Ngày đánh giá: {{ new Date(r.createdAt).toLocaleDateString('vi-VN') }}
+                  Ngày đánh giá: {{ vnDateString(r.createdAt) }}
                 </div>
               </div>
             </div>
@@ -569,7 +570,7 @@ const handleClose = () => {
         <!-- TAB 3: DỊCH VỤ & BẢNG GIÁ (REAL DATA) -->
         <div v-else-if="activeTab === 'services'" class="space-y-4">
           <!-- Featured Price Card with Glass Accent -->
-          <div class="p-5 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50/70 to-indigo-50/30 space-y-4 shadow-xs">
+          <div class="p-5 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50/70 to-brand-50/30 space-y-4 shadow-xs">
             <div class="flex items-center justify-between border-b border-brand-100 pb-3">
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center shadow-xs">
@@ -596,7 +597,7 @@ const handleClose = () => {
                   <span class="text-ink-500 block text-[11px]">Bảo hành cam kết:</span>
                   <strong class="text-ink-900 font-num text-sm">{{ candidate.typicalWarrantyDays || 30 }} ngày</strong>
                 </div>
-                <Shield :size="20" class="text-amber-500" />
+                <Shield :size="20" class="text-warning-500" />
               </div>
 
               <div class="bg-white p-3 rounded-xl border border-brand-100 shadow-xs flex items-center justify-between">
@@ -612,7 +613,7 @@ const handleClose = () => {
           <!-- Transparent 4-step workflow guarantee -->
           <div class="p-4 rounded-xl border border-ink-200 bg-white space-y-3 shadow-xs">
             <h5 class="text-xs font-bold text-ink-900 uppercase tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 :size="15" class="text-emerald-600" />
+              <CheckCircle2 :size="15" class="text-success-600" />
               Quy trình phục vụ chuẩn mực 4 bước:
             </h5>
 
@@ -665,7 +666,7 @@ const handleClose = () => {
             Đang chọn làm <strong>Ưu tiên #{{ priorityIndex + 1 }}</strong>
           </span>
           <span v-else class="text-ink-500 flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
             Thợ đang hoạt động và sẵn sàng tiếp nhận
           </span>
         </div>

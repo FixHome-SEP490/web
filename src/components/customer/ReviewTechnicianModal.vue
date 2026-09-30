@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 import { FhButton } from '../index';
 import { reviewsApi, type Review } from '../../api/reviews.api';
+import { userFacingError } from '../../utils/user-facing-error';
 
 interface Props {
   open: boolean;
@@ -112,11 +113,11 @@ watch(
 );
 
 const ratingLabels: Record<number, { text: string; tone: string; emoji: string }> = {
-  5: { text: 'Xuất sắc — Rất hài lòng', tone: 'text-amber-600', emoji: '🤩' },
-  4: { text: 'Hài lòng — Dịch vụ tốt', tone: 'text-emerald-600', emoji: '😊' },
-  3: { text: 'Bình thường — Tạm ổn', tone: 'text-yellow-600', emoji: '😐' },
-  2: { text: 'Chưa hài lòng', tone: 'text-orange-600', emoji: '🙁' },
-  1: { text: 'Rất không hài lòng', tone: 'text-rose-600', emoji: '😞' },
+  5: { text: 'Xuất sắc — Rất hài lòng', tone: 'text-warning-600', emoji: '🤩' },
+  4: { text: 'Hài lòng — Dịch vụ tốt', tone: 'text-success-600', emoji: '😊' },
+  3: { text: 'Bình thường — Tạm ổn', tone: 'text-warning-600', emoji: '😐' },
+  2: { text: 'Chưa hài lòng', tone: 'text-warning-600', emoji: '🙁' },
+  1: { text: 'Rất không hài lòng', tone: 'text-danger-600', emoji: '😞' },
 };
 
 const currentLabel = computed(() => {
@@ -165,9 +166,7 @@ const handleSubmit = async () => {
       emit('close');
     }, 1800);
   } catch (err: unknown) {
-    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      || (err as Error)?.message
-      || 'Không thể gửi đánh giá. Vui lòng thử lại sau.';
+    const message = userFacingError(err, 'Không thể gửi đánh giá. Vui lòng thử lại sau.');
     errorMsg.value = message;
   } finally {
     submitting.value = false;
@@ -191,8 +190,8 @@ const handleSubmit = async () => {
       <!-- Header -->
       <div class="px-6 py-4 border-b border-ink-100 flex items-center justify-between bg-ink-25">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-500 shadow-xs">
-            <Star :size="18" class="fill-amber-400 text-amber-400" />
+          <div class="w-8 h-8 rounded-lg bg-warning-50 border border-warning-200 flex items-center justify-center text-warning-500 shadow-xs">
+            <Star :size="18" class="fill-warning-400 text-warning-400" />
           </div>
           <div>
             <h2 id="review-modal-title" class="text-base font-bold text-ink-900 leading-tight">
@@ -216,7 +215,7 @@ const handleSubmit = async () => {
 
       <!-- Success Screen -->
       <div v-if="isSuccess" class="p-8 text-center space-y-4 my-auto">
-        <div class="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm animate-bounce">
+        <div class="w-16 h-16 rounded-full bg-success-50 border border-success-200 text-success-600 flex items-center justify-center mx-auto shadow-sm animate-bounce">
           <CheckCircle2 :size="36" />
         </div>
         <div class="space-y-1">
@@ -225,8 +224,8 @@ const handleSubmit = async () => {
             Đánh giá của bạn đã được ghi nhận và gửi đến Kỹ thuật viên <strong class="text-ink-900">{{ technicianName }}</strong>.
           </p>
         </div>
-        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
-          <Sparkles :size="14" class="text-amber-500" />
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning-50 border border-warning-200 text-warning-700 text-xs font-semibold">
+          <Sparkles :size="14" class="text-warning-500" />
           Đã cộng điểm uy tín cho kỹ thuật viên
         </div>
       </div>
@@ -247,7 +246,7 @@ const handleSubmit = async () => {
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-bold text-ink-900 truncate">{{ technicianName }}</span>
-              <UserCheck :size="15" class="text-emerald-600 shrink-0" />
+              <UserCheck :size="15" class="text-success-600 shrink-0" />
             </div>
             <p class="text-xs text-ink-500">Kỹ thuật viên thực hiện đơn sửa chữa</p>
           </div>
@@ -277,7 +276,7 @@ const handleSubmit = async () => {
                 class="transition-colors duration-150"
                 :class="
                   star <= activeRating
-                    ? 'text-amber-400 fill-amber-400 drop-shadow-xs'
+                    ? 'text-warning-400 fill-warning-400 drop-shadow-xs'
                     : 'text-ink-200 hover:text-ink-300'
                 "
               />
@@ -311,7 +310,7 @@ const handleSubmit = async () => {
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border"
               :class="
                 selectedChips.includes(chip)
-                  ? 'bg-blue-50 border-brand-600 text-brand-700 shadow-xs ring-1 ring-brand-500/20'
+                  ? 'bg-brand-50 border-brand-600 text-brand-700 shadow-xs ring-1 ring-brand-500/20'
                   : 'bg-white border-ink-200 text-ink-700 hover:bg-ink-50 hover:border-ink-300'
               "
               @click="toggleChip(chip)"
@@ -344,9 +343,9 @@ const handleSubmit = async () => {
         <!-- Error Message -->
         <div
           v-if="errorMsg"
-          class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2"
+          class="p-3 rounded-lg bg-danger-50 border border-danger-200 text-danger-700 text-xs flex items-center gap-2"
         >
-          <AlertCircle :size="15" class="shrink-0 text-rose-500" />
+          <AlertCircle :size="15" class="shrink-0 text-danger-500" />
           <span>{{ errorMsg }}</span>
         </div>
       </div>

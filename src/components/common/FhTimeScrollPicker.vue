@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { Clock, Zap, AlertCircle } from 'lucide-vue-next';
+import { vnDayKey, vnKeyAndClockToDate, vnParts } from '../../utils/vn-time';
 
 const props = withDefaults(
   defineProps<{
@@ -41,10 +42,7 @@ const ITEM_HEIGHT = 40; // 40px per item row
 const isToday = computed(() => {
   if (!props.selectedDate) return true;
   if (props.selectedDate === 'TODAY') return true;
-  const now = new Date();
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-  const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return props.selectedDate === todayIso;
+  return props.selectedDate === vnDayKey();
 });
 
 // Initialize from props
@@ -114,8 +112,7 @@ onMounted(() => {
 const isPresetPast = (h: string, m: string): boolean => {
   if (!isToday.value) return false;
   const now = new Date();
-  const presetDate = new Date();
-  presetDate.setHours(Number(h), Number(m), 0, 0);
+  const presetDate = vnKeyAndClockToDate(vnDayKey(now), Number(h), Number(m));
   return presetDate.getTime() <= now.getTime() + 15 * 60 * 1000;
 };
 
@@ -128,9 +125,9 @@ const setMode = (newMode: 'EARLIEST' | 'CUSTOM') => {
     // If today, ensure selected time is at least 30 minutes in the future
     if (isToday.value) {
       const now = new Date();
-      const minSlot = new Date(now.getTime() + 30 * 60 * 1000);
-      let targetH = minSlot.getHours();
-      let targetM = minSlot.getMinutes();
+      const minSlot = vnParts(now.getTime() + 30 * 60 * 1000);
+      let targetH = minSlot.hour;
+      let targetM = minSlot.minute;
       if (targetM > 45) {
         targetH += 1;
         targetM = 0;
@@ -145,8 +142,7 @@ const setMode = (newMode: 'EARLIEST' | 'CUSTOM') => {
       const hStr = targetH < 10 ? `0${targetH}` : `${targetH}`;
       const mStr = targetM < 10 ? `0${targetM}` : `${targetM}`;
 
-      const selectedDate = new Date();
-      selectedDate.setHours(Number(selectedHour.value), Number(selectedMinute.value), 0, 0);
+      const selectedDate = vnKeyAndClockToDate(vnDayKey(now), Number(selectedHour.value), Number(selectedMinute.value));
       if (selectedDate <= now) {
         selectedHour.value = hStr;
         selectedMinute.value = mStr;
@@ -223,8 +219,7 @@ const applyPreset = (h: string, m: string) => {
 const isTimePastForToday = computed(() => {
   if (!isToday.value || mode.value === 'EARLIEST') return false;
   const now = new Date();
-  const selectedDate = new Date();
-  selectedDate.setHours(Number(selectedHour.value), Number(selectedMinute.value), 0, 0);
+  const selectedDate = vnKeyAndClockToDate(vnDayKey(now), Number(selectedHour.value), Number(selectedMinute.value));
   return selectedDate.getTime() <= now.getTime();
 });
 
@@ -250,7 +245,7 @@ const endTimeDisplay = computed(() => {
         "
         @click="setMode('EARLIEST')"
       >
-        <Zap :size="14" class="text-amber-500 fill-amber-500" />
+        <Zap :size="14" class="text-warning-500 fill-warning-500" />
         <span>Sớm nhất (Có mặt ngay)</span>
       </button>
 
@@ -272,13 +267,13 @@ const endTimeDisplay = computed(() => {
     <!-- Mode: Earliest Info -->
     <div
       v-if="mode === 'EARLIEST'"
-      class="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 text-amber-900 space-y-1.5"
+      class="p-4 rounded-xl bg-warning-50/70 border border-warning-200/80 text-warning-900 space-y-1.5"
     >
       <div class="flex items-center gap-2 font-bold text-xs">
-        <Zap :size="15" class="text-amber-600 shrink-0" />
+        <Zap :size="15" class="text-warning-600 shrink-0" />
         <span>Điều phối kỹ thuật viên tức thì</span>
       </div>
-      <p class="text-[11px] text-amber-800 leading-relaxed">
+      <p class="text-[11px] text-warning-800 leading-relaxed">
         Thợ gần nhất trong khu vực sẽ liên hệ xác nhận và di chuyển tới nhà bạn trong vòng <strong>30 – 60 phút</strong>.
       </p>
     </div>
@@ -424,9 +419,9 @@ const endTimeDisplay = computed(() => {
       <!-- Past Warning Note if selected time on Today has already elapsed -->
       <div
         v-if="isTimePastForToday"
-        class="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs"
+        class="flex items-center gap-2 p-2.5 rounded-xl bg-danger-50 border border-danger-200 text-danger-700 text-xs"
       >
-        <AlertCircle :size="15" class="shrink-0 text-rose-600" />
+        <AlertCircle :size="15" class="shrink-0 text-danger-600" />
         <span>Giờ bạn chọn đã qua. Vui lòng chọn giờ sau thời điểm hiện tại hoặc chọn ngày khác.</span>
       </div>
 

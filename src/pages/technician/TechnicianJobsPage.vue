@@ -21,6 +21,8 @@ import {
 } from '../../components';
 import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type CanonicalOrderStatus } from '../../api/orders.api';
 import { useChatStore } from '../../stores/chat.store';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -54,16 +56,16 @@ const getStatusBadge = (status: CanonicalOrderStatus) => {
   const s = String(status).toUpperCase();
   switch (s) {
     case 'ACCEPTED':
-      return { label: 'Chờ di chuyển', bg: 'bg-amber-100 text-amber-800 border-amber-200' };
+      return { label: 'Chờ di chuyển', bg: 'bg-warning-100 text-warning-800 border-warning-200' };
     case 'EN_ROUTE':
-      return { label: 'Đang trên đường', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      return { label: 'Đang trên đường', bg: 'bg-success-100 text-success-800 border-success-200' };
     case 'UNDER_REPAIR':
     case 'IN_PROGRESS':
-      return { label: 'Đang sửa chữa', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+      return { label: 'Đang sửa chữa', bg: 'bg-brand-100 text-brand-800 border-brand-200' };
     case 'COMPLETED':
       return { label: 'Hoàn thành', bg: 'bg-ink-100 text-ink-700 border-ink-200' };
     case 'CANCELLED':
-      return { label: 'Đã huỷ', bg: 'bg-rose-100 text-rose-700 border-rose-200' };
+      return { label: 'Đã huỷ', bg: 'bg-danger-100 text-danger-700 border-danger-200' };
     default:
       return { label: s, bg: 'bg-ink-100 text-ink-700 border-ink-200' };
   }
@@ -110,7 +112,7 @@ const handleEnRoute = async (job: ServiceOrderItem) => {
     window.alert('Đã cập nhật: Bạn đang trên đường di chuyển tới nhà khách hàng.');
     await loadJobs();
   } catch (err: unknown) {
-    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Không thể cập nhật trạng thái di chuyển.';
+    const message = userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.');
     window.alert(message);
   } finally {
     actionLoading.value = null;
@@ -176,13 +178,13 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'pending'
-            ? 'bg-white text-amber-700 shadow-xs font-extrabold'
+            ? 'bg-white text-warning-700 shadow-xs font-extrabold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'pending'"
       >
         <span>Cần di chuyển</span>
-        <span v-if="pendingCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-amber-100 text-amber-800">
+        <span v-if="pendingCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-warning-100 text-warning-800">
           {{ pendingCount }}
         </span>
       </button>
@@ -192,13 +194,13 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
         :class="
           activeTab === 'in_progress'
-            ? 'bg-white text-blue-700 shadow-xs font-extrabold'
+            ? 'bg-white text-brand-700 shadow-xs font-extrabold'
             : 'text-ink-600 hover:text-ink-900'
         "
         @click="activeTab = 'in_progress'"
       >
         <span>Đang sửa chữa</span>
-        <span v-if="inProgressCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-blue-100 text-blue-800">
+        <span v-if="inProgressCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-brand-100 text-brand-800">
           {{ inProgressCount }}
         </span>
       </button>
@@ -255,7 +257,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
             <span class="text-ink-300 text-xs">•</span>
             <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
               <Calendar :size="13" class="text-brand-600" />
-              {{ new Date(job.scheduledAt).toLocaleDateString('vi-VN') }}
+              {{ vnDateString(job.scheduledAt) }}
             </span>
           </div>
 
@@ -313,7 +315,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
               v-if="String(job.status).toUpperCase() === 'ACCEPTED'"
               type="button"
               :disabled="actionLoading === job.id"
-              class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+              class="px-3.5 py-2 rounded-xl bg-warning-500 hover:bg-warning-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
               @click.stop="handleEnRoute(job)"
             >
               <Navigation :size="14" />
@@ -358,7 +360,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
         @click="router.push(`/tech/jobs/${entry.id}`)">
         <p class="text-xs font-bold text-ink-900">Mã đơn: {{ entry.code }}</p>
         <p class="text-xs text-ink-600">Trạng thái: {{ getStatusBadge(entry.status).label }}</p>
-        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ new Date(entry.createdAt).toLocaleDateString('vi-VN') }}</p>
+        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ vnDateString(entry.createdAt) }}</p>
         <p class="text-xs text-ink-500">Lịch sử công việc rút gọn. Không còn quyền xem thông tin riêng tư của khách.</p>
         <button type="button" class="text-xs font-semibold text-brand-700 underline group-hover:text-brand-800"
           @click.stop="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>

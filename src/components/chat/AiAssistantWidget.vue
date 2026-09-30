@@ -257,8 +257,8 @@ function priceLabel(reply: AiReply): string | null {
       >
         <!-- Header -->
         <div class="flex items-center gap-2 px-4 py-3 border-b border-ink-100">
-          <div class="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
-            <Bot :size="17" class="text-violet-700" />
+          <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
+            <Bot :size="17" class="text-brand-700" />
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-bold text-ink-900 leading-tight">Trợ lý FixHome</p>
@@ -272,7 +272,7 @@ function priceLabel(reply: AiReply): string | null {
           </div>
           <button
             type="button"
-            class="p-1.5 rounded-lg text-ink-400 hover:text-violet-700 hover:bg-violet-50 disabled:opacity-40 disabled:hover:bg-transparent"
+            class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent"
             :disabled="turnCount === 0"
             title="Bắt đầu phiên mới"
             @click="startOver"
@@ -303,9 +303,9 @@ function priceLabel(reply: AiReply): string | null {
 
             <div v-else class="flex gap-2">
               <div
-                class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"
+                class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0 mt-0.5"
               >
-                <Bot :size="14" class="text-violet-700" />
+                <Bot :size="14" class="text-brand-700" />
               </div>
               <div class="flex-1 min-w-0 space-y-2">
                 <div
@@ -500,7 +500,7 @@ function priceLabel(reply: AiReply): string | null {
          thread that reaches a real technician. -->
     <button
       type="button"
-      class="w-13 h-13 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg hover:bg-violet-700 hover:shadow-xl hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-4 focus:ring-violet-200"
+      class="w-13 h-13 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-lg hover:bg-brand-700 hover:shadow-xl hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-4 focus:ring-brand-200"
       :title="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
       @click="toggle"
     >

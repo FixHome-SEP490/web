@@ -34,6 +34,7 @@ import {
 import { FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -273,22 +274,22 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </div>
 
     <!-- 2. Hero Search Banner (Royal Blue Gradient - FixHome Mobile Signature) -->
-    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-6 sm:p-8 text-white shadow-lg">
+    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-700 via-brand-600 to-brand-600 p-6 sm:p-8 text-white shadow-lg">
       <!-- Glassmorphism decorative elements -->
       <div class="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-      <div class="absolute -left-12 -bottom-12 w-56 h-56 rounded-full bg-blue-900/20 blur-xl pointer-events-none"></div>
-      <div class="absolute right-8 bottom-8 w-32 h-32 rounded-full bg-indigo-400/10 blur-xl pointer-events-none"></div>
+      <div class="absolute -left-12 -bottom-12 w-56 h-56 rounded-full bg-brand-900/20 blur-xl pointer-events-none"></div>
+      <div class="absolute right-8 bottom-8 w-32 h-32 rounded-full bg-brand-400/10 blur-xl pointer-events-none"></div>
 
       <div class="relative z-10 max-w-2xl space-y-4">
         <!-- Slogan -->
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-blue-100 border border-white/20 shadow-xs">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-brand-100 border border-white/20 shadow-xs">
           <span>Tin tưởng - Nhanh chóng - Hiệu quả</span>
-          <Sparkles :size="14" class="text-amber-300 fill-amber-300" />
+          <Sparkles :size="14" class="text-warning-300 fill-warning-300" />
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
           Cần sửa gì hôm nay? <br class="hidden sm:inline" />
-          <span class="text-blue-100 font-semibold">Thợ giỏi FixHome sẵn sàng tới ngay</span>
+          <span class="text-brand-100 font-semibold">Thợ giỏi FixHome sẵn sàng tới ngay</span>
         </h1>
 
         <!-- Pill Search Bar -->
@@ -311,14 +312,14 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         </form>
 
         <!-- Sub Stats -->
-        <div class="flex flex-wrap items-center gap-4 pt-1 text-xs text-blue-100 font-medium">
+        <div class="flex flex-wrap items-center gap-4 pt-1 text-xs text-brand-100 font-medium">
           <div class="flex items-center gap-1.5">
-            <Zap :size="14" class="text-amber-300 fill-amber-300" />
+            <Zap :size="14" class="text-warning-300 fill-warning-300" />
             <span>Không mất phí khảo sát</span>
           </div>
           <span class="opacity-40">•</span>
           <div class="flex items-center gap-1.5">
-            <Users :size="14" class="text-blue-200" />
+            <Users :size="14" class="text-brand-200" />
             <span>100,000+ thợ tay nghề cao</span>
           </div>
         </div>
@@ -327,18 +328,18 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 
     <!-- 3. Status Announcement Pill -->
     <div
-      class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs shadow-xs cursor-pointer hover:bg-emerald-100/70 transition-colors"
+      class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-success-50 border border-success-200 text-success-900 text-xs shadow-xs cursor-pointer hover:bg-success-100/70 transition-colors"
       @click="router.push('/app/bookings/new')"
     >
       <div class="flex items-center gap-2.5 min-w-0">
-        <div class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+        <div class="w-7 h-7 rounded-lg bg-success-600 text-white flex items-center justify-center shrink-0">
           <ShieldCheck :size="16" />
         </div>
         <p class="truncate">
           <strong class="font-bold">128+ thợ FixHome</strong> sẵn sàng có mặt sau 15–30 phút tại khu vực của bạn!
         </p>
       </div>
-      <ChevronRight :size="16" class="text-emerald-700 shrink-0" />
+      <ChevronRight :size="16" class="text-success-700 shrink-0" />
     </div>
 
     <!-- 4. Quick Category Chips (Horizontal Scroll) -->
@@ -490,7 +491,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     <!-- 7. Quick Stats Summary (compact) -->
     <div v-if="!loading && orders.length > 0" class="grid grid-cols-3 gap-3">
       <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
           <BookOpen :size="18" />
         </div>
         <div>
@@ -499,7 +500,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         </div>
       </div>
       <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-warning-50 text-warning-600 flex items-center justify-center shrink-0">
           <Timer :size="18" />
         </div>
         <div>
@@ -508,7 +509,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         </div>
       </div>
       <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-success-50 text-success-600 flex items-center justify-center shrink-0">
           <BadgeCheck :size="18" />
         </div>
         <div>
@@ -581,25 +582,25 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 
     <!-- 9. Promotional Campaign Banner -->
     <div
-      class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
+      class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-ink-900 via-ink-900 to-brand-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
       @click="router.push('/app/bookings/new')"
     >
       <div class="space-y-2 text-center sm:text-left">
-        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[10px] font-bold uppercase tracking-wider">
-          <Flame :size="12" class="text-amber-400" />
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-500/30 text-brand-200 border border-brand-400/40 text-[10px] font-bold uppercase tracking-wider">
+          <Flame :size="12" class="text-warning-400" />
           ĐẶT THỢ NGAY
         </span>
         <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight">
           Giảm 30% cho đơn sửa chữa đầu tiên
         </h3>
-        <p class="text-xs sm:text-sm text-slate-300">
+        <p class="text-xs sm:text-sm text-ink-300">
           Cam kết bảo hành sửa chữa 30 ngày an tâm, hoàn tiền nếu không hài lòng.
         </p>
       </div>
 
       <button
         type="button"
-        class="px-5 py-2.5 rounded-xl bg-white text-slate-950 hover:bg-blue-50 text-xs font-bold shrink-0 transition-colors shadow-sm flex items-center gap-1.5"
+        class="px-5 py-2.5 rounded-xl bg-white text-ink-900 hover:bg-brand-50 text-xs font-bold shrink-0 transition-colors shadow-sm flex items-center gap-1.5"
       >
         <span>Tham gia ngay</span>
         <ArrowRight :size="14" />
@@ -633,7 +634,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             <h4 class="text-sm font-bold text-ink-900 line-clamp-1">{{ order.serviceName }}</h4>
             <p class="text-xs text-ink-500 flex items-center gap-1.5">
               <Clock :size="12" />
-              <span>{{ new Date(order.createdAt).toLocaleDateString('vi-VN') }}</span>
+              <span>{{ vnDateString(order.createdAt) }}</span>
             </p>
           </div>
 

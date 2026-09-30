@@ -50,6 +50,7 @@ import {
 } from '../../api/technician-verification.api';
 import { catalogApi, type ServiceItem, type ServiceCategory } from '../../api/catalog.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const authStore = useAuthStore();
 
@@ -693,13 +694,13 @@ const handleSaveAvatar = async () => {
         class="fixed top-20 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl border text-sm font-semibold backdrop-blur-md"
         :class="
           saveFeedback.type === 'success'
-            ? 'bg-emerald-900/90 text-white border-emerald-500/50'
-            : 'bg-rose-900/90 text-white border-rose-500/50'
+            ? 'bg-success-900/90 text-white border-success-500/50'
+            : 'bg-danger-900/90 text-white border-danger-500/50'
         "
         role="alert"
       >
-        <CheckCircle2 v-if="saveFeedback.type === 'success'" :size="18" class="text-emerald-400 shrink-0" />
-        <AlertCircle v-else :size="18" class="text-rose-400 shrink-0" />
+        <CheckCircle2 v-if="saveFeedback.type === 'success'" :size="18" class="text-success-400 shrink-0" />
+        <AlertCircle v-else :size="18" class="text-danger-400 shrink-0" />
         <span>{{ saveFeedback.message }}</span>
       </div>
     </Transition>
@@ -719,13 +720,13 @@ const handleSaveAvatar = async () => {
     <!-- Error State -->
     <div
       v-else-if="loadError"
-      class="p-6 rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 flex items-center justify-between gap-4"
+      class="p-6 rounded-2xl border border-danger-200 bg-danger-50 text-danger-800 flex items-center justify-between gap-4"
     >
       <div class="flex items-center gap-3">
-        <AlertCircle :size="24" class="text-rose-600 shrink-0" />
+        <AlertCircle :size="24" class="text-danger-600 shrink-0" />
         <div>
           <h3 class="font-bold text-base">Đã xảy ra lỗi khi tải hồ sơ</h3>
-          <p class="text-sm text-rose-700 mt-0.5">{{ loadError }}</p>
+          <p class="text-sm text-danger-700 mt-0.5">{{ loadError }}</p>
         </div>
       </div>
       <FhButton variant="primary" size="sm" @click="loadProfile">
@@ -743,7 +744,7 @@ const handleSaveAvatar = async () => {
           class="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-500/15 blur-3xl pointer-events-none"
         ></div>
         <div
-          class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none"
+          class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-brand-500/10 blur-3xl pointer-events-none"
         ></div>
 
         <div class="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -755,7 +756,7 @@ const handleSaveAvatar = async () => {
                 class="w-full h-full rounded-2xl border-2 shadow-lg overflow-hidden flex items-center justify-center transition-transform hover:scale-105"
                 :class="
                   technicianProfile.isAvailable
-                    ? 'border-emerald-400/80 bg-brand-900 text-brand-200 ring-4 ring-emerald-500/20'
+                    ? 'border-success-400/80 bg-brand-900 text-brand-200 ring-4 ring-success-500/20'
                     : 'border-ink-600 bg-ink-800 text-ink-300 ring-4 ring-ink-700/20'
                 "
               >
@@ -786,26 +787,26 @@ const handleSaveAvatar = async () => {
                 <!-- KYC Badge -->
                 <div
                   v-if="kycVerification?.status === 'VERIFIED'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold"
+                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-success-500/20 text-success-300 border border-success-500/40 text-xs font-bold"
                   title="Hồ sơ danh tính CCCD đã được FixHome xác thực"
                 >
-                  <ShieldCheck :size="14" class="text-emerald-400" />
+                  <ShieldCheck :size="14" class="text-success-400" />
                   <span>Đã định danh CCCD</span>
                 </div>
                 <div
                   v-else-if="kycVerification?.status === 'PENDING'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold"
+                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warning-500/20 text-warning-300 border border-warning-500/40 text-xs font-bold"
                   title="CCCD đang chờ Admin FixHome phê duyệt"
                 >
-                  <ShieldQuestion :size="14" class="text-amber-400" />
+                  <ShieldQuestion :size="14" class="text-warning-400" />
                   <span>Chờ duyệt CCCD</span>
                 </div>
                 <router-link
                   v-else
                   to="/tech/kyc"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold hover:bg-rose-500/30 transition-colors"
+                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-danger-500/20 text-danger-300 border border-danger-500/40 text-xs font-bold hover:bg-danger-500/30 transition-colors"
                 >
-                  <ShieldAlert :size="14" class="text-rose-400" />
+                  <ShieldAlert :size="14" class="text-danger-400" />
                   <span>Chưa xác minh KYC &rarr;</span>
                 </router-link>
               </div>
@@ -818,24 +819,24 @@ const handleSaveAvatar = async () => {
                 </span>
                 <span class="hidden sm:inline text-ink-600">•</span>
                 <span class="flex items-center gap-1.5">
-                  <Star :size="14" class="text-amber-400 fill-amber-400" />
+                  <Star :size="14" class="text-warning-400 fill-warning-400" />
                   <strong class="text-white">{{ technicianProfile.averageRating }}</strong> ({{ technicianProfile.ratingCount }} đánh giá)
                 </span>
                 <span class="hidden sm:inline text-ink-600">•</span>
                 <span class="flex items-center gap-1.5">
-                  <Award :size="14" class="text-cyan-400" />
+                  <Award :size="14" class="text-brand-400" />
                   Độ tin cậy: <strong class="text-white">{{ technicianProfile.reliabilityScore }}%</strong>
                 </span>
               </div>
 
               <!-- Location Quick Badge -->
               <p class="text-xs text-ink-300/90 flex items-center justify-center sm:justify-start gap-1.5 pt-0.5">
-                <MapPin :size="13" class="text-rose-400 shrink-0" />
+                <MapPin :size="13" class="text-danger-400 shrink-0" />
                 <span v-if="technicianAddress">
                   {{ technicianAddress.line1 }}, {{ [technicianAddress.ward, technicianAddress.district].filter(Boolean).join(', ') }}
                   (bán kính {{ technicianProfile.serviceRadiusKm }} km)
                 </span>
-                <span v-else class="text-amber-300">Chưa cài đặt địa chỉ nhận đơn</span>
+                <span v-else class="text-warning-300">Chưa cài đặt địa chỉ nhận đơn</span>
               </p>
             </div>
           </div>
@@ -854,7 +855,7 @@ const handleSaveAvatar = async () => {
               class="group relative inline-flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all duration-300 hover:scale-102 active:scale-98 cursor-pointer disabled:opacity-60 border"
               :class="
                 technicianProfile.isAvailable
-                  ? 'bg-emerald-600/90 hover:bg-emerald-500 text-white border-emerald-400/40 ring-4 ring-emerald-500/20'
+                  ? 'bg-success-600/90 hover:bg-success-500 text-white border-success-400/40 ring-4 ring-success-500/20'
                   : 'bg-ink-800 hover:bg-ink-700 text-ink-300 border-ink-600 ring-4 ring-ink-700/20'
               "
             >
@@ -862,7 +863,7 @@ const handleSaveAvatar = async () => {
                 class="w-3.5 h-3.5 rounded-full transition-transform group-hover:scale-110 flex items-center justify-center"
                 :class="technicianProfile.isAvailable ? 'bg-white shadow-xs' : 'bg-ink-500'"
               >
-                <Power :size="10" :class="technicianProfile.isAvailable ? 'text-emerald-600' : 'text-ink-900'" />
+                <Power :size="10" :class="technicianProfile.isAvailable ? 'text-success-600' : 'text-ink-900'" />
               </span>
               <span>
                 {{ technicianProfile.isAvailable ? 'Đang sẵn sàng nhận việc' : 'Tạm dừng nhận việc' }}
@@ -876,12 +877,12 @@ const handleSaveAvatar = async () => {
                   <Sparkles :size="13" class="text-brand-300" />
                   Độ hoàn thiện hồ sơ
                 </span>
-                <span class="font-num font-bold text-emerald-300">{{ profileCompleteness.score }}%</span>
+                <span class="font-num font-bold text-success-300">{{ profileCompleteness.score }}%</span>
               </div>
               <div class="w-full h-1.5 rounded-full bg-white/20 overflow-hidden">
                 <div
                   class="h-full rounded-full transition-all duration-500"
-                  :class="profileCompleteness.score >= 80 ? 'bg-emerald-400' : profileCompleteness.score >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
+                  :class="profileCompleteness.score >= 80 ? 'bg-success-400' : profileCompleteness.score >= 50 ? 'bg-warning-400' : 'bg-danger-400'"
                   :style="{ width: `${profileCompleteness.score}%` }"
                 ></div>
               </div>
@@ -898,8 +899,8 @@ const handleSaveAvatar = async () => {
           @click="activeTab = 'reviews'"
           title="Bấm để xem danh sách đánh giá từ khách hàng"
         >
-          <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 group-hover:scale-105 transition-transform">
-            <Star :size="24" class="fill-amber-500 text-amber-500" />
+          <div class="w-12 h-12 rounded-xl bg-warning-50 text-warning-600 flex items-center justify-center shrink-0 border border-warning-200 group-hover:scale-105 transition-transform">
+            <Star :size="24" class="fill-warning-500 text-warning-500" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold uppercase text-ink-500">Đánh giá khách hàng</div>
@@ -916,14 +917,14 @@ const handleSaveAvatar = async () => {
           @click="activeTab = 'info'"
           title="Bấm để xem hồ sơ xác thực và chỉ số uy tín"
         >
-          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200 group-hover:scale-105 transition-transform">
+          <div class="w-12 h-12 rounded-xl bg-success-50 text-success-600 flex items-center justify-center shrink-0 border border-success-200 group-hover:scale-105 transition-transform">
             <ShieldCheck :size="24" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold uppercase text-ink-500">Điểm độ tin cậy</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-emerald-700">{{ technicianProfile.reliabilityScore }}%</span>
-              <span class="text-xs font-semibold text-emerald-600">Chuẩn nhận việc</span>
+              <span class="text-2xl font-black font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
+              <span class="text-xs font-semibold text-success-600">Chuẩn nhận việc</span>
             </div>
           </div>
         </div>
@@ -950,14 +951,14 @@ const handleSaveAvatar = async () => {
           class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-300 transition-all flex items-center gap-4 cursor-pointer"
           @click="activeTab = 'location'"
         >
-          <div class="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 border border-violet-200">
+          <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
             <Navigation :size="24" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold uppercase text-ink-500">Bán kính quét đơn</div>
             <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-black font-num text-violet-700">{{ technicianProfile.serviceRadiusKm }} km</span>
-              <span class="text-xs text-violet-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
+              <span class="text-2xl font-black font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
+              <span class="text-xs text-brand-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
             </div>
           </div>
         </div>
@@ -1038,12 +1039,12 @@ const handleSaveAvatar = async () => {
           "
           @click="activeTab = 'reviews'"
         >
-          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-white text-white' : 'fill-amber-400 text-amber-400'" />
+          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-white text-white' : 'fill-warning-400 text-warning-400'" />
           <span>Đánh giá &amp; Uy tín</span>
           <span
             v-if="technicianProfile.ratingCount > 0"
             class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-num font-bold"
-            :class="activeTab === 'reviews' ? 'bg-white text-brand-700' : 'bg-amber-100 text-amber-800'"
+            :class="activeTab === 'reviews' ? 'bg-white text-brand-700' : 'bg-warning-100 text-warning-800'"
           >
             {{ technicianProfile.ratingCount }}
           </span>
@@ -1167,16 +1168,16 @@ const handleSaveAvatar = async () => {
             <!-- KYC Details Box -->
             <div
               v-if="kycVerification?.status === 'VERIFIED'"
-              class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2 text-xs text-emerald-800"
+              class="p-4 rounded-xl bg-success-50 border border-success-200 space-y-2 text-xs text-success-800"
             >
-              <div class="flex items-center gap-2 font-bold text-emerald-900">
-                <ShieldCheck :size="18" class="text-emerald-600" />
+              <div class="flex items-center gap-2 font-bold text-success-900">
+                <ShieldCheck :size="18" class="text-success-600" />
                 Hồ sơ định danh đã được chứng thực
               </div>
               <p>Bạn đã hoàn tất đối soát CCCD 2 mặt và video nhận diện khuôn mặt FPT.AI. Tài khoản có độ tin cậy tuyệt đối.</p>
               <router-link
                 to="/tech/kyc"
-                class="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-900 underline pt-1"
+                class="inline-flex items-center gap-1 font-bold text-success-700 hover:text-success-900 underline pt-1"
               >
                 Xem chi tiết hồ sơ KYC &rarr;
               </router-link>
@@ -1184,16 +1185,16 @@ const handleSaveAvatar = async () => {
 
             <div
               v-else-if="kycVerification?.status === 'PENDING'"
-              class="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2 text-xs text-amber-800"
+              class="p-4 rounded-xl bg-warning-50 border border-warning-200 space-y-2 text-xs text-warning-800"
             >
-              <div class="flex items-center gap-2 font-bold text-amber-900">
-                <Clock :size="18" class="text-amber-600" />
+              <div class="flex items-center gap-2 font-bold text-warning-900">
+                <Clock :size="18" class="text-warning-600" />
                 Hồ sơ đang chờ phê duyệt
               </div>
               <p>Quản trị viên FixHome đang đối chiếu CCCD và video khuôn mặt của bạn. Dự kiến hoàn tất trong 24 giờ.</p>
               <router-link
                 to="/tech/kyc"
-                class="inline-flex items-center gap-1 font-bold text-amber-700 hover:text-amber-900 underline pt-1"
+                class="inline-flex items-center gap-1 font-bold text-warning-700 hover:text-warning-900 underline pt-1"
               >
                 Kiểm tra tiến trình &rarr;
               </router-link>
@@ -1201,18 +1202,18 @@ const handleSaveAvatar = async () => {
 
             <div
               v-else-if="kycVerification?.status === 'REJECTED'"
-              class="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-2 text-xs text-rose-800"
+              class="p-4 rounded-xl bg-danger-50 border border-danger-200 space-y-2 text-xs text-danger-800"
             >
-              <div class="flex items-center gap-2 font-bold text-rose-900">
-                <AlertCircle :size="18" class="text-rose-600" />
+              <div class="flex items-center gap-2 font-bold text-danger-900">
+                <AlertCircle :size="18" class="text-danger-600" />
                 Hồ sơ bị từ chối phê duyệt
               </div>
-              <p v-if="kycVerification.rejectionReason" class="font-medium text-rose-700">
+              <p v-if="kycVerification.rejectionReason" class="font-medium text-danger-700">
                 Lý do: {{ kycVerification.rejectionReason }}
               </p>
               <router-link
                 to="/tech/kyc"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700 transition-colors mt-2"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-danger-600 text-white rounded-lg font-bold hover:bg-danger-700 transition-colors mt-2"
               >
                 Nộp lại hồ sơ CCCD ngay
               </router-link>
@@ -1220,7 +1221,7 @@ const handleSaveAvatar = async () => {
 
             <div v-else class="p-4 rounded-xl bg-ink-50 border border-ink-200 space-y-2 text-xs text-ink-700">
               <div class="flex items-center gap-2 font-bold text-ink-900">
-                <ShieldAlert :size="18" class="text-amber-600" />
+                <ShieldAlert :size="18" class="text-warning-600" />
                 Chưa gửi hồ sơ xác minh CCCD
               </div>
               <p>Để nhận các đơn sửa chữa giá trị cao và hiển thị huy hiệu xác thực, hãy chụp CCCD và quay video xác minh.</p>
@@ -1241,11 +1242,11 @@ const handleSaveAvatar = async () => {
                 v-for="(item, idx) in profileCompleteness.items"
                 :key="idx"
                 class="flex items-center justify-between gap-3 text-xs p-2.5 rounded-xl border transition-colors cursor-pointer"
-                :class="item.done ? 'bg-emerald-50/50 border-emerald-200 text-ink-800' : 'bg-ink-50 border-ink-200 text-ink-600 hover:border-brand-400'"
+                :class="item.done ? 'bg-success-50/50 border-success-200 text-ink-800' : 'bg-ink-50 border-ink-200 text-ink-600 hover:border-brand-400'"
                 @click="activeTab = item.targetTab"
               >
                 <div class="flex items-center gap-2">
-                  <CheckCircle2 v-if="item.done" :size="16" class="text-emerald-600 shrink-0" />
+                  <CheckCircle2 v-if="item.done" :size="16" class="text-success-600 shrink-0" />
                   <div v-else class="w-4 h-4 rounded-full border border-ink-400 shrink-0"></div>
                   <span :class="{ 'font-semibold text-ink-900': item.done }">{{ item.label }}</span>
                 </div>
@@ -1354,8 +1355,8 @@ const handleSaveAvatar = async () => {
                       class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                       :class="
                         String(service.pricingMode).toLowerCase() === 'fixed_price'
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                          : 'bg-success-50 text-success-700 border border-success-200'
                       "
                     >
                       {{ String(service.pricingMode).toLowerCase() === 'fixed_price' ? 'Giá cố định' : 'Giá khảo sát / Công' }}
@@ -1374,11 +1375,11 @@ const handleSaveAvatar = async () => {
                   v-if="myOfferings.get(service.id)"
                   class="px-2.5 py-1 rounded-full text-xs font-bold"
                   :class="{
-                    'bg-amber-50 text-amber-700 border border-amber-200':
+                    'bg-warning-50 text-warning-700 border border-warning-200':
                       myOfferings.get(service.id)?.verificationStatus === 'pending',
-                    'bg-emerald-50 text-emerald-700 border border-emerald-200':
+                    'bg-success-50 text-success-700 border border-success-200':
                       myOfferings.get(service.id)?.verificationStatus === 'verified',
-                    'bg-rose-50 text-rose-700 border border-rose-200':
+                    'bg-danger-50 text-danger-700 border border-danger-200':
                       myOfferings.get(service.id)?.verificationStatus === 'rejected',
                   }"
                 >
@@ -1473,7 +1474,7 @@ const handleSaveAvatar = async () => {
                   <button
                     v-if="myOfferings.get(service.id)?.verificationStatus === 'rejected'"
                     type="button"
-                    class="text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer"
+                    class="text-danger-600 hover:text-danger-800 font-bold underline cursor-pointer"
                     @click="showRejectionReason(service.id)"
                   >
                     Xem lý do từ chối
@@ -1500,9 +1501,9 @@ const handleSaveAvatar = async () => {
               <!-- Rejection Reason Alert if clicked -->
               <div
                 v-if="rejectionReasons[service.id]"
-                class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2"
+                class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-800 flex items-start gap-2"
               >
-                <AlertCircle :size="16" class="text-rose-600 shrink-0 mt-0.5" />
+                <AlertCircle :size="16" class="text-danger-600 shrink-0 mt-0.5" />
                 <div>
                   <strong class="font-bold">Phản hồi từ bộ phận thẩm định:</strong>
                   <p class="mt-0.5">{{ rejectionReasons[service.id] }}</p>
@@ -1567,7 +1568,7 @@ const handleSaveAvatar = async () => {
                     <span class="font-bold text-sm text-ink-900">{{ DAY_NAMES[day] }}</span>
                     <span
                       class="ml-2 text-[11px] font-bold px-1.5 py-0.2 rounded"
-                      :class="slot.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'"
+                      :class="slot.enabled ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-500'"
                     >
                       {{ slot.enabled ? 'Nhận việc' : 'Nghỉ' }}
                     </span>
@@ -1676,7 +1677,7 @@ const handleSaveAvatar = async () => {
               >
                 <div class="min-w-0">
                   <p class="font-bold text-xs text-ink-900 font-num">
-                    {{ new Date(t.startAt).toLocaleDateString('vi-VN') }} – {{ new Date(t.endAt).toLocaleDateString('vi-VN') }}
+                    {{ vnDateString(t.startAt) }} – {{ vnDateString(t.endAt) }}
                   </p>
                   <p v-if="t.reason" class="text-[11px] text-ink-500 truncate mt-0.5">
                     {{ t.reason }}
@@ -1684,7 +1685,7 @@ const handleSaveAvatar = async () => {
                 </div>
                 <button
                   type="button"
-                  class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                  class="p-1.5 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors cursor-pointer"
                   title="Xoá lịch nghỉ"
                   @click="confirmDeleteTimeOff = t"
                 >
@@ -1817,15 +1818,15 @@ const handleSaveAvatar = async () => {
           <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
             <div class="border-b border-ink-100 pb-4">
               <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-                <Star :size="18" class="text-amber-500 fill-amber-400" />
+                <Star :size="18" class="text-warning-500 fill-warning-400" />
                 Tổng quan Uy tín &amp; Đánh giá
               </h2>
               <p class="text-xs text-ink-500 mt-0.5">Điểm số và mức độ hài lòng từ các khách hàng bạn đã phục vụ.</p>
             </div>
 
             <!-- Big Rating Score Box -->
-            <div class="p-6 rounded-2xl bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 border border-amber-200/80 text-center space-y-2 shadow-xs">
-              <div class="text-xs font-bold uppercase tracking-wider text-amber-700">Điểm trung bình</div>
+            <div class="p-6 rounded-2xl bg-gradient-to-br from-warning-50/80 via-white to-warning-50/40 border border-warning-200/80 text-center space-y-2 shadow-xs">
+              <div class="text-xs font-bold uppercase tracking-wider text-warning-700">Điểm trung bình</div>
               <div class="text-5xl font-black font-num text-ink-900 flex items-center justify-center gap-1.5">
                 <span>{{ technicianProfile.averageRating }}</span>
                 <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
@@ -1835,7 +1836,7 @@ const handleSaveAvatar = async () => {
                   v-for="s in 5"
                   :key="s"
                   :size="22"
-                  :class="s <= Math.round(Number(technicianProfile.averageRating) || 5) ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                  :class="s <= Math.round(Number(technicianProfile.averageRating) || 5) ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
                 />
               </div>
               <p class="text-xs font-semibold text-ink-600">
@@ -1852,12 +1853,12 @@ const handleSaveAvatar = async () => {
                 class="flex items-center gap-2.5 text-xs"
               >
                 <span class="w-10 font-bold font-num text-ink-700 flex items-center gap-0.5">
-                  {{ star }} <Star :size="12" class="fill-amber-400 text-amber-400" />
+                  {{ star }} <Star :size="12" class="fill-warning-400 text-warning-400" />
                 </span>
                 <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
                   <div
                     class="h-full rounded-full transition-all duration-500"
-                    :class="star >= 4 ? 'bg-amber-400' : star === 3 ? 'bg-yellow-400' : 'bg-rose-400'"
+                    :class="star >= 4 ? 'bg-warning-400' : star === 3 ? 'bg-warning-400' : 'bg-danger-400'"
                     :style="{ width: `${starDistribution.percentages[star]}%` }"
                   ></div>
                 </div>
@@ -1868,12 +1869,12 @@ const handleSaveAvatar = async () => {
             </div>
 
             <!-- Trust Badge Card -->
-            <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-1">
-              <div class="font-bold text-emerald-900 flex items-center gap-1.5">
-                <ShieldCheck :size="15" class="text-emerald-600" />
+            <div class="p-3.5 rounded-xl bg-success-50/70 border border-success-200 text-xs space-y-1">
+              <div class="font-bold text-success-900 flex items-center gap-1.5">
+                <ShieldCheck :size="15" class="text-success-600" />
                 Chính sách tăng độ uy tín
               </div>
-              <p class="text-[11px] text-emerald-800 leading-relaxed">
+              <p class="text-[11px] text-success-800 leading-relaxed">
                 Đánh giá cao từ khách hàng sẽ giúp bạn được hệ thống ưu tiên đề xuất cho khách khi tìm thợ và tăng tỷ lệ nhận đơn mới.
               </p>
             </div>
@@ -1904,7 +1905,7 @@ const handleSaveAvatar = async () => {
               v-else-if="reviewsList.length === 0"
               class="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-ink-200 space-y-3"
             >
-              <div class="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto border border-amber-200">
+              <div class="w-12 h-12 rounded-full bg-warning-50 text-warning-500 flex items-center justify-center mx-auto border border-warning-200">
                 <Star :size="24" />
               </div>
               <div class="space-y-1">
@@ -1934,7 +1935,7 @@ const handleSaveAvatar = async () => {
                           v-for="s in 5"
                           :key="s"
                           :size="13"
-                          :class="s <= r.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                          :class="s <= r.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
                         />
                         <span class="text-[11px] font-bold font-num text-ink-700 ml-1">{{ r.rating }}/5 sao</span>
                       </div>
@@ -1942,7 +1943,7 @@ const handleSaveAvatar = async () => {
                   </div>
 
                   <span class="text-[11px] font-num text-ink-400">
-                    {{ new Date(r.createdAt).toLocaleDateString('vi-VN') }}
+                    {{ vnDateString(r.createdAt) }}
                   </span>
                 </div>
 
@@ -1954,7 +1955,7 @@ const handleSaveAvatar = async () => {
                   <span
                     v-for="tag in parseReviewComment(r.comment).tags"
                     :key="tag"
-                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200"
                   >
                     <Check :size="10" class="text-brand-600 stroke-[3]" />
                     {{ tag }}

@@ -57,6 +57,8 @@ import { mediaApi } from '../../api/media.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
 const showPartsDemo = import.meta.env.DEV;
 const route = useRoute();
@@ -192,10 +194,7 @@ const handleWithdrawOrder = async () => {
     }
     await router.push('/tech/jobs');
   } catch (err: unknown) {
-    const msg =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      (err as Error)?.message ||
-      'Không thể rút khỏi đơn.';
+    const msg = userFacingError(err, 'Không thể rút khỏi đơn. Vui lòng thử lại.');
     actionMessage.value = { type: 'error', text: msg };
   } finally {
     withdrawing.value = false;
@@ -242,7 +241,7 @@ const heroAction = computed(() => {
       title: 'Đơn hàng đã hoàn tất thành công!',
       subtitle: 'Khách hàng đã nghiệm thu và hoàn tất thanh toán. Tiền công đã được ghi nhận vào tài khoản ví của bạn.',
       badge: 'HOÀN TẤT',
-      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      badgeClass: 'bg-success-100 text-success-800 border-success-300',
       btnText: 'Xem danh sách việc',
       btnAction: () => router.push('/tech/jobs'),
       btnIcon: 'check',
@@ -259,7 +258,7 @@ const heroAction = computed(() => {
           title: 'Khách đã nghiệm thu và thanh toán Online thành công!',
           subtitle: 'Hệ thống đang cập nhật trạng thái hoàn tất đơn hàng. Tiền công đã được ghi nhận.',
           badge: 'ĐÃ THANH TOÁN',
-          badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+          badgeClass: 'bg-success-100 text-success-800 border-success-300',
           btnText: 'Làm mới & Hoàn tất ca',
           btnAction: refreshJobStatus,
           btnIcon: 'refresh',
@@ -275,7 +274,7 @@ const heroAction = computed(() => {
             ? 'Khai báo số tiền mặt đã thu từ khách để khách xác nhận đối soát trên ứng dụng.'
             : 'Nhắc khách hàng thực hiện thanh toán trực tuyến qua ứng dụng FixHome (VNPAY / Ví).',
         badge: 'CHỜ THANH TOÁN',
-        badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+        badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
         btnText: hasCashPayment.value === 'YES' ? 'Khai báo thu tiền mặt' : 'Kiểm tra thanh toán Online',
         btnAction: hasCashPayment.value === 'YES' ? handleDeclareCash : refreshJobStatus,
         btnIcon: hasCashPayment.value === 'YES' ? 'dollar' : 'refresh',
@@ -288,7 +287,7 @@ const heroAction = computed(() => {
       title: 'Đã gửi yêu cầu nghiệm thu — Chờ khách hàng kiểm tra',
       subtitle: 'Mời khách kiểm tra thiết bị và bấm "Xác nhận nghiệm thu dịch vụ" trên ứng dụng FixHome.',
       badge: 'CHỜ NGHIỆM THU',
-      badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+      badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
       btnText: 'Kiểm tra khách đã duyệt chưa',
       btnAction: refreshJobStatus,
       btnIcon: 'refresh',
@@ -305,7 +304,7 @@ const heroAction = computed(() => {
         title: 'Đang tiến hành sửa chữa — Cần chụp ảnh hoàn thành (AFTER)',
         subtitle: 'Thực hiện công việc, sau đó chụp ít nhất 1 ảnh thiết bị sau khi sửa chữa xong.',
         badge: 'ĐANG SỬA CHỮA',
-        badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+        badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
         btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hoàn thành (AFTER)',
         btnAction: () => afterFile.value?.click(),
         btnIcon: 'camera',
@@ -318,7 +317,7 @@ const heroAction = computed(() => {
       title: 'Đã có ảnh sau sửa — Sẵn sàng gửi yêu cầu nghiệm thu',
       subtitle: 'Kiểm tra lại linh kiện/chi phí phát sinh, sau đó gửi yêu cầu nghiệm thu tới khách.',
       badge: 'SẴN SÀNG NGHIỆM THU',
-      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      badgeClass: 'bg-success-100 text-success-800 border-success-300',
       btnText: 'Gửi yêu cầu nghiệm thu ngay',
       btnAction: handleCompleteOrder,
       btnIcon: 'shield',
@@ -335,7 +334,7 @@ const heroAction = computed(() => {
         title: 'Đã check-in hiện trường — Chụp ảnh hiện trạng lỗi (BEFORE)',
         subtitle: 'Bắt buộc chụp ít nhất 1 ảnh hiện trạng hư hỏng trước khi bắt đầu tháo máy sửa chữa.',
         badge: 'CẦN ẢNH HIỆN TRẠNG',
-        badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+        badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
         btnText: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hiện trạng (BEFORE)',
         btnAction: openBeforeEvidencePicker,
         btnIcon: 'camera',
@@ -349,7 +348,7 @@ const heroAction = computed(() => {
         title: 'Đã có ảnh hiện trạng — Sẵn sàng bắt đầu sửa chữa',
         subtitle: 'Đơn hàng có giá công cố định theo Booking. Bấm để bắt đầu tính giờ sửa chữa.',
         badge: 'SẴN SÀNG SỬA',
-        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        badgeClass: 'bg-success-100 text-success-800 border-success-300',
         btnText: 'Bắt đầu sửa chữa (UNDER_REPAIR)',
         btnAction: handleStartRepair,
         btnIcon: 'wrench',
@@ -362,7 +361,7 @@ const heroAction = computed(() => {
       title: 'Đã có ảnh hiện trạng — Lập báo giá hoặc Bắt đầu sửa',
       subtitle: 'Kiểm tra máy móc, nhập chi phí công & linh kiện rồi gửi báo giá hoặc bấm bắt đầu sửa.',
       badge: 'LẬP BÁO GIÁ',
-      badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+      badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
       btnText: 'Bắt đầu sửa chữa (UNDER_REPAIR)',
       btnAction: handleStartRepair,
       btnIcon: 'wrench',
@@ -377,7 +376,7 @@ const heroAction = computed(() => {
       title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
       subtitle: 'Khi tới nơi trong bán kính ≤ 200m, hãy bấm nút Check-in GPS để mở khóa chụp ảnh.',
       badge: 'ĐANG DI CHUYỂN',
-      badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+      badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
       btnText: 'Check-in GPS ngay khi đến nơi',
       btnAction: () => handleCheckIn(),
       btnIcon: 'map-pin',
@@ -392,7 +391,7 @@ const heroAction = computed(() => {
     title: 'Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách',
     subtitle: 'Bấm bắt đầu di chuyển để hệ thống gửi thông báo và định vị trực tiếp cho khách hàng.',
     badge: 'CHỜ KHỞI HÀNH',
-    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
     btnText: 'Bắt đầu di chuyển (En Route)',
     btnAction: handleEnRoute,
     btnIcon: 'navigation',
@@ -418,10 +417,7 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
     await loadJob(jobId, { silent: true });
     actionMessage.value = { type: 'success', text: 'Đã xóa ảnh bằng chứng thành công.' };
   } catch (err: unknown) {
-    const errorMsg =
-      (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
-      (err as Error)?.message ||
-      'Không thể xóa ảnh. Vui lòng thử lại.';
+    const errorMsg = userFacingError(err, 'Không thể xóa ảnh. Vui lòng thử lại.');
     actionMessage.value = { type: 'error', text: errorMsg };
   } finally {
     actionLoading.value = false;
@@ -448,10 +444,7 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: File
       text: `Đã lưu ${files.length > 1 ? files.length + ' ảnh' : 'ảnh'} bằng chứng thành công.`,
     };
   } catch (err: unknown) {
-    const errorMsg =
-      (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
-      (err as Error)?.message ||
-      'Chưa lưu được ảnh. Chọn JPEG, PNG hoặc WebP dưới 10 MB và thử lại.';
+    const errorMsg = userFacingError(err, 'Chưa lưu được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB và thử lại.');
     actionMessage.value = { type: 'error', text: errorMsg };
   } finally {
     actionLoading.value = false;
@@ -1019,12 +1012,9 @@ async function handleSubmitAdditionalCost() {
     showAdditionalCostForm.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu chi phí phát sinh, chờ khách duyệt.' };
   } catch (err: unknown) {
-    const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-    const msg = axiosErr?.response?.data?.message;
-    const text = Array.isArray(msg) ? msg.join(', ') : msg;
     actionMessage.value = {
       type: 'error',
-      text: text || (err as Error)?.message || 'Không thể gửi yêu cầu chi phí phát sinh (Lỗi 400).',
+      text: userFacingError(err, 'Không thể gửi yêu cầu chi phí phát sinh. Vui lòng kiểm tra lại thông tin.'),
     };
   } finally {
     acSubmitting.value = false;
@@ -1201,7 +1191,7 @@ const refreshJobStatus = async () => {
         </span>
       </div>
       <p class="text-xs text-ink-600">
-        Ngày ghi nhận: {{ new Date(historicalJob.createdAt).toLocaleDateString('vi-VN') }}
+        Ngày ghi nhận: {{ vnDateString(historicalJob.createdAt) }}
       </p>
       <p class="text-xs text-ink-500 leading-relaxed bg-ink-50 p-3 rounded-xl border border-ink-200">
         Bạn không còn được giao đơn này. Thông tin riêng tư của khách và các thao tác thực hiện công việc không còn khả dụng theo chính sách bảo mật của FixHome.
@@ -1263,7 +1253,7 @@ const refreshJobStatus = async () => {
               <ShieldCheck v-else-if="heroAction.btnIcon === 'shield'" :size="16" class="text-brand-600" />
               <DollarSign v-else-if="heroAction.btnIcon === 'dollar'" :size="16" class="text-brand-600" />
               <RefreshCw v-else-if="heroAction.btnIcon === 'refresh'" :size="16" class="text-brand-600" />
-              <CheckCircle2 v-else :size="16" class="text-emerald-600" />
+              <CheckCircle2 v-else :size="16" class="text-success-600" />
               <span>{{ heroAction.btnText }}</span>
             </button>
           </div>
@@ -1278,7 +1268,7 @@ const refreshJobStatus = async () => {
               class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/20"
               title="Mở chỉ đường trên ứng dụng Google Maps"
             >
-              <Navigation :size="14" class="text-amber-400" />
+              <Navigation :size="14" class="text-warning-400" />
               <span>Chỉ đường</span>
               <ExternalLink :size="12" class="opacity-60" />
             </a>
@@ -1289,7 +1279,7 @@ const refreshJobStatus = async () => {
               class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/20"
               title="Gọi điện trực tiếp cho khách hàng"
             >
-              <Phone :size="14" class="text-emerald-400" />
+              <Phone :size="14" class="text-success-400" />
               <span>Gọi</span>
             </a>
 
@@ -1299,7 +1289,7 @@ const refreshJobStatus = async () => {
               title="Nhắn tin với khách hàng"
               @click="handleChatWithCustomer"
             >
-              <MessageSquare :size="14" class="text-blue-300" />
+              <MessageSquare :size="14" class="text-brand-300" />
               <span>Nhắn tin</span>
             </button>
           </div>
@@ -1342,7 +1332,7 @@ const refreshJobStatus = async () => {
               <h2 class="font-extrabold text-sm text-ink-900">{{ job.serviceName }}</h2>
               <p class="text-ink-500 flex items-center gap-1 font-medium">
                 <Calendar :size="13" class="text-brand-600" />
-                Lịch hẹn: {{ new Date(job.scheduledAt).toLocaleString('vi-VN') }}
+                Lịch hẹn: {{ vnDateTimeString(job.scheduledAt) }}
               </p>
             </div>
 
@@ -1402,7 +1392,7 @@ const refreshJobStatus = async () => {
             class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
             :class="
               currentStepNumber > 1
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 shadow-2xs'
+                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 1
                   ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
@@ -1411,7 +1401,7 @@ const refreshJobStatus = async () => {
           >
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10px] font-mono font-bold">BƯỚC 1</span>
-              <CheckCircle2 v-if="currentStepNumber > 1" :size="13" class="text-emerald-600" />
+              <CheckCircle2 v-if="currentStepNumber > 1" :size="13" class="text-success-600" />
               <Navigation v-else :size="13" :class="currentStepNumber === 1 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
             <div class="text-xs font-bold truncate">Khởi hành</div>
@@ -1422,7 +1412,7 @@ const refreshJobStatus = async () => {
             class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
             :class="
               gpsCheckedIn
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 shadow-2xs'
+                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 2
                   ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
@@ -1431,7 +1421,7 @@ const refreshJobStatus = async () => {
           >
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10px] font-mono font-bold">BƯỚC 2</span>
-              <CheckCircle2 v-if="gpsCheckedIn" :size="13" class="text-emerald-600" />
+              <CheckCircle2 v-if="gpsCheckedIn" :size="13" class="text-success-600" />
               <MapPin v-else :size="13" :class="currentStepNumber === 2 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
             <div class="text-xs font-bold truncate">Check-in GPS</div>
@@ -1442,7 +1432,7 @@ const refreshJobStatus = async () => {
             class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
             :class="
               beforePhotoUploaded || String(job.status).toUpperCase() === 'UNDER_REPAIR' || currentStepNumber > 3
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 shadow-2xs'
+                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 3
                   ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
@@ -1451,7 +1441,7 @@ const refreshJobStatus = async () => {
           >
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10px] font-mono font-bold">BƯỚC 3</span>
-              <CheckCircle2 v-if="beforePhotoUploaded || currentStepNumber > 3" :size="13" class="text-emerald-600" />
+              <CheckCircle2 v-if="beforePhotoUploaded || currentStepNumber > 3" :size="13" class="text-success-600" />
               <Camera v-else :size="13" :class="currentStepNumber === 3 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
             <div class="text-xs font-bold truncate">Ảnh hiện trạng</div>
@@ -1462,7 +1452,7 @@ const refreshJobStatus = async () => {
             class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
             :class="
               completionRequested || currentStepNumber > 4
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 shadow-2xs'
+                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 4
                   ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
@@ -1471,7 +1461,7 @@ const refreshJobStatus = async () => {
           >
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10px] font-mono font-bold">BƯỚC 4</span>
-              <CheckCircle2 v-if="completionRequested || currentStepNumber > 4" :size="13" class="text-emerald-600" />
+              <CheckCircle2 v-if="completionRequested || currentStepNumber > 4" :size="13" class="text-success-600" />
               <Wrench v-else :size="13" :class="currentStepNumber === 4 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
             <div class="text-xs font-bold truncate">Sửa chữa</div>
@@ -1482,7 +1472,7 @@ const refreshJobStatus = async () => {
             class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between col-span-2 sm:col-span-1"
             :class="
               isCompleted
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 shadow-2xs'
+                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
                 : currentStepNumber === 5
                   ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-extrabold shadow-xs'
                   : 'bg-ink-50/60 border-ink-200 text-ink-400'
@@ -1491,7 +1481,7 @@ const refreshJobStatus = async () => {
           >
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10px] font-mono font-bold">BƯỚC 5</span>
-              <CheckCircle2 v-if="isCompleted" :size="13" class="text-emerald-600" />
+              <CheckCircle2 v-if="isCompleted" :size="13" class="text-success-600" />
               <ShieldCheck v-else :size="13" :class="currentStepNumber === 5 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
             <div class="text-xs font-bold truncate">Nghiệm thu</div>
@@ -1513,7 +1503,7 @@ const refreshJobStatus = async () => {
                 <p class="text-ink-600">
                   Cập nhật trạng thái khi bắt đầu di chuyển để khách hàng theo dõi thời gian dự kiến tới nơi.
                 </p>
-                <div v-if="isEnRoute" class="text-emerald-700 font-medium flex items-center gap-1.5">
+                <div v-if="isEnRoute" class="text-success-700 font-medium flex items-center gap-1.5">
                   <CheckCircle2 :size="14" /> Định vị di chuyển thời gian thực đang hoạt động.
                 </div>
               </div>
@@ -1552,7 +1542,7 @@ const refreshJobStatus = async () => {
                 <p class="text-ink-600">
                   Bắt buộc check-in GPS trong bán kính ≤ 200m từ địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
                 </p>
-                <div v-if="gpsCheckedIn" class="text-emerald-700 font-medium flex items-center gap-1.5">
+                <div v-if="gpsCheckedIn" class="text-success-700 font-medium flex items-center gap-1.5">
                   <CheckCircle2 :size="14" /> Bạn đã check-in thành công tại hiện trường.
                 </div>
               </div>
@@ -1574,7 +1564,7 @@ const refreshJobStatus = async () => {
                   v-if="showPartsDemo"
                   variant="ghost"
                   size="sm"
-                  class="border border-dashed border-amber-400 text-amber-700"
+                  class="border border-dashed border-warning-400 text-warning-700"
                   :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
                   title="Chỉ để test: check-in luôn bằng đúng toạ độ địa chỉ khách, bỏ qua GPS thật"
                   @click="handleCheckInDevExact"
@@ -1602,7 +1592,7 @@ const refreshJobStatus = async () => {
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-warning-800 bg-warning-50 px-2 py-0.5 rounded border border-warning-200"
                 >
                   <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh
                 </span>
@@ -1881,14 +1871,14 @@ const refreshJobStatus = async () => {
                     </button>
                     <button
                       type="button"
-                      class="text-[11px] text-blue-600 font-bold hover:underline flex items-center gap-1"
+                      class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1"
                       @click="addAcItem('PARTS', 'fixhome')"
                     >
                       <Plus :size="13" /> + LK FixHome
                     </button>
                     <button
                       type="button"
-                      class="text-[11px] text-amber-700 font-bold hover:underline flex items-center gap-1"
+                      class="text-[11px] text-warning-700 font-bold hover:underline flex items-center gap-1"
                       @click="addAcItem('PARTS', 'external')"
                     >
                       <Plus :size="13" /> + LK Ngoài (EXTERNAL)
@@ -1903,9 +1893,9 @@ const refreshJobStatus = async () => {
                     class="p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center gap-2 transition-all"
                     :class="
                       item.partSource === 'fixhome'
-                        ? 'bg-blue-50/40 border-blue-200'
+                        ? 'bg-brand-50/40 border-brand-200'
                         : item.partSource === 'external'
-                          ? 'bg-amber-50/40 border-amber-200'
+                          ? 'bg-warning-50/40 border-warning-200'
                           : 'bg-ink-50 border-ink-200'
                     "
                   >
@@ -1916,8 +1906,8 @@ const refreshJobStatus = async () => {
                           item.type === 'LABOR'
                             ? 'bg-brand-100 text-brand-800'
                             : item.partSource === 'external'
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              ? 'bg-warning-100 text-warning-900 border border-warning-300'
+                              : 'bg-brand-100 text-brand-800 border border-brand-200'
                         "
                       >
                         {{ item.type === 'LABOR' ? 'Công' : item.partSource === 'external' ? 'LK Ngoài' : 'LK FixHome' }}
@@ -1937,19 +1927,19 @@ const refreshJobStatus = async () => {
                     <!-- FixHome Part with catalog info -->
                     <div
                       v-if="item.type === 'PARTS' && item.partSource === 'fixhome' && item.partCatalogId"
-                      class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded border border-blue-200"
+                      class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded border border-brand-200"
                     >
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="font-bold text-ink-900 text-xs truncate">{{ item.description }}</span>
                           <span
                             v-if="item.partSku"
-                            class="text-[10px] font-mono px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200 font-semibold"
+                            class="text-[10px] font-mono px-1.5 py-0.2 bg-brand-50 text-brand-700 rounded border border-brand-200 font-semibold"
                           >
                             {{ item.partSku }}
                           </span>
                           <span
-                            class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"
+                            class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 shrink-0"
                             :title="item.warrantyPolicy || undefined"
                           >
                             <ShieldCheck :size="11" />
@@ -1962,7 +1952,7 @@ const refreshJobStatus = async () => {
                       </div>
                       <button
                         type="button"
-                        class="text-[11px] text-blue-600 hover:text-blue-800 font-semibold underline shrink-0 cursor-pointer"
+                        class="text-[11px] text-brand-600 hover:text-brand-800 font-semibold underline shrink-0 cursor-pointer"
                         @click="openAcPartPicker(idx)"
                       >
                         Đổi linh kiện
@@ -1973,7 +1963,7 @@ const refreshJobStatus = async () => {
                     <div v-else-if="item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId" class="flex-1">
                       <button
                         type="button"
-                        class="w-full h-8 px-3 rounded border border-dashed border-blue-400 bg-white hover:bg-blue-50 text-blue-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        class="w-full h-8 px-3 rounded border border-dashed border-brand-400 bg-white hover:bg-brand-50 text-brand-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         @click="openAcPartPicker(idx)"
                       >
                         <Search :size="13" /> Bấm để chọn linh kiện từ kho FixHome (Xem giá & bảo hành)
@@ -2001,7 +1991,7 @@ const refreshJobStatus = async () => {
 
                       <div
                         v-if="item.partSource === 'fixhome' && item.partCatalogId"
-                        class="min-w-[100px] text-right px-2 py-1 bg-white rounded border border-blue-200"
+                        class="min-w-[100px] text-right px-2 py-1 bg-white rounded border border-brand-200"
                       >
                         <span class="text-[10px] text-ink-400 block -mb-0.5">Đơn giá kho:</span>
                         <span class="font-num font-bold text-brand-700 text-xs">
@@ -2032,9 +2022,9 @@ const refreshJobStatus = async () => {
                 <!-- Fulfillment Method for FixHome parts -->
                 <div
                   v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome')"
-                  class="p-2.5 rounded-xl bg-blue-50 border border-blue-200 space-y-2 text-xs"
+                  class="p-2.5 rounded-xl bg-brand-50 border border-brand-200 space-y-2 text-xs"
                 >
-                  <div class="font-semibold text-blue-900 flex items-center gap-1.5">
+                  <div class="font-semibold text-brand-900 flex items-center gap-1.5">
                     <Package :size="14" /> Phương thức nhận linh kiện FixHome:
                   </div>
                   <div class="flex items-center gap-4">
@@ -2054,7 +2044,7 @@ const refreshJobStatus = async () => {
                       type="number"
                       step="5000"
                       placeholder="Phí ship (VNĐ)"
-                      class="w-32 h-7 px-2 bg-white border border-blue-300 rounded text-xs font-num font-bold"
+                      class="w-32 h-7 px-2 bg-white border border-brand-300 rounded text-xs font-num font-bold"
                     />
                     <span class="text-ink-400 text-[11px]">VNĐ (tính vào tổng thanh toán)</span>
                   </div>
@@ -2063,12 +2053,12 @@ const refreshJobStatus = async () => {
                 <!-- Disclaimer for External parts -->
                 <div
                   v-if="acItems.some((i) => i.partSource === 'external')"
-                  class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2"
+                  class="p-2.5 rounded-xl bg-warning-50 border border-warning-200 text-warning-900 text-xs flex items-start gap-2"
                 >
-                  <AlertTriangle :size="16" class="text-amber-600 mt-0.5 flex-shrink-0" />
+                  <AlertTriangle :size="16" class="text-warning-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <p class="font-semibold">Lưu ý về linh kiện ngoài (EXTERNAL):</p>
-                    <p class="text-[11px] text-amber-800">
+                    <p class="text-[11px] text-warning-800">
                       Linh kiện mua ngoài không thuộc chính sách bảo hành của FixHome. Khách hàng sẽ phải tích xác nhận chấp nhận rủi ro khi duyệt yêu cầu phát sinh này.
                     </p>
                   </div>
@@ -2142,7 +2132,7 @@ const refreshJobStatus = async () => {
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-warning-800 bg-warning-50 px-2 py-0.5 rounded border border-warning-200"
                 >
                   <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh sau sửa
                 </span>
@@ -2295,20 +2285,20 @@ const refreshJobStatus = async () => {
                   <!-- Giai đoạn 1: Nghiệm thu dịch vụ -->
                   <div
                     class="border rounded-2xl p-4 space-y-2.5"
-                    :class="job?.customerConfirmed ? 'border-success-200 bg-success-50/50' : 'border-amber-200 bg-amber-50/60'"
+                    :class="job?.customerConfirmed ? 'border-success-200 bg-success-50/50' : 'border-warning-200 bg-warning-50/60'"
                   >
                     <div class="flex items-center justify-between">
                       <div
                         class="flex items-center gap-2 font-bold text-xs"
-                        :class="job?.customerConfirmed ? 'text-success-900' : 'text-amber-900'"
+                        :class="job?.customerConfirmed ? 'text-success-900' : 'text-warning-900'"
                       >
                         <CheckCircle2 v-if="job?.customerConfirmed" :size="16" class="text-success-600 shrink-0" />
-                        <AlertCircle v-else :size="16" class="text-amber-600 shrink-0" />
+                        <AlertCircle v-else :size="16" class="text-warning-600 shrink-0" />
                         <span>Giai đoạn 1: Khách hàng Nghiệm thu dịch vụ</span>
                       </div>
                       <span
                         class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                        :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-amber-100 text-amber-800'"
+                        :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800'"
                       >
                         {{ job?.customerConfirmed ? 'ĐÃ NGHIỆM THU ĐẠT' : 'CHỜ KHÁCH BẤM NGHIỆM THU' }}
                       </span>
@@ -2346,7 +2336,7 @@ const refreshJobStatus = async () => {
                       </span>
                       <span
                         v-else
-                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-800"
                       >
                         CHƯA THANH TOÁN
                       </span>
@@ -2444,10 +2434,10 @@ const refreshJobStatus = async () => {
 
                           <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
                             <CheckCircle2 v-if="job?.customerConfirmed" :size="15" class="text-success-600 shrink-0 mt-0.5" />
-                            <Loader2 v-else :size="15" class="text-amber-500 animate-spin shrink-0 mt-0.5" />
+                            <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
                             <div>
                               <div class="font-bold text-ink-800">2. Khách nghiệm thu</div>
-                              <div class="text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-amber-700'">
+                              <div class="text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-warning-700'">
                                 {{ job?.customerConfirmed ? 'Đã xác nhận dịch vụ' : 'Chờ khách bấm xác nhận' }}
                               </div>
                             </div>
@@ -2455,10 +2445,10 @@ const refreshJobStatus = async () => {
 
                           <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
                             <CheckCircle2 v-if="job?.paymentStatus?.toUpperCase() === 'PAID'" :size="15" class="text-success-600 shrink-0 mt-0.5" />
-                            <Loader2 v-else :size="15" class="text-amber-500 animate-spin shrink-0 mt-0.5" />
+                            <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
                             <div>
                               <div class="font-bold text-ink-800">3. Thanh toán Online</div>
-                              <div class="text-[10px]" :class="job?.paymentStatus?.toUpperCase() === 'PAID' ? 'text-success-700 font-medium' : 'text-amber-700'">
+                              <div class="text-[10px]" :class="job?.paymentStatus?.toUpperCase() === 'PAID' ? 'text-success-700 font-medium' : 'text-warning-700'">
                                 {{ job?.paymentStatus?.toUpperCase() === 'PAID' ? 'Đã thanh toán (PAID)' : 'Chờ khách trả VNPAY/Ví' }}
                               </div>
                             </div>
@@ -2558,17 +2548,17 @@ const refreshJobStatus = async () => {
             <!-- Đánh giá từ khách hàng cho đơn này -->
             <FhCard
               v-if="isCompleted || String(job?.status).toUpperCase() === 'COMPLETED'"
-              class="border border-amber-200 bg-amber-50/20 shadow-xs"
+              class="border border-warning-200 bg-warning-50/20 shadow-xs"
             >
               <template #header>
                 <div class="flex items-center justify-between w-full">
                   <div class="flex items-center gap-2">
-                    <Star :size="18" class="text-amber-500 fill-amber-400" />
+                    <Star :size="18" class="text-warning-500 fill-warning-400" />
                     <span class="font-bold text-sm text-ink-900">Đánh giá từ khách hàng</span>
                   </div>
                   <span
                     v-if="customerReview"
-                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-success-100 text-success-800 border border-success-200"
                   >
                     <CheckCircle2 :size="12" /> Đã cập nhật vào uy tín thợ
                   </span>
@@ -2588,14 +2578,14 @@ const refreshJobStatus = async () => {
                       v-for="s in 5"
                       :key="s"
                       :size="20"
-                      :class="s <= customerReview.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-200'"
+                      :class="s <= customerReview.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
                     />
                   </div>
                   <span class="font-bold text-ink-900 font-num text-sm">
                     {{ customerReview.rating }}/5 sao
                   </span>
                   <span v-if="customerReview.createdAt" class="text-ink-400 font-num text-[11px]">
-                    • {{ new Date(customerReview.createdAt).toLocaleString('vi-VN') }}
+                    • {{ vnDateTimeString(customerReview.createdAt) }}
                   </span>
                 </div>
 
@@ -2604,7 +2594,7 @@ const refreshJobStatus = async () => {
                   <span
                     v-for="tag in parsedCustomerReview.tags"
                     :key="tag"
-                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-brand-700 border border-brand-200"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200"
                   >
                     <Sparkles :size="11" class="text-brand-600" />
                     {{ tag }}
@@ -2660,7 +2650,7 @@ const refreshJobStatus = async () => {
         <a
           v-if="job.customerPhone"
           :href="'tel:' + job.customerPhone"
-          class="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+          class="p-2.5 rounded-xl bg-success-50 text-success-700 hover:bg-success-100 transition-colors"
           title="Gọi khách"
         >
           <Phone :size="18" />
@@ -2694,7 +2684,7 @@ const refreshJobStatus = async () => {
           </button>
         </div>
 
-        <div class="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs leading-relaxed">
+        <div class="p-3 bg-warning-50 rounded-2xl border border-warning-200 text-warning-900 text-xs leading-relaxed">
           ⚠️ <strong>Lưu ý:</strong> Khi bạn rút khỏi đơn, hệ thống FixHome sẽ tự động điều phối thợ tiếp theo trong danh sách ưu tiên của khách. Vui lòng chọn lý do chính xác để không ảnh hưởng đến điểm uy tín kỹ thuật viên.
         </div>
 
@@ -2866,7 +2856,7 @@ const refreshJobStatus = async () => {
                   {{ part.sku }}
                 </span>
                 <span
-                  class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
                 >
                   <ShieldCheck :size="11" /> {{ formatAcWarrantyBadge(part.warrantyDays) }}
                 </span>

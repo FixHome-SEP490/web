@@ -24,9 +24,9 @@ const statusConfig = computed(() => {
       };
     case 'ACCEPTED':
       return {
-        bg: 'bg-violet-50',
-        text: 'text-violet-600',
-        dot: 'bg-violet-600',
+        bg: 'bg-brand-50',
+        text: 'text-brand-600',
+        dot: 'bg-brand-600',
         defaultLabel: 'Đã nhận đơn',
       };
     case 'EN_ROUTE':

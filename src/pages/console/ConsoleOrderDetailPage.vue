@@ -19,6 +19,7 @@ import {
 import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/console-order-context.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { useAuthStore } from '../../stores/auth';
+import { vnDateTimeString } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
@@ -176,17 +177,17 @@ const timelineSteps = computed<TimelineStep[]>(() => {
               <div class="font-bold text-sm text-ink-900 font-mono">Booking: {{ order.bookingId }}</div>
               <div class="text-ink-500 flex items-center gap-1">
                 <Calendar :size="13" />
-                <span v-if="order.scheduledAt">Hẹn: {{ new Date(order.scheduledAt).toLocaleString('vi-VN') }}</span>
+                <span v-if="order.scheduledAt">Hẹn: {{ vnDateTimeString(order.scheduledAt) }}</span>
                 <span v-else class="italic">Backend chưa trả về lịch hẹn cho đơn này.</span>
               </div>
             </div>
 
             <div class="space-y-1.5 sm:text-right">
               <div class="text-ink-500">
-                Tạo lúc: {{ order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN') : '—' }}
+                Tạo lúc: {{ order.createdAt ? vnDateTimeString(order.createdAt) : '—' }}
               </div>
               <div class="text-ink-500">
-                Cập nhật: {{ order.updatedAt ? new Date(order.updatedAt).toLocaleString('vi-VN') : '—' }}
+                Cập nhật: {{ order.updatedAt ? vnDateTimeString(order.updatedAt) : '—' }}
               </div>
             </div>
           </div>

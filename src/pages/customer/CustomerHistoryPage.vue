@@ -80,8 +80,8 @@ const historyItems = ref([
             <div class="font-semibold text-ink-900 flex items-center gap-1.5 sm:justify-end">
               <Wrench :size="13" class="text-brand-600" /> {{ item.technicianName }}
             </div>
-            <div class="flex items-center gap-1 sm:justify-end text-amber-500 font-bold">
-              <Star v-for="i in item.technicianRating" :key="i" :size="12" class="fill-amber-400" />
+            <div class="flex items-center gap-1 sm:justify-end text-warning-500 font-bold">
+              <Star v-for="i in item.technicianRating" :key="i" :size="12" class="fill-warning-400" />
             </div>
           </div>
         </div>
