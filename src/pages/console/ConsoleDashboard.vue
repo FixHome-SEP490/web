@@ -36,7 +36,6 @@ const loading = ref(true);
 const loadError = ref('');
 const ops = ref<OperationalDashboard | null>(null);
 const watchOrders = ref<ServiceOrderItem[]>([]);
-
 async function loadDashboard() {
   loading.value = true;
   loadError.value = '';
