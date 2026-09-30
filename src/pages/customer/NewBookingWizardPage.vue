@@ -918,7 +918,7 @@ const createAndFindTech = async () => {
           <!-- 3. Fixed Price Package Detail & Quantity Configurator -->
           <div
             v-if="isFixedPrice"
-            class="p-5 rounded-2xl bg-gradient-to-br from-brand-50/80 to-brand-50/40 border border-brand-200 space-y-4"
+            class="p-5 rounded-2xl bg-brand-50 border border-brand-200 space-y-4"
           >
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1">

@@ -193,20 +193,20 @@ onMounted(() => {
                 v-if="hasOpenClaim(order)"
                 class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-100 text-warning-900 border border-warning-300"
               >
-                ĐANG XỬ LÝ BẢO HÀNH
+                Đang xử lý bảo hành
               </span>
               <span
                 v-else-if="order.hasActiveCoverage"
                 class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-100 text-success-800 border border-success-300 flex items-center gap-1"
               >
                 <span class="w-1.5 h-1.5 rounded-full bg-success-500 inline-block animate-pulse"></span>
-                CÒN HIỆU LỰC (Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày)
+                Còn hiệu lực (Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày)
               </span>
               <span
                 v-else
                 class="px-2 py-0.5 rounded text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-300"
               >
-                HẾT HẠN BẢO HÀNH
+                Hết hạn bảo hành
               </span>
             </div>
           </div>

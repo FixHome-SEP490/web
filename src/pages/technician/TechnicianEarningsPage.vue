@@ -67,7 +67,7 @@ const payouts = ref([
 
     <!-- Hero Wallet Balance Card (Mobile Style) -->
     <div
-      class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-700 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-6 cursor-pointer hover:shadow-lg transition-all group"
+      class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-6 cursor-pointer hover:shadow-lg transition-all group"
       @click="router?.push('/tech/wallet')"
       title="Bấm để mở Ví Kỹ thuật viên & Quản lý số dư"
     >
@@ -99,7 +99,7 @@ const payouts = ref([
     <!-- 4 Gradient Stat Cards (Matching Mobile Home Overview) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
       <div
-        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white border border-brand-200/80 shadow-xs space-y-1 cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all"
+        class="p-4 sm:p-5 rounded-2xl bg-brand-50 border border-brand-200/80 shadow-xs space-y-1 cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all"
         @click="router?.push('/tech/wallet')"
         title="Bấm để xem lịch sử biến động số dư"
       >
@@ -111,7 +111,7 @@ const payouts = ref([
       </div>
 
       <div
-        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-warning-100 via-warning-50 to-white border border-warning-200/80 shadow-xs space-y-1 cursor-pointer hover:border-warning-300 hover:shadow-sm transition-all"
+        class="p-4 sm:p-5 rounded-2xl bg-warning-50 border border-warning-200/80 shadow-xs space-y-1 cursor-pointer hover:border-warning-300 hover:shadow-sm transition-all"
         @click="router?.push('/tech/jobs')"
         title="Bấm để mở danh sách đơn hoàn tất"
       >
@@ -123,7 +123,7 @@ const payouts = ref([
       </div>
 
       <div
-        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-success-100 via-success-50 to-white border border-success-200/80 shadow-xs space-y-1 cursor-pointer hover:border-success-300 hover:shadow-sm transition-all"
+        class="p-4 sm:p-5 rounded-2xl bg-success-50 border border-success-200/80 shadow-xs space-y-1 cursor-pointer hover:border-success-300 hover:shadow-sm transition-all"
         @click="router?.push('/tech/profile')"
         title="Bấm để xem chi tiết hồ sơ & đánh giá"
       >
@@ -134,7 +134,7 @@ const payouts = ref([
         <p class="text-[11px] text-success-600 font-medium">Từ 148 khách hàng</p>
       </div>
 
-      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white border border-brand-200/80 shadow-xs space-y-1">
+      <div class="p-4 sm:p-5 rounded-2xl bg-brand-50 border border-brand-200/80 shadow-xs space-y-1">
         <span class="text-xs font-bold text-brand-800">Phí nền tảng (minh họa)</span>
         <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
           Chưa chốt

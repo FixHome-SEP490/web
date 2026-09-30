@@ -226,7 +226,7 @@ const handleViewAll = () => {
         class="absolute right-0 mt-2 w-84 sm:w-96 bg-white rounded-2xl border border-ink-200 shadow-2xl z-50 overflow-hidden flex flex-col text-ink-900"
       >
         <!-- Header -->
-        <div class="p-3.5 px-4 bg-gradient-to-r from-ink-50 via-white to-brand-50/40 border-b border-ink-100 flex items-center justify-between">
+        <div class="p-3.5 px-4 bg-white border-b border-ink-100 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="font-bold text-sm text-ink-900">Thông báo</span>
             <span

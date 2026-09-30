@@ -151,10 +151,7 @@ const handleClose = () => {
       class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-ink-200/80 animate-in fade-in zoom-in-95 duration-200 relative"
     >
       <!-- Top Decorative Gradient Header Banner -->
-      <div class="relative bg-gradient-to-r from-brand-700 via-brand-600 to-brand-700 px-6 pt-5 pb-16 text-white overflow-hidden shrink-0">
-        <!-- Ambient lighting decorative circles -->
-        <div class="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        <div class="absolute bottom-0 right-1/4 w-36 h-36 bg-brand-400/20 rounded-full blur-xl pointer-events-none" />
+      <div class="relative bg-brand-600 px-6 pt-5 pb-16 text-white overflow-hidden shrink-0">
 
         <div class="relative z-10 flex items-center justify-between">
           <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-md text-white text-xs font-semibold border border-white/20">
@@ -181,7 +178,7 @@ const handleClose = () => {
             <!-- Large Avatar with Double Ring -->
             <div class="relative shrink-0">
               <div
-                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-700 to-brand-800 text-white flex items-center justify-center font-bold text-2xl shadow-xl ring-4 ring-white border border-brand-200"
+                class="w-20 h-20 rounded-2xl bg-brand-600 text-white flex items-center justify-center font-bold text-2xl shadow-xl ring-4 ring-white border border-brand-200"
               >
                 {{ candidate.fullName.charAt(0) }}
               </div>
@@ -234,7 +231,7 @@ const handleClose = () => {
         <!-- 4 Bento Grid KPI Cards with Space Grotesk -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
           <!-- Card 1: Completion Rate -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-success-50/80 to-success-50/30 border border-success-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+          <div class="p-3 rounded-xl bg-success-50 border border-success-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
             <div class="flex items-center justify-between text-success-800 mb-1">
               <span class="text-[11px] font-semibold">Tỷ lệ hoàn thành</span>
               <div class="w-6 h-6 rounded-full bg-success-100 flex items-center justify-center">
@@ -248,7 +245,7 @@ const handleClose = () => {
           </div>
 
           <!-- Card 2: Response Time -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+          <div class="p-3 rounded-xl bg-brand-50 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
             <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Thời gian phản hồi</span>
               <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
@@ -262,7 +259,7 @@ const handleClose = () => {
           </div>
 
           <!-- Card 3: Total Orders Completed -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+          <div class="p-3 rounded-xl bg-brand-50 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
             <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Đơn đã thực hiện</span>
               <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
@@ -276,7 +273,7 @@ const handleClose = () => {
           </div>
 
           <!-- Card 4: Reliability Score -->
-          <div class="p-3 rounded-xl bg-gradient-to-br from-brand-50/80 to-brand-50/30 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
+          <div class="p-3 rounded-xl bg-brand-50 border border-brand-200/70 shadow-xs flex flex-col justify-between transition-all hover:shadow-sm">
             <div class="flex items-center justify-between text-brand-800 mb-1">
               <span class="text-[11px] font-semibold">Độ tin cậy</span>
               <div class="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center">
@@ -345,7 +342,7 @@ const handleClose = () => {
           <!-- Real Bio Highlight Card if present -->
           <div
             v-if="candidate.bio"
-            class="p-4 rounded-xl border border-brand-200 bg-gradient-to-r from-brand-50/60 to-brand-50/40 relative overflow-hidden shadow-xs"
+            class="p-4 rounded-xl border border-brand-200 bg-brand-50 relative overflow-hidden shadow-xs"
           >
             <Quote :size="36" class="absolute -bottom-2 -right-2 text-brand-200/50 pointer-events-none" />
             <div class="flex items-start gap-2.5">
@@ -470,7 +467,7 @@ const handleClose = () => {
             <!-- Review Summary Card when reviews exist -->
             <div
               v-if="reviews.length > 0"
-              class="p-5 rounded-2xl bg-gradient-to-br from-ink-25 to-white border border-ink-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-6"
+              class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-6"
             >
               <div class="text-center sm:text-left sm:border-r border-ink-200 sm:pr-8 shrink-0">
                 <div class="text-4xl font-bold text-ink-900 font-num tracking-tight">
@@ -494,7 +491,7 @@ const handleClose = () => {
                   <span class="w-10 font-num font-semibold text-[11px] shrink-0">{{ star }} sao</span>
                   <div class="flex-1 h-2 rounded-full bg-ink-150 overflow-hidden">
                     <div
-                      class="h-full bg-gradient-to-r from-warning-400 to-warning-500 rounded-full transition-all duration-300"
+                      class="h-full bg-warning-500 rounded-full transition-all duration-300"
                       :style="{ width: `${starStats.percentages[star as 1|2|3|4|5]}%` }"
                     />
                   </div>
@@ -514,7 +511,7 @@ const handleClose = () => {
               >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-600 to-brand-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    <div class="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                       {{ (r.customerName || 'K').charAt(0) }}
                     </div>
                     <div>
@@ -570,7 +567,7 @@ const handleClose = () => {
         <!-- TAB 3: DỊCH VỤ & BẢNG GIÁ (REAL DATA) -->
         <div v-else-if="activeTab === 'services'" class="space-y-4">
           <!-- Featured Price Card with Glass Accent -->
-          <div class="p-5 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50/70 to-brand-50/30 space-y-4 shadow-xs">
+          <div class="p-5 rounded-2xl border border-brand-200 bg-brand-50 space-y-4 shadow-xs">
             <div class="flex items-center justify-between border-b border-brand-100 pb-3">
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center shadow-xs">

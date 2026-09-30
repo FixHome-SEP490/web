@@ -380,7 +380,7 @@ const handleTestReceive = async (requestId: string) => {
     });
 
     actionSuccess.value =
-      '🧪 [Test Mode] Xác nhận đã quét mã QR thành công! Linh kiện đã chuyển sang trạng thái ĐÃ NHẬN (RECEIVED).';
+      'Xác nhận đã quét mã QR thành công. Linh kiện đã chuyển sang trạng thái đã nhận.';
     showQrInput.value = null;
     qrTokenInput.value = '';
     await loadPartRequests();
@@ -408,7 +408,7 @@ const handleUpdateUsage = async (
     });
 
     actionSuccess.value =
-      status === 'used' ? 'Đã ghi nhận linh kiện ĐÃ DÙNG.' : 'Đã ghi nhận linh kiện HOÀN TRẢ.';
+      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện hoàn trả.';
     await loadPartRequests();
     emit('parts-updated');
   } catch (err: unknown) {
@@ -460,7 +460,7 @@ const getStatusBadgeClass = (status: string) => {
 </script>
 
 <template>
-  <FhCard title="Linh kiện sửa chữa (Flow 1 & 2)">
+  <FhCard title="Linh kiện sửa chữa">
     <div class="space-y-4 text-xs">
       <!-- Alerts -->
       <div
@@ -483,7 +483,7 @@ const getStatusBadgeClass = (status: string) => {
       <div class="rounded-lg bg-brand-50/70 border border-brand-200 p-3 text-brand-900 space-y-1.5">
         <p class="font-bold flex items-center gap-1.5 text-[11px] text-brand-800">
           <Package :size="14" class="text-brand-600" />
-          QUY TẮC QUẢN LÝ LINH KIỆN FIXHOME:
+          Quy tắc quản lý linh kiện FixHome:
         </p>
         <ul class="list-disc list-inside space-y-0.5 text-[11px] text-ink-700">
           <li>
@@ -492,10 +492,10 @@ const getStatusBadgeClass = (status: string) => {
           </li>
           <li>
             <strong>Tính phí khách hàng:</strong> Khách chỉ thanh toán cho linh kiện
-            <em>thực tế được sử dụng (USED)</em> và đã được khách duyệt qua Báo giá / Chi phí phát sinh.
+            <em>thực tế được sử dụng</em> và đã được khách duyệt qua Báo giá / Chi phí phát sinh.
           </li>
           <li>
-            <strong>Linh kiện không dùng:</strong> Đánh dấu <em>Hoàn trả (RETURNED)</em> mang về kho, hoàn toàn
+            <strong>Linh kiện không dùng:</strong> Đánh dấu <em>Hoàn trả</em> mang về kho, hoàn toàn
             không tính vào chi phí đơn hàng.
           </li>
         </ul>
@@ -1133,13 +1133,13 @@ const getStatusBadgeClass = (status: string) => {
                         v-if="item.usageStatus === 'used'"
                         class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-50 text-success-700 border border-success-200 inline-flex items-center gap-1"
                       >
-                        <Check :size="11" /> ĐÃ DÙNG
+                        <Check :size="11" /> Đã dùng
                       </span>
                       <span
                         v-else-if="item.usageStatus === 'returned'"
                         class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-50 text-warning-700 border border-warning-200 inline-flex items-center gap-1"
                       >
-                        <RotateCcw :size="11" /> HOÀN TRẢ
+                        <RotateCcw :size="11" /> Hoàn trả
                       </span>
                       <span
                         v-else

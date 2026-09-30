@@ -484,7 +484,7 @@ const handleWithdraw = async () => {
       </div>
 
       <!-- Hero Wallet Balance Card -->
-      <div class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-700 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div class="space-y-2">
           <div class="flex items-center gap-2.5">
             <span class="text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">

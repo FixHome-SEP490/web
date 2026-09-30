@@ -116,7 +116,7 @@ const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
-// Quotation Items Form (D-02 Standard)
+// Quotation Items Form
 const quotationItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
 
 // Additional Cost (Chi phí phát sinh)
@@ -240,7 +240,7 @@ const heroAction = computed(() => {
     return {
       title: 'Đơn hàng đã hoàn tất thành công!',
       subtitle: 'Khách hàng đã nghiệm thu và hoàn tất thanh toán. Tiền công đã được ghi nhận vào tài khoản ví của bạn.',
-      badge: 'HOÀN TẤT',
+      badge: 'Hoàn tất',
       badgeClass: 'bg-success-100 text-success-800 border-success-300',
       btnText: 'Xem danh sách việc',
       btnAction: () => router.push('/tech/jobs'),
@@ -257,7 +257,7 @@ const heroAction = computed(() => {
         return {
           title: 'Khách đã nghiệm thu và thanh toán Online thành công!',
           subtitle: 'Hệ thống đang cập nhật trạng thái hoàn tất đơn hàng. Tiền công đã được ghi nhận.',
-          badge: 'ĐÃ THANH TOÁN',
+          badge: 'Đã thanh toán',
           badgeClass: 'bg-success-100 text-success-800 border-success-300',
           btnText: 'Làm mới & Hoàn tất ca',
           btnAction: refreshJobStatus,
@@ -273,7 +273,7 @@ const heroAction = computed(() => {
           hasCashPayment.value === 'YES'
             ? 'Khai báo số tiền mặt đã thu từ khách để khách xác nhận đối soát trên ứng dụng.'
             : 'Nhắc khách hàng thực hiện thanh toán trực tuyến qua ứng dụng FixHome (VNPAY / Ví).',
-        badge: 'CHỜ THANH TOÁN',
+        badge: 'Chờ thanh toán',
         badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
         btnText: hasCashPayment.value === 'YES' ? 'Khai báo thu tiền mặt' : 'Kiểm tra thanh toán Online',
         btnAction: hasCashPayment.value === 'YES' ? handleDeclareCash : refreshJobStatus,
@@ -286,7 +286,7 @@ const heroAction = computed(() => {
     return {
       title: 'Đã gửi yêu cầu nghiệm thu — Chờ khách hàng kiểm tra',
       subtitle: 'Mời khách kiểm tra thiết bị và bấm "Xác nhận nghiệm thu dịch vụ" trên ứng dụng FixHome.',
-      badge: 'CHỜ NGHIỆM THU',
+      badge: 'Chờ nghiệm thu',
       badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
       btnText: 'Kiểm tra khách đã duyệt chưa',
       btnAction: refreshJobStatus,
@@ -305,7 +305,7 @@ const heroAction = computed(() => {
         subtitle: 'Thực hiện công việc, sau đó chụp ít nhất 1 ảnh thiết bị sau khi sửa chữa xong.',
         badge: 'ĐANG SỬA CHỮA',
         badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-        btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hoàn thành (AFTER)',
+        btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hoàn thành (sau sửa chữa)',
         btnAction: () => afterFile.value?.click(),
         btnIcon: 'camera',
         btnVariant: 'primary' as const,
@@ -316,7 +316,7 @@ const heroAction = computed(() => {
     return {
       title: 'Đã có ảnh sau sửa — Sẵn sàng gửi yêu cầu nghiệm thu',
       subtitle: 'Kiểm tra lại linh kiện/chi phí phát sinh, sau đó gửi yêu cầu nghiệm thu tới khách.',
-      badge: 'SẴN SÀNG NGHIỆM THU',
+      badge: 'Sẵn sàng nghiệm thu',
       badgeClass: 'bg-success-100 text-success-800 border-success-300',
       btnText: 'Gửi yêu cầu nghiệm thu ngay',
       btnAction: handleCompleteOrder,
@@ -333,9 +333,9 @@ const heroAction = computed(() => {
       return {
         title: 'Đã xác nhận đến nơi — Chụp ảnh hiện trạng trước sửa chữa',
         subtitle: 'Bắt buộc chụp ít nhất 1 ảnh hiện trạng hư hỏng trước khi bắt đầu tháo máy sửa chữa.',
-        badge: 'CẦN ẢNH HIỆN TRẠNG',
+        badge: 'Cần ảnh hiện trạng',
         badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-        btnText: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hiện trạng (BEFORE)',
+        btnText: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hiện trạng (trước sửa chữa)',
         btnAction: openBeforeEvidencePicker,
         btnIcon: 'camera',
         btnVariant: 'primary' as const,
@@ -346,10 +346,10 @@ const heroAction = computed(() => {
     if (isFixedPriceOrder.value) {
       return {
         title: 'Đã có ảnh hiện trạng — Sẵn sàng bắt đầu sửa chữa',
-        subtitle: 'Đơn hàng có giá công cố định theo Booking. Bấm để bắt đầu tính giờ sửa chữa.',
+        subtitle: 'Đơn hàng có giá công cố định theo yêu cầu đặt lịch. Bấm để bắt đầu tính giờ sửa chữa.',
         badge: 'SẴN SÀNG SỬA',
         badgeClass: 'bg-success-100 text-success-800 border-success-300',
-        btnText: 'Bắt đầu sửa chữa (UNDER_REPAIR)',
+        btnText: 'Bắt đầu sửa chữa',
         btnAction: handleStartRepair,
         btnIcon: 'wrench',
         btnVariant: 'primary' as const,
@@ -360,9 +360,9 @@ const heroAction = computed(() => {
     return {
       title: 'Đã có ảnh hiện trạng — Lập báo giá hoặc Bắt đầu sửa',
       subtitle: 'Kiểm tra máy móc, nhập chi phí công & linh kiện rồi gửi báo giá hoặc bấm bắt đầu sửa.',
-      badge: 'LẬP BÁO GIÁ',
+      badge: 'Lập báo giá',
       badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-      btnText: 'Bắt đầu sửa chữa (UNDER_REPAIR)',
+      btnText: 'Bắt đầu sửa chữa',
       btnAction: handleStartRepair,
       btnIcon: 'wrench',
       btnVariant: 'primary' as const,
@@ -375,7 +375,7 @@ const heroAction = computed(() => {
     return {
       title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
       subtitle: 'Khi tới nơi trong bán kính 200 m, hãy bấm Xác nhận đến nơi để mở khóa chụp ảnh.',
-      badge: 'ĐANG DI CHUYỂN',
+      badge: 'Đang di chuyển',
       badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
       btnText: 'Xác nhận đến nơi ngay khi tới địa chỉ',
       btnAction: () => handleCheckIn(),
@@ -390,9 +390,9 @@ const heroAction = computed(() => {
   return {
     title: 'Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách',
     subtitle: 'Bấm bắt đầu di chuyển để hệ thống gửi thông báo và định vị trực tiếp cho khách hàng.',
-    badge: 'CHỜ KHỞI HÀNH',
+    badge: 'Chờ khởi hành',
     badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-    btnText: 'Bắt đầu di chuyển (En Route)',
+    btnText: 'Bắt đầu di chuyển',
     btnAction: handleEnRoute,
     btnIcon: 'navigation',
     btnVariant: 'primary' as const,
@@ -1186,9 +1186,7 @@ const refreshJobStatus = async () => {
     >
       <div class="flex items-center justify-between border-b border-ink-100 pb-3">
         <h1 class="text-base font-bold text-ink-900">Lịch sử công việc: {{ historicalJob.code }}</h1>
-        <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-ink-100 text-ink-700 border border-ink-200">
-          {{ historicalJob.status }}
-        </span>
+        <FhStatusPill :status="historicalJob.status" />
       </div>
       <p class="text-xs text-ink-600">
         Ngày ghi nhận: {{ vnDateString(historicalJob.createdAt) }}
@@ -1206,7 +1204,7 @@ const refreshJobStatus = async () => {
       <!-- 🌟 HERO NEXT STEP ACTION CARD (Tập trung hành động cốt lõi cho thợ) -->
       <div
         v-if="heroAction"
-        class="bg-gradient-to-br from-brand-900 via-brand-800 to-ink-900 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-brand-700/50 space-y-4 relative overflow-hidden"
+        class="bg-brand-600 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-brand-700/50 space-y-4 relative overflow-hidden"
       >
         <div class="absolute -right-8 -bottom-8 opacity-10 pointer-events-none">
           <Wrench :size="160" />
@@ -1301,7 +1299,7 @@ const refreshJobStatus = async () => {
         <div class="space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 pb-3">
             <div>
-              <p class="text-[11px] font-mono text-ink-400">MÃ ĐƠN HÀNG: {{ job.code }}</p>
+              <p class="text-[11px] font-mono text-ink-400">Mã đơn: {{ job.code }}</p>
               <h1 class="text-base font-bold text-ink-900 mt-0.5 flex items-center gap-2">
                 <span>{{ job.customerName }}</span>
                 <span class="text-xs font-medium text-ink-400 font-mono">({{ job.customerPhone }})</span>
@@ -1400,7 +1398,7 @@ const refreshJobStatus = async () => {
             @click="scrollToStep('step-en-route')"
           >
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono font-bold">BƯỚC 1</span>
+              <span class="text-xs text-ink-500">Bước 1</span>
               <CheckCircle2 v-if="currentStepNumber > 1" :size="13" class="text-success-600" />
               <Navigation v-else :size="13" :class="currentStepNumber === 1 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
@@ -1420,7 +1418,7 @@ const refreshJobStatus = async () => {
             @click="scrollToStep('step-check-in')"
           >
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono font-bold">BƯỚC 2</span>
+              <span class="text-xs text-ink-500">Bước 2</span>
               <CheckCircle2 v-if="gpsCheckedIn" :size="13" class="text-success-600" />
               <MapPin v-else :size="13" :class="currentStepNumber === 2 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
@@ -1440,7 +1438,7 @@ const refreshJobStatus = async () => {
             @click="scrollToStep('step-before-evidence')"
           >
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono font-bold">BƯỚC 3</span>
+              <span class="text-xs text-ink-500">Bước 3</span>
               <CheckCircle2 v-if="beforePhotoUploaded || currentStepNumber > 3" :size="13" class="text-success-600" />
               <Camera v-else :size="13" :class="currentStepNumber === 3 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
@@ -1460,7 +1458,7 @@ const refreshJobStatus = async () => {
             @click="scrollToStep('step-under-repair')"
           >
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono font-bold">BƯỚC 4</span>
+              <span class="text-xs text-ink-500">Bước 4</span>
               <CheckCircle2 v-if="completionRequested || currentStepNumber > 4" :size="13" class="text-success-600" />
               <Wrench v-else :size="13" :class="currentStepNumber === 4 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
@@ -1480,7 +1478,7 @@ const refreshJobStatus = async () => {
             @click="scrollToStep('step-completion')"
           >
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono font-bold">BƯỚC 5</span>
+              <span class="text-xs text-ink-500">Bước 5</span>
               <CheckCircle2 v-if="isCompleted" :size="13" class="text-success-600" />
               <ShieldCheck v-else :size="13" :class="currentStepNumber === 5 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
@@ -1495,9 +1493,9 @@ const refreshJobStatus = async () => {
           @parts-updated="loadJob(jobId, { silent: true })"
         />
 
-        <!-- STEP 1: Khởi hành đến nhà khách (En Route) -->
+        <!-- STEP 1: Khởi hành đến nhà khách -->
         <div id="step-en-route">
-          <FhCard title="1. Khởi hành đến nhà khách (En Route)">
+          <FhCard title="1. Khởi hành đến nhà khách">
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
               <div class="space-y-1 max-w-md">
                 <p class="text-ink-600">
@@ -1684,16 +1682,16 @@ const refreshJobStatus = async () => {
         </div>
 
         <!-- STEP 3.5: Quotation or Fixed-Price Section -->
-        <FhCard :title="isFixedPriceOrder ? '4. Giá cố định theo Booking' : '4. Lập báo giá phân tách Công & Phụ tùng (D-02 Standard)'">
+        <FhCard :title="isFixedPriceOrder ? '4. Giá cố định theo yêu cầu đặt lịch' : '4. Lập báo giá phân tách Công & Phụ tùng'">
           <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="space-y-3 text-sm">
             <p class="font-semibold text-brand-800">
-              Dịch vụ có giá cố định theo Booking đã đặt; không lập báo giá kiểm tra hiện trường lần nữa.
+              Dịch vụ có giá cố định theo yêu cầu đặt lịch đã đặt; không lập báo giá kiểm tra hiện trường lần nữa.
             </p>
             <p v-if="job?.scopeDescription" class="text-ink-700">Phạm vi đã đặt: {{ job.scopeDescription }}</p>
             <div v-if="fixedPriceTotal != null" data-testid="fixed-price-breakdown" class="rounded-xl bg-ink-50 border border-ink-200 p-3 space-y-1">
               <p>Đơn giá đã lưu: <FhMoney :amount="job?.fixedUnitPrice ?? 0" /></p>
               <p>Số lượng đã đặt: {{ job?.quantity ?? 1 }}</p>
-              <p class="font-semibold">Giá công theo Booking: <FhMoney :amount="fixedPriceTotal" /></p>
+              <p class="font-semibold">Giá công theo yêu cầu đặt lịch: <FhMoney :amount="fixedPriceTotal" /></p>
               <p class="text-ink-500 text-xs">Không bao gồm chi phí phát sinh được duyệt riêng (nếu có).</p>
             </div>
             <p v-else role="status" class="text-danger-700">
@@ -1706,7 +1704,7 @@ const refreshJobStatus = async () => {
               :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || job?.status !== 'EN_ROUTE' || fixedPriceTotal == null"
               @click="handleStartRepair"
             >
-              Bắt đầu sửa chữa (UNDER_REPAIR)
+              Bắt đầu sửa chữa
             </FhButton>
           </div>
 
@@ -1789,7 +1787,7 @@ const refreshJobStatus = async () => {
                   :disabled="actionLoading"
                   @click="handleStartRepair"
                 >
-                  Bắt đầu sửa chữa (UNDER_REPAIR)
+                  Bắt đầu sửa chữa
                 </FhButton>
                 <FhButton
                   variant="primary"
@@ -2238,7 +2236,7 @@ const refreshJobStatus = async () => {
 
           <!-- Customer Acceptance & Payment Resolution Card -->
           <div class="mt-5">
-            <FhCard title="6. Khách hàng Nghiệm thu & Thanh toán (Spec v1.2)">
+            <FhCard title="6. Khách hàng Nghiệm thu & Thanh toán ">
               <div class="space-y-4 text-xs">
                 <p class="text-ink-600 leading-relaxed">
                   Quy chuẩn thực thi: <strong>1. Khách nghiệm thu dịch vụ đạt chuẩn → 2. Tiến hành thanh toán (Tiền mặt hoặc Online) → 3. Hệ thống hoàn tất ca.</strong>
@@ -2255,7 +2253,7 @@ const refreshJobStatus = async () => {
                       <span>Đơn hàng đã hoàn tất thành công (COMPLETED)!</span>
                     </div>
                     <span class="text-xs font-bold text-success-800 bg-success-100 px-2.5 py-0.5 rounded-full border border-success-300">
-                      HOÀN TẤT
+                      Hoàn tất
                     </span>
                   </div>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-success-800">
@@ -2300,7 +2298,7 @@ const refreshJobStatus = async () => {
                         class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                         :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800'"
                       >
-                        {{ job?.customerConfirmed ? 'ĐÃ NGHIỆM THU ĐẠT' : 'CHỜ KHÁCH BẤM NGHIỆM THU' }}
+                        {{ job?.customerConfirmed ? 'Đã nghiệm thu đạt' : 'Chờ khách bấm nghiệm thu' }}
                       </span>
                     </div>
 
@@ -2332,13 +2330,13 @@ const refreshJobStatus = async () => {
                         v-if="job?.paymentStatus?.toUpperCase() === 'PAID'"
                         class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success-100 text-success-800"
                       >
-                        ĐÃ THANH TOÁN (PAID)
+                        Đã thanh toán
                       </span>
                       <span
                         v-else
                         class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-800"
                       >
-                        CHƯA THANH TOÁN
+                        Chưa thanh toán
                       </span>
                     </div>
 

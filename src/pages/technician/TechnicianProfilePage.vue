@@ -737,15 +737,8 @@ const handleSaveAvatar = async () => {
     <template v-else-if="technicianProfile">
       <!-- 1. EXECUTIVE HERO BANNER: Identity, Availability & Quick Status -->
       <div
-        class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ink-950 via-brand-950 to-brand-900 text-white p-6 sm:p-8 shadow-xl border border-white/10"
+        class="relative overflow-hidden rounded-3xl bg-brand-600 text-white p-6 sm:p-8 shadow-xl border border-white/10"
       >
-        <!-- Background Ambient Glow & Patterns -->
-        <div
-          class="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-500/15 blur-3xl pointer-events-none"
-        ></div>
-        <div
-          class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-brand-500/10 blur-3xl pointer-events-none"
-        ></div>
 
         <div class="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <!-- Left: Avatar + Identity + Key Chips -->
@@ -903,10 +896,10 @@ const handleSaveAvatar = async () => {
             <Star :size="24" class="fill-warning-500 text-warning-500" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold text-ink-500">Đánh giá khách hàng</div>
-            <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
-              <span class="text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
+            <div class="text-sm text-ink-500">Đánh giá khách hàng</div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
+              <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
+              <span class="whitespace-nowrap text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
             </div>
           </div>
         </div>
@@ -921,10 +914,10 @@ const handleSaveAvatar = async () => {
             <ShieldCheck :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold text-ink-500">Điểm độ tin cậy</div>
-            <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
-              <span class="text-xs font-semibold text-success-600">Chuẩn nhận việc</span>
+            <div class="text-sm text-ink-500">Điểm độ tin cậy</div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
+              <span class="whitespace-nowrap text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
+              <span class="whitespace-nowrap text-xs font-semibold text-success-600">Chuẩn nhận việc</span>
             </div>
           </div>
         </div>
@@ -938,10 +931,10 @@ const handleSaveAvatar = async () => {
             <FileCheck2 :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold text-ink-500">Dịch vụ nhận làm</div>
-            <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-bold font-num text-ink-900">{{ technicianProfile.skills.length }}</span>
-              <span class="text-xs text-brand-600 font-bold hover:underline">Quản lý giá &rarr;</span>
+            <div class="text-sm text-ink-500">Dịch vụ nhận làm</div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
+              <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900">{{ technicianProfile.skills.length }}</span>
+              <span class="whitespace-nowrap text-xs text-brand-600 font-bold hover:underline">Quản lý giá &rarr;</span>
             </div>
           </div>
         </div>
@@ -955,37 +948,37 @@ const handleSaveAvatar = async () => {
             <Navigation :size="24" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold text-ink-500">Bán kính quét đơn</div>
-            <div class="flex items-baseline gap-1.5 mt-0.5">
-              <span class="text-2xl font-bold font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
-              <span class="text-xs text-brand-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
+            <div class="text-sm text-ink-500">Bán kính quét đơn</div>
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
+              <span class="whitespace-nowrap text-2xl font-bold font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
+              <span class="whitespace-nowrap text-xs text-brand-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
             </div>
           </div>
         </div>
       </div>
 
       <!-- 3. DESKTOP TAB NAVIGATION (Sticky-friendly, clear segmentation) -->
-      <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-1.5 flex items-center gap-1.5 overflow-x-auto">
+      <div class="bg-white rounded-2xl border border-ink-200 p-1.5 flex items-center gap-1 overflow-x-auto" role="tablist">
         <button
           type="button"
-          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
           :class="
             activeTab === 'info'
-              ? 'bg-brand-600 text-white shadow-xs'
+              ? 'bg-brand-50 text-brand-700 font-semibold'
               : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
           "
           @click="activeTab = 'info'"
         >
           <Briefcase :size="16" />
-          <span>Hồ sơ cá nhân &amp; KYC</span>
+          <span>Hồ sơ cá nhân &amp; xác minh</span>
         </button>
 
         <button
           type="button"
-          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer relative"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer relative"
           :class="
             activeTab === 'services'
-              ? 'bg-brand-600 text-white shadow-xs'
+              ? 'bg-brand-50 text-brand-700 font-semibold'
               : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
           "
           @click="activeTab = 'services'"
@@ -1003,10 +996,10 @@ const handleSaveAvatar = async () => {
 
         <button
           type="button"
-          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
           :class="
             activeTab === 'schedule'
-              ? 'bg-brand-600 text-white shadow-xs'
+              ? 'bg-brand-50 text-brand-700 font-semibold'
               : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
           "
           @click="activeTab = 'schedule'"
@@ -1017,10 +1010,10 @@ const handleSaveAvatar = async () => {
 
         <button
           type="button"
-          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
           :class="
             activeTab === 'location'
-              ? 'bg-brand-600 text-white shadow-xs'
+              ? 'bg-brand-50 text-brand-700 font-semibold'
               : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
           "
           @click="activeTab = 'location'"
@@ -1031,15 +1024,15 @@ const handleSaveAvatar = async () => {
 
         <button
           type="button"
-          class="flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer relative"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer relative"
           :class="
             activeTab === 'reviews'
-              ? 'bg-brand-600 text-white shadow-xs'
+              ? 'bg-brand-50 text-brand-700 font-semibold'
               : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
           "
           @click="activeTab = 'reviews'"
         >
-          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-white text-white' : 'fill-warning-400 text-warning-400'" />
+          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-warning-400 text-warning-400' : 'fill-warning-400 text-warning-400'" />
           <span>Đánh giá &amp; Uy tín</span>
           <span
             v-if="technicianProfile.ratingCount > 0"
@@ -1825,7 +1818,7 @@ const handleSaveAvatar = async () => {
             </div>
 
             <!-- Big Rating Score Box -->
-            <div class="p-6 rounded-2xl bg-gradient-to-br from-warning-50/80 via-white to-warning-50/40 border border-warning-200/80 text-center space-y-2 shadow-xs">
+            <div class="p-6 rounded-2xl bg-warning-50 border border-warning-200/80 text-center space-y-2 shadow-xs">
               <div class="text-xs font-bold text-warning-700">Điểm trung bình</div>
               <div class="text-5xl font-bold font-num text-ink-900 flex items-center justify-center gap-1.5">
                 <span>{{ technicianProfile.averageRating }}</span>

@@ -1851,7 +1851,7 @@ const handleLogout = async () => {
           <!-- Section 3: Smart Radius Recommendation Action Banner -->
           <div
             v-if="inRadiusDistricts.length > 0"
-            class="rounded-2xl p-4 bg-gradient-to-r from-warning-50/90 via-brand-50/50 to-success-50/60 border border-warning-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            class="rounded-2xl p-4 bg-warning-50 border border-warning-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
           >
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-xl bg-warning-500 text-white flex items-center justify-center shrink-0 shadow-2xs">

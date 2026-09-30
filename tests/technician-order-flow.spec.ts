@@ -82,7 +82,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
 
     // Hero title shows pending en-route
     expect(wrapper.text()).toContain('Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách');
-    expect(wrapper.text()).toContain('Bắt đầu di chuyển (En Route)');
+    expect(wrapper.text()).toContain('Bắt đầu di chuyển');
 
     // Google Maps navigation link is present and correctly targets the destination
     const mapLinks = wrapper.findAll('a[href*="google.com/maps"]');

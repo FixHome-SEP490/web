@@ -23,7 +23,7 @@ const toggle = (id: string) => {
 <template>
   <section data-testid="parts-quotation-demo" role="note" class="rounded-xl border border-brand-300 bg-brand-50 p-3 space-y-3 text-xs text-brand-900">
     <h4 class="font-bold text-sm">DEMO — Chọn linh kiện để xem trước báo giá mẫu</h4>
-    <p>Đây là dữ liệu giả để hình dung cách chọn linh kiện và cộng tiền công. Không lấy từ kho/cửa hàng, không có giá hoặc bảo hành chính thức; <strong>không thêm vào báo giá thật và không gửi API</strong>.</p>
+    <p>Đây là dữ liệu giả để hình dung cách chọn linh kiện và cộng tiền công. Không lấy từ kho/cửa hàng, không có giá hoặc bảo hành chính thức; <strong>không thêm vào báo giá thật và không gửi đi đâu</strong>.</p>
     <div role="group" aria-label="Danh sách linh kiện mẫu" class="grid sm:grid-cols-3 gap-2">
       <label v-for="part in demoParts" :key="part.id" class="flex items-center justify-between gap-2 rounded-lg border border-brand-200 bg-white p-2 cursor-pointer">
         <span class="flex items-center gap-2"><input type="checkbox" :checked="selectedIds.includes(part.id)" @change="toggle(part.id)" />{{ part.name }}</span>
@@ -35,6 +35,6 @@ const toggle = (id: string) => {
       <p data-testid="parts-demo-selected">Linh kiện mẫu đã chọn: <strong>{{ selectedParts.length }}</strong> — {{ vnd(demoPartsTotal) }}</p>
       <p data-testid="parts-demo-total">Tổng báo giá mẫu: <strong>{{ vnd(demoTotal) }}</strong></p>
     </div>
-    <p class="font-semibold">Để gửi báo giá thật cho khách, thợ phải tự nhập và xác nhận biểu mẫu báo giá riêng bên dưới. Việc chọn mẫu ở đây không ảnh hưởng ServiceOrder, số dư ví hoặc thanh toán.</p>
+    <p class="font-semibold">Để gửi báo giá thật cho khách, thợ phải tự nhập và xác nhận biểu mẫu báo giá riêng bên dưới. Việc chọn mẫu ở đây không ảnh hưởng đơn sửa chữa, số dư ví hoặc thanh toán.</p>
   </section>
 </template>

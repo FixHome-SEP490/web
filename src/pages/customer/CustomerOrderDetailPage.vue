@@ -847,7 +847,7 @@ const confirmWork = async () => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-success-900 font-bold text-sm">
               <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
-              <span>Nghiệm thu dịch vụ ĐÃ ĐẠT! Vui lòng tiến hành thanh toán</span>
+              <span>Nghiệm thu dịch vụ Đã đạt! Vui lòng tiến hành thanh toán</span>
             </div>
             <span class="text-[11px] font-semibold text-success-700 bg-success-100 px-2.5 py-0.5 rounded-full">
               Bước 2: Thanh toán
@@ -1490,10 +1490,10 @@ const confirmWork = async () => {
           >
             {{
               activeWarrantyClaim
-                ? 'ĐANG XỬ LÝ BẢO HÀNH'
+                ? 'Đang xử lý bảo hành'
                 : isOrderWarrantyActive
-                ? 'BẢO HÀNH CÒN HIỆU LỰC'
-                : 'BẢO HÀNH ĐÃ HẾT HẠN'
+                ? 'Bảo hành còn hiệu lực'
+                : 'Bảo hành đã hết hạn'
             }}
           </span>
         </template>
