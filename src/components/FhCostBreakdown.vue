@@ -44,20 +44,20 @@ const partsPct = computed(() => 100 - laborPct.value);
   <div class="w-full space-y-3 p-4 bg-ink-25 rounded-[var(--radius-md)] border border-ink-200">
     <!-- Breakdown Rows -->
     <div class="space-y-2 text-sm">
-      <div class="flex items-center justify-between">
-        <span class="inline-flex items-center gap-2 text-ink-700">
+      <div class="flex items-center justify-between gap-2">
+        <span class="flex flex-1 items-center gap-2 text-ink-700 min-w-0">
           <span class="w-2.5 h-2.5 rounded-full bg-brand-400 shrink-0" />
-          <span>Tiền công thợ (Labor)</span>
+          <span class="truncate">Tiền công thợ (Labor)</span>
         </span>
-        <FhMoney :amount="laborNum" />
+        <FhMoney :amount="laborNum" class="shrink-0 font-num" />
       </div>
 
-      <div class="flex items-center justify-between">
-        <span class="inline-flex items-center gap-2 text-ink-700">
+      <div class="flex items-center justify-between gap-2 mt-1.5">
+        <span class="flex flex-1 items-center gap-2 text-ink-700 min-w-0">
           <span class="w-2.5 h-2.5 rounded-full bg-info-600 shrink-0" />
-          <span>Thiết bị & vật tư (Parts)</span>
+          <span class="truncate">Thiết bị & vật tư (Parts)</span>
         </span>
-        <FhMoney :amount="partsNum" />
+        <FhMoney :amount="partsNum" class="shrink-0 font-num" />
       </div>
     </div>
 
@@ -78,9 +78,9 @@ const partsPct = computed(() => 100 - laborPct.value);
     </div>
 
     <!-- Grand Total Row -->
-    <div class="pt-2 border-t border-ink-200 flex items-center justify-between">
-      <span class="font-semibold text-ink-900">Tổng thanh toán:</span>
-      <FhMoney :amount="totalNum" emphasis />
+    <div class="pt-2 border-t border-ink-200 flex items-center justify-between gap-2">
+      <span class="font-semibold text-ink-900 truncate">Tổng thanh toán:</span>
+      <FhMoney :amount="totalNum" emphasis class="shrink-0" />
     </div>
   </div>
 </template>

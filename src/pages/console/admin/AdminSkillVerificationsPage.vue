@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { CheckCircle2, XCircle, FileText, Award, RefreshCw, UploadCloud } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, FhStatusPill, FhConfirmDialog, type TableColumn } from '../../../components';
+import { FhButton, FhTable, FhStatusPill, FhConfirmDialog, FhSkeleton, type TableColumn } from '../../../components';
 import {
   adminSkillVerificationsApi,
   type SkillVerification,
@@ -29,6 +29,22 @@ const actionLoadingId = ref<string | null>(null);
 let latestRequest = 0;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredVerifications = computed<(SkillVerification & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: pageSize }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      technicianId: '',
+      serviceId: '',
+      status: 'PENDING',
+      documents: [],
+    } as unknown as SkillVerification & { _isSkeleton: boolean }));
+  }
+  return verifications.value;
+});
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (reason instanceof Error && reason.message) return reason.message;
@@ -201,61 +217,75 @@ const formatDate = (value: string) => {
       {{ successMessage }}
     </div>
 
-    <div class="flex items-center justify-between gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <label class="flex items-center gap-2 text-xs text-ink-500">
-        Trạng thái:
-        <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700">
-          <option value="PENDING">PENDING</option>
-          <option value="VERIFIED">VERIFIED</option>
-          <option value="REJECTED">REJECTED</option>
-          <option value="ALL">Tất cả trạng thái</option>
-        </select>
-      </label>
-    </div>
+    <FhTable :columns="columns" :rows="filteredVerifications" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có yêu cầu phù hợp.'">
+      <template #toolbar>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-ink-500">Trạng thái:</span>
+          <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600">
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="PENDING">PENDING</option>
+            <option value="VERIFIED">VERIFIED</option>
+            <option value="REJECTED">REJECTED</option>
+          </select>
+        </div>
+      </template>
 
-    <FhCard>
-      <FhTable :columns="columns" :rows="verifications" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có yêu cầu phù hợp.'">
-        <template #cell-technician="{ row }">
+      <template #cell-technician="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="120px" height="16px" class="mb-1" />
+          <FhSkeleton width="160px" height="12px" />
+        </div>
+        <div v-else>
           <div class="font-semibold text-xs text-ink-900">{{ row.technician?.fullName || row.technicianId }}</div>
           <div class="text-[11px] text-ink-500">{{ row.technician?.email || '—' }}</div>
-        </template>
-        <template #cell-service="{ row }">
-          <span class="text-xs text-ink-800">{{ row.serviceName || row.serviceId }}</span>
-        </template>
-        <template #cell-submittedAt="{ row }">
-          <span class="text-xs text-ink-500 font-num">{{ formatDate(String(row.submittedAt)) }}</span>
-        </template>
-        <template #cell-documents="{ row }">
-          <div class="space-y-1 text-[11px]">
-            <button
-              v-for="document in row.documents"
-              :key="document.id"
-              class="flex items-center gap-1 text-left text-brand-600 hover:underline"
-              type="button"
-              @click="openDocument(row, document.id)"
-            >
-              <FileText :size="12" />
-              <span>{{ document.issuedById ? 'FixHome cấp' : 'Tín chỉ của thợ' }} · {{ document.fileName }}</span>
-            </button>
-            <span v-if="row.documents.length === 0" class="text-ink-400">Chưa có tài liệu</span>
-          </div>
-        </template>
-        <template #cell-status="{ row }">
-          <FhStatusPill :status="row.status" />
-        </template>
-        <template #cell-actions="{ row }">
-          <div v-if="row.status === 'PENDING'" class="flex items-center gap-2">
-            <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="openApprove(row)">
-              <CheckCircle2 :size="14" /> Duyệt & cấp chứng chỉ
-            </FhButton>
-            <FhButton variant="danger" size="sm" :disabled="Boolean(actionLoadingId)" @click="openReject(row)">
-              <XCircle :size="14" /> Từ chối
-            </FhButton>
-          </div>
-          <span v-else class="text-xs text-ink-400">Đã xử lý</span>
-        </template>
-      </FhTable>
-    </FhCard>
+        </div>
+      </template>
+      <template #cell-service="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+        <span v-else class="text-xs text-ink-800">{{ row.serviceName || row.serviceId }}</span>
+      </template>
+      <template #cell-submittedAt="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+        <span v-else class="text-xs text-ink-500 font-num">{{ formatDate(String(row.submittedAt)) }}</span>
+      </template>
+      <template #cell-documents="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="140px" height="16px" />
+        </div>
+        <div v-else class="space-y-1 text-[11px]">
+          <button
+            v-for="document in row.documents"
+            :key="document.id"
+            class="flex items-center gap-1 text-left text-brand-600 hover:underline"
+            type="button"
+            @click="openDocument(row, document.id)"
+          >
+            <FileText :size="12" />
+            <span>{{ document.issuedById ? 'FixHome cấp' : 'Tín chỉ của thợ' }} · {{ document.fileName }}</span>
+          </button>
+          <span v-if="row.documents.length === 0" class="text-ink-400">Chưa có tài liệu</span>
+        </div>
+      </template>
+      <template #cell-status="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
+        <FhStatusPill v-else :status="row.status" />
+      </template>
+      <template #cell-actions="{ row }">
+        <div v-if="isSkeleton(row)" class="flex gap-2">
+          <FhSkeleton width="120px" height="28px" class="rounded-[var(--radius-sm)]" />
+          <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
+        </div>
+        <div v-else-if="row.status === 'PENDING'" class="flex items-center gap-2">
+          <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="openApprove(row)">
+            <CheckCircle2 :size="14" /> Duyệt & cấp chứng chỉ
+          </FhButton>
+          <FhButton variant="danger" size="sm" :disabled="Boolean(actionLoadingId)" @click="openReject(row)">
+            <XCircle :size="14" /> Từ chối
+          </FhButton>
+        </div>
+        <span v-else class="text-xs text-ink-400">Đã xử lý</span>
+      </template>
+    </FhTable>
 
     <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
       <span>Trang {{ page }} / {{ totalPages }} · {{ total }} yêu cầu</span>

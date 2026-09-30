@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Receipt, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { FhButton, FhCard, FhTable, FhStatusPill, FhMoney, type TableColumn } from '../../../components';
+import { Receipt, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { FhButton, FhTable, FhStatusPill, FhMoney, FhSkeleton, type TableColumn } from '../../../components';
 import { platformDuesApi, type PlatformDueRecord } from '../../../api/admin-platform-dues.api';
 
 const columns: TableColumn[] = [
@@ -23,6 +23,29 @@ const error = ref('');
 let latestRequest = 0;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredDues = computed<(PlatformDueRecord & { _isSkeleton?: boolean })[]>(() => {
+  if (loading.value) {
+    return Array.from({ length: pageSize }).map((_, i) => ({
+      id: `skeleton-${i}`,
+      _isSkeleton: true,
+      invoiceId: '',
+      serviceOrderId: '',
+      laborTotalSnapshot: 0,
+      fixHomePartsTotalSnapshot: 0,
+      commissionRateSnapshot: 0,
+      commissionAmountSnapshot: 0,
+      dueAmount: 0,
+      status: 'PENDING',
+      settledAt: null,
+      createdAt: '',
+      updatedAt: '',
+    } as unknown as PlatformDueRecord & { _isSkeleton: boolean }));
+  }
+  return dues.value;
+});
 
 function getErrorMessage(reason: unknown, fallback: string): string {
   if (typeof reason === 'object' && reason !== null && 'response' in reason) {
@@ -106,47 +129,64 @@ const formatDate = (value: string | null) => {
       <button class="font-semibold underline" type="button" @click="loadDues">Thử lại</button>
     </div>
 
-    <div class="flex flex-wrap items-center gap-4 bg-white p-3.5 rounded-[var(--radius-sm)] border border-ink-200 shadow-[var(--shadow-e1)]">
-      <div class="relative flex-1 min-w-[240px] max-w-sm">
-        <label class="sr-only" for="platform-due-status">Lọc theo trạng thái</label>
-        <input
-          id="platform-due-status"
-          v-model="statusFilter"
-          type="search"
-          placeholder="Lọc theo trạng thái Backend (để trống = tất cả)..."
-          class="w-full h-9 pl-9 pr-3 text-xs bg-ink-50 border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 focus:bg-white"
-        />
-        <Search :size="15" class="absolute left-3 top-2.5 text-ink-400" />
-      </div>
-      <span class="text-[11px] text-ink-400 italic">Trang kiểm toán chỉ đọc — không có thao tác quyết toán/thanh toán.</span>
-    </div>
+    <FhTable
+      :columns="columns"
+      :rows="filteredDues"
+      :loading="loading"
+      :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có công nợ phù hợp.'"
+      searchable
+      v-model:searchQuery="statusFilter"
+      search-placeholder="Lọc theo trạng thái (để trống = tất cả)..."
+    >
+      <template #toolbar>
+        <span class="text-[11px] text-ink-400 italic flex-1 text-right">Trang kiểm toán chỉ đọc — không thao tác quyết toán.</span>
+      </template>
 
-    <FhCard>
-      <FhTable :columns="columns" :rows="dues" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có công nợ phù hợp.'">
-        <template #cell-invoice="{ row }">
+      <template #cell-invoice="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="180px" height="16px" class="mb-1" />
+          <FhSkeleton width="140px" height="12px" class="mb-1" />
+          <FhSkeleton width="100px" height="12px" />
+        </div>
+        <div v-else>
           <div class="text-xs text-ink-700 font-mono">Invoice: {{ row.invoiceId }}</div>
           <div class="text-[11px] text-ink-400 font-mono">Order: {{ row.serviceOrderId }}</div>
           <div class="text-[11px] text-ink-400 font-mono">Due: {{ row.id }}</div>
-        </template>
-        <template #cell-snapshots="{ row }">
+        </div>
+      </template>
+      <template #cell-snapshots="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="120px" height="16px" class="mb-1" />
+          <FhSkeleton width="140px" height="16px" />
+        </div>
+        <div v-else>
           <div class="text-xs text-ink-700 font-num">Công: <FhMoney :amount="row.laborTotalSnapshot" /></div>
           <div class="text-xs text-ink-700 font-num">Linh kiện FH: <FhMoney :amount="row.fixHomePartsTotalSnapshot" /></div>
-        </template>
-        <template #cell-commission="{ row }">
+        </div>
+      </template>
+      <template #cell-commission="{ row }">
+        <div v-if="isSkeleton(row)">
+          <FhSkeleton width="80px" height="16px" class="mb-1" />
+          <FhSkeleton width="100px" height="16px" />
+        </div>
+        <div v-else>
           <div class="text-xs text-ink-700 font-num">Tỉ lệ: {{ row.commissionRateSnapshot }}</div>
           <div class="text-xs font-bold text-ink-900 font-num"><FhMoney :amount="row.commissionAmountSnapshot" /></div>
-        </template>
-        <template #cell-due="{ row }">
-          <span class="text-sm font-bold font-num text-brand-700"><FhMoney :amount="row.dueAmount" /></span>
-        </template>
-        <template #cell-status="{ row }">
-          <FhStatusPill :status="String(row.status)" :label="String(row.status)" />
-        </template>
-        <template #cell-settledAt="{ row }">
-          <span class="text-xs text-ink-500 font-num">{{ formatDate(row.settledAt) }}</span>
-        </template>
-      </FhTable>
-    </FhCard>
+        </div>
+      </template>
+      <template #cell-due="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="20px" />
+        <span v-else class="text-sm font-bold font-num text-brand-700"><FhMoney :amount="row.dueAmount" /></span>
+      </template>
+      <template #cell-status="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
+        <FhStatusPill v-else :status="String(row.status)" :label="String(row.status)" />
+      </template>
+      <template #cell-settledAt="{ row }">
+        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
+        <span v-else class="text-xs text-ink-500 font-num">{{ formatDate(row.settledAt) }}</span>
+      </template>
+    </FhTable>
 
     <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
       <span>Trang {{ page }} / {{ totalPages }} · {{ total }} bản ghi</span>

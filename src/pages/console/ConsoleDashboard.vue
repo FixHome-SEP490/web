@@ -36,9 +36,6 @@ const loading = ref(true);
 const loadError = ref('');
 const ops = ref<OperationalDashboard | null>(null);
 const watchOrders = ref<ServiceOrderItem[]>([]);
-
-
-
 async function loadDashboard() {
   loading.value = true;
   loadError.value = '';
@@ -97,7 +94,7 @@ onMounted(loadDashboard);
     <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
       <div v-for="i in 4" :key="i" class="bg-white rounded-3xl border border-ink-200 p-5 min-h-[140px] flex flex-col justify-end">
         <FhSkeleton height="12px" width="60%" />
-        <FhSkeleton height="28px" width="40%" />
+        <FhSkeleton height="28px" width="40%" class="mt-3" />
       </div>
     </div>
 

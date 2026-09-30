@@ -10,6 +10,10 @@ export type SupportCaseType =
   | 'parts_dispute'
   | 'warranty_dispute'
   | 'mid_job_interruption'
+  | 'property_damage'
+  | 'quality'
+  | 'pricing_dispute'
+  | 'conduct'
   | 'other';
 
 export type SupportCaseStatus = 'open' | 'in_review' | 'resolved' | 'rejected';
@@ -31,8 +35,47 @@ export interface SupportCaseSummary {
   resolutionReason?: string | null;
   evidenceRefs?: string[] | null;
   resolvedAt?: string | null;
+  isUrgent?: boolean;
+  respondBy?: string | null;
+  holdCompletion?: boolean;
+  liableParty?: string | null;
+  amount?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MySupportCase {
+  id: string;
+  caseType: SupportCaseType;
+  status: SupportCaseStatus;
+  bookingId: string | null;
+  serviceOrderId: string | null;
+  reason: string;
+  description: string | null;
+  resolutionReason: string | null;
+  evidenceRefs: string[] | null;
+  isUrgent: boolean;
+  respondBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSupportCasePayload {
+  caseType: SupportCaseType;
+  reason: string;
+  description?: string;
+  evidenceRefs?: string[];
+  bookingId?: string;
+  serviceOrderId?: string;
+  isUrgent?: boolean;
+}
+
+export interface MySupportCaseQuery {
+  page?: number;
+  limit?: number;
+  status?: SupportCaseStatus;
+  serviceOrderId?: string;
 }
 
 export interface SupportBookingContext {
@@ -89,6 +132,7 @@ export interface SupportCaseQuery {
   serviceOrderId?: string;
   assignedManagerId?: string;
   search?: string;
+  sort?: 'newest' | 'priority';
 }
 
 export interface SupportCaseResolvePayload {
@@ -96,6 +140,8 @@ export interface SupportCaseResolvePayload {
   resolutionCode: string;
   reason: string;
   evidenceRefs?: string[];
+  liableParty?: 'technician' | 'customer' | 'platform' | 'shared';
+  amount?: number;
 }
 
 export interface SupportCaseListResponse {
@@ -112,6 +158,10 @@ const CASE_TYPES: readonly SupportCaseType[] = [
   'parts_dispute',
   'warranty_dispute',
   'mid_job_interruption',
+  'property_damage',
+  'quality',
+  'pricing_dispute',
+  'conduct',
   'other',
 ];
 
@@ -203,8 +253,33 @@ function normalizeSummary(payload: unknown): SupportCaseSummary {
       'Backend returned invalid support case evidence references.',
     ),
     resolvedAt: optionalString(payload, 'resolvedAt', 'Backend returned an invalid support case response.'),
+    isUrgent: payload.isUrgent === true,
+    respondBy: optionalString(payload, 'respondBy', 'Backend returned an invalid support case response.'),
+    holdCompletion: payload.holdCompletion === true,
+    liableParty: optionalString(payload, 'liableParty', 'Backend returned an invalid support case response.'),
+    amount: optionalNumber(payload, 'amount', 'Backend returned an invalid support case response.'),
     createdAt: requiredString(payload.createdAt, 'Backend returned an invalid support case response.'),
     updatedAt: requiredString(payload.updatedAt, 'Backend returned an invalid support case response.'),
+  };
+}
+
+function normalizeMine(payload: unknown): MySupportCase {
+  const base = normalizeSummary(payload);
+  return {
+    id: base.id,
+    caseType: base.caseType,
+    status: base.status,
+    bookingId: base.bookingId ?? null,
+    serviceOrderId: base.serviceOrderId ?? null,
+    reason: base.reason,
+    description: base.description ?? null,
+    resolutionReason: base.resolutionReason ?? null,
+    evidenceRefs: base.evidenceRefs ?? null,
+    isUrgent: base.isUrgent === true,
+    respondBy: base.respondBy ?? null,
+    resolvedAt: base.resolvedAt ?? null,
+    createdAt: base.createdAt,
+    updatedAt: base.updatedAt,
   };
 }
 
@@ -341,6 +416,7 @@ function normalizeQuery(query: SupportCaseQuery): Record<string, unknown> {
     'serviceOrderId',
     'assignedManagerId',
     'search',
+    'sort',
   ] as const) {
     const value = query[key];
     if (value !== undefined && value !== null && value !== '') params[key] = value;
@@ -355,7 +431,8 @@ function assertId(id: string): string {
 function assertResolvePayload(payload: SupportCaseResolvePayload): void {
   const keys = Object.keys(payload);
   if (
-    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs'].includes(key)) ||
+    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs', 'liableParty', 'amount'].includes(key)) ||
+    (payload.amount !== undefined && (!Number.isInteger(payload.amount) || payload.amount < 0)) ||
     !['resolved', 'rejected'].includes(payload.finalStatus) ||
     !payload.resolutionCode.trim() ||
     payload.resolutionCode.length > 128 ||
@@ -386,6 +463,44 @@ export const supportCasesApi = {
   async getCase(id: string): Promise<SupportCaseDetail> {
     const response = await apiClient.get<unknown>(`/support/cases/${encodeURIComponent(assertId(id))}`);
     const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case detail response.');
+    return normalizeDetail(envelope.data);
+  },
+
+  async createCase(payload: CreateSupportCasePayload): Promise<MySupportCase> {
+    const response = await apiClient.post<unknown>('/support/cases', payload);
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case create response.');
+    return normalizeMine(envelope.data);
+  },
+
+  async listMine(query: MySupportCaseQuery = {}): Promise<{ data: MySupportCase[]; meta: PaginationMeta }> {
+    const params: Record<string, unknown> = {};
+    for (const key of ['page', 'limit', 'status', 'serviceOrderId'] as const) {
+      const value = query[key];
+      if (value !== undefined && value !== null && value !== '') params[key] = value;
+    }
+    const response = await apiClient.get<unknown>('/support/cases/mine', { params });
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case list response.');
+    if (!Array.isArray(envelope.data) || envelope.meta === undefined) {
+      invalid('Backend returned an invalid support case list response.');
+    }
+    return { data: envelope.data.map(normalizeMine), meta: normalizePagination(envelope.meta) };
+  },
+
+  async getMine(id: string): Promise<MySupportCase> {
+    const response = await apiClient.get<unknown>(`/support/cases/mine/${encodeURIComponent(assertId(id))}`);
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case detail response.');
+    return normalizeMine(envelope.data);
+  },
+
+  async startReview(id: string): Promise<SupportCaseDetail> {
+    const response = await apiClient.post<unknown>(`/support/cases/${encodeURIComponent(assertId(id))}/review`);
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case review response.');
+    return normalizeDetail(envelope.data);
+  },
+
+  async setHold(id: string, hold: boolean): Promise<SupportCaseDetail> {
+    const response = await apiClient.post<unknown>(`/support/cases/${encodeURIComponent(assertId(id))}/hold`, { hold });
+    const envelope = unwrapEnvelope(response.data, 'Backend returned an invalid support case hold response.');
     return normalizeDetail(envelope.data);
   },
 

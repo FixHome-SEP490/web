@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Wallet,
@@ -14,12 +14,17 @@ import {
   RefreshCw,
   Info,
   Filter,
+  ArrowRight,
+  Landmark,
+  Pencil,
 } from 'lucide-vue-next';
 import {
   walletApi,
   type WalletSummary,
   type WalletTransaction,
   type WithdrawalRequest,
+  type BankAccount,
+  type BankOption,
 } from '../../api/wallet.api';
 import {
   FhButton,
@@ -29,7 +34,9 @@ import {
   formatCurrencyVND,
   formatDateTimeVN,
   formatWalletTxType,
+  formatWithdrawalStatus,
 } from '../../utils/formatters';
+import { extractApiErrorMessage } from '../../utils/input-validation';
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -69,24 +76,44 @@ watch(showTopUpModal, (open) => {
 
 const showWithdrawModal = ref(false);
 const withdrawAmount = ref<number>(100000);
-const bankName = ref('Vietcombank');
-const bankAccountNumber = ref('');
-const bankAccountName = ref('');
 const withdrawSubmitting = ref(false);
 const withdrawError = ref<string | null>(null);
 
 const topUpPresets = [100000, 200000, 500000, 1000000];
 
-const popularBanks = [
-  'Vietcombank',
-  'Techcombank',
-  'MB Bank',
-  'BIDV',
-  'VietinBank',
-  'ACB',
-  'VPBank',
-  'TPBank',
-];
+// ---- Bank account the money is paid to --------------------------------------
+// Saved once and reused. The backend only accepts it when the holder name
+// matches the name verified at KYC, which is why a withdrawal never carries
+// its own bank details.
+const bankAccount = ref<BankAccount | null>(null);
+const banks = ref<BankOption[]>([]);
+const showBankModal = ref(false);
+const bankForm = ref({ bankBin: '', accountNumber: '', accountName: '' });
+const bankSaving = ref(false);
+const bankError = ref<string | null>(null);
+/** Set when the technician tried to withdraw before saving an account. */
+const bankNeededForWithdraw = ref(false);
+
+/** Falls back to the PO's 10.000 ₫ if an older backend omits the field. */
+const minimumWithdrawal = computed(() => wallet.value?.minimumWithdrawal ?? 10000);
+
+const withdrawBlockedReason = computed<string | null>(() => {
+  if (!wallet.value) return 'Đang tải ví';
+  if ((wallet.value.processingWithdrawal ?? 0) > 0) {
+    return 'Bạn có lệnh rút đang được chuyển về ngân hàng';
+  }
+  if (wallet.value.pendingWithdrawal > 0) return 'Bạn có lệnh rút đang chờ duyệt';
+  if (wallet.value.withdrawableBalance < minimumWithdrawal.value) {
+    return `Cần tối thiểu ${formatCurrencyVND(minimumWithdrawal.value)} có thể rút`;
+  }
+  return null;
+});
+
+/** Only the last four digits are shown outside the edit form. */
+const maskedAccountNumber = computed(() => {
+  const number = bankAccount.value?.accountNumber ?? '';
+  return number.length > 4 ? `•••• ${number.slice(-4)}` : number;
+});
 
 const loadWallet = async () => {
   try {
@@ -118,6 +145,23 @@ const loadTransactions = async () => {
   }
 };
 
+const loadBankAccount = async () => {
+  try {
+    bankAccount.value = await walletApi.getMyBankAccount();
+  } catch (err) {
+    console.error('Failed to load bank account:', err);
+  }
+};
+
+const loadBanks = async () => {
+  if (banks.value.length > 0) return;
+  try {
+    banks.value = await walletApi.listBanks();
+  } catch (err) {
+    console.error('Failed to load bank list:', err);
+  }
+};
+
 const loadWithdrawals = async () => {
   wdLoading.value = true;
   try {
@@ -137,7 +181,7 @@ const loadWithdrawals = async () => {
 
 const refreshAll = async () => {
   refreshing.value = true;
-  await loadWallet();
+  await Promise.all([loadWallet(), loadBankAccount()]);
   if (activeTab.value === 'transactions') {
     await loadTransactions();
   } else {
@@ -165,7 +209,7 @@ const returnBanner = ref<{ type: 'success' | 'error'; message: string } | null>(
 
 onMounted(async () => {
   loading.value = true;
-  await loadWallet();
+  await Promise.all([loadWallet(), loadBankAccount()]);
   await loadTransactions();
   loading.value = false;
 
@@ -245,39 +289,90 @@ const handleTopUp = async () => {
   }
 };
 
+// Bank account handlers
+const openBankModal = async (forWithdraw = false) => {
+  bankNeededForWithdraw.value = forWithdraw;
+  bankError.value = null;
+  bankForm.value = {
+    bankBin: bankAccount.value?.bankBin ?? '',
+    accountNumber: bankAccount.value?.accountNumber ?? '',
+    accountName: bankAccount.value?.accountName ?? '',
+  };
+  showBankModal.value = true;
+  await loadBanks();
+};
+
+const handleSaveBank = async () => {
+  bankError.value = null;
+  const accountNumber = bankForm.value.accountNumber.trim();
+  const accountName = bankForm.value.accountName.trim();
+  if (!bankForm.value.bankBin) {
+    bankError.value = 'Vui lòng chọn ngân hàng';
+    return;
+  }
+  if (!/^\d{6,19}$/.test(accountNumber)) {
+    bankError.value = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 19 số';
+    return;
+  }
+  if (!accountName) {
+    bankError.value = 'Vui lòng nhập tên chủ tài khoản';
+    return;
+  }
+
+  bankSaving.value = true;
+  try {
+    bankAccount.value = await walletApi.saveMyBankAccount({
+      bankBin: bankForm.value.bankBin,
+      accountNumber,
+      accountName,
+    });
+    showBankModal.value = false;
+    // They came here on the way to withdrawing: carry on to where they meant to go.
+    if (bankNeededForWithdraw.value) openWithdraw();
+  } catch (err: unknown) {
+    bankError.value = extractApiErrorMessage(err, 'Không lưu được tài khoản ngân hàng');
+  } finally {
+    bankSaving.value = false;
+  }
+};
+
 // Withdrawal Handler
+const openWithdraw = () => {
+  if (withdrawBlockedReason.value) return;
+  if (!bankAccount.value) {
+    void openBankModal(true);
+    return;
+  }
+  withdrawError.value = null;
+  withdrawAmount.value = Math.min(
+    Math.max(100000, minimumWithdrawal.value),
+    wallet.value?.withdrawableBalance ?? 0,
+  );
+  showWithdrawModal.value = true;
+};
+
 const handleWithdraw = async () => {
   withdrawError.value = null;
+  const amount = Number(withdrawAmount.value);
   const max = wallet.value?.withdrawableBalance ?? 0;
-  if (!withdrawAmount.value || withdrawAmount.value < 50000) {
-    withdrawError.value = 'Số tiền rút tối thiểu là 50.000 ₫';
+  if (!Number.isInteger(amount) || amount < minimumWithdrawal.value) {
+    withdrawError.value = `Số tiền rút tối thiểu là ${formatCurrencyVND(minimumWithdrawal.value)}`;
     return;
   }
-  if (withdrawAmount.value > max) {
+  if (amount > max) {
     withdrawError.value = `Số tiền rút không được vượt quá số dư khả dụng (${formatCurrencyVND(max)})`;
-    return;
-  }
-  if (!bankName.value.trim() || !bankAccountNumber.value.trim() || !bankAccountName.value.trim()) {
-    withdrawError.value = 'Vui lòng điền đầy đủ thông tin tài khoản ngân hàng';
     return;
   }
 
   withdrawSubmitting.value = true;
   try {
-    await walletApi.requestWithdrawal({
-      amount: withdrawAmount.value,
-      bankName: bankName.value.trim(),
-      bankAccountNumber: bankAccountNumber.value.trim(),
-      bankAccountName: bankAccountName.value.trim().toUpperCase(),
-    });
+    await walletApi.requestWithdrawal(amount);
     showWithdrawModal.value = false;
     await loadWallet();
     activeTab.value = 'withdrawals';
     await loadWithdrawals();
   } catch (err: unknown) {
-    withdrawError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Tạo yêu cầu rút tiền thất bại';
+    withdrawError.value = extractApiErrorMessage(err, 'Tạo yêu cầu rút tiền thất bại');
   } finally {
     withdrawSubmitting.value = false;
   }
@@ -442,9 +537,9 @@ const handleWithdraw = async () => {
           <button
             type="button"
             class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-extrabold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="wallet.withdrawableBalance <= 0 || wallet.pendingWithdrawal > 0"
-            :title="wallet.pendingWithdrawal > 0 ? 'Bạn đang có lệnh rút chờ xử lý' : 'Rút tiền về tài khoản ngân hàng'"
-            @click="showWithdrawModal = true"
+            :disabled="!!withdrawBlockedReason"
+            :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
+            @click="openWithdraw"
           >
             <ArrowUpRight :size="16" />
             <span>Rút tiền về ngân hàng</span>
@@ -457,8 +552,8 @@ const handleWithdraw = async () => {
         <!-- Card 1: Withdrawable Balance -->
         <div
           class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
-          @click="wallet.withdrawableBalance > 0 && wallet.pendingWithdrawal <= 0 ? (showWithdrawModal = true) : null"
-          :title="wallet.withdrawableBalance > 0 && wallet.pendingWithdrawal <= 0 ? 'Bấm để yêu cầu rút tiền' : undefined"
+          @click="openWithdraw"
+          :title="withdrawBlockedReason ?? 'Bấm để yêu cầu rút tiền'"
         >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
             <span>Số dư có thể rút</span>
@@ -497,16 +592,50 @@ const handleWithdraw = async () => {
           title="Bấm để xem danh sách lệnh rút tiền"
         >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>Đang chờ duyệt rút</span>
+            <span>{{ (wallet.processingWithdrawal ?? 0) > 0 ? 'Đang chuyển về ngân hàng' : 'Đang chờ duyệt rút' }}</span>
             <Clock :size="16" class="text-violet-600" />
           </div>
           <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-violet-700 transition-colors">
-            {{ formatCurrencyVND(wallet.pendingWithdrawal) }}
+            {{ formatCurrencyVND(wallet.pendingWithdrawal + (wallet.processingWithdrawal ?? 0)) }}
           </div>
           <p class="text-[11px] text-ink-500">
-            Đang được Service Manager thẩm định chuyển khoản
+            {{
+              (wallet.processingWithdrawal ?? 0) > 0
+                ? 'Đã duyệt, hệ thống đang chuyển khoản tự động'
+                : 'Đang chờ Quản lý dịch vụ duyệt, duyệt xong tiền tự chuyển'
+            }}
           </p>
         </div>
+      </div>
+
+      <!-- Receiving bank account -->
+      <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <Landmark :size="20" />
+          </div>
+          <div v-if="bankAccount" class="min-w-0">
+            <div class="text-xs font-bold text-ink-500">Tài khoản nhận tiền rút</div>
+            <div class="text-sm font-extrabold text-ink-900 truncate">
+              {{ bankAccount.bankName }} · <span class="font-num">{{ maskedAccountNumber }}</span>
+            </div>
+            <div class="text-[11px] text-ink-500 truncate">{{ bankAccount.accountName }}</div>
+          </div>
+          <div v-else class="min-w-0">
+            <div class="text-sm font-extrabold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
+            <p class="text-[11px] text-ink-500">
+              Khai một lần, tên chủ tài khoản phải trùng tên đã xác minh danh tính
+            </p>
+          </div>
+        </div>
+        <FhButton
+          :variant="bankAccount ? 'secondary' : 'primary'"
+          size="md"
+          @click="openBankModal(false)"
+        >
+          <Pencil v-if="bankAccount" :size="14" />
+          <span>{{ bankAccount ? 'Đổi tài khoản' : 'Khai báo tài khoản' }}</span>
+        </FhButton>
       </div>
 
       <!-- Main Navigation Tabs -->
@@ -562,6 +691,7 @@ const handleWithdraw = async () => {
                   { id: 'PLATFORM_FEE', label: 'Phí nền tảng' },
                   { id: 'TOP_UP', label: 'Nạp tiền' },
                   { id: 'WITHDRAW', label: 'Rút tiền' },
+                  { id: 'WITHDRAW_REFUND', label: 'Hoàn tiền rút' },
                   { id: 'ADJUSTMENT', label: 'Điều chỉnh' },
                 ]"
                 :key="f.id"
@@ -730,17 +860,29 @@ const handleWithdraw = async () => {
                     <div class="text-[11px] text-ink-500 font-num">{{ w.bankAccountNumber }} — {{ w.bankAccountName }}</div>
                   </td>
                   <td class="py-3.5 px-3 whitespace-nowrap">
-                    <FhStatusPill :status="w.status" />
+                    <FhStatusPill :status="w.status" :label="formatWithdrawalStatus(w.status).label" />
                   </td>
                   <td class="py-3.5 px-3 text-ink-500 max-w-xs">
                     <span v-if="w.status === 'REJECTED' && w.rejectReason" class="text-rose-600 font-medium">
                       Lý do: {{ w.rejectReason }}
                     </span>
-                    <span v-else-if="w.status === 'SUCCESS' && w.processedAt">
-                      Đã xử lý lúc {{ formatDateTimeVN(w.processedAt) }}
+                    <span v-else-if="w.status === 'FAILED'" class="text-rose-600 font-medium">
+                      Không chuyển được<template v-if="w.failureReason">: {{ w.failureReason }}</template>.
+                      Tiền đã được hoàn lại vào ví.
+                    </span>
+                    <span v-else-if="w.status === 'SUCCESS'">
+                      <template v-if="w.payoutBankReference">
+                        Mã giao dịch ngân hàng: <strong class="font-num text-ink-700">{{ w.payoutBankReference }}</strong>
+                      </template>
+                      <template v-else-if="w.processedAt">
+                        Đã chuyển lúc {{ formatDateTimeVN(w.processedAt) }}
+                      </template>
+                    </span>
+                    <span v-else-if="w.status === 'PROCESSING'">
+                      Đã duyệt, đang chuyển về ngân hàng
                     </span>
                     <span v-else-if="w.status === 'PENDING'">
-                      Đang đợi Service Manager phê duyệt
+                      Đang chờ Quản lý dịch vụ duyệt
                     </span>
                     <span v-else>—</span>
                   </td>
@@ -901,7 +1043,7 @@ const handleWithdraw = async () => {
               <input
                 v-model.number="withdrawAmount"
                 type="number"
-                min="50000"
+                :min="minimumWithdrawal"
                 :max="wallet?.withdrawableBalance ?? 0"
                 step="10000"
                 placeholder="100000"
@@ -909,38 +1051,31 @@ const handleWithdraw = async () => {
               />
               <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
             </div>
-            <p class="text-[11px] text-ink-500">Rút tối thiểu 50.000 ₫</p>
+            <p class="text-[11px] text-ink-500">Rút tối thiểu {{ formatCurrencyVND(minimumWithdrawal) }}</p>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Ngân hàng thụ hưởng:</label>
-            <select
-              v-model="bankName"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-            >
-              <option v-for="b in popularBanks" :key="b" :value="b">{{ b }}</option>
-            </select>
+          <!-- Where the money goes: always the saved, KYC-checked account -->
+          <div v-if="bankAccount" class="p-3.5 rounded-xl border border-ink-200 text-xs space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-ink-700">Chuyển về tài khoản</span>
+              <button
+                type="button"
+                class="text-brand-600 hover:text-brand-700 font-bold"
+                @click="showWithdrawModal = false; openBankModal(false)"
+              >
+                Đổi
+              </button>
+            </div>
+            <div class="font-extrabold text-ink-900">
+              {{ bankAccount.bankName }} · <span class="font-num">{{ bankAccount.accountNumber }}</span>
+            </div>
+            <div class="text-ink-500">{{ bankAccount.accountName }}</div>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Số tài khoản ngân hàng:</label>
-            <input
-              v-model="bankAccountNumber"
-              type="text"
-              placeholder="VD: 1012345678"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 font-num text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-            />
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Tên chủ tài khoản (In hoa không dấu):</label>
-            <input
-              v-model="bankAccountName"
-              type="text"
-              placeholder="VD: NGUYEN VAN A"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-            />
-          </div>
+          <p class="text-[11px] text-ink-500 flex items-start gap-1.5">
+            <Info :size="13" class="shrink-0 mt-0.5 text-brand-600" />
+            <span>Quản lý dịch vụ duyệt xong, hệ thống tự chuyển khoản qua payOS. Nếu chuyển không thành công, tiền được hoàn lại vào ví.</span>
+          </p>
 
           <div class="flex items-center justify-end gap-3 pt-2">
             <FhButton variant="secondary" size="md" @click="showWithdrawModal = false">
@@ -953,6 +1088,98 @@ const handleWithdraw = async () => {
               @click="handleWithdraw"
             >
               Gửi yêu cầu rút tiền
+            </FhButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: TÀI KHOẢN NHẬN TIỀN -->
+    <div
+      v-if="showBankModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+    >
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
+            <Landmark class="text-brand-600" :size="20" />
+            <span>Tài khoản nhận tiền rút</span>
+          </h3>
+          <button
+            type="button"
+            class="text-ink-400 hover:text-ink-700 text-lg font-bold"
+            aria-label="Đóng"
+            @click="showBankModal = false"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p
+          v-if="bankNeededForWithdraw"
+          class="p-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-900"
+        >
+          Bạn cần khai báo tài khoản nhận tiền trước khi rút. Khai một lần, lần sau hệ thống điền sẵn.
+        </p>
+
+        <div v-if="bankError" class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2">
+          <AlertCircle :size="16" class="shrink-0 mt-0.5" /> <span>{{ bankError }}</span>
+        </div>
+
+        <div class="space-y-4">
+          <div class="space-y-1.5">
+            <label for="bank-bin" class="block text-xs font-bold text-ink-700">Ngân hàng</label>
+            <select
+              id="bank-bin"
+              v-model="bankForm.bankBin"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+            >
+              <option value="" disabled>{{ banks.length ? 'Chọn ngân hàng' : 'Đang tải danh sách ngân hàng...' }}</option>
+              <option v-for="b in banks" :key="b.bin" :value="b.bin">{{ b.shortName }} — {{ b.name }}</option>
+            </select>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="bank-account-number" class="block text-xs font-bold text-ink-700">Số tài khoản</label>
+            <input
+              id="bank-account-number"
+              v-model="bankForm.accountNumber"
+              type="text"
+              inputmode="numeric"
+              maxlength="19"
+              autocomplete="off"
+              placeholder="VD: 1012345678"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 font-num text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="bank-account-name" class="block text-xs font-bold text-ink-700">Tên chủ tài khoản</label>
+            <input
+              id="bank-account-name"
+              v-model="bankForm.accountName"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+              placeholder="VD: NGUYEN VAN A"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+            />
+            <p class="text-[11px] text-ink-500">
+              Phải trùng họ tên đã xác minh danh tính. Gõ có dấu hay không dấu đều được.
+            </p>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <FhButton variant="secondary" size="md" @click="showBankModal = false">
+              Huỷ bỏ
+            </FhButton>
+            <FhButton
+              variant="primary"
+              size="md"
+              :loading="bankSaving"
+              @click="handleSaveBank"
+            >
+              Lưu tài khoản
             </FhButton>
           </div>
         </div>

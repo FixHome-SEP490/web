@@ -3,32 +3,38 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '../../stores/auth';
 import {
   Wallet,
-  ArrowUpRight,
   CheckCircle2,
   XCircle,
-  Search,
   RefreshCw,
   Sliders,
   AlertCircle,
   FileText,
   ShieldAlert,
+  Landmark,
 } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import {
   walletApi,
   type WalletListItem,
   type WithdrawalRequest,
   type WalletTransaction,
   type WalletConfig,
+  type PayoutOverview,
 } from '../../api/wallet.api';
 import {
   FhButton,
   FhStatusPill,
+  FhTable,
+  FhSkeleton,
+  type TableColumn,
 } from '../../components';
 import {
   formatCurrencyVND,
   formatDateTimeVN,
   formatWalletTxType,
+  formatWithdrawalStatus,
 } from '../../utils/formatters';
+import { extractApiErrorMessage } from '../../utils/input-validation';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.userRole === 'ADMIN');
@@ -44,6 +50,32 @@ const walletsPage = ref(1);
 const walletsTotalPages = ref(1);
 const walletsTotal = ref(0);
 
+const walletsColumns: TableColumn[] = [
+  { key: 'technician', label: 'Kỹ thuật viên' },
+  { key: 'balance', label: 'Số dư thực tế', width: '150px' },
+  { key: 'eligibleForJobs', label: 'Điều kiện nhận việc', width: '180px' },
+  { key: 'updatedAt', label: 'Cập nhật lần cuối', width: '160px' },
+  { key: 'actions', label: 'Thao tác', width: '200px' },
+];
+
+const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+
+const filteredWallets = computed<(WalletListItem & { _isSkeleton?: boolean })[]>(() => {
+  if (walletsLoading.value) {
+    return Array.from({ length: 15 }).map((_, i) => ({
+      id: `skeleton-w-${i}`,
+      _isSkeleton: true,
+      technicianId: '',
+      technician: { fullName: '', phoneNumber: '', email: '' },
+      balance: 0,
+      eligibleForJobs: false,
+      createdAt: '',
+      updatedAt: '',
+    } as unknown as WalletListItem & { _isSkeleton: boolean }));
+  }
+  return wallets.value;
+});
+
 // Tab 2: Withdrawals State
 const withdrawals = ref<WithdrawalRequest[]>([]);
 const wdLoading = ref(false);
@@ -51,6 +83,36 @@ const wdStatusFilter = ref<string>('ALL');
 const wdPage = ref(1);
 const wdTotalPages = ref(1);
 const wdTotal = ref(0);
+
+const wdColumns: TableColumn[] = [
+  { key: 'requestedAt', label: 'Thời gian', width: '150px' },
+  { key: 'technician', label: 'Kỹ thuật viên' },
+  { key: 'amount', label: 'Số tiền rút', width: '150px' },
+  { key: 'bankInfo', label: 'Tài khoản thụ hưởng' },
+  { key: 'status', label: 'Trạng thái', width: '150px' },
+  { key: 'actions', label: 'Hành động', width: '220px' },
+];
+
+const filteredWithdrawals = computed<(WithdrawalRequest & { _isSkeleton?: boolean })[]>(() => {
+  if (wdLoading.value) {
+    return Array.from({ length: 15 }).map((_, i) => ({
+      id: `skeleton-wd-${i}`,
+      _isSkeleton: true,
+      technicianId: '',
+      technician: null,
+      amount: 0,
+      bankName: '',
+      bankAccountNumber: '',
+      bankAccountName: '',
+      status: 'PENDING',
+      rejectReason: null,
+      requestedAt: '',
+      processedAt: null,
+      processedByUserId: null,
+    } as unknown as WithdrawalRequest & { _isSkeleton: boolean }));
+  }
+  return withdrawals.value;
+});
 
 // Tab 3: Config State (Admin)
 const config = ref<WalletConfig | null>(null);
@@ -66,6 +128,11 @@ const showApproveModal = ref(false);
 const showRejectModal = ref(false);
 const rejectReason = ref('');
 const actionSubmitting = ref(false);
+
+// Automatic payouts: what has left, what is moving, and what the source holds.
+const payoutOverview = ref<PayoutOverview | null>(null);
+/** Id of the withdrawal whose payout is being re-checked with payOS. */
+const reconcilingId = ref<string | null>(null);
 
 // Admin Adjust Modal
 const showAdjustModal = ref(false);
@@ -119,6 +186,14 @@ const loadWithdrawals = async () => {
   }
 };
 
+const loadPayoutOverview = async () => {
+  try {
+    payoutOverview.value = await walletApi.getPayoutOverview();
+  } catch (err) {
+    console.error('Failed to load payout overview:', err);
+  }
+};
+
 const loadConfig = async () => {
   if (!isAdmin.value) return;
   configLoading.value = true;
@@ -161,18 +236,48 @@ const openApprove = (wd: WithdrawalRequest) => {
   showApproveModal.value = true;
 };
 
+/** Say exactly where the payout ended up; each outcome needs a different reaction. */
+const announcePayout = (result: WithdrawalRequest & { message: string }) => {
+  if (result.status === 'SUCCESS') {
+    toast.success(result.message, {
+      description: result.payoutBankReference
+        ? `Mã giao dịch ngân hàng: ${result.payoutBankReference}`
+        : undefined,
+    });
+  } else if (result.status === 'FAILED') {
+    toast.error(result.message, { description: result.failureReason ?? undefined });
+  } else {
+    toast.info(result.message);
+  }
+};
+
 const handleApprove = async () => {
   if (!selectedWd.value) return;
   actionSubmitting.value = true;
   try {
-    await walletApi.approveWithdrawal(selectedWd.value.id);
+    const result = await walletApi.approveWithdrawal(selectedWd.value.id);
     showApproveModal.value = false;
-    await loadWithdrawals();
-    await loadWallets();
+    announcePayout(result);
+    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
   } catch (err: unknown) {
-    alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Phê duyệt thất bại');
+    // Refusals such as a short payout source leave the request PENDING and
+    // nothing debited, so the message is what the manager needs to act on.
+    toast.error(extractApiErrorMessage(err, 'Duyệt chi thất bại'));
   } finally {
     actionSubmitting.value = false;
+  }
+};
+
+const handleReconcile = async (wd: WithdrawalRequest) => {
+  reconcilingId.value = wd.id;
+  try {
+    const result = await walletApi.reconcileWithdrawal(wd.id);
+    announcePayout(result);
+    await Promise.all([loadWithdrawals(), loadPayoutOverview()]);
+  } catch (err: unknown) {
+    toast.error(extractApiErrorMessage(err, 'Không kiểm tra được với payOS'));
+  } finally {
+    reconcilingId.value = null;
   }
 };
 
@@ -192,10 +297,9 @@ const handleReject = async () => {
   try {
     await walletApi.rejectWithdrawal(selectedWd.value.id, rejectReason.value.trim());
     showRejectModal.value = false;
-    await loadWithdrawals();
-    await loadWallets();
+    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
   } catch (err: unknown) {
-    alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Từ chối thất bại');
+    toast.error(extractApiErrorMessage(err, 'Từ chối thất bại'));
   } finally {
     actionSubmitting.value = false;
   }
@@ -268,13 +372,17 @@ watch(wdStatusFilter, () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'wallets') loadWallets();
-  if (tab === 'withdrawals') loadWithdrawals();
+  if (tab === 'withdrawals') {
+    loadWithdrawals();
+    loadPayoutOverview();
+  }
   if (tab === 'config') loadConfig();
 });
 
 onMounted(() => {
   loadWallets();
   loadWithdrawals();
+  loadPayoutOverview();
   if (isAdmin.value) {
     loadConfig();
   }
@@ -359,269 +467,326 @@ onMounted(() => {
 
     <!-- TAB 1: DANH SÁCH VÍ KỸ THUẬT VIÊN -->
     <div v-if="activeTab === 'wallets'" class="space-y-4">
-      <!-- Search & Filters -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="relative max-w-sm w-full">
-          <Search :size="16" class="absolute left-3 top-3 text-ink-400" />
-          <input
-            v-model="walletSearch"
-            type="text"
-            placeholder="Tìm theo tên thợ, SĐT, email..."
-            class="w-full pl-9 pr-4 py-2 rounded-xl border border-ink-200 text-xs text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-            @keyup.enter="walletsPage = 1; loadWallets()"
-          />
-        </div>
-
-        <div class="flex items-center gap-2 text-xs font-bold">
-          <span class="text-ink-400">Trạng thái:</span>
-          <select
-            v-model="walletEligibilityFilter"
-            class="px-3 py-2 rounded-xl border border-ink-200 text-xs font-semibold text-ink-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          >
-            <option value="ALL">Tất cả điều kiện</option>
-            <option value="ELIGIBLE">Đủ điều kiện nhận việc</option>
-            <option value="INELIGIBLE">Dưới mức tối thiểu</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Loading State -->
-      <div v-if="walletsLoading" class="py-16 text-center text-ink-400 text-xs">
-        <RefreshCw class="animate-spin inline-block mr-2" :size="18" />
-        Đang tải danh sách ví kỹ thuật viên...
-      </div>
-
-      <!-- Empty State -->
-      <div
-        v-else-if="wallets.length === 0"
-        class="py-16 text-center text-ink-400 text-xs space-y-2 bg-white rounded-2xl border border-ink-100"
+      <FhTable
+        :columns="walletsColumns"
+        :rows="filteredWallets"
+        :loading="walletsLoading"
+        :empty-text="'Không tìm thấy ví kỹ thuật viên nào phù hợp'"
+        searchable
+        v-model:searchQuery="walletSearch"
+        search-placeholder="Tìm theo tên thợ, SĐT, email..."
+        @update:searchQuery="walletsPage = 1; loadWallets()"
       >
-        <Wallet :size="36" class="mx-auto text-ink-300 stroke-1" />
-        <p>Không tìm thấy ví kỹ thuật viên nào phù hợp</p>
-      </div>
+        <template #toolbar>
 
-      <!-- Wallets Table -->
-      <div v-else class="bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-ink-50 text-ink-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-ink-100">
-              <tr>
-                <th class="py-3 px-4">Kỹ thuật viên</th>
-                <th class="py-3 px-4">Số dư thực tế</th>
-                <th class="py-3 px-4">Điều kiện nhận việc</th>
-                <th class="py-3 px-4">Cập nhật lần cuối</th>
-                <th class="py-3 px-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-ink-100">
-              <tr v-for="item in wallets" :key="item.id" class="hover:bg-ink-50/50">
-                <td class="py-3.5 px-4">
-                  <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-extrabold text-sm shrink-0">
-                      {{ item.technician.fullName?.charAt(0)?.toUpperCase() || 'T' }}
-                    </div>
-                    <div>
-                      <div class="font-extrabold text-ink-900 text-xs sm:text-sm">
-                        {{ item.technician.fullName }}
-                      </div>
-                      <div class="text-[11px] text-ink-500 font-num">
-                        {{ item.technician.phoneNumber }} • {{ item.technician.email }}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td class="py-3.5 px-4 whitespace-nowrap">
-                  <div
-                    class="text-sm font-extrabold font-num"
-                    :class="[item.balance < 0 ? 'text-rose-600' : 'text-ink-900']"
-                  >
-                    {{ formatCurrencyVND(item.balance) }}
-                  </div>
-                </td>
-                <td class="py-3.5 px-4 whitespace-nowrap">
-                  <span
-                    v-if="item.eligibleForJobs"
-                    class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  >
-                    <CheckCircle2 :size="12" /> Đủ điều kiện
-                  </span>
-                  <span
-                    v-else
-                    class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200"
-                  >
-                    <XCircle :size="12" /> Dưới mức ký quỹ
-                  </span>
-                </td>
-                <td class="py-3.5 px-4 text-ink-500 whitespace-nowrap">
-                  {{ formatDateTimeVN(item.updatedAt) }}
-                </td>
-                <td class="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
-                  <FhButton variant="secondary" size="sm" @click="viewTransactions(item)">
-                    <FileText :size="13" class="mr-1" />
-                    Lịch sử
-                  </FhButton>
-                  <FhButton
-                    v-if="isAdmin"
-                    variant="primary"
-                    size="sm"
-                    @click="openAdjustModal(item)"
-                  >
-                    Điều chỉnh
-                  </FhButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination -->
-        <div
-          v-if="walletsTotalPages > 1"
-          class="flex items-center justify-between p-4 border-t border-ink-100 text-xs text-ink-500"
-        >
-          <span>Trang {{ walletsPage }} / {{ walletsTotalPages }} (Tổng {{ walletsTotal }} ví)</span>
-          <div class="flex items-center gap-2">
-            <FhButton
-              variant="secondary"
-              size="sm"
-              :disabled="walletsPage <= 1"
-              @click="walletsPage--; loadWallets()"
+          <div class="flex items-center gap-2 text-xs font-bold ml-auto">
+            <span class="text-ink-500">Trạng thái:</span>
+            <select
+              v-model="walletEligibilityFilter"
+              class="h-9 px-3 rounded-sm border border-ink-200 text-xs text-ink-700 focus:outline-none focus:border-brand-600"
             >
-              Trước
+              <option value="ALL">Tất cả điều kiện</option>
+              <option value="ELIGIBLE">Đủ điều kiện nhận việc</option>
+              <option value="INELIGIBLE">Dưới mức tối thiểu</option>
+            </select>
+          </div>
+        </template>
+
+        <template #cell-technician="{ row }">
+          <div v-if="isSkeleton(row)" class="flex items-center gap-3">
+            <FhSkeleton width="36px" height="36px" class="rounded-full shrink-0" />
+            <div>
+              <FhSkeleton width="120px" height="16px" class="mb-1" />
+              <FhSkeleton width="160px" height="12px" />
+            </div>
+          </div>
+          <div v-else class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-extrabold text-sm shrink-0">
+              {{ row.technician.fullName?.charAt(0)?.toUpperCase() || 'T' }}
+            </div>
+            <div>
+              <div class="font-extrabold text-ink-900 text-xs">
+                {{ row.technician.fullName }}
+              </div>
+              <div class="text-[11px] text-ink-500 font-num">
+                {{ row.technician.phoneNumber }} • {{ row.technician.email }}
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-balance="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+          <div
+            v-else
+            class="text-sm font-extrabold font-num"
+            :class="[row.balance < 0 ? 'text-rose-600' : 'text-ink-900']"
+          >
+            {{ formatCurrencyVND(row.balance) }}
+          </div>
+        </template>
+
+        <template #cell-eligibleForJobs="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="24px" class="rounded-full" />
+          <template v-else>
+            <span
+              v-if="row.eligibleForJobs"
+              class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+            >
+              <CheckCircle2 :size="12" /> Đủ điều kiện
+            </span>
+            <span
+              v-else
+              class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200"
+            >
+              <XCircle :size="12" /> Dưới mức ký quỹ
+            </span>
+          </template>
+        </template>
+
+        <template #cell-updatedAt="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+          <span v-else class="text-ink-500 whitespace-nowrap">{{ formatDateTimeVN(row.updatedAt) }}</span>
+        </template>
+
+        <template #cell-actions="{ row }">
+          <div v-if="isSkeleton(row)" class="flex justify-end gap-2">
+            <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
+            <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" v-if="isAdmin" />
+          </div>
+          <div v-else class="flex justify-end gap-2">
+            <FhButton variant="secondary" size="sm" @click="viewTransactions(row)">
+              <FileText :size="13" class="mr-1" />
+              Lịch sử
             </FhButton>
             <FhButton
-              variant="secondary"
+              v-if="isAdmin"
+              variant="primary"
               size="sm"
-              :disabled="walletsPage >= walletsTotalPages"
-              @click="walletsPage++; loadWallets()"
+              @click="openAdjustModal(row)"
             >
-              Sau
+              Điều chỉnh
             </FhButton>
           </div>
+        </template>
+      </FhTable>
+
+      <!-- Pagination -->
+      <div
+        v-if="walletsTotalPages > 1"
+        class="flex items-center justify-between text-xs text-ink-500"
+      >
+        <span>Trang {{ walletsPage }} / {{ walletsTotalPages }} (Tổng {{ walletsTotal }} ví)</span>
+        <div class="flex items-center gap-2">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="walletsPage <= 1"
+            @click="walletsPage--; loadWallets()"
+          >
+            Trước
+          </FhButton>
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="walletsPage >= walletsTotalPages"
+            @click="walletsPage++; loadWallets()"
+          >
+            Sau
+          </FhButton>
         </div>
       </div>
     </div>
 
     <!-- TAB 2: YÊU CẦU RÚT TIỀN -->
     <div v-else-if="activeTab === 'withdrawals'" class="space-y-4">
-      <!-- Status Filter -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2 text-xs font-bold">
-          <span class="text-ink-400">Trạng thái:</span>
-          <select
-            v-model="wdStatusFilter"
-            class="px-3 py-2 rounded-xl border border-ink-200 text-xs font-semibold text-ink-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">Chờ duyệt chi (PENDING)</option>
-            <option value="SUCCESS">Đã chi tiền (SUCCESS)</option>
-            <option value="REJECTED">Đã từ chối (REJECTED)</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Loading State -->
-      <div v-if="wdLoading" class="py-16 text-center text-ink-400 text-xs">
-        <RefreshCw class="animate-spin inline-block mr-2" :size="18" />
-        Đang tải danh sách yêu cầu rút tiền...
-      </div>
-
-      <!-- Empty State -->
-      <div
-        v-else-if="withdrawals.length === 0"
-        class="py-16 text-center text-ink-400 text-xs space-y-2 bg-white rounded-2xl border border-ink-100"
-      >
-        <ArrowUpRight :size="36" class="mx-auto text-ink-300 stroke-1" />
-        <p>Không có yêu cầu rút tiền nào</p>
-      </div>
-
-      <!-- Withdrawals Table -->
-      <div v-else class="bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-ink-50 text-ink-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-ink-100">
-              <tr>
-                <th class="py-3 px-4">Thời gian</th>
-                <th class="py-3 px-4">Kỹ thuật viên</th>
-                <th class="py-3 px-4">Số tiền rút</th>
-                <th class="py-3 px-4">Tài khoản thụ hưởng</th>
-                <th class="py-3 px-4">Trạng thái</th>
-                <th class="py-3 px-4 text-right">Hành động</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-ink-100">
-              <tr v-for="w in withdrawals" :key="w.id" class="hover:bg-ink-50/50">
-                <td class="py-3.5 px-4 whitespace-nowrap text-ink-600">
-                  {{ formatDateTimeVN(w.requestedAt) }}
-                </td>
-                <td class="py-3.5 px-4">
-                  <div class="font-extrabold text-ink-900">
-                    {{ w.technician?.fullName || 'KTV FixHome' }}
-                  </div>
-                  <div class="text-[11px] text-ink-500 font-num">
-                    {{ w.technician?.phoneNumber || w.technicianId }}
-                  </div>
-                </td>
-                <td class="py-3.5 px-4 font-extrabold font-num text-ink-900 text-sm whitespace-nowrap">
-                  {{ formatCurrencyVND(w.amount) }}
-                </td>
-                <td class="py-3.5 px-4">
-                  <div class="font-bold text-ink-900">{{ w.bankName }}</div>
-                  <div class="text-[11px] text-ink-600 font-num">
-                    {{ w.bankAccountNumber }} — <span class="uppercase font-bold">{{ w.bankAccountName }}</span>
-                  </div>
-                </td>
-                <td class="py-3.5 px-4 whitespace-nowrap">
-                  <FhStatusPill :status="w.status" />
-                  <div v-if="w.status === 'REJECTED' && w.rejectReason" class="text-[10px] text-rose-600 mt-1 max-w-xs">
-                    Lý do: {{ w.rejectReason }}
-                  </div>
-                  <div v-if="w.status === 'SUCCESS' && w.processedAt" class="text-[10px] text-ink-400 mt-1">
-                    {{ formatDateTimeVN(w.processedAt) }}
-                  </div>
-                </td>
-                <td class="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
-                  <template v-if="w.status === 'PENDING'">
-                    <FhButton variant="primary" size="sm" @click="openApprove(w)">
-                      <CheckCircle2 :size="13" class="mr-1" />
-                      Duyệt chi
-                    </FhButton>
-                    <FhButton variant="danger" size="sm" @click="openReject(w)">
-                      <XCircle :size="13" class="mr-1" />
-                      Từ chối
-                    </FhButton>
-                  </template>
-                  <span v-else class="text-ink-400 text-xs italic">Đã giải quyết</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination -->
+      <!-- Payout overview -->
+      <div v-if="payoutOverview" class="space-y-3">
         <div
-          v-if="wdTotalPages > 1"
-          class="flex items-center justify-between p-4 border-t border-ink-100 text-xs text-ink-500"
+          v-if="payoutOverview.provider === 'mock'"
+          class="p-3 rounded-xl bg-warning-50 border border-warning-600/20 text-warning-600 text-xs font-bold flex items-center gap-2"
         >
-          <span>Trang {{ wdPage }} / {{ wdTotalPages }} (Tổng {{ wdTotal }} yêu cầu)</span>
-          <div class="flex items-center gap-2">
-            <FhButton
-              variant="secondary"
-              size="sm"
-              :disabled="wdPage <= 1"
-              @click="wdPage--; loadWithdrawals()"
-            >
-              Trước
-            </FhButton>
-            <FhButton
-              variant="secondary"
-              size="sm"
-              :disabled="wdPage >= wdTotalPages"
-              @click="wdPage++; loadWithdrawals()"
-            >
-              Sau
-            </FhButton>
+          <AlertCircle :size="15" class="shrink-0" />
+          <span>Đang chạy chế độ giả lập chi hộ: duyệt chi không chuyển tiền thật.</span>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="flex items-center justify-between text-[11px] font-bold text-ink-500">
+              <span>Ví nguồn chi hộ</span>
+              <Landmark :size="14" class="text-brand-600" />
+            </div>
+            <div class="text-lg font-extrabold font-num text-ink-900">
+              {{ payoutOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(payoutOverview.sourceBalance) }}
+            </div>
+            <p class="text-[11px] text-ink-500">
+              {{ payoutOverview.provider === 'mock' ? 'Số dư giả lập' : 'Ví payOS dùng để chi hộ' }}
+            </p>
           </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Đã chuyển cho kỹ thuật viên</div>
+            <div class="text-lg font-extrabold font-num text-success-600">
+              {{ formatCurrencyVND(payoutOverview.paidOut.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">{{ payoutOverview.paidOut.count }} lệnh thành công</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Đang chuyển</div>
+            <div class="text-lg font-extrabold font-num text-info-600">
+              {{ formatCurrencyVND(payoutOverview.processing.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">{{ payoutOverview.processing.count }} lệnh chờ payOS xác nhận</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
+            <div class="text-[11px] font-bold text-ink-500">Chờ duyệt</div>
+            <div class="text-lg font-extrabold font-num text-warning-600">
+              {{ formatCurrencyVND(payoutOverview.pending.amount) }}
+            </div>
+            <p class="text-[11px] text-ink-500">
+              {{ payoutOverview.pending.count }} yêu cầu · {{ payoutOverview.failed.count }} lệnh chuyển thất bại
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <FhTable
+        :columns="wdColumns"
+        :rows="filteredWithdrawals"
+        :loading="wdLoading"
+        :empty-text="'Không có yêu cầu rút tiền nào'"
+      >
+        <template #toolbar>
+          <div class="flex items-center gap-2 text-xs font-bold ml-auto">
+            <span class="text-ink-500">Trạng thái:</span>
+            <select
+              v-model="wdStatusFilter"
+              class="h-9 px-3 rounded-sm border border-ink-200 text-xs text-ink-700 focus:outline-none focus:border-brand-600"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="PROCESSING">Đang chuyển tiền</option>
+              <option value="SUCCESS">Đã chi tiền</option>
+              <option value="FAILED">Chuyển thất bại</option>
+              <option value="REJECTED">Đã từ chối</option>
+            </select>
+          </div>
+        </template>
+
+        <template #cell-requestedAt="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+          <span v-else class="text-ink-600">{{ formatDateTimeVN(row.requestedAt) }}</span>
+        </template>
+
+        <template #cell-technician="{ row }">
+          <div v-if="isSkeleton(row)">
+            <FhSkeleton width="120px" height="16px" class="mb-1" />
+            <FhSkeleton width="100px" height="12px" />
+          </div>
+          <div v-else>
+            <div class="font-extrabold text-ink-900">
+              {{ row.technician?.fullName || 'KTV FixHome' }}
+            </div>
+            <div class="text-[11px] text-ink-500 font-num">
+              {{ row.technician?.phoneNumber || row.technicianId }}
+            </div>
+          </div>
+        </template>
+
+        <template #cell-amount="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
+          <span v-else class="font-extrabold font-num text-ink-900 text-sm whitespace-nowrap">
+            {{ formatCurrencyVND(row.amount) }}
+          </span>
+        </template>
+
+        <template #cell-bankInfo="{ row }">
+          <div v-if="isSkeleton(row)">
+            <FhSkeleton width="140px" height="16px" class="mb-1" />
+            <FhSkeleton width="180px" height="12px" />
+          </div>
+          <div v-else>
+            <div class="font-bold text-ink-900">{{ row.bankName }}</div>
+            <div class="text-[11px] text-ink-600 font-num">
+              {{ row.bankAccountNumber }} — <span class="uppercase font-bold">{{ row.bankAccountName }}</span>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-status="{ row }">
+          <FhSkeleton v-if="isSkeleton(row)" width="100px" height="24px" class="rounded-full" />
+          <div v-else>
+            <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
+            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="text-[10px] text-rose-600 mt-1 max-w-xs whitespace-normal">
+              Lý do: {{ row.rejectReason }}
+            </div>
+            <div v-if="row.status === 'FAILED'" class="text-[10px] text-rose-600 mt-1 max-w-xs whitespace-normal">
+              {{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví
+            </div>
+            <div v-if="row.status === 'PROCESSING' && row.failureReason" class="text-[10px] text-info-600 mt-1 max-w-xs whitespace-normal">
+              {{ row.failureReason }}
+            </div>
+            <div v-if="row.status === 'SUCCESS'" class="text-[10px] text-ink-400 mt-1">
+              <template v-if="row.payoutBankReference">
+                Mã GD: <span class="font-num font-bold text-ink-600">{{ row.payoutBankReference }}</span>
+              </template>
+              <template v-else-if="row.processedAt">{{ formatDateTimeVN(row.processedAt) }}</template>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-actions="{ row }">
+          <div v-if="isSkeleton(row)" class="flex justify-end gap-2">
+            <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
+            <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
+          </div>
+          <div v-else class="flex justify-end gap-2">
+            <template v-if="row.status === 'PENDING'">
+              <FhButton variant="primary" size="sm" @click="openApprove(row)">
+                <CheckCircle2 :size="13" class="mr-1" />
+                Duyệt và chi
+              </FhButton>
+              <FhButton variant="danger" size="sm" @click="openReject(row)">
+                <XCircle :size="13" class="mr-1" />
+                Từ chối
+              </FhButton>
+            </template>
+            <FhButton
+              v-else-if="row.status === 'PROCESSING'"
+              variant="secondary"
+              size="sm"
+              :loading="reconcilingId === row.id"
+              @click="handleReconcile(row)"
+            >
+              <RefreshCw :size="13" class="mr-1" />
+              Kiểm tra lại
+            </FhButton>
+            <span v-else class="text-ink-400 text-xs italic">Đã giải quyết</span>
+          </div>
+        </template>
+      </FhTable>
+
+      <!-- Pagination -->
+      <div
+        v-if="wdTotalPages > 1"
+        class="flex items-center justify-between text-xs text-ink-500"
+      >
+        <span>Trang {{ wdPage }} / {{ wdTotalPages }} (Tổng {{ wdTotal }} yêu cầu)</span>
+        <div class="flex items-center gap-2">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="wdPage <= 1"
+            @click="wdPage--; loadWithdrawals()"
+          >
+            Trước
+          </FhButton>
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="wdPage >= wdTotalPages"
+            @click="wdPage++; loadWithdrawals()"
+          >
+            Sau
+          </FhButton>
         </div>
       </div>
     </div>
@@ -701,7 +866,7 @@ onMounted(() => {
       <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
         <h3 class="text-base font-extrabold text-ink-900 flex items-center gap-2">
           <CheckCircle2 class="text-emerald-600" :size="20" />
-          <span>Xác nhận duyệt chi tiền</span>
+          <span>Duyệt và chi tiền tự động</span>
         </h3>
 
         <div class="p-4 rounded-2xl bg-ink-50 border border-ink-100 space-y-2 text-xs">
@@ -728,7 +893,14 @@ onMounted(() => {
         </div>
 
         <p class="text-xs text-ink-500">
-          Vui lòng xác nhận bạn đã hoàn tất lệnh chuyển khoản đến tài khoản ngân hàng trên. Hệ thống sẽ ghi nhận trạng thái THÀNH CÔNG và trừ chính thức số dư ký quỹ của kỹ thuật viên.
+          Hệ thống sẽ trừ ví kỹ thuật viên rồi tự chuyển khoản qua payOS tới tài khoản trên — bạn không cần chuyển tay.
+          Nếu ngân hàng không nhận, số tiền được hoàn lại vào ví kỹ thuật viên. Tài khoản này đã được đối chiếu tên với hồ sơ xác minh danh tính.
+        </p>
+        <p
+          v-if="payoutOverview?.provider === 'mock'"
+          class="text-[11px] font-bold text-warning-600"
+        >
+          Đang ở chế độ giả lập: không có tiền thật được chuyển.
         </p>
 
         <div class="flex items-center justify-end gap-3 pt-2">
@@ -741,7 +913,7 @@ onMounted(() => {
             :loading="actionSubmitting"
             @click="handleApprove"
           >
-            Xác nhận đã chi tiền
+            Duyệt và chi tiền
           </FhButton>
         </div>
       </div>

@@ -68,6 +68,7 @@ const currentStep = ref(1);
 const loading = ref(true);
 const saving = ref(false);
 const statusData = ref<OnboardingStatusResponse | null>(null);
+const isReviewing = ref(false);
 
 // ----------------- Step 1: Personal Info -----------------
 const fullName = ref(authStore.user?.fullName || '');
@@ -842,10 +843,24 @@ const isRejected = computed(
 );
 const isSubmitted = computed(
   () =>
-    (statusData.value?.onboardingStatus === 'submitted' || statusData.value?.verificationStatus === 'pending') &&
+    statusData.value?.onboardingStatus === 'submitted' &&
     !isApproved.value &&
     !isRejected.value,
 );
+
+const handleReviewSubmitted = () => {
+  isReviewing.value = true;
+  currentStep.value = 1;
+};
+
+const handleEditRejected = () => {
+  isReviewing.value = true;
+  currentStep.value = 1;
+};
+
+const handleReturnToStatus = () => {
+  isReviewing.value = false;
+};
 
 const loadInitialData = async () => {
   loading.value = true;
@@ -863,7 +878,36 @@ const loadInitialData = async () => {
 
     if (statusRes) {
       statusData.value = statusRes;
-      currentStep.value = Math.min(5, Math.max(1, statusRes.currentStep));
+      if (statusRes.onboardingStatus === 'not_started') {
+        currentStep.value = 1;
+      } else {
+        currentStep.value = Math.min(5, Math.max(1, statusRes.currentStep));
+      }
+
+      if (statusRes.fullName) {
+        fullName.value = statusRes.fullName;
+      }
+      if (statusRes.dateOfBirth) {
+        dateOfBirth.value = statusRes.dateOfBirth;
+      }
+      if (statusRes.gender) {
+        gender.value = statusRes.gender;
+      }
+      if (statusRes.citizenIdNumber) {
+        citizenIdNumber.value = statusRes.citizenIdNumber;
+      }
+      if (statusRes.phoneNumber) {
+        phoneNumber.value = statusRes.phoneNumber;
+      }
+      if (statusRes.yearsExperience !== undefined && statusRes.yearsExperience !== null) {
+        yearsExperience.value = statusRes.yearsExperience;
+      }
+      if (statusRes.bio) {
+        bio.value = statusRes.bio;
+      }
+      if (statusRes.selectedServiceIds && statusRes.selectedServiceIds.length > 0) {
+        selectedServiceIds.value = statusRes.selectedServiceIds;
+      }
 
       if (statusRes.kycSubmitted) {
         slots.value.forEach((s) => (s.uploaded = true));
@@ -1008,6 +1052,7 @@ const handleFinalSubmit = async () => {
   try {
     const res = await technicianOnboardingApi.submit();
     statusData.value = res;
+    isReviewing.value = false;
     toast.success('Hồ sơ của bạn đã được gửi phê duyệt thành công!');
   } catch (err: unknown) {
     const msg = getErrorMessage(err, 'Không thể nộp hồ sơ. Vui lòng kiểm tra lại các bước.');
@@ -1029,7 +1074,7 @@ const handleLogout = async () => {
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <router-link to="/" class="flex items-center gap-2.5">
-          <img src="/logo.png" alt="FixHome" class="w-8 h-8 object-contain rounded-lg" />
+          <img :src="'/logo.png'" alt="FixHome" class="w-8 h-8 object-contain rounded-lg" />
           <div class="flex flex-col">
             <span class="text-base font-extrabold tracking-tight">
               <span class="text-brand-600">Fix</span><span class="text-emerald-600">Home</span>
@@ -1084,7 +1129,7 @@ const handleLogout = async () => {
 
       <!-- Pending / Submitted Screen -->
       <div
-        v-else-if="isSubmitted"
+        v-else-if="isSubmitted && !isReviewing"
         class="bg-white rounded-3xl p-8 sm:p-12 border border-amber-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
         <div class="w-20 h-20 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-inner animate-pulse">
@@ -1117,7 +1162,7 @@ const handleLogout = async () => {
         </div>
 
         <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <FhButton variant="secondary" size="md" @click="currentStep = 1">
+          <FhButton variant="secondary" size="md" @click="handleReviewSubmitted">
             <span>Xem lại thông tin đã gửi</span>
           </FhButton>
           <FhButton variant="primary" size="md" @click="loadInitialData">
@@ -1129,7 +1174,7 @@ const handleLogout = async () => {
 
       <!-- Rejected Screen -->
       <div
-        v-else-if="isRejected"
+        v-else-if="isRejected && !isReviewing"
         class="bg-white rounded-3xl p-8 sm:p-12 border border-rose-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
         <div class="w-20 h-20 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
@@ -1144,7 +1189,7 @@ const handleLogout = async () => {
             {{ statusData?.rejectionReason || 'Hồ sơ xác thực danh tính hoặc thông tin thợ chưa đạt tiêu chuẩn. Vui lòng kiểm tra lại ảnh chụp CCCD, video khuôn mặt và thông tin liên quan.' }}
           </p>
         </div>
-        <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="currentStep = 1">
+        <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="handleEditRejected">
           <span>Chỉnh sửa lại hồ sơ</span>
           <ArrowRight :size="16" class="ml-2" />
         </FhButton>
@@ -1152,6 +1197,34 @@ const handleLogout = async () => {
 
       <!-- Active Wizard Form -->
       <div v-else class="space-y-8">
+        <!-- Reviewing / Editing Banner -->
+        <div
+          v-if="isReviewing"
+          class="rounded-2xl p-4 border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs"
+          :class="isRejected ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-amber-50 border-amber-200 text-amber-900'"
+        >
+          <div class="flex items-center gap-2.5 text-xs">
+            <AlertCircle v-if="isRejected" :size="18" class="text-rose-600 shrink-0" />
+            <Clock v-else :size="18" class="text-amber-600 shrink-0" />
+            <div>
+              <span v-if="isRejected" class="font-bold">
+                Hồ sơ cần cập nhật lại: {{ statusData?.rejectionReason || 'Vui lòng bổ sung đầy đủ thông tin.' }}
+              </span>
+              <span v-else class="font-bold">
+                Bạn đang ở chế độ xem lại hồ sơ đã nộp chờ phê duyệt.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="handleReturnToStatus"
+            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0"
+            :class="isRejected ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'"
+          >
+            Quay lại màn hình trạng thái
+          </button>
+        </div>
+
         <!-- Wizard Title & Subtitle -->
         <div class="text-center space-y-2">
           <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold uppercase tracking-wider">
@@ -2097,9 +2170,24 @@ const handleLogout = async () => {
               <ArrowLeft :size="16" class="mr-2" />
               <span>Quay lại</span>
             </FhButton>
-            <FhButton variant="primary" size="lg" :loading="saving" @click="handleFinalSubmit">
+            <FhButton
+              v-if="!isSubmitted || isRejected"
+              variant="primary"
+              size="lg"
+              :loading="saving"
+              @click="handleFinalSubmit"
+            >
               <CheckCircle2 :size="16" class="mr-2" />
-              <span>Gửi hồ sơ xét duyệt</span>
+              <span>{{ isRejected ? 'Gửi lại hồ sơ xét duyệt' : 'Gửi hồ sơ xét duyệt' }}</span>
+            </FhButton>
+            <FhButton
+              v-else
+              variant="primary"
+              size="lg"
+              @click="handleReturnToStatus"
+            >
+              <CheckCircle2 :size="16" class="mr-2" />
+              <span>Quay lại màn hình chờ duyệt</span>
             </FhButton>
           </div>
         </div>

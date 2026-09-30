@@ -8,6 +8,43 @@ export interface TypingEvent {
   isTyping: boolean;
 }
 
+/** Why a call stopped. Mirrors CallEndReason in the backend. */
+export type CallEndReason =
+  | 'rejected'
+  | 'cancelled'
+  | 'ended'
+  | 'timeout'
+  | 'disconnected'
+  | 'busy';
+
+export interface IncomingCallEvent {
+  callId: string;
+  conversationId: string;
+  fromUserId: string;
+}
+
+export interface CallAcceptedEvent {
+  callId: string;
+  conversationId: string;
+}
+
+export interface CallEndedEvent {
+  callId: string;
+  conversationId: string;
+  reason: CallEndReason;
+}
+
+export interface CallSignalEvent<T> {
+  callId: string;
+  data: T;
+}
+
+export interface CallInviteResult {
+  ok: boolean;
+  callId?: string;
+  reason?: 'invalid' | 'forbidden' | 'busy';
+}
+
 export interface ChatSocketHandlers {
   onMessageNew?: (message: ChatMessage) => void;
   onMessageUpdated?: (message: ChatMessage) => void;
@@ -16,7 +53,16 @@ export interface ChatSocketHandlers {
   onTyping?: (event: TypingEvent) => void;
   onStatusChange?: (connected: boolean) => void;
   onReconnected?: () => void;
+  onCallIncoming?: (event: IncomingCallEvent) => void;
+  onCallAccepted?: (event: CallAcceptedEvent) => void;
+  onCallEnded?: (event: CallEndedEvent) => void;
+  onCallOffer?: (event: CallSignalEvent<RTCSessionDescriptionInit>) => void;
+  onCallAnswer?: (event: CallSignalEvent<RTCSessionDescriptionInit>) => void;
+  onCallIce?: (event: CallSignalEvent<RTCIceCandidateInit>) => void;
 }
+
+/** How long to wait for the server to acknowledge a call request. */
+const ACK_TIMEOUT_MS = 8000;
 
 function socketOrigin(): string {
   const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
@@ -29,9 +75,18 @@ class ChatSocketService {
   private connecting: Promise<void> | null = null;
   private joined = new Set<string>();
   private hasConnectedOnce = false;
+  /**
+   * Handed over by the server on connect:ready. Empty is a valid answer — two
+   * peers on one Wi-Fi network reach each other without any STUN server.
+   */
+  private ice: RTCIceServer[] = [];
 
   get connected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  get iceServers(): RTCIceServer[] {
+    return this.ice;
   }
 
   subscribe(handlers: ChatSocketHandlers): () => void {
@@ -107,6 +162,34 @@ class ChatSocketService {
         this.emitToHandlers('onConversationUpdated', p),
       );
       socket.on('typing', (e: TypingEvent) => this.emitToHandlers('onTyping', e));
+
+      socket.on(
+        'connect:ready',
+        (payload: { iceServers?: RTCIceServer[] }) => {
+          this.ice = payload?.iceServers ?? [];
+        },
+      );
+
+      // Call signalling. The server addresses every one of these from the call
+      // it stored, so anything arriving here is genuinely for this account.
+      socket.on('call:incoming', (e: IncomingCallEvent) =>
+        this.emitToHandlers('onCallIncoming', e),
+      );
+      socket.on('call:accepted', (e: CallAcceptedEvent) =>
+        this.emitToHandlers('onCallAccepted', e),
+      );
+      socket.on('call:ended', (e: CallEndedEvent) =>
+        this.emitToHandlers('onCallEnded', e),
+      );
+      socket.on('call:offer', (e: CallSignalEvent<RTCSessionDescriptionInit>) =>
+        this.emitToHandlers('onCallOffer', e),
+      );
+      socket.on('call:answer', (e: CallSignalEvent<RTCSessionDescriptionInit>) =>
+        this.emitToHandlers('onCallAnswer', e),
+      );
+      socket.on('call:ice', (e: CallSignalEvent<RTCIceCandidateInit>) =>
+        this.emitToHandlers('onCallIce', e),
+      );
     });
 
     try {
@@ -130,6 +213,72 @@ class ChatSocketService {
     this.socket?.emit('typing', { conversationId, isTyping });
   }
 
+  // --------------------------------------------------------- voice signalling
+
+  /**
+   * Ask the server to ring the other participant.
+   *
+   * Only a conversation id is sent: the server works out who that means. The
+   * promise resolves rather than rejects on failure so the caller can show the
+   * right Vietnamese message for a busy line versus a closed conversation.
+   */
+  callInvite(conversationId: string): Promise<CallInviteResult> {
+    return this.emitWithAck<CallInviteResult>('call:invite', { conversationId });
+  }
+
+  callAccept(callId: string): Promise<{ ok: boolean }> {
+    return this.emitWithAck('call:accept', { callId });
+  }
+
+  callReject(callId: string): Promise<{ ok: boolean }> {
+    return this.emitWithAck('call:reject', { callId });
+  }
+
+  callCancel(callId: string): Promise<{ ok: boolean }> {
+    return this.emitWithAck('call:cancel', { callId });
+  }
+
+  callEnd(callId: string): Promise<{ ok: boolean }> {
+    return this.emitWithAck('call:end', { callId });
+  }
+
+  sendOffer(callId: string, data: RTCSessionDescriptionInit): void {
+    this.socket?.emit('call:offer', { callId, data });
+  }
+
+  sendAnswer(callId: string, data: RTCSessionDescriptionInit): void {
+    this.socket?.emit('call:answer', { callId, data });
+  }
+
+  sendIceCandidate(callId: string, data: RTCIceCandidateInit): void {
+    this.socket?.emit('call:ice', { callId, data });
+  }
+
+  /**
+   * A hang-up that never comes back would leave the caller stuck on a ringing
+   * screen, so every acknowledgement is bounded.
+   */
+  private emitWithAck<T extends { ok: boolean }>(
+    event: string,
+    payload: Record<string, unknown>,
+  ): Promise<T> {
+    const socket = this.socket;
+    if (!socket?.connected) {
+      return Promise.resolve({ ok: false } as T);
+    }
+    return new Promise<T>((resolve) => {
+      let settled = false;
+      const done = (value: T) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => done({ ok: false } as T), ACK_TIMEOUT_MS);
+      socket.emit(event, payload, (ack: T) => done(ack ?? ({ ok: false } as T)));
+    });
+  }
+
   updateToken(token: string): void {
     if (this.socket) {
       this.socket.auth = { token };
@@ -147,6 +296,7 @@ class ChatSocketService {
     this.socket = null;
     this.joined.clear();
     this.hasConnectedOnce = false;
+    this.ice = [];
   }
 }
 
