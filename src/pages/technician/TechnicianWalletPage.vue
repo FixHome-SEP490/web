@@ -37,6 +37,7 @@ import {
   formatWithdrawalStatus,
 } from '../../utils/formatters';
 import { extractApiErrorMessage } from '../../utils/input-validation';
+import { toast } from 'vue-sonner';
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -102,7 +103,7 @@ const withdrawBlockedReason = computed<string | null>(() => {
   if ((wallet.value.processingWithdrawal ?? 0) > 0) {
     return 'Bạn có lệnh rút đang được chuyển về ngân hàng';
   }
-  if (wallet.value.pendingWithdrawal > 0) return 'Bạn có lệnh rút đang chờ duyệt';
+  if (wallet.value.pendingWithdrawal > 0) return 'Bạn có lệnh rút đang chờ xử lý';
   if (wallet.value.withdrawableBalance < minimumWithdrawal.value) {
     return `Cần tối thiểu ${formatCurrencyVND(minimumWithdrawal.value)} có thể rút`;
   }
@@ -366,13 +367,26 @@ const handleWithdraw = async () => {
 
   withdrawSubmitting.value = true;
   try {
-    await walletApi.requestWithdrawal(amount);
+    // No approval step: this call is the payout, and it says how it ended.
+    const result = await walletApi.requestWithdrawal(amount);
     showWithdrawModal.value = false;
-    await loadWallet();
+    if (result.status === 'SUCCESS') {
+      toast.success(result.message, {
+        description: result.payoutBankReference
+          ? `Mã giao dịch ngân hàng: ${result.payoutBankReference}`
+          : undefined,
+      });
+    } else if (result.status === 'FAILED') {
+      toast.error(result.message, { description: result.failureReason ?? undefined });
+    } else {
+      toast.info(result.message);
+    }
+    await Promise.all([loadWallet(), loadTransactions()]);
     activeTab.value = 'withdrawals';
     await loadWithdrawals();
   } catch (err: unknown) {
-    withdrawError.value = extractApiErrorMessage(err, 'Tạo yêu cầu rút tiền thất bại');
+    // Refused before any money moved: the wallet is untouched.
+    withdrawError.value = extractApiErrorMessage(err, 'Rút tiền không thành công');
   } finally {
     withdrawSubmitting.value = false;
   }
@@ -592,7 +606,7 @@ const handleWithdraw = async () => {
           title="Bấm để xem danh sách lệnh rút tiền"
         >
           <div class="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>{{ (wallet.processingWithdrawal ?? 0) > 0 ? 'Đang chuyển về ngân hàng' : 'Đang chờ duyệt rút' }}</span>
+            <span>Đang chuyển về ngân hàng</span>
             <Clock :size="16" class="text-violet-600" />
           </div>
           <div class="text-2xl font-extrabold font-num text-ink-900 group-hover:text-violet-700 transition-colors">
@@ -601,8 +615,8 @@ const handleWithdraw = async () => {
           <p class="text-[11px] text-ink-500">
             {{
               (wallet.processingWithdrawal ?? 0) > 0
-                ? 'Đã duyệt, hệ thống đang chuyển khoản tự động'
-                : 'Đang chờ Quản lý dịch vụ duyệt, duyệt xong tiền tự chuyển'
+                ? 'Ngân hàng đang xử lý lệnh chuyển, bạn sẽ nhận thông báo khi tiền về'
+                : 'Rút tiền được chuyển ngay, không cần chờ duyệt'
             }}
           </p>
         </div>
@@ -879,10 +893,10 @@ const handleWithdraw = async () => {
                       </template>
                     </span>
                     <span v-else-if="w.status === 'PROCESSING'">
-                      Đã duyệt, đang chuyển về ngân hàng
+                      Ngân hàng đang xử lý lệnh chuyển
                     </span>
                     <span v-else-if="w.status === 'PENDING'">
-                      Đang chờ Quản lý dịch vụ duyệt
+                      Đang chờ xử lý
                     </span>
                     <span v-else>—</span>
                   </td>
@@ -1009,7 +1023,7 @@ const handleWithdraw = async () => {
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-extrabold text-ink-900 flex items-center gap-2">
             <ArrowUpRight class="text-brand-600" :size="20" />
-            <span>Yêu cầu rút tiền về ngân hàng</span>
+            <span>Rút tiền về ngân hàng</span>
           </h3>
           <button
             type="button"
@@ -1074,7 +1088,7 @@ const handleWithdraw = async () => {
 
           <p class="text-[11px] text-ink-500 flex items-start gap-1.5">
             <Info :size="13" class="shrink-0 mt-0.5 text-brand-600" />
-            <span>Quản lý dịch vụ duyệt xong, hệ thống tự chuyển khoản qua payOS. Nếu chuyển không thành công, tiền được hoàn lại vào ví.</span>
+            <span>Tiền được chuyển ngay về tài khoản trên qua payOS, không cần chờ duyệt. Nếu chuyển không thành công, tiền được hoàn lại vào ví.</span>
           </p>
 
           <div class="flex items-center justify-end gap-3 pt-2">
@@ -1087,7 +1101,7 @@ const handleWithdraw = async () => {
               :loading="withdrawSubmitting"
               @click="handleWithdraw"
             >
-              Gửi yêu cầu rút tiền
+              Rút tiền ngay
             </FhButton>
           </div>
         </div>

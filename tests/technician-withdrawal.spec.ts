@@ -7,7 +7,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
  * These tests pin the page to that contract.
  */
 
-const { walletApi } = vi.hoisted(() => ({
+const { walletApi, toast } = vi.hoisted(() => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   walletApi: {
     getMyWallet: vi.fn(),
     getMyTransactions: vi.fn(),
@@ -21,6 +22,7 @@ const { walletApi } = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/api/wallet.api', () => ({ walletApi }));
+vi.mock('vue-sonner', () => ({ toast }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -127,13 +129,18 @@ describe('Rút tiền phía kỹ thuật viên (web)', () => {
       accountNumber: '0123456789',
       accountName: 'Phạm Đức Toàn',
     });
-    expect(wrapper.text()).toContain('Yêu cầu rút tiền về ngân hàng');
+    expect(wrapper.text()).toContain('Rút tiền về ngân hàng');
     expect(wrapper.text()).toContain('Chuyển về tài khoản');
   });
 
   it('sends only the amount: the destination is the saved account', async () => {
     walletApi.getMyBankAccount.mockResolvedValue({ ...ACCOUNT });
-    walletApi.requestWithdrawal.mockResolvedValue({ id: 'wd-1', status: 'PENDING' });
+    walletApi.requestWithdrawal.mockResolvedValue({
+      id: 'wd-1',
+      status: 'SUCCESS',
+      payoutBankReference: 'FT123',
+      message: 'Đã chuyển tiền về tài khoản ngân hàng của bạn',
+    });
     const wrapper = await mountPage();
 
     await button(wrapper, 'Rút tiền về ngân hàng').trigger('click');
@@ -141,10 +148,14 @@ describe('Rút tiền phía kỹ thuật viên (web)', () => {
       .findAll('input[type="number"]')
       .find((i) => i.attributes('placeholder') === '100000')!;
     await amountInput.setValue(50_000);
-    await button(wrapper, 'Gửi yêu cầu rút tiền').trigger('click');
+    await button(wrapper, 'Rút tiền ngay').trigger('click');
     await flushPromises();
 
     expect(walletApi.requestWithdrawal).toHaveBeenCalledWith(50_000);
+    // No approval step: the answer is the payout result, shown straight away.
+    expect(toast.success).toHaveBeenCalledWith('Đã chuyển tiền về tài khoản ngân hàng của bạn', {
+      description: 'Mã giao dịch ngân hàng: FT123',
+    });
   });
 
   it('holds the 10.000 ₫ minimum on the client too', async () => {
@@ -156,7 +167,7 @@ describe('Rút tiền phía kỹ thuật viên (web)', () => {
       .findAll('input[type="number"]')
       .find((i) => i.attributes('placeholder') === '100000')!;
     await amountInput.setValue(9_999);
-    await button(wrapper, 'Gửi yêu cầu rút tiền').trigger('click');
+    await button(wrapper, 'Rút tiền ngay').trigger('click');
 
     expect(wrapper.text()).toContain('Số tiền rút tối thiểu là');
     expect(walletApi.requestWithdrawal).not.toHaveBeenCalled();
@@ -176,7 +187,7 @@ describe('Rút tiền phía kỹ thuật viên (web)', () => {
     });
     const wrapper = await mountPage();
     await button(wrapper, 'Rút tiền về ngân hàng').trigger('click');
-    await button(wrapper, 'Gửi yêu cầu rút tiền').trigger('click');
+    await button(wrapper, 'Rút tiền ngay').trigger('click');
     await flushPromises();
 
     // The old page read response.data.message, which the backend never sets,
@@ -240,5 +251,55 @@ describe('Rút tiền phía kỹ thuật viên (web)', () => {
     expect(wrapper.text()).toContain('Tiền đã được hoàn lại vào ví');
     expect(wrapper.text()).toContain('Đã chi tiền');
     expect(wrapper.text()).toContain('FT26273123');
+  });
+});
+
+describe('Rút tiền không cần duyệt (web)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    walletApi.getMyWallet.mockResolvedValue({ ...WALLET });
+    walletApi.getMyTransactions.mockResolvedValue({ data: [], meta: { total: 0, totalPages: 1 } });
+    walletApi.getMyWithdrawals.mockResolvedValue({ data: [], meta: { total: 0, totalPages: 1 } });
+    walletApi.getMyBankAccount.mockResolvedValue({ ...ACCOUNT });
+  });
+
+  it('never tells the technician to wait for a manager', async () => {
+    const wrapper = await mountPage();
+    await button(wrapper, 'Rút tiền về ngân hàng').trigger('click');
+
+    expect(wrapper.text()).not.toMatch(/chờ\s+Quản lý dịch vụ duyệt|Quản lý dịch vụ duyệt xong/);
+    expect(wrapper.text()).toContain('không cần chờ duyệt');
+  });
+
+  it('announces a failed payout as an error, with the refund', async () => {
+    walletApi.requestWithdrawal.mockResolvedValue({
+      id: 'wd-2',
+      status: 'FAILED',
+      failureReason: 'Số tài khoản nhận không tồn tại',
+      message: 'Chuyển tiền không thành công, số tiền đã được hoàn lại vào ví của bạn',
+    });
+    const wrapper = await mountPage();
+    await button(wrapper, 'Rút tiền về ngân hàng').trigger('click');
+    await button(wrapper, 'Rút tiền ngay').trigger('click');
+    await flushPromises();
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Chuyển tiền không thành công, số tiền đã được hoàn lại vào ví của bạn',
+      { description: 'Số tài khoản nhận không tồn tại' },
+    );
+  });
+
+  it('tells the technician when the bank is still working on it', async () => {
+    walletApi.requestWithdrawal.mockResolvedValue({
+      id: 'wd-3',
+      status: 'PROCESSING',
+      message: 'Lệnh rút đã gửi, ngân hàng đang xử lý.',
+    });
+    const wrapper = await mountPage();
+    await button(wrapper, 'Rút tiền về ngân hàng').trigger('click');
+    await button(wrapper, 'Rút tiền ngay').trigger('click');
+    await flushPromises();
+
+    expect(toast.info).toHaveBeenCalledWith('Lệnh rút đã gửi, ngân hàng đang xử lý.');
   });
 });

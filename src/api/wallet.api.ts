@@ -204,11 +204,15 @@ export const walletApi = {
   },
 
   /**
+   * Withdraw and pay out at once: there is no approval step. Resolves with
+   * where the payout ended up — SUCCESS, PROCESSING (bank still working) or
+   * FAILED (money back in the wallet) — plus a sentence to show.
+   *
    * Only the amount travels: the money always goes to the saved account,
    * which is the one checked against the KYC name.
    */
-  async requestWithdrawal(amount: number): Promise<WithdrawalRequest> {
-    const res = await apiClient.post<{ data: WithdrawalRequest }>(
+  async requestWithdrawal(amount: number): Promise<WithdrawalDecision> {
+    const res = await apiClient.post<{ data: WithdrawalDecision }>(
       '/technician/wallet/withdrawals',
       { amount },
     );
@@ -272,17 +276,6 @@ export const walletApi = {
     return res.data;
   },
 
-  /**
-   * Approve and pay out through payOS. Resolves with where the payout ended up:
-   * SUCCESS, PROCESSING (payOS still working) or FAILED (money refunded).
-   */
-  async approveWithdrawal(id: string): Promise<WithdrawalDecision> {
-    const res = await apiClient.patch<{ data: WithdrawalDecision }>(
-      `/service-manager/withdrawals/${id}/approve`,
-    );
-    return res.data.data;
-  },
-
   /** Ask payOS again about a payout that is still PROCESSING. */
   async reconcileWithdrawal(id: string): Promise<WithdrawalDecision> {
     const res = await apiClient.post<{ data: WithdrawalDecision }>(
@@ -295,16 +288,6 @@ export const walletApi = {
     const res = await apiClient.get<{ data: PayoutOverview }>(
       '/service-manager/withdrawals/payout-overview',
     );
-    return res.data.data;
-  },
-
-  async rejectWithdrawal(
-    id: string,
-    reason: string,
-  ): Promise<{ success: boolean; id: string; status: string; rejectReason: string; message: string }> {
-    const res = await apiClient.patch<{
-      data: { success: boolean; id: string; status: string; rejectReason: string; message: string };
-    }>(`/service-manager/withdrawals/${id}/reject`, { reason });
     return res.data.data;
   },
 
