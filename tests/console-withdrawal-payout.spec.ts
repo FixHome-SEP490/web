@@ -12,9 +12,7 @@ const { walletApi, toast } = vi.hoisted(() => ({
     listWallets: vi.fn(),
     listWithdrawals: vi.fn(),
     getPayoutOverview: vi.fn(),
-    approveWithdrawal: vi.fn(),
     reconcileWithdrawal: vi.fn(),
-    rejectWithdrawal: vi.fn(),
     getWalletConfig: vi.fn(),
   },
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -102,69 +100,35 @@ describe('Duyệt và chi tiền tự động (console)', () => {
     expect(wrapper.text()).toContain('chế độ giả lập chi hộ');
   });
 
-  it('no longer asks the manager to confirm a manual transfer', async () => {
+  it('offers no approve or reject: managers only track the money leaving', async () => {
     const wrapper = await openWithdrawalsTab();
-    await button(wrapper, 'Duyệt và chi').trigger('click');
 
-    expect(wrapper.text()).not.toContain('đã hoàn tất lệnh chuyển khoản');
-    expect(wrapper.text()).toContain('bạn không cần chuyển tay');
+    const labels = wrapper.findAll('button').map((b) => b.text());
+    expect(labels.some((t) => /Duyệt/.test(t))).toBe(false);
+    expect(labels.some((t) => /Từ chối/.test(t))).toBe(false);
   });
 
-  it('reports a paid withdrawal with its bank reference', async () => {
-    walletApi.approveWithdrawal.mockResolvedValue({
-      ...row({ status: 'SUCCESS', payoutBankReference: 'FT26273123' }),
-      message: 'Đã chi tiền về tài khoản ngân hàng của kỹ thuật viên',
+  it('tracks failed payouts and says the money went back', async () => {
+    const wrapper = await openWithdrawalsTab();
+
+    expect(wrapper.text()).toContain('Chuyển thất bại');
+    expect(wrapper.text()).toContain('tiền đã hoàn về ví kỹ thuật viên');
+  });
+
+  it('passes on the server${q}s reason when a re-check fails', async () => {
+    walletApi.listWithdrawals.mockResolvedValue({
+      data: [row({ status: 'PROCESSING' })],
+      meta: { total: 1, totalPages: 1 },
+    });
+    walletApi.reconcileWithdrawal.mockRejectedValue({
+      response: { data: { error: { message: 'Yêu cầu rút tiền không tồn tại' } } },
     });
     const wrapper = await openWithdrawalsTab();
 
-    await button(wrapper, 'Duyệt và chi').trigger('click');
-    await button(wrapper, 'Duyệt và chi tiền').trigger('click');
+    await button(wrapper, 'Kiểm tra lại').trigger('click');
     await flushPromises();
 
-    expect(walletApi.approveWithdrawal).toHaveBeenCalledWith('wd-1');
-    expect(toast.success).toHaveBeenCalledWith(
-      'Đã chi tiền về tài khoản ngân hàng của kỹ thuật viên',
-      { description: 'Mã giao dịch ngân hàng: FT26273123' },
-    );
-  });
-
-  it('reports a failed payout as an error, with the reason', async () => {
-    walletApi.approveWithdrawal.mockResolvedValue({
-      ...row({ status: 'FAILED', failureReason: 'Số tài khoản nhận không tồn tại' }),
-      message: 'Chi tiền không thành công, số tiền đã được hoàn lại vào ví kỹ thuật viên',
-    });
-    const wrapper = await openWithdrawalsTab();
-
-    await button(wrapper, 'Duyệt và chi').trigger('click');
-    await button(wrapper, 'Duyệt và chi tiền').trigger('click');
-    await flushPromises();
-
-    expect(toast.error).toHaveBeenCalledWith(
-      'Chi tiền không thành công, số tiền đã được hoàn lại vào ví kỹ thuật viên',
-      { description: 'Số tài khoản nhận không tồn tại' },
-    );
-  });
-
-  it('passes on the server\'s reason when the payout source is short', async () => {
-    walletApi.approveWithdrawal.mockRejectedValue({
-      response: {
-        data: {
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'Ví nguồn chi hộ không đủ số dư: còn 5.000 ₫, cần 10.000 ₫.',
-          },
-        },
-      },
-    });
-    const wrapper = await openWithdrawalsTab();
-
-    await button(wrapper, 'Duyệt và chi').trigger('click');
-    await button(wrapper, 'Duyệt và chi tiền').trigger('click');
-    await flushPromises();
-
-    expect(toast.error).toHaveBeenCalledWith(
-      'Ví nguồn chi hộ không đủ số dư: còn 5.000 ₫, cần 10.000 ₫.',
-    );
+    expect(toast.error).toHaveBeenCalledWith('Yêu cầu rút tiền không tồn tại');
   });
 
   it('offers a re-check for a payout still in flight', async () => {

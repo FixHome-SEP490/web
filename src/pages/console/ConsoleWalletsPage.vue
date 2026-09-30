@@ -122,14 +122,9 @@ const editMinBalance = ref<number>(200000);
 const editFeeRateBps = ref<number>(1500);
 const configSuccessMsg = ref<string | null>(null);
 
-// Modals State
-const selectedWd = ref<WithdrawalRequest | null>(null);
-const showApproveModal = ref(false);
-const showRejectModal = ref(false);
-const rejectReason = ref('');
-const actionSubmitting = ref(false);
-
-// Automatic payouts: what has left, what is moving, and what the source holds.
+// Withdrawals are paid out the moment the technician asks (PO decision
+// 30/09/2026). Managers track the money leaving; there is nothing to approve.
+// What has left, what is moving, and what the payout source holds:
 const payoutOverview = ref<PayoutOverview | null>(null);
 /** Id of the withdrawal whose payout is being re-checked with payOS. */
 const reconcilingId = ref<string | null>(null);
@@ -231,11 +226,6 @@ const saveConfig = async () => {
   }
 };
 
-const openApprove = (wd: WithdrawalRequest) => {
-  selectedWd.value = wd;
-  showApproveModal.value = true;
-};
-
 /** Say exactly where the payout ended up; each outcome needs a different reaction. */
 const announcePayout = (result: WithdrawalRequest & { message: string }) => {
   if (result.status === 'SUCCESS') {
@@ -251,23 +241,6 @@ const announcePayout = (result: WithdrawalRequest & { message: string }) => {
   }
 };
 
-const handleApprove = async () => {
-  if (!selectedWd.value) return;
-  actionSubmitting.value = true;
-  try {
-    const result = await walletApi.approveWithdrawal(selectedWd.value.id);
-    showApproveModal.value = false;
-    announcePayout(result);
-    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
-  } catch (err: unknown) {
-    // Refusals such as a short payout source leave the request PENDING and
-    // nothing debited, so the message is what the manager needs to act on.
-    toast.error(extractApiErrorMessage(err, 'Duyệt chi thất bại'));
-  } finally {
-    actionSubmitting.value = false;
-  }
-};
-
 const handleReconcile = async (wd: WithdrawalRequest) => {
   reconcilingId.value = wd.id;
   try {
@@ -278,30 +251,6 @@ const handleReconcile = async (wd: WithdrawalRequest) => {
     toast.error(extractApiErrorMessage(err, 'Không kiểm tra được với payOS'));
   } finally {
     reconcilingId.value = null;
-  }
-};
-
-const openReject = (wd: WithdrawalRequest) => {
-  selectedWd.value = wd;
-  rejectReason.value = '';
-  showRejectModal.value = true;
-};
-
-const handleReject = async () => {
-  if (!selectedWd.value) return;
-  if (!rejectReason.value.trim() || rejectReason.value.trim().length < 5) {
-    alert('Vui lòng nhập lý do từ chối rõ ràng (tối thiểu 5 ký tự)');
-    return;
-  }
-  actionSubmitting.value = true;
-  try {
-    await walletApi.rejectWithdrawal(selectedWd.value.id, rejectReason.value.trim());
-    showRejectModal.value = false;
-    await Promise.all([loadWithdrawals(), loadWallets(), loadPayoutOverview()]);
-  } catch (err: unknown) {
-    toast.error(extractApiErrorMessage(err, 'Từ chối thất bại'));
-  } finally {
-    actionSubmitting.value = false;
   }
 };
 
@@ -607,7 +556,7 @@ onMounted(() => {
           class="p-3 rounded-xl bg-warning-50 border border-warning-600/20 text-warning-600 text-xs font-bold flex items-center gap-2"
         >
           <AlertCircle :size="15" class="shrink-0" />
-          <span>Đang chạy chế độ giả lập chi hộ: duyệt chi không chuyển tiền thật.</span>
+          <span>Đang chạy chế độ giả lập chi hộ: lệnh rút của kỹ thuật viên không chuyển tiền thật.</span>
         </div>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
@@ -637,13 +586,11 @@ onMounted(() => {
             <p class="text-[11px] text-ink-500">{{ payoutOverview.processing.count }} lệnh chờ payOS xác nhận</p>
           </div>
           <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
-            <div class="text-[11px] font-bold text-ink-500">Chờ duyệt</div>
-            <div class="text-lg font-extrabold font-num text-warning-600">
-              {{ formatCurrencyVND(payoutOverview.pending.amount) }}
+            <div class="text-[11px] font-bold text-ink-500">Chuyển thất bại</div>
+            <div class="text-lg font-extrabold font-num text-danger-600">
+              {{ formatCurrencyVND(payoutOverview.failed.amount) }}
             </div>
-            <p class="text-[11px] text-ink-500">
-              {{ payoutOverview.pending.count }} yêu cầu · {{ payoutOverview.failed.count }} lệnh chuyển thất bại
-            </p>
+            <p class="text-[11px] text-ink-500">{{ payoutOverview.failed.count }} lệnh, tiền đã hoàn về ví kỹ thuật viên</p>
           </div>
         </div>
       </div>
@@ -739,18 +686,8 @@ onMounted(() => {
             <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
           </div>
           <div v-else class="flex justify-end gap-2">
-            <template v-if="row.status === 'PENDING'">
-              <FhButton variant="primary" size="sm" @click="openApprove(row)">
-                <CheckCircle2 :size="13" class="mr-1" />
-                Duyệt và chi
-              </FhButton>
-              <FhButton variant="danger" size="sm" @click="openReject(row)">
-                <XCircle :size="13" class="mr-1" />
-                Từ chối
-              </FhButton>
-            </template>
             <FhButton
-              v-else-if="row.status === 'PROCESSING'"
+              v-if="row.status === 'PROCESSING'"
               variant="secondary"
               size="sm"
               :loading="reconcilingId === row.id"
@@ -759,7 +696,7 @@ onMounted(() => {
               <RefreshCw :size="13" class="mr-1" />
               Kiểm tra lại
             </FhButton>
-            <span v-else class="text-ink-400 text-xs italic">Đã giải quyết</span>
+            <span v-else class="text-ink-400 text-xs italic">Đã xong</span>
           </div>
         </template>
       </FhTable>
@@ -853,108 +790,6 @@ onMounted(() => {
             @click="saveConfig"
           >
             Lưu thay đổi cấu hình
-          </FhButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL: PHÊ DUYỆT RÚT TIỀN -->
-    <div
-      v-if="showApproveModal && selectedWd"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-    >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
-        <h3 class="text-base font-extrabold text-ink-900 flex items-center gap-2">
-          <CheckCircle2 class="text-emerald-600" :size="20" />
-          <span>Duyệt và chi tiền tự động</span>
-        </h3>
-
-        <div class="p-4 rounded-2xl bg-ink-50 border border-ink-100 space-y-2 text-xs">
-          <div class="flex justify-between">
-            <span class="text-ink-500">Kỹ thuật viên:</span>
-            <span class="font-bold text-ink-900">{{ selectedWd.technician?.fullName }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-ink-500">Số tiền chi trả:</span>
-            <span class="font-extrabold font-num text-sm text-brand-600">{{ formatCurrencyVND(selectedWd.amount) }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-ink-500">Ngân hàng:</span>
-            <span class="font-bold text-ink-900">{{ selectedWd.bankName }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-ink-500">Số tài khoản:</span>
-            <span class="font-extrabold font-num text-ink-900">{{ selectedWd.bankAccountNumber }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-ink-500">Chủ tài khoản:</span>
-            <span class="font-bold uppercase text-ink-900">{{ selectedWd.bankAccountName }}</span>
-          </div>
-        </div>
-
-        <p class="text-xs text-ink-500">
-          Hệ thống sẽ trừ ví kỹ thuật viên rồi tự chuyển khoản qua payOS tới tài khoản trên — bạn không cần chuyển tay.
-          Nếu ngân hàng không nhận, số tiền được hoàn lại vào ví kỹ thuật viên. Tài khoản này đã được đối chiếu tên với hồ sơ xác minh danh tính.
-        </p>
-        <p
-          v-if="payoutOverview?.provider === 'mock'"
-          class="text-[11px] font-bold text-warning-600"
-        >
-          Đang ở chế độ giả lập: không có tiền thật được chuyển.
-        </p>
-
-        <div class="flex items-center justify-end gap-3 pt-2">
-          <FhButton variant="secondary" size="md" @click="showApproveModal = false">
-            Huỷ bỏ
-          </FhButton>
-          <FhButton
-            variant="primary"
-            size="md"
-            :loading="actionSubmitting"
-            @click="handleApprove"
-          >
-            Duyệt và chi tiền
-          </FhButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL: TỪ CHỐI RÚT TIỀN -->
-    <div
-      v-if="showRejectModal && selectedWd"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-    >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
-        <h3 class="text-base font-extrabold text-ink-900 flex items-center gap-2">
-          <XCircle class="text-rose-600" :size="20" />
-          <span>Từ chối yêu cầu rút tiền</span>
-        </h3>
-
-        <p class="text-xs text-ink-500">
-          Số tiền <strong class="font-num text-ink-900">{{ formatCurrencyVND(selectedWd.amount) }}</strong> sẽ được hoàn trả lại ví khả dụng của KTV. Vui lòng cung cấp lý do từ chối rõ ràng.
-        </p>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-bold text-ink-700">Lý do từ chối (Bắt buộc):</label>
-          <textarea
-            v-model="rejectReason"
-            rows="3"
-            placeholder="VD: Số tài khoản và tên chủ thẻ ngân hàng không trùng khớp..."
-            class="w-full p-3 rounded-xl border border-ink-200 text-xs text-ink-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-          />
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-2">
-          <FhButton variant="secondary" size="md" @click="showRejectModal = false">
-            Huỷ bỏ
-          </FhButton>
-          <FhButton
-            variant="danger"
-            size="md"
-            :loading="actionSubmitting"
-            @click="handleReject"
-          >
-            Xác nhận từ chối
           </FhButton>
         </div>
       </div>
