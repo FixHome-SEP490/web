@@ -25,6 +25,7 @@ import { ordersApi } from '../api/orders.api';
 import { bookingsApi } from '../api/bookings.api';
 import { technicianProfileApi } from '../api/technician-profile.api';
 import { technicianOnboardingApi } from '../api/technician-onboarding.api';
+import { walletApi, type WalletSummary } from '../api/wallet.api';
 import { toast } from 'vue-sonner';
 
 const authStore = useAuthStore();
@@ -70,6 +71,16 @@ const loadOnboardingStatus = async () => {
   }
 };
 
+const walletSummary = ref<WalletSummary | null>(null);
+
+const loadWalletSummary = async () => {
+  try {
+    walletSummary.value = await walletApi.getMyWallet();
+  } catch {
+    walletSummary.value = null;
+  }
+};
+
 let invitationPoll: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
@@ -85,7 +96,7 @@ onMounted(async () => {
   } catch {
     // ignore
   }
-  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus()]);
+  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus(), loadWalletSummary()]);
   invitationPoll = setInterval(refreshInvitationCount, 30000);
 });
 
@@ -354,6 +365,29 @@ const userShortName = computed(() => {
           class="shrink-0 px-3.5 py-1.5 bg-white text-amber-950 font-bold rounded-xl hover:bg-amber-50 transition-colors shadow-2xs whitespace-nowrap"
         >
           Hoàn tất hồ sơ thợ →
+        </router-link>
+      </div>
+    </div>
+
+    <!-- Deposit required banner when approved but wallet balance is below minimum -->
+    <div
+      v-else-if="(onboardingStatus === 'approved' || verificationStatus === 'verified') && walletSummary && !walletSummary.eligibleForJobs"
+      class="bg-gradient-to-r from-blue-600 via-indigo-600 to-brand-700 text-white px-4 py-3 shadow-xs"
+    >
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2.5">
+          <Wallet :size="18" class="shrink-0 text-blue-200" />
+          <span>
+            Hồ sơ thợ đã được duyệt! Số dư ví hiện tại là <strong>{{ Number(walletSummary.balance).toLocaleString('vi-VN') }} ₫</strong>.
+            Vui lòng nạp tối thiểu <strong>{{ Number(walletSummary.minimumBalance).toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để đủ điều kiện tiếp nhận đơn sửa chữa mới.
+          </span>
+        </div>
+        <router-link
+          to="/tech/wallet"
+          class="shrink-0 px-3.5 py-1.5 bg-white text-blue-900 font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-2xs whitespace-nowrap flex items-center gap-1.5"
+        >
+          <span>Nạp tiền vào ví ngay</span>
+          <span>→</span>
         </router-link>
       </div>
     </div>

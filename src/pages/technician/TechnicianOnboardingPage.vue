@@ -24,6 +24,7 @@ import {
   Building2,
   Zap,
   Crosshair,
+  Wallet,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { FhButton } from '../../components';
@@ -35,6 +36,7 @@ import {
   type SubmitDocumentPayload,
 } from '../../api/technician-verification.api';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { walletApi, type WalletSummary } from '../../api/wallet.api';
 import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import {
   vietnamProvincesApi,
@@ -68,6 +70,7 @@ const currentStep = ref(1);
 const loading = ref(true);
 const saving = ref(false);
 const statusData = ref<OnboardingStatusResponse | null>(null);
+const wallet = ref<WalletSummary | null>(null);
 const isReviewing = ref(false);
 
 // ----------------- Step 1: Personal Info -----------------
@@ -874,13 +877,16 @@ const handleReturnToStatus = () => {
 const loadInitialData = async () => {
   loading.value = true;
   try {
-    const [statusRes, catRes, servicesRes, vnProvincesRes, myVerificationRes] = await Promise.all([
+    const [statusRes, catRes, servicesRes, vnProvincesRes, myVerificationRes, myWalletRes] = await Promise.all([
       technicianOnboardingApi.getStatus().catch(() => null),
       catalogApi.getCategories(true).catch(() => []),
       catalogApi.getServices({ limit: 100 }).catch(() => ({ data: [] })),
       vietnamProvincesApi.getProvincesWithDistricts().catch(() => []),
       technicianVerificationApi.getMyVerification().catch(() => null),
+      walletApi.getMyWallet().catch(() => null),
     ]);
+
+    wallet.value = myWalletRes;
 
     categories.value = catRes;
     allServices.value = servicesRes.data;
@@ -1148,13 +1154,61 @@ const handleLogout = async () => {
         <div class="space-y-2">
           <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Hồ sơ đã được phê duyệt!</h2>
           <p class="text-slate-600 text-sm max-w-md mx-auto">
-            Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome. Bạn có thể bắt đầu nhận việc ngay.
+            Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome.
           </p>
         </div>
-        <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech')">
-          <span>Vào Bàn làm việc Kỹ thuật viên</span>
-          <ArrowRight :size="16" class="ml-2" />
-        </FhButton>
+
+        <!-- Wallet Top-Up Notice / Status -->
+        <div
+          class="p-5 rounded-2xl border text-left space-y-3"
+          :class="wallet?.eligibleForJobs ? 'bg-emerald-50/80 border-emerald-200' : 'bg-amber-50/80 border-amber-200'"
+        >
+          <div class="flex items-start gap-3">
+            <div
+              class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+              :class="wallet?.eligibleForJobs ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
+            >
+              <Wallet :size="20" />
+            </div>
+            <div class="space-y-1">
+              <h4
+                class="text-sm font-bold"
+                :class="wallet?.eligibleForJobs ? 'text-emerald-950' : 'text-amber-950'"
+              >
+                {{ wallet?.eligibleForJobs ? 'Ví tài khoản đã sẵn sàng nhận việc' : 'Thông báo số dư ví ban đầu & Điều kiện nhận đơn' }}
+              </h4>
+              <p
+                class="text-xs leading-relaxed"
+                :class="wallet?.eligibleForJobs ? 'text-emerald-900' : 'text-amber-900'"
+              >
+                <span v-if="wallet?.eligibleForJobs">
+                  Ví ký quỹ của bạn đã đạt mức tối thiểu và đủ điều kiện nhận đơn sửa chữa mới từ khách hàng.
+                </span>
+                <span v-else>
+                  Tài khoản mới tạo có số dư ví là <strong class="font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong>. Theo quy định hệ thống, bạn cần nạp tối thiểu <strong class="font-num">{{ (wallet?.minimumBalance ?? 200000).toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để kích hoạt quyền nhận việc và nhận lời mời đơn sửa chữa mới.
+                </span>
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2.5 border-t text-xs gap-1.5 font-medium"
+            :class="wallet?.eligibleForJobs ? 'border-emerald-200/60 text-emerald-900' : 'border-amber-200/60 text-amber-900'"
+          >
+            <span>Số dư ví hiện tại: <strong class="text-slate-900 font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong></span>
+            <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">{{ (wallet?.minimumBalance ?? 200000).toLocaleString('vi-VN') }} ₫</strong></span>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech/wallet')">
+            <Wallet :size="16" class="mr-2" />
+            <span>Nạp tiền vào ví ngay</span>
+          </FhButton>
+          <FhButton variant="secondary" size="lg" class="w-full sm:w-auto" @click="router.push('/tech')">
+            <span>Vào Bàn làm việc Kỹ thuật viên</span>
+            <ArrowRight :size="16" class="ml-2" />
+          </FhButton>
+        </div>
       </div>
 
       <!-- Pending / Submitted Screen -->
