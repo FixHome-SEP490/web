@@ -196,21 +196,6 @@ const openDocumentAccess = async (title: string, documentId: string) => {
 
 
 
-const formatDocumentType = (value: string) => {
-  switch (value.toLowerCase()) {
-    case 'citizen_id_front':
-      return 'CCCD mặt trước';
-    case 'citizen_id_back':
-      return 'CCCD mặt sau';
-    case 'face_photo':
-      return 'Ảnh khuôn mặt';
-    case 'face_video':
-      return 'Video xác minh khuôn mặt';
-    default:
-      return value;
-  }
-};
-
 const formatDate = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
