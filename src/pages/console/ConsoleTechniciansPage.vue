@@ -8,6 +8,7 @@ import {
   type VerificationStatus,
 } from '../../api/admin-verifications.api';
 import TechnicianVerificationDrawer from '../../components/console/TechnicianVerificationDrawer.vue';
+import { vnDateString } from '../../utils/vn-time';
 
 const columns: TableColumn[] = [
   { key: 'technician', label: 'Kỹ thuật viên' },
