@@ -3,6 +3,7 @@
 import { ref, computed, nextTick } from 'vue';
 import type { ChatMessage } from '../../api/messaging.api';
 import { MoreVertical, Edit2, Trash2 } from 'lucide-vue-next';
+import { vnTimeString } from '../../utils/vn-time';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -24,7 +25,7 @@ const editInputRef = ref<HTMLTextAreaElement | null>(null);
 const timeString = computed(() => {
   try {
     const d = new Date(props.message.createdAt);
-    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return vnTimeString(d, { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '';
   }

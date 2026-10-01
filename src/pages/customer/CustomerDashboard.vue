@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Zap,
   Users,
-  Wrench,
   Bot,
   Snowflake,
   Droplets,
@@ -19,21 +18,21 @@ import {
   Package,
   Clock,
   MapPin,
-  ArrowRight,
   ChevronRight,
   MessageSquare,
   Award,
   Tag,
-  Flame,
+  Gift,
   BadgeCheck,
   Timer,
   BookOpen,
   FileCheck,
   CircleDollarSign,
 } from 'lucide-vue-next';
-import { FhMoney, FhStatusPill } from '../../components';
+import { FhButton, FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -49,10 +48,8 @@ const loading = ref(true);
 const popularServices = [
   {
     id: 'ac_clean',
-    name: 'Vệ sinh\nmáy lạnh',
+    name: 'Vệ sinh máy lạnh',
     icon: Snowflake,
-    iconColor: '#0284C7',
-    pedestalBg: '#E0F2FE',
     badge: 'HOT',
     query: 'vệ sinh điều hòa',
     price: 180000,
@@ -61,10 +58,8 @@ const popularServices = [
   },
   {
     id: 'washer_clean',
-    name: 'Vệ sinh\nmáy giặt',
+    name: 'Vệ sinh máy giặt',
     icon: Disc,
-    iconColor: '#7C3AED',
-    pedestalBg: '#EDE9FE',
     badge: 'GIÁ TỐT',
     query: 'vệ sinh cửa trên',
     price: 350000,
@@ -73,10 +68,8 @@ const popularServices = [
   },
   {
     id: 'dryer_clean',
-    name: 'Vệ sinh\nmáy sấy',
+    name: 'Vệ sinh máy sấy',
     icon: Package,
-    iconColor: '#EA580C',
-    pedestalBg: '#FFEDD5',
     query: 'vệ sinh máy sấy',
     price: 350000,
     unit: 'Máy',
@@ -84,29 +77,23 @@ const popularServices = [
   },
   {
     id: 'plumbing',
-    name: 'Sửa ống\nnước',
+    name: 'Sửa ống nước',
     icon: Droplets,
-    iconColor: '#0D9488',
-    pedestalBg: '#CCFBF1',
     query: 'ống nước',
     isFixed: false,
   },
   {
     id: 'electricity',
-    name: 'Lắp đặt hệ\nthống điện',
+    name: 'Lắp đặt hệ thống điện',
     icon: Zap,
-    iconColor: '#EAB308',
-    pedestalBg: '#FEF9C3',
     badge: '24/7',
     query: 'điện',
     isFixed: false,
   },
   {
     id: 'inspection',
-    name: 'Kiểm tra\nthiết bị',
+    name: 'Kiểm tra thiết bị',
     icon: Cpu,
-    iconColor: '#059669',
-    pedestalBg: '#D1FAE5',
     query: 'kiểm tra',
     price: 100000,
     unit: 'Lần',
@@ -117,10 +104,40 @@ const popularServices = [
 
 // Quick Category Chips
 const quickChips = [
-  { id: 'urgent', title: '⚡ Cứu hộ điện nước 24/7', query: 'điện' },
-  { id: 'ac', title: '❄️ Vệ sinh máy lạnh 180K', query: 'vệ sinh điều hòa' },
-  { id: 'ai', title: '🤖 AI Chẩn đoán hỏng hóc', isAi: true },
-  { id: 'voucher', title: '🎁 Voucher giảm 50.000đ' },
+  { id: 'urgent', title: 'Cứu hộ điện nước 24/7', icon: Zap, query: 'điện' },
+  { id: 'ac', title: 'Vệ sinh máy lạnh 180K', icon: Snowflake, query: 'vệ sinh điều hòa' },
+  { id: 'ai', title: 'AI Chẩn đoán hỏng hóc', icon: Bot, isAi: true },
+  { id: 'voucher', title: 'Voucher giảm 50.000đ', icon: Gift },
+];
+
+const featureCards = [
+  {
+    title: 'Đặt thợ & AI Chẩn đoán',
+    text: 'Mô tả hoặc chụp ảnh sự cố → AI bắt bệnh & báo giá → Thợ có mặt chỉ sau 15 phút',
+    tags: ['Thợ giỏi gần bạn', 'AI 30s'],
+    icon: Bot,
+    to: '/app/bookings/new',
+  },
+  {
+    title: 'Bảng giá tham khảo',
+    text: 'Xem bảng giá dịch vụ cố định, vật tư chính hãng & bảo hành dài hạn 12 tháng',
+    tags: ['Giá cố định minh bạch'],
+    icon: CircleDollarSign,
+    to: '/services',
+  },
+  {
+    title: 'Bảo hành điện tử',
+    text: 'Xem phiếu bảo hành, yêu cầu bảo hành lại & theo dõi tiến trình xử lý',
+    tags: ['Tra cứu nhanh'],
+    icon: FileCheck,
+    to: '/app/warranties',
+  },
+];
+
+const promises = [
+  { title: 'Thợ xác minh', text: 'Lý lịch 100% rõ ràng, kiểm tra tay nghề định kỳ', icon: ShieldCheck },
+  { title: 'Giá minh bạch', text: 'Báo giá trước khi làm, niêm yết theo catalog', icon: Tag },
+  { title: 'Bảo hành 30 ngày', text: 'Bảo hành điện tử, giải quyết khiếu nại trong 24h', icon: Award },
 ];
 
 function formatAddress(addr: UserAddress): string {
@@ -175,6 +192,12 @@ const orderStats = computed(() => {
   return { total, completed, inProgress };
 });
 
+const statTiles = computed(() => [
+  { label: 'Tổng đơn', value: orderStats.value.total, icon: BookOpen },
+  { label: 'Đang xử lý', value: orderStats.value.inProgress, icon: Timer },
+  { label: 'Hoàn thành', value: orderStats.value.completed, icon: BadgeCheck },
+]);
+
 function handleSearch() {
   const q = searchQuery.value.trim();
   router.push({ path: '/app/bookings/new', query: q ? { q } : {} });
@@ -218,460 +241,290 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 </script>
 
 <template>
-  <div class="space-y-6 max-w-5xl mx-auto pb-12">
-    <!-- 1. Address Bar & Greeting -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-2xl border border-ink-200 shadow-xs">
-      <div class="flex items-center gap-3">
-        <div class="relative">
-          <div class="w-11 h-11 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-sm border border-brand-200 overflow-hidden shadow-xs">
-            <img
-              v-if="authStore.user?.avatarUrl"
-              :src="authStore.user.avatarUrl"
-              alt="Avatar"
-              class="w-full h-full object-cover"
-            />
-            <span v-else>{{ authStore.user?.fullName?.charAt(0) || 'C' }}</span>
+  <div class="space-y-6 pb-4">
+    <!-- 1. Greeting and delivery address -->
+    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-4 rounded-2xl border border-ink-200">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="relative shrink-0">
+          <div class="w-11 h-11 rounded-full bg-brand-50 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-100 overflow-hidden">
+            <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
+            <span v-else>{{ authStore.user?.fullName?.charAt(0) || 'K' }}</span>
           </div>
-          <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-success-600 border-2 border-white"></span>
+          <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-success-500 border-2 border-white" />
         </div>
-
-        <div>
-          <div class="text-xs text-ink-500 flex items-center gap-1 font-medium">
-            <span>Xin chào</span>
-            <span class="text-sm">👋</span>
-          </div>
-          <h2 class="text-base font-bold text-ink-900 leading-tight">
-            {{ authStore.user?.fullName || 'Khách hàng' }}
-          </h2>
+        <div class="min-w-0">
+          <p class="text-sm text-ink-500">Xin chào</p>
+          <h2 class="text-base font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Khách hàng' }}</h2>
         </div>
       </div>
 
-      <!-- Address Selector -->
       <router-link
         to="/app/profile"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-ink-50 hover:bg-ink-100 transition-colors border border-ink-200 text-xs max-w-md group cursor-pointer"
+        class="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-ink-50 hover:bg-ink-100 transition-colors text-sm sm:max-w-md min-w-0"
         :title="selectedAddress ? 'Quản lý sổ địa chỉ' : 'Thêm địa chỉ giao hàng'"
       >
-        <MapPin :size="16" class="text-danger-600 shrink-0 group-hover:scale-105 transition-transform" />
-        <div class="min-w-0">
-          <span class="text-[10px] text-ink-400 block leading-none font-medium">Giao đến</span>
-          <span
-            v-if="selectedAddress"
-            class="font-semibold text-ink-800 truncate block mt-0.5"
-            :title="selectedAddress"
-          >
-            {{ selectedAddress }}
-          </span>
-          <span
-            v-else
-            class="font-medium text-brand-600 group-hover:underline truncate block mt-0.5"
-          >
-            Chưa có địa chỉ (Thêm mới)
-          </span>
-        </div>
+        <MapPin :size="18" class="text-brand-600 shrink-0" />
+        <span class="min-w-0">
+          <span class="block text-xs text-ink-500">Giao đến</span>
+          <span v-if="selectedAddress" class="block font-medium text-ink-900 truncate" :title="selectedAddress">{{ selectedAddress }}</span>
+          <span v-else class="block font-medium text-brand-600 truncate">Chưa có địa chỉ (Thêm mới)</span>
+        </span>
+        <ChevronRight :size="16" class="text-ink-400 shrink-0" />
       </router-link>
-    </div>
+    </section>
 
-    <!-- 2. Hero Search Banner (Royal Blue Gradient - FixHome Mobile Signature) -->
-    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-6 sm:p-8 text-white shadow-lg">
-      <!-- Glassmorphism decorative elements -->
-      <div class="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-      <div class="absolute -left-12 -bottom-12 w-56 h-56 rounded-full bg-blue-900/20 blur-xl pointer-events-none"></div>
-      <div class="absolute right-8 bottom-8 w-32 h-32 rounded-full bg-indigo-400/10 blur-xl pointer-events-none"></div>
-
-      <div class="relative z-10 max-w-2xl space-y-4">
-        <!-- Slogan -->
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-blue-100 border border-white/20 shadow-xs">
-          <span>Tin tưởng - Nhanh chóng - Hiệu quả</span>
-          <Sparkles :size="14" class="text-amber-300 fill-amber-300" />
-        </div>
-
-        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
-          Cần sửa gì hôm nay? <br class="hidden sm:inline" />
-          <span class="text-blue-100 font-semibold">Thợ giỏi FixHome sẵn sàng tới ngay</span>
+    <!-- 2. The one emphasis block of the page: search what needs fixing -->
+    <section class="rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white">
+      <div class="max-w-2xl space-y-4">
+        <p class="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-white/15 text-sm text-white/90">
+          <Sparkles :size="14" />
+          Tin tưởng - Nhanh chóng - Hiệu quả
+        </p>
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
+          Cần sửa gì hôm nay?
+          <span class="block text-lg sm:text-xl font-medium text-white/85 mt-1">Thợ giỏi FixHome sẵn sàng tới ngay</span>
         </h1>
 
-        <!-- Pill Search Bar -->
-        <form class="flex items-center gap-2 max-w-xl" @submit.prevent="handleSearch">
-          <div class="flex-1 relative">
+        <form class="max-w-xl" role="search" @submit.prevent="handleSearch">
+          <label for="dashboard-search" class="sr-only">Tìm dịch vụ sửa chữa</label>
+          <div class="relative">
             <input
+              id="dashboard-search"
               v-model="searchQuery"
               type="text"
-              placeholder="Điện, nước, máy lạnh, thông cống, tivi..."
-              class="w-full pl-4 pr-12 py-3.5 rounded-2xl bg-white text-ink-900 placeholder:text-ink-400 text-sm font-medium shadow-lg outline-none focus:ring-4 focus:ring-white/30 transition-all"
+              placeholder="Điện, nước, máy lạnh, thông cống, tivi…"
+              class="w-full h-13 pl-4 pr-14 rounded-xl bg-white text-ink-900 placeholder:text-ink-400 text-base outline-none focus-visible:ring-4 focus-visible:ring-white/40"
             />
             <button
               type="submit"
-              class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center transition-colors shadow-sm"
+              class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center transition-colors"
               title="Tìm kiếm dịch vụ"
+              aria-label="Tìm kiếm dịch vụ"
             >
               <Search :size="18" />
             </button>
           </div>
         </form>
 
-        <!-- Sub Stats -->
-        <div class="flex flex-wrap items-center gap-4 pt-1 text-xs text-blue-100 font-medium">
-          <div class="flex items-center gap-1.5">
-            <Zap :size="14" class="text-amber-300 fill-amber-300" />
-            <span>Không mất phí khảo sát</span>
-          </div>
-          <span class="opacity-40">•</span>
-          <div class="flex items-center gap-1.5">
-            <Users :size="14" class="text-blue-200" />
-            <span>100,000+ thợ tay nghề cao</span>
-          </div>
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-white/90">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap"><Zap :size="15" /> Không mất phí khảo sát</span>
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap"><Users :size="15" /> 100,000+ thợ tay nghề cao</span>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 3. Status Announcement Pill -->
-    <div
-      class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs shadow-xs cursor-pointer hover:bg-emerald-100/70 transition-colors"
+    <!-- 3. Availability line -->
+    <button
+      type="button"
+      class="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-white border border-ink-200 text-left hover:bg-ink-25 transition-colors"
       @click="router.push('/app/bookings/new')"
     >
-      <div class="flex items-center gap-2.5 min-w-0">
-        <div class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-          <ShieldCheck :size="16" />
-        </div>
-        <p class="truncate">
-          <strong class="font-bold">128+ thợ FixHome</strong> sẵn sàng có mặt sau 15–30 phút tại khu vực của bạn!
-        </p>
-      </div>
-      <ChevronRight :size="16" class="text-emerald-700 shrink-0" />
-    </div>
+      <span class="flex items-center gap-3 min-w-0 text-sm text-ink-700">
+        <ShieldCheck :size="20" :stroke-width="1.75" class="text-success-600 shrink-0" />
+        <span class="text-pretty"><strong class="font-semibold text-ink-900">128+ thợ FixHome</strong> sẵn sàng có mặt sau 15–30 phút tại khu vực của bạn!</span>
+      </span>
+      <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+    </button>
 
-    <!-- 4. Quick Category Chips (Horizontal Scroll) -->
-    <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-medium">
+    <!-- 4. Quick picks -->
+    <div class="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
       <button
         v-for="chip in quickChips"
         :key="chip.id"
         type="button"
-        class="px-3.5 py-2 rounded-full bg-white border border-ink-200 text-ink-800 hover:border-brand-500 hover:text-brand-600 hover:bg-brand-50/50 transition-all shrink-0 shadow-xs flex items-center gap-1.5 active:scale-95"
+        class="h-9 px-3.5 rounded-full bg-white border border-ink-200 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors shrink-0 inline-flex items-center gap-2 whitespace-nowrap"
         @click="handleChipClick(chip)"
       >
-        <span>{{ chip.title }}</span>
+        <component :is="chip.icon" :size="16" :stroke-width="1.75" class="text-ink-500" />
+        {{ chip.title }}
       </button>
     </div>
 
-    <!-- 5. Three Hero Feature Cards (Đặt thợ & AI Chẩn đoán, Bảng giá tham khảo, Bảo hành) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <!-- Card 1: Đặt thợ & AI Chẩn đoán (unified) -->
-      <div
-        class="relative p-5 rounded-2xl bg-gradient-to-br from-[#E0F2FE] to-[#F0E6FF] border border-[#BAE6FD] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-        @click="router.push('/app/bookings/new')"
+    <!-- 5. Three ways in -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <button
+        v-for="card in featureCards"
+        :key="card.title"
+        type="button"
+        class="text-left p-5 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors flex flex-col gap-3"
+        @click="router.push(card.to)"
       >
-        <div>
-          <div class="flex items-center gap-2 mb-3">
-            <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#0284C7] text-white text-[11px] font-bold shadow-xs">
-              Thợ giỏi gần bạn
+        <span class="flex items-center justify-between gap-3">
+          <span class="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
+            <component :is="card.icon" :size="22" :stroke-width="1.75" />
+          </span>
+          <span class="flex flex-wrap justify-end gap-1.5">
+            <span
+              v-for="tag in card.tags"
+              :key="tag"
+              class="h-6 px-2 rounded-lg bg-ink-100 text-ink-600 text-xs font-medium inline-flex items-center whitespace-nowrap"
+            >
+              {{ tag }}
             </span>
-            <span class="inline-block px-2 py-0.5 rounded-full bg-[#7C3AED] text-white text-[10px] font-bold shadow-xs">
-              AI 30s
-            </span>
-          </div>
-          <h3 class="text-xl font-extrabold text-[#0369A1] tracking-tight">Đặt thợ & AI Chẩn đoán</h3>
-          <p class="text-xs text-[#0284C7] font-medium mt-1 leading-relaxed">
-            Mô tả hoặc chụp ảnh sự cố → AI bắt bệnh & báo giá → Thợ có mặt chỉ sau 15 phút
-          </p>
-        </div>
-        <div class="flex justify-end mt-4 gap-2">
-          <div class="w-11 h-11 rounded-2xl bg-white/80 backdrop-blur-sm text-[#7C3AED] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <Bot :size="22" />
-          </div>
-          <div class="w-11 h-11 rounded-2xl bg-white/80 backdrop-blur-sm text-[#0284C7] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <Wrench :size="22" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Card 2: Bảng giá dịch vụ tham khảo (was "Vật tư Mall") -->
-      <div
-        class="relative p-5 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-        @click="router.push('/services')"
-      >
-        <div>
-          <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#D97706] text-white text-[11px] font-bold mb-3 shadow-xs">
-            Giá cố định minh bạch
           </span>
-          <h3 class="text-xl font-extrabold text-[#B45309] tracking-tight">Bảng giá tham khảo</h3>
-          <p class="text-xs text-[#D97706] font-medium mt-1 leading-relaxed">
-            Xem bảng giá dịch vụ cố định, vật tư chính hãng & bảo hành dài hạn 12 tháng
-          </p>
-        </div>
-        <div class="flex justify-end mt-4">
-          <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#D97706] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <CircleDollarSign :size="24" />
-          </div>
-        </div>
-      </div>
+        </span>
+        <span class="block text-lg font-semibold text-ink-900">{{ card.title }}</span>
+        <span class="block text-sm text-ink-600 text-pretty">{{ card.text }}</span>
+      </button>
+    </section>
 
-      <!-- Card 3: Bảo hành điện tử -->
-      <div
-        class="relative p-5 rounded-2xl bg-[#ECFDF5] border border-[#A7F3D0] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-        @click="router.push('/app/warranties')"
-      >
-        <div>
-          <span class="inline-block px-2.5 py-0.5 rounded-full bg-[#059669] text-white text-[11px] font-bold mb-3 shadow-xs">
-            Tra cứu nhanh
-          </span>
-          <h3 class="text-xl font-extrabold text-[#047857] tracking-tight">Bảo hành điện tử</h3>
-          <p class="text-xs text-[#059669] font-medium mt-1 leading-relaxed">
-            Xem phiếu bảo hành, yêu cầu bảo hành lại & theo dõi tiến trình xử lý
-          </p>
-        </div>
-        <div class="flex justify-end mt-4">
-          <div class="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm text-[#059669] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            <FileCheck :size="24" />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 6. Active Order Tracker (if any order is in progress) -->
-    <div
-      v-if="activeOrder"
-      class="p-5 rounded-2xl bg-white border-2 border-brand-200 shadow-md space-y-4"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="relative flex h-3 w-3">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-600"></span>
-          </span>
-          <h3 class="text-sm font-bold text-ink-900">Đơn sửa chữa đang diễn ra</h3>
-        </div>
+    <!-- 6. Order in progress -->
+    <section v-if="activeOrder" class="p-5 sm:p-6 rounded-2xl bg-white border border-brand-200 shadow-(--shadow-e1) space-y-4">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-base font-semibold text-ink-900 flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-brand-600" />
+          Đơn sửa chữa đang diễn ra
+        </h3>
         <FhStatusPill :status="activeOrder.status" />
       </div>
 
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-ink-25 border border-ink-100">
-        <div class="space-y-1">
-          <span class="font-mono text-xs font-bold text-ink-500">{{ activeOrder.code }}</span>
-          <h4 class="text-base font-bold text-ink-900">{{ activeOrder.serviceName }}</h4>
-          <p class="text-xs text-ink-500 flex items-center gap-1.5">
-            <MapPin :size="13" class="text-brand-600 shrink-0" />
-            {{ activeOrder.addressSummary }}
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-xl bg-ink-50">
+        <div class="min-w-0 space-y-1">
+          <span class="text-sm text-ink-500 font-num">{{ activeOrder.code }}</span>
+          <h4 class="text-base font-semibold text-ink-900">{{ activeOrder.serviceName }}</h4>
+          <p class="text-sm text-ink-600 flex items-start gap-1.5">
+            <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+            <span class="text-pretty">{{ activeOrder.addressSummary }}</span>
           </p>
         </div>
 
-        <!-- Tech Info & Quick Actions -->
-        <div class="flex items-center gap-3 sm:border-l sm:border-ink-200 sm:pl-6">
-          <div v-if="activeOrder.technician" class="flex items-center gap-2.5">
-            <div class="w-10 h-10 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 lg:border-l lg:border-ink-200 lg:pl-5 shrink-0">
+          <div v-if="activeOrder.technician" class="flex items-center gap-2.5 min-w-0">
+            <span class="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-sm shrink-0">
               {{ activeOrder.technician.fullName.charAt(0) }}
-            </div>
-            <div>
-              <div class="font-bold text-xs text-ink-900">{{ activeOrder.technician.fullName }}</div>
-              <div class="text-[11px] text-ink-500">★ {{ activeOrder.technician.averageRating || '5.0' }} • Kỹ thuật viên</div>
-            </div>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold text-ink-900 truncate">{{ activeOrder.technician.fullName }}</span>
+              <span class="block text-xs text-ink-500 whitespace-nowrap">
+                <span class="text-warning-500">★</span> {{ activeOrder.technician.averageRating || '5.0' }} · Kỹ thuật viên
+              </span>
+            </span>
           </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors flex items-center gap-1.5 shadow-xs"
-              @click="handleChatForOrder(activeOrder)"
-            >
-              <MessageSquare :size="14" />
-              <span>Nhắn tin</span>
-            </button>
-            <button
-              type="button"
-              class="px-3 py-2 rounded-xl bg-white border border-ink-200 text-ink-700 text-xs font-semibold hover:bg-ink-50 transition-colors"
-              @click="router.push(`/app/orders/${activeOrder.id}`)"
-            >
+          <div class="grid grid-cols-2 sm:flex items-center gap-2">
+            <FhButton variant="primary" size="sm" @click="handleChatForOrder(activeOrder)">
+              <MessageSquare :size="16" />
+              Nhắn tin
+            </FhButton>
+            <FhButton variant="secondary" size="sm" @click="router.push(`/app/orders/${activeOrder.id}`)">
               Xem tiến độ
-            </button>
+            </FhButton>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 7. Quick Stats Summary (compact) -->
-    <div v-if="!loading && orders.length > 0" class="grid grid-cols-3 gap-3">
-      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-          <BookOpen :size="18" />
-        </div>
-        <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.total }}</div>
-          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Tổng đơn</div>
-        </div>
+    <!-- 7. Order counts -->
+    <section v-if="!loading && orders.length > 0" class="grid grid-cols-3 gap-3">
+      <div v-for="stat in statTiles" :key="stat.label" class="p-4 rounded-2xl bg-white border border-ink-200">
+        <component :is="stat.icon" :size="18" :stroke-width="1.75" class="text-ink-400 mb-2" />
+        <div class="text-xl font-semibold text-ink-900 font-num">{{ stat.value }}</div>
+        <div class="text-sm text-ink-500 whitespace-nowrap">{{ stat.label }}</div>
       </div>
-      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-          <Timer :size="18" />
-        </div>
-        <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.inProgress }}</div>
-          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Đang xử lý</div>
-        </div>
-      </div>
-      <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-ink-200 shadow-xs">
-        <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-          <BadgeCheck :size="18" />
-        </div>
-        <div>
-          <div class="text-lg font-extrabold text-ink-900 font-num leading-none">{{ orderStats.completed }}</div>
-          <div class="text-[11px] text-ink-500 font-medium mt-0.5">Hoàn thành</div>
-        </div>
-      </div>
-    </div>
+    </section>
 
-    <!-- 8. Popular Services Grid -->
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <Sparkles :size="18" class="text-brand-600" />
-          <h2 class="text-lg font-bold text-ink-900">Dịch vụ phổ biến</h2>
-        </div>
+    <!-- 8. Popular services -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold text-ink-900">Dịch vụ phổ biến</h2>
         <button
           type="button"
-          class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+          class="text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap"
           @click="router.push('/services')"
         >
-          Xem tất cả <ChevronRight :size="14" />
+          Xem tất cả <ChevronRight :size="16" />
         </button>
       </div>
 
-      <!-- Grid 4 cột trên desktop, 2 cột trên mobile -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <button
           v-for="srv in popularServices"
           :key="srv.id"
           type="button"
-          class="p-4 rounded-2xl bg-white border border-ink-200 hover:border-brand-400 hover:shadow-md transition-all flex flex-col items-center text-center group active:scale-95"
+          class="p-4 rounded-2xl bg-white border border-ink-200 hover:border-brand-300 transition-colors flex items-center gap-3.5 text-left"
           @click="handleServiceClick(srv)"
         >
-          <!-- 3D Isometric Pedestal Effect -->
-          <div class="relative mb-3">
-            <div
-              class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105"
-              :style="{ backgroundColor: srv.pedestalBg }"
-            >
-              <component :is="srv.icon" :size="26" :style="{ color: srv.iconColor }" />
-            </div>
-            <!-- Hot Badge -->
-            <span
-              v-if="srv.badge"
-              class="absolute -top-1.5 -right-2 px-1.5 py-0.2 rounded-full bg-danger-600 text-white text-[9px] font-bold uppercase tracking-wider shadow-xs"
-            >
-              {{ srv.badge }}
+          <span class="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <component :is="srv.icon" :size="22" :stroke-width="1.75" />
+          </span>
+          <span class="flex-1 min-w-0">
+            <span class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-ink-900 truncate">{{ srv.name }}</span>
+              <span v-if="srv.badge" class="h-5 px-1.5 rounded-md bg-warning-50 text-warning-800 text-[11px] font-medium inline-flex items-center whitespace-nowrap shrink-0">
+                {{ srv.badge }}
+              </span>
             </span>
-          </div>
-
-          <span class="text-xs font-bold text-ink-800 group-hover:text-brand-600 whitespace-pre-line leading-tight">
-            {{ srv.name }}
+            <span v-if="srv.price" class="block text-sm text-ink-600 font-num whitespace-nowrap">Từ {{ srv.price.toLocaleString('vi-VN') }}&nbsp;₫</span>
+            <span v-else class="block text-sm text-ink-500 whitespace-nowrap">Khảo sát tận nơi</span>
           </span>
-          <span
-            v-if="srv.price"
-            class="mt-1.5 text-[10px] font-extrabold text-brand-700 bg-brand-50 border border-brand-200/80 px-2 py-0.5 rounded-full font-num"
-          >
-            Từ {{ srv.price.toLocaleString('vi-VN') }}đ
-          </span>
-          <span
-            v-else
-            class="mt-1.5 text-[10px] font-medium text-ink-400 bg-ink-50 px-1.5 py-0.5 rounded-full"
-          >
-            Khảo sát tận nơi
-          </span>
+          <ChevronRight :size="18" class="text-ink-400 shrink-0" />
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- 9. Promotional Campaign Banner -->
-    <div
-      class="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
+    <!-- 9. Offer -->
+    <section
+      class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:border-ink-300 transition-colors"
       @click="router.push('/app/bookings/new')"
     >
-      <div class="space-y-2 text-center sm:text-left">
-        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[10px] font-bold uppercase tracking-wider">
-          <Flame :size="12" class="text-amber-400" />
-          ĐẶT THỢ NGAY
+      <div class="flex gap-4 min-w-0">
+        <span class="w-11 h-11 rounded-xl bg-warning-50 text-warning-600 flex items-center justify-center shrink-0">
+          <Gift :size="22" :stroke-width="1.75" />
         </span>
-        <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight">
-          Giảm 30% cho đơn sửa chữa đầu tiên
-        </h3>
-        <p class="text-xs sm:text-sm text-slate-300">
-          Cam kết bảo hành sửa chữa 30 ngày an tâm, hoàn tiền nếu không hài lòng.
-        </p>
+        <div class="space-y-1 min-w-0">
+          <p class="text-sm font-medium text-warning-700">Đặt thợ ngay</p>
+          <h3 class="text-lg font-semibold text-ink-900">Giảm 30% cho đơn sửa chữa đầu tiên</h3>
+          <p class="text-sm text-ink-600 text-pretty">Cam kết bảo hành sửa chữa 30 ngày an tâm, hoàn tiền nếu không hài lòng.</p>
+        </div>
       </div>
+      <FhButton variant="primary" size="md" class="self-start sm:self-center">
+        Tham gia ngay
+        <ChevronRight :size="16" />
+      </FhButton>
+    </section>
 
-      <button
-        type="button"
-        class="px-5 py-2.5 rounded-xl bg-white text-slate-950 hover:bg-blue-50 text-xs font-bold shrink-0 transition-colors shadow-sm flex items-center gap-1.5"
-      >
-        <span>Tham gia ngay</span>
-        <ArrowRight :size="14" />
-      </button>
-    </div>
-
-    <!-- 10. Recent Orders History -->
-    <div v-if="recentOrders.length > 0" class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h2 class="text-base font-bold text-ink-900">Lịch sử sửa chữa gần đây</h2>
-        <router-link
-          to="/app/orders"
-          class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
-        >
-          Xem tất cả đơn <ChevronRight :size="14" />
+    <!-- 10. Recent orders -->
+    <section v-if="recentOrders.length > 0" class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold text-ink-900">Lịch sử sửa chữa gần đây</h2>
+        <router-link to="/app/orders" class="text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap">
+          Xem tất cả đơn <ChevronRight :size="16" />
         </router-link>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div
+        <button
           v-for="order in recentOrders"
           :key="order.id"
-          class="p-4 rounded-2xl bg-white border border-ink-200 hover:border-brand-300 hover:shadow-xs transition-all cursor-pointer space-y-2.5 flex flex-col justify-between"
+          type="button"
+          class="text-left p-4 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors flex flex-col gap-3"
           @click="router.push(`/app/orders/${order.id}`)"
         >
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-1">
-              <span class="font-mono text-xs font-bold text-ink-500">{{ order.code }}</span>
-              <FhStatusPill :status="order.status" />
-            </div>
-            <h4 class="text-sm font-bold text-ink-900 line-clamp-1">{{ order.serviceName }}</h4>
-            <p class="text-xs text-ink-500 flex items-center gap-1.5">
-              <Clock :size="12" />
-              <span>{{ new Date(order.createdAt).toLocaleDateString('vi-VN') }}</span>
-            </p>
-          </div>
+          <span class="flex items-center justify-between gap-2">
+            <span class="text-sm text-ink-500 font-num truncate">{{ order.code }}</span>
+            <FhStatusPill :status="order.status" />
+          </span>
+          <span class="block text-sm font-semibold text-ink-900 line-clamp-2">{{ order.serviceName }}</span>
+          <span class="text-sm text-ink-500 flex items-center gap-1.5">
+            <Clock :size="14" />
+            {{ vnDateString(order.createdAt) }}
+          </span>
+          <span class="mt-auto pt-3 border-t border-ink-100 flex items-center justify-between text-sm">
+            <span class="text-ink-500">Tổng tiền:</span>
+            <span class="font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="order.grandTotal" /></span>
+          </span>
+        </button>
+      </div>
+    </section>
 
-          <div class="pt-2 border-t border-ink-100 flex items-center justify-between text-xs">
-            <span class="text-ink-400 font-medium">Tổng tiền:</span>
-            <span class="font-bold text-brand-700">
-              <FhMoney :amount="order.grandTotal" />
-            </span>
-          </div>
+    <!-- 11. Promises -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 rounded-2xl bg-white border border-ink-200 divide-y sm:divide-y-0 sm:divide-x divide-ink-100">
+      <div v-for="promise in promises" :key="promise.title" class="p-5 flex sm:flex-col items-start gap-3">
+        <component :is="promise.icon" :size="22" :stroke-width="1.75" class="text-brand-600 shrink-0" />
+        <div>
+          <h4 class="text-sm font-semibold text-ink-900">{{ promise.title }}</h4>
+          <p class="text-sm text-ink-500 text-pretty">{{ promise.text }}</p>
         </div>
       </div>
-    </div>
-
-    <!-- 11. FixHome Trust Section (3 Cam kết vàng) -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-6 rounded-2xl bg-white border border-ink-200 shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-ink-100 text-center">
-      <div class="pt-3 sm:pt-0 sm:px-4 space-y-1">
-        <div class="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
-          <ShieldCheck :size="20" />
-        </div>
-        <h4 class="text-xs font-bold text-ink-900">Thợ xác minh</h4>
-        <p class="text-[11px] text-ink-500">Lý lịch 100% rõ ràng, kiểm tra tay nghề định kỳ</p>
-      </div>
-
-      <div class="pt-3 sm:pt-0 sm:px-4 space-y-1">
-        <div class="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
-          <Tag :size="20" />
-        </div>
-        <h4 class="text-xs font-bold text-ink-900">Giá minh bạch</h4>
-        <p class="text-[11px] text-ink-500">Báo giá trước khi làm, niêm yết theo catalog</p>
-      </div>
-
-      <div class="pt-3 sm:pt-0 sm:px-4 space-y-1">
-        <div class="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
-          <Award :size="20" />
-        </div>
-        <h4 class="text-xs font-bold text-ink-900">Bảo hành 30 ngày</h4>
-        <p class="text-[11px] text-ink-500">Bảo hành điện tử, giải quyết khiếu nại trong 24h</p>
-      </div>
-    </div>
+    </section>
   </div>
 </template>

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ScrollText, RefreshCw, Search, ChevronLeft, ChevronRight, X } from 'lucide-vue-next';
 import { FhButton, FhTable, FhSkeleton, type TableColumn } from '../../../components';
 import { auditLogsApi, type AuditLogRecord } from '../../../api/admin-audit-logs.api';
+import { vnDateTimeString } from '../../../utils/vn-time';
 
 const columns: TableColumn[] = [
   { key: 'action', label: 'Hành động / Tài nguyên' },
@@ -122,7 +123,7 @@ const closeDetail = () => {
 const formatDateTime = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('vi-VN');
+  return Number.isNaN(date.getTime()) ? value : vnDateTimeString(date);
 };
 
 const formatSnapshot = (value: unknown) => {

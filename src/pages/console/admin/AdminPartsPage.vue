@@ -28,6 +28,7 @@ import {
   type CreatePartPayload,
   type UpdatePartPayload,
 } from '../../../api/admin-parts.api';
+import { vnDateString } from '../../../utils/vn-time';
 
 // ── Table columns ──────────────────────────────────────────────────────────
 const columns: TableColumn[] = [
@@ -707,8 +708,8 @@ async function submitForm() {
           </div>
 
           <div class="flex items-center justify-between text-[11px] text-ink-400 pt-1 border-t border-ink-100">
-            <span>Ngày tạo: {{ new Date(detailPart.createdAt).toLocaleDateString('vi-VN') }}</span>
-            <span>Cập nhật: {{ new Date(detailPart.updatedAt).toLocaleDateString('vi-VN') }}</span>
+            <span>Ngày tạo: {{ vnDateString(detailPart.createdAt) }}</span>
+            <span>Cập nhật: {{ vnDateString(detailPart.updatedAt) }}</span>
           </div>
         </div>
 

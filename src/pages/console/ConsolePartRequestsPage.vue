@@ -27,6 +27,7 @@ import {
   type PartRequestType,
   type FulfillmentMethod,
 } from '../../api/part-requests.api';
+import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeString } from '../../utils/vn-time';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
@@ -76,7 +77,7 @@ const loadData = async () => {
       status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() as PartRequestStatus : undefined,
       requestType: typeFilter.value !== 'ALL' ? typeFilter.value.toLowerCase() as PartRequestType : undefined,
       fulfillmentMethod: fulfillmentFilter.value !== 'ALL' ? fulfillmentFilter.value.toLowerCase() as FulfillmentMethod : undefined,
-      createdFrom: dateFilter.value === 'ALL' ? undefined : new Date(dateFilter.value === 'today' ? new Date().setHours(0, 0, 0, 0) : Date.now() - (dateFilter.value === '7days' ? 7 : 30) * 86400000).toISOString(),
+      createdFrom: dateFilter.value === 'ALL' ? undefined : (dateFilter.value === 'today' ? vnKeyAndClockToDate(vnDayKey(), 0, 0) : new Date(Date.now() - (dateFilter.value === '7days' ? 7 : 30) * 86400000)).toISOString(),
       search: searchQuery.value.trim() || undefined,
       page: page.value,
       pageSize,
@@ -498,10 +499,10 @@ const getUsageBadgeClass = (status: string) => {
         </div>
         <div v-else>
           <div class="text-[11px] text-ink-700 font-num">
-            {{ new Date(row.createdAt).toLocaleDateString('vi-VN') }}
+            {{ vnDateString(row.createdAt) }}
           </div>
           <div class="text-[10px] text-ink-400 font-num">
-            {{ new Date(row.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}
+            {{ vnTimeString(row.createdAt, { hour: '2-digit', minute: '2-digit' }) }}
           </div>
         </div>
       </template>
@@ -652,7 +653,7 @@ const getUsageBadgeClass = (status: string) => {
           <div>Phí giao hàng: <strong class="text-ink-900 font-num"><FhMoney :amount="detailModalRequest.shippingFee || 0" /></strong></div>
         </div>
 
-        <p class="text-xs text-ink-600">Đã nhận: {{ detailModalRequest.receivedAt ? new Date(detailModalRequest.receivedAt).toLocaleString('vi-VN') : 'Chưa nhận' }} • Hoàn tất: {{ detailModalRequest.completedAt ? new Date(detailModalRequest.completedAt).toLocaleString('vi-VN') : 'Chưa hoàn tất' }}</p>
+        <p class="text-xs text-ink-600">Đã nhận: {{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }} • Hoàn tất: {{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</p>
         <div class="space-y-2">
           <h4 class="text-xs font-bold text-ink-800 uppercase tracking-wider">Danh sách linh kiện & Trạng thái sử dụng:</h4>
           <div class="border border-ink-200 rounded divide-y divide-ink-100">

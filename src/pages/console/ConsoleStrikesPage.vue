@@ -4,6 +4,7 @@ import { ShieldAlert, CheckCircle2, RotateCcw } from 'lucide-vue-next';
 import { FhCard, FhTable, FhButton, FhConfirmDialog, FhSkeleton, FhEmptyState } from '../../components';
 import { ordersApi, type StrikeRecord } from '../../api/orders.api';
 import { adminUsersApi } from '../../api/admin-users.api';
+import { vnDateString } from '../../utils/vn-time';
 
 interface StrikeRow extends StrikeRecord {
   userName: string;
@@ -137,7 +138,7 @@ onMounted(loadStrikes);
 
         <template #cell-suspension="{ row }">
           <div v-if="String(row.status).toUpperCase() !== 'WAIVED' && row.suspendedUntil" class="text-xs font-semibold text-danger-600 font-num">
-            Tới {{ new Date(row.suspendedUntil).toLocaleDateString('vi-VN') }}
+            Tới {{ vnDateString(row.suspendedUntil) }}
           </div>
           <span v-else-if="String(row.status).toUpperCase() === 'WAIVED'" class="text-xs font-semibold text-success-600 flex items-center gap-1">
             <CheckCircle2 :size="13" /> Đã gỡ bỏ

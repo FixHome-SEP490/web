@@ -11,6 +11,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'booking-w1' } }), useRouter: () => ({ push }),
 }));
 import BookingDetailPage from '../src/pages/customer/BookingDetailPage.vue';
+import { vnWallClockToDate } from '../src/utils/vn-time';
 
 const DatePicker = defineComponent({
   props: ['modelValue'], emits: ['update:modelValue'],
@@ -125,7 +126,8 @@ describe('W1 pre-Accept schedule and shortlist recovery (mock HTTP only)', () =>
     await wrapper.get('input[type="date"]').setValue('2030-01-03');
     await wrapper.get('input[type="time"]').setValue('10:30');
     await save().trigger('click'); await flushPromises();
-    const start = new Date(2030, 0, 3, 10, 30);
+    // The picked 03/01 10:30 is a Vietnam clock time, whatever zone the browser is in.
+    const start = vnWallClockToDate(2030, 1, 3, 10, 30);
     expect(patch).toHaveBeenCalledWith('/bookings/booking-w1/schedule', {
       description: 'Original description', preferredStartAt: start.toISOString(),
       preferredEndAt: new Date(start.getTime() + 4 * 60 * 60 * 1000).toISOString(),

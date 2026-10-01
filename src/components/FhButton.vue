@@ -25,7 +25,7 @@ const emit = defineEmits<{
 }>();
 
 const baseClasses =
-  'inline-flex items-center justify-center font-medium transition-all duration-120 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 select-none cursor-pointer';
+  'inline-flex items-center justify-center font-medium transition-all duration-120 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 select-none cursor-pointer whitespace-nowrap shrink-0';
 
 const sizeClasses = computed(() => {
   switch (props.size) {

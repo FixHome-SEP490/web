@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Receipt, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 import { FhButton, FhTable, FhStatusPill, FhMoney, FhSkeleton, type TableColumn } from '../../../components';
 import { platformDuesApi, type PlatformDueRecord } from '../../../api/admin-platform-dues.api';
+import { vnDateString } from '../../../utils/vn-time';
 
 const columns: TableColumn[] = [
   { key: 'invoice', label: 'Hoá đơn / Đơn' },
@@ -98,7 +99,7 @@ watch(page, (nextPage, previousPage) => {
 const formatDate = (value: string | null) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN');
+  return Number.isNaN(date.getTime()) ? value : vnDateString(date);
 };
 </script>
 

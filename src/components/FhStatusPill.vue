@@ -24,9 +24,9 @@ const statusConfig = computed(() => {
       };
     case 'ACCEPTED':
       return {
-        bg: 'bg-violet-50',
-        text: 'text-violet-600',
-        dot: 'bg-violet-600',
+        bg: 'bg-brand-50',
+        text: 'text-brand-600',
+        dot: 'bg-brand-600',
         defaultLabel: 'Đã nhận đơn',
       };
     case 'EN_ROUTE':
@@ -200,7 +200,7 @@ const displayLabel = computed(() => props.label || statusConfig.value.defaultLab
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 h-[24px] px-2 rounded-[var(--radius-sm)] text-[12px] font-medium select-none"
+    class="inline-flex items-center gap-1.5 h-[24px] px-2 rounded-[var(--radius-sm)] text-[12px] font-medium select-none whitespace-nowrap shrink-0"
     :class="[statusConfig.bg, statusConfig.text]"
   >
     <span

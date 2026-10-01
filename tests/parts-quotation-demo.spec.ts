@@ -5,7 +5,7 @@ import PartsQuoteDemoPreview from '../src/components/PartsQuoteDemoPreview.vue';
 describe('Parts quote preview is client-only illustrative data', () => {
   it('lets technician visualize example items and a draft total without submitting a quotation', async () => {
     const wrapper = mount(PartsQuoteDemoPreview);
-    expect(wrapper.get('[data-testid="parts-quotation-demo"]').text()).toContain('không gửi API');
+    expect(wrapper.get('[data-testid="parts-quotation-demo"]').text()).toContain('không gửi đi đâu');
     expect(wrapper.text()).toContain('không thêm vào báo giá thật');
     const choices = wrapper.findAll('input[type="checkbox"]');
     expect(choices).toHaveLength(3);

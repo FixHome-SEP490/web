@@ -216,7 +216,7 @@ function handleDelete(messageId: string) {
           <span
             class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
             :class="chatStore.isSocketConnected ? 'bg-success-600' : 'bg-ink-300'"
-            :title="chatStore.isSocketConnected ? 'Đã kết nối realtime' : 'Đang kết nối lại...'"
+            :title="chatStore.isSocketConnected ? 'Đã kết nối' : 'Đang kết nối lại…'"
           ></span>
         </div>
 
@@ -283,9 +283,9 @@ function handleDelete(messageId: string) {
     <!-- Read-only Banner (if applicable) -->
     <div
       v-if="!canSend && conversation"
-      class="px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2 flex-shrink-0"
+      class="px-3 py-2 bg-warning-50 border-b border-warning-200 text-warning-800 text-xs flex items-center gap-2 flex-shrink-0"
     >
-      <Lock :size="14" class="flex-shrink-0 text-amber-600" />
+      <Lock :size="14" class="flex-shrink-0 text-warning-600" />
       <span>Cuộc trò chuyện này đang ở chế độ chỉ đọc do đơn dịch vụ đã chuyển trạng thái.</span>
     </div>
 

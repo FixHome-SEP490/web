@@ -39,7 +39,7 @@ describe('historical ServiceOrder Web adapter keeps private-free summary separat
     expect(card.text()).toContain('SO-OLD');
     expect(card.text()).not.toMatch(/PRIVATE|SYNTHETIC_PRIVATE|Địa chỉ|Điện thoại/);
     expect(wrapper.find('a[href^="tel:"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Vào Workspace');
+    expect(wrapper.text()).not.toContain('Mở công việc');
     expect(wrapper.text()).not.toContain('Nhắn tin');
     wrapper.unmount();
   });

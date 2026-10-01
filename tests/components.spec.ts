@@ -105,8 +105,10 @@ describe('FixHome Base Components', () => {
           partsTotal: 300000,
         },
       });
-      expect(wrapper.text()).toContain('Tiền công thợ (Labor)');
-      expect(wrapper.text()).toContain('Thiết bị & vật tư (Parts)');
+      expect(wrapper.text()).toContain('Tiền công thợ');
+      expect(wrapper.text()).toContain('Thiết bị & vật tư');
+      // Customers read Vietnamese only, no English terms in brackets.
+      expect(wrapper.text()).not.toMatch(/Labor|Parts/);
       expect(wrapper.text()).toContain('200.000');
       expect(wrapper.text()).toContain('300.000');
       expect(wrapper.text()).toContain('500.000');

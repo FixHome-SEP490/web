@@ -104,22 +104,42 @@ describe('extractApiErrorMessage', () => {
           error: {
             code: 'VALIDATION_FAILED',
             message: 'Validation failed',
+            details: ['Email không đúng định dạng'],
+          },
+        },
+      },
+    };
+    expect(extractApiErrorMessage(err, 'du phong')).toBe('Email không đúng định dạng');
+  });
+
+  it('dùng error.message khi không có details', () => {
+    const err = {
+      response: { data: { error: { message: 'Số điện thoại này đã được đăng ký' } } },
+    };
+    expect(extractApiErrorMessage(err, 'du phong')).toBe('Số điện thoại này đã được đăng ký');
+  });
+
+  it('không để câu tiếng Anh của thư viện tới người dùng', () => {
+    const err = {
+      response: {
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Validation failed',
             details: ['email must be a valid email address'],
           },
         },
       },
     };
-    expect(extractApiErrorMessage(err, 'du phong')).toBe(
-      'email must be a valid email address',
-    );
+    expect(extractApiErrorMessage(err, 'du phong')).toBe('du phong');
   });
 
-  it('dùng error.message khi không có details', () => {
+  it('dịch câu tiếng Anh của backend mà người dùng cần biết', () => {
     const err = {
       response: { data: { error: { message: 'Email is already registered' } } },
     };
     expect(extractApiErrorMessage(err, 'du phong')).toBe(
-      'Email is already registered',
+      'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.',
     );
   });
 

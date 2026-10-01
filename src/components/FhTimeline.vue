@@ -64,7 +64,7 @@ defineProps<Props>();
 
           <span
             v-if="step.current"
-            class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-600 border border-brand-200"
+            class="h-5 px-1.5 inline-flex items-center text-[11px] font-medium rounded-md bg-brand-50 text-brand-700 whitespace-nowrap"
           >
             Hiện tại
           </span>
@@ -72,8 +72,8 @@ defineProps<Props>();
 
         <div v-if="step.timestamp || step.actor" class="text-xs text-ink-500 flex items-center gap-2">
           <span v-if="step.timestamp" class="font-num">{{ step.timestamp }}</span>
-          <span v-if="step.timestamp && step.actor">•</span>
-          <span v-if="step.actor" class="italic">{{ step.actor }}</span>
+          <span v-if="step.timestamp && step.actor">·</span>
+          <span v-if="step.actor">{{ step.actor }}</span>
         </div>
 
         <p v-if="step.note" class="text-xs text-ink-600 bg-ink-50 p-2 rounded-[var(--radius-sm)] mt-1 border border-ink-100">

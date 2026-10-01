@@ -4,6 +4,7 @@ import { bookingsApi } from '../src/api/bookings.api';
 import { ordersApi } from '../src/api/orders.api';
 import { profileApi } from '../src/api/profile.api';
 import { bookingSchedule } from '../src/utils/booking-schedule';
+import { vnParts, vnWallClockToDate } from '../src/utils/vn-time';
 
 vi.mock('../src/api/client', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
 describe('booking/order HTTP contracts (AI excluded)', () => {
@@ -57,11 +58,12 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/service-orders/o/confirm-completion',{});
   });
   it('rejects a past appointment and preserves the selected future window', () => {
-    const now = new Date(2026,8,16,15);
+    // 16/09 at 15:00 in Vietnam; days and hours are Vietnam ones whatever the machine zone.
+    const now = vnWallClockToDate(2026,9,16,15);
     expect(() => bookingSchedule('TODAY','MORNING',now)).toThrow();
     const schedule = bookingSchedule('TOMORROW','AFTERNOON',now);
-    expect(new Date(schedule.preferredStartAt).getDate()).toBe(17);
-    expect(new Date(schedule.preferredStartAt).getHours()).toBe(13);
+    expect(vnParts(schedule.preferredStartAt).day).toBe(17);
+    expect(vnParts(schedule.preferredStartAt).hour).toBe(13);
     expect(new Date(schedule.preferredEndAt).getTime()-new Date(schedule.preferredStartAt).getTime()).toBe(4*3600000);
   });
 });
