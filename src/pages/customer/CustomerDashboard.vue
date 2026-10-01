@@ -33,6 +33,7 @@ import { FhButton, FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { vnDateString } from '../../utils/vn-time';
+import { formatRating } from '../../utils/formatters';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -396,7 +397,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             <span class="min-w-0">
               <span class="block text-sm font-semibold text-ink-900 truncate">{{ activeOrder.technician.fullName }}</span>
               <span class="block text-xs text-ink-500 whitespace-nowrap">
-                <span class="text-warning-500">★</span> {{ activeOrder.technician.averageRating || '5.0' }} · Kỹ thuật viên
+                <template v-if="formatRating(activeOrder.technician.averageRating)"><span class="text-warning-500">★</span> {{ formatRating(activeOrder.technician.averageRating) }}</template><template v-else>Chưa có đánh giá</template> · Kỹ thuật viên
               </span>
             </span>
           </div>
