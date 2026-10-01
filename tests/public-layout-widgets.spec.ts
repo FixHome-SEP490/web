@@ -4,8 +4,9 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h } from 'vue';
 
-// A signed-in customer browsing the public pages keeps chat, the assistant and
-// incoming calls, as inside the app; guests and staff see the pages unchanged.
+// Signed-in customers and technicians keep their chat bubble and incoming calls
+// on every page, public pages and technician onboarding included; customers also
+// keep the assistant. Guests and staff see the pages unchanged.
 const { initSocket, initCallSignalling } = vi.hoisted(() => ({ initSocket: vi.fn(), initCallSignalling: vi.fn() }));
 
 vi.mock('../src/api/client', () => ({
@@ -17,11 +18,8 @@ vi.mock('../src/api/client', () => ({
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ initSocket }) }));
 vi.mock('../src/stores/call.store', () => ({ useCallStore: () => ({ initCallSignalling }) }));
 vi.mock('../src/components/chat/CallOverlay.vue', () => ({ default: defineComponent({ render: () => h('div', { 'data-testid': 'call-overlay' }) }) }));
-vi.mock('../src/components', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  ChatFloatingWidget: defineComponent({ render: () => h('div', { 'data-testid': 'chat-widget' }) }),
-  AiAssistantWidget: defineComponent({ render: () => h('div', { 'data-testid': 'ai-widget' }) }),
-}));
+vi.mock('../src/components/chat/ChatFloatingWidget.vue', () => ({ default: defineComponent({ render: () => h('div', { 'data-testid': 'chat-widget' }) }) }));
+vi.mock('../src/components/chat/AiAssistantWidget.vue', () => ({ default: defineComponent({ render: () => h('div', { 'data-testid': 'ai-widget' }) }) }));
 
 import PublicLayout from '../src/layouts/PublicLayout.vue';
 import { useAuthStore } from '../src/stores/auth';
@@ -53,10 +51,18 @@ describe('Public pages for a signed-in customer', () => {
     expect(initCallSignalling).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a technician their chat and calls, without the customer assistant', async () => {
+    const wrapper = await render(UserRole.TECHNICIAN);
+    expect(wrapper.find('[data-testid="chat-widget"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="call-overlay"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="ai-widget"]').exists()).toBe(false);
+    expect(initSocket).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['a guest', null],
-    ['a technician', UserRole.TECHNICIAN],
     ['an admin', UserRole.ADMIN],
+    ['a service manager', UserRole.SERVICE_MANAGER],
   ])('keeps the pages unchanged for %s', async (_label, role) => {
     const wrapper = await render(role as UserRole | null);
     expect(wrapper.find('[data-testid="chat-widget"]').exists()).toBe(false);
