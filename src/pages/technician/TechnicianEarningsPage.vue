@@ -88,7 +88,7 @@ onMounted(load);
         <div class="text-sm text-ink-500">Tổng tiền công</div>
         <div class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
           <template v-if="loading">—</template>
-          <FhMoney v-else :amount="totals.labor" />
+          <FhMoney v-else :amount="totals.labor" emphasis />
         </div>
       </div>
       <div class="p-5 rounded-2xl bg-white border border-ink-200">
@@ -96,7 +96,7 @@ onMounted(load);
         <div class="text-sm text-ink-500">Tổng giá trị đơn</div>
         <div class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
           <template v-if="loading">—</template>
-          <FhMoney v-else :amount="totals.orderValue" />
+          <FhMoney v-else :amount="totals.orderValue" emphasis />
         </div>
       </div>
       <div class="p-5 rounded-2xl bg-white border border-ink-200">
@@ -119,7 +119,7 @@ onMounted(load);
       <span class="flex-1 min-w-0">
         <span class="block text-sm text-ink-500">Số dư ví hiện tại</span>
         <span class="block text-xl font-semibold text-ink-900 font-num whitespace-nowrap">
-          <template v-if="wallet"><FhMoney :amount="wallet.balance" /></template>
+          <template v-if="wallet"><FhMoney :amount="wallet.balance" emphasis /></template>
           <template v-else>—</template>
         </span>
         <span class="block text-sm text-ink-500">Nạp tiền, rút tiền và xem phí nền tảng đã trừ</span>
