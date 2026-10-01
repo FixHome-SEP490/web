@@ -25,6 +25,7 @@ import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString } from '../../utils/vn-time';
+import { formatRating } from '../../utils/formatters';
 
 const PAGE_SIZE = 20;
 
@@ -506,8 +507,11 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               <div class="text-sm min-w-0">
                 <div class="font-semibold text-ink-900 truncate">{{ order.technician.fullName }}</div>
                 <div class="text-xs text-ink-600 flex items-center gap-1 whitespace-nowrap">
-                  <Star :size="12" class="fill-warning-500 text-warning-500" />
-                  <span>{{ order.technician.averageRating || '5.0' }}</span>
+                  <template v-if="formatRating(order.technician.averageRating)">
+                    <Star :size="12" class="fill-warning-500 text-warning-500" />
+                    <span>{{ formatRating(order.technician.averageRating) }}</span>
+                  </template>
+                  <span v-else>Chưa có đánh giá</span>
                   <span class="text-ink-500">· Thợ chính</span>
                 </div>
               </div>

@@ -1,202 +1,179 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+// Earnings from real records only: the technician's completed service orders
+// and their wallet balance. Platform fees are not estimated here; the wallet
+// lists the fees actually deducted, line by line.
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { DollarSign, Calendar, Wallet, ArrowUpRight, Download } from 'lucide-vue-next';
+import { Banknote, BadgeCheck, CalendarCheck, ChevronRight, ClipboardList, RefreshCw, Wallet } from 'lucide-vue-next';
 
-import { FhMoney, FhTable, FhButton } from '../../components';
+import { FhButton, FhMoney, FhStatusPill } from '../../components';
+import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
+import { walletApi, type WalletSummary } from '../../api/wallet.api';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
-const showWalletDemo = import.meta.env.DEV;
-const payouts = ref([
-  {
-    orderCode: 'DEMO-0042',
-    date: '10/09/2026',
-    customer: 'Khách demo 1',
-    gross: 400000,
-    platformFee: 60000,
-    net: 340000,
-    status: 'COMPLETED',
-  },
-  {
-    orderCode: 'DEMO-0019',
-    date: '08/09/2026',
-    customer: 'Khách demo 2',
-    gross: 250000,
-    platformFee: 37500,
-    net: 212500,
-    status: 'COMPLETED',
-  },
-  {
-    orderCode: 'DEMO-0081',
-    date: '05/09/2026',
-    customer: 'Khách demo 3',
-    gross: 500000,
-    platformFee: 75000,
-    net: 425000,
-    status: 'COMPLETED',
-  },
-]);
 
+const loading = ref(true);
+const error = ref<string | null>(null);
+const orders = ref<ServiceOrderItem[]>([]);
+const wallet = ref<WalletSummary | null>(null);
+
+const isPaid = (order: ServiceOrderItem) => String(order.paymentStatus).toUpperCase() === 'PAID';
+
+const completed = computed(() =>
+  orders.value
+    .filter((order) => String(order.status).toUpperCase() === 'COMPLETED')
+    .sort((a, b) => new Date(b.completedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.createdAt).getTime()),
+);
+
+const totals = computed(() => ({
+  count: completed.value.length,
+  labor: completed.value.reduce((sum, order) => sum + Number(order.laborTotal || 0), 0),
+  orderValue: completed.value.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0),
+  paid: completed.value.filter(isPaid).length,
+}));
+
+async function load() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [list, summary] = await Promise.all([
+      ordersApi.getTechnicianJobs(),
+      walletApi.getMyWallet().catch(() => null),
+    ]);
+    orders.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
+    wallet.value = summary;
+  } catch (err) {
+    error.value = userFacingError(err, 'Không thể tải thu nhập. Vui lòng thử lại.');
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(load);
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6">
-    <template v-if="showWalletDemo">
-    <div data-testid="wallet-demo-notice" role="note" class="rounded-xl border border-warning-300 bg-warning-50 p-4 text-sm text-warning-900">
-      <strong>Dữ liệu minh họa, không phải tiền thật.</strong>
-      Số dư, doanh thu, phí nền tảng và lịch sử bên dưới là ví dụ giao diện; chưa kết nối Wallet hoặc ngân hàng. Trang này không thể rút tiền hay tạo giao dịch. Quy tắc Linh kiện/Wallet đang chờ nhóm chốt.
-    </div>
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div class="max-w-5xl mx-auto space-y-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <DollarSign class="text-brand-600" :size="24" />
-          <span>Thu Nhập & Quyết Toán</span>
+        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
+          <Banknote class="text-brand-600" :size="24" />
+          Thu nhập
         </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Các số liệu dưới đây chỉ để xem trước giao diện; không dùng tỷ lệ phí minh họa làm quy tắc nghiệp vụ.
+        <p class="text-sm text-ink-500 mt-1 text-pretty">
+          Các đơn sửa chữa bạn đã hoàn thành và tiền công của từng đơn. Phí nền tảng đã trừ và tiền đã rút xem trong Ví của tôi.
         </p>
       </div>
-
-      <div class="flex items-center gap-2">
-        <FhButton variant="secondary" size="sm" disabled>
-          <Download :size="14" class="mr-1.5" /> Xuất đối soát (chưa hỗ trợ)
-        </FhButton>
-      </div>
+      <FhButton variant="secondary" size="sm" :disabled="loading" @click="load">
+        <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
+        Làm mới
+      </FhButton>
     </div>
 
-    <!-- Hero Wallet Balance Card (Mobile Style) -->
-    <div
-      class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-6 cursor-pointer hover:shadow-lg transition-all group"
-      @click="router?.push('/tech/wallet')"
-      title="Bấm để mở Ví Kỹ thuật viên & Quản lý số dư"
+    <div v-if="error" role="alert" class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3">
+      <span>{{ error }}</span>
+      <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
+    </div>
+
+    <section class="grid grid-cols-2 xl:grid-cols-4 gap-4" data-testid="earnings-totals">
+      <div class="p-5 rounded-2xl bg-white border border-ink-200">
+        <ClipboardList :size="18" class="text-ink-400 mb-2" />
+        <div class="text-sm text-ink-500">Đơn đã hoàn thành</div>
+        <div class="text-2xl font-semibold text-ink-900 font-num">{{ loading ? '—' : totals.count }}</div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white border border-ink-200">
+        <Banknote :size="18" class="text-ink-400 mb-2" />
+        <div class="text-sm text-ink-500">Tổng tiền công</div>
+        <div class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
+          <template v-if="loading">—</template>
+          <FhMoney v-else :amount="totals.labor" />
+        </div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white border border-ink-200">
+        <CalendarCheck :size="18" class="text-ink-400 mb-2" />
+        <div class="text-sm text-ink-500">Tổng giá trị đơn</div>
+        <div class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
+          <template v-if="loading">—</template>
+          <FhMoney v-else :amount="totals.orderValue" />
+        </div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white border border-ink-200">
+        <BadgeCheck :size="18" class="text-ink-400 mb-2" />
+        <div class="text-sm text-ink-500">Đơn đã thanh toán</div>
+        <div class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
+          {{ loading ? '—' : `${totals.paid}/${totals.count}` }}
+        </div>
+      </div>
+    </section>
+
+    <button
+      type="button"
+      class="w-full p-5 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors flex items-center gap-4 text-left"
+      @click="router.push('/tech/wallet')"
     >
-      <div class="space-y-1.5">
-        <div class="flex items-center gap-2 text-xs font-semibold text-brand-200">
-          <Wallet :size="16" class="text-warning-300" />
-          <span>Số dư minh họa (Bấm để xem Ví)</span>
-        </div>
-        <div class="text-3xl sm:text-4xl font-bold font-num tracking-tight">
-          3.850.000 <span class="text-lg font-sans font-bold">VNĐ</span>
-        </div>
-        <p class="text-xs text-brand-100 flex items-center gap-1.5 pt-1">
-          Chưa kết nối ngân hàng — số dư bên trên chỉ để minh họa
-        </p>
+      <span class="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+        <Wallet :size="22" />
+      </span>
+      <span class="flex-1 min-w-0">
+        <span class="block text-sm text-ink-500">Số dư ví hiện tại</span>
+        <span class="block text-xl font-semibold text-ink-900 font-num whitespace-nowrap">
+          <template v-if="wallet"><FhMoney :amount="wallet.balance" /></template>
+          <template v-else>—</template>
+        </span>
+        <span class="block text-sm text-ink-500">Nạp tiền, rút tiền và xem phí nền tảng đã trừ</span>
+      </span>
+      <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+    </button>
+
+    <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+      <header class="px-5 sm:px-6 py-4 border-b border-ink-100">
+        <h2 class="text-lg font-semibold text-ink-900">Đơn đã hoàn thành</h2>
+      </header>
+
+      <p v-if="loading" role="status" class="px-6 py-10 text-center text-sm text-ink-500">Đang tải thu nhập…</p>
+
+      <div v-else-if="completed.length === 0" class="px-6 py-12 text-center space-y-2" data-testid="earnings-empty">
+        <p class="text-base font-semibold text-ink-900">Bạn chưa hoàn thành đơn sửa chữa nào.</p>
+        <p class="text-sm text-ink-500">Đơn hoàn thành sẽ xuất hiện ở đây cùng tiền công của đơn.</p>
       </div>
 
-      <button
-        type="button"
-        class="h-11 px-5 rounded-xl bg-white text-brand-700 text-sm font-semibold shrink-0 inline-flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-75 disabled:cursor-not-allowed"
-        disabled
-        aria-disabled="true"
-        title="Trang minh họa không thể rút tiền. Rút tiền thật trong trang Ví của tôi."
-      >
-        <span>Rút tiền chưa hỗ trợ (minh họa)</span>
-        <ArrowUpRight :size="16" />
-      </button>
-    </div>
-
-    <!-- 4 Gradient Stat Cards (Matching Mobile Home Overview) -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-brand-50 border border-brand-200/80 shadow-xs space-y-1 cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all"
-        @click="router?.push('/tech/wallet')"
-        title="Bấm để xem lịch sử biến động số dư"
-      >
-        <span class="text-xs font-bold text-brand-800">Thực nhận tháng này</span>
-        <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
-          12.450.000 <span class="text-xs font-sans font-bold text-brand-700">đ</span>
-        </div>
-        <p class="text-[11px] text-brand-600 font-medium">+15% so với tháng trước</p>
-      </div>
-
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-warning-50 border border-warning-200/80 shadow-xs space-y-1 cursor-pointer hover:border-warning-300 hover:shadow-sm transition-all"
-        @click="router?.push('/tech/jobs')"
-        title="Bấm để mở danh sách đơn hoàn tất"
-      >
-        <span class="text-xs font-bold text-warning-800">Đơn hoàn tất</span>
-        <div class="text-lg sm:text-2xl font-bold text-warning-900 font-num">
-          28 <span class="text-xs font-sans font-bold text-warning-700">đơn</span>
-        </div>
-        <p class="text-[11px] text-warning-600 font-medium">Tỷ lệ thành công 96%</p>
-      </div>
-
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-success-50 border border-success-200/80 shadow-xs space-y-1 cursor-pointer hover:border-success-300 hover:shadow-sm transition-all"
-        @click="router?.push('/tech/profile')"
-        title="Bấm để xem chi tiết hồ sơ & đánh giá"
-      >
-        <span class="text-xs font-bold text-success-800">Đánh giá sao</span>
-        <div class="text-lg sm:text-2xl font-bold text-success-900 font-num">
-          4.95 <span class="text-xs font-sans font-bold text-success-700">★</span>
-        </div>
-        <p class="text-[11px] text-success-600 font-medium">Từ 148 khách hàng</p>
-      </div>
-
-      <div class="p-4 sm:p-5 rounded-2xl bg-brand-50 border border-brand-200/80 shadow-xs space-y-1">
-        <span class="text-xs font-bold text-brand-800">Phí nền tảng (minh họa)</span>
-        <div class="text-lg sm:text-2xl font-bold text-brand-900 font-num">
-          Chưa chốt
-        </div>
-        <p class="text-[11px] text-brand-600 font-medium">Chỉ minh họa giao diện, không phải quy tắc tính phí</p>
-      </div>
-    </div>
-
-    <!-- Payout History Table Card -->
-    <div class="bg-white rounded-3xl border border-ink-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-      <div class="flex items-center justify-between">
-        <h2 class="text-base font-bold text-ink-900">Lịch sử các đơn đã quyết toán</h2>
-        <span class="text-xs text-ink-500 font-medium">3 đơn gần nhất</span>
-      </div>
-
-      <FhTable
-        :columns="[
-          { key: 'orderCode', label: 'Mã đơn' },
-          { key: 'date', label: 'Ngày thực hiện' },
-          { key: 'customer', label: 'Khách hàng' },
-          { key: 'gross', label: 'Tổng thu', align: 'right' },
-          { key: 'platformFee', label: 'Phí nền tảng (mẫu)', align: 'right' },
-          { key: 'net', label: 'Thực nhận (mẫu)', align: 'right' },
-        ]"
-        :rows="payouts"
-      >
-        <template #cell-orderCode="{ row }">
-          <span class="font-mono text-xs font-bold text-ink-900">{{ row.orderCode }}</span>
-        </template>
-
-        <template #cell-date="{ row }">
-          <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
-            <Calendar :size="13" class="text-brand-600" /> {{ row.date }}
-          </span>
-        </template>
-
-        <template #cell-customer="{ row }">
-          <span class="text-xs font-semibold text-ink-800">{{ row.customer }}</span>
-        </template>
-
-        <template #cell-gross="{ row }">
-          <span class="font-num text-xs font-bold text-ink-700">
-            <FhMoney :amount="row.gross" />
-          </span>
-        </template>
-
-        <template #cell-platformFee="{ row }">
-          <span class="font-num text-xs font-bold text-danger-600">
-            -<FhMoney :amount="row.platformFee" />
-          </span>
-        </template>
-
-        <template #cell-net="{ row }">
-          <span class="font-num text-xs font-bold text-success-600">
-            +<FhMoney :amount="row.net" />
-          </span>
-        </template>
-      </FhTable>
-    </div>
-    </template>
-    <div v-else role="status" class="rounded-xl border border-ink-200 bg-ink-50 p-5 text-sm text-ink-700">
-      Báo cáo thu nhập chi tiết sẽ sớm có mặt. Số dư và lịch sử giao dịch của bạn xem trong trang Ví của tôi.
-    </div>
+      <ul v-else class="divide-y divide-ink-100">
+        <li v-for="order in completed" :key="order.id">
+          <button
+            type="button"
+            class="w-full px-5 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left hover:bg-ink-25 transition-colors"
+            :data-testid="`earning-row-${order.id}`"
+            @click="router.push(`/tech/jobs/${order.id}`)"
+          >
+            <span class="min-w-0 space-y-1">
+              <span class="flex items-center gap-2 flex-wrap text-sm">
+                <span class="font-num text-ink-500 whitespace-nowrap">{{ order.code }}</span>
+                <FhStatusPill
+                  :status="isPaid(order) ? 'COMPLETED' : 'PENDING'"
+                  :label="isPaid(order) ? 'Đã thanh toán' : 'Chưa thanh toán'"
+                />
+              </span>
+              <span class="block text-sm font-semibold text-ink-900">{{ order.serviceName }}</span>
+              <span class="block text-sm text-ink-500">
+                Hoàn thành {{ order.completedAt ? vnDateString(order.completedAt) : '—' }}
+              </span>
+            </span>
+            <span class="flex items-center gap-5 shrink-0">
+              <span class="text-right">
+                <span class="block text-xs text-ink-500">Tiền công</span>
+                <span class="block text-base font-semibold text-ink-900 font-num whitespace-nowrap"><FhMoney :amount="order.laborTotal" /></span>
+              </span>
+              <span class="text-right">
+                <span class="block text-xs text-ink-500">Tổng đơn</span>
+                <span class="block text-base text-ink-700 font-num whitespace-nowrap"><FhMoney :amount="order.grandTotal" /></span>
+              </span>
+              <ChevronRight :size="18" class="text-ink-400" />
+            </span>
+          </button>
+        </li>
+      </ul>
+    </section>
   </div>
 </template>
