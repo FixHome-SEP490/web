@@ -144,6 +144,21 @@ const formattedScheduleDisplay = computed(() => {
 // written into this file.
 const aiResult = ref<AiReply | null>(null);
 
+/**
+ * The assistant conversation this booking continues, when the customer came
+ * from the assistant. Step 3 adds to the same conversation, and the booking
+ * sends it so the technician starts with a summary of what was said.
+ */
+const SESSION_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const aiSessionFromChat = (() => {
+  const raw = typeof route.query.aiSession === 'string' ? route.query.aiSession : '';
+  return SESSION_PATTERN.test(raw) ? raw : null;
+})();
+const aiSessionId = computed(() => {
+  const fromStep = aiResult.value?.aiAvailable !== false ? aiResult.value?.sessionId : null;
+  return (fromStep && SESSION_PATTERN.test(fromStep) ? fromStep : null) ?? aiSessionFromChat;
+});
+
 /** Null when there is no price, and "từ X" when the ceiling is unknown. */
 const aiPriceLabel = computed(() => {
   const price = aiResult.value?.priceEstimate;
@@ -412,6 +427,13 @@ onMounted(async () => {
         }
       }
     }
+    // What the customer already told the assistant is their description; it
+    // counts as typed by them, so picking another service does not replace it.
+    const fromChat = typeof route.query.desc === 'string' ? route.query.desc.trim().slice(0, 1000) : '';
+    if (fromChat) {
+      description.value = fromChat;
+      userModifiedDescription.value = true;
+    }
     addresses.value = addrs;
     const defAddr = addrs.find((a) => a.isDefault);
     if (defAddr) selectedAddressId.value = defAddr.id;
@@ -575,7 +597,7 @@ const goToNextStepFrom2 = async () => {
     // every failure, and every call was failing, that invention was all anyone
     // ever saw. AI failure must not block a booking, and saying so plainly
     // honours that without making anything up.
-    aiResult.value = await aiApi.analyze({ description: description.value });
+    aiResult.value = await aiApi.analyze({ description: description.value, sessionId: aiSessionFromChat ?? undefined });
   } finally {
     loading.value = false;
   }
@@ -618,6 +640,7 @@ const createAndFindTech = async () => {
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
       photoUploadIds,
+      ...(aiSessionId.value ? { aiSessionId: aiSessionId.value } : {}),
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch (error: unknown) {
@@ -1427,6 +1450,14 @@ const createAndFindTech = async () => {
             Kiểm tra lại thông tin trước khi kích hoạt hệ thống ghép thợ FixHome.
           </p>
         </div>
+
+        <p
+          v-if="aiSessionId"
+          data-testid="ai-summary-note"
+          class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
+        >
+          Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
+        </p>
 
         <div class="space-y-4 text-xs sm:text-sm">
           <div class="p-5 rounded-2xl bg-ink-50 border border-ink-200 space-y-3 divide-y divide-ink-200/60">

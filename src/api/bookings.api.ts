@@ -59,6 +59,8 @@ export interface CreateBookingDto {
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   mediaUrls?: string[];
   photoUploadIds?: string[];
+  /** Session id from the assistant; the technician receives a summary of it. */
+  aiSessionId?: string;
 }
 
 export interface MatchingExtensionResult {
