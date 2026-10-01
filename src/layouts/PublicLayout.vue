@@ -17,7 +17,11 @@ import {
   Sparkles,
 } from 'lucide-vue-next';
 import { useAuthStore } from '../stores/auth';
-import { FhButton } from '../components';
+import { useChatStore } from '../stores/chat.store';
+import { useCallStore } from '../stores/call.store';
+import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
+import CallOverlay from '../components/chat/CallOverlay.vue';
+import { UserRole } from '../types/auth.types';
 
 const route = useRoute();
 const router = useRouter();
@@ -97,6 +101,23 @@ async function logout() {
   await authStore.logout();
   await router.push('/');
 }
+/**
+ * A signed-in customer browsing the public pages keeps the same chat, assistant
+ * and call reach as inside the app; guests see the landing page unchanged.
+ */
+const isCustomer = computed(() => authStore.isAuthenticated && authStore.hasRole(UserRole.CUSTOMER));
+const chatStore = useChatStore();
+const callStore = useCallStore();
+watch(
+  isCustomer,
+  (customer) => {
+    if (!customer) return;
+    chatStore.initSocket();
+    callStore.initCallSignalling();
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   handleScroll();
   window.addEventListener('scroll', handleScroll, { passive: true });
@@ -470,6 +491,12 @@ onUnmounted(() => {
         </div>
       </div>
     </footer>
+
+    <template v-if="isCustomer">
+      <ChatFloatingWidget />
+      <AiAssistantWidget />
+      <CallOverlay />
+    </template>
   </div>
 </template>
 
