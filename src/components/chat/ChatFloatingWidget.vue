@@ -106,7 +106,7 @@ function handleExpandToPage() {
                   <span v-if="chatStore.totalUnreadCount > 0" class="text-brand-600 font-semibold">
                     {{ chatStore.totalUnreadCount }} tin nhắn mới
                   </span>
-                  <span v-else>Trao đổi với kỹ thuật viên</span>
+                  <span v-else>{{ authStore.user?.role?.toUpperCase() === 'TECHNICIAN' ? 'Trao đổi với khách hàng' : 'Trao đổi với kỹ thuật viên' }}</span>
                 </p>
               </div>
             </div>

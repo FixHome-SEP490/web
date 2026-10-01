@@ -28,6 +28,7 @@ import {
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { FhButton } from '../../components';
+import RoleChatDock from '../../components/chat/RoleChatDock.vue';
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 import {
   technicianVerificationApi,
@@ -2306,5 +2307,6 @@ const handleLogout = async () => {
         </div>
       </div>
     </div>
+    <RoleChatDock />
   </div>
 </template>
