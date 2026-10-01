@@ -87,42 +87,43 @@ describe('Technician Selection and Profile Modal Feature', () => {
 
     // Clicking anywhere on card 1 selects it as priority #1
     await cards[0].trigger('click');
-    expect(wrapper.text()).toMatch(/Shortlist:\s*1\s*\/\s*2/);
+    expect(wrapper.text()).toMatch(/Đã chọn:\s*1\s*\/\s*2/);
     expect(cards[0].classes()).toContain('border-brand-600');
     expect(cards[0].text()).toContain('#1');
 
     // Clicking anywhere on card 2 selects it as priority #2
     await cards[1].trigger('click');
-    expect(wrapper.text()).toMatch(/Shortlist:\s*2\s*\/\s*2/);
+    expect(wrapper.text()).toMatch(/Đã chọn:\s*2\s*\/\s*2/);
     expect(cards[1].text()).toContain('#2');
 
     // Clicking card 1 again unselects it
     await cards[0].trigger('click');
-    expect(wrapper.text()).toMatch(/Shortlist:\s*1\s*\/\s*2/);
+    expect(wrapper.text()).toMatch(/Đã chọn:\s*1\s*\/\s*2/);
 
     wrapper.unmount();
   });
 
-  it('opens technician profile modal when clicking "Xem thông tin thợ"', async () => {
+  it('opens technician profile modal when clicking "Xem hồ sơ"', async () => {
     const wrapper = mount(BookingCandidatesPage);
     await flushPromises();
 
     const viewProfileButtons = wrapper.findAll('[data-testid="view-profile-btn"]');
     expect(viewProfileButtons.length).toBe(2);
 
-    // Clicking "Xem thông tin thợ" does not select the card
+    // Clicking "Xem hồ sơ" does not select the card
     await viewProfileButtons[0].trigger('click');
-    expect(wrapper.text()).toMatch(/Shortlist:\s*0\s*\/\s*2/);
+    expect(wrapper.text()).toMatch(/Đã chọn:\s*0\s*\/\s*2/);
 
     // Modal is opened with technician info
     const modal = wrapper.findComponent(TechnicianProfileModal);
     expect(modal.exists()).toBe(true);
     expect(modal.text()).toContain('Thợ Điện Lạnh 4');
     expect(modal.text()).toContain('Tỷ lệ hoàn thành');
-    expect(modal.text()).toContain('Thời gian phản hồi');
+    // Response time was guessed from distance; only recorded figures are shown.
+    expect(modal.text()).not.toContain('Thời gian phản hồi');
     expect(modal.text()).toContain('Đơn đã thực hiện');
     expect(modal.text()).toContain('Độ tin cậy');
-    expect(modal.text()).toContain('Tiêu chí đạt được');
+    expect(modal.text()).toContain('Giới thiệu');
 
     // Check API was called with technician id
     expect(reviewsApi.getByTechnician).toHaveBeenCalledWith('user-tech-1');
@@ -147,7 +148,7 @@ describe('Technician Selection and Profile Modal Feature', () => {
     await selectInModalBtn!.trigger('click');
 
     // Selection synchronizes with parent state
-    expect(wrapper.text()).toMatch(/Shortlist:\s*1\s*\/\s*2/);
+    expect(wrapper.text()).toMatch(/Đã chọn:\s*1\s*\/\s*2/);
 
     wrapper.unmount();
   });

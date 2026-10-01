@@ -37,6 +37,24 @@ export interface UnreadCountResponse {
 }
 
 /**
+ * Icon tone follows severity only, so the list stays calm: red for something
+ * that went wrong, yellow for something that needs the reader, brand blue for
+ * good news and grey for everything else.
+ */
+function toneOf(severity: NotificationSeverity): Pick<NotificationCategoryMeta, 'iconBgClass' | 'iconColorClass'> {
+  switch (severity) {
+    case 'error':
+      return { iconBgClass: 'bg-danger-50 border-danger-100', iconColorClass: 'text-danger-600' };
+    case 'warning':
+      return { iconBgClass: 'bg-warning-50 border-warning-100', iconColorClass: 'text-warning-700' };
+    case 'success':
+      return { iconBgClass: 'bg-brand-50 border-brand-100', iconColorClass: 'text-brand-600' };
+    default:
+      return { iconBgClass: 'bg-ink-100 border-ink-200', iconColorClass: 'text-ink-600' };
+  }
+}
+
+/**
  * Determine the visual sender category, severity and badge styling for a notification
  */
 export function getNotificationCategory(item: NotificationItem): NotificationCategoryMeta {
@@ -57,11 +75,10 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
     return {
       category: 'ADMIN',
       severity: 'info',
-      label: 'Quản trị viên FixHome',
-      eventLabel: 'Ban Quản Trị',
-      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
-      iconBgClass: 'bg-amber-100',
-      iconColorClass: 'text-amber-700',
+      label: 'FixHome',
+      eventLabel: 'FixHome',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('info'),
       iconName: 'sparkles',
     };
   }
@@ -81,11 +98,10 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
     return {
       category: 'SERVICE_MANAGER',
       severity: t.includes('DISPUTE') || t.includes('CANCEL') ? 'error' : 'info',
-      label: 'Quản lý dịch vụ (SM)',
-      eventLabel: t.startsWith('PART_REQUEST') ? 'Linh kiện' : 'Quản lý (SM)',
-      badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
-      iconBgClass: 'bg-purple-100',
-      iconColorClass: 'text-purple-700',
+      label: 'Quản lý dịch vụ',
+      eventLabel: t.startsWith('PART_REQUEST') ? 'Linh kiện' : 'Quản lý dịch vụ',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf(t.includes('DISPUTE') || t.includes('CANCEL') ? 'error' : 'info'),
       iconName: t.startsWith('PART_REQUEST') ? 'package' : 'shield',
     };
   }
@@ -107,73 +123,51 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
     m.includes('thợ')
   ) {
     let iconName: NotificationCategoryMeta['iconName'] = 'wrench';
-    let iconBgClass = 'bg-blue-100';
-    let iconColorClass = 'text-blue-700';
     let severity: NotificationSeverity = 'info';
     let eventLabel = 'Kỹ thuật viên';
 
     if (t.includes('ADDITIONAL_COST') || title.includes('phí phát sinh') || title.includes('chi phí')) {
       if (t === 'ADDITIONAL_COST_APPROVED' || (title.includes('duyệt') && title.includes('chi phí'))) {
         iconName = 'check';
-        iconBgClass = 'bg-emerald-100';
-        iconColorClass = 'text-emerald-700';
         severity = 'success';
         eventLabel = 'Duyệt phát sinh';
       } else if (t === 'ADDITIONAL_COST_REJECTED' || (title.includes('từ chối') && title.includes('chi phí'))) {
         iconName = 'x';
-        iconBgClass = 'bg-rose-100';
-        iconColorClass = 'text-rose-700';
         severity = 'error';
         eventLabel = 'Từ chối phát sinh';
       } else {
         iconName = 'dollar';
-        iconBgClass = 'bg-amber-100';
-        iconColorClass = 'text-amber-700';
         severity = 'warning';
         eventLabel = 'Phí phát sinh';
       }
     } else if (t.includes('QUOTATION') || title.includes('báo giá')) {
       if (t === 'QUOTATION_APPROVED' || (title.includes('duyệt') && title.includes('báo giá'))) {
         iconName = 'check';
-        iconBgClass = 'bg-emerald-100';
-        iconColorClass = 'text-emerald-700';
         severity = 'success';
         eventLabel = 'Duyệt báo giá';
       } else if (t === 'QUOTATION_REJECTED' || (title.includes('từ chối') && title.includes('báo giá'))) {
         iconName = 'x';
-        iconBgClass = 'bg-rose-100';
-        iconColorClass = 'text-rose-700';
         severity = 'error';
         eventLabel = 'Từ chối báo giá';
       } else {
         iconName = 'dollar';
-        iconBgClass = 'bg-amber-100';
-        iconColorClass = 'text-amber-700';
         severity = 'warning';
         eventLabel = 'Báo giá mới';
       }
     } else if (t === 'TECHNICIAN_ARRIVED' || title.includes('đã đến nơi') || title.includes('bắt đầu sửa chữa')) {
       iconName = 'check';
-      iconBgClass = 'bg-emerald-100';
-      iconColorClass = 'text-emerald-700';
       severity = 'success';
-      eventLabel = 'Thợ đã đến';
+      eventLabel = 'Kỹ thuật viên đã đến';
     } else if (t === 'TECHNICIAN_EN_ROUTE' || title.includes('đang di chuyển')) {
       iconName = 'truck';
-      iconBgClass = 'bg-blue-100';
-      iconColorClass = 'text-blue-700';
       severity = 'info';
       eventLabel = 'Đang di chuyển';
     } else if (t === 'COMPLETION_REQUESTED' || title.includes('yêu cầu nghiệm thu')) {
       iconName = 'clock';
-      iconBgClass = 'bg-purple-100';
-      iconColorClass = 'text-purple-700';
       severity = 'warning';
       eventLabel = 'Nghiệm thu';
     } else if (t === 'COMPLETION_CONFIRMED' || title.includes('đã nghiệm thu')) {
       iconName = 'sparkles';
-      iconBgClass = 'bg-emerald-100';
-      iconColorClass = 'text-emerald-700';
       severity = 'success';
       eventLabel = 'Đã nghiệm thu';
     }
@@ -183,9 +177,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
       severity,
       label: 'Kỹ thuật viên',
       eventLabel,
-      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-      iconBgClass,
-      iconColorClass,
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf(severity),
       iconName,
     };
   }
@@ -197,9 +190,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
       severity: 'error',
       label: 'Thông báo',
       eventLabel: 'Đã huỷ đơn',
-      badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
-      iconBgClass: 'bg-rose-100',
-      iconColorClass: 'text-rose-700',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('error'),
       iconName: 'x',
     };
   }
@@ -209,9 +201,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
       severity: 'success',
       label: 'Thông báo',
       eventLabel: 'Hoàn thành',
-      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      iconBgClass: 'bg-emerald-100',
-      iconColorClass: 'text-emerald-700',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('success'),
       iconName: 'check',
     };
   }
@@ -221,9 +212,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
       severity: 'info',
       label: 'Thông báo',
       eventLabel: 'Thư mời mới',
-      badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      iconBgClass: 'bg-indigo-100',
-      iconColorClass: 'text-indigo-700',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('info'),
       iconName: 'bell',
     };
   }
@@ -233,9 +223,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
     severity: 'info',
     label: 'Thông báo',
     eventLabel: 'Hệ thống',
-    badgeClass: 'bg-ink-100 text-ink-700 border-ink-200',
-    iconBgClass: 'bg-ink-100',
-    iconColorClass: 'text-ink-600',
+    badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+    ...toneOf('info'),
     iconName: 'bell',
   };
 }

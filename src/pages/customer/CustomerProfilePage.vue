@@ -539,7 +539,7 @@ const confirmDelete = async () => {
                   <span class="font-bold text-sm text-ink-900 flex items-center gap-1.5">
                     <MapPin :size="16" class="text-brand-600" /> {{ addr.label || 'Địa chỉ' }}
                   </span>
-                  <span v-if="addr.isDefault" class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
+                  <span v-if="addr.isDefault" class="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
                     <Star :size="11" class="fill-brand-600" /> Mặc định
                   </span>
                 </div>

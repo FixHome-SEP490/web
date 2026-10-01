@@ -104,11 +104,11 @@ onMounted(() => {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <ShieldCheck class="text-success-600" :size="26" />
-          Bảo hành Điện tử theo Đơn hàng
+          <ShieldCheck class="text-brand-600" :size="24" />
+          Bảo hành
         </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Tất cả linh kiện và dịch vụ sửa chữa của FixHome được quản lý bảo hành tập trung theo từng đơn hàng.
+        <p class="text-sm text-ink-500 mt-1 text-pretty">
+          Hạng mục còn bảo hành trong từng đơn sửa chữa, và các yêu cầu bảo hành bạn đã gửi.
         </p>
       </div>
 
@@ -120,7 +120,7 @@ onMounted(() => {
     <!-- Alert / Toast Banner -->
     <div
       v-if="actionMessage"
-      class="p-3.5 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all shadow-xs"
+      class="p-3.5 rounded-2xl text-sm font-medium flex items-center gap-2.5"
       :class="
         actionMessage.type === 'success'
           ? 'bg-success-50 text-success-800 border border-success-200'
@@ -145,24 +145,26 @@ onMounted(() => {
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="text-center py-16 text-ink-400">
-      <Loader2 :size="24" class="animate-spin inline mr-2 text-brand-600" />
-      Đang tải danh sách bảo hành theo đơn...
+    <div v-if="loading" role="status" class="text-center py-16 text-sm text-ink-500">
+      <Loader2 :size="20" class="animate-spin inline mr-2 text-brand-600" />
+      Đang tải bảo hành…
     </div>
 
     <!-- Empty State -->
     <div
       v-else-if="warrantyOrders.length === 0"
-      class="text-center py-16 bg-white rounded-[var(--radius-md)] border border-ink-200 shadow-xs space-y-2"
+      class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3"
     >
-      <ShieldCheck :size="48" class="mx-auto text-ink-300 mb-1" />
-      <h3 class="text-base font-bold text-ink-800">Chưa có đơn hàng nào có bảo hành</h3>
-      <p class="text-xs text-ink-500 max-w-md mx-auto">
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto">
+        <ShieldCheck :size="24" />
+      </div>
+      <h3 class="text-base font-semibold text-ink-900">Chưa có đơn nào đang được bảo hành</h3>
+      <p class="text-sm text-ink-500 max-w-md mx-auto text-pretty">
         Khi đơn sửa chữa hoàn tất nghiệm thu và thanh toán, các gói bảo hành dịch vụ cùng linh kiện thay thế sẽ tự động kích hoạt tại đây.
       </p>
       <div class="pt-2">
         <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
-          Đặt thợ sửa chữa ngay
+          Đặt lịch sửa chữa
         </FhButton>
       </div>
     </div>
@@ -172,14 +174,14 @@ onMounted(() => {
       <FhCard
         v-for="order in warrantyOrders"
         :key="order.orderId"
-        class="flex flex-col justify-between space-y-4 hover:border-brand-300 transition-all shadow-xs"
+        class="flex flex-col justify-between space-y-4"
       >
         <div class="space-y-3.5">
           <!-- Card Header: Order Code & Badges -->
           <div class="flex items-center justify-between gap-2 border-b border-ink-100 pb-2.5">
             <button
               type="button"
-              class="font-mono text-xs font-bold text-brand-700 hover:text-brand-900 flex items-center gap-1 group"
+              class="font-num text-sm font-semibold text-brand-700 hover:text-brand-800 flex items-center gap-1 group"
               title="Bấm để xem chi tiết đơn hàng này"
               @click="goToOrderDetail(order.orderId)"
             >
@@ -191,20 +193,19 @@ onMounted(() => {
             <div class="flex items-center gap-1.5">
               <span
                 v-if="hasOpenClaim(order)"
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-100 text-warning-900 border border-warning-300"
+                class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-warning-50 text-warning-800 border border-warning-200"
               >
                 Đang xử lý bảo hành
               </span>
               <span
                 v-else-if="order.hasActiveCoverage"
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-100 text-success-800 border border-success-300 flex items-center gap-1"
+                class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-success-50 text-success-700 border border-success-200"
               >
-                <span class="w-1.5 h-1.5 rounded-full bg-success-500 inline-block animate-pulse"></span>
-                Còn hiệu lực (Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày)
+                Còn {{ getDaysRemaining(order.maxExpiresAt) }} ngày
               </span>
               <span
                 v-else
-                class="px-2 py-0.5 rounded text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-300"
+                class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-ink-100 text-ink-600 border border-ink-200"
               >
                 Hết hạn bảo hành
               </span>
@@ -214,22 +215,19 @@ onMounted(() => {
           <!-- Order Title -->
           <div>
             <h3
-              class="font-bold text-sm text-ink-900 cursor-pointer hover:text-brand-700 transition-colors"
+              class="font-semibold text-base text-ink-900 cursor-pointer hover:text-brand-700 transition-colors"
               @click="goToOrderDetail(order.orderId)"
             >
               {{ order.serviceName }}
             </h3>
-            <p class="text-[11px] text-ink-400 mt-0.5">
-              Đơn hàng hoàn tất · Được bảo vệ bởi chính sách bảo hành điện tử FixHome
-            </p>
           </div>
 
           <!-- Covered Items Inside Order -->
-          <div class="p-3 rounded-lg bg-ink-50/80 border border-ink-200 space-y-2">
-            <div class="flex items-center justify-between text-xs font-semibold text-ink-800">
+          <div class="p-3 rounded-xl bg-ink-50 border border-ink-100 space-y-2">
+            <div class="flex items-center justify-between text-sm font-medium text-ink-800">
               <span class="flex items-center gap-1.5">
                 <PackageCheck :size="14" class="text-brand-600" />
-                Hạng mục bảo hành trong đơn ({{ order.coverages.length }} mục):
+                Hạng mục được bảo hành ({{ order.coverages.length }})
               </span>
             </div>
 
@@ -237,16 +235,16 @@ onMounted(() => {
               <div
                 v-for="item in order.coverages"
                 :key="item.id"
-                class="flex items-center justify-between text-xs py-1 px-2 rounded bg-white border border-ink-150 shadow-2xs"
+                class="flex items-center justify-between gap-2 text-sm py-1.5 px-2.5 rounded-lg bg-white border border-ink-100"
               >
-                <div class="flex items-center gap-1.5 font-medium text-ink-900 truncate mr-2">
-                  <CheckCircle2 :size="13" class="text-success-600 shrink-0" />
+                <div class="flex items-center gap-1.5 text-ink-900 min-w-0">
+                  <CheckCircle2 :size="14" class="text-ink-400 shrink-0" />
                   <span class="truncate" :title="item.itemDescription">{{ item.itemDescription }}</span>
                 </div>
-                <div class="flex items-center gap-2 text-[11px] shrink-0 font-num">
+                <div class="flex items-center gap-2 text-xs shrink-0 font-num whitespace-nowrap">
                   <span class="text-ink-500">Hạn: {{ formatDate(item.expiresAt) }}</span>
                   <span
-                    class="px-1.5 py-0.2 rounded text-[10px] font-semibold"
+                    class="px-2 py-0.5 rounded-full text-xs font-medium"
                     :class="
                       item.status === 'ACTIVE'
                         ? 'bg-success-50 text-success-700 border border-success-200'
@@ -261,26 +259,26 @@ onMounted(() => {
           </div>
 
           <!-- Metadata: Dates & Technician -->
-          <div class="text-xs text-ink-600 space-y-1 bg-ink-25/50 p-2.5 rounded-lg border border-ink-100">
+          <div class="text-sm text-ink-600 space-y-1.5">
             <div class="flex items-center justify-between">
               <span class="flex items-center gap-1.5 text-ink-500">
-                <Calendar :size="13" /> Kích hoạt từ:
+                <Calendar :size="14" /> Bắt đầu bảo hành
               </span>
               <span class="font-medium font-num">{{ formatDate(order.minStartsAt) }}</span>
             </div>
-            <div class="flex items-center justify-between font-semibold">
-              <span class="flex items-center gap-1.5 text-brand-700">
-                <Clock :size="13" /> Hạn bảo hành tối đa:
-              </span>
-              <span class="text-brand-800 font-num">{{ formatDate(order.maxExpiresAt) }}</span>
-            </div>
-            <div class="flex items-center justify-between pt-1 border-t border-ink-100">
+            <div class="flex items-center justify-between">
               <span class="flex items-center gap-1.5 text-ink-500">
-                <Wrench :size="13" /> Kỹ thuật viên:
+                <Clock :size="14" /> Hết hạn muộn nhất
               </span>
-              <span class="font-medium text-ink-900">
+              <span class="font-medium text-ink-900 font-num">{{ formatDate(order.maxExpiresAt) }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <span class="flex items-center gap-1.5 text-ink-500 shrink-0">
+                <Wrench :size="14" /> Kỹ thuật viên
+              </span>
+              <span class="font-medium text-ink-900 text-right">
                 {{ order.technicianName }}
-                <span v-if="order.technicianPhone" class="text-ink-400 font-mono text-[11px]">
+                <span v-if="order.technicianPhone" class="text-ink-500 font-num whitespace-nowrap">
                   ({{ order.technicianPhone }})
                 </span>
               </span>
@@ -299,26 +297,19 @@ onMounted(() => {
         </div>
 
         <!-- Footer Actions -->
-        <div class="pt-3 border-t border-ink-100 flex items-center justify-between gap-2">
-          <span class="text-[11px] text-success-700 font-semibold flex items-center gap-1">
-            <ShieldCheck :size="13" class="text-success-600" />
-            100% miễn phí công thợ
-          </span>
-
+        <div class="pt-3 border-t border-ink-100 flex items-center justify-end gap-2">
           <div class="flex items-center gap-2">
             <FhButton
               variant="secondary"
               size="sm"
-              class="text-xs"
               @click="goToOrderDetail(order.orderId)"
             >
-              Xem đơn hàng
+              Xem đơn
             </FhButton>
 
             <FhButton
               variant="primary"
               size="sm"
-              class="text-xs"
               :disabled="allCoveragesBusy(order)"
               :title="allCoveragesBusy(order) ? 'Mọi hạng mục đang có yêu cầu chưa xử lý xong' : 'Gửi yêu cầu bảo hành'"
               @click="openClaimModal(order)"

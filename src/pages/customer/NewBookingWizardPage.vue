@@ -728,7 +728,7 @@ const createAndFindTech = async () => {
                     <component :is="getCategoryIcon(cat)" :size="17" />
                   </div>
                   <span
-                    class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    class="text-xs font-bold px-2 py-0.5 rounded-full"
                     :class="selectedCategoryId === cat.id ? 'bg-white/20 text-white' : 'bg-ink-200/70 text-ink-600'"
                   >
                     {{ cat.services?.length || 0 }} dịch vụ
@@ -739,7 +739,7 @@ const createAndFindTech = async () => {
                     {{ cat.name }}
                   </div>
                   <div
-                    class="text-[10px] mt-0.5 line-clamp-1"
+                    class="text-xs mt-0.5 line-clamp-1"
                     :class="selectedCategoryId === cat.id ? 'text-brand-100' : 'text-ink-500'"
                   >
                     {{ cat.description || 'Sửa chữa & bảo dưỡng' }}
@@ -778,7 +778,7 @@ const createAndFindTech = async () => {
                   @click="serviceFilter = 'FIXED'"
                 >
                   <Zap :size="14" /><span>Giá niêm yết</span>
-                  <span class="text-[10px] opacity-80">({{ fixedServicesCount }})</span>
+                  <span class="text-xs opacity-80">({{ fixedServicesCount }})</span>
                 </button>
                 <button
                   v-if="inspectionServicesCount > 0"
@@ -788,7 +788,7 @@ const createAndFindTech = async () => {
                   @click="serviceFilter = 'INSPECTION'"
                 >
                   <Search :size="14" /><span>Khảo sát</span>
-                  <span class="text-[10px] opacity-80">({{ inspectionServicesCount }})</span>
+                  <span class="text-xs opacity-80">({{ inspectionServicesCount }})</span>
                 </button>
               </div>
             </div>
@@ -828,13 +828,13 @@ const createAndFindTech = async () => {
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span
                       v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-success-50 text-success-700 border border-success-200"
                     >
                       <Zap :size="12" /> Giá niêm yết
                     </span>
                     <span
                       v-else
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-100 text-ink-700 border border-ink-200"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-ink-100 text-ink-700 border border-ink-200"
                     >
                       <Search :size="12" /> Khảo sát tận nơi
                     </span>
@@ -923,7 +923,7 @@ const createAndFindTech = async () => {
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
+                  <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
                     Gói trọn gói chuẩn
                   </span>
                   <span class="font-bold text-xs sm:text-sm text-brand-950">
@@ -974,7 +974,7 @@ const createAndFindTech = async () => {
                 </div>
 
                 <div class="text-right pl-2">
-                  <div class="text-[10px] text-ink-500 font-medium">Tổng tiền trọn gói:</div>
+                  <div class="text-xs text-ink-500 font-medium">Tổng tiền trọn gói:</div>
                   <div class="font-bold text-base text-brand-700 font-num">
                     <FhMoney :amount="totalFixedAmount" />
                   </div>
@@ -1139,7 +1139,7 @@ const createAndFindTech = async () => {
                     :class="urgency === lvl.key ? 'text-brand-600' : 'text-ink-400'"
                   />
                   <span
-                    class="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                    class="text-xs font-bold px-1.5 py-0.5 rounded-full"
                     :class="urgency === lvl.key ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'"
                   >
                     {{ lvl.badge }}
@@ -1147,7 +1147,7 @@ const createAndFindTech = async () => {
                 </div>
                 <div>
                   <div class="text-xs sm:text-[13px] font-bold">{{ lvl.label }}</div>
-                  <div class="text-[10px] text-ink-500 mt-0.5 font-normal">{{ lvl.hint }}</div>
+                  <div class="text-xs text-ink-500 mt-0.5 font-normal">{{ lvl.hint }}</div>
                 </div>
               </button>
             </div>
@@ -1332,7 +1332,7 @@ const createAndFindTech = async () => {
                 </span>
                 <span
                   v-if="aiResult.confidence"
-                  class="text-[10px] font-bold text-brand-700 bg-white px-2 py-0.5 rounded-full border border-brand-200"
+                  class="text-xs font-bold text-brand-700 bg-white px-2 py-0.5 rounded-full border border-brand-200"
                 >
                   Mức tin cậy {{ Math.round(aiResult.confidence * 100) }}%
                 </span>

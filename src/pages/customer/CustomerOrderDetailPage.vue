@@ -969,7 +969,7 @@ const confirmWork = async () => {
               @click="evidenceFilter = 'BEFORE'"
             >
               <span>Trước khi làm</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'BEFORE' ? 'bg-white/20' : 'bg-brand-200'">{{ beforeEvidences.length }}</span>
+              <span class="text-xs px-1 py-0.2 rounded-full" :class="evidenceFilter === 'BEFORE' ? 'bg-white/20' : 'bg-brand-200'">{{ beforeEvidences.length }}</span>
             </button>
             <button
               type="button"
@@ -978,7 +978,7 @@ const confirmWork = async () => {
               @click="evidenceFilter = 'AFTER'"
             >
               <span>Sau khi hoàn thành</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'AFTER' ? 'bg-white/20' : 'bg-success-200'">{{ afterEvidences.length }}</span>
+              <span class="text-xs px-1 py-0.2 rounded-full" :class="evidenceFilter === 'AFTER' ? 'bg-white/20' : 'bg-success-200'">{{ afterEvidences.length }}</span>
             </button>
             <button
               v-if="additionalEvidences.length > 0"
@@ -988,7 +988,7 @@ const confirmWork = async () => {
               @click="evidenceFilter = 'ADDITIONAL'"
             >
               <span>Phát sinh</span>
-              <span class="text-[10px] px-1 py-0.2 rounded-full" :class="evidenceFilter === 'ADDITIONAL' ? 'bg-white/20' : 'bg-warning-200'">{{ additionalEvidences.length }}</span>
+              <span class="text-xs px-1 py-0.2 rounded-full" :class="evidenceFilter === 'ADDITIONAL' ? 'bg-white/20' : 'bg-warning-200'">{{ additionalEvidences.length }}</span>
             </button>
           </div>
 
@@ -1034,19 +1034,19 @@ const confirmWork = async () => {
                 <div class="absolute top-2.5 left-2.5">
                   <span
                     v-if="ev.type?.toLowerCase() === 'before'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-brand-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-xs font-bold tracking-wide bg-brand-600 text-white shadow-xs"
                   >
                     Trước khi làm
                   </span>
                   <span
                     v-else-if="ev.type?.toLowerCase() === 'after'"
-                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-success-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-xs font-bold tracking-wide bg-success-600 text-white shadow-xs"
                   >
                     Sau khi sửa
                   </span>
                   <span
                     v-else
-                    class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-warning-600 text-white shadow-xs"
+                    class="px-2 py-0.5 rounded-full text-xs font-bold tracking-wide bg-warning-600 text-white shadow-xs"
                   >
                     Phát sinh
                   </span>
@@ -1063,7 +1063,7 @@ const confirmWork = async () => {
               <div class="p-3 flex-1 flex flex-col justify-between space-y-2 bg-white">
                 <!-- Technician Note -->
                 <div>
-                  <div class="text-[10px] font-bold text-ink-400 mb-0.5 flex items-center gap-1">
+                  <div class="text-xs font-bold text-ink-400 mb-0.5 flex items-center gap-1">
                     <MessageSquare :size="11" />
                     <span>Ghi chú của thợ:</span>
                   </div>
@@ -1117,11 +1117,11 @@ const confirmWork = async () => {
               {{ order.scopeDescription || bookingDetails?.description || 'Kiểm tra, chẩn đoán sự cố và tiến hành khắc phục kỹ thuật tại nhà.' }}
             </p>
             <div v-if="bookingDetails?.diagnosis?.possibleIssues?.length" class="flex items-center gap-1.5 flex-wrap pt-1">
-              <span class="text-[10px] font-semibold text-ink-400">Chẩn đoán gợi ý:</span>
+              <span class="text-xs font-semibold text-ink-400">Chẩn đoán gợi ý:</span>
               <span
                 v-for="issue in bookingDetails.diagnosis.possibleIssues"
                 :key="issue"
-                class="px-2 py-0.5 rounded-md bg-white border border-ink-200 text-ink-700 text-[10px] font-medium"
+                class="px-2 py-0.5 rounded-md bg-white border border-ink-200 text-ink-700 text-xs font-medium"
               >
                 {{ issue }}
               </span>
@@ -1204,10 +1204,10 @@ const confirmWork = async () => {
                         {{ item.description }}
                       </td>
                       <td class="p-2.5 text-center">
-                        <span v-if="item.warrantyDays" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200">
+                        <span v-if="item.warrantyDays" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-success-50 text-success-700 border border-success-200">
                           <ShieldCheck :size="11" /> {{ item.warrantyDays }} ngày
                         </span>
-                        <span v-else class="text-ink-400 text-[10px]">Theo tiêu chuẩn</span>
+                        <span v-else class="text-ink-400 text-xs">Theo tiêu chuẩn</span>
                       </td>
                       <td class="p-2.5 text-center font-num">{{ item.quantity }}</td>
                       <td class="p-2.5 text-right font-num text-ink-600"><FhMoney :amount="item.unitPrice" /></td>
@@ -1304,13 +1304,13 @@ const confirmWork = async () => {
                 >
                   <td class="p-2.5 font-medium text-ink-900">
                     {{ item.description }}
-                    <span v-if="item.warrantyDays" class="block text-[10px] text-success-600 font-semibold">
+                    <span v-if="item.warrantyDays" class="block text-xs text-success-600 font-semibold">
                       Bảo hành {{ item.warrantyDays }} ngày
                     </span>
                   </td>
                   <td class="p-2.5">
                     <span
-                      class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      class="px-1.5 py-0.5 rounded text-xs font-bold"
                       :class="item.type === 'LABOR' ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-700'"
                     >
                       {{ item.type === 'LABOR' ? 'Tiền công' : 'Linh kiện' }}
@@ -1398,13 +1398,13 @@ const confirmWork = async () => {
                 <div class="flex items-center gap-1.5">
                   <span
                     v-if="item.partSource === 'external'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-warning-100 text-warning-900 border border-warning-300"
+                    class="text-xs font-bold px-1.5 py-0.2 rounded bg-warning-100 text-warning-900 border border-warning-300"
                   >
                     LK Ngoài
                   </span>
                   <span
                     v-else-if="item.partSource === 'fixhome'"
-                    class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800"
+                    class="text-xs font-bold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800"
                   >
                     LK FixHome
                   </span>
@@ -1473,23 +1473,23 @@ const confirmWork = async () => {
         </div>
       </FhCard>
 
-      <!-- Bảo hành Điện tử của Đơn hàng (Spec v1.2 / Warranty) -->
+      <!-- Warranty coverage of this order -->
       <FhCard v-if="order.status === 'COMPLETED' && orderWarranties.length > 0">
         <template #title>
           <div class="flex items-center gap-2">
-            <ShieldCheck class="text-success-600" :size="20" />
-            <span>Bảo hành Điện tử của Đơn hàng</span>
+            <ShieldCheck class="text-brand-600" :size="20" />
+            <span>Bảo hành</span>
           </div>
         </template>
         <template #action>
           <span
-            class="px-2.5 py-0.5 rounded-full text-[11px] font-bold"
+            class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
             :class="
               activeWarrantyClaim
-                ? 'bg-warning-100 text-warning-900 border border-warning-300'
+                ? 'bg-warning-50 text-warning-800 border border-warning-200'
                 : isOrderWarrantyActive
-                ? 'bg-success-100 text-success-800 border border-success-300'
-                : 'bg-ink-100 text-ink-600 border border-ink-300'
+                ? 'bg-success-50 text-success-700 border border-success-200'
+                : 'bg-ink-100 text-ink-600 border border-ink-200'
             "
           >
             {{
@@ -1502,60 +1502,28 @@ const confirmWork = async () => {
           </span>
         </template>
 
-        <div class="space-y-4 text-xs">
-          <!-- Summary banner -->
-          <div class="p-3 rounded-lg bg-success-50/70 border border-success-200 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p class="font-bold text-success-900 flex items-center gap-1.5">
-                <ShieldCheck :size="15" class="text-success-600 shrink-0" />
-                Chính sách bảo hành điện tử chính hãng FixHome
-              </p>
-              <p class="text-[11px] text-success-800 mt-0.5">
-                100% miễn phí công thợ khi bảo hành sự cố tái phát trong thời hạn bảo hành.
-              </p>
-            </div>
-            <div class="text-right">
-              <span class="text-[11px] text-ink-500 block">Hạn bảo hành tối đa:</span>
-              <span class="font-bold text-success-900 font-num text-sm">
-                {{ formatDate(maxWarrantyExpiresAt) }}
-              </span>
-            </div>
+        <div class="space-y-4 text-sm">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-ink-500">Hết hạn muộn nhất</span>
+            <span class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ formatDate(maxWarrantyExpiresAt) }}</span>
           </div>
 
-          <!-- Items Table -->
-          <div class="border border-ink-200 rounded-lg overflow-hidden bg-white">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-ink-50 text-ink-600 font-semibold border-b border-ink-100">
-                <tr>
-                  <th class="p-2.5">Hạng mục bảo hành</th>
-                  <th class="p-2.5 text-center">Thời hạn</th>
-                  <th class="p-2.5 text-center">Ngày hết hạn</th>
-                  <th class="p-2.5 text-right">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-ink-100">
-                <tr v-for="w in orderWarranties" :key="w.id" class="hover:bg-ink-50/50">
-                  <td class="p-2.5 font-medium text-ink-900">
-                    {{ w.note || 'Bảo hành dịch vụ' }}
-                  </td>
-                  <td class="p-2.5 text-center text-ink-600 font-num">
-                    {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }}
-                  </td>
-                  <td class="p-2.5 text-center font-num text-ink-700">
-                    {{ formatDate(w.expiresAt) }}
-                  </td>
-                  <td class="p-2.5 text-right">
-                    <span
-                      class="px-2 py-0.5 rounded text-[10px] font-bold"
-                      :class="new Date(w.expiresAt) > new Date() ? 'bg-success-100 text-success-800' : 'bg-ink-100 text-ink-600'"
-                    >
-                      {{ new Date(w.expiresAt) > new Date() ? 'Còn hiệu lực' : 'Đã hết hạn' }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ul class="rounded-xl border border-ink-200 divide-y divide-ink-100 bg-white">
+            <li v-for="w in orderWarranties" :key="w.id" class="px-3.5 py-3 flex items-start justify-between gap-3">
+              <span class="min-w-0">
+                <span class="block font-medium text-ink-900">{{ w.note || 'Bảo hành dịch vụ' }}</span>
+                <span class="block text-xs text-ink-500 font-num mt-0.5">
+                  {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
+                </span>
+              </span>
+              <span
+                class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
+                :class="new Date(w.expiresAt) > new Date() ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-600'"
+              >
+                {{ new Date(w.expiresAt) > new Date() ? 'Còn hạn' : 'Hết hạn' }}
+              </span>
+            </li>
+          </ul>
 
           <div v-if="warrantyClaims.length" class="space-y-2">
             <WarrantyClaimCard
@@ -1569,7 +1537,7 @@ const confirmWork = async () => {
 
           <!-- Action Button -->
           <div v-if="hasClaimableCoverage" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
-            <span class="text-ink-500 text-[11px]">
+            <span class="text-ink-500 text-sm text-pretty">
               Nếu thiết bị gặp sự cố hoặc hoạt động bất thường, bạn có thể gửi yêu cầu bảo hành cho từng hạng mục.
             </span>
             <FhButton
@@ -1754,7 +1722,7 @@ const confirmWork = async () => {
             </p>
           </div>
 
-          <div class="shrink-0 text-right text-ink-500 font-mono text-[11px] self-end sm:self-center">
+          <div class="shrink-0 text-right text-ink-500 font-num text-[11px] self-end sm:self-center">
             {{ formatFullTimestamp(lightboxEvidence.capturedAt || lightboxEvidence.createdAt) }}
           </div>
         </div>

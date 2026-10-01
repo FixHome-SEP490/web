@@ -1,110 +1,163 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { History, Calendar, Wrench, Star, CheckCircle2 } from 'lucide-vue-next';
-import { FhCard, FhMoney, FhCostBreakdown } from '../../components';
+// Repair history from the server's read model: the customer's completed and
+// cancelled orders, newest first, with what each one cost.
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { History, MapPin, Wrench, ChevronRight, RefreshCw } from 'lucide-vue-next';
+import { FhButton, FhCostBreakdown, FhMoney, FhStatusPill } from '../../components';
+import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
+import { userFacingError } from '../../utils/user-facing-error';
+import { vnDateString } from '../../utils/vn-time';
 
-const historyItems = ref([
-  {
-    id: 'h1',
-    orderCode: 'FH-20260910-0042',
-    date: '10/09/2026',
-    device: 'Hệ thống điện phòng khách',
-    service: 'Sửa chập điện âm tường & thay Aptomat',
-    technicianName: 'Trần Đình Trọng',
-    technicianRating: 5,
-    customerReview: 'Thợ đến đúng giờ, dò tìm điểm chập rất chuyên nghiệp và thay aptomat an toàn.',
-    laborTotal: 250000,
-    partsTotal: 150000,
-    grandTotal: 400000,
-    evidenceUrls: ['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400'],
-  },
-  {
-    id: 'h2',
-    orderCode: 'FH-20260815-0109',
-    date: '15/08/2026',
-    device: 'Điều hòa Daikin Inverter 1.5 HP',
-    service: 'Vệ sinh & nạp gas điều hòa R32',
-    technicianName: 'Nguyễn Văn Hùng',
-    technicianRating: 5,
-    customerReview: 'Máy lạnh vệ sinh sạch sẽ, mát sâu ngay sau khi bơm gas.',
-    laborTotal: 200000,
-    partsTotal: 0,
-    grandTotal: 200000,
-    evidenceUrls: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400'],
-  },
-]);
+type Filter = 'all' | 'completed' | 'cancelled';
+
+const PAGE_SIZE = 20;
+const router = useRouter();
+
+const filter = ref<Filter>('all');
+const items = ref<RepairHistoryItem[]>([]);
+const total = ref(0);
+const page = ref(1);
+const loading = ref(true);
+const loadingMore = ref(false);
+const error = ref<string | null>(null);
+
+const tabs: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'completed', label: 'Hoàn thành' },
+  { key: 'cancelled', label: 'Đã hủy' },
+];
+
+const hasMore = computed(() => items.value.length < total.value);
+
+const isCancelled = (item: RepairHistoryItem) => String(item.status).toLowerCase() === 'cancelled';
+const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancelledAt : item.completedAt);
+
+async function load(nextPage = 1) {
+  if (nextPage === 1) loading.value = true;
+  else loadingMore.value = true;
+  error.value = null;
+  try {
+    const result = await ordersApi.getRepairHistory(
+      nextPage,
+      PAGE_SIZE,
+      filter.value === 'all' ? undefined : filter.value,
+    );
+    items.value = nextPage === 1 ? result.data : [...items.value, ...result.data];
+    total.value = result.total;
+    page.value = nextPage;
+  } catch (err) {
+    error.value = userFacingError(err, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.');
+  } finally {
+    loading.value = false;
+    loadingMore.value = false;
+  }
+}
+
+watch(filter, () => load(1));
+onMounted(() => load(1));
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6">
-    <!-- Header -->
     <div>
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
         <History class="text-brand-600" :size="24" />
-        Nhật ký Sửa chữa Ngôi nhà (D-20 Read Model)
+        Lịch sử sửa chữa
       </h1>
-      <p class="text-xs text-ink-500 mt-1">
-        Hồ sơ theo dõi tình trạng sức khỏe thiết bị gia đình, lưu trữ lịch sử bảo dưỡng và linh kiện đã thay.
+      <p class="text-sm text-ink-500 mt-1 text-pretty">
+        Các đơn sửa chữa đã hoàn thành hoặc đã hủy của bạn, kèm chi phí từng đơn.
       </p>
     </div>
 
-    <div class="space-y-4">
-      <FhCard
-        v-for="item in historyItems"
-        :key="item.id"
-        class="space-y-4"
+    <div class="grid grid-cols-3 gap-1 p-1 bg-white rounded-2xl border border-ink-200 text-sm font-medium" role="tablist">
+      <button
+        v-for="tab in tabs"
+        :key="tab.key"
+        type="button"
+        role="tab"
+        :aria-selected="filter === tab.key"
+        :data-testid="`history-filter-${tab.key}`"
+        class="h-10 px-2 rounded-xl transition-colors whitespace-nowrap"
+        :class="filter === tab.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-ink-50'"
+        @click="filter = tab.key"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
-          <div class="flex items-center gap-2">
-            <span class="font-num text-sm text-ink-600 whitespace-nowrap">{{ item.orderCode }}</span>
-            <span class="text-ink-400 text-xs">•</span>
-            <span class="text-xs text-ink-500 flex items-center gap-1">
-              <Calendar :size="13" /> {{ item.date }}
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div v-if="error" role="alert" class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3">
+      <span>{{ error }}</span>
+      <FhButton variant="secondary" size="sm" @click="load(1)">Thử lại</FhButton>
+    </div>
+
+    <p v-if="loading" role="status" class="py-16 text-center text-sm text-ink-500">Đang tải lịch sử sửa chữa…</p>
+
+    <div
+      v-else-if="!error && items.length === 0"
+      data-testid="history-empty"
+      class="py-14 px-6 bg-white rounded-2xl border border-ink-200 text-center space-y-3"
+    >
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto">
+        <History :size="24" />
+      </div>
+      <p class="text-base font-semibold text-ink-900">
+        {{ filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
+      </p>
+      <p class="text-sm text-ink-500">Đơn sửa chữa sẽ xuất hiện ở đây khi hoàn thành hoặc bị hủy.</p>
+      <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">Đặt lịch sửa chữa</FhButton>
+    </div>
+
+    <ul v-else class="space-y-4">
+      <li v-for="item in items" :key="item.orderId">
+        <article
+          class="p-5 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors cursor-pointer space-y-4"
+          :data-testid="`history-item-${item.orderId}`"
+          @click="router.push(`/app/orders/${item.orderId}`)"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-ink-100">
+            <span class="flex items-center gap-3 text-sm">
+              <span class="font-num text-ink-600 whitespace-nowrap">{{ item.code }}</span>
+              <span class="text-ink-500 whitespace-nowrap">
+                {{ isCancelled(item) ? 'Hủy' : 'Hoàn thành' }} {{ finishedAt(item) ? vnDateString(finishedAt(item)!) : '—' }}
+              </span>
+            </span>
+            <FhStatusPill :status="isCancelled(item) ? 'CANCELLED' : 'COMPLETED'" />
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1.5 min-w-0">
+              <h3 class="text-base font-semibold text-ink-900">{{ item.serviceName || 'Dịch vụ sửa chữa' }}</h3>
+              <p v-if="item.addressSummary" class="text-sm text-ink-600 flex items-start gap-1.5">
+                <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+                <span class="text-pretty">{{ item.addressSummary }}</span>
+              </p>
+              <p v-if="item.technicianName" class="text-sm text-ink-600 flex items-center gap-1.5">
+                <Wrench :size="15" class="text-ink-400 shrink-0" />
+                Kỹ thuật viên: <span class="font-medium text-ink-900">{{ item.technicianName }}</span>
+              </p>
+            </div>
+            <FhCostBreakdown v-if="!isCancelled(item)" :labor-total="item.laborTotal" :parts-total="item.partsTotal" />
+          </div>
+
+          <div class="pt-3 border-t border-ink-100 flex items-center justify-between gap-3">
+            <span class="text-sm text-ink-500">
+              Tổng thanh toán:
+              <span class="ml-1 text-base font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="item.grandTotal" /></span>
+            </span>
+            <span class="text-sm font-medium text-brand-600 inline-flex items-center gap-1 whitespace-nowrap">
+              Xem chi tiết <ChevronRight :size="16" />
             </span>
           </div>
+        </article>
+      </li>
+    </ul>
 
-          <span class="text-xs font-semibold text-success-600 flex items-center gap-1">
-            <CheckCircle2 :size="14" /> Đã nghiệm thu & thanh toán
-          </span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div class="space-y-1.5">
-            <div class="text-[11px] text-ink-400 font-semibold">Thiết bị & Dịch vụ:</div>
-            <div class="font-bold text-sm text-ink-900">{{ item.device }}</div>
-            <div class="text-ink-600">{{ item.service }}</div>
-          </div>
-
-          <div class="space-y-1.5 sm:text-right">
-            <div class="text-[11px] text-ink-400 font-semibold">Kỹ thuật viên thực hiện:</div>
-            <div class="font-semibold text-ink-900 flex items-center gap-1.5 sm:justify-end">
-              <Wrench :size="13" class="text-brand-600" /> {{ item.technicianName }}
-            </div>
-            <div class="flex items-center gap-1 sm:justify-end text-warning-500 font-bold">
-              <Star v-for="i in item.technicianRating" :key="i" :size="12" class="fill-warning-400" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Customer Review Snippet -->
-        <div class="p-3 rounded bg-ink-50 border border-ink-200 text-xs text-ink-700 italic">
-          "{{ item.customerReview }}"
-        </div>
-
-        <!-- Cost Breakdown -->
-        <div class="pt-3 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex-1 max-w-sm">
-            <FhCostBreakdown :labor-total="item.laborTotal" :parts-total="item.partsTotal" />
-          </div>
-
-          <div class="text-right">
-            <span class="text-[11px] text-ink-400 block">Tổng thanh toán:</span>
-            <span class="text-sm font-bold font-num text-brand-700">
-              <FhMoney :amount="item.grandTotal" />
-            </span>
-          </div>
-        </div>
-      </FhCard>
+    <div v-if="!loading && hasMore" class="flex justify-center">
+      <FhButton variant="secondary" size="sm" :loading="loadingMore" data-testid="history-load-more" @click="load(page + 1)">
+        <RefreshCw :size="16" />
+        Xem thêm
+      </FhButton>
     </div>
   </div>
 </template>

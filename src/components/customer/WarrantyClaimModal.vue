@@ -109,7 +109,7 @@ async function submit() {
       </div>
 
       <p class="text-xs text-ink-600">
-        Đơn <span class="font-mono font-bold text-brand-700">{{ orderCode }}</span> · {{ serviceName }} ·
+        Đơn <span class="font-num font-bold text-brand-700">{{ orderCode }}</span> · {{ serviceName }} ·
         Kỹ thuật viên phụ trách: {{ technicianName }}
       </p>
 

@@ -33,7 +33,7 @@ describe('Notification Categorization', () => {
     };
     const cat = getNotificationCategory(item);
     expect(cat.category).toBe('SERVICE_MANAGER');
-    expect(cat.label).toBe('Quản lý dịch vụ (SM)');
+    expect(cat.label).toBe('Quản lý dịch vụ');
   });
 
   it('identifies admin notifications correctly', () => {
@@ -48,7 +48,7 @@ describe('Notification Categorization', () => {
     };
     const cat = getNotificationCategory(item);
     expect(cat.category).toBe('ADMIN');
-    expect(cat.label).toBe('Quản trị viên FixHome');
+    expect(cat.label).toBe('FixHome');
   });
 });
 

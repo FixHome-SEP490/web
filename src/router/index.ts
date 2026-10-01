@@ -115,7 +115,7 @@ const routes: RouteRecordRaw[] = [
         path: 'bookings/:id/candidates',
         name: 'booking-candidates',
         component: () => import('../pages/customer/BookingCandidatesPage.vue'),
-        meta: { title: 'Chọn Kỹ thuật viên' },
+        meta: { title: 'Chọn kỹ thuật viên', actionBar: true },
       },
       {
         path: 'bookings/:id',

@@ -27,6 +27,22 @@ export interface HistoricalOrderItem {
 }
 
 export type TechnicianOrderItem = ServiceOrderItem | HistoricalOrderItem;
+
+/** One finished or cancelled order, as the repair-history read model returns it. */
+export interface RepairHistoryItem {
+  orderId: string;
+  bookingId: string;
+  code: string;
+  status: string;
+  serviceName?: string | null;
+  technicianName?: string | null;
+  addressSummary?: string | null;
+  laborTotal: number;
+  partsTotal: number;
+  grandTotal: number;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+}
 export const isHistoricalOrder = (order: TechnicianOrderItem): order is HistoricalOrderItem =>
   (order as HistoricalOrderItem).historical === true;
 export interface ServiceOrderItem {
@@ -292,6 +308,28 @@ export const ordersApi = {
       throw new Error('Unexpected API response: service-orders/my missing meta.total');
     }
     return { data: res.data.data.map(normalizeOrder), total: res.data.meta.total };
+  },
+
+  /** Completed and cancelled orders of the signed-in user, newest first. */
+  async getRepairHistory(
+    page = 1,
+    pageSize = 20,
+    status?: 'completed' | 'cancelled',
+  ): Promise<{ data: RepairHistoryItem[]; total: number }> {
+    const res = await apiClient.get<{ data: RepairHistoryItem[]; meta?: { total?: number } }>('/repair-history', {
+      params: { page, pageSize, ...(status ? { status } : {}) },
+    });
+    const rows = Array.isArray(res.data?.data) ? res.data.data : [];
+    const money = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        laborTotal: money(row.laborTotal),
+        partsTotal: money(row.partsTotal),
+        grandTotal: money(row.grandTotal),
+      })),
+      total: typeof res.data?.meta?.total === 'number' ? res.data.meta.total : rows.length,
+    };
   },
 
   async getTechnicianJobs(): Promise<TechnicianOrderItem[]> { const res = await apiClient.get<{data: TechnicianOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeTechnicianOrder); },
