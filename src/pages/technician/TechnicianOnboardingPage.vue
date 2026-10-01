@@ -1139,8 +1139,8 @@ const handleLogout = async () => {
           <CheckCircle2 :size="42" />
         </div>
         <div class="space-y-2">
-          <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Hồ sơ đã được phê duyệt!</h2>
-          <p class="text-slate-600 text-sm max-w-md mx-auto">
+          <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ đã được phê duyệt!</h2>
+          <p class="text-ink-600 text-sm max-w-md mx-auto">
             Chúc mừng bạn đã chính thức trở thành Đối tác Kỹ thuật viên của FixHome.
           </p>
         </div>
@@ -1148,25 +1148,25 @@ const handleLogout = async () => {
         <!-- Wallet Top-Up Notice / Status -->
         <div
           class="p-5 rounded-2xl border text-left space-y-3"
-          :class="wallet?.eligibleForJobs ? 'bg-emerald-50/80 border-emerald-200' : 'bg-amber-50/80 border-amber-200'"
+          :class="wallet?.eligibleForJobs ? 'bg-success-50/80 border-success-200' : 'bg-warning-50/80 border-warning-200'"
         >
           <div class="flex items-start gap-3">
             <div
               class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-              :class="wallet?.eligibleForJobs ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
+              :class="wallet?.eligibleForJobs ? 'bg-success-100 text-success-700' : 'bg-warning-100 text-warning-700'"
             >
               <Wallet :size="20" />
             </div>
             <div class="space-y-1">
               <h4
                 class="text-sm font-bold"
-                :class="wallet?.eligibleForJobs ? 'text-emerald-950' : 'text-amber-950'"
+                :class="wallet?.eligibleForJobs ? 'text-success-900' : 'text-warning-900'"
               >
                 {{ wallet?.eligibleForJobs ? 'Ví tài khoản đã sẵn sàng nhận việc' : 'Thông báo số dư ví ban đầu & Điều kiện nhận đơn' }}
               </h4>
               <p
                 class="text-xs leading-relaxed"
-                :class="wallet?.eligibleForJobs ? 'text-emerald-900' : 'text-amber-900'"
+                :class="wallet?.eligibleForJobs ? 'text-success-900' : 'text-warning-900'"
               >
                 <span v-if="wallet?.eligibleForJobs">
                   Ví ký quỹ của bạn đã đạt mức tối thiểu và đủ điều kiện nhận đơn sửa chữa mới từ khách hàng.
@@ -1179,9 +1179,9 @@ const handleLogout = async () => {
           </div>
           <div
             class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2.5 border-t text-xs gap-1.5 font-medium"
-            :class="wallet?.eligibleForJobs ? 'border-emerald-200/60 text-emerald-900' : 'border-amber-200/60 text-amber-900'"
+            :class="wallet?.eligibleForJobs ? 'border-success-200/60 text-success-900' : 'border-warning-200/60 text-warning-900'"
           >
-            <span>Số dư ví hiện tại: <strong class="text-slate-900 font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong></span>
+            <span>Số dư ví hiện tại: <strong class="text-ink-900 font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong></span>
             <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">{{ (wallet?.minimumBalance ?? 200000).toLocaleString('vi-VN') }} ₫</strong></span>
           </div>
         </div>
@@ -1227,8 +1227,8 @@ const handleLogout = async () => {
             <span class="font-bold text-ink-800">{{ authStore.user?.fullName }}</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="font-medium text-slate-500">Trạng thái:</span>
-            <span class="font-bold text-amber-600">Đang chờ xét duyệt</span>
+            <span class="font-medium text-ink-500">Trạng thái:</span>
+            <span class="font-bold text-warning-600">Đang chờ xét duyệt</span>
           </div>
         </div>
 
@@ -1322,10 +1322,10 @@ const handleLogout = async () => {
                 class="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all font-bold text-xs sm:text-sm mb-1.5 shadow-2xs"
                 :class="[
                   currentStep === step.id
-                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-black scale-105'
+                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-bold scale-105'
                     : currentStep > step.id || (isReviewing && currentStep !== step.id)
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                    ? 'bg-success-500 text-white'
+                    : 'bg-ink-100 text-ink-400 group-hover:bg-ink-200'
                 ]"
               >
                 <Check v-if="currentStep > step.id || (isReviewing && currentStep !== step.id)" :size="18" />
