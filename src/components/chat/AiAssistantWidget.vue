@@ -464,6 +464,7 @@ function priceLabel(reply: AiReply): string | null {
           </div>
           <button
             type="button"
+            data-testid="ai-book-technician"
             class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700"
             @click="goToBooking"
           >
