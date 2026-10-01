@@ -228,7 +228,20 @@ async function send() {
   void scrollToEnd();
 }
 
-/** Chat does not book. It carries the service into the booking flow. */
+/** What the customer typed, oldest first, for the booking description. */
+function customerWords(): string {
+  return messages.value
+    .filter((m) => m.sender === 'user' && m.text.trim())
+    .map((m) => m.text.trim())
+    .join('. ')
+    .slice(0, 1000);
+}
+
+/**
+ * Chat does not book. It carries the service, the customer's own words and the
+ * conversation into the booking flow; the backend turns the conversation into
+ * the summary the technician receives on accepting.
+ */
 function goToBooking() {
   const service = pinnedService.value;
   if (!service) return;
@@ -240,6 +253,8 @@ function goToBooking() {
       // as a fallback for the wizard's own matching when it could not.
       serviceId: service.serviceId || undefined,
       q: service.nameVi,
+      aiSession: sessionId.value || undefined,
+      desc: customerWords() || undefined,
     },
   });
 }
