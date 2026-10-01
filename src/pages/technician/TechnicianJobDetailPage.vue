@@ -41,7 +41,6 @@ import {
   BookingMediaViewer,
   TechnicianPartsSection,
 } from '../../components';
-import PartsQuoteDemoPreview from '../../components/PartsQuoteDemoPreview.vue';
 import {
   ordersApi,
   isHistoricalOrder,
@@ -60,7 +59,8 @@ import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.v
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
-const showPartsDemo = import.meta.env.DEV;
+// Testing aid on a laptop only: confirm arrival at the customer's exact coordinates.
+const showDevShortcuts = import.meta.env.DEV;
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
@@ -1559,7 +1559,7 @@ const refreshJobStatus = async () => {
 
                 <!-- DEV demo shortcut -->
                 <FhButton
-                  v-if="showPartsDemo"
+                  v-if="showDevShortcuts"
                   variant="ghost"
                   size="sm"
                   class="border border-dashed border-warning-400 text-warning-700"
@@ -1709,7 +1709,6 @@ const refreshJobStatus = async () => {
           </div>
 
           <div v-else class="space-y-4 text-xs">
-            <PartsQuoteDemoPreview v-if="showPartsDemo" />
             <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
 
             <div class="space-y-2">

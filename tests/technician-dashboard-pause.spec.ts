@@ -6,6 +6,7 @@ const { getMyProfile, updateMyProfile, getTechnicianJobs, getMyInvitations } = v
 }));
 vi.mock('../src/api/technician-profile.api', () => ({ technicianProfileApi: { getMyProfile, updateMyProfile } }));
 vi.mock('../src/api/orders.api', () => ({ ordersApi: { getTechnicianJobs } }));
+vi.mock('../src/api/technician-onboarding.api', () => ({ technicianOnboardingApi: { getStatus: vi.fn().mockResolvedValue({ onboardingStatus: 'approved', verificationStatus: 'verified' }) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getMyInvitations } }));
 vi.mock('../src/api/wallet.api', () => ({
   walletApi: {

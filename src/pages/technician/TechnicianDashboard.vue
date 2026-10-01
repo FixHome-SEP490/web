@@ -21,7 +21,6 @@ import {
   Navigation,
   Package,
   Headphones,
-  Award,
   Sparkles,
   Check,
   Radio,
@@ -45,6 +44,9 @@ import {
 import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
+import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
+import { formatRating } from '../../utils/formatters';
+import { addDaysToKey, vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 import { walletApi, type WalletSummary } from '../../api/wallet.api';
 
 const router = useRouter();
@@ -139,7 +141,19 @@ const toggleAvailability = async () => {
   }
 };
 
+const identityVerified = ref(false);
+
+const loadVerification = async () => {
+  try {
+    const status = await technicianOnboardingApi.getStatus();
+    identityVerified.value = status.verificationStatus === 'verified' || status.onboardingStatus === 'approved';
+  } catch {
+    identityVerified.value = false;
+  }
+};
+
 const loadData = async () => {
+  const verificationRequest = loadVerification();
   const profileRequest = technicianProfileApi.getMyProfile()
     .then((p) => {
       profile.value = p;
@@ -162,6 +176,7 @@ const loadData = async () => {
   await loadInvitations();
   await loadWallet();
   await profileRequest;
+  await verificationRequest;
 };
 
 const handleRefresh = async () => {
@@ -198,7 +213,11 @@ const totalEarnings = computed(() => {
   return completedJobs.value.reduce((sum, j) => sum + (j.laborTotal || j.grandTotal || 0), 0);
 });
 
-const completedCount = computed(() => completedJobs.value.length);
+const completedCount = computed(() => {
+  const today = vnDayKey();
+  const monday = addDaysToKey(today, -((weekdayOfKey(today) + 6) % 7));
+  return completedJobs.value.filter((job) => job.completedAt && vnDayKey(job.completedAt) >= monday).length;
+});
 const targetPercentage = computed(() => Math.min(Math.round((completedCount.value / 20) * 100), 100));
 
 const handleChatWithCustomer = async (order: ServiceOrderItem) => {
@@ -262,14 +281,13 @@ const shortcuts = [
 
         <div class="min-w-0 space-y-1.5">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm text-ink-500 first-letter:">{{ currentDateFormatted }}</span>
-            <span class="inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-brand-50 text-brand-700 text-xs font-medium whitespace-nowrap">
+            <span class="text-sm text-ink-500 first-letter:uppercase">{{ currentDateFormatted }}</span>
+            <span
+              v-if="identityVerified"
+              class="inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-brand-50 text-brand-700 text-xs font-medium whitespace-nowrap"
+            >
               <ShieldCheck :size="14" />
-              Đã xác thực KYC
-            </span>
-            <span class="inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-ink-100 text-ink-600 text-xs font-medium whitespace-nowrap">
-              <Award :size="14" />
-              Thợ Chuyên Nghiệp
+              Đã xác minh danh tính
             </span>
           </div>
           <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
@@ -278,16 +296,16 @@ const shortcuts = [
           <div class="flex items-center gap-x-4 gap-y-1 flex-wrap text-sm text-ink-600">
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <MapPin :size="15" class="text-ink-400" />
-              Bán kính: <strong class="font-semibold text-ink-900 font-num">{{ profile?.serviceRadiusKm ?? 10 }}&nbsp;km</strong>
+              Bán kính: <strong class="font-semibold text-ink-900 font-num">{{ profile ? `${profile.serviceRadiusKm}\u00A0km` : '—' }}</strong>
             </span>
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Star :size="15" class="text-warning-500 fill-warning-500" />
-              Đánh giá: <strong class="font-semibold text-ink-900 font-num">{{ profile?.averageRating ? profile.averageRating.toFixed(1) : '5.0' }}&nbsp;★</strong>
+              Đánh giá: <strong class="font-semibold text-ink-900 font-num">{{ profile && profile.ratingCount > 0 && formatRating(profile.averageRating) ? `${formatRating(profile.averageRating)}\u00A0★` : 'Chưa có' }}</strong>
               <span class="text-ink-400">({{ profile?.ratingCount ?? 0 }})</span>
             </span>
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Sparkles :size="15" class="text-ink-400" />
-              Độ tin cậy: <strong class="font-semibold text-success-700 font-num">{{ profile?.reliabilityScore ?? 100 }}%</strong>
+              Độ tin cậy: <strong class="font-semibold text-success-700 font-num">{{ profile ? `${profile.reliabilityScore}%` : '—' }}</strong>
             </span>
           </div>
         </div>
@@ -480,9 +498,12 @@ const shortcuts = [
           <Star :size="18" class="text-ink-400" />
         </span>
         <span class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
-          {{ profile?.averageRating ? profile.averageRating.toFixed(2) : '4.95' }}&nbsp;<span class="text-warning-500">★</span>
+          <template v-if="profile && profile.ratingCount > 0 && formatRating(profile.averageRating)">
+            {{ formatRating(profile.averageRating) }}&nbsp;<span class="text-warning-500">★</span>
+          </template>
+          <span v-else class="text-lg font-medium text-ink-500 font-sans">Chưa có đánh giá</span>
         </span>
-        <span class="text-sm text-ink-600">Độ tin cậy: <strong class="font-semibold text-ink-900 font-num">{{ profile?.reliabilityScore ?? 100 }}/100</strong></span>
+        <span class="text-sm text-ink-600">Độ tin cậy: <strong class="font-semibold text-ink-900 font-num">{{ profile ? `${profile.reliabilityScore}/100` : '—' }}</strong></span>
         <span class="mt-auto pt-3 border-t border-ink-100 text-sm font-medium text-brand-600 flex items-center justify-between">
           Xem hồ sơ & kỹ năng
           <ChevronRight :size="16" />
@@ -679,7 +700,6 @@ const shortcuts = [
               <Trophy :size="14" class="text-warning-600" />
               Đua top kỹ thuật viên FixHome
             </span>
-            <span class="text-sm text-ink-500 whitespace-nowrap">Cấp bậc: <strong class="font-semibold text-ink-900">Vàng</strong></span>
           </div>
           <div class="space-y-1.5">
             <h3 class="text-lg font-semibold text-ink-900">Chỉ tiêu hoàn thành tuần</h3>

@@ -50,6 +50,7 @@ import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/cus
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
 import { toTimelineSteps } from '../../utils/order-timeline';
+import { formatRating } from '../../utils/formatters';
 
 const route = useRoute();
 const router = useRouter();
@@ -678,8 +679,11 @@ const confirmWork = async () => {
                     </span>
                   </div>
                   <div class="text-sm text-ink-600 flex flex-wrap items-center gap-x-1 mt-0.5">
-                    <span class="text-warning-500">★</span>
-                    <span class="font-medium text-ink-900">{{ order.technician.averageRating || '5.0' }}</span>
+                    <template v-if="formatRating(order.technician.averageRating)">
+                      <span class="text-warning-500">★</span>
+                      <span class="font-medium text-ink-900">{{ formatRating(order.technician.averageRating) }}</span>
+                    </template>
+                    <span v-else>Chưa có đánh giá</span>
                     <span class="text-ink-500">· Kỹ thuật viên chính</span>
                   </div>
                 </div>

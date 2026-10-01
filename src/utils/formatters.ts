@@ -96,3 +96,12 @@ export function formatWithdrawalStatus(status: string): { label: string; color: 
       return { label: status, color: 'gray' };
   }
 }
+
+/**
+ * A rating as the server reports it, one decimal, or null when there is none
+ * yet. Screens show "Chưa có đánh giá" for null rather than inventing a score.
+ */
+export function formatRating(value: number | string | null | undefined): string | null {
+  const rating = Number(value);
+  return Number.isFinite(rating) && rating > 0 ? rating.toFixed(1) : null;
+}
