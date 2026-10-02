@@ -33,7 +33,7 @@ const router = useRouter();
             Đặt lịch sửa chữa
             <ArrowRight :size="18" aria-hidden="true" />
           </FhButton>
-          <a href="#ai" class="landing-secondary-link">
+          <a href="/app/bookings/ai" class="landing-secondary-link" @click.prevent="router.push('/app/bookings/ai')">
             <Sparkles :size="18" class="text-brand-600" aria-hidden="true" />
             Phân tích sự cố bằng AI
           </a>

@@ -16,6 +16,7 @@ import {
   ClipboardList,
   ShieldCheck,
   History,
+  Bot,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -85,7 +86,8 @@ const handleLogout = async () => {
     :class="hasActionBar ? '[--fh-dock:10rem] lg:[--fh-dock:6rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <header class="sticky top-0 z-30 bg-white border-b border-ink-200">
-      <div class="max-w-280 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <!-- A little wider than the page so the five links and both booking buttons fit. -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">
           <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0" aria-label="FixHome - Trang chủ">
             <img :src="'/logo.png'" alt="" class="w-9 h-9 object-contain rounded-xl" />
@@ -118,10 +120,24 @@ const handleLogout = async () => {
             size="sm"
             :disabled="isSuspended"
             :title="isSuspended ? 'Tài khoản đang bị tạm khoá đặt dịch vụ' : 'Tạo yêu cầu sửa chữa mới'"
+            aria-label="Đặt thợ ngay"
             @click="router.push('/app/bookings/new')"
           >
             <CalendarPlus :size="16" />
-            <span class="hidden sm:inline">Đặt thợ ngay</span>
+            <span class="hidden sm:inline lg:hidden xl:inline whitespace-nowrap">Đặt thợ ngay</span>
+          </FhButton>
+          <!-- The AI form sits right beside the plain one. -->
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :disabled="isSuspended"
+            title="Mô tả sự cố để trợ lý AI chẩn đoán rồi đặt thợ"
+            aria-label="Chẩn đoán bằng AI"
+            data-testid="header-ai-booking"
+            @click="router.push('/app/bookings/ai')"
+          >
+            <Bot :size="16" />
+            <span class="hidden sm:inline lg:hidden xl:inline whitespace-nowrap">Chẩn đoán bằng AI</span>
           </FhButton>
 
           <NotificationBellDropdown />

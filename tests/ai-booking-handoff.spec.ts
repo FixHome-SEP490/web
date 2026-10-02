@@ -55,18 +55,15 @@ beforeEach(() => {
   vi.stubGlobal('alert', vi.fn());
 });
 
-describe('Booking from the assistant', () => {
-  it('prefills the customer\'s words, says the technician will see the summary, and sends the session', async () => {
+describe('Plain booking form', () => {
+  it('keeps the plain booking form free of AI: an assistant session in the link is ignored', async () => {
     route.query = { serviceId: 'svc', aiSession: '25a67259319c492bb68fd414778b8ce0', desc: 'Máy lạnh kêu lạch cạch 😣' };
     const wrapper = await bookThroughToConfirm();
-    expect(wrapper.find('[data-testid="ai-summary-note"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="ai-summary-note"]').exists()).toBe(false);
     await wrapper.findAll('button').find((b) => b.text().includes('Tìm kỹ thuật viên'))?.trigger('click');
     await flushPromises();
-    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
-      serviceId: 'svc',
-      description: 'Máy lạnh kêu lạch cạch 😣',
-      aiSessionId: '25a67259319c492bb68fd414778b8ce0',
-    }));
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc', description: 'Máy lạnh kêu lạch cạch 😣' }));
+    expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
   });
 
   it.each([

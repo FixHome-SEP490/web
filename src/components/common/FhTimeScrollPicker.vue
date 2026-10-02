@@ -271,10 +271,10 @@ const endTimeDisplay = computed(() => {
     >
       <div class="flex items-center gap-2 font-bold text-xs">
         <Zap :size="15" class="text-warning-600 shrink-0" />
-        <span>Điều phối kỹ thuật viên tức thì</span>
+        <span>Hẹn sớm nhất có thể</span>
       </div>
-      <p class="text-[11px] text-warning-800 leading-relaxed">
-        Thợ gần nhất trong khu vực sẽ liên hệ xác nhận và di chuyển tới nhà bạn trong vòng <strong>30 – 60 phút</strong>.
+      <p class="text-xs text-warning-800 leading-relaxed">
+        Khung hẹn bắt đầu khoảng 1 giờ sau khi đặt. Chỉ kỹ thuật viên đang trong ca làm việc mới nhận được đơn, nên vào tối muộn hoặc ban đêm bạn hãy chọn giờ cụ thể.
       </p>
     </div>
 

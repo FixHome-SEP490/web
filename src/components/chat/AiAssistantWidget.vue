@@ -57,7 +57,7 @@ function goToBooking() {
   if (!service) return;
   isOpen.value = false;
   void router.push({
-    name: 'new-booking',
+    name: 'ai-booking',
     query: {
       // The id when the backend could resolve the catalogue code, and the name
       // as a fallback for the wizard's own matching when it could not.
