@@ -20,6 +20,11 @@ import {
 } from '../api/ai.api';
 import { prepareForAi, shrinkForRetry, type PickedImage } from '../utils/image-for-ai';
 
+/** The assistant's first line, before the customer says anything. */
+export const ASSISTANT_GREETING =
+  'Dạ em chào anh/chị, em là trợ lý của FixHome ạ. Anh/chị đang gặp vấn đề gì ở ' +
+  'nhà mình thì kể em nghe, hoặc gửi em tấm ảnh thiết bị để em xem giúp nhé.';
+
 /** The service drops a session after an hour of silence. Told, not discovered. */
 export const SESSION_IDLE_MINUTES = 60;
 
@@ -258,3 +263,21 @@ export function useAiConversation(options: AiConversationOptions = {}) {
 }
 
 export type AiConversation = ReturnType<typeof useAiConversation>;
+
+let shared: AiConversation | null = null;
+
+/**
+ * The floating assistant's conversation, one per page load. The booking form
+ * reuses it when the customer arrives from the assistant ("Đặt thợ"), so step 3
+ * shows what was already said and carries on, instead of starting a second
+ * conversation and repeating the customer's words to the assistant.
+ */
+export function useSharedAiConversation(): AiConversation {
+  shared ??= useAiConversation({ greeting: ASSISTANT_GREETING });
+  return shared;
+}
+
+/** Test seam: forget the shared conversation. */
+export function resetSharedAiConversation() {
+  shared = null;
+}

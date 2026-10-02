@@ -34,6 +34,7 @@ vi.mock('../src/utils/image-for-ai', () => ({
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
+import { useSharedAiConversation, resetSharedAiConversation } from '../src/composables/useAiConversation';
 
 const ActionButton = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -75,6 +76,7 @@ beforeEach(() => {
   ]);
   getAddresses.mockReset().mockResolvedValue([{ id: 'addr', label: 'Nhà', line1: '1 Test', district: 'Q1', province: 'HCM', isDefault: true }]);
   route.query = { serviceId: 'svc-check' };
+  resetSharedAiConversation();
   vi.stubGlobal('alert', vi.fn());
 });
 
@@ -125,5 +127,32 @@ describe('Booking form, step 3: talking with the assistant', () => {
     await flushPromises();
     expect(createBooking).toHaveBeenCalledTimes(1);
     expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
+  }, 10000);
+});
+
+describe('Booking form, step 3, arriving from the floating assistant', () => {
+  it('shows the conversation already held and carries on, without repeating it to the AI', async () => {
+    analyze.mockResolvedValueOnce(reply({ sessionId: 'sess-chat', messageVi: 'Dạ khả năng là hỏng mô tơ quạt ạ.' }));
+    const assistant = useSharedAiConversation();
+    await assistant.sendTurn('Máy lạnh kêu lạch cạch ở cục trong', []);
+    expect(analyze).toHaveBeenCalledTimes(1);
+
+    route.query = { serviceId: 'svc-check', aiSession: 'sess-chat', desc: 'Máy lạnh kêu lạch cạch ở cục trong' };
+    const wrapper = mount(NewBookingWizardPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text().includes('Tiếp tục'))!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text().includes('Phân tích sự cố cùng AI'))!.trigger('click');
+    await flushPromises();
+
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(wrapper.get('[data-testid="ai-thread"]').text()).toContain('Dạ khả năng là hỏng mô tơ quạt ạ.');
+
+    analyze.mockResolvedValueOnce(reply({ sessionId: 'sess-chat' }));
+    await wrapper.get('[data-testid="ai-input"]').setValue('Máy dùng 3 năm rồi');
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await flushPromises();
+    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Máy dùng 3 năm rồi', sessionId: 'sess-chat' }));
   }, 10000);
 });

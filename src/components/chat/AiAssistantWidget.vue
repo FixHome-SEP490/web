@@ -18,11 +18,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Bot, X, RotateCcw, CalendarPlus } from 'lucide-vue-next';
 import AiConversationThread from './AiConversationThread.vue';
 import { useChatStore } from '../../stores/chat.store';
-import { useAiConversation, SESSION_IDLE_MINUTES } from '../../composables/useAiConversation';
-
-const GREETING =
-  'Dạ em chào anh/chị, em là trợ lý của FixHome ạ. Anh/chị đang gặp vấn đề gì ở ' +
-  'nhà mình thì kể em nghe, hoặc gửi em tấm ảnh thiết bị để em xem giúp nhé.';
+import { useSharedAiConversation, SESSION_IDLE_MINUTES } from '../../composables/useAiConversation';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -39,7 +35,8 @@ const isOpen = computed({
   set: (open: boolean) => chatStore.toggleAiPanel(open),
 });
 
-const conversation = useAiConversation({ greeting: GREETING });
+// Shared with the booking form, which continues it after "Đặt thợ".
+const conversation = useSharedAiConversation();
 const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords } = conversation;
 
 async function toggle() {

@@ -37,7 +37,7 @@ import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/ca
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { useAiConversation } from '../../composables/useAiConversation';
+import { useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
@@ -158,7 +158,14 @@ const aiSessionFromChat = (() => {
  * asks something else, adds photos or asks for another service before going
  * on. AI failure never blocks the booking; the customer can always continue.
  */
-const aiConversation = useAiConversation({ sessionId: aiSessionFromChat });
+// Arriving from the assistant, step 3 continues that very conversation: same
+// thread on screen, nothing repeated to the AI. Otherwise it starts its own.
+const sharedConversation = useSharedAiConversation();
+const continuesAssistant =
+  !!aiSessionFromChat &&
+  sharedConversation.sessionId.value === aiSessionFromChat &&
+  sharedConversation.turnCount.value > 0;
+const aiConversation = continuesAssistant ? sharedConversation : useAiConversation({ sessionId: aiSessionFromChat });
 const aiSessionId = computed(() => {
   const id = aiConversation.sessionId.value;
   return id && SESSION_PATTERN.test(id) ? id : null;
