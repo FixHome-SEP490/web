@@ -147,7 +147,7 @@ const stages = [
 
           <!-- UNIFIED CTA PER ISSUE 04 -->
           <div class="pt-2">
-            <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/new')">
+            <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/ai')">
               <Sparkles :size="18" aria-hidden="true" />
               Phân tích sự cố bằng AI
               <ArrowRight :size="18" aria-hidden="true" />

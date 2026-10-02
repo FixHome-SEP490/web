@@ -2,15 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
 
-// Step 3 of the booking form is a conversation with the assistant: it opens
-// with the customer's description and photos, the customer can answer what
-// the assistant asks back or switch service, and only then goes on to book.
+// Two booking forms. The plain one: the customer picks the service, no AI at
+// all. The AI one: the customer only describes the problem, the assistant
+// diagnoses it and chooses the service, and only then can the customer change
+// it and book.
 const { createBooking, getCategories, getAddresses, push, route, analyze, ask } = vi.hoisted(() => ({
   createBooking: vi.fn(),
   getCategories: vi.fn(),
   getAddresses: vi.fn(),
   push: vi.fn(),
-  route: { query: {} as Record<string, string> },
+  route: { query: {} as Record<string, string>, meta: {} as Record<string, unknown> },
   analyze: vi.fn(),
   ask: vi.fn(),
 }));
@@ -50,18 +51,22 @@ const reply = (extra: Record<string, unknown> = {}) => ({
   sessionId: 'sess-42', status: 'ok', aiAvailable: true, messageVi: 'Dạ em xem rồi ạ.',
   suspectedFaults: [], recommendedServices: [], suggestedActionsVi: [], priceEstimate: null, ...extra,
 });
+const fix = { serviceCode: 'FIX', nameVi: 'Sửa máy lạnh không mát', serviceId: 'svc-fix' };
+const pause = () => new Promise((resolve) => setTimeout(resolve, 1000)); // acknowledgement dwell
+const button = (w: ReturnType<typeof mount>, text: string) => w.findAll('button').find((b) => b.text().includes(text))!;
 
-async function openAiStep() {
+async function openAiForm() {
+  route.meta = { bookingFlow: 'ai' };
   const wrapper = mount(NewBookingWizardPage, { global: { stubs } });
   await flushPromises();
-  const textarea = wrapper.find('textarea');
-  await textarea.setValue('Máy lạnh kêu lạch cạch, không mát');
-  await wrapper.findAll('button').find((b) => b.text().includes('Tiếp tục'))!.trigger('click');
-  await flushPromises();
-  await wrapper.findAll('button').find((b) => b.text().includes('Phân tích sự cố cùng AI'))!.trigger('click');
-  await new Promise((resolve) => setTimeout(resolve, 1000)); // acknowledgement pause
-  await flushPromises();
   return wrapper;
+}
+
+async function describeAndAnalyze(wrapper: ReturnType<typeof mount>) {
+  await wrapper.find('textarea').setValue('Máy lạnh kêu lạch cạch, không mát');
+  await wrapper.get('[data-testid="step1-next"]').trigger('click');
+  await pause();
+  await flushPromises();
 }
 
 beforeEach(() => {
@@ -72,87 +77,133 @@ beforeEach(() => {
     { id: 'cat-ac', name: 'Điện lạnh', services: [
       { id: 'svc-check', name: 'Kiểm tra máy lạnh', pricingMode: 'inspection_required', basePrice: 100000 },
       { id: 'svc-fix', name: 'Sửa máy lạnh không mát', pricingMode: 'inspection_required', basePrice: 200000 },
+      { id: 'svc-clean', name: 'Vệ sinh máy lạnh', pricingMode: 'inspection_required', basePrice: 150000 },
     ] },
   ]);
   getAddresses.mockReset().mockResolvedValue([{ id: 'addr', label: 'Nhà', line1: '1 Test', district: 'Q1', province: 'HCM', isDefault: true }]);
-  route.query = { serviceId: 'svc-check' };
+  route.query = {};
+  route.meta = {};
   resetSharedAiConversation();
   vi.stubGlobal('alert', vi.fn());
 });
 
-describe('Booking form, step 3: talking with the assistant', () => {
-  it('opens with the description, shows the assistant\'s questions and lets the customer answer them', async () => {
+describe('AI booking form', () => {
+  it('asks only for the problem: no service choice before the diagnosis', async () => {
+    const wrapper = await openAiForm();
+    expect(wrapper.text()).toContain('Mô tả sự cố để trợ lý AI phân tích');
+    expect(wrapper.text()).not.toContain('Kiểm tra máy lạnh');
+    expect(wrapper.get('[data-testid="booking-stepper"]').text()).toContain('Trò chuyện với AI');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('lets the customer answer what the assistant asks, and takes the service the assistant chooses', async () => {
     analyze
       .mockResolvedValueOnce(reply({ status: 'needs_clarification', clarification: { questionsVi: ['Tiếng kêu ở cục trong hay cục ngoài ạ?'] } }))
-      .mockResolvedValueOnce(reply({ suspectedFaults: [{ faultCode: 'F1', nameVi: 'Hỏng mô tơ quạt dàn lạnh' }] }));
-    const wrapper = await openAiStep();
+      .mockResolvedValueOnce(reply({ suspectedFaults: [{ faultCode: 'F1', nameVi: 'Hỏng mô tơ quạt' }], recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
 
-    expect(analyze).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledWith(expect.objectContaining({ description: 'Máy lạnh kêu lạch cạch, không mát', sessionId: null }));
     expect(wrapper.get('[data-testid="ai-questions"]').text()).toContain('Tiếng kêu ở cục trong hay cục ngoài');
-    expect(wrapper.text()).not.toContain('Mở trợ lý ở góc màn hình');
+    // no service yet, so the customer cannot go on
+    expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeDefined();
 
     await wrapper.get('[data-testid="ai-input"]').setValue('Cục trong phòng ạ');
     await wrapper.get('[data-testid="ai-send"]').trigger('click');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await pause();
     await flushPromises();
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Cục trong phòng ạ', sessionId: 'sess-42' }));
-    expect(wrapper.text()).toContain('Hỏng mô tơ quạt dàn lạnh');
+    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa máy lạnh không mát');
+    expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
   }, 10000);
 
-  it('switches to the service the assistant suggests, then books with the conversation', async () => {
-    analyze.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'FIX', nameVi: 'Sửa máy lạnh không mát', serviceId: 'svc-fix' }] }));
-    const wrapper = await openAiStep();
-
-    await wrapper.get('[data-testid="ai-use-suggested"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('[data-testid="ai-use-suggested"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa máy lạnh không mát');
+  it('books what the assistant chose, with the whole conversation, through address and confirmation', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
 
     await wrapper.get('[data-testid="ai-continue"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Địa chỉ');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="ai-summary-note"]').exists()).toBe(true);
-    await wrapper.findAll('button').find((b) => b.text().includes('Tìm kỹ thuật viên'))!.trigger('click');
+    await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
     await flushPromises();
-    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc-fix', aiSessionId: 'sess-42' }));
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
+      serviceId: 'svc-fix', aiSessionId: 'sess-42', description: 'Máy lạnh kêu lạch cạch, không mát',
+    }));
   }, 10000);
 
-  it('lets the customer book normally when the assistant cannot be reached', async () => {
+  it('lets the customer change the service only after the diagnosis', async () => {
+    analyze
+      .mockResolvedValueOnce(reply({ recommendedServices: [fix] }))
+      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'CLEAN', nameVi: 'Vệ sinh máy lạnh', serviceId: 'svc-clean' }] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+
+    // the assistant suggests another service in a later turn
+    await wrapper.get('[data-testid="ai-input"]').setValue('À máy chỉ bẩn thôi, cần vệ sinh');
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
+    await pause();
+    await flushPromises();
+    await wrapper.get('[data-testid="ai-use-suggested"]').trigger('click');
+    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Vệ sinh máy lạnh');
+
+    // or picks one themselves
+    await wrapper.get('[data-testid="ai-manual-service"]').setValue('svc-check');
+    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Kiểm tra máy lạnh');
+  }, 10000);
+
+  it('still books when the assistant cannot be reached: the customer picks the service', async () => {
     analyze.mockResolvedValueOnce({ status: 'unavailable', aiAvailable: false, sessionId: null, messageVi: 'Trợ lý đang tạm thời không kết nối được.' });
-    const wrapper = await openAiStep();
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
     expect(wrapper.text()).toContain('Trợ lý đang tạm thời không kết nối được.');
+    await wrapper.get('[data-testid="ai-manual-service"]').setValue('svc-fix');
     await wrapper.get('[data-testid="ai-continue"]').trigger('click');
     await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text().includes('Tìm kỹ thuật viên'))!.trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
-    expect(createBooking).toHaveBeenCalledTimes(1);
+    await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
+    await flushPromises();
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc-fix' }));
     expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
   }, 10000);
-});
 
-describe('Booking form, step 3, arriving from the floating assistant', () => {
-  it('shows the conversation already held and carries on, without repeating it to the AI', async () => {
-    analyze.mockResolvedValueOnce(reply({ sessionId: 'sess-chat', messageVi: 'Dạ khả năng là hỏng mô tơ quạt ạ.' }));
+  it('arriving from the floating assistant, goes to address and time, and back shows the same conversation', async () => {
+    analyze.mockResolvedValueOnce(reply({ sessionId: 'sess-chat', messageVi: 'Dạ khả năng là hỏng mô tơ quạt ạ.', recommendedServices: [fix] }));
     const assistant = useSharedAiConversation();
     await assistant.sendTurn('Máy lạnh kêu lạch cạch ở cục trong', []);
     expect(analyze).toHaveBeenCalledTimes(1);
 
-    route.query = { serviceId: 'svc-check', aiSession: 'sess-chat', desc: 'Máy lạnh kêu lạch cạch ở cục trong' };
+    route.query = { serviceId: 'svc-fix', aiSession: 'sess-chat', desc: 'Máy lạnh kêu lạch cạch ở cục trong' };
+    const wrapper = await openAiForm();
+    expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+    await button(wrapper, 'Quay lại').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="ai-thread"]').text()).toContain('Dạ khả năng là hỏng mô tơ quạt ạ.');
+    expect(analyze).toHaveBeenCalledTimes(1);
+  }, 10000);
+});
+
+describe('Plain booking form', () => {
+  it('never talks to the assistant: service, address and time, confirmation', async () => {
+    route.query = { serviceId: 'svc-fix' };
     const wrapper = mount(NewBookingWizardPage, { global: { stubs } });
     await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text().includes('Tiếp tục'))!.trigger('click');
+    expect(wrapper.get('[data-testid="booking-stepper"]').text()).not.toContain('AI');
+    await wrapper.find('textarea').setValue('Máy lạnh không mát');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
     await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text().includes('Phân tích sự cố cùng AI'))!.trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
-
-    expect(analyze).toHaveBeenCalledTimes(1);
-    expect(wrapper.get('[data-testid="ai-thread"]').text()).toContain('Dạ khả năng là hỏng mô tơ quạt ạ.');
-
-    analyze.mockResolvedValueOnce(reply({ sessionId: 'sess-chat' }));
-    await wrapper.get('[data-testid="ai-input"]').setValue('Máy dùng 3 năm rồi');
-    await wrapper.get('[data-testid="ai-send"]').trigger('click');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(wrapper.find('[data-testid="ai-thread"]').exists()).toBe(false);
+    await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
     await flushPromises();
-    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Máy dùng 3 năm rồi', sessionId: 'sess-chat' }));
-  }, 10000);
+    expect(analyze).not.toHaveBeenCalled();
+    expect(ask).not.toHaveBeenCalled();
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc-fix', description: 'Máy lạnh không mát' }));
+    expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
+  });
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // src/pages/customer/NewBookingWizardPage.vue
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Wrench,
@@ -48,6 +48,14 @@ import { vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
+
+/**
+ * Two forms on one page. /app/bookings/new: the customer knows what they need
+ * and picks the service; no AI anywhere. /app/bookings/ai: the customer only
+ * describes the problem, the assistant diagnoses it and chooses the service,
+ * and only then can the customer change it.
+ */
+const isAiFlow = route.meta?.bookingFlow === 'ai';
 
 const step = ref(1);
 const loading = ref(false);
@@ -148,6 +156,7 @@ const formattedScheduleDisplay = computed(() => {
  */
 const SESSION_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const aiSessionFromChat = (() => {
+  if (!isAiFlow) return null;
   const raw = typeof route.query.aiSession === 'string' ? route.query.aiSession : '';
   return SESSION_PATTERN.test(raw) ? raw : null;
 })();
@@ -167,6 +176,7 @@ const continuesAssistant =
   sharedConversation.turnCount.value > 0;
 const aiConversation = continuesAssistant ? sharedConversation : useAiConversation({ sessionId: aiSessionFromChat });
 const aiSessionId = computed(() => {
+  if (!isAiFlow) return null;
   const id = aiConversation.sessionId.value;
   return id && SESSION_PATTERN.test(id) ? id : null;
 });
@@ -191,6 +201,66 @@ async function startAiConversation() {
 async function restartAiConversation() {
   aiConversation.startOver();
   await startAiConversation();
+}
+
+/** In the AI form the assistant chooses the service: its first pick is applied. */
+watch(
+  () => aiConversation.pinnedService.value,
+  (suggested) => {
+    if (!isAiFlow || !suggested?.serviceId || selectedServiceId.value) return;
+    if (aiSuggestedServiceExists.value) useSuggestedService();
+  },
+);
+
+/** After the diagnosis, the customer may still pick another service themselves. */
+const allServices = computed(() =>
+  categories.value.flatMap((cat) => (cat.services ?? []).map((srv) => ({ ...srv, categoryName: cat.name, categoryId: cat.id }))),
+);
+function chooseService(id: string) {
+  for (const cat of categories.value) {
+    if (cat.services?.some((srv) => srv.id === id)) {
+      selectedCategoryId.value = cat.id;
+      services.value = cat.services ?? [];
+      selectedServiceId.value = id;
+      return;
+    }
+  }
+}
+
+/** Steps in the order each form walks them; numbers are the step ids below. */
+const stepItems = computed(() =>
+  isAiFlow
+    ? [
+        { id: 1, label: 'Mô tả sự cố' },
+        { id: 3, label: 'Trò chuyện với AI' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ]
+    : [
+        { id: 1, label: isFixedPrice.value ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Mô tả' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ],
+);
+const stepIndex = computed(() => stepItems.value.findIndex((item) => item.id === step.value));
+
+/** AI form, step 1 -> the conversation. */
+function startAiStep() {
+  if (!description.value.trim()) {
+    window.alert('Vui lòng mô tả sơ bộ tình trạng thiết bị để trợ lý phân tích.');
+    return;
+  }
+  step.value = 3;
+  void startAiConversation();
+}
+
+/** AI form, conversation -> address and time, once a service is chosen. */
+function leaveAiStep() {
+  if (!selectedServiceId.value) {
+    window.alert('Trợ lý chưa chọn được dịch vụ. Anh/chị trả lời thêm hoặc chọn dịch vụ ở bên dưới khung chat.');
+    return;
+  }
+  step.value = 2;
 }
 
 /** The assistant suggested another service: book that one instead. */
@@ -446,10 +516,10 @@ onMounted(async () => {
       services.value = matchedCat.services ?? [];
       if (matchedSvc) {
         selectedServiceId.value = matchedSvc.id;
-        if (matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
+        if (!isAiFlow && matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
           description.value = `Yêu cầu dịch vụ niêm yết: ${matchedSvc.name}`;
         }
-      } else if (services.value.length > 0) {
+      } else if (!isAiFlow && services.value.length > 0) {
         selectedServiceId.value = services.value[0].id;
         const first = services.value[0];
         if (first.pricingMode?.toLowerCase() === 'fixed_price' || (first.fixedPrice != null && first.fixedPrice > 0)) {
@@ -468,6 +538,9 @@ onMounted(async () => {
     const defAddr = addrs.find((a) => a.isDefault);
     if (defAddr) selectedAddressId.value = defAddr.id;
     else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
+    // From the floating assistant: diagnosis done and service chosen, so the
+    // customer goes straight to address and time (back shows the conversation).
+    if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
 
   } catch {
     window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
@@ -611,14 +684,7 @@ const goToNextStepFrom2 = async () => {
     return;
   }
 
-  // Dịch vụ phổ biến có giá niêm yết: Bỏ qua AI chẩn đoán, đi thẳng tới Bước Xác nhận đơn
-  if (isFixedPrice.value) {
-    step.value = 4;
-    return;
-  }
-
-  step.value = 3;
-  void startAiConversation();
+  step.value = 4;
 };
 
 const createAndFindTech = async () => {
@@ -653,7 +719,7 @@ const createAndFindTech = async () => {
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
-      description: description.value,
+      description: isAiFlow ? (aiConversation.customerWords() || description.value) : description.value,
       ...schedule,
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
@@ -692,33 +758,18 @@ const createAndFindTech = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-6 pb-12">
-    <!-- Stepper Navigation Header (Style Mobile & Web) -->
+    <!-- Stepper: the steps of whichever form this is -->
     <div class="bg-white rounded-2xl border border-ink-200/90 p-4 shadow-xs">
-      <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2">
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 1 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 1 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">1</span>
-          <span>{{ isFixedPrice ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Lỗi' }}</span>
-        </div>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 2 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 2 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 2 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">2</span>
-          <span>Địa chỉ & Giờ</span>
-        </div>
-        <template v-if="!isFixedPrice">
-          <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-          <div class="flex items-center gap-2 shrink-0" :class="step >= 3 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
-            <span>AI Soi lỗi</span>
+      <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2" data-testid="booking-stepper">
+        <template v-for="(item, index) in stepItems" :key="item.id">
+          <div v-if="index > 0" class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="stepIndex >= index ? 'bg-brand-600' : 'bg-ink-200'"></div>
+          <div class="flex items-center gap-2 shrink-0" :class="stepIndex >= index ? 'text-brand-600 font-bold' : 'text-ink-400'">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="stepIndex >= index ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ index + 1 }}</span>
+            <span class="whitespace-nowrap">{{ item.label }}</span>
           </div>
         </template>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 4 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 4 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ isFixedPrice ? '3' : '4' }}</span>
-          <span>Xác nhận</span>
-        </div>
       </div>
     </div>
-
 
     <!-- Step 1: Service & Issue Description -->
     <div v-if="step === 1" class="space-y-6">
@@ -727,7 +778,7 @@ const createAndFindTech = async () => {
         <div class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-              Nhà mình đang gặp vấn đề gì?
+              {{ isAiFlow ? 'Mô tả sự cố để trợ lý AI phân tích' : 'Nhà mình đang gặp vấn đề gì?' }}
             </h2>
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
               <ShieldCheck :size="14" class="text-brand-600" />
@@ -735,11 +786,18 @@ const createAndFindTech = async () => {
             </span>
           </div>
           <p class="text-xs sm:text-sm text-ink-500 leading-relaxed">
-            Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
+            <template v-if="isAiFlow">
+              Kể tình trạng thiết bị và gửi ảnh nếu có. Trợ lý sẽ phân tích, hỏi thêm nếu cần và chọn dịch vụ phù hợp; bạn không cần tự chọn dịch vụ.
+            </template>
+            <template v-else>
+              Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
+            </template>
           </p>
         </div>
 
         <div class="space-y-7 text-xs sm:text-sm">
+          <!-- Choosing the service is the plain form's job; the AI form leaves it to the assistant. -->
+          <template v-if="!isAiFlow">
           <!-- 1. Categories Pills with Icons & Count -->
           <div class="space-y-2.5">
             <div class="flex items-center justify-between">
@@ -1030,12 +1088,14 @@ const createAndFindTech = async () => {
             </div>
           </div>
 
+          </template>
+
           <!-- 4. Photo Upload Area (Drag & Drop + Dotted Box) -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
                 <Camera :size="15" class="text-brand-600" />
-                <span>3. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
+                <span>{{ isAiFlow ? 1 : 3 }}. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
               </label>
               <span class="text-[11px] text-ink-500 font-medium">
                 {{ uploadedPhotos.length }}/5 ảnh
@@ -1109,7 +1169,7 @@ const createAndFindTech = async () => {
           <div class="space-y-2.5">
             <div class="flex items-center justify-between flex-wrap gap-1">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>4. Mô tả chi tiết yêu cầu</span>
+                <span>{{ isAiFlow ? 2 : 4 }}. Mô tả chi tiết yêu cầu</span>
                 <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
               </label>
               <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
@@ -1121,7 +1181,7 @@ const createAndFindTech = async () => {
             </div>
 
             <!-- Quick symptom chips for faster input -->
-            <div class="space-y-1.5">
+            <div v-if="!isAiFlow" class="space-y-1.5">
               <div class="text-[11px] text-ink-500 flex items-center gap-1">
                 <Sparkles :size="12" class="text-brand-600" />
                 <span>Gợi ý triệu chứng phổ biến (bấm để thêm nhanh vào mô tả):</span>
@@ -1157,7 +1217,7 @@ const createAndFindTech = async () => {
           <div class="space-y-2.5">
             <div class="flex items-center justify-between">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>5. Mức độ khẩn cấp</span>
+                <span>{{ isAiFlow ? 3 : 5 }}. Mức độ khẩn cấp</span>
               </label>
               <span class="text-[11px] text-ink-500">Chọn mức độ mong muốn thợ có mặt</span>
             </div>
@@ -1203,7 +1263,7 @@ const createAndFindTech = async () => {
 
           <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
             <!-- Selected summary on desktop -->
-            <div v-if="selectedService" class="text-right hidden sm:block">
+            <div v-if="selectedService && !isAiFlow" class="text-right hidden sm:block">
               <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
               <div v-if="isFixedPrice" class="text-xs font-bold text-brand-700 font-num">
                 Tổng: <FhMoney :amount="totalFixedAmount" />
@@ -1215,10 +1275,12 @@ const createAndFindTech = async () => {
               variant="primary"
               size="lg"
               class="w-full sm:w-auto px-7 shadow-xs"
-              :disabled="!selectedServiceId"
-              @click="goToStep2"
+              :disabled="isAiFlow ? !description.trim() : !selectedServiceId"
+              data-testid="step1-next"
+              @click="isAiFlow ? startAiStep() : goToStep2()"
             >
-              Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" />
+              <template v-if="isAiFlow">Phân tích cùng AI <Sparkles :size="15" class="ml-1.5" /></template>
+              <template v-else>Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" /></template>
             </FhButton>
           </div>
         </div>
@@ -1289,16 +1351,11 @@ const createAndFindTech = async () => {
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 1">
+          <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" @click="goToNextStepFrom2">
-            <template v-if="isFixedPrice">
-              Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
-            </template>
-            <template v-else>
-              Phân tích sự cố cùng AI <Sparkles :size="15" class="ml-1.5" />
-            </template>
+          <FhButton variant="primary" size="md" data-testid="step2-next" @click="goToNextStepFrom2">
+            Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
 
         </div>
@@ -1331,7 +1388,7 @@ const createAndFindTech = async () => {
           <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
             <template #pinned>
               <div
-                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists"
+                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId"
                 class="flex flex-wrap items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
                 data-testid="ai-suggested-service"
               >
@@ -1348,23 +1405,37 @@ const createAndFindTech = async () => {
                   Đổi sang dịch vụ này
                 </button>
               </div>
-              <div
-                v-else-if="selectedService"
-                class="flex items-center gap-2 px-3.5 py-2.5 bg-ink-50 border-t border-ink-100 text-sm"
-                data-testid="ai-current-service"
-              >
-                <span class="text-ink-500 whitespace-nowrap">Dịch vụ đang đặt:</span>
-                <span class="font-semibold text-ink-900 min-w-0 truncate">{{ selectedService.name }}</span>
+              <div class="px-3.5 py-2.5 bg-ink-50 border-t border-ink-100 text-sm space-y-2" data-testid="ai-current-service">
+                <div v-if="selectedService" class="flex items-center gap-2 min-w-0">
+                  <span class="text-ink-500 whitespace-nowrap">Dịch vụ sẽ đặt:</span>
+                  <span class="font-semibold text-ink-900 min-w-0 truncate">{{ selectedService.name }}</span>
+                </div>
+                <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
+                <label
+                  v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
+                  class="flex items-center gap-2 text-ink-600"
+                >
+                  <span class="whitespace-nowrap">Đổi dịch vụ khác:</span>
+                  <select
+                    class="min-w-0 flex-1 h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm text-ink-900"
+                    data-testid="ai-manual-service"
+                    :value="selectedServiceId"
+                    @change="chooseService(($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="" disabled>Chọn dịch vụ</option>
+                    <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
+                  </select>
+                </label>
               </div>
             </template>
           </AiConversationThread>
         </div>
 
         <div class="flex items-center justify-between gap-3 pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 2">
+          <FhButton variant="ghost" size="md" @click="step = 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value" data-testid="ai-continue" @click="step = 4">
+          <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || !selectedServiceId" data-testid="ai-continue" @click="leaveAiStep">
             Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
         </div>
@@ -1457,7 +1528,7 @@ const createAndFindTech = async () => {
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = isFixedPrice ? 2 : 3">
+          <FhButton variant="ghost" size="md" @click="step = 2">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
 
