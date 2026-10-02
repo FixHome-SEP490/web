@@ -18,6 +18,7 @@ import {
 } from 'lucide-vue-next';
 import { useAuthStore } from '../stores/auth';
 import { FhButton } from '../components';
+import RoleChatDock from '../components/chat/RoleChatDock.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -470,6 +471,9 @@ onUnmounted(() => {
         </div>
       </div>
     </footer>
+
+    <!-- Signed-in customers and technicians keep their chat on public pages. -->
+    <RoleChatDock />
   </div>
 </template>
 

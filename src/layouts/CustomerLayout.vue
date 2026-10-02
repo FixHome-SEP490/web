@@ -28,6 +28,10 @@ const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 const callStore = useCallStore();
+
+// Pages with a fixed action bar at the bottom (route meta actionBar) need the
+// floating chat buttons lifted above it.
+const hasActionBar = computed(() => router.currentRoute?.value?.meta?.actionBar === true);
 const avatarMenuOpen = ref(false);
 
 onMounted(() => {
@@ -76,7 +80,10 @@ const handleLogout = async () => {
 
 <template>
   <!-- The bottom tab bar is 64px below lg; --fh-dock lifts floating buttons above it. -->
-  <div class="min-h-screen flex flex-col bg-ink-50 text-ink-900 [--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]">
+  <div
+    class="min-h-screen flex flex-col bg-ink-50 text-ink-900"
+    :class="hasActionBar ? '[--fh-dock:10rem] lg:[--fh-dock:6rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
+  >
     <header class="sticky top-0 z-30 bg-white border-b border-ink-200">
       <div class="max-w-280 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">

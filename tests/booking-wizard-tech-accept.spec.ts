@@ -187,8 +187,8 @@ describe('WEB-WIZARD-TECH customer-ranked one-or-two-technician shortlist', () =
     mockGet.mockResolvedValue({ data: { data: two } });
     const wrapper = mount(BookingCandidatesPage, { global });
     await flushPromises();
-    expect(wrapper.text()).toContain('Nếu chọn 1 người');
-    expect(wrapper.text()).toContain('thợ số 2 ở trạng thái dự phòng');
+    expect(wrapper.text()).toContain('Chọn 1 người thì người đó được mời ngay');
+    expect(wrapper.text()).toContain('người số 2 là dự phòng và chỉ được mời khi người số 1 từ chối hoặc hết hạn phản hồi');
     expect(wrapper.text()).not.toContain('gửi lời mời đến các thợ bạn chọn cùng lúc');
     wrapper.unmount();
   });

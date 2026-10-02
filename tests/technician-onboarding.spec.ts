@@ -12,6 +12,13 @@ vi.mock('vue-router', () => ({
   }),
 }));
 
+// The chat dock has its own spec (public-layout-widgets); here it only has to be
+// present, without opening a real chat connection.
+vi.mock('../src/components/chat/RoleChatDock.vue', async () => {
+  const { defineComponent, h } = await import('vue');
+  return { default: defineComponent({ render: () => h('div', { 'data-testid': 'role-chat-dock' }) }) };
+});
+
 vi.mock('../src/api/technician-onboarding.api', () => ({
   technicianOnboardingApi: {
     getStatus: vi.fn(),
@@ -268,3 +275,12 @@ describe('TechnicianOnboardingPage', () => {
   });
 });
 
+
+describe('TechnicianOnboardingPage chat', () => {
+  it('keeps the technician chat bubble on the onboarding page', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(TechnicianOnboardingPage);
+    expect(wrapper.find('[data-testid="role-chat-dock"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});

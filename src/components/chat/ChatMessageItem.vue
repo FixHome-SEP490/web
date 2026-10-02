@@ -181,10 +181,11 @@ function confirmDelete() {
 
       <!-- Timestamp & Metadata -->
       <div
-        class="flex items-center gap-1 mt-0.5 text-[10px]"
-        :class="isMe ? 'text-ink-400 justify-end' : 'text-ink-400 justify-start ml-1'"
+        class="flex items-center gap-1 mt-0.5 text-xs"
+        :class="isMe ? 'text-ink-500 justify-end' : 'text-ink-500 justify-start ml-1'"
       >
-        <span v-if="message.editedAt && !message.isDeleted" class="italic text-[10px]">
+        <span v-if="message.isAutomated && !message.isDeleted" data-testid="message-automated" class="whitespace-nowrap">Tin nhắn tự động ·</span>
+        <span v-if="message.editedAt && !message.isDeleted" class="italic">
           (đã sửa)
         </span>
         <span class="font-num">{{ timeString }}</span>
