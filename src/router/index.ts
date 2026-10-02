@@ -109,7 +109,8 @@ const routes: RouteRecordRaw[] = [
         path: 'bookings/new',
         name: 'new-booking',
         component: () => import('../pages/customer/NewBookingWizardPage.vue'),
-        meta: { title: 'Đặt lịch sửa chữa' },
+        // The form talks to the assistant itself (step 3), so the floating one hides.
+        meta: { title: 'Đặt lịch sửa chữa', hidesAssistant: true },
       },
       {
         path: 'bookings/:id/candidates',
