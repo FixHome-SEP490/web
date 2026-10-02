@@ -35,6 +35,13 @@ export const SESSION_IDLE_MINUTES = 60;
  */
 const ACKNOWLEDGEMENT_DWELL_MS = 900;
 
+/**
+ * Catch-all services the assistant falls back to when a turn names no fault -
+ * a price question, a thank-you. They must not replace a specific service the
+ * conversation already found ("Sửa điều hòa không mát" -> "Kiểm tra/chẩn đoán").
+ */
+const FALLBACK_SERVICE_CODES = new Set(['KIEM_TRA_CHAN_DOAN_THIET_BI', 'DICH_VU_KHAC']);
+
 export interface AiChatMessage {
   id: string;
   sender: 'user' | 'bot';
@@ -209,7 +216,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     lastReply.value = reply;
 
     const offered = reply.recommendedServices?.[0];
-    if (offered) pinnedService.value = offered;
+    const current = pinnedService.value;
+    const keepsSpecific =
+      !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
+    if (offered && !keepsSpecific) pinnedService.value = offered;
 
     messages.value.push({
       id: nextId(),

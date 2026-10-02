@@ -107,3 +107,27 @@ describe('useAiConversation', () => {
     expect(priceLabel(reply({ priceEstimate: { min: 100000, max: null } }) as never)).toBe('Từ 100.000đ');
   });
 });
+
+describe('useAiConversation service suggestion', () => {
+  beforeEach(() => { analyze.mockReset(); ask.mockReset(); acknowledgements.mockReset().mockResolvedValue({}); });
+
+  it('keeps the specific service when a later turn only offers the catch-all check-up', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'SUA_DIEU_HOA', nameVi: 'Sửa điều hòa không mát', serviceId: 'svc-ac' }] }));
+    ask.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'KIEM_TRA_CHAN_DOAN_THIET_BI', nameVi: 'Kiểm tra/chẩn đoán', serviceId: 'svc-check' }] }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Máy lạnh không mát', []);
+    await c.sendTurn('Sửa hết bao nhiêu tiền?', []);
+    expect(c.pinnedService.value?.serviceId).toBe('svc-ac');
+  });
+
+  it('still takes the catch-all when nothing specific was found, and a specific one over it later', async () => {
+    analyze
+      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'KIEM_TRA_CHAN_DOAN_THIET_BI', nameVi: 'Kiểm tra', serviceId: 'svc-check' }] }))
+      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'SUA_MAY_GIAT', nameVi: 'Sửa máy giặt', serviceId: 'svc-wm' }] }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Đồ trong nhà bị hỏng', []);
+    expect(c.pinnedService.value?.serviceId).toBe('svc-check');
+    await c.sendTurn('Máy giặt không vắt', []);
+    expect(c.pinnedService.value?.serviceId).toBe('svc-wm');
+  });
+});

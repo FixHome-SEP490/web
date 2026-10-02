@@ -1365,7 +1365,7 @@ const createAndFindTech = async () => {
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
           <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value" data-testid="ai-continue" @click="step = 4">
-            Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
+            Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
         </div>
       </div>

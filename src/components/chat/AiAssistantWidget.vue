@@ -37,6 +37,9 @@ const isOpen = computed({
 
 // Shared with the booking form, which continues it after "Đặt thợ".
 const conversation = useSharedAiConversation();
+
+/** Pages that hold the assistant conversation themselves (the booking form). */
+const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
 const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords } = conversation;
 
 async function toggle() {
@@ -69,6 +72,7 @@ function goToBooking() {
 
 <template>
   <div
+    v-if="!hiddenHere"
     class="fixed right-4 sm:right-5 z-40 flex flex-col items-end"
     :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
   >
