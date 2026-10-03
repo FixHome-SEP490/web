@@ -186,10 +186,10 @@ const successMessage = computed(() => selectedCount.value === 1
 
     <FhEmptyState
       v-else-if="candidates.length === 0"
-      title="Chưa tìm thấy kỹ thuật viên phù hợp"
-      description="Hiện chưa có kỹ thuật viên nào còn trống lịch ở khu vực của bạn. Bạn có thể thử lại sau ít phút."
-      action-text="Tải lại danh sách"
-      @action="loadCandidates"
+      title="Chưa có kỹ thuật viên nhận được giờ hẹn này"
+      description="Kỹ thuật viên chỉ nhận đơn trong ca làm việc của mình và khi còn trống lịch. Thường là do giờ hẹn rơi vào tối muộn hoặc ban đêm; bạn hãy đổi sang giờ khác rồi tìm lại."
+      action-text="Đổi giờ hẹn"
+      @action="router.push(`/app/bookings/${bookingId}`)"
     />
 
     <div v-else class="space-y-3.5">

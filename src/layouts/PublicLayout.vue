@@ -330,6 +330,7 @@ onUnmounted(() => {
           </template>
           <template v-else>
             <FhButton block @click="router.push('/app/bookings/new')">Đặt lịch sửa chữa</FhButton>
+            <FhButton variant="secondary" block @click="router.push('/app/bookings/ai')">Phân tích sự cố bằng AI</FhButton>
             <router-link to="/login" class="public-nav-link justify-center" @click="closeMenu()">
               Đăng nhập
             </router-link>

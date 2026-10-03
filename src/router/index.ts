@@ -109,7 +109,16 @@ const routes: RouteRecordRaw[] = [
         path: 'bookings/new',
         name: 'new-booking',
         component: () => import('../pages/customer/NewBookingWizardPage.vue'),
-        meta: { title: 'Đặt lịch sửa chữa' },
+        // Booking a service the customer chose: no AI anywhere on this form.
+        meta: { title: 'Đặt lịch sửa chữa', hidesAssistant: true },
+      },
+      {
+        // Booking through the assistant: describe, let the AI diagnose and
+        // choose the service, then book. Same page, the AI form of it.
+        path: 'bookings/ai',
+        name: 'ai-booking',
+        component: () => import('../pages/customer/NewBookingWizardPage.vue'),
+        meta: { title: 'Đặt thợ nhờ AI phân tích', bookingFlow: 'ai', hidesAssistant: true },
       },
       {
         path: 'bookings/:id/candidates',

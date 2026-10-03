@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // src/pages/customer/NewBookingWizardPage.vue
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Wrench,
@@ -10,13 +10,11 @@ import {
   ArrowLeft,
   CheckCircle2,
   Camera,
-  Bot,
   ShieldCheck,
   Plus,
   Trash2,
   Calendar as CalendarIcon,
   Clock,
-  AlertTriangle,
   Snowflake,
   Droplets,
   Zap,
@@ -27,6 +25,7 @@ import {
   Search,
   X,
   Minus,
+  RotateCcw,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -37,7 +36,10 @@ import {
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
-import { aiApi, type AiReply } from '../../api/ai.api';
+import { AI_MAX_IMAGES } from '../../api/ai.api';
+import { useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { prepareForAi } from '../../utils/image-for-ai';
+import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { bookingSchedule } from '../../utils/booking-schedule';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -46,6 +48,14 @@ import { vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
+
+/**
+ * Two forms on one page. /app/bookings/new: the customer knows what they need
+ * and picks the service; no AI anywhere. /app/bookings/ai: the customer only
+ * describes the problem, the assistant diagnoses it and chooses the service,
+ * and only then can the customer change it.
+ */
+const isAiFlow = route.meta?.bookingFlow === 'ai';
 
 const step = ref(1);
 const loading = ref(false);
@@ -69,6 +79,8 @@ interface BookingPhotoDraft {
   localId: number;
   previewUrl: string;
   uploadId: string | null;
+  /** Kept so the diagnosis step can show the same photos to the assistant. */
+  file: File;
 }
 
 const uploadedPhotos = ref<BookingPhotoDraft[]>([]);
@@ -137,13 +149,6 @@ const formattedScheduleDisplay = computed(() => {
   return `${dateText} • ${timeText}`;
 });
 
-// What the assistant actually said. The shape is the AI Service's own, passed
-// through by our backend: this page used to read possibleIssues,
-// possibleCauses and suggestedPriceMin, none of which the service has ever
-// returned, so every call landed in the catch below and showed a diagnosis
-// written into this file.
-const aiResult = ref<AiReply | null>(null);
-
 /**
  * The assistant conversation this booking continues, when the customer came
  * from the assistant. Step 3 adds to the same conversation, and the booking
@@ -151,31 +156,126 @@ const aiResult = ref<AiReply | null>(null);
  */
 const SESSION_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const aiSessionFromChat = (() => {
+  if (!isAiFlow) return null;
   const raw = typeof route.query.aiSession === 'string' ? route.query.aiSession : '';
   return SESSION_PATTERN.test(raw) ? raw : null;
 })();
+
+/**
+ * Step 3 is a conversation, not a single answer: the assistant may ask back
+ * (its knowledge base works through a checklist), and the customer answers,
+ * asks something else, adds photos or asks for another service before going
+ * on. AI failure never blocks the booking; the customer can always continue.
+ */
+// Arriving from the assistant, step 3 continues that very conversation: same
+// thread on screen, nothing repeated to the AI. Otherwise it starts its own.
+const sharedConversation = useSharedAiConversation();
+const continuesAssistant =
+  !!aiSessionFromChat &&
+  sharedConversation.sessionId.value === aiSessionFromChat &&
+  sharedConversation.turnCount.value > 0;
+const aiConversation = continuesAssistant ? sharedConversation : useAiConversation({ sessionId: aiSessionFromChat });
 const aiSessionId = computed(() => {
-  const fromStep = aiResult.value?.aiAvailable !== false ? aiResult.value?.sessionId : null;
-  return (fromStep && SESSION_PATTERN.test(fromStep) ? fromStep : null) ?? aiSessionFromChat;
+  if (!isAiFlow) return null;
+  const id = aiConversation.sessionId.value;
+  return id && SESSION_PATTERN.test(id) ? id : null;
 });
-
-/** Null when there is no price, and "từ X" when the ceiling is unknown. */
-const aiPriceLabel = computed(() => {
-  const price = aiResult.value?.priceEstimate;
-  if (!price) return null;
-  const money = (value: number) => `${value.toLocaleString('vi-VN')}đ`;
-  if (price.max && price.max > price.min) return `${money(price.min)} – ${money(price.max)}`;
-  return `Từ ${money(price.min)}`;
-});
-
-/** Safety steps outrank everything else, so they are rendered on their own. */
-const aiUrgentActions = computed(() =>
-  aiResult.value?.urgency === 'HIGH' ? aiResult.value.suggestedActionsVi ?? [] : [],
+const aiSuggested = computed(() => aiConversation.pinnedService.value);
+const aiSuggestsOtherService = computed(
+  () => !!aiSuggested.value?.serviceId && aiSuggested.value.serviceId !== selectedServiceId.value,
 );
-const aiOrdinaryActions = computed(() =>
-  aiResult.value?.urgency === 'HIGH' ? [] : aiResult.value?.suggestedActionsVi ?? [],
+const aiSuggestedServiceExists = computed(() =>
+  categories.value.some((cat) => cat.services?.some((srv) => srv.id === aiSuggested.value?.serviceId)),
 );
 
+/** Open the conversation with what the customer already gave: description and photos. */
+async function startAiConversation() {
+  if (aiConversation.turnCount.value > 0 || aiConversation.isThinking.value) return;
+  void aiConversation.loadHoldingLines();
+  const files = uploadedPhotos.value.map((photo) => photo.file).slice(0, AI_MAX_IMAGES);
+  const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
+  await aiConversation.sendTurn(description.value.trim(), prepared.images);
+}
+
+/** Start again from the current description and photos, e.g. after editing step 1. */
+async function restartAiConversation() {
+  aiConversation.startOver();
+  await startAiConversation();
+}
+
+/** In the AI form the assistant chooses the service: its first pick is applied. */
+watch(
+  () => aiConversation.pinnedService.value,
+  (suggested) => {
+    if (!isAiFlow || !suggested?.serviceId || selectedServiceId.value) return;
+    if (aiSuggestedServiceExists.value) useSuggestedService();
+  },
+);
+
+/** After the diagnosis, the customer may still pick another service themselves. */
+const allServices = computed(() =>
+  categories.value.flatMap((cat) => (cat.services ?? []).map((srv) => ({ ...srv, categoryName: cat.name, categoryId: cat.id }))),
+);
+function chooseService(id: string) {
+  for (const cat of categories.value) {
+    if (cat.services?.some((srv) => srv.id === id)) {
+      selectedCategoryId.value = cat.id;
+      services.value = cat.services ?? [];
+      selectedServiceId.value = id;
+      return;
+    }
+  }
+}
+
+/** Steps in the order each form walks them; numbers are the step ids below. */
+const stepItems = computed(() =>
+  isAiFlow
+    ? [
+        { id: 1, label: 'Mô tả sự cố' },
+        { id: 3, label: 'Trò chuyện với AI' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ]
+    : [
+        { id: 1, label: isFixedPrice.value ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Mô tả' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ],
+);
+const stepIndex = computed(() => stepItems.value.findIndex((item) => item.id === step.value));
+
+/** AI form, step 1 -> the conversation. */
+function startAiStep() {
+  if (!description.value.trim()) {
+    window.alert('Vui lòng mô tả sơ bộ tình trạng thiết bị để trợ lý phân tích.');
+    return;
+  }
+  step.value = 3;
+  void startAiConversation();
+}
+
+/** AI form, conversation -> address and time, once a service is chosen. */
+function leaveAiStep() {
+  if (!selectedServiceId.value) {
+    window.alert('Trợ lý chưa chọn được dịch vụ. Anh/chị trả lời thêm hoặc chọn dịch vụ ở bên dưới khung chat.');
+    return;
+  }
+  step.value = 2;
+}
+
+/** The assistant suggested another service: book that one instead. */
+function useSuggestedService() {
+  const wanted = aiSuggested.value?.serviceId;
+  if (!wanted) return;
+  for (const cat of categories.value) {
+    if (cat.services?.some((srv) => srv.id === wanted)) {
+      selectedCategoryId.value = cat.id;
+      services.value = cat.services ?? [];
+      selectedServiceId.value = wanted;
+      return;
+    }
+  }
+}
 
 const selectedService = computed(() => {
   for (const cat of categories.value) {
@@ -416,10 +516,10 @@ onMounted(async () => {
       services.value = matchedCat.services ?? [];
       if (matchedSvc) {
         selectedServiceId.value = matchedSvc.id;
-        if (matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
+        if (!isAiFlow && matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
           description.value = `Yêu cầu dịch vụ niêm yết: ${matchedSvc.name}`;
         }
-      } else if (services.value.length > 0) {
+      } else if (!isAiFlow && services.value.length > 0) {
         selectedServiceId.value = services.value[0].id;
         const first = services.value[0];
         if (first.pricingMode?.toLowerCase() === 'fixed_price' || (first.fixedPrice != null && first.fixedPrice > 0)) {
@@ -438,6 +538,9 @@ onMounted(async () => {
     const defAddr = addrs.find((a) => a.isDefault);
     if (defAddr) selectedAddressId.value = defAddr.id;
     else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
+    // From the floating assistant: diagnosis done and service chosen, so the
+    // customer goes straight to address and time (back shows the conversation).
+    if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
 
   } catch {
     window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
@@ -505,6 +608,7 @@ const handlePhotoFiles = async (files: File[]) => {
         localId: nextPhotoLocalId++,
         previewUrl: createPhotoPreviewUrl(file),
         uploadId: null,
+        file,
       };
       uploadedPhotos.value.push(photo);
       try {
@@ -580,27 +684,7 @@ const goToNextStepFrom2 = async () => {
     return;
   }
 
-  // Dịch vụ phổ biến có giá niêm yết: Bỏ qua AI chẩn đoán, đi thẳng tới Bước Xác nhận đơn
-  if (isFixedPrice.value) {
-    step.value = 4;
-    return;
-  }
-
-  step.value = 3;
-
-
-  loading.value = true;
-  try {
-    // aiApi never rejects: it answers that the assistant is unavailable, which
-    // the template shows as such. The old fallback here invented a fault and a
-    // price range and presented them as the AI's own - and since it ran on
-    // every failure, and every call was failing, that invention was all anyone
-    // ever saw. AI failure must not block a booking, and saying so plainly
-    // honours that without making anything up.
-    aiResult.value = await aiApi.analyze({ description: description.value, sessionId: aiSessionFromChat ?? undefined });
-  } finally {
-    loading.value = false;
-  }
+  step.value = 4;
 };
 
 const createAndFindTech = async () => {
@@ -635,7 +719,7 @@ const createAndFindTech = async () => {
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
-      description: description.value,
+      description: isAiFlow ? (aiConversation.customerWords() || description.value) : description.value,
       ...schedule,
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
@@ -674,33 +758,18 @@ const createAndFindTech = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-6 pb-12">
-    <!-- Stepper Navigation Header (Style Mobile & Web) -->
+    <!-- Stepper: the steps of whichever form this is -->
     <div class="bg-white rounded-2xl border border-ink-200/90 p-4 shadow-xs">
-      <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2">
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 1 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 1 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">1</span>
-          <span>{{ isFixedPrice ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Lỗi' }}</span>
-        </div>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 2 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 2 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 2 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">2</span>
-          <span>Địa chỉ & Giờ</span>
-        </div>
-        <template v-if="!isFixedPrice">
-          <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 3 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-          <div class="flex items-center gap-2 shrink-0" :class="step >= 3 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 3 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">3</span>
-            <span>AI Soi lỗi</span>
+      <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2" data-testid="booking-stepper">
+        <template v-for="(item, index) in stepItems" :key="item.id">
+          <div v-if="index > 0" class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="stepIndex >= index ? 'bg-brand-600' : 'bg-ink-200'"></div>
+          <div class="flex items-center gap-2 shrink-0" :class="stepIndex >= index ? 'text-brand-600 font-bold' : 'text-ink-400'">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="stepIndex >= index ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ index + 1 }}</span>
+            <span class="whitespace-nowrap">{{ item.label }}</span>
           </div>
         </template>
-        <div class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="step >= 4 ? 'bg-brand-600' : 'bg-ink-200'"></div>
-        <div class="flex items-center gap-2 shrink-0" :class="step >= 4 ? 'text-brand-600 font-bold' : 'text-ink-400'">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="step >= 4 ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ isFixedPrice ? '3' : '4' }}</span>
-          <span>Xác nhận</span>
-        </div>
       </div>
     </div>
-
 
     <!-- Step 1: Service & Issue Description -->
     <div v-if="step === 1" class="space-y-6">
@@ -709,7 +778,7 @@ const createAndFindTech = async () => {
         <div class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-              Nhà mình đang gặp vấn đề gì?
+              {{ isAiFlow ? 'Mô tả sự cố để trợ lý AI phân tích' : 'Nhà mình đang gặp vấn đề gì?' }}
             </h2>
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
               <ShieldCheck :size="14" class="text-brand-600" />
@@ -717,11 +786,18 @@ const createAndFindTech = async () => {
             </span>
           </div>
           <p class="text-xs sm:text-sm text-ink-500 leading-relaxed">
-            Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
+            <template v-if="isAiFlow">
+              Kể tình trạng thiết bị và gửi ảnh nếu có. Trợ lý sẽ phân tích, hỏi thêm nếu cần và chọn dịch vụ phù hợp; bạn không cần tự chọn dịch vụ.
+            </template>
+            <template v-else>
+              Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
+            </template>
           </p>
         </div>
 
         <div class="space-y-7 text-xs sm:text-sm">
+          <!-- Choosing the service is the plain form's job; the AI form leaves it to the assistant. -->
+          <template v-if="!isAiFlow">
           <!-- 1. Categories Pills with Icons & Count -->
           <div class="space-y-2.5">
             <div class="flex items-center justify-between">
@@ -1012,12 +1088,14 @@ const createAndFindTech = async () => {
             </div>
           </div>
 
+          </template>
+
           <!-- 4. Photo Upload Area (Drag & Drop + Dotted Box) -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
                 <Camera :size="15" class="text-brand-600" />
-                <span>3. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
+                <span>{{ isAiFlow ? 1 : 3 }}. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
               </label>
               <span class="text-[11px] text-ink-500 font-medium">
                 {{ uploadedPhotos.length }}/5 ảnh
@@ -1091,7 +1169,7 @@ const createAndFindTech = async () => {
           <div class="space-y-2.5">
             <div class="flex items-center justify-between flex-wrap gap-1">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>4. Mô tả chi tiết yêu cầu</span>
+                <span>{{ isAiFlow ? 2 : 4 }}. Mô tả chi tiết yêu cầu</span>
                 <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
               </label>
               <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
@@ -1103,7 +1181,7 @@ const createAndFindTech = async () => {
             </div>
 
             <!-- Quick symptom chips for faster input -->
-            <div class="space-y-1.5">
+            <div v-if="!isAiFlow" class="space-y-1.5">
               <div class="text-[11px] text-ink-500 flex items-center gap-1">
                 <Sparkles :size="12" class="text-brand-600" />
                 <span>Gợi ý triệu chứng phổ biến (bấm để thêm nhanh vào mô tả):</span>
@@ -1139,7 +1217,7 @@ const createAndFindTech = async () => {
           <div class="space-y-2.5">
             <div class="flex items-center justify-between">
               <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>5. Mức độ khẩn cấp</span>
+                <span>{{ isAiFlow ? 3 : 5 }}. Mức độ khẩn cấp</span>
               </label>
               <span class="text-[11px] text-ink-500">Chọn mức độ mong muốn thợ có mặt</span>
             </div>
@@ -1185,7 +1263,7 @@ const createAndFindTech = async () => {
 
           <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
             <!-- Selected summary on desktop -->
-            <div v-if="selectedService" class="text-right hidden sm:block">
+            <div v-if="selectedService && !isAiFlow" class="text-right hidden sm:block">
               <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
               <div v-if="isFixedPrice" class="text-xs font-bold text-brand-700 font-num">
                 Tổng: <FhMoney :amount="totalFixedAmount" />
@@ -1197,10 +1275,12 @@ const createAndFindTech = async () => {
               variant="primary"
               size="lg"
               class="w-full sm:w-auto px-7 shadow-xs"
-              :disabled="!selectedServiceId"
-              @click="goToStep2"
+              :disabled="isAiFlow ? !description.trim() : !selectedServiceId"
+              data-testid="step1-next"
+              @click="isAiFlow ? startAiStep() : goToStep2()"
             >
-              Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" />
+              <template v-if="isAiFlow">Phân tích cùng AI <Sparkles :size="15" class="ml-1.5" /></template>
+              <template v-else>Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" /></template>
             </FhButton>
           </div>
         </div>
@@ -1271,169 +1351,92 @@ const createAndFindTech = async () => {
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 1">
+          <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" @click="goToNextStepFrom2">
-            <template v-if="isFixedPrice">
-              Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
-            </template>
-            <template v-else>
-              Phân tích sự cố cùng AI <Sparkles :size="15" class="ml-1.5" />
-            </template>
+          <FhButton variant="primary" size="md" data-testid="step2-next" @click="goToNextStepFrom2">
+            Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
 
         </div>
       </div>
     </div>
 
-    <!-- Step 3: AI Diagnosis Result (Style Mobile) -->
+    <!-- Step 3: conversation with the assistant before booking -->
     <div v-if="step === 3" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div>
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-bold mb-2">
-            <Bot :size="14" />
-            <span>AI Chẩn đoán FixHome</span>
+      <div class="bg-white rounded-3xl border border-ink-200 p-5 sm:p-8 shadow-xs space-y-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">Trò chuyện với trợ lý AI</h2>
+            <p class="text-sm text-ink-500 mt-1 text-pretty">
+              Trợ lý có thể hỏi thêm để chẩn đoán sát hơn. Bạn trả lời, hỏi thêm, gửi thêm ảnh hoặc nhờ đổi dịch vụ ngay tại đây, xong rồi mới đặt thợ.
+            </p>
           </div>
-          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-            Gợi ý phán đoán sự cố từ AI
-          </h2>
-          <p class="text-xs text-ink-500 mt-1">
-            <!-- The number here used to be "50,000+ ca sửa chữa", which is not
-                 a number anyone measured. The corpus is 166 documents, 3,319
-                 passages and 134 fault codes, and saying so is both true and
-                 more convincing than a round figure nobody can source. -->
-            Đối chiếu triệu chứng với kho tri thức nghề của FixHome — 134 mã hư
-            hỏng trên 22 thiết bị gia dụng.
-          </p>
-        </div>
-
-        <div v-if="loading" class="text-center py-12 space-y-3">
-          <Sparkles class="animate-spin text-brand-600 mx-auto" :size="36" />
-          <p class="text-xs text-ink-600 font-bold">AI đang phân tích mô tả của bạn...</p>
-        </div>
-
-        <div v-else-if="aiResult" class="space-y-5 text-xs sm:text-sm">
-          <!-- The assistant could not be reached. Said plainly, with nothing
-               invented, and the booking carries on regardless. -->
-          <div
-            v-if="aiResult.status === 'unavailable'"
-            class="p-5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900"
+          <button
+            type="button"
+            class="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-ink-600 hover:bg-ink-50 disabled:opacity-40"
+            :disabled="aiConversation.isThinking.value || aiConversation.turnCount.value === 0"
+            data-testid="ai-restart"
+            @click="restartAiConversation"
           >
-            <p class="font-bold text-xs mb-1">Trợ lý đang tạm thời không kết nối được</p>
-            <p class="text-xs leading-relaxed">
-              Anh/chị vẫn đặt thợ bình thường được. Thợ FixHome sẽ kiểm tra trực tiếp
-              và báo giá trước khi sửa.
-            </p>
-          </div>
-
-          <template v-else>
-            <!-- Safety first, literally. A warning read after a list of faults
-                 is a warning nobody acted on. -->
-            <div
-              v-if="aiUrgentActions.length"
-              class="p-5 rounded-2xl bg-danger-50 border border-danger-200 space-y-2"
-            >
-              <div class="flex items-center gap-1.5 font-bold text-danger-700 text-xs">
-                <AlertTriangle :size="15" /> Anh/chị làm ngay giúp em
-              </div>
-              <p
-                v-for="(action, index) in aiUrgentActions"
-                :key="index"
-                class="text-xs text-danger-900 leading-relaxed"
-              >
-                {{ index + 1 }}. {{ action }}
-              </p>
-            </div>
-
-            <div class="p-5 rounded-2xl bg-brand-50 border border-brand-200 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="font-bold text-brand-900 flex items-center gap-1.5 text-xs">
-                  <Sparkles :size="15" class="text-brand-600" />
-                  <template v-if="aiResult.device">{{ aiResult.device.nameVi }}</template>
-                  <template v-else>Gợi ý sơ bộ</template>
-                </span>
-                <span
-                  v-if="aiResult.confidence"
-                  class="text-xs font-bold text-brand-700 bg-white px-2 py-0.5 rounded-full border border-brand-200"
-                >
-                  Mức tin cậy {{ Math.round(aiResult.confidence * 100) }}%
-                </span>
-              </div>
-
-              <p v-if="aiResult.messageVi" class="text-xs text-brand-900 leading-relaxed">
-                {{ aiResult.messageVi }}
-              </p>
-
-              <div v-if="aiResult.suspectedFaults?.length">
-                <div class="text-xs font-bold text-brand-900 mb-1.5">Có thể là:</div>
-                <ul class="list-disc list-inside space-y-1 text-xs text-brand-900 font-medium">
-                  <li v-for="fault in aiResult.suspectedFaults" :key="fault.faultCode">
-                    {{ fault.nameVi }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div
-                v-if="aiOrdinaryActions.length"
-                class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-1.5"
-              >
-                <div class="font-bold text-ink-900 text-xs">Anh/chị có thể làm trước</div>
-                <ul class="list-disc list-inside space-y-1 text-xs text-ink-600">
-                  <li v-for="(action, index) in aiOrdinaryActions" :key="index">{{ action }}</li>
-                </ul>
-              </div>
-
-              <div
-                v-if="aiPriceLabel"
-                class="p-4 rounded-2xl bg-brand-50 border border-brand-200 flex flex-col justify-between"
-              >
-                <div>
-                  <div class="font-bold text-brand-900 text-xs mb-0.5">Chi phí tham khảo</div>
-                  <div class="text-[11px] text-ink-500">
-                    <template v-if="aiResult.priceEstimate?.requiresAssessment">
-                      Thợ xem tận nơi rồi mới báo giá chính xác
-                    </template>
-                    <template v-else>Ước tính công thợ, chưa gồm linh kiện</template>
-                  </div>
-                </div>
-                <div class="text-lg font-bold font-num text-brand-700 mt-2">
-                  {{ aiPriceLabel }}
-                </div>
-              </div>
-            </div>
-
-            <div v-if="aiResult.clarification?.questionsVi?.length" class="p-4 rounded-2xl bg-ink-50 border border-ink-200">
-              <div class="font-bold text-ink-900 text-xs mb-1.5">Trợ lý cần hỏi thêm</div>
-              <p
-                v-for="(question, index) in aiResult.clarification.questionsVi"
-                :key="index"
-                class="text-xs text-ink-600 leading-relaxed"
-              >
-                {{ question }}
-              </p>
-              <p class="text-[11px] text-ink-500 mt-2">
-                Mở trợ lý ở góc màn hình để trả lời và nhận chẩn đoán sát hơn.
-              </p>
-            </div>
-
-            <p
-              v-if="aiResult.disclaimerVi"
-              class="text-[11px] text-ink-500 italic bg-warning-50 p-3 rounded-xl border border-warning-200 text-warning-800"
-            >
-              {{ aiResult.disclaimerVi }}
-            </p>
-          </template>
+            <RotateCcw :size="15" />
+            <span class="hidden sm:inline whitespace-nowrap">Hỏi lại từ đầu</span>
+          </button>
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 2">
+        <div class="h-[30rem] max-h-[65dvh] rounded-2xl border border-ink-200 overflow-hidden">
+          <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
+            <template #pinned>
+              <div
+                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId"
+                class="flex flex-wrap items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
+                data-testid="ai-suggested-service"
+              >
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-semibold text-brand-700">Trợ lý gợi ý dịch vụ</p>
+                  <p class="text-sm font-semibold text-ink-900">{{ aiSuggested.nameVi }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 whitespace-nowrap"
+                  data-testid="ai-use-suggested"
+                  @click="useSuggestedService"
+                >
+                  Đổi sang dịch vụ này
+                </button>
+              </div>
+              <div class="px-3.5 py-2.5 bg-ink-50 border-t border-ink-100 text-sm space-y-2" data-testid="ai-current-service">
+                <div v-if="selectedService" class="flex items-center gap-2 min-w-0">
+                  <span class="text-ink-500 whitespace-nowrap">Dịch vụ sẽ đặt:</span>
+                  <span class="font-semibold text-ink-900 min-w-0 truncate">{{ selectedService.name }}</span>
+                </div>
+                <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
+                <label
+                  v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
+                  class="flex items-center gap-2 text-ink-600"
+                >
+                  <span class="whitespace-nowrap">Đổi dịch vụ khác:</span>
+                  <select
+                    class="min-w-0 flex-1 h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm text-ink-900"
+                    data-testid="ai-manual-service"
+                    :value="selectedServiceId"
+                    @change="chooseService(($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="" disabled>Chọn dịch vụ</option>
+                    <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
+                  </select>
+                </label>
+              </div>
+            </template>
+          </AiConversationThread>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 pt-5 border-t border-ink-100">
+          <FhButton variant="ghost" size="md" @click="step = 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" @click="step = 4">
-            Xác nhận đặt đơn <ArrowRight :size="15" class="ml-1.5" />
+          <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || !selectedServiceId" data-testid="ai-continue" @click="leaveAiStep">
+            Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
         </div>
       </div>
@@ -1525,7 +1528,7 @@ const createAndFindTech = async () => {
         </div>
 
         <div class="flex items-center justify-between pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = isFixedPrice ? 2 : 3">
+          <FhButton variant="ghost" size="md" @click="step = 2">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
 

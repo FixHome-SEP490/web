@@ -28,6 +28,7 @@ import {
   BookOpen,
   FileCheck,
   CircleDollarSign,
+  CalendarPlus,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
@@ -111,13 +112,22 @@ const quickChips = [
   { id: 'voucher', title: 'Voucher giảm 50.000đ', icon: Gift },
 ];
 
+// The two ways to book sit side by side: choose the service yourself, or let
+// the assistant diagnose the problem and choose it.
 const featureCards = [
   {
-    title: 'Đặt thợ & AI Chẩn đoán',
-    text: 'Mô tả hoặc chụp ảnh sự cố → AI bắt bệnh & báo giá → Thợ có mặt chỉ sau 15 phút',
-    tags: ['Thợ giỏi gần bạn', 'AI 30s'],
-    icon: Bot,
+    title: 'Đặt thợ',
+    text: 'Bạn biết mình cần dịch vụ gì: chọn dịch vụ, địa chỉ và giờ hẹn, kỹ thuật viên gần bạn nhận việc.',
+    tags: ['Chủ động chọn dịch vụ'],
+    icon: CalendarPlus,
     to: '/app/bookings/new',
+  },
+  {
+    title: 'Chẩn đoán hỏng hóc bằng AI',
+    text: 'Chưa rõ lỗi: mô tả hoặc chụp ảnh, trợ lý AI hỏi thêm, chẩn đoán và chọn dịch vụ rồi bạn đặt thợ.',
+    tags: ['Chưa rõ lỗi'],
+    icon: Bot,
+    to: '/app/bookings/ai',
   },
   {
     title: 'Bảng giá tham khảo',
@@ -206,7 +216,7 @@ function handleSearch() {
 
 function handleChipClick(chip: typeof quickChips[0]) {
   if (chip.isAi) {
-    router.push({ path: '/app/bookings/new', query: { ai: 'true' } });
+    router.push('/app/bookings/ai');
   } else if (chip.query) {
     router.push({ path: '/app/bookings/new', query: { q: chip.query } });
   } else {
@@ -341,8 +351,8 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </button>
     </div>
 
-    <!-- 5. Three ways in -->
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- 5. Ways in: the two ways to book first, side by side -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       <button
         v-for="card in featureCards"
         :key="card.title"
