@@ -38,32 +38,15 @@ import { ShieldCheck } from 'lucide-vue-next';
             Mọi thiết bị,<br/>được xử lý đúng<br/>chuẩn kỹ thuật.
           </h1>
           <p class="text-slate-600 text-sm xl:text-base leading-relaxed max-w-[90%] font-medium">
-            Đội thợ được đào tạo bài bản, báo giá minh bạch và bảo hành rõ ràng cho từng hạng mục.
+            Kỹ thuật viên được duyệt hồ sơ, báo giá minh bạch và bảo hành rõ ràng cho từng hạng mục.
           </p>
         </div>
 
-        <!-- Bottom: Stats & Footer -->
-        <div class="relative z-10 mt-16 space-y-12">
-          <!-- Stats Grid -->
-          <div class="grid grid-cols-3 gap-6">
-            <div>
-              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">12.400+</div>
-              <div class="text-xs text-slate-500 font-medium">Hạng mục hoàn thành</div>
-            </div>
-            <div>
-              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">4.9/5</div>
-              <div class="text-xs text-slate-500 font-medium">Điểm đánh giá</div>
-            </div>
-            <div>
-              <div class="font-bold text-2xl xl:text-3xl text-brand-600 mb-1">45p</div>
-              <div class="text-xs text-slate-500 font-medium">Thời gian phản hồi</div>
-            </div>
-          </div>
-
-          <!-- Footer Note -->
+        <!-- Bottom: Footer note -->
+        <div class="relative z-10 mt-16">
           <div class="flex items-center gap-3 text-xs text-slate-500 font-bold">
             <ShieldCheck :size="16" class="text-brand-600" />
-            <span>Đang trực 24/7 - Bảo hành 12 tháng</span>
+            <span>Báo giá trước khi sửa, bảo hành điện tử cho từng đơn</span>
           </div>
         </div>
       </div>

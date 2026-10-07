@@ -1,7 +1,7 @@
 // tests/notifications.spec.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
-import { getNotificationCategory, type NotificationItem } from '../src/api/notifications.api';
+import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../src/api/notifications.api';
 import { useNotificationsStore } from '../src/stores/notifications.store';
 import apiClient from '../src/api/client';
 
@@ -97,5 +97,50 @@ describe('useNotificationsStore', () => {
     await store.markAllAsRead();
     expect(store.notifications[1].isRead).toBe(true);
     expect(store.unreadCount).toBe(0);
+  });
+});
+
+describe('Departure warning and matching exhausted notifications', () => {
+  const base = { userId: 'u1', isRead: false, createdAt: '2026-10-07T08:00:00Z' };
+
+  it('shows a technician who has not left as a red warning that opens the order', () => {
+    const item: NotificationItem = {
+      ...base,
+      id: 'n1',
+      title: 'Kỹ thuật viên chưa xuất phát',
+      message: 'Kỹ thuật viên của đơn #FH-1 chưa xuất phát.',
+      type: 'ORDER_DEPARTURE_WARNING',
+      referenceId: 'order-1',
+      referenceType: 'SERVICE_ORDER',
+    };
+    const cat = getNotificationCategory(item);
+    expect(cat.severity).toBe('error');
+    expect(cat.eventLabel).toBe('Chưa xuất phát');
+    expect(cat.iconColorClass).toContain('danger');
+    expect(customerNotificationPath(item)).toBe('/app/orders/order-1');
+  });
+
+  it('sends the customer to pick other technicians when nobody accepted', () => {
+    const item: NotificationItem = {
+      ...base,
+      id: 'n2',
+      title: 'Chưa có kỹ thuật viên nhận lời mời',
+      message: 'Các kỹ thuật viên bạn chọn đều chưa nhận lời mời.',
+      type: 'BOOKING_MATCHING_EXHAUSTED',
+      referenceId: 'booking-1',
+      referenceType: 'BOOKING',
+    };
+    const cat = getNotificationCategory(item);
+    expect(cat.eventLabel).toBe('Chọn kỹ thuật viên khác');
+    expect(cat.severity).toBe('warning');
+    expect(customerNotificationPath(item)).toBe('/app/bookings/booking-1/candidates');
+  });
+
+  it('keeps the usual destinations for other notifications', () => {
+    const booking = { ...base, id: 'n3', title: 'x', message: 'x', type: 'BOOKING_CREATED', referenceId: 'b2', referenceType: 'BOOKING' };
+    const order = { ...base, id: 'n4', title: 'x', message: 'x', type: 'ORDER_COMPLETED', referenceId: 'o2', referenceType: 'SERVICE_ORDER' };
+    expect(customerNotificationPath(booking)).toBe('/app/bookings/b2');
+    expect(customerNotificationPath(order)).toBe('/app/orders/o2');
+    expect(customerNotificationPath({ ...order, referenceId: null })).toBeNull();
   });
 });

@@ -21,6 +21,7 @@ import {
   TechnicianProfileModal,
 } from '../../components';
 import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const route = useRoute();
 const router = useRouter();
@@ -237,7 +238,10 @@ const successMessage = computed(() => selectedCount.value === 1
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-600">
               <span class="flex items-center gap-1 whitespace-nowrap font-num">
-                <Star :size="14" class="text-warning-500 fill-warning-400" /> {{ tech.averageRating }} ({{ tech.ratingCount }})
+                <template v-if="hasRating(tech.averageRating, tech.ratingCount)">
+                  <Star :size="14" class="text-warning-500 fill-warning-400" /> {{ ratingLabel(tech.averageRating, tech.ratingCount) }} ({{ tech.ratingCount }})
+                </template>
+                <template v-else>Chưa có đánh giá</template>
               </span>
               <span class="flex items-center gap-1 whitespace-nowrap">
                 <Briefcase :size="14" class="text-ink-400" /> {{ tech.yearsExperience }} năm kinh nghiệm
@@ -259,7 +263,7 @@ const successMessage = computed(() => selectedCount.value === 1
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-ink-100">
           <div class="text-right hidden sm:block mr-1">
             <div class="text-xs text-ink-500 whitespace-nowrap">Độ tin cậy</div>
-            <div class="text-sm font-semibold text-ink-900 font-num">{{ tech.reliabilityScore }}%</div>
+            <div class="text-sm font-semibold text-ink-900 font-num">{{ tech.reliabilityScore != null ? `${tech.reliabilityScore}%` : '—' }}</div>
           </div>
 
           <!-- Nút Xem thông tin thợ -->

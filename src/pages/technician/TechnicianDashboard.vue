@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   Wallet,
   Star,
-  Trophy,
   Briefcase,
   Calendar,
   MessageSquare,
@@ -20,7 +19,6 @@ import {
   RefreshCw,
   Navigation,
   Package,
-  Headphones,
   Sparkles,
   Check,
   Radio,
@@ -29,7 +27,6 @@ import {
   AlertTriangle,
   ChevronRight,
   Inbox,
-  Target,
   Camera,
   Loader2,
   Info,
@@ -45,7 +42,7 @@ import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/o
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
-import { formatRating } from '../../utils/formatters';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 import { addDaysToKey, vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 import { walletApi, type WalletSummary } from '../../api/wallet.api';
 
@@ -218,7 +215,6 @@ const completedCount = computed(() => {
   const monday = addDaysToKey(today, -((weekdayOfKey(today) + 6) % 7));
   return completedJobs.value.filter((job) => job.completedAt && vnDayKey(job.completedAt) >= monday).length;
 });
-const targetPercentage = computed(() => Math.min(Math.round((completedCount.value / 20) * 100), 100));
 
 const handleChatWithCustomer = async (order: ServiceOrderItem) => {
   const bookingId = order.bookingId || order.id;
@@ -300,12 +296,12 @@ const shortcuts = [
             </span>
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Star :size="15" class="text-warning-500 fill-warning-500" />
-              Đánh giá: <strong class="font-semibold text-ink-900 font-num">{{ profile && profile.ratingCount > 0 && formatRating(profile.averageRating) ? `${formatRating(profile.averageRating)}\u00A0★` : 'Chưa có' }}</strong>
+              Đánh giá: <strong class="font-semibold text-ink-900 font-num">{{ profile && hasRating(profile.averageRating, profile.ratingCount) ? `${ratingLabel(profile.averageRating, profile.ratingCount)}\u00A0★` : 'Chưa có đánh giá' }}</strong>
               <span class="text-ink-400">({{ profile?.ratingCount ?? 0 }})</span>
             </span>
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Sparkles :size="15" class="text-ink-400" />
-              Độ tin cậy: <strong class="font-semibold text-success-700 font-num">{{ profile ? `${profile.reliabilityScore}%` : '—' }}</strong>
+              Độ tin cậy: <strong class="font-semibold text-success-700 font-num">{{ profile?.reliabilityScore != null ? `${profile.reliabilityScore}%` : '—' }}</strong>
             </span>
           </div>
         </div>
@@ -474,21 +470,16 @@ const shortcuts = [
 
       <button type="button" class="text-left bg-white rounded-2xl border border-ink-200 p-5 flex flex-col gap-3 hover:border-ink-300 transition-colors" @click="router.push('/tech/earnings')">
         <span class="flex items-center justify-between text-sm text-ink-500">
-          Mục tiêu tuần
-          <Target :size="18" class="text-ink-400" />
+          Hoàn thành tuần này
+          <CheckCircle2 :size="18" class="text-ink-400" />
         </span>
-        <span class="flex items-baseline justify-between gap-2">
-          <span class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
-            {{ completedCount }} <span class="text-base font-medium text-ink-500 font-sans">/&nbsp;20 đơn</span>
-          </span>
-          <span class="text-sm font-semibold text-brand-700 font-num">{{ targetPercentage }}%</span>
+        <span class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
+          {{ completedCount }} <span class="text-base font-medium text-ink-500 font-sans">đơn</span>
         </span>
-        <span class="block w-full h-2 bg-ink-100 rounded-full overflow-hidden">
-          <span class="block h-full bg-brand-600 rounded-full transition-[width] duration-500" :style="{ width: `${targetPercentage}%` }" />
-        </span>
-        <span class="mt-auto pt-3 border-t border-ink-100 text-sm text-ink-600 flex items-center justify-between gap-2">
-          <span>Còn <strong class="font-semibold text-ink-900">{{ Math.max(0, 20 - completedCount) }}</strong> đơn để đạt thưởng</span>
-          <ChevronRight :size="16" class="text-brand-600 shrink-0" />
+        <span class="text-sm text-ink-600">Tính từ thứ Hai tuần này</span>
+        <span class="mt-auto pt-3 border-t border-ink-100 text-sm font-medium text-brand-600 flex items-center justify-between">
+          Xem thu nhập
+          <ChevronRight :size="16" />
         </span>
       </button>
 
@@ -498,12 +489,12 @@ const shortcuts = [
           <Star :size="18" class="text-ink-400" />
         </span>
         <span class="text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
-          <template v-if="profile && profile.ratingCount > 0 && formatRating(profile.averageRating)">
-            {{ formatRating(profile.averageRating) }}&nbsp;<span class="text-warning-500">★</span>
+          <template v-if="profile && hasRating(profile.averageRating, profile.ratingCount)">
+            {{ ratingLabel(profile.averageRating, profile.ratingCount) }}&nbsp;<span class="text-warning-500">★</span>
           </template>
           <span v-else class="text-lg font-medium text-ink-500 font-sans">Chưa có đánh giá</span>
         </span>
-        <span class="text-sm text-ink-600">Độ tin cậy: <strong class="font-semibold text-ink-900 font-num">{{ profile ? `${profile.reliabilityScore}/100` : '—' }}</strong></span>
+        <span class="text-sm text-ink-600">Độ tin cậy: <strong class="font-semibold text-ink-900 font-num">{{ profile?.reliabilityScore != null ? `${profile.reliabilityScore}/100` : '—' }}</strong></span>
         <span class="mt-auto pt-3 border-t border-ink-100 text-sm font-medium text-brand-600 flex items-center justify-between">
           Xem hồ sơ & kỹ năng
           <ChevronRight :size="16" />
@@ -694,34 +685,6 @@ const shortcuts = [
       </div>
 
       <aside class="2xl:col-span-4 grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-1 gap-6">
-        <section class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-4">
-          <div class="flex items-center justify-between gap-3">
-            <span class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-warning-50 text-warning-800 text-xs font-medium whitespace-nowrap">
-              <Trophy :size="14" class="text-warning-600" />
-              Đua top kỹ thuật viên FixHome
-            </span>
-          </div>
-          <div class="space-y-1.5">
-            <h3 class="text-lg font-semibold text-ink-900">Chỉ tiêu hoàn thành tuần</h3>
-            <p class="text-sm text-ink-600">
-              Hoàn thành 20 đơn/tuần với đánh giá trên 4.8★ để nâng hạn mức nhận việc ưu tiên và nhận voucher thưởng định kỳ.
-            </p>
-          </div>
-          <div class="space-y-2">
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-ink-600">Tiến độ tuần</span>
-              <span class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ completedCount }}/20 đơn ({{ targetPercentage }}%)</span>
-            </div>
-            <div class="w-full h-2 bg-ink-100 rounded-full overflow-hidden">
-              <div class="h-full bg-brand-600 rounded-full transition-[width] duration-500" :style="{ width: `${targetPercentage}%` }" />
-            </div>
-          </div>
-          <FhButton variant="secondary" size="md" class="w-full whitespace-nowrap" @click="router.push('/tech/jobs')">
-            Nhận đơn việc mới
-            <ChevronRight :size="16" />
-          </FhButton>
-        </section>
-
         <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
           <h3 class="px-5 sm:px-6 pt-5 pb-2 text-base font-semibold text-ink-900">Lối tắt</h3>
           <div class="divide-y divide-ink-100">
@@ -742,23 +705,8 @@ const shortcuts = [
           </div>
         </section>
 
-        <section class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-4 lg:col-span-2 2xl:col-span-1">
-          <div class="flex items-center gap-3">
-            <Headphones :size="20" :stroke-width="1.75" class="text-ink-500 shrink-0" />
-            <div>
-              <h4 class="text-sm font-semibold text-ink-900">Hỗ trợ Kỹ thuật viên 24/7</h4>
-              <p class="text-sm text-ink-500">Khi gặp tranh chấp hoặc sự cố an toàn</p>
-            </div>
-          </div>
-          <div class="p-3.5 bg-ink-50 rounded-xl flex items-center justify-between gap-3">
-            <div>
-              <span class="block text-xs text-ink-500">Tổng đài đối tác</span>
-              <a href="tel:1900888666" class="text-base font-semibold text-ink-900 font-num hover:text-brand-700 whitespace-nowrap">1900 888 666</a>
-            </div>
-            <a href="tel:1900888666" class="h-9 px-3.5 rounded-lg bg-white border border-ink-200 text-sm font-medium text-brand-600 hover:bg-brand-50 inline-flex items-center whitespace-nowrap transition-colors">
-              Gọi ngay
-            </a>
-          </div>
+        <section class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-4">
+          <h4 class="text-sm font-semibold text-ink-900">Lưu ý khi làm việc</h4>
           <!-- A note, not a warning: yellow. -->
           <p class="p-3.5 rounded-xl bg-warning-50 border border-warning-200 text-sm text-warning-800 flex items-start gap-2 text-pretty">
             <Info :size="16" class="text-warning-600 shrink-0 mt-0.5" />

@@ -16,20 +16,6 @@ const password = ref('');
 const showPassword = ref(false);
 const errorMessage = ref('');
 
-const demoAccounts = [
-  { label: '👑 Admin', email: 'admin@fixhome.vn', role: 'ADMIN' },
-  { label: '👔 SM (Quản lý)', email: 'sm.hcm@fixhome.vn', role: 'SERVICE_MANAGER' },
-  { label: '🔧 Thợ sửa', email: 'tech1@fixhome.vn', role: 'TECHNICIAN' },
-  { label: '👤 Khách hàng', email: 'customer1@fixhome.vn', role: 'CUSTOMER' },
-  { label: '⚠️ Khách bị khoá', email: 'customer.suspended@fixhome.vn', role: 'CUSTOMER' },
-];
-
-const fillDemo = (email: string) => {
-  identifier.value = email;
-  password.value = 'Password123!';
-  errorMessage.value = '';
-};
-
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 
 /** Đăng nhập bằng mật khẩu hay bằng Google thì chặng sau đều giống nhau. */
@@ -181,28 +167,6 @@ const handleLogin = async () => {
       @credential="handleGoogleCredential"
       @error="(message: string) => (errorMessage = message)"
     />
-
-    <!-- Demo Account Quick Selector -->
-    <div class="pt-8">
-      <div class="relative flex py-4 items-center mb-4">
-        <div class="grow border-t border-slate-200"></div>
-        <span class="shrink-0 mx-4 text-[10px] uppercase tracking-widest text-slate-400 font-bold">Tài khoản Demo</span>
-        <div class="grow border-t border-slate-200"></div>
-      </div>
-      
-      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <button
-          v-for="demo in demoAccounts"
-          :key="demo.email"
-          type="button"
-          class="p-3 text-left rounded-xl bg-white border border-slate-200 hover:border-brand-500 hover:shadow-md transition-all group"
-          @click="fillDemo(demo.email)"
-        >
-          <div class="text-[11px] font-bold text-slate-900 group-hover:text-brand-600 transition-colors">{{ demo.label }}</div>
-          <div class="text-[9px] text-slate-500 mt-0.5 truncate">{{ demo.role }}</div>
-        </button>
-      </div>
-    </div>
 
     <!-- Register Link (Mobile fallback) -->
     <div class="text-center text-xs text-slate-500 font-medium lg:hidden pt-4">

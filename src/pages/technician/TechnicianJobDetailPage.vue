@@ -59,8 +59,6 @@ import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.v
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
-// Testing aid on a laptop only: confirm arrival at the customer's exact coordinates.
-const showDevShortcuts = import.meta.env.DEV;
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
@@ -668,7 +666,7 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
       return {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
-        accuracyMeters: pos.coords.accuracy || 20,
+        accuracyMeters: pos.coords.accuracy,
       };
     } catch {
       // 2. Thử tiếp với enableHighAccuracy: true
@@ -683,7 +681,7 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
         return {
           lat: posHigh.coords.latitude,
           lng: posHigh.coords.longitude,
-          accuracyMeters: posHigh.coords.accuracy || 20,
+          accuracyMeters: posHigh.coords.accuracy,
         };
       } catch {
         // Cả 2 đều thất bại do thiết bị không có cảm biến định vị hoặc bị chặn
@@ -691,32 +689,16 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
     }
   }
 
-  // 3. Fallback: Dùng vị trí di chuyển gần nhất đã được backend ghi nhận
-  if (job.value?.technicianLocation?.lat != null && job.value?.technicianLocation?.lng != null) {
-    return {
-      lat: Number(job.value.technicianLocation.lat),
-      lng: Number(job.value.technicianLocation.lng),
-      accuracyMeters: 20,
-    };
-  }
-
-  // 4. Fallback môi trường Dev / Localhost khi máy tính không có cảm biến GPS
-  if (job.value?.destination?.lat != null && job.value?.destination?.lng != null) {
-    return {
-      lat: Number(job.value.destination.lat),
-      lng: Number(job.value.destination.lng),
-      accuracyMeters: 10,
-    };
-  }
-
+  // Check-in chỉ dùng vị trí GPS thật của thiết bị lúc bấm; không thay bằng
+  // vị trí cũ hay toạ độ địa chỉ khách.
   throw new Error('Không thể xác định vị trí hiện tại. Vui lòng kiểm tra thiết bị định vị.');
 };
 
-const handleCheckIn = async (overrideCoords?: { lat: number; lng: number; accuracyMeters: number }) => {
+const handleCheckIn = async () => {
   actionLoading.value = true;
   actionMessage.value = null;
   try {
-    const coords = overrideCoords ?? (await obtainCurrentPosition());
+    const coords = await obtainCurrentPosition();
     const result = await ordersApi.checkIn(jobId, {
       lat: coords.lat,
       lng: coords.lng,
@@ -744,13 +726,6 @@ const handleCheckIn = async (overrideCoords?: { lat: number; lng: number; accura
   } finally {
     actionLoading.value = false;
   }
-};
-
-// DEV-only test helper
-const handleCheckInDevExact = () => {
-  const dest = job.value?.destination;
-  if (dest?.lat == null || dest?.lng == null) return;
-  return handleCheckIn({ lat: Number(dest.lat), lng: Number(dest.lng), accuracyMeters: 5 });
 };
 
 const openBeforeEvidencePicker = () => {
@@ -1557,18 +1532,6 @@ const refreshJobStatus = async () => {
                   {{ gpsCheckedIn ? 'Đã xác nhận đến nơi' : 'Xác nhận đến nơi' }}
                 </FhButton>
 
-                <!-- DEV demo shortcut -->
-                <FhButton
-                  v-if="showDevShortcuts"
-                  variant="ghost"
-                  size="sm"
-                  class="border border-dashed border-warning-400 text-warning-700"
-                  :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
-                  title="Chỉ để thử: xác nhận bằng đúng toạ độ địa chỉ khách, bỏ qua vị trí thật"
-                  @click="handleCheckInDevExact"
-                >
-                  Xác nhận đến nơi (chỉ để thử)
-                </FhButton>
               </div>
             </div>
           </FhCard>
@@ -2777,7 +2740,7 @@ const refreshJobStatus = async () => {
             <div>
               <h3 class="font-bold text-ink-900 text-sm">Kho linh kiện chính hãng FixHome</h3>
               <p class="text-[11px] text-ink-500">
-                Tra cứu hơn 790+ linh kiện chính hãng. Tự động lấy đơn giá niêm yết và thời hạn bảo hành.
+                Tra cứu trong danh mục linh kiện của FixHome. Tự động lấy đơn giá niêm yết và thời hạn bảo hành.
               </p>
             </div>
           </div>

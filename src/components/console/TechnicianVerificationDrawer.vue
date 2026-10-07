@@ -57,11 +57,11 @@ const faceVideoDoc = computed(() => documents.value.find((d) => d.documentType.t
 
 const technician = computed(() => props.verification?.technician);
 
-// MOCK data for the UI requirements where backend API doesn't provide them yet
+// Profile fields read from the verification record the backend sends; a field it
+// does not send stays null and the drawer shows a dash, never a made-up value.
 const profileInfo = computed(() => {
   const v = props.verification;
   if (!v) return null;
-  // Try to cast or read extended fields if they exist in the future
   return {
     cccd: v.identityCardNumber || null,
     dob: v.dateOfBirth || null,

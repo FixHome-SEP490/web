@@ -18,7 +18,7 @@ useSmoothScroll();
         Chính sách giá & <br class="hidden sm:block"/>Tách bạch chi phí
       </h1>
       <p class="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed font-medium">
-        FixHome là nền tảng đầu tiên tại Việt Nam áp dụng nguyên tắc bắt buộc tách riêng Tiền công và Tiền vật tư trên toàn bộ chu trình dịch vụ.
+        FixHome bắt buộc tách riêng Tiền công và Tiền vật tư trên toàn bộ chu trình dịch vụ.
       </p>
     </div>
 
@@ -32,53 +32,36 @@ useSmoothScroll();
         <ul class="space-y-3 font-medium text-brand-900/80 leading-relaxed text-base">
           <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không gộp giá:</strong> Tuyệt đối không cho phép báo giá "trọn gói mập mờ" không tách rõ linh kiện.</span></li>
           <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không tự ý phát sinh:</strong> Chi phí phát sinh trong lúc sửa bắt buộc phải lập phiếu yêu cầu và khách hàng bấm xác nhận trên app mới được tính tiền.</span></li>
-          <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không ép giá:</strong> Mọi dịch vụ đều có khung giá tham khảo được công khai trong danh mục.</span></li>
+          <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không ép giá:</strong> Giá niêm yết và giá tham khảo của dịch vụ được công khai trong danh mục.</span></li>
         </ul>
       </div>
     </div>
 
-    <!-- Cost Breakdown Interactive Component Demo -->
+    <!-- How a quotation is laid out (text only, no sample figures) -->
     <div class="space-y-12">
       <div class="text-center space-y-4 max-w-2xl mx-auto">
         <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Cách thể hiện báo giá trên hệ thống</h2>
         <p class="text-lg text-slate-500 font-medium">
-          Dưới đây là bảng báo giá mẫu chuẩn mực hiển thị trên điện thoại của khách hàng trước khi bấm đồng ý:
+          Trước khi bạn bấm đồng ý, báo giá trên ứng dụng tách riêng từng phần để bạn biết mình trả tiền cho việc gì:
         </p>
       </div>
 
-      <div class="max-w-3xl mx-auto bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-slate-200/50">
-        <div class="p-8 md:p-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 gap-4">
-          <div>
-            <div class="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-2">Hoá đơn mẫu (Chờ bạn duyệt)</div>
-            <div class="font-bold text-lg text-slate-900">Thay tụ & nạp gas máy lạnh 1.5 HP</div>
+      <ul class="max-w-3xl mx-auto bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-slate-200/50 divide-y divide-slate-100 text-base font-medium">
+        <li class="p-8 md:p-10 space-y-1.5">
+          <div class="font-bold text-slate-900">Tiền công kỹ thuật</div>
+          <p class="text-slate-500">Công kiểm tra và sửa chữa của kỹ thuật viên, theo giá niêm yết hoặc báo giá sau khi kiểm tra.</p>
+        </li>
+        <li class="p-8 md:p-10 space-y-1.5">
+          <div class="font-bold text-slate-900">Vật tư và linh kiện</div>
+          <p class="text-slate-500">Từng linh kiện được ghi tên, số lượng và đơn giá riêng, không gộp vào tiền công.</p>
+        </li>
+        <li class="bg-slate-50 p-8 md:p-10 space-y-1.5">
+          <div class="font-bold text-slate-900 flex items-center gap-1.5">
+            <ShieldCheck :size="18" class="text-brand-600" /> Tổng cộng và bảo hành
           </div>
-          <div class="text-xs text-slate-400 sm:text-right">
-            Mã đơn<br/><span class="font-bold text-slate-900 text-sm">FH-8821</span>
-          </div>
-        </div>
-        
-        <div class="p-8 md:p-10 space-y-6 text-base font-medium">
-          <div class="flex justify-between items-center">
-            <span class="text-slate-500">Tiền công thợ (Kiểm tra & thay tụ)</span>
-            <span class="font-bold text-slate-900 font-num">200.000 ₫</span>
-          </div>
-          <div class="w-full h-px border-t border-dashed border-slate-200"></div>
-          <div class="flex justify-between items-center">
-            <span class="text-slate-500">Vật tư & Linh kiện (Tụ kích 45uF chính hãng)</span>
-            <span class="font-bold text-slate-900 font-num">350.000 ₫</span>
-          </div>
-        </div>
-        
-        <div class="bg-slate-50 p-8 md:p-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-t border-slate-100 gap-4">
-          <div>
-            <div class="text-[11px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Tổng cộng</div>
-            <div class="text-sm text-brand-600 font-semibold flex items-center gap-1.5">
-              <ShieldCheck :size="16" /> Bảo hành 90 ngày
-            </div>
-          </div>
-          <span class="text-3xl md:text-4xl font-extrabold text-slate-900 font-num tracking-tight">550.000 ₫</span>
-        </div>
-      </div>
+          <p class="text-slate-500">Tổng tiền bạn duyệt là số tiền được tính. Thời hạn bảo hành ghi trên phiếu bảo hành của đơn sau khi hoàn tất.</p>
+        </li>
+      </ul>
     </div>
 
     <!-- Additional Cost Sub-workflow -->

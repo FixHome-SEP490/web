@@ -62,6 +62,34 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
   const title = (item.title || '').toLowerCase();
   const m = (item.message || '').toLowerCase();
 
+  // 0. Types the backend names exactly, matched before any wording guess.
+  // The technician has not left by the appointment time; the order cancels
+  // itself if they still do not: a warning, so red.
+  if (t === 'ORDER_DEPARTURE_WARNING') {
+    return {
+      category: 'SYSTEM',
+      severity: 'error',
+      label: 'Thông báo',
+      eventLabel: 'Chưa xuất phát',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('error'),
+      iconName: 'alert',
+    };
+  }
+  // Every chosen technician declined or let the invitation lapse: the customer
+  // has to pick others, so it needs the reader.
+  if (t === 'BOOKING_MATCHING_EXHAUSTED') {
+    return {
+      category: 'SYSTEM',
+      severity: 'warning',
+      label: 'Thông báo',
+      eventLabel: 'Chọn kỹ thuật viên khác',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('warning'),
+      iconName: 'clock',
+    };
+  }
+
   // 1. Admin / System announcements
   if (
     t.includes('ADMIN') ||
@@ -227,6 +255,20 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
     ...toneOf('info'),
     iconName: 'bell',
   };
+}
+
+/**
+ * Where a customer lands from a notification, or null when it points nowhere.
+ * A booking nobody accepted opens the technician list, so the customer can
+ * pick others; other bookings open the booking, everything else the order.
+ */
+export function customerNotificationPath(item: NotificationItem): string | null {
+  if (!item.referenceId) return null;
+  const type = (item.type || '').toUpperCase();
+  const refType = (item.referenceType || '').toUpperCase();
+  if (type === 'BOOKING_MATCHING_EXHAUSTED') return `/app/bookings/${item.referenceId}/candidates`;
+  if (refType.includes('BOOKING')) return `/app/bookings/${item.referenceId}`;
+  return `/app/orders/${item.referenceId}`;
 }
 
 export const notificationsApi = {

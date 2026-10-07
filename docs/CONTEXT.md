@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-07 14:43 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: docs/repo-context
+> Cập nhật lần cuối: 2026-10-07 19:37 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/no-fake-data-and-po-decisions
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -110,6 +110,14 @@ Onboarding và KYC, bật tắt nhận việc (cần đủ số dư ví), lời 
 - Chỉ quản lý dịch vụ: huỷ đơn, vi phạm, hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành.
 - Chỉ admin: kỹ thuật viên và duyệt KYC, danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
+### Thay đổi 07/10/2026 (nhánh `fix/no-fake-data-and-po-decisions`)
+
+- Bỏ dữ liệu và luồng giả: tài khoản demo ở trang đăng nhập, nút giả lập quét QR, số liệu và khuyến mãi bịa ở trang khách, trang thợ, trang công khai, hotline và địa chỉ bịa, mã QR tải app giả, hoá đơn mẫu, check-in lấy toạ độ nhà khách khi máy không có GPS (giờ chỉ dùng GPS thật), cộng tiền tức thì khi nạp ví.
+- Đánh giá: chưa có đánh giá thì hiện "Chưa có đánh giá" (`ratingLabel` trong `utils/formatters.ts`).
+- Chẩn đoán AI bắt buộc có mô tả (BRX-064) ở form đặt lịch có AI và bong bóng trợ lý.
+- Console: nút "Xác nhận vi phạm" ở trang huỷ đơn; hai khoá `order.departure_*` ở trang cấu hình; banner khi chưa cấu hình payOS.
+- Thông báo `ORDER_DEPARTURE_WARNING` (đỏ) và `BOOKING_MATCHING_EXHAUSTED` (vàng, mở trang chọn lại kỹ thuật viên).
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -143,6 +151,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 7. Quyết định đã chốt
 
+- Không có dữ liệu hay luồng giả (PO 07/10/2026): mọi màn hình chỉ hiện dữ liệu thật của `backend`; chỗ chưa có dữ liệu thì bỏ hoặc hiện trạng thái trống trung thực.
+- Chẩn đoán AI bắt buộc có mô tả, ảnh không bắt buộc (BRX-064).
+
 - Hai luồng đặt lịch tách riêng: thường (chọn dịch vụ trước) và có AI (chẩn đoán trước, đổi dịch vụ sau).
 - Bong bóng chat và trợ lý AI có ở mọi trang của khách hàng; kỹ thuật viên có bong bóng chat ở mọi trang.
 - Giao diện khách và kỹ thuật viên theo mục 17 của `FIXHOME-DESIGN-SYSTEM.md`: ít màu, vàng là ghi chú, đỏ là cảnh báo, không hiện mã lỗi, không xuống dòng trong nút, nhãn và số tiền.
@@ -154,11 +165,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Thông báo dùng polling, chưa nhận đẩy realtime.
 - `/console/service-areas` có route nhưng chưa có mục trên sidebar.
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
-- `walletApi.topUp` luôn trả `success: true` bất kể phản hồi.
 - Một số tiêu đề trang console còn lẫn tiếng Anh.
 - Image Docker dùng Node 20 trong khi `.nvmrc` yêu cầu 22.22.2.
-- Trang chi tiết công việc của kỹ thuật viên có lối tắt check-in chỉ bật khi chạy dev (`import.meta.env.DEV`).
+- Check-in trên web chỉ dùng GPS thật của thiết bị; laptop không có GPS sẽ không check-in được (kỹ thuật viên chủ yếu check-in bằng `mobile`).
+- Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật
 - 2026-10-07 14:43 (UTC+7) | ToanAltF4 | docs/repo-context | Tạo file context theo bộ quy tắc chung của bốn repo, ghi hiện trạng sau đợt sửa lỗi ngày 07/10/2026

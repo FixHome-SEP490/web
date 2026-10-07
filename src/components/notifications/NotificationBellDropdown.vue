@@ -21,7 +21,7 @@ import {
 import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
+import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
@@ -150,12 +150,9 @@ const handleItemClick = async (item: NotificationItem) => {
   }
 
   // 3. CUSTOMER navigation (Default)
-  if (item.referenceId) {
-    if (refType.includes('BOOKING')) {
-      router.push(`/app/bookings/${item.referenceId}`);
-      return;
-    }
-    router.push(`/app/orders/${item.referenceId}`);
+  const customerPath = customerNotificationPath(item);
+  if (customerPath) {
+    router.push(customerPath);
     return;
   }
 

@@ -37,7 +37,7 @@ import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/ca
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { DESCRIBE_BEFORE_SEND, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
@@ -191,6 +191,8 @@ const aiSuggestedServiceExists = computed(() =>
 /** Open the conversation with what the customer already gave: description and photos. */
 async function startAiConversation() {
   if (aiConversation.turnCount.value > 0 || aiConversation.isThinking.value) return;
+  // The assistant diagnoses from words; photos only go along with them (BRX-064).
+  if (!description.value.trim()) return;
   void aiConversation.loadHoldingLines();
   const files = uploadedPhotos.value.map((photo) => photo.file).slice(0, AI_MAX_IMAGES);
   const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
@@ -1256,6 +1258,13 @@ const createAndFindTech = async () => {
         </div>
 
         <!-- Step 1 Footer Action Bar -->
+        <p
+          v-if="isAiFlow && !description.trim()"
+          class="text-xs text-warning-700 sm:text-right"
+          data-testid="ai-needs-description"
+        >
+          {{ DESCRIBE_BEFORE_SEND }}
+        </p>
         <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-ink-100">
           <FhButton variant="ghost" size="md" @click="router.back()" class="w-full sm:w-auto">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại

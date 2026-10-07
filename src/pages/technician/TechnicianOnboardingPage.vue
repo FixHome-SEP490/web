@@ -1172,18 +1172,22 @@ const handleLogout = async () => {
                 <span v-if="wallet?.eligibleForJobs">
                   Ví ký quỹ của bạn đã đạt mức tối thiểu và đủ điều kiện nhận đơn sửa chữa mới từ khách hàng.
                 </span>
+                <span v-else-if="wallet">
+                  Tài khoản mới tạo có số dư ví là <strong class="font-num">{{ wallet.balance.toLocaleString('vi-VN') }} ₫</strong>. Theo quy định hệ thống, bạn cần nạp tối thiểu <strong class="font-num">{{ wallet.minimumBalance.toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để kích hoạt quyền nhận việc và nhận lời mời đơn sửa chữa mới.
+                </span>
                 <span v-else>
-                  Tài khoản mới tạo có số dư ví là <strong class="font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong>. Theo quy định hệ thống, bạn cần nạp tối thiểu <strong class="font-num">{{ (wallet?.minimumBalance ?? 200000).toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để kích hoạt quyền nhận việc và nhận lời mời đơn sửa chữa mới.
+                  Chưa tải được thông tin ví. Mở trang Ví để xem số dư và mức ký quỹ tối thiểu cần nạp trước khi nhận việc.
                 </span>
               </p>
             </div>
           </div>
           <div
+            v-if="wallet"
             class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2.5 border-t text-xs gap-1.5 font-medium"
-            :class="wallet?.eligibleForJobs ? 'border-success-200/60 text-success-900' : 'border-warning-200/60 text-warning-900'"
+            :class="wallet.eligibleForJobs ? 'border-success-200/60 text-success-900' : 'border-warning-200/60 text-warning-900'"
           >
-            <span>Số dư ví hiện tại: <strong class="text-ink-900 font-num">{{ (wallet?.balance ?? 0).toLocaleString('vi-VN') }} ₫</strong></span>
-            <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">{{ (wallet?.minimumBalance ?? 200000).toLocaleString('vi-VN') }} ₫</strong></span>
+            <span>Số dư ví hiện tại: <strong class="text-ink-900 font-num">{{ wallet.balance.toLocaleString('vi-VN') }} ₫</strong></span>
+            <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">{{ wallet.minimumBalance.toLocaleString('vi-VN') }} ₫</strong></span>
           </div>
         </div>
 

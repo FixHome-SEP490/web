@@ -20,7 +20,7 @@ import {
 } from 'lucide-vue-next';
 import { FhButton } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
+import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 import { toast } from 'vue-sonner';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -74,14 +74,8 @@ const handleItemClick = async (item: NotificationItem) => {
   if (!item.isRead) {
     await notifStore.markAsRead(item.id);
   }
-  if (item.referenceId) {
-    const refType = (item.referenceType || '').toUpperCase();
-    if (refType.includes('BOOKING')) {
-      router.push(`/app/bookings/${item.referenceId}`);
-      return;
-    }
-    router.push(`/app/orders/${item.referenceId}`);
-  }
+  const path = customerNotificationPath(item);
+  if (path) router.push(path);
 };
 
 const handleMarkAllRead = async () => {
