@@ -180,10 +180,37 @@ describe('SupportDetailPage for a complaint', () => {
     wrapper.unmount();
   });
 
-  it('keeps the free-text code field for a cash case', async () => {
+  it('settles a cash case with the exact code the backend acts on', async () => {
     const wrapper = await mountPage(baseCase({ caseType: 'cash_mismatch', isUrgent: false, respondBy: null }));
-    expect(wrapper.find('input[placeholder="Ví dụ: CASH_CONFIRMED"]').exists()).toBe(true);
+    expect(wrapper.find('input[type="text"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Bên chịu trách nhiệm');
+    const selects = wrapper.findAll('select');
+    expect(selects[1].findAll('option').map((o) => o.text())).toContain('Xác nhận khách đã trả đủ tiền mặt theo hoá đơn');
+    await selects[1].setValue('CASH_SETTLEMENT_CONFIRMED_BY_MANAGER');
+    expect(wrapper.text()).toContain('phí nền tảng trừ vào ví kỹ thuật viên');
+    await wrapper.get('textarea').setValue('Đã gọi khách, khách xác nhận trả đủ tiền mặt.');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    apiClientMock.post.mockResolvedValueOnce(envelope(baseCase({ caseType: 'cash_mismatch', status: 'resolved' })));
+    Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('Gửi kết quả'))!.click();
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/resolve', {
+      finalStatus: 'resolved',
+      resolutionCode: 'CASH_SETTLEMENT_CONFIRMED_BY_MANAGER',
+      reason: 'Đã gọi khách, khách xác nhận trả đủ tiền mặt.',
+    });
+    wrapper.unmount();
+  });
+
+  it('does not offer settling the cash when the cash case is rejected', async () => {
+    const wrapper = await mountPage(baseCase({ caseType: 'cash_non_response', isUrgent: false, respondBy: null }));
+    const selects = wrapper.findAll('select');
+    await selects[1].setValue('CASH_SETTLEMENT_CONFIRMED_BY_MANAGER');
+    await selects[0].setValue('rejected');
+    await flushPromises();
+    const codes = wrapper.findAll('select')[1].findAll('option').map((o) => o.attributes('value'));
+    expect(codes).not.toContain('CASH_SETTLEMENT_CONFIRMED_BY_MANAGER');
+    expect((wrapper.findAll('select')[1].element as HTMLSelectElement).value).toBe('');
     wrapper.unmount();
   });
 });
