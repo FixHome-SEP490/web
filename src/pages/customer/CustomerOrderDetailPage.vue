@@ -187,6 +187,12 @@ const laborItems = computed(() => {
 const partsItems = computed(() => {
   return order.value?.quotation?.items?.filter((i) => i.type === 'PARTS') ?? [];
 });
+// Before the invoice exists the order totals are 0 while the quotation lines
+// are already listed; show the lines' sum then. Once invoiced, the order totals
+// also carry approved additional costs, so they win.
+const sumLines = (items: Array<{ lineTotal?: number | null }>) => items.reduce((sum, i) => sum + Number(i.lineTotal ?? 0), 0);
+const shownLaborTotal = computed(() => Number(order.value?.laborTotal ?? 0) || sumLines(laborItems.value));
+const shownPartsTotal = computed(() => Number(order.value?.partsTotal ?? 0) || sumLines(partsItems.value));
 const approvedAdditionalCosts = computed(() => {
   return additionalCosts.value.filter((c) => c.status === 'APPROVED');
 });
@@ -608,7 +614,7 @@ const confirmWork = async () => {
         </FhButton>
 
         <FhButton
-          v-if="order && order.status !== 'COMPLETED' && order.status !== 'CANCELLED'"
+          v-if="order && (order.status === 'ACCEPTED' || order.status === 'EN_ROUTE')"
           variant="danger"
           size="sm"
           @click="showCancelModal = true"
@@ -1136,7 +1142,7 @@ const confirmWork = async () => {
                 1. Công việc kỹ thuật &amp; Tiền công
               </h4>
               <span class="font-bold font-num text-brand-700">
-                Tổng công: <FhMoney :amount="order.laborTotal" />
+                Tổng công: <FhMoney :amount="shownLaborTotal" />
               </span>
             </div>
 
@@ -1182,7 +1188,7 @@ const confirmWork = async () => {
                 2. Linh kiện &amp; Phụ tùng thay thế
               </h4>
               <span class="font-bold font-num text-brand-700">
-                Tổng phụ tùng: <FhMoney :amount="order.partsTotal" />
+                Tổng phụ tùng: <FhMoney :amount="shownPartsTotal" />
               </span>
             </div>
 

@@ -372,7 +372,7 @@ const heroAction = computed(() => {
   if (s === 'EN_ROUTE' && !gpsCheckedIn.value) {
     return {
       title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
-      subtitle: 'Khi tới nơi trong bán kính 200 m, hãy bấm Xác nhận đến nơi để mở khóa chụp ảnh.',
+      subtitle: 'Khi tới địa chỉ của khách, hãy bấm Xác nhận đến nơi để mở khóa chụp ảnh.',
       badge: 'Đang di chuyển',
       badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
       btnText: 'Xác nhận đến nơi ngay khi tới địa chỉ',
@@ -708,11 +708,11 @@ const handleCheckIn = async () => {
     if (result.result !== 'valid') {
       if (result.result === 'out_of_geofence') {
         const dist = typeof result.distanceMeters === 'number' ? `${Math.round(result.distanceMeters)}m` : 'ngoài phạm vi';
-        throw new Error(`Vị trí hiện tại cách địa chỉ khách hàng ${dist} (vượt quá bán kính cho phép ≤ 200m). Hãy di chuyển tới nhà khách.`);
+        throw new Error(`Vị trí hiện tại cách địa chỉ khách hàng ${dist} , ngoài bán kính cho phép. Hãy di chuyển tới nhà khách rồi thử lại.`);
       }
       if (result.result === 'low_accuracy') {
         const acc = typeof result.accuracyMeters === 'number' ? `${Math.round(result.accuracyMeters)}m` : 'quá lớn';
-        throw new Error(`Độ chính xác GPS chưa đạt (sai số ${acc} > 100m). Vui lòng ra nơi thoáng hoặc bật GPS trên điện thoại.`);
+        throw new Error(`Độ chính xác GPS chưa đạt (sai số ${acc}). Vui lòng ra nơi thoáng hoặc bật GPS trên điện thoại.`);
       }
       throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
     }
@@ -1002,7 +1002,7 @@ const handleStartRepair = async () => {
     actionMessage.value = null;
     await ordersApi.startRepair(jobId);
     if (job.value) job.value.status = 'UNDER_REPAIR';
-    actionMessage.value = { type: 'success', text: 'Bắt đầu sửa chữa! Trạng thái: UNDER_REPAIR' };
+    actionMessage.value = { type: 'success', text: 'Đã bắt đầu sửa chữa.' };
   } catch (err) {
     actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Chưa thể bắt đầu sửa chữa.' };
   } finally {
@@ -1513,7 +1513,7 @@ const refreshJobStatus = async () => {
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
               <div class="space-y-1 max-w-md">
                 <p class="text-ink-600">
-                  Cần xác nhận vị trí trong bán kính 200 m quanh địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
+                  Cần xác nhận đã đến địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
                 </p>
                 <div v-if="gpsCheckedIn" class="text-success-700 font-medium flex items-center gap-1.5">
                   <CheckCircle2 :size="14" /> Bạn đã xác nhận có mặt tại hiện trường.

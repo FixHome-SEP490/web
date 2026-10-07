@@ -71,10 +71,10 @@ const handleDecline = async (inv: InvitationItem) => {
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Mail class="text-brand-600" :size="24" />
-          Hộp Thư Mời Nhận Việc (Inbox)
+          Hộp thư mời nhận việc
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Khách hàng đã chọn bạn vào danh sách đề xuất. Hãy phản hồi trước khi hết thời gian chờ (TTL).
+          Khách hàng đã chọn bạn vào danh sách đề xuất. Hãy phản hồi trước khi lời mời hết hạn.
         </p>
       </div>
 
@@ -113,15 +113,11 @@ const handleDecline = async (inv: InvitationItem) => {
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
           <div class="flex items-center gap-2 text-xs">
             <span class="font-bold text-brand-700">Ưu tiên số #{{ inv.priorityOrder }}</span>
-            <span class="text-ink-400">•</span>
-            <span class="text-ink-500">Mã đơn: {{ inv.bookingId }}</span>
           </div>
 
           <!-- Countdown Timer Component (P7.7) -->
           <div class="flex items-center gap-2 text-xs">
-            <span class="text-ink-500 flex items-center gap-1">
-              <Clock :size="14" class="text-danger-500" /> Hết hạn sau:
-            </span>
+            <Clock :size="14" class="text-danger-500" />
             <FhCountdown :expires-at="inv.expiresAt" />
           </div>
         </div>
@@ -185,8 +181,6 @@ const handleDecline = async (inv: InvitationItem) => {
 
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <span class="font-bold text-brand-700">Ưu tiên số #{{ detailInvitation.priorityOrder }}</span>
-          <span class="text-ink-400">•</span>
-          <span class="text-ink-500">Mã đơn: {{ detailInvitation.bookingId }}</span>
           <FhCountdown :expires-at="detailInvitation.expiresAt" />
         </div>
 
