@@ -69,6 +69,11 @@ describe('Wallet Formatters & Logic (Design System Conformance)', () => {
       });
     });
 
+    it('reads an admin adjustment\'s direction from the balances', () => {
+      expect(formatWalletTxType('ADJUSTMENT', { balanceBefore: 100000, balanceAfter: 150000 }).isCredit).toBe(true);
+      expect(formatWalletTxType('ADJUSTMENT', { balanceBefore: 150000, balanceAfter: 100000 }).isCredit).toBe(false);
+    });
+
     it('should correctly classify debit transactions', () => {
       expect(formatWalletTxType('PLATFORM_FEE')).toEqual({
         label: 'Khấu trừ phí nền tảng (Đơn tiền mặt)',

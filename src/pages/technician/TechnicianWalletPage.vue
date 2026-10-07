@@ -736,12 +736,12 @@ const handleWithdraw = async () => {
                 <div
                   class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
                   :class="[
-                    formatWalletTxType(tx.type).isCredit
+                    formatWalletTxType(tx.type, tx).isCredit
                       ? 'bg-success-50 text-success-600'
                       : 'bg-danger-50 text-danger-600'
                   ]"
                 >
-                  <ArrowDownLeft v-if="formatWalletTxType(tx.type).isCredit" :size="18" />
+                  <ArrowDownLeft v-if="formatWalletTxType(tx.type, tx).isCredit" :size="18" />
                   <ArrowUpRight v-else :size="18" />
                 </div>
 
@@ -749,7 +749,7 @@ const handleWithdraw = async () => {
                 <div class="min-w-0 space-y-0.5">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-xs sm:text-sm font-bold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
-                      {{ formatWalletTxType(tx.type).label }}
+                      {{ formatWalletTxType(tx.type, tx).label }}
                     </span>
                     <span
                       v-if="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId"
@@ -775,10 +775,10 @@ const handleWithdraw = async () => {
                 <div
                   class="text-sm sm:text-base font-bold font-num"
                   :class="[
-                    formatWalletTxType(tx.type).isCredit ? 'text-success-600' : 'text-danger-600'
+                    formatWalletTxType(tx.type, tx).isCredit ? 'text-success-600' : 'text-danger-600'
                   ]"
                 >
-                  {{ formatWalletTxType(tx.type).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
+                  {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
                 </div>
               </div>
             </div>
