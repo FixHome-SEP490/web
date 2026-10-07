@@ -304,7 +304,8 @@ const routes: RouteRecordRaw[] = [
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        // KYC decisions are Admin's (BRX-041); the page has nothing else.
+        meta: { title: 'Thẩm định Kỹ thuật viên', roles: ['ADMIN'] },
       },
       {
         path: 'cancellations',
