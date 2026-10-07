@@ -1,28 +1,36 @@
-# Frontend-FixHome AI Technical Guide
+# FixHome Web (`web`) AI Technical Guide
+
+> Ngữ cảnh hiện hành của repo (luồng, hợp đồng, quyết định, việc đang dở) nằm ở [`CONTEXT.md`](CONTEXT.md); khi file này lệch với code hoặc với CONTEXT.md, CONTEXT.md và code là chuẩn.
 
 This document governs all human and AI changes in this independent Vue repository. Preserve the
 current client architecture and do not move Backend business logic into the browser.
 
 ## 1. Repository Purpose
 
-Frontend-FixHome owns the Vue web experience, currently centered on the Admin/Service Manager
-portal: layouts, pages, browser routing, Pinia client state, typed Backend integration, and static
-assets. It may present Customer web capabilities when approved by requirements.
+The `web` repository owns the Vue web experience for all four roles plus public pages: public
+landing/services/`/track`/`/vnpay-return`, auth, the Customer app `/app` (plain booking
+`/app/bookings/new` and AI-assisted booking `/app/bookings/ai`, orders, warranties, history,
+messages, notifications, profile), the Technician app `/tech` (+ `/tech/onboarding`), and the
+`/console` for Service Manager and Admin (Admin-only: technicians/KYC, catalog, `admin/*`). It owns
+layouts, pages, browser routing, Pinia client state, typed Backend integration, and static assets.
 
 It does not own business validation, authoritative permissions, database access, order state
-transitions, or AI-provider calls. Those remain in Backend-FixHome and AI-FixHome. Cross-system
-requirements and contracts belong in Docs-FixHome.
+transitions, or AI-provider calls. Those remain in `backend` and `ai-service`. Cross-system
+requirements and contracts belong in the `docs` repository (all under FixHome-SEP490).
 
 ## 2. Technology Stack
 
-- Node.js 22.22.2+ and npm with deterministic `npm ci` (matching dependency engine requirements)
+- Node.js 22.22.2 (`.nvmrc`; `engines` >= 22.22.2) and npm with deterministic `npm ci`
 - Vue 3 Composition API and TypeScript 6
 - Vite 8 build/dev tooling and `@vitejs/plugin-vue`
 - Tailwind CSS 4 through the Vite plugin
 - Pinia for client state and Vue Router for navigation
 - Axios for the Backend REST API
+- socket.io-client for chat and WebRTC call signalling
+- maplibre-gl with MapTiler tiles (`VITE_MAPTILER_KEY`)
+- lucide-vue-next, vue-sonner, qrcode, lenis for UI support
 - ESLint with the official Vue TypeScript configuration
-- Vitest for unit tests and `vue-tsc` for type checking
+- Vitest (+ @vue/test-utils, happy-dom) for unit tests and `vue-tsc` for type checking
 
 Do not replace Pinia, Vue Router, Axios, Tailwind, Vite, or test/lint tooling without explicit scope.
 
@@ -32,17 +40,23 @@ Do not replace Pinia, Vue Router, Axios, Tailwind, Vite, or test/lint tooling wi
 src/main.ts
   -> App.vue
   -> Vue Router + global auth guard
-  -> auth/admin layouts
+  -> Public/Auth/Customer/Technician/Console layouts
   -> route pages
-  -> Pinia stores and typed utilities
-  -> shared Axios client / endpoint modules
-  -> Backend-FixHome REST API
+  -> Pinia stores, composables and typed utilities
+  -> shared Axios client / endpoint modules   -> backend REST API (incl. /ai/*)
+  -> chat-socket service (socket.io)           -> <API origin>/chat
 ```
 
-`src/api/client.ts` centralizes base URL, timeout, JWT attachment, and 401 handling. Endpoint files
-use that client. `src/stores` owns client session/UI state. `src/router` defines lazy routes and
-navigation guards. Layouts provide shells; pages orchestrate user interactions. Components should
-be introduced under `src/components` only when reuse justifies them.
+`src/api/client.ts` centralizes base URL, timeout, JWT attachment, refresh-token retry, and 401
+handling; tokens are handled there and in the auth store. Endpoint files use that client.
+`src/stores` owns client session/UI state (auth, chat, call, notifications). `src/router` defines
+lazy routes and navigation guards. Layouts provide shells; pages orchestrate user interactions.
+Components should be introduced under `src/components` only when reuse justifies them.
+
+Realtime: chat and WebRTC call signalling use socket.io to `<API origin>/chat`
+(`src/services/chat-socket.service.ts`, `webrtc-call.service.ts`); notifications are polled every
+30 seconds. AI goes only through the backend `/ai/*` (self-hosted `ai-service`, Qwen); the browser
+never calls an AI provider directly. Maps use MapTiler via maplibre-gl.
 
 Route guards improve UX but are not a security boundary. Backend must repeat every permission and
 ownership decision.
@@ -51,14 +65,19 @@ ownership decision.
 
 - `.github/workflows/`: independent web CI.
 - `public/`: assets served without bundling.
-- `src/api/`: Axios client and resource-specific endpoint calls.
+- `src/api/`: Axios client (`client.ts`) and 30 resource-specific `*.api.ts` endpoint modules.
 - `src/assets/`: bundled images and global Tailwind/CSS entry.
-- `src/layouts/`: reusable page shells.
-- `src/pages/`: route-level Vue SFCs, currently login, dashboard, and not-found.
-- `src/router/`: route table and global guards.
-- `src/stores/`: Pinia stores, including auth state.
+- `src/components/`: shared `Fh*` components plus `chat/`, `common/`, `console/`, `customer/`,
+  `landing/`, `notifications/`, `technician/`.
+- `src/composables/`: `useAiConversation`, `useEvidencePhotos`, `useSmoothScroll`.
+- `src/layouts/`: Public, Auth, Customer, Technician, Console shells (`AdminLayout.vue` is unused).
+- `src/pages/`: route-level Vue SFCs (~57) under `public/`, `auth/`, `customer/`, `chat/`,
+  `technician/`, `console/` (+ `console/admin/`), plus 403/404 pages.
+- `src/router/`: route table (`index.ts`) and global guards (`guards.ts`).
+- `src/services/`: `chat-socket` (socket.io), `webrtc-call`, `google-identity`.
+- `src/stores/`: Pinia stores: auth, chat, call, notifications.
 - `src/types/`: API and domain-facing TypeScript contracts.
-- `src/utils/`: small browser utilities such as token storage.
+- `src/utils/`: small browser utilities (formatters, validation, VN time...); `storage.ts` is unused.
 - `tests/`: Vitest unit tests and test setup.
 - `docs/`: repository-local governance.
 
@@ -82,19 +101,22 @@ ownership decision.
 
 ## 6. Business Rules
 
-- Primary actors are Service Manager and Admin on web; Customer behavior must follow approved Docs.
+- Web serves Customer, Technician, Service Manager and Admin; behavior must follow approved Docs.
 - Backend is authoritative for JWT, RBAC, ownership, validation, quotation approval, assignment,
   and state transitions. Hiding a button never grants or denies real permission.
-- Role strings remain `customer`, `technician`, `service_manager`, and `admin` across all clients.
-- Display Service Order states from Backend without independently inventing transitions:
+- Backend role strings are lowercase (`customer`, `technician`, `service_manager`, `admin`); the web
+  uses the UPPERCASE `UserRole` enum and the auth store upper-cases the Backend role.
+- Display Service Order states from Backend without independently inventing transitions. The order
+  is created when the technician accepts, so there is no pre-acceptance order state:
 
 ```text
-PENDING_CONFIRMATION -> ACCEPTED -> EN_ROUTE -> UNDER_REPAIR -> COMPLETED
-PENDING_CONFIRMATION or ACCEPTED -> CANCELLED
+ACCEPTED -> EN_ROUTE -> UNDER_REPAIR -> COMPLETED
+ACCEPTED, EN_ROUTE or UNDER_REPAIR -> CANCELLED (who may cancel is decided by Backend)
 ```
 
 - Booking and Service Order are separate concepts and must not share status values accidentally.
 - AI results are advisory, carry confidence/disclaimer information, and must allow manual fallback.
+  AI is reached only through Backend `/ai/*`; never call Gemini, OpenAI or any provider from the web.
 - Never present scaffolded endpoints/features as operational.
 
 ## 7. Security Rules
@@ -123,8 +145,8 @@ PENDING_CONFIRMATION or ACCEPTED -> CANCELLED
 
 ## 9. CI/CD Rules
 
-`.github/workflows/ci.yml` runs independently for pushes and pull requests targeting `main`,
-`development`, or the retained `develop` alias:
+`.github/workflows/ci.yml` runs independently for pushes and pull requests targeting `main`, `dev`,
+`development`, `develop`, or `Truonghoang`; Node comes from `.nvmrc`. The integration branch is `dev`:
 
 ```text
 npm ci
@@ -144,7 +166,7 @@ Execute this sequence before reporting completion:
 
 ```text
 Task
--> read this guide and relevant Docs-FixHome requirements/contracts
+-> read this guide, CONTEXT.md and relevant `docs` repository requirements/contracts
 -> inspect routes/pages/stores/API/types/tests/dependencies
 -> BA analysis: actor, use case, input/output, rule, validation, permission, API/state, edge cases,
    affected repositories
