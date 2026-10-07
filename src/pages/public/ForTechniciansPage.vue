@@ -5,7 +5,7 @@ import {
   DollarSign,
   Calendar,
   Award,
-  PhoneCall,
+  ArrowRight,
 } from 'lucide-vue-next';
 
 useSmoothScroll();
@@ -66,25 +66,18 @@ useSmoothScroll();
         <h3 class="text-2xl sm:text-3xl font-bold tracking-tight">Quy trình gia nhập (P4.3)</h3>
       </div>
       <p class="text-lg text-slate-300 leading-relaxed max-w-4xl">
-        Để đảm bảo an toàn cho các hộ gia đình, tài khoản Kỹ thuật viên không mở đăng ký tự do trên web.
-        Tất cả hồ sơ thợ đều do <strong>Service Manager</strong> của FixHome phỏng vấn trực tiếp,
-        kiểm tra chứng chỉ nghề, xác thực CCCD và kích hoạt sau khi hoàn thành khóa đào tạo.
+        Để đảm bảo an toàn cho các hộ gia đình, kỹ thuật viên đăng ký tài khoản, hoàn tất hồ sơ, giấy tờ tùy thân
+        và kỹ năng nhận sửa. Quản trị viên FixHome duyệt hồ sơ trước khi bạn được bật nhận việc.
       </p>
-      
-      <div class="pt-8 mt-8 border-t border-slate-700/50 flex flex-col sm:flex-row items-center gap-6 sm:gap-12">
-        <div class="text-lg text-brand-400 flex items-center gap-3">
-          <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
-             <PhoneCall :size="20" />
-          </div>
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Hotline tuyển thợ</div>
-            <strong class="font-num tracking-wider">0902 000 001</strong>
-          </div>
-        </div>
-        <div class="text-sm text-slate-400 sm:border-l sm:border-slate-700/50 sm:pl-12 max-w-xs leading-relaxed">
-          <strong>Văn phòng tiếp nhận:</strong><br/>
-          120 Pasteur, P. Bến Nghé, Quận 1, TP.HCM
-        </div>
+
+      <div class="pt-8 mt-8 border-t border-slate-700/50">
+        <router-link
+          to="/register"
+          class="inline-flex items-center gap-2 h-12 px-6 rounded-full bg-brand-600 hover:bg-brand-500 text-white font-semibold whitespace-nowrap transition-colors"
+        >
+          Đăng ký tài khoản kỹ thuật viên
+          <ArrowRight :size="18" />
+        </router-link>
       </div>
     </div>
   </div>

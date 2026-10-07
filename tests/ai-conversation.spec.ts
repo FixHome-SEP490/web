@@ -73,7 +73,7 @@ describe('useAiConversation', () => {
       .mockResolvedValueOnce({ status: 'unavailable', aiAvailable: false, sessionId: null, messageVi: 'Trợ lý đang bận' })
       .mockResolvedValueOnce(reply());
     const c = useAiConversation({ dwellMs: 0 });
-    await c.sendTurn('', [{ dataUrl: 'data:big', bytes: 9 } as never]);
+    await c.sendTurn('Máy giặt không vắt', [{ dataUrl: 'data:big', bytes: 9 } as never]);
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ images: ['data:big#small'] }));
     expect(c.isThinking.value).toBe(false);
   });
@@ -89,6 +89,28 @@ describe('useAiConversation', () => {
     expect(analyze).toHaveBeenCalledTimes(1);
     release(reply());
     await first;
+  });
+
+  it('never sends a photo without a written description (BRX-064)', async () => {
+    const c = useAiConversation({ dwellMs: 0 });
+    c.pending.value = [{ dataUrl: 'data:photo', bytes: 1 } as never];
+
+    for (const blank of ['', '   ', '\n\t ']) {
+      c.input.value = blank;
+      expect(c.canSend.value).toBe(false);
+      expect(c.needsDescription.value).toBe(true);
+      await c.send();
+    }
+    await c.sendTurn('   ', [{ dataUrl: 'data:photo', bytes: 1 } as never]);
+    expect(analyze).not.toHaveBeenCalled();
+    expect(c.messages.value).toHaveLength(0);
+
+    analyze.mockResolvedValueOnce(reply());
+    c.input.value = 'Máy giặt rung mạnh khi vắt';
+    expect(c.canSend.value).toBe(true);
+    expect(c.needsDescription.value).toBe(false);
+    await c.send();
+    expect(analyze).toHaveBeenCalledWith({ description: 'Máy giặt rung mạnh khi vắt', images: ['data:photo'], sessionId: null });
   });
 
   it('starts over with a fresh session and keeps the greeting', async () => {

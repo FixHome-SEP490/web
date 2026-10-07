@@ -16,6 +16,16 @@ export interface WalletSummary {
   eligibleForJobs: boolean;
 }
 
+export interface TopUpResult {
+  success: true;
+  paymentId: string;
+  /** VNPay page the technician is sent to; the wallet is credited only after it confirms. */
+  paymentUrl: string;
+  message: string;
+}
+
+export const TOP_UP_NOT_STARTED = 'Chưa mở được cổng thanh toán VNPay. Vui lòng thử lại sau.';
+
 export type WalletTxType =
   | 'TOP_UP'
   | 'WITHDRAW'
@@ -97,7 +107,8 @@ export interface BankAccount {
 }
 
 export interface PayoutOverview {
-  provider: 'payos' | 'mock';
+  /** 'disabled' when payOS is not configured: nothing can be paid out. */
+  provider: 'payos' | 'disabled';
   sourceBalance: number | null;
   paidOut: { count: number; amount: number };
   processing: { count: number; amount: number };
@@ -153,27 +164,29 @@ export const walletApi = {
     return res.data;
   },
 
-  async topUp(
-    amount: number,
-    idempotencyKey?: string,
-  ): Promise<{ success: boolean; paymentId: string; balanceAfter: number | null; paymentUrl?: string | null; message: string }> {
+  /**
+   * Starts a VNPay top-up. Money only reaches the wallet after VNPay confirms
+   * the payment, so a reply without a payment link is a failure, never an
+   * instant credit. A refusal from the server (for example the payment gateway
+   * not being open yet) is thrown as-is so the screen shows its message.
+   */
+  async topUp(amount: number, idempotencyKey?: string): Promise<TopUpResult> {
     const key =
       idempotencyKey ||
       `TOPUP_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const res = await apiClient.post<{
-      data?: { success?: boolean; paymentId?: string; balanceAfter?: number | null; paymentUrl?: string | null; message?: string };
-      paymentId?: string;
-      balanceAfter?: number | null;
-      paymentUrl?: string | null;
-      message?: string;
+      data?: { success?: boolean; paymentId?: string; paymentUrl?: string | null; message?: string };
     }>('/technician/wallet/top-up', { amount: Number(amount), idempotencyKey: key });
-    const payload = res.data?.data || res.data;
+    const payload = res.data?.data;
+    const paymentUrl = typeof payload?.paymentUrl === 'string' ? payload.paymentUrl.trim() : '';
+    if (payload?.success !== true || !paymentUrl) {
+      throw new Error(TOP_UP_NOT_STARTED);
+    }
     return {
       success: true,
-      paymentId: payload?.paymentId || '',
-      paymentUrl: payload?.paymentUrl || null,
-      balanceAfter: payload?.balanceAfter !== undefined && payload?.balanceAfter !== null ? Number(payload.balanceAfter) : null,
-      message: payload?.message || 'Nạp tiền vào ví thành công',
+      paymentId: payload.paymentId ?? '',
+      paymentUrl,
+      message: payload.message ?? '',
     };
   },
 

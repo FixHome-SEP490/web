@@ -23,10 +23,12 @@ export interface TechnicianScheduleView {
 export interface TechnicianProfileView {
   bio: string | null;
   yearsExperience: number;
-  isAvailable: boolean;
-  averageRating: number;
+  /** null when the server did not say; never assume the technician is on. */
+  isAvailable: boolean | null;
+  /** null until the technician has at least one review. */
+  averageRating: number | null;
   ratingCount: number;
-  reliabilityScore: number;
+  reliabilityScore: number | null;
   serviceRadiusKm: number;
   skills: TechnicianSkillView[];
   serviceAreas: TechnicianServiceAreaView[];
@@ -162,10 +164,13 @@ function normalizeProfile(payload: unknown): TechnicianProfileView {
   return {
     bio: profile.bio == null ? null : String(profile.bio),
     yearsExperience: Number(profile.yearsExperience ?? 0),
-    isAvailable: Boolean(profile.isAvailable ?? true),
-    averageRating: Number(profile.averageRating ?? 5),
+    isAvailable: typeof profile.isAvailable === 'boolean' ? profile.isAvailable : null,
+    averageRating:
+      profile.averageRating == null || !(Number(profile.ratingCount) > 0)
+        ? null
+        : Number(profile.averageRating),
     ratingCount: Number(profile.ratingCount ?? 0),
-    reliabilityScore: Number(profile.reliabilityScore ?? 100),
+    reliabilityScore: profile.reliabilityScore == null ? null : Number(profile.reliabilityScore),
     serviceRadiusKm: Number(profile.serviceRadiusKm ?? 10),
     skills: Array.isArray(profile.skills) ? profile.skills.map(normalizeSkill) : [],
     serviceAreas: Array.isArray(profile.serviceAreas)

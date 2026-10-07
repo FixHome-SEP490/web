@@ -18,7 +18,7 @@ const trustPillars = [
     icon: Star,
     title: 'Đánh giá thực tế từ khách hàng',
     description:
-      '100% đánh giá đến từ các ca sửa chữa đã hoàn tất trên hệ thống, giúp bạn an tâm về thái độ và tay nghề.',
+      'Chỉ khách hàng có đơn sửa chữa đã hoàn tất mới được đánh giá, giúp bạn an tâm về thái độ và tay nghề.',
   },
   {
     icon: History,

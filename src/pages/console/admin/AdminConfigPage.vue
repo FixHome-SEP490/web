@@ -28,7 +28,7 @@ interface ConfigRow extends ConfigDefinition {
 }
 
 const configDefinitions: ConfigDefinition[] = [
-  { key: 'matching.max_shortlist', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 10, description: 'Số Technician tối đa trong shortlist.' },
+  { key: 'matching.max_shortlist', valueType: 'int', effectStatus: 'NOT_IMPLEMENTED', min: 1, max: 2, description: 'Cố định 1 đến 2 kỹ thuật viên theo quyết định PO; chỉ để tham khảo' },
   { key: 'matching.mode', valueType: 'enum', effectStatus: 'STALE_REVIEW', enumValues: ['SEQUENTIAL'], description: 'Chế độ mời Technician; v1.4 yêu cầu tuần tự.' },
   { key: 'matching.invitation_ttl_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 1440, description: 'Thời gian hết hạn lời mời (phút).' },
   { key: 'geofence.radius_meters', valueType: 'int', effectStatus: 'TO_WIRE', min: 10, max: 5000, description: 'Bán kính geofence cho check-in.' },
@@ -42,13 +42,15 @@ const configDefinitions: ConfigDefinition[] = [
   { key: 'customer.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian suspension Customer (giờ).' },
   { key: 'technician.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian suspension Technician (giờ).' },
   { key: 'cancel.grace_minutes_after_accept', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 120, description: 'Thời gian grace sau Accept (phút).' },
+  { key: 'order.departure_grace_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 240, description: 'Số phút sau giờ hẹn mà kỹ thuật viên chưa xuất phát thì gửi cảnh báo' },
+  { key: 'order.departure_cancel_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 240, description: 'Số phút sau cảnh báo mà kỹ thuật viên vẫn chưa xuất phát thì tự huỷ đơn và booking' },
   { key: 'compensation.arrival.amount', valueType: 'bigint', effectStatus: 'STALE_REVIEW', min: 0, max: 0, description: 'Semantics compensation arrival đã bị loại khỏi v1.4.' },
   { key: 'commission.base', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['LABOR'], description: 'Cơ sở tính commission; v1.4 chỉ tính LABOR.' },
-  { key: 'commission.rate_bps', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 5000, description: 'Commission theo basis points (1000 = 10%).' },
+  { key: 'commission.rate_bps', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 5000, description: 'Commission theo basis points (1000 = 10%).' },
   { key: 'additional_cost.approval_ttl_minutes', valueType: 'int', effectStatus: 'STALE_REVIEW', min: 5, max: 1440, description: 'Thời gian chờ duyệt Additional Cost (phút).' },
   { key: 'warranty.default_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Warranty mặc định (ngày).' },
   { key: 'warranty.max_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Warranty tối đa (ngày).' },
-  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'gemini', 'openai', 'fixhome'], description: 'Provider AI hiện tại.' },
+  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'fixhome'], description: 'Provider AI hiện tại (AI tự host, không dùng dịch vụ bên ngoài).' },
   { key: 'ai.timeout_ms', valueType: 'int', effectStatus: 'TO_WIRE', min: 1000, max: 60000, description: 'Timeout cho AI (milliseconds).' },
   { key: 'ai.rate_limit_per_user_per_hour', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 1000, description: 'Số request AI tối đa mỗi user mỗi giờ.' },
   { key: 'payment.mode', valueType: 'enum', effectStatus: 'NOT_IMPLEMENTED', enumValues: ['DEMO', 'LIVE'], description: 'Chế độ thanh toán; provider verification thuộc Wave 3.' },

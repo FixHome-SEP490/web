@@ -552,11 +552,11 @@ onMounted(() => {
       <!-- Payout overview -->
       <div v-if="payoutOverview" class="space-y-3">
         <div
-          v-if="payoutOverview.provider === 'mock'"
-          class="p-3 rounded-xl bg-warning-50 border border-warning-600/20 text-warning-600 text-xs font-bold flex items-center gap-2"
+          v-if="payoutOverview.provider === 'disabled'"
+          class="p-3 rounded-xl bg-danger-50 border border-danger-600/20 text-danger-600 text-xs font-bold flex items-center gap-2"
         >
           <AlertCircle :size="15" class="shrink-0" />
-          <span>Đang chạy chế độ giả lập chi hộ: lệnh rút của kỹ thuật viên không chuyển tiền thật.</span>
+          <span>Chưa cấu hình payOS nên chưa thể chi tiền rút cho kỹ thuật viên.</span>
         </div>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">
@@ -568,7 +568,7 @@ onMounted(() => {
               {{ payoutOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(payoutOverview.sourceBalance) }}
             </div>
             <p class="text-[11px] text-ink-500">
-              {{ payoutOverview.provider === 'mock' ? 'Số dư giả lập' : 'Ví payOS dùng để chi hộ' }}
+              {{ payoutOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ' }}
             </p>
           </div>
           <div class="p-4 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1">

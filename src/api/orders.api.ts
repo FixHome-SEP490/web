@@ -71,7 +71,8 @@ export interface ServiceOrderItem {
     fullName: string;
     phoneNumber: string;
     avatarUrl?: string;
-    averageRating: number;
+    /** null until the technician has at least one review. */
+    averageRating: number | null;
   };
   laborTotal: number;
   partsTotal: number;
@@ -756,7 +757,13 @@ export const ordersApi = {
 
   async reviewCancellation(
     id: string,
-    body: { waiveStrike?: boolean; waiveReason?: string; grantPriorityBoost?: boolean },
+    body: {
+      /** BRX-032: staff confirm a customer/technician cancellation was a violation; records a strike. */
+      confirmViolation?: boolean;
+      waiveStrike?: boolean;
+      waiveReason?: string;
+      grantPriorityBoost?: boolean;
+    },
   ): Promise<CancellationRecord> {
     const res = await apiClient.post<{ data: CancellationRecord }>(`/cancellations/${id}/review`, body);
     return res.data.data;

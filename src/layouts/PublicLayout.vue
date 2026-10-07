@@ -10,9 +10,6 @@ import {
   ChevronDown,
   User,
   ClipboardList,
-  MapPin,
-  Phone,
-  Mail,
   ShieldCheck,
   Sparkles,
 } from 'lucide-vue-next';
@@ -433,25 +430,13 @@ onUnmounted(() => {
             </ul>
           </div>
 
-          <!-- Contact & Region Column -->
+          <!-- Account Column -->
           <div>
             <h2 class="mb-4 text-xs font-bold uppercase tracking-wider text-slate-200">
-              Khu vực & Hỗ trợ
+              Tài khoản
             </h2>
             <ul class="space-y-3 text-sm text-slate-400">
-              <li class="flex items-start gap-2.5">
-                <MapPin :size="16" class="text-blue-400 shrink-0 mt-0.5" />
-                <span class="leading-snug">Khu Công nghệ cao, TP. Thủ Đức, TP. Hồ Chí Minh</span>
-              </li>
-              <li class="flex items-center gap-2.5">
-                <Phone :size="16" class="text-blue-400 shrink-0" />
-                <span>Hotline: <strong class="text-slate-200 font-semibold">1900 xxxx</strong> (8:00 - 20:00)</span>
-              </li>
-              <li class="flex items-center gap-2.5">
-                <Mail :size="16" class="text-blue-400 shrink-0" />
-                <span>hotro@fixhome.vn</span>
-              </li>
-              <li class="pt-1">
+              <li>
                 <router-link
                   :to="authStore.isAuthenticated ? accountRoute : '/login'"
                   class="public-footer-link text-blue-400 hover:text-blue-300 font-medium"

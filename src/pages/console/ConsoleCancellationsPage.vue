@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { Ban, Zap, ShieldAlert } from 'lucide-vue-next';
-import { FhCard, FhTable, FhStatusPill, FhButton, FhSkeleton, FhEmptyState } from '../../components';
+import { FhCard, FhTable, FhStatusPill, FhButton, FhConfirmDialog, FhSkeleton, FhEmptyState } from '../../components';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
+import { userFacingError } from '../../utils/user-facing-error';
 
 interface CancellationRow extends CancellationRecord {
   orderCode: string;
@@ -22,6 +23,15 @@ const loading = ref(true);
 const loadError = ref('');
 const rows = ref<CancellationRow[]>([]);
 const busyId = ref('');
+
+/** Only a customer's or a technician's own cancellation can be a violation (BRX-032). */
+const canConfirmViolation = (row: CancellationRow) =>
+  !row.reviewedByUserId &&
+  !row.strikeApplied &&
+  ['CUSTOMER', 'TECHNICIAN'].includes(String(row.actor ?? '').toUpperCase());
+
+const violationTarget = ref<CancellationRow | null>(null);
+const confirmingViolation = ref(false);
 
 async function loadCancellations() {
   loading.value = true;
@@ -64,6 +74,27 @@ async function handleWaiveStrike(row: CancellationRow) {
   } catch {
     window.alert('Không thể miễn Strike. Vui lòng thử lại.');
   } finally {
+    busyId.value = '';
+  }
+}
+
+function askConfirmViolation(row: CancellationRow) {
+  violationTarget.value = row;
+}
+
+async function confirmViolation() {
+  const row = violationTarget.value;
+  if (!row) return;
+  confirmingViolation.value = true;
+  busyId.value = row.id;
+  try {
+    await ordersApi.reviewCancellation(row.id, { confirmViolation: true });
+    violationTarget.value = null;
+    await loadCancellations();
+  } catch (err) {
+    window.alert(userFacingError(err, 'Không thể xác nhận vi phạm. Vui lòng thử lại.'));
+  } finally {
+    confirmingViolation.value = false;
     busyId.value = '';
   }
 }
@@ -150,7 +181,17 @@ onMounted(loadCancellations);
 
         <template #cell-actions="{ row }">
           <span v-if="row.reviewedByUserId" class="text-xs text-ink-400 font-semibold">Đã xử lý</span>
-          <div v-else class="flex items-center gap-2">
+          <div v-else class="flex flex-wrap items-center gap-2">
+            <FhButton
+              v-if="canConfirmViolation(row)"
+              variant="danger"
+              size="sm"
+              :disabled="busyId === row.id"
+              data-testid="confirm-violation"
+              @click="askConfirmViolation(row)"
+            >
+              <ShieldAlert :size="13" class="mr-1" /> Xác nhận vi phạm
+            </FhButton>
             <FhButton
               variant="primary"
               size="sm"
@@ -172,5 +213,16 @@ onMounted(loadCancellations);
         </template>
       </FhTable>
     </FhCard>
+
+    <FhConfirmDialog
+      :open="!!violationTarget"
+      title="Xác nhận vi phạm huỷ đơn"
+      :consequence="`Ghi 1 Strike cho ${violationTarget ? roleLabel(violationTarget.actor).toLowerCase() : ''} ${violationTarget?.actorName ?? ''}. Đủ ngưỡng Strike thì tài khoản bị tạm khoá theo cấu hình hệ thống.`"
+      confirm-text="Xác nhận vi phạm"
+      cancel-text="Quay lại"
+      :loading="confirmingViolation"
+      @confirm="confirmViolation"
+      @cancel="violationTarget = null"
+    />
   </div>
 </template>

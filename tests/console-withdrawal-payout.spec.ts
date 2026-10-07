@@ -24,7 +24,7 @@ vi.mock('vue-sonner', () => ({ toast }));
 import ConsoleWalletsPage from '../src/pages/console/ConsoleWalletsPage.vue';
 
 const OVERVIEW = {
-  provider: 'mock' as const,
+  provider: 'payos' as const,
   sourceBalance: 49_980_000,
   paidOut: { count: 2, amount: 20_000 },
   processing: { count: 1, amount: 10_000 },
@@ -94,10 +94,21 @@ describe('Duyệt và chi tiền tự động (console)', () => {
     expect(wrapper.text()).toContain('1 lệnh chờ payOS xác nhận');
   });
 
-  it('warns loudly that the simulator moves no real money', async () => {
+  it('never mentions a simulated payout: the backend has no mock provider any more', async () => {
     const wrapper = await openWithdrawalsTab();
 
-    expect(wrapper.text()).toContain('chế độ giả lập chi hộ');
+    expect(wrapper.text()).not.toContain('giả lập');
+    expect(wrapper.text()).toContain('Ví payOS dùng để chi hộ');
+    expect(wrapper.text()).not.toContain('Chưa cấu hình payOS');
+  });
+
+  it('says plainly when payOS is not configured and nothing can be paid out', async () => {
+    walletApi.getPayoutOverview.mockResolvedValue({ ...OVERVIEW, provider: 'disabled', sourceBalance: null });
+    const wrapper = await openWithdrawalsTab();
+
+    expect(wrapper.text()).toContain('Chưa cấu hình payOS nên chưa thể chi tiền rút cho kỹ thuật viên.');
+    expect(wrapper.text()).toContain('Không đọc được');
+    expect(wrapper.text()).not.toContain('giả lập');
   });
 
   it('offers no approve or reject: managers only track the money leaving', async () => {

@@ -4,6 +4,7 @@ import { UserPlus, Star, MapPin, Clock, AlertTriangle, RefreshCw } from 'lucide-
 import { FhStatusPill, FhButton, FhSkeleton, FhTable, type TableColumn, FhMoney } from '../../components';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
 import { vnDateTimeString } from '../../utils/vn-time';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const activeTab = ref<'actionable' | 'expired'>('actionable');
 
@@ -314,7 +315,8 @@ onMounted(loadBookings);
             <div>
               <div class="text-xs font-bold text-ink-900">{{ c.fullName }}</div>
               <div class="flex items-center gap-2 text-[11px] text-ink-500 mt-0.5">
-                <span class="flex items-center gap-0.5"><Star :size="11" class="fill-amber-400 text-amber-400" /> {{ c.averageRating.toFixed(1) }} ({{ c.ratingCount }})</span>
+                <span v-if="hasRating(c.averageRating, c.ratingCount)" class="flex items-center gap-0.5"><Star :size="11" class="fill-amber-400 text-amber-400" /> {{ ratingLabel(c.averageRating, c.ratingCount) }} ({{ c.ratingCount }})</span>
+                <span v-else>Chưa có đánh giá</span>
                 <span v-if="c.distanceKm != null">~{{ c.distanceKm.toFixed(1) }} km</span>
                 <span v-if="c.listedLaborPrice"><FhMoney :amount="c.listedLaborPrice" /></span>
               </div>

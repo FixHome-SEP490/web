@@ -11,6 +11,7 @@ import {
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { vnDateString } from '../../utils/vn-time';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const router = useRouter();
 
@@ -164,7 +165,8 @@ const filteredOrders = computed<(ServiceOrderItem & { _isSkeleton?: boolean })[]
         <div v-else>
           <div v-if="row.technician" class="text-xs font-medium text-ink-900">
             {{ row.technician.fullName }}
-            <span class="text-[10px] text-amber-600 block">★ {{ row.technician.averageRating }}</span>
+            <span v-if="hasRating(row.technician.averageRating)" class="text-[10px] text-amber-600 block">★ {{ ratingLabel(row.technician.averageRating) }}</span>
+            <span v-else class="text-[10px] text-ink-500 block">Chưa có đánh giá</span>
           </div>
           <span v-else class="text-[11px] text-amber-600 font-semibold">Chưa gán thợ</span>
         </div>

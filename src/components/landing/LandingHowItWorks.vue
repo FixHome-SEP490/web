@@ -40,9 +40,9 @@ const steps = [
     icon: Sparkles,
     tag: 'Bước 3',
     title: 'AI phân tích & Đưa kết quả',
-    description: 'Trợ lý AI tự động nhận diện thiết bị, khoanh vùng triệu chứng hỏng hóc và dự toán khoảng chi phí sơ bộ.',
+    description: 'Trợ lý AI nhận diện thiết bị, khoanh vùng triệu chứng hỏng hóc và gợi ý dịch vụ phù hợp. Kết quả chỉ mang tính tham khảo.',
     image: '/images/steps/step-3-ai-result.png',
-    badge: 'Nhận diện & Gợi ý tức thì (92%)',
+    badge: 'Gợi ý mang tính tham khảo',
   },
   {
     stepNum: '04',
@@ -276,8 +276,8 @@ onUnmounted(() => {
                   <Sparkles :size="18" />
                 </div>
                 <div class="text-left">
-                  <p class="text-xs font-bold text-ink-900 leading-tight">Báo giá trong 5 phút</p>
-                  <p class="text-[10px] text-ink-500 font-medium">AI hỗ trợ 24/7</p>
+                  <p class="text-xs font-bold text-ink-900 leading-tight">Gợi ý chẩn đoán bằng AI</p>
+                  <p class="text-[10px] text-ink-500 font-medium">Chỉ mang tính tham khảo</p>
                 </div>
               </div>
 

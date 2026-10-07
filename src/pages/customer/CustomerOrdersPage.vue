@@ -405,7 +405,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </div>
       <h3 class="text-sm font-bold text-ink-800">Chưa có đơn dịch vụ nào</h3>
       <p class="text-xs text-ink-500 max-w-sm mx-auto">
-        {{ searchQuery ? 'Không tìm thấy đơn nào phù hợp với từ khóa.' : 'Đặt lịch ngay để thợ FixHome kiểm tra tại nhà bạn sau 15–30 phút.' }}
+        {{ searchQuery ? 'Không tìm thấy đơn nào phù hợp với từ khóa.' : 'Đặt lịch để kỹ thuật viên FixHome kiểm tra tại nhà bạn.' }}
       </p>
       <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
         Đặt thợ ngay

@@ -9,6 +9,7 @@ import { FhButton, FhStatusPill, FhMoney, FhEmptyState } from '../index';
 import type { TechnicianCandidate } from '../../api/bookings.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 
 interface Props {
   candidate: TechnicianCandidate | null;
@@ -131,9 +132,12 @@ const handleClose = () => emit('close');
             </div>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-600">
               <span class="flex items-center gap-1 whitespace-nowrap font-num">
-                <Star :size="14" class="fill-warning-400 text-warning-500" />
-                <span class="font-semibold text-ink-900">{{ candidate.averageRating }}</span>
-                ({{ candidate.ratingCount }} đánh giá)
+                <template v-if="hasRating(candidate.averageRating, candidate.ratingCount)">
+                  <Star :size="14" class="fill-warning-400 text-warning-500" />
+                  <span class="font-semibold text-ink-900">{{ ratingLabel(candidate.averageRating, candidate.ratingCount) }}</span>
+                  ({{ candidate.ratingCount }} đánh giá)
+                </template>
+                <template v-else>Chưa có đánh giá</template>
               </span>
               <span class="flex items-center gap-1 whitespace-nowrap">
                 <Briefcase :size="14" class="text-ink-400" />
@@ -168,7 +172,7 @@ const handleClose = () => emit('close');
           </div>
           <div class="p-3 rounded-xl bg-ink-50">
             <dt class="text-xs text-ink-500">Độ tin cậy</dt>
-            <dd class="text-lg font-semibold text-ink-900 font-num">{{ candidate.reliabilityScore }}%</dd>
+            <dd class="text-lg font-semibold text-ink-900 font-num">{{ candidate.reliabilityScore != null ? `${candidate.reliabilityScore}%` : '—' }}</dd>
           </div>
         </dl>
       </div>
@@ -239,7 +243,7 @@ const handleClose = () => emit('close');
           <template v-else-if="reviews.length > 0">
             <div class="flex items-center gap-5 p-4 rounded-xl bg-ink-50">
               <div class="text-center shrink-0">
-                <div class="text-3xl font-semibold text-ink-900 font-num">{{ candidate.averageRating }}</div>
+                <div class="text-3xl font-semibold text-ink-900 font-num">{{ ratingLabel(candidate.averageRating, candidate.ratingCount) }}</div>
                 <div class="text-xs text-ink-500 mt-0.5 whitespace-nowrap">{{ reviews.length }} nhận xét</div>
               </div>
               <div class="flex-1 space-y-1.5">

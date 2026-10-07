@@ -9,30 +9,26 @@ import {
   Search,
   ShieldCheck,
   Zap,
-  Users,
   Bot,
   Snowflake,
-  Droplets,
-  Cpu,
-  Disc,
-  Package,
   Clock,
   MapPin,
   ChevronRight,
   MessageSquare,
   Award,
   Tag,
-  Gift,
   BadgeCheck,
   Timer,
   BookOpen,
   FileCheck,
   CircleDollarSign,
   CalendarPlus,
+  Wrench,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhStatusPill } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
+import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 import { vnDateString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
 
@@ -46,70 +42,18 @@ const addresses = ref<UserAddress[]>([]);
 const selectedAddress = ref('');
 const loading = ref(true);
 
-// Popular Services – curated list
-const popularServices = [
-  {
-    id: 'ac_clean',
-    name: 'Vệ sinh máy lạnh',
-    icon: Snowflake,
-    badge: 'HOT',
-    query: 'vệ sinh điều hòa',
-    price: 180000,
-    unit: 'Máy',
-    isFixed: true,
-  },
-  {
-    id: 'washer_clean',
-    name: 'Vệ sinh máy giặt',
-    icon: Disc,
-    badge: 'GIÁ TỐT',
-    query: 'vệ sinh cửa trên',
-    price: 350000,
-    unit: 'Máy',
-    isFixed: true,
-  },
-  {
-    id: 'dryer_clean',
-    name: 'Vệ sinh máy sấy',
-    icon: Package,
-    query: 'vệ sinh máy sấy',
-    price: 350000,
-    unit: 'Máy',
-    isFixed: true,
-  },
-  {
-    id: 'plumbing',
-    name: 'Sửa ống nước',
-    icon: Droplets,
-    query: 'ống nước',
-    isFixed: false,
-  },
-  {
-    id: 'electricity',
-    name: 'Lắp đặt hệ thống điện',
-    icon: Zap,
-    badge: '24/7',
-    query: 'điện',
-    isFixed: false,
-  },
-  {
-    id: 'inspection',
-    name: 'Kiểm tra thiết bị',
-    icon: Cpu,
-    query: 'kiểm tra',
-    price: 100000,
-    unit: 'Lần',
-    isFixed: true,
-  },
-];
+// Dịch vụ lấy thật từ danh mục của backend; không có thì ẩn khối này.
+const popularServices = ref<ServiceItem[]>([]);
 
+function isFixedPrice(svc: ServiceItem): boolean {
+  return svc.pricingMode?.toLowerCase() === 'fixed_price' && svc.fixedPrice != null && svc.fixedPrice > 0;
+}
 
 // Quick Category Chips
 const quickChips = [
-  { id: 'urgent', title: 'Cứu hộ điện nước 24/7', icon: Zap, query: 'điện' },
-  { id: 'ac', title: 'Vệ sinh máy lạnh 180K', icon: Snowflake, query: 'vệ sinh điều hòa' },
+  { id: 'urgent', title: 'Sửa điện nước', icon: Zap, query: 'điện' },
+  { id: 'ac', title: 'Vệ sinh máy lạnh', icon: Snowflake, query: 'vệ sinh điều hòa' },
   { id: 'ai', title: 'AI Chẩn đoán hỏng hóc', icon: Bot, isAi: true },
-  { id: 'voucher', title: 'Voucher giảm 50.000đ', icon: Gift },
 ];
 
 // The two ways to book sit side by side: choose the service yourself, or let
@@ -131,8 +75,8 @@ const featureCards = [
   },
   {
     title: 'Bảng giá tham khảo',
-    text: 'Xem bảng giá dịch vụ cố định, vật tư chính hãng & bảo hành dài hạn 12 tháng',
-    tags: ['Giá cố định minh bạch'],
+    text: 'Xem giá niêm yết của các dịch vụ trong danh mục FixHome',
+    tags: ['Giá niêm yết'],
     icon: CircleDollarSign,
     to: '/services',
   },
@@ -146,9 +90,9 @@ const featureCards = [
 ];
 
 const promises = [
-  { title: 'Thợ xác minh', text: 'Lý lịch 100% rõ ràng, kiểm tra tay nghề định kỳ', icon: ShieldCheck },
-  { title: 'Giá minh bạch', text: 'Báo giá trước khi làm, niêm yết theo catalog', icon: Tag },
-  { title: 'Bảo hành 30 ngày', text: 'Bảo hành điện tử, giải quyết khiếu nại trong 24h', icon: Award },
+  { title: 'Thợ xác minh', text: 'Kỹ thuật viên được duyệt hồ sơ và giấy tờ trước khi nhận việc', icon: ShieldCheck },
+  { title: 'Giá minh bạch', text: 'Báo giá trước khi làm, bạn duyệt rồi kỹ thuật viên mới sửa', icon: Tag },
+  { title: 'Bảo hành điện tử', text: 'Xem phiếu bảo hành và gửi yêu cầu bảo hành ngay trên ứng dụng', icon: Award },
 ];
 
 function formatAddress(addr: UserAddress): string {
@@ -157,12 +101,14 @@ function formatAddress(addr: UserAddress): string {
 
 onMounted(async () => {
   try {
-    const [orderList, addrList] = await Promise.all([
+    const [orderList, addrList, serviceList] = await Promise.all([
       ordersApi.getCustomerOrders().catch(() => []),
       profileApi.getAddresses().catch(() => []),
+      catalogApi.getServices({ page: 1, limit: 6 }).then((res) => res.data).catch(() => []),
     ]);
     orders.value = orderList;
     addresses.value = addrList;
+    popularServices.value = serviceList.filter((svc) => svc.isActive !== false);
 
     const def = addrList.find((a) => a.isDefault);
     if (def) {
@@ -224,15 +170,8 @@ function handleChipClick(chip: typeof quickChips[0]) {
   }
 }
 
-function handleServiceClick(service: (typeof popularServices)[0]) {
-  router.push({
-    path: '/app/bookings/new',
-    query: {
-      q: service.query,
-      popular: 'true',
-      ...(service.isFixed ? { fixed: 'true' } : {}),
-    },
-  });
+function handleServiceClick(service: ServiceItem) {
+  router.push({ path: '/app/bookings/new', query: { serviceId: service.id } });
 }
 
 
@@ -293,7 +232,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         </p>
         <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
           Cần sửa gì hôm nay?
-          <span class="block text-lg sm:text-xl font-medium text-white/85 mt-1">Thợ giỏi FixHome sẵn sàng tới ngay</span>
+          <span class="block text-lg sm:text-xl font-medium text-white/85 mt-1">Tìm kỹ thuật viên FixHome gần bạn</span>
         </h1>
 
         <form class="max-w-xl" role="search" @submit.prevent="handleSearch">
@@ -316,26 +255,8 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             </button>
           </div>
         </form>
-
-        <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-white/90">
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap"><Zap :size="15" /> Không mất phí khảo sát</span>
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap"><Users :size="15" /> 100,000+ thợ tay nghề cao</span>
-        </div>
       </div>
     </section>
-
-    <!-- 3. Availability line -->
-    <button
-      type="button"
-      class="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-white border border-ink-200 text-left hover:bg-ink-25 transition-colors"
-      @click="router.push('/app/bookings/new')"
-    >
-      <span class="flex items-center gap-3 min-w-0 text-sm text-ink-700">
-        <ShieldCheck :size="20" :stroke-width="1.75" class="text-success-600 shrink-0" />
-        <span class="text-pretty"><strong class="font-semibold text-ink-900">128+ thợ FixHome</strong> sẵn sàng có mặt sau 15–30 phút tại khu vực của bạn!</span>
-      </span>
-      <ChevronRight :size="18" class="text-ink-400 shrink-0" />
-    </button>
 
     <!-- 4. Quick picks -->
     <div class="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -434,9 +355,9 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- 8. Popular services -->
-    <section class="space-y-3">
+    <section v-if="popularServices.length > 0" class="space-y-3">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold text-ink-900">Dịch vụ phổ biến</h2>
+        <h2 class="text-lg font-semibold text-ink-900">Dịch vụ</h2>
         <button
           type="button"
           class="text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap"
@@ -455,42 +376,16 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           @click="handleServiceClick(srv)"
         >
           <span class="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-            <component :is="srv.icon" :size="22" :stroke-width="1.75" />
+            <Wrench :size="22" :stroke-width="1.75" />
           </span>
           <span class="flex-1 min-w-0">
-            <span class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-ink-900 truncate">{{ srv.name }}</span>
-              <span v-if="srv.badge" class="h-5 px-1.5 rounded-md bg-warning-50 text-warning-800 text-[11px] font-medium inline-flex items-center whitespace-nowrap shrink-0">
-                {{ srv.badge }}
-              </span>
-            </span>
-            <span v-if="srv.price" class="block text-sm text-ink-600 font-num whitespace-nowrap">Từ {{ srv.price.toLocaleString('vi-VN') }}&nbsp;₫</span>
-            <span v-else class="block text-sm text-ink-500 whitespace-nowrap">Khảo sát tận nơi</span>
+            <span class="block text-sm font-semibold text-ink-900 truncate">{{ srv.name }}</span>
+            <span v-if="isFixedPrice(srv)" class="block text-sm text-ink-600 font-num whitespace-nowrap"><FhMoney :amount="srv.fixedPrice ?? 0" /><template v-if="srv.unit"> / {{ srv.unit }}</template></span>
+            <span v-else class="block text-sm text-ink-500 whitespace-nowrap">Báo giá sau khi kiểm tra</span>
           </span>
           <ChevronRight :size="18" class="text-ink-400 shrink-0" />
         </button>
       </div>
-    </section>
-
-    <!-- 9. Offer -->
-    <section
-      class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:border-ink-300 transition-colors"
-      @click="router.push('/app/bookings/new')"
-    >
-      <div class="flex gap-4 min-w-0">
-        <span class="w-11 h-11 rounded-xl bg-warning-50 text-warning-600 flex items-center justify-center shrink-0">
-          <Gift :size="22" :stroke-width="1.75" />
-        </span>
-        <div class="space-y-1 min-w-0">
-          <p class="text-sm font-medium text-warning-700">Đặt thợ ngay</p>
-          <h3 class="text-lg font-semibold text-ink-900">Giảm 30% cho đơn sửa chữa đầu tiên</h3>
-          <p class="text-sm text-ink-600 text-pretty">Cam kết bảo hành sửa chữa 30 ngày an tâm, hoàn tiền nếu không hài lòng.</p>
-        </div>
-      </div>
-      <FhButton variant="primary" size="md" class="self-start sm:self-center">
-        Tham gia ngay
-        <ChevronRight :size="16" />
-      </FhButton>
     </section>
 
     <!-- 10. Recent orders -->

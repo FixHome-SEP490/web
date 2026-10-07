@@ -36,7 +36,7 @@ const steps = [
   {
     step: 'Bước 4',
     title: 'Nghiệm thu & Nhận bảo hành điện tử',
-    desc: 'Sau khi sửa xong, thợ chụp ảnh hoàn thành (AFTER evidence) và kiểm tra vận hành trước sự chứng kiến của bạn. Hệ thống xuất hoá đơn điện tử có hiệu lực pháp lý và kích hoạt tem bảo hành điện tử từ 30 đến 90 ngày.',
+    desc: 'Sau khi sửa xong, thợ chụp ảnh hoàn thành (AFTER evidence) và kiểm tra vận hành trước sự chứng kiến của bạn. Hệ thống lập hoá đơn và kích hoạt phiếu bảo hành điện tử theo thời hạn bảo hành của đơn.',
     icon: ShieldCheck,
   },
 ];
