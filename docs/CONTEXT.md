@@ -132,6 +132,10 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 - Trang công việc của kỹ thuật viên: bỏ con số bán kính 200 m và sai số 100 m viết cứng (backend lấy theo cấu hình `geofence.*`, hiện 300 m); thông báo bắt đầu sửa không còn mã trạng thái thô.
 - Thư mời nhận việc: bỏ dòng "Mã đơn" hiện UUID booking, bỏ nhãn "Hết hạn sau:" trùng với đồng hồ, bỏ chữ Inbox/TTL.
 
+### AI tắt vẫn đặt lịch được, có hướng dẫn (07/10/2026, nhánh `fix/ai-step-service-hint`)
+
+Ở bước trò chuyện với AI, khi trợ lý đã trả lời mà chưa có dịch vụ (AI không kết nối được hoặc không chọn được), trang hiện "Chọn dịch vụ ở ô bên dưới để đặt thợ." thay vì "Trợ lý sẽ chọn dịch vụ...", để nút Đặt thợ ngay bị khoá không làm khách tưởng bị kẹt.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -187,6 +191,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 9. Nhật ký cập nhật context
 
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
+- 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
 - 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
 - 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.
 - 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật
