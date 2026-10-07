@@ -183,7 +183,11 @@ describe('AI booking form', () => {
     const wrapper = await openAiForm();
     await describeAndAnalyze(wrapper);
     expect(wrapper.text()).toContain('Trợ lý đang tạm thời không kết nối được.');
+    // The disabled button must not leave the customer guessing what is missing.
+    expect(wrapper.get('[data-testid="ai-pick-service-hint"]').text()).toContain('Chọn dịch vụ ở ô bên dưới');
+    expect(wrapper.text()).not.toContain('Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán');
     await wrapper.get('[data-testid="ai-manual-service"]').setValue('svc-fix');
+    expect(wrapper.find('[data-testid="ai-pick-service-hint"]').exists()).toBe(false);
     await wrapper.get('[data-testid="ai-continue"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="step2-next"]').trigger('click');
