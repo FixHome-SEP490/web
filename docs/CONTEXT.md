@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-07 19:37 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/no-fake-data-and-po-decisions
+> Cập nhật lần cuối: 2026-10-07 21:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/cash-case-resolution
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -118,6 +118,10 @@ Onboarding và KYC, bật tắt nhận việc (cần đủ số dư ví), lời 
 - Console: nút "Xác nhận vi phạm" ở trang huỷ đơn; hai khoá `order.departure_*` ở trang cấu hình; banner khi chưa cấu hình payOS.
 - Thông báo `ORDER_DEPARTURE_WARNING` (đỏ) và `BOOKING_MATCHING_EXHAUSTED` (vàng, mở trang chọn lại kỹ thuật viên).
 
+### Xử lý tranh chấp tiền mặt (07/10/2026, nhánh `fix/cash-case-resolution`)
+
+Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay mã. Chọn "Xác nhận khách đã trả đủ tiền mặt theo hoá đơn" gửi đúng mã `CASH_SETTLEMENT_CONFIRMED_BY_MANAGER` (`cashResolutionCodeLabels` trong `support-cases.utils.ts`), là mã duy nhất backend dùng để chốt tiền và hoàn tất đơn; trước đây gõ mã khác thì case đóng mà đơn kẹt ở đang sửa. Trạng thái "Từ chối" chỉ còn lựa chọn đóng case.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -172,5 +176,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.
 - 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật
 - 2026-10-07 14:43 (UTC+7) | ToanAltF4 | docs/repo-context | Tạo file context theo bộ quy tắc chung của bốn repo, ghi hiện trạng sau đợt sửa lỗi ngày 07/10/2026

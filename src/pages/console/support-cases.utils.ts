@@ -39,6 +39,17 @@ export const resolutionCodeLabels: Record<string, string> = {
 
 export const RESOLUTION_CODES = Object.keys(resolutionCodeLabels);
 
+/**
+ * Cash disputes: the backend settles the cash (invoice paid, platform fee,
+ * order completion) only for this exact code; any other code just closes the
+ * case. Keep it a choice, never free text.
+ */
+export const CASH_CONFIRMED_BY_MANAGER = 'CASH_SETTLEMENT_CONFIRMED_BY_MANAGER';
+export const cashResolutionCodeLabels: Record<string, string> = {
+  [CASH_CONFIRMED_BY_MANAGER]: 'Xác nhận khách đã trả đủ tiền mặt theo hoá đơn',
+  no_action: 'Đóng case, không chốt tiền mặt',
+};
+
 export const liablePartyLabels: Record<string, string> = {
   technician: 'Kỹ thuật viên',
   customer: 'Khách hàng',
