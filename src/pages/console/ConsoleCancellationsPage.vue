@@ -3,12 +3,20 @@ import { ref, onMounted } from 'vue';
 import { Ban, Zap, ShieldAlert } from 'lucide-vue-next';
 import { FhCard, FhTable, FhStatusPill, FhButton, FhSkeleton, FhEmptyState } from '../../components';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
-import { adminUsersApi } from '../../api/admin-users.api';
 
 interface CancellationRow extends CancellationRecord {
   orderCode: string;
   actorName: string;
 }
+
+/** Role codes shown as words. */
+const ROLE_LABELS: Record<string, string> = {
+  CUSTOMER: 'Khách hàng',
+  TECHNICIAN: 'Kỹ thuật viên',
+  SERVICE_MANAGER: 'Quản lý dịch vụ',
+  ADMIN: 'Quản trị viên',
+};
+const roleLabel = (role: unknown) => ROLE_LABELS[String(role ?? '').toUpperCase()] ?? 'Không rõ';
 
 const loading = ref(true);
 const loadError = ref('');
@@ -19,20 +27,14 @@ async function loadCancellations() {
   loading.value = true;
   loadError.value = '';
   try {
+    // The list carries the order code and who cancelled: Service Managers may
+    // not read user records, and one request per row was slow besides.
     const list = await ordersApi.getCancellations();
-    rows.value = await Promise.all(
-      list.map(async (c) => {
-        const [order, actorUser] = await Promise.all([
-          ordersApi.getOrder(c.serviceOrderId).catch(() => null),
-          adminUsersApi.getUser(c.actorUserId).catch(() => null),
-        ]);
-        return {
-          ...c,
-          orderCode: order?.code ?? c.serviceOrderId,
-          actorName: actorUser?.fullName ?? c.actorUserId,
-        };
-      }),
-    );
+    rows.value = list.map((c) => ({
+      ...c,
+      orderCode: c.orderCode ?? '—',
+      actorName: c.actorName ?? 'Không rõ',
+    }));
   } catch {
     loadError.value = 'Không thể tải danh sách huỷ đơn. Vui lòng thử lại.';
   } finally {
@@ -122,7 +124,7 @@ onMounted(loadCancellations);
             class="text-[10px] font-bold px-1.5 py-0.5 rounded"
             :class="String(row.actor).toUpperCase() === 'CUSTOMER' ? 'bg-ink-100 text-ink-800' : 'bg-brand-50 text-brand-700'"
           >
-            {{ String(row.actor).toUpperCase() }}
+            {{ roleLabel(row.actor) }}
           </span>
         </template>
 

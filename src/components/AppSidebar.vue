@@ -30,7 +30,10 @@ withDefaults(defineProps<{
   subtitle: 'Console'
 });
 
-const isCollapsed = ref(false);
+// Narrow screens start collapsed (icons only): the full 16rem sidebar left a
+// phone about 130px for the page, and every console page overflowed.
+const NARROW = '(max-width: 1023px)';
+const isCollapsed = ref(typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches);
 const route = useRoute();
 const authStore = useAuthStore();
 const showProfileDropdown = ref(false);

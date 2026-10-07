@@ -42,7 +42,6 @@ const navigation = computed(() => [
       { label: 'Yêu cầu linh kiện', path: '/console/part-requests', icon: Boxes },
       { label: 'Gán thợ thủ công', path: '/console/bookings', icon: UserPlus },
       { label: 'Ví & Rút tiền KTV', path: '/console/wallets', icon: Wallet },
-      { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
         ...(isServiceManager.value
         ? [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
@@ -58,6 +57,7 @@ const navigation = computed(() => [
         {
           group: 'Quản trị & governance',
           items: [
+            { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
             { label: 'Duyệt kỹ năng thợ', path: '/console/admin/skill-verifications', icon: Award },
             { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
             { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
