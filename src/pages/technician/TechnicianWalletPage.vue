@@ -245,23 +245,13 @@ const handleTopUp = async () => {
   topUpSubmitting.value = true;
   topUpSuccessMsg.value = null;
   try {
+    // The wallet is credited only after VNPay confirms; topUp throws when no
+    // payment page was opened, so there is no "instant credit" branch here.
     const res = await walletApi.topUp(topUpAmount.value);
-    if (res.paymentUrl) {
-      topUpSuccessMsg.value = 'Đang chuyển hướng tới cổng thanh toán VNPay...';
-      setTimeout(() => {
-        window.location.href = res.paymentUrl!;
-      }, 500);
-      return;
-    }
-
-    topUpSuccessMsg.value = res.message || 'Nạp tiền vào ví thành công';
-    await loadWallet();
-    await loadTransactions();
+    topUpSuccessMsg.value = 'Đang chuyển hướng tới cổng thanh toán VNPay...';
     setTimeout(() => {
-      showTopUpModal.value = false;
-      topUpSuccessMsg.value = null;
-      topUpError.value = null;
-    }, 1500);
+      window.location.href = res.paymentUrl;
+    }, 500);
   } catch (err: unknown) {
     topUpError.value = userFacingError(err, 'Nạp tiền thất bại. Vui lòng thử lại.');
   } finally {

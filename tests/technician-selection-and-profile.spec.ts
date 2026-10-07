@@ -172,4 +172,24 @@ describe('Technician Selection and Profile Modal Feature', () => {
 
     wrapper.unmount();
   });
+
+  it('shows "Chưa có đánh giá" for a technician the backend reports as unrated', async () => {
+    vi.mocked(bookingsApi.getCandidates).mockResolvedValue([
+      { ...mockCandidates[0], averageRating: null, ratingCount: 0, reliabilityScore: null },
+    ]);
+    vi.mocked(reviewsApi.getByTechnician).mockResolvedValue({ data: [], total: 0 });
+    const wrapper = mount(BookingCandidatesPage);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Chưa có đánh giá');
+    expect(wrapper.text()).not.toMatch(/null|NaN|undefined/);
+    expect(wrapper.text()).not.toContain('5.0');
+
+    await wrapper.get('[data-testid="view-profile-btn"]').trigger('click');
+    const modal = wrapper.findComponent(TechnicianProfileModal);
+    expect(modal.text()).toContain('Chưa có đánh giá');
+    expect(modal.text()).not.toMatch(/null|NaN|undefined/);
+
+    wrapper.unmount();
+  });
 });

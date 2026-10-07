@@ -76,10 +76,11 @@ export interface TechnicianCandidate {
   userId?: string;
   fullName: string;
   avatarUrl?: string;
-  averageRating: number;
+  /** null until the technician has at least one review. */
+  averageRating: number | null;
   ratingCount: number;
   yearsExperience: number;
-  reliabilityScore: number;
+  reliabilityScore: number | null;
   distanceKm?: number;
   isAvailable: boolean;
   listedLaborPrice?: number | null;

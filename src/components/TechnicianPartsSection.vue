@@ -369,31 +369,6 @@ const handleReceiveQr = async (requestId: string) => {
   }
 };
 
-const handleTestReceive = async (requestId: string) => {
-  try {
-    actionLoading.value = true;
-    actionError.value = null;
-    actionSuccess.value = null;
-
-    await partRequestsApi.receiveByQr(requestId, {
-      qrToken: 'TEST_SCAN',
-    });
-
-    actionSuccess.value =
-      'Xác nhận đã quét mã QR thành công. Linh kiện đã chuyển sang trạng thái đã nhận.';
-    showQrInput.value = null;
-    qrTokenInput.value = '';
-    await loadPartRequests();
-    emit('parts-updated');
-  } catch (err: unknown) {
-    actionError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Không thể giả lập quét mã QR nhận hàng.';
-  } finally {
-    actionLoading.value = false;
-  }
-};
-
 const handleUpdateUsage = async (
   requestId: string,
   itemId: string,
@@ -561,7 +536,7 @@ const getStatusBadgeClass = (status: string) => {
                   Tìm kiếm & Chọn linh kiện chính hãng FixHome
                 </h5>
                 <p class="text-[11px] text-ink-500">
-                  Tra cứu trong danh mục 790+ linh kiện chính hãng. Xem ngay giá niêm yết và thời hạn bảo hành.
+                  Tra cứu trong danh mục linh kiện của FixHome. Xem giá niêm yết và thời hạn bảo hành.
                 </p>
               </div>
               <span class="text-[11px] font-medium text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-full">
@@ -989,7 +964,7 @@ const getStatusBadgeClass = (status: string) => {
             Phí giao hàng: <FhMoney :amount="pr.shippingFee" />
           </div>
 
-          <!-- Pending Preparation State with Test Helper Bypass -->
+          <!-- Pending Preparation State -->
           <div
             v-if="pr.status === 'requested'"
             class="p-2.5 rounded-lg bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
@@ -998,17 +973,6 @@ const getStatusBadgeClass = (status: string) => {
               <Clock :size="14" class="text-warning-600 shrink-0" />
               <span>Đang chờ Quản lý kho chuẩn bị linh kiện...</span>
             </div>
-            <FhButton
-              variant="secondary"
-              size="sm"
-              class="border-dashed border-warning-500 bg-warning-100 text-warning-900 hover:bg-warning-200 text-xs font-semibold"
-              :disabled="actionLoading"
-              title="Bỏ qua chờ kho chuẩn bị, giả lập đã quét mã QR để chuyển ngay sang trạng thái ĐÃ NHẬN"
-              @click="handleTestReceive(pr.id)"
-            >
-              <CheckCircle2 :size="14" class="mr-1 text-warning-700" />
-              [Test] Giả lập đã quét nhận
-            </FhButton>
           </div>
 
           <!-- QR Handover Action (When READY or DELIVERING) -->
@@ -1033,17 +997,6 @@ const getStatusBadgeClass = (status: string) => {
                 >
                   Nhận linh kiện (Quét QR)
                 </FhButton>
-                <FhButton
-                  variant="secondary"
-                  size="sm"
-                  class="border-warning-400 bg-warning-100 text-warning-900 hover:bg-warning-200 font-semibold"
-                  :disabled="actionLoading"
-                  title="Giả lập đã quét mã QR nhận hàng để chuyển ngay sang ĐÃ NHẬN"
-                  @click="handleTestReceive(pr.id)"
-                >
-                  <CheckCircle2 :size="14" class="mr-1 text-warning-700" />
-                  [Test] Đã quét nhận hàng
-                </FhButton>
               </div>
             </div>
 
@@ -1066,15 +1019,6 @@ const getStatusBadgeClass = (status: string) => {
                 @click="handleReceiveQr(pr.id)"
               >
                 <Check :size="14" class="mr-1" /> Xác nhận đã nhận
-              </FhButton>
-              <FhButton
-                variant="secondary"
-                size="sm"
-                class="border-warning-400 bg-warning-50 text-warning-800 hover:bg-warning-100"
-                :disabled="actionLoading"
-                @click="handleTestReceive(pr.id)"
-              >
-                [Test] Đã quét
               </FhButton>
               <FhButton variant="ghost" size="sm" @click="showQrInput = null">Hủy</FhButton>
             </div>

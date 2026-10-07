@@ -7,7 +7,7 @@ import { nextTick, reactive, ref, watch } from 'vue';
 import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { priceLabel, type AiConversation } from '../../composables/useAiConversation';
+import { DESCRIBE_BEFORE_SEND, priceLabel, type AiConversation } from '../../composables/useAiConversation';
 
 const props = withDefaults(
   defineProps<{
@@ -138,6 +138,7 @@ defineExpose({ scrollToEnd });
       <span class="text-xs text-ink-500 whitespace-nowrap">{{ c.pending.length }}/{{ AI_MAX_IMAGES }} ảnh</span>
     </div>
     <p v-if="c.problem" class="px-3.5 pb-1 text-xs text-danger-600">{{ c.problem }}</p>
+    <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-xs text-warning-700" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
 
     <!-- Composer -->
     <div class="flex items-end gap-2 px-3 py-2.5 border-t border-ink-100 bg-white">

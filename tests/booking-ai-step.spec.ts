@@ -96,6 +96,29 @@ describe('AI booking form', () => {
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
   });
 
+  it('keeps every AI send off until there is a written description (BRX-064)', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+
+    expect(wrapper.get('[data-testid="ai-needs-description"]').text()).toBe('Mô tả vấn đề trước khi gửi cho trợ lý');
+    await wrapper.find('textarea').setValue('   \n ');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="ai-needs-description"]').exists()).toBe(true);
+
+    await describeAndAnalyze(wrapper);
+    expect(analyze).toHaveBeenCalledTimes(1);
+
+    // In the conversation, Send stays off while the composer has no words.
+    expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="ai-input"]').setValue('   ');
+    expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
+    await flushPromises();
+    expect(analyze).toHaveBeenCalledTimes(1);
+    await wrapper.get('[data-testid="ai-input"]').setValue('Máy chạy nhưng không ra hơi lạnh');
+    expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeUndefined();
+  }, 10000);
+
   it('lets the customer answer what the assistant asks, and takes the service the assistant chooses', async () => {
     analyze
       .mockResolvedValueOnce(reply({ status: 'needs_clarification', clarification: { questionsVi: ['Tiếng kêu ở cục trong hay cục ngoài ạ?'] } }))

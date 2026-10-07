@@ -51,6 +51,7 @@ import {
 import { catalogApi, type ServiceItem, type ServiceCategory } from '../../api/catalog.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
+import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const authStore = useAuthStore();
 
@@ -90,7 +91,9 @@ const starDistribution = computed(() => {
   const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   const total = reviewsList.value.length;
   for (const r of reviewsList.value) {
-    const score = Math.max(1, Math.min(5, Math.round(r.rating || 5)));
+    const value = Number(r.rating);
+    if (!Number.isFinite(value) || value < 1) continue;
+    const score = Math.max(1, Math.min(5, Math.round(value)));
     counts[score] = (counts[score] || 0) + 1;
   }
   return {
@@ -813,12 +816,15 @@ const handleSaveAvatar = async () => {
                 <span class="hidden sm:inline text-ink-600">•</span>
                 <span class="flex items-center gap-1.5">
                   <Star :size="14" class="text-warning-400 fill-warning-400" />
-                  <strong class="text-white">{{ technicianProfile.averageRating }}</strong> ({{ technicianProfile.ratingCount }} đánh giá)
+                  <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
+                    <strong class="text-white">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</strong> ({{ technicianProfile.ratingCount }} đánh giá)
+                  </template>
+                  <template v-else>Chưa có đánh giá</template>
                 </span>
                 <span class="hidden sm:inline text-ink-600">•</span>
                 <span class="flex items-center gap-1.5">
                   <Award :size="14" class="text-brand-400" />
-                  Độ tin cậy: <strong class="text-white">{{ technicianProfile.reliabilityScore }}%</strong>
+                  Độ tin cậy: <strong class="text-white">{{ technicianProfile.reliabilityScore != null ? `${technicianProfile.reliabilityScore}%` : '—' }}</strong>
                 </span>
               </div>
 
@@ -898,8 +904,11 @@ const handleSaveAvatar = async () => {
           <div class="min-w-0 flex-1">
             <div class="text-sm text-ink-500">Đánh giá khách hàng</div>
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
-              <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ technicianProfile.averageRating }}</span>
-              <span class="whitespace-nowrap text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
+              <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
+                <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</span>
+                <span class="whitespace-nowrap text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
+              </template>
+              <span v-else class="whitespace-nowrap text-lg font-semibold text-ink-500">Chưa có đánh giá</span>
             </div>
           </div>
         </div>
@@ -916,8 +925,7 @@ const handleSaveAvatar = async () => {
           <div class="min-w-0 flex-1">
             <div class="text-sm text-ink-500">Điểm độ tin cậy</div>
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
-              <span class="whitespace-nowrap text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore }}%</span>
-              <span class="whitespace-nowrap text-xs font-semibold text-success-600">Chuẩn nhận việc</span>
+              <span class="whitespace-nowrap text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore != null ? `${technicianProfile.reliabilityScore}%` : '—' }}</span>
             </div>
           </div>
         </div>
@@ -1820,21 +1828,24 @@ const handleSaveAvatar = async () => {
             <!-- Big Rating Score Box -->
             <div class="p-6 rounded-2xl bg-warning-50 border border-warning-200/80 text-center space-y-2 shadow-xs">
               <div class="text-xs font-bold text-warning-700">Điểm trung bình</div>
-              <div class="text-5xl font-bold font-num text-ink-900 flex items-center justify-center gap-1.5">
-                <span>{{ technicianProfile.averageRating }}</span>
-                <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
-              </div>
-              <div class="flex items-center justify-center gap-1 py-1">
-                <Star
-                  v-for="s in 5"
-                  :key="s"
-                  :size="22"
-                  :class="s <= Math.round(Number(technicianProfile.averageRating) || 5) ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
-                />
-              </div>
-              <p class="text-xs font-semibold text-ink-600">
-                Dựa trên {{ technicianProfile.ratingCount }} lượt đánh giá thực tế
-              </p>
+              <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
+                <div class="text-5xl font-bold font-num text-ink-900 flex items-center justify-center gap-1.5">
+                  <span>{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</span>
+                  <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
+                </div>
+                <div class="flex items-center justify-center gap-1 py-1">
+                  <Star
+                    v-for="s in 5"
+                    :key="s"
+                    :size="22"
+                    :class="s <= Math.round(Number(technicianProfile.averageRating)) ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
+                  />
+                </div>
+                <p class="text-xs font-semibold text-ink-600">
+                  Dựa trên {{ technicianProfile.ratingCount }} lượt đánh giá thực tế
+                </p>
+              </template>
+              <p v-else class="text-lg font-semibold text-ink-500">Chưa có đánh giá</p>
             </div>
 
             <!-- Star Distribution Progress Bars -->

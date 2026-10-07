@@ -25,6 +25,13 @@ export const ASSISTANT_GREETING =
   'Dạ em chào anh/chị, em là trợ lý của FixHome ạ. Anh/chị đang gặp vấn đề gì ở ' +
   'nhà mình thì kể em nghe, hoặc gửi em tấm ảnh thiết bị để em xem giúp nhé.';
 
+/**
+ * BRX-064: the assistant only diagnoses from a written description; the
+ * backend answers 400 to a photo with no text. Shown under the composer when
+ * photos wait without words.
+ */
+export const DESCRIBE_BEFORE_SEND = 'Mô tả vấn đề trước khi gửi cho trợ lý';
+
 /** The service drops a session after an hour of silence. Told, not discovered. */
 export const SESSION_IDLE_MINUTES = 60;
 
@@ -117,9 +124,11 @@ export function useAiConversation(options: AiConversationOptions = {}) {
 
   const holdingLines = ref<Record<string, string[]>>({});
 
-  const canSend = computed(
-    () => (input.value.trim().length > 0 || pending.value.length > 0) && !isThinking.value,
-  );
+  // Photos go along with words, never instead of them (BRX-064).
+  const canSend = computed(() => input.value.trim().length > 0 && !isThinking.value);
+
+  /** Photos are waiting but nothing is written yet: say why Send is off. */
+  const needsDescription = computed(() => pending.value.length > 0 && input.value.trim().length === 0);
 
   const updated = () => options.onUpdate?.();
 
@@ -161,12 +170,14 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   }
 
   /**
-   * Send one turn. Photos always go to the diagnosis route; text that reads
+   * Send one turn. Text is required; photos ride along with it and always go
+   * to the diagnosis route; text that reads
    * like a question goes to the question route; anything else is a
    * description and goes to diagnosis, continuing the same session either way.
    */
   async function sendTurn(text: string, images: PickedImage[]) {
-    if (!text && images.length === 0) return;
+    // A description is required, with or without photos (BRX-064).
+    if (!text.trim()) return;
     if (isThinking.value) return;
 
     const isQuestion = images.length === 0 && looksLikeAQuestion(text);
@@ -235,7 +246,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   async function send() {
     const text = input.value.trim();
     const images = pending.value;
-    if (!text && images.length === 0) return;
+    if (!text) return;
     input.value = '';
     pending.value = [];
     problem.value = '';
@@ -262,6 +273,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     pinnedService,
     lastReply,
     canSend,
+    needsDescription,
     loadHoldingLines,
     startOver,
     addFiles,

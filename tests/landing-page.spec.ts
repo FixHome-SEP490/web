@@ -189,38 +189,32 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders the mobile app showcase section with device mockup image and opens QR modal', async () => {
+  it('renders the mobile app showcase without invented ratings, download counts or a fake QR code', async () => {
     const context = await setup();
     const wrapper = mount(LandingMobileApp, context);
-    
+
     // Check headline and mockup image
     expect(wrapper.text()).toContain('Chăm sóc ngôi nhà trong tầm tay');
     expect(wrapper.text()).toContain('Tiện lợi hơn trên ứng dụng FixHome');
     const img = wrapper.get('img[src="/images/fixhome-devices-mockup.png"]');
     expect(img.exists()).toBe(true);
 
-    // Check store buttons and CTA
-    expect(wrapper.text()).toContain('Tải ứng dụng ngay');
-    expect(wrapper.text()).toContain('App Store');
-    expect(wrapper.text()).toContain('Google Play');
-    expect(wrapper.text()).toContain('4.9/5');
+    // No store listing exists yet, so nothing may pretend to download the app.
+    expect(wrapper.text()).not.toContain('4.9/5');
+    expect(wrapper.text()).not.toContain('10.000+');
+    expect(wrapper.text()).not.toContain('Tải ứng dụng ngay');
+    expect(wrapper.text()).not.toContain('App Store');
+    expect(wrapper.text()).not.toContain('Google Play');
+    expect(wrapper.text()).not.toContain('Quét mã QR');
+    expect(wrapper.findAll('button')).toHaveLength(0);
+    wrapper.unmount();
+  });
 
-    // Click "Tải ứng dụng ngay" and verify QR modal opens
-    const downloadBtn = wrapper.findAll('button').find((btn) => btn.text().includes('Tải ứng dụng ngay'));
-    expect(downloadBtn).toBeDefined();
-    await downloadBtn!.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('Tải ứng dụng FixHome');
-    expect(wrapper.text()).toContain('Hỗ trợ iOS 15+ & Android 10+');
-
-    // Close modal
-    const closeBtn = wrapper.findAll('button').find((btn) => btn.text().includes('Đóng'));
-    expect(closeBtn).toBeDefined();
-    await closeBtn!.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).not.toContain('Hỗ trợ iOS 15+ & Android 10+');
+  it('shows no invented hotline, office address or support e-mail in the public footer', async () => {
+    const wrapper = mount(PublicLayout, await setup());
+    expect(wrapper.text()).not.toContain('1900');
+    expect(wrapper.text()).not.toContain('Khu Công nghệ cao');
+    expect(wrapper.text()).not.toContain('hotro@fixhome.vn');
     wrapper.unmount();
   });
 

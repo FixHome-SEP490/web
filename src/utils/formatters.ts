@@ -112,3 +112,25 @@ export function formatRating(value: number | string | null | undefined): string 
   const rating = Number(value);
   return Number.isFinite(rating) && rating > 0 ? rating.toFixed(1) : null;
 }
+
+export const NO_RATING_LABEL = 'Chưa có đánh giá';
+
+/**
+ * Rating ready to show: one decimal when the technician has been rated, or
+ * "Chưa có đánh giá" when the server sends null or no review exists yet.
+ */
+export function ratingLabel(
+  value: number | string | null | undefined,
+  ratingCount?: number | string | null,
+): string {
+  if (ratingCount != null && !(Number(ratingCount) > 0)) return NO_RATING_LABEL;
+  return formatRating(value) ?? NO_RATING_LABEL;
+}
+
+/** True when there is a real rating to show next to a star. */
+export function hasRating(
+  value: number | string | null | undefined,
+  ratingCount?: number | string | null,
+): boolean {
+  return ratingLabel(value, ratingCount) !== NO_RATING_LABEL;
+}

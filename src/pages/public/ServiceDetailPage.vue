@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
-import { Clock, ShieldCheck, CheckCircle2, ChevronRight, Star, ArrowLeft, Wrench } from 'lucide-vue-next';
+import { Clock, ShieldCheck, CheckCircle2, ChevronRight, ArrowLeft, Wrench } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhStatusPill, FhSkeleton, FhEmptyState } from '../../components';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 
@@ -19,6 +19,16 @@ useSmoothScroll();
 function isFixedPrice(s: ServiceItem): boolean {
   const mode = s.pricingMode?.toLowerCase();
   return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
+}
+
+/** A price range only when the catalog actually has one; never a made-up 0 ₫. */
+function hasPriceRange(s: ServiceItem): boolean {
+  return (s.minPrice ?? 0) > 0 && (s.maxPrice ?? 0) > 0;
+}
+
+function bookService(s: ServiceItem) {
+  // Guests are sent to sign-in by the router guard and come back here after.
+  router.push({ path: '/app/bookings/new', query: { serviceId: s.id } });
 }
 
 async function loadService() {
@@ -87,9 +97,6 @@ onMounted(loadService);
         <div class="space-y-6">
           <div class="flex items-center gap-3 mb-2">
              <FhStatusPill status="COMPLETED" :label="service.category?.name ?? 'Dịch vụ chuẩn'" class="bg-brand-50 text-brand-700" />
-             <span class="flex items-center gap-1.5 text-sm text-slate-600 font-semibold font-num">
-               <Star :size="14" class="fill-amber-400 text-amber-400" /> 4.9 (1.2k+ đánh giá)
-             </span>
           </div>
           <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-[1.1]">
              {{ service.name }}
@@ -99,7 +106,7 @@ onMounted(loadService);
           </p>
 
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-6 pt-10 border-t border-slate-100">
-            <div class="space-y-2.5">
+            <div v-if="service.estimatedMinutes > 0" class="space-y-2.5">
               <Clock :size="24" class="text-brand-500" />
               <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Thời lượng</div>
               <div class="text-sm font-semibold text-slate-900">~{{ service.estimatedMinutes }} phút</div>
@@ -107,12 +114,12 @@ onMounted(loadService);
             <div class="space-y-2.5">
               <ShieldCheck :size="24" class="text-brand-500" />
               <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Bảo hành</div>
-              <div class="text-sm font-semibold text-slate-900">30 – 90 ngày</div>
+              <div class="text-sm font-semibold text-slate-900">Ghi trên phiếu bảo hành của đơn</div>
             </div>
             <div class="space-y-2.5">
               <CheckCircle2 :size="24" class="text-brand-500" />
               <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Xác thực</div>
-              <div class="text-sm font-semibold text-slate-900">100% Lý lịch rõ ràng</div>
+              <div class="text-sm font-semibold text-slate-900">Kỹ thuật viên đã duyệt hồ sơ</div>
             </div>
           </div>
         </div>
@@ -128,7 +135,7 @@ onMounted(loadService);
                  <CheckCircle2 :size="20" class="text-brand-600" /> Tiền công kỹ thuật
                </h4>
                <p class="text-sm text-brand-900/70 leading-relaxed font-medium">
-                 Là phí kiểm tra, dò lỗi và thao tác kỹ thuật của thợ. Báo giá công luôn cố định theo bảng giá chuẩn niêm yết, cam kết không phát sinh vô lý.
+                 Là phí kiểm tra, dò lỗi và thao tác kỹ thuật của thợ. Dịch vụ giá niêm yết tính theo giá niêm yết; dịch vụ cần kiểm tra thì kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.
                </p>
              </div>
 
@@ -137,7 +144,7 @@ onMounted(loadService);
                  <CheckCircle2 :size="20" class="text-slate-400" /> Tiền linh kiện
                </h4>
                <p class="text-sm text-slate-500 leading-relaxed font-medium">
-                 Chỉ tính khi linh kiện cũ hỏng cần thay mới. Thợ phải xuất trình mã linh kiện, giá đại lý và chỉ được mua khi có sự đồng ý của bạn.
+                 Chỉ tính khi linh kiện cũ hỏng cần thay mới. Giá lấy theo danh mục linh kiện của FixHome và chỉ được tính khi bạn đồng ý.
                </p>
              </div>
            </div>
@@ -155,25 +162,26 @@ onMounted(loadService);
              {{ isFixedPrice(service) ? 'Giá niêm yết' : 'Giá công tham khảo' }}
            </div>
            <div class="text-4xl sm:text-5xl font-extrabold text-slate-900 font-num tracking-tight mb-10">
-             <template v-if="isFixedPrice(service)">
+             <template v-if="isFixedPrice(service) && (service.fixedPrice ?? service.basePrice)">
                <FhMoney :amount="service.fixedPrice ?? service.basePrice ?? 0" />
              </template>
-             <template v-else>
-               <FhMoney :amount="service.minPrice ?? service.basePrice ?? 0" /> – <FhMoney :amount="service.maxPrice ?? service.basePrice ?? 0" />
+             <template v-else-if="!isFixedPrice(service) && hasPriceRange(service)">
+               <FhMoney :amount="service.minPrice ?? 0" /> – <FhMoney :amount="service.maxPrice ?? 0" />
              </template>
+             <span v-else class="block text-xl font-semibold text-slate-500 font-sans tracking-normal">Báo giá sau khi kiểm tra</span>
            </div>
 
            <div class="space-y-4">
-              <FhButton variant="primary" size="lg" class="w-full rounded-full shadow-lg shadow-brand-500/25 h-14 text-base" @click="router.push('/register')">
+              <FhButton variant="primary" size="lg" class="w-full rounded-full shadow-lg shadow-brand-500/25 h-14 text-base" @click="bookService(service)">
                  Đặt thợ ngay bây giờ
               </FhButton>
-              <FhButton variant="secondary" size="lg" class="w-full rounded-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-14 text-base font-semibold" @click="router.push('/contact')">
-                 Tư vấn thêm
+              <FhButton variant="secondary" size="lg" class="w-full rounded-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-14 text-base font-semibold" @click="router.push('/how-it-works')">
+                 Xem quy trình đặt thợ
               </FhButton>
            </div>
            
            <div class="mt-8 pt-8 border-t border-slate-100 text-xs text-slate-500 font-medium leading-relaxed text-center">
-             Kỹ thuật viên gần bạn nhất sẽ tiếp nhận và có mặt trong 30 – 45 phút.
+             Bạn chọn giờ hẹn và 1 đến 2 kỹ thuật viên phù hợp khi đặt lịch.
            </div>
         </div>
       </div>
