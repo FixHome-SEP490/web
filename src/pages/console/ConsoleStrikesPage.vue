@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { ShieldAlert, CheckCircle2, RotateCcw } from 'lucide-vue-next';
 import { FhCard, FhTable, FhButton, FhConfirmDialog, FhSkeleton, FhEmptyState } from '../../components';
 import { ordersApi, type StrikeRecord } from '../../api/orders.api';
-import { adminUsersApi } from '../../api/admin-users.api';
 import { vnDateString } from '../../utils/vn-time';
 
 interface StrikeRow extends StrikeRecord {
@@ -12,6 +11,15 @@ interface StrikeRow extends StrikeRecord {
   orderCode: string;
   suspendedUntil?: string | null;
 }
+
+/** Role codes shown as words. */
+const ROLE_LABELS: Record<string, string> = {
+  CUSTOMER: 'Khách hàng',
+  TECHNICIAN: 'Kỹ thuật viên',
+  SERVICE_MANAGER: 'Quản lý dịch vụ',
+  ADMIN: 'Quản trị viên',
+};
+const roleLabel = (role: unknown) => ROLE_LABELS[String(role ?? '').toUpperCase()] ?? 'Không rõ';
 
 const loading = ref(true);
 const loadError = ref('');
@@ -22,27 +30,16 @@ async function loadStrikes() {
   loading.value = true;
   loadError.value = '';
   try {
-    const [strikes, cancellations] = await Promise.all([
-      ordersApi.getStrikes(),
-      ordersApi.getCancellations(),
-    ]);
-    const cancellationById = new Map(cancellations.map((c) => [c.id, c]));
-    rows.value = await Promise.all(
-      strikes.map(async (s) => {
-        const cancellation = cancellationById.get(s.cancellationId);
-        const [user, order] = await Promise.all([
-          adminUsersApi.getUser(s.userId).catch(() => null),
-          cancellation ? ordersApi.getOrder(cancellation.serviceOrderId).catch(() => null) : null,
-        ]);
-        return {
-          ...s,
-          userName: user?.fullName ?? s.userId,
-          role: user?.role ?? '',
-          orderCode: order?.code ?? cancellation?.serviceOrderId ?? '—',
-          suspendedUntil: user?.bookingSuspendedUntil ?? null,
-        };
-      }),
-    );
+    // The list carries whose strike, the order and the suspension: Service
+    // Managers may not read user records, and one request per row was slow.
+    const strikes = await ordersApi.getStrikes();
+    rows.value = strikes.map((s) => ({
+      ...s,
+      userName: s.userName ?? 'Không rõ',
+      role: s.userRole ?? '',
+      orderCode: s.orderCode ?? '—',
+      suspendedUntil: s.userSuspendedUntil ?? null,
+    }));
   } catch {
     loadError.value = 'Không thể tải danh sách Strike. Vui lòng thử lại.';
   } finally {
@@ -124,7 +121,7 @@ onMounted(loadStrikes);
             class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
             :class="row.role.toUpperCase() === 'TECHNICIAN' ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-800'"
           >
-            {{ row.role }}
+            {{ roleLabel(row.role) }}
           </span>
         </template>
 

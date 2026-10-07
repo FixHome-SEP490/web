@@ -157,6 +157,10 @@ export interface CancellationRecord {
   compensationStatus: string;
   reviewedByUserId?: string | null;
   createdAt: string;
+  /** Carried by the review list so Service Managers need not read user records. */
+  actorName?: string | null;
+  actorRole?: string | null;
+  orderCode?: string | null;
 }
 
 export interface StrikeRecord {
@@ -167,6 +171,11 @@ export interface StrikeRecord {
   waivedByUserId?: string | null;
   waiveReason?: string | null;
   createdAt: string;
+  userName?: string | null;
+  userRole?: string | null;
+  userSuspendedUntil?: string | null;
+  serviceOrderId?: string | null;
+  orderCode?: string | null;
 }
 
 export interface WarrantyItem {
