@@ -933,7 +933,7 @@ onMounted(() => {
           >
             <div class="space-y-0.5">
               <div class="flex items-center gap-2">
-                <span class="font-extrabold text-ink-900">{{ formatWalletTxType(tx.type).label }}</span>
+                <span class="font-extrabold text-ink-900">{{ formatWalletTxType(tx.type, tx).label }}</span>
                 <span class="text-[10px] text-ink-400 font-num">{{ formatDateTimeVN(tx.createdAt) }}</span>
               </div>
               <p class="text-[11px] text-ink-500">{{ tx.description || 'Giao dịch ví' }}</p>
@@ -944,9 +944,9 @@ onMounted(() => {
 
             <div
               class="font-extrabold font-num text-sm text-right shrink-0"
-              :class="[formatWalletTxType(tx.type).isCredit ? 'text-emerald-600' : 'text-rose-600']"
+              :class="[formatWalletTxType(tx.type, tx).isCredit ? 'text-emerald-600' : 'text-rose-600']"
             >
-              {{ formatWalletTxType(tx.type).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
+              {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
             </div>
           </div>
         </div>

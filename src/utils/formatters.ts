@@ -56,9 +56,13 @@ export function formatDateVN(dateInput: string | number | Date | null | undefine
 }
 
 /**
- * Pure Vietnamese friendly label for wallet transaction types
+ * Pure Vietnamese friendly label for wallet transaction types. An admin
+ * adjustment can go either way, so its direction comes from the balances.
  */
-export function formatWalletTxType(type: string): { label: string; isCredit: boolean } {
+export function formatWalletTxType(
+  type: string,
+  balances?: { balanceBefore: number; balanceAfter: number },
+): { label: string; isCredit: boolean } {
   switch (type) {
     case 'TOP_UP':
       return { label: 'Nạp tiền vào ví', isCredit: true };
@@ -71,7 +75,10 @@ export function formatWalletTxType(type: string): { label: string; isCredit: boo
     case 'WITHDRAW_REFUND':
       return { label: 'Hoàn tiền rút không thành công', isCredit: true };
     case 'ADJUSTMENT':
-      return { label: 'Điều chỉnh bởi Admin', isCredit: false };
+      return {
+        label: 'Điều chỉnh bởi Admin',
+        isCredit: balances ? Number(balances.balanceAfter) >= Number(balances.balanceBefore) : false,
+      };
     default:
       return { label: type, isCredit: false };
   }
