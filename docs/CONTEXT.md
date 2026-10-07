@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-07 21:24 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/strike-waive-reason
+> Cập nhật lần cuối: 2026-10-07 21:48 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-step-service-hint
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,10 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối thiểu 5 ký tự) trước khi miễn, lý do được lưu trên vi phạm và audit; trước đây gửi câu cố định. Câu báo hậu quả nay đúng với backend: miễn vi phạm không gỡ lệnh tạm khoá đang có.
 
+### AI tắt vẫn đặt lịch được, có hướng dẫn (07/10/2026, nhánh `fix/ai-step-service-hint`)
+
+Ở bước trò chuyện với AI, khi trợ lý đã trả lời mà chưa có dịch vụ (AI không kết nối được hoặc không chọn được), trang hiện "Chọn dịch vụ ở ô bên dưới để đặt thợ." thay vì "Trợ lý sẽ chọn dịch vụ...", để nút Đặt thợ ngay bị khoá không làm khách tưởng bị kẹt.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -180,6 +184,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
 - 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
 - 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.
 - 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật
