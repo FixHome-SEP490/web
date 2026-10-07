@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-07 21:24 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/strike-waive-reason
+> Cập nhật lần cuối: 2026-10-07 22:07 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/order-pages-wording-and-totals
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,12 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối thiểu 5 ký tự) trước khi miễn, lý do được lưu trên vi phạm và audit; trước đây gửi câu cố định. Câu báo hậu quả nay đúng với backend: miễn vi phạm không gỡ lệnh tạm khoá đang có.
 
+### Trang đơn: tổng tiền, nút huỷ, câu chữ (07/10/2026, nhánh `fix/order-pages-wording-and-totals`)
+
+- Trang đơn của khách: khi báo giá chờ duyệt (chưa có hoá đơn) "Tổng công" và "Tổng phụ tùng" lấy tổng các dòng báo giá thay vì 0; có hoá đơn thì lấy số của đơn (đã gồm phát sinh). Nút Huỷ đơn chỉ hiện ở ACCEPTED và EN_ROUTE vì backend không cho khách huỷ khi đang sửa.
+- Trang công việc của kỹ thuật viên: bỏ con số bán kính 200 m và sai số 100 m viết cứng (backend lấy theo cấu hình `geofence.*`, hiện 300 m); thông báo bắt đầu sửa không còn mã trạng thái thô.
+- Thư mời nhận việc: bỏ dòng "Mã đơn" hiện UUID booking, bỏ nhãn "Hết hạn sau:" trùng với đồng hồ, bỏ chữ Inbox/TTL.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -180,6 +186,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
 - 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.
 - 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật

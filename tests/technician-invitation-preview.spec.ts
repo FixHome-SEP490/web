@@ -54,5 +54,8 @@ describe('WEB technician invitation safe preview integration', () => {
     await details.trigger('click');
     expect(wrapper.text()).not.toContain('PRIVATE_');
     expect(wrapper.find('a[href="PRIVATE_IMAGE_URL"]').exists()).toBe(false);
+    // No raw booking id posing as an order code, no jargon.
+    expect(wrapper.text()).not.toContain('booking-synthetic');
+    expect(wrapper.text()).not.toMatch(/TTL|Inbox/);
   });
 });
