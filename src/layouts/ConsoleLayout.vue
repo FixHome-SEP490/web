@@ -24,6 +24,7 @@ import {
   Wallet,
   Home,
   ChevronRight,
+  MapPinned,
 } from 'lucide-vue-next';
 
 
@@ -42,6 +43,7 @@ const navigation = computed(() => [
       { label: 'Yêu cầu linh kiện', path: '/console/part-requests', icon: Boxes },
       { label: 'Gán thợ thủ công', path: '/console/bookings', icon: UserPlus },
       { label: 'Ví & Rút tiền KTV', path: '/console/wallets', icon: Wallet },
+      { label: 'Khu vực phục vụ', path: '/console/service-areas', icon: MapPinned },
         ...(isServiceManager.value
         ? [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
