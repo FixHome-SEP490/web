@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-09 00:03 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-order-steps
+> Cập nhật lần cuối: 2026-10-09 00:14 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-certificates
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -151,6 +151,11 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 - Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
 - Sau check-in có thẻ "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
 
+### Chứng chỉ khi đăng ký thợ (08/10/2026, nhánh `feat/technician-certificates`)
+
+- Bước KYC của onboarding có phần "Chứng chỉ nghề" không bắt buộc, tối đa 5 ảnh, ghi chú vàng "phải chụp từ bản đã công chứng"; gửi cùng hồ sơ với `documentType: certificate` (backend đã nhận sẵn).
+- Màn chờ duyệt và hồ sơ: "Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc." Bỏ các câu sai: "video khuôn mặt" (thực tế là ảnh), "tự động nhận diện", "trong vòng 24 giờ".
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -205,6 +210,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 00:14 (UTC+7) | ToanAltF4 | feat/technician-certificates | Đăng ký thợ: chứng chỉ không bắt buộc (bản công chứng), câu nhắc đến trụ sở sau khi gửi hồ sơ.
 - 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
 - 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.

@@ -169,6 +169,9 @@ describe('TechnicianOnboardingPage', () => {
     // Now it should show "Hồ sơ thợ đã được tiếp nhận!"
     expect(wrapper.text()).toContain('Hồ sơ thợ đã được tiếp nhận!');
     expect(wrapper.text()).toContain('Đang chờ ban quản trị phê duyệt');
+    // PO 08/10/2026: the technician is asked to come to the office; no promised review time.
+    expect(wrapper.get('[data-testid="visit-office-note"]').text()).toBe('Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.');
+    expect(wrapper.text()).not.toContain('24 giờ');
 
     // Clicking "Xem lại thông tin đã gửi" enters review mode
     const reviewBtn = wrapper.findAll('button').find((b) => b.text().includes('Xem lại thông tin đã gửi'));
