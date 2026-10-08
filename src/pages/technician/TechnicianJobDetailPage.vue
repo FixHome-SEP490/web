@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { supportCasesApi } from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import { computed, ref, onMounted, onUnmounted, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -304,11 +305,11 @@ const heroAction = computed(() => {
     const hasAfter = afterPhotoUploaded.value || afterEvidences.value.length > 0;
     if (!hasAfter) {
       return {
-        title: 'Đang tiến hành sửa chữa — Cần chụp ảnh sau sửa chữa',
-        subtitle: 'Thực hiện công việc, sau đó chụp ít nhất 1 ảnh thiết bị sau khi sửa chữa xong.',
+        title: 'Đang tiến hành sửa chữa',
+        subtitle: 'Sửa xong bấm Hoàn thành và chụp ảnh sản phẩm sau khi sửa; hệ thống gửi yêu cầu nghiệm thu cho khách.',
         badge: 'ĐANG SỬA CHỮA',
         badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-        btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hoàn thành (sau sửa chữa)',
+        btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Hoàn thành (chụp ảnh sau sửa)',
         btnAction: () => afterFile.value?.click(),
         btnIcon: 'camera',
         btnVariant: 'primary' as const,
@@ -348,26 +349,26 @@ const heroAction = computed(() => {
     }
     if (isFixedPriceOrder.value) {
       return {
-        title: 'Đã có ảnh hiện trạng — Sẵn sàng bắt đầu sửa chữa',
-        subtitle: 'Đơn hàng có giá công cố định theo yêu cầu đặt lịch. Bấm để bắt đầu tính giờ sửa chữa.',
+        title: 'Đã check-in và có ảnh sản phẩm — Đơn chuyển sang sửa chữa',
+        subtitle: 'Đơn giá cố định tự chuyển sang đang sửa sau khi check-in có ảnh. Tải lại nếu trạng thái chưa đổi.',
         badge: 'SẴN SÀNG SỬA',
         badgeClass: 'bg-success-100 text-success-800 border-success-300',
-        btnText: 'Bắt đầu sửa chữa',
-        btnAction: handleStartRepair,
-        btnIcon: 'wrench',
+        btnText: 'Tải lại trạng thái',
+        btnAction: () => loadJob(jobId, { silent: true }),
+        btnIcon: 'refresh',
         btnVariant: 'primary' as const,
-        btnDisabled: actionLoading.value || fixedPriceTotal.value == null,
+        btnDisabled: actionLoading.value,
         btnLoading: actionLoading.value,
       };
     }
     return {
-      title: 'Đã có ảnh hiện trạng — Lập báo giá hoặc Bắt đầu sửa',
-      subtitle: 'Kiểm tra máy móc, nhập chi phí công & linh kiện rồi gửi báo giá hoặc bấm bắt đầu sửa.',
+      title: 'Đã check-in và có ảnh sản phẩm — Gửi báo giá cho khách',
+      subtitle: 'Kiểm tra máy, nhập tiền công và linh kiện rồi gửi báo giá. Khách duyệt xong đơn tự chuyển sang sửa chữa.',
       badge: 'Lập báo giá',
       badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-      btnText: 'Bắt đầu sửa chữa',
-      btnAction: handleStartRepair,
-      btnIcon: 'wrench',
+      btnText: 'Kiểm tra khách đã duyệt chưa',
+      btnAction: () => loadJob(jobId, { silent: true }),
+      btnIcon: 'refresh',
       btnVariant: 'primary' as const,
       btnDisabled: actionLoading.value,
       btnLoading: actionLoading.value,
@@ -377,11 +378,11 @@ const heroAction = computed(() => {
   if (s === 'EN_ROUTE' && !gpsCheckedIn.value) {
     return {
       title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
-      subtitle: 'Khi tới địa chỉ của khách, hãy bấm Xác nhận đến nơi để mở khóa chụp ảnh.',
+      subtitle: 'Tới địa chỉ của khách thì bấm Check-in và chụp ảnh sản phẩm; hệ thống kiểm tra vị trí rồi lưu ảnh.',
       badge: 'Đang di chuyển',
       badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-      btnText: 'Xác nhận đến nơi ngay khi tới địa chỉ',
-      btnAction: () => handleCheckIn(),
+      btnText: 'Check-in và chụp ảnh sản phẩm',
+      btnAction: () => beforeFile.value?.click(),
       btnIcon: 'map-pin',
       btnVariant: 'primary' as const,
       btnDisabled: actionLoading.value,
@@ -739,8 +740,26 @@ const handleCheckIn = async () => {
 const openBeforeEvidencePicker = () => {
   if (gpsCheckedIn.value && !actionLoading.value) beforeFile.value?.click();
 };
-const handleUploadBefore = async () => uploadSelectedEvidence('BEFORE', beforeFile.value?.files);
-const handleUploadAfter = async () => uploadSelectedEvidence('AFTER', afterFile.value?.files);
+// Check-in needs a product photo (PO 08/10/2026): the picker opens first, then the
+// GPS check-in runs, then the photo is stored.
+const handleUploadBefore = async () => {
+  const files = beforeFile.value?.files;
+  if (!files || files.length === 0) return;
+  if (!gpsCheckedIn.value) {
+    await handleCheckIn();
+    if (!gpsCheckedIn.value) {
+      if (beforeFile.value) beforeFile.value.value = '';
+      return;
+    }
+  }
+  await uploadSelectedEvidence('BEFORE', files);
+};
+// "Hoàn thành": the after photo, then the completion request to the customer.
+const handleUploadAfter = async () => {
+  const hadAfter = afterEvidences.value.length > 0;
+  await uploadSelectedEvidence('AFTER', afterFile.value?.files);
+  if (!hadAfter && afterEvidences.value.length > 0 && !completionRequested.value) await handleCompleteOrder();
+};
 
 const handleSubmitQuotation = async () => {
   actionLoading.value = true;
@@ -1004,17 +1023,30 @@ async function handleSubmitAdditionalCost() {
   }
 }
 
-const handleStartRepair = async () => {
+// "Cần thay đổi thợ" (PO 08/10/2026): after check-in, when the job is outside the
+// technician's skills, the Service Manager gets a case to send someone else.
+const replacementOpen = ref(false);
+const replacementReason = ref('');
+const replacementSending = ref(false);
+const replacementSent = ref(false);
+const replacementError = ref('');
+const canAskReplacement = computed(() => gpsCheckedIn.value && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(job.value?.status ?? '').toUpperCase()) && !completionRequested.value);
+const sendReplacement = async () => {
+  const reason = replacementReason.value.trim();
+  if (reason.length < 10) {
+    replacementError.value = 'Ghi rõ vì sao cần thay thợ, tối thiểu 10 ký tự.';
+    return;
+  }
+  replacementSending.value = true;
+  replacementError.value = '';
   try {
-    actionLoading.value = true;
-    actionMessage.value = null;
-    await ordersApi.startRepair(jobId);
-    if (job.value) job.value.status = 'UNDER_REPAIR';
-    actionMessage.value = { type: 'success', text: 'Đã bắt đầu sửa chữa.' };
+    await supportCasesApi.createCase({ caseType: 'technician_replacement', reason, serviceOrderId: jobId, isUrgent: true });
+    replacementSent.value = true;
+    replacementOpen.value = false;
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Chưa thể bắt đầu sửa chữa.' };
+    replacementError.value = userFacingError(err, 'Chưa gửi được, thử lại sau.');
   } finally {
-    actionLoading.value = false;
+    replacementSending.value = false;
   }
 };
 
@@ -1354,6 +1386,25 @@ const refreshJobStatus = async () => {
         />
       </div>
 
+      <FhCard v-if="canAskReplacement || replacementSent" class="border-warning-200" data-testid="replacement-card">
+        <div class="space-y-2 text-sm">
+          <p class="font-bold text-ink-900">Cần thay đổi thợ?</p>
+          <p v-if="replacementSent" class="text-success-700">Đã báo quản lý dịch vụ. Quản lý sẽ liên hệ và sắp xếp thợ khác.</p>
+          <template v-else>
+            <p class="text-ink-600 text-xs">Dùng khi đã tới nơi kiểm tra và thấy việc nằm ngoài kỹ năng của bạn. Trường hợp này được quản lý xem xét, không tự trừ điểm uy tín.</p>
+            <FhButton v-if="!replacementOpen" variant="secondary" size="sm" @click="replacementOpen = true">Cần thay đổi thợ</FhButton>
+            <div v-else class="space-y-2">
+              <textarea v-model="replacementReason" rows="3" maxlength="1000" class="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm" placeholder="Ví dụ: máy là loại công nghiệp, cần thợ chuyên điện lạnh công nghiệp" />
+              <p v-if="replacementError" class="text-xs text-danger-700" role="alert">{{ replacementError }}</p>
+              <div class="flex gap-2">
+                <FhButton size="sm" :loading="replacementSending" @click="sendReplacement">Gửi cho quản lý</FhButton>
+                <FhButton variant="ghost" size="sm" :disabled="replacementSending" @click="replacementOpen = false">Huỷ</FhButton>
+              </div>
+            </div>
+          </template>
+        </div>
+      </FhCard>
+
       <OrderComplaintPanel
         :order-id="job.id"
         :order-status="job.status"
@@ -1671,15 +1722,7 @@ const refreshJobStatus = async () => {
             <p v-else role="status" class="text-danger-700">
               Chưa có giá cố định đã lưu trong đơn; cần kiểm tra dữ liệu Booking trước khi bắt đầu sửa.
             </p>
-            <FhButton
-              data-testid="fixed-price-start-repair"
-              variant="primary"
-              size="sm"
-              :disabled="actionLoading || !gpsCheckedIn || !beforePhotoUploaded || job?.status !== 'EN_ROUTE' || fixedPriceTotal == null"
-              @click="handleStartRepair"
-            >
-              Bắt đầu sửa chữa
-            </FhButton>
+            <p class="text-ink-500" data-testid="fixed-price-auto-start">Check-in có ảnh sản phẩm xong, đơn tự chuyển sang sửa chữa.</p>
           </div>
 
           <div v-else class="space-y-4 text-xs">
@@ -1754,14 +1797,6 @@ const refreshJobStatus = async () => {
               </div>
 
               <div class="flex gap-2">
-                <FhButton
-                  variant="secondary"
-                  size="sm"
-                  :disabled="actionLoading"
-                  @click="handleStartRepair"
-                >
-                  Bắt đầu sửa chữa
-                </FhButton>
                 <FhButton
                   variant="primary"
                   size="sm"

@@ -16,6 +16,7 @@ export const supportCaseTypeLabels: Record<SupportCaseType, string> = {
   pricing_dispute: 'Tranh chấp chi phí',
   conduct: 'Thái độ hoặc hành vi',
   other: 'Trường hợp khác',
+  technician_replacement: 'Cần thay đổi thợ (ngoài kỹ năng)',
 };
 
 export const supportCaseStatusLabels: Record<SupportCaseStatus, string> = {

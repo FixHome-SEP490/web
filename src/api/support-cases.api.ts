@@ -14,7 +14,8 @@ export type SupportCaseType =
   | 'quality'
   | 'pricing_dispute'
   | 'conduct'
-  | 'other';
+  | 'other'
+  | 'technician_replacement';
 
 export type SupportCaseStatus = 'open' | 'in_review' | 'resolved' | 'rejected';
 export type SupportCaseFinalStatus = 'resolved' | 'rejected';
@@ -163,6 +164,7 @@ const CASE_TYPES: readonly SupportCaseType[] = [
   'pricing_dispute',
   'conduct',
   'other',
+  'technician_replacement',
 ];
 
 const CASE_STATUSES: readonly SupportCaseStatus[] = ['open', 'in_review', 'resolved', 'rejected'];
