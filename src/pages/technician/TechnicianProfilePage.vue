@@ -1774,7 +1774,7 @@ const handleSaveAvatar = async () => {
               <input
                 type="range"
                 min="1"
-                max="50"
+                max="40"
                 step="1"
                 v-model.number="locationRadiusKm"
                 class="w-full accent-brand-600 cursor-pointer"

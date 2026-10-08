@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-08 21:43 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/profile-password-and-sm-areas
+> Cập nhật lần cuối: 2026-10-08 23:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-sessions-ui
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -141,6 +141,11 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 - `components/account/ChangePasswordCard.vue` ở trang hồ sơ khách và tab Thông tin của kỹ thuật viên: gửi mã về email của tài khoản (`/auth/forgot-password`), nhập mã và mật khẩu mới (`/auth/reset-password`), xong thì đăng xuất để đăng nhập lại. Giống màn Bảo mật trên mobile.
 - Menu console có mục "Khu vực phục vụ" (`/console/service-areas`, quản lý dịch vụ và admin); trang đã có từ trước nhưng chưa có lối vào.
 
+### Phía kỹ thuật viên theo buổi (08/10/2026, nhánh `feat/technician-sessions-ui`)
+
+- `utils/booking-session.ts`: nhãn buổi (sáng 8-12, chiều 13-18, "Tới ngay" cho đơn vãng lai) và `canDepartNow`. Trang công việc hiện lịch hẹn theo buổi, ghi chú của khách (vàng), nút Xuất phát chỉ sáng từ `departAvailableAt` (1 giờ trước giờ hẹn, backend cũng chặn).
+- `TechnicianLayout` gửi vị trí GPS mỗi 5 phút khi thợ đang nhận việc (`PATCH /technicians/me/location`), dùng cho đơn vãng lai. Thanh bán kính tối đa 40 km.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -195,6 +200,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.

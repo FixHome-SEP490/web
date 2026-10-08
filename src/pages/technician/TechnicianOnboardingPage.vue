@@ -1907,7 +1907,7 @@ const handleLogout = async () => {
               v-model.number="serviceRadiusKm"
               type="range"
               min="3"
-              max="50"
+              max="40"
               step="1"
               class="w-full accent-brand-600 cursor-pointer"
             />
