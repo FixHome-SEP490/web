@@ -170,6 +170,38 @@ const slots = ref<KycSlot[]>([
   },
 ]);
 
+// Professional certificates (PO 08/10/2026): optional, several photos, must be notarised copies.
+interface CertificatePhoto {
+  file: File | null;
+  previewUrl: string | null;
+  storageObjectPath?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+}
+const MAX_CERTIFICATES = 5;
+const certificates = ref<CertificatePhoto[]>([]);
+const certificateInput = ref<HTMLInputElement | null>(null);
+const addCertificates = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  for (const file of files) {
+    if (certificates.value.length >= MAX_CERTIFICATES) {
+      toast.info(`Tối đa ${MAX_CERTIFICATES} ảnh chứng chỉ`);
+      break;
+    }
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+      toast.error('Chỉ nhận ảnh dưới 10 MB');
+      continue;
+    }
+    certificates.value.push({ file, previewUrl: URL.createObjectURL(file) });
+  }
+  input.value = '';
+};
+const removeCertificate = (index: number) => {
+  certificates.value.splice(index, 1);
+};
+
 const frontInput = ref<HTMLInputElement | null>(null);
 const backInput = ref<HTMLInputElement | null>(null);
 const faceInput = ref<HTMLInputElement | null>(null);
@@ -297,7 +329,7 @@ const uploadKycDocuments = async (): Promise<boolean> => {
     }
   }
 
-  const hasNewFiles = slots.value.some((s) => !!s.file);
+  const hasNewFiles = slots.value.some((s) => !!s.file) || certificates.value.some((c) => !!c.file);
   if (!hasNewFiles) {
     return true;
   }
@@ -336,6 +368,24 @@ const uploadKycDocuments = async (): Promise<boolean> => {
           fileName: slot.existingFileName || `${slot.documentType}.jpg`,
           fileSize: slot.fileSize || 500000,
           mimeType: (slot.mimeType as KycMimeType) || 'image/jpeg',
+        });
+      }
+    }
+
+    for (const cert of certificates.value) {
+      if (cert.file) {
+        const { mimeType, fileName } = getKycUploadMeta(cert.file, 'certificate');
+        const slotInfo = await technicianVerificationApi.requestUploadUrl(mimeType);
+        await technicianVerificationApi.uploadToSignedUrl(slotInfo.uploadUrl, mimeType, cert.file);
+        Object.assign(cert, { storageObjectPath: slotInfo.storageObjectPath, fileName, fileSize: cert.file.size, mimeType, file: null });
+      }
+      if (cert.storageObjectPath) {
+        uploadPayloads.push({
+          documentType: 'certificate',
+          storageObjectPath: cert.storageObjectPath,
+          fileName: cert.fileName || 'certificate.jpg',
+          fileSize: cert.fileSize || 500000,
+          mimeType: (cert.mimeType as KycMimeType) || 'image/jpeg',
         });
       }
     }
@@ -883,6 +933,14 @@ const loadInitialData = async () => {
     if (myVerificationRes?.documents && myVerificationRes.documents.length > 0) {
       for (const doc of myVerificationRes.documents) {
         const docTypeLower = doc.documentType.toLowerCase();
+        if (docTypeLower === 'certificate') {
+          const cert: CertificatePhoto = { file: null, previewUrl: null, storageObjectPath: doc.storageObjectPath ?? undefined, fileName: doc.fileName ?? undefined };
+          certificates.value.push(cert);
+          if (doc.id) {
+            technicianVerificationApi.getDocumentAccess(doc.id).then((url) => { if (url) cert.previewUrl = url; }).catch(() => {});
+          }
+          continue;
+        }
         const slot = slots.value.find((s) => s.documentType.toLowerCase() === docTypeLower);
         if (slot) {
           slot.uploaded = true;
@@ -1217,8 +1275,10 @@ const handleLogout = async () => {
           </div>
           <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ thợ đã được tiếp nhận!</h2>
           <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
-            Hồ sơ xác thực căn cước công dân, video khuôn mặt, kỹ năng chuyên môn và địa chỉ của bạn đã được lưu an toàn.
-            Ban kiểm duyệt FixHome sẽ xem xét và kích hoạt tài khoản trong vòng <strong>24 giờ làm việc</strong>.
+            Căn cước, ảnh chân dung, chứng chỉ, kỹ năng và địa chỉ của bạn đã được lưu.
+          </p>
+          <p class="text-sm font-semibold text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3 max-w-md mx-auto" data-testid="visit-office-note">
+            Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.
           </p>
         </div>
 
@@ -1262,7 +1322,7 @@ const handleLogout = async () => {
           </div>
           <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ chưa đạt yêu cầu</h2>
           <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
-            {{ statusData?.rejectionReason || 'Hồ sơ xác thực danh tính hoặc thông tin thợ chưa đạt tiêu chuẩn. Vui lòng kiểm tra lại ảnh chụp CCCD, video khuôn mặt và thông tin liên quan.' }}
+            {{ statusData?.rejectionReason || 'Hồ sơ xác thực danh tính hoặc thông tin thợ chưa đạt tiêu chuẩn. Vui lòng kiểm tra lại ảnh chụp CCCD, ảnh chân dung và thông tin liên quan.' }}
           </p>
         </div>
         <FhButton variant="primary" size="lg" class="w-full sm:w-auto" @click="handleEditRejected">
@@ -1451,7 +1511,7 @@ const handleLogout = async () => {
               Bước 2: Xác thực CCCD & Video khuôn mặt (eKYC)
             </h3>
             <p class="text-xs text-ink-500 mt-1">
-              Vui lòng chụp ảnh 2 mặt CCCD và video khuôn mặt để hệ thống tự động nhận diện và đảm bảo tính chính chủ.
+              Vui lòng chụp ảnh 2 mặt CCCD và ảnh chân dung; quản trị viên FixHome sẽ đối chiếu để xác minh chính chủ.
             </p>
           </div>
 
@@ -1577,6 +1637,24 @@ const handleLogout = async () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div class="space-y-3 border-t border-ink-100 pt-4" data-testid="certificate-section">
+            <div>
+              <h4 class="text-sm font-bold text-ink-900">Chứng chỉ nghề <span class="font-normal text-ink-400">(không bắt buộc)</span></h4>
+              <p class="mt-1 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">Ảnh chứng chỉ phải chụp từ bản đã công chứng. Tối đa {{ MAX_CERTIFICATES }} ảnh.</p>
+            </div>
+            <input ref="certificateInput" type="file" accept="image/*" multiple class="hidden" @change="addCertificates" />
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div v-for="(cert, index) in certificates" :key="index" class="relative rounded-xl border border-ink-200 overflow-hidden">
+                <img v-if="cert.previewUrl" :src="cert.previewUrl" alt="Chứng chỉ" class="h-28 w-full object-cover" />
+                <div v-else class="h-28 flex items-center justify-center text-xs text-ink-400">Đã tải lên</div>
+                <button v-if="cert.file" type="button" class="absolute top-1 right-1 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-danger-700" @click="removeCertificate(index)">Bỏ</button>
+              </div>
+              <button v-if="certificates.length < MAX_CERTIFICATES" type="button" class="h-28 rounded-xl border-2 border-dashed border-ink-200 text-xs font-semibold text-ink-600 hover:border-brand-400" @click="certificateInput?.click()">
+                + Thêm ảnh chứng chỉ
+              </button>
             </div>
           </div>
 
