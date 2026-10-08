@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { canDepartNow, sessionLabel } from '../../utils/booking-session';
+import { computed, ref, onMounted, onUnmounted, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -69,6 +70,10 @@ let disposed = false;
 const loading = ref(true);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+// Re-evaluated every 30 s so the depart button lights up on time without a reload.
+const nowTick = ref(Date.now());
+const nowTimer = setInterval(() => { nowTick.value = Date.now(); }, 30_000);
+onBeforeUnmount(() => clearInterval(nowTimer));
 const isFixedPriceOrder = computed(() => String(job.value?.pricingMode ?? '').toLowerCase() === 'fixed_price');
 const fixedPriceTotal = computed(() => {
   const unit = job.value?.fixedUnitPrice;
@@ -385,16 +390,19 @@ const heroAction = computed(() => {
   }
 
   // s === 'ACCEPTED'
+  const departOpen = canDepartNow(job.value?.departAvailableAt, nowTick.value);
   return {
     title: 'Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách',
-    subtitle: 'Bấm bắt đầu di chuyển để hệ thống gửi thông báo và định vị trực tiếp cho khách hàng.',
+    subtitle: departOpen
+      ? 'Bấm bắt đầu di chuyển để hệ thống gửi thông báo và định vị trực tiếp cho khách hàng.'
+      : `Nút xuất phát mở lúc ${vnDateTimeString(job.value!.departAvailableAt!)} (1 giờ trước giờ hẹn).`,
     badge: 'Chờ khởi hành',
     badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
     btnText: 'Bắt đầu di chuyển',
     btnAction: handleEnRoute,
     btnIcon: 'navigation',
     btnVariant: 'primary' as const,
-    btnDisabled: actionLoading.value,
+    btnDisabled: actionLoading.value || !departOpen,
     btnLoading: actionLoading.value,
   };
 });
@@ -1305,7 +1313,10 @@ const refreshJobStatus = async () => {
               <h2 class="font-bold text-sm text-ink-900">{{ job.serviceName }}</h2>
               <p class="text-ink-500 flex items-center gap-1 font-medium">
                 <Calendar :size="13" class="text-brand-600" />
-                Lịch hẹn: {{ vnDateTimeString(job.scheduledAt) }}
+                Lịch hẹn: {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
+              </p>
+              <p v-if="job.customerNote" class="text-warning-800 bg-warning-50 border border-warning-200 rounded-lg px-2 py-1 font-medium" data-testid="customer-note">
+                Ghi chú của khách: {{ job.customerNote }}
               </p>
             </div>
 
@@ -1495,7 +1506,7 @@ const refreshJobStatus = async () => {
                 <FhButton
                   :variant="isEnRoute ? 'secondary' : 'primary'"
                   size="sm"
-                  :disabled="isEnRoute || actionLoading"
+                  :disabled="isEnRoute || actionLoading || !canDepartNow(job?.departAvailableAt, nowTick)"
                   @click="handleEnRoute"
                 >
                   <CheckCircle2 v-if="isEnRoute" :size="15" class="mr-1.5 text-success-600" />

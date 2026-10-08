@@ -197,6 +197,11 @@ export const technicianProfileApi = {
     return normalizeProfile(res.data.data);
   },
 
+  /** Last GPS position while the technician app is open; used to offer urgent jobs nearby. */
+  async reportLocation(dto: { lat: number; lng: number; accuracyMeters?: number }): Promise<void> {
+    await apiClient.patch('/technicians/me/location', dto);
+  },
+
   // ---- Skills (dịch vụ nhận làm) ----
   async getMyServices(): Promise<TechnicianServiceOfferingView[]> {
     const res = await apiClient.get<{ data: unknown }>('/technicians/me/services');
