@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-08 23:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-sessions-ui
+> Cập nhật lần cuối: 2026-10-09 00:03 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-order-steps
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -146,6 +146,11 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 - `utils/booking-session.ts`: nhãn buổi (sáng 8-12, chiều 13-18, "Tới ngay" cho đơn vãng lai) và `canDepartNow`. Trang công việc hiện lịch hẹn theo buổi, ghi chú của khách (vàng), nút Xuất phát chỉ sáng từ `departAvailableAt` (1 giờ trước giờ hẹn, backend cũng chặn).
 - `TechnicianLayout` gửi vị trí GPS mỗi 5 phút khi thợ đang nhận việc (`PATCH /technicians/me/location`), dùng cho đơn vãng lai. Thanh bán kính tối đa 40 km.
 
+### Các bước của thợ trong đơn (08/10/2026, nhánh `feat/technician-order-steps`)
+
+- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Sau check-in có thẻ "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -200,6 +205,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
 - 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.

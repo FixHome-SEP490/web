@@ -17,6 +17,7 @@ export const complaintTypeLabels: Record<SupportCaseType, string> = {
   other: 'Vấn đề khác',
   cash_non_response: 'Không phản hồi xác nhận tiền mặt',
   warranty_dispute: 'Tranh chấp bảo hành',
+  technician_replacement: 'Cần thay đổi thợ (ngoài kỹ năng)',
 };
 
 const CUSTOMER_TYPES: Record<string, SupportCaseType[]> = {
@@ -37,8 +38,8 @@ const CUSTOMER_TYPES: Record<string, SupportCaseType[]> = {
 
 const TECHNICIAN_TYPES: Record<string, SupportCaseType[]> = {
   ACCEPTED: ['arrival_abnormal', 'conduct', 'other'],
-  EN_ROUTE: ['arrival_abnormal', 'conduct', 'other'],
-  UNDER_REPAIR: ['mid_job_interruption', 'parts_dispute', 'pricing_dispute', 'property_damage', 'conduct', 'other'],
+  EN_ROUTE: ['arrival_abnormal', 'technician_replacement', 'conduct', 'other'],
+  UNDER_REPAIR: ['mid_job_interruption', 'parts_dispute', 'pricing_dispute', 'property_damage', 'technician_replacement', 'conduct', 'other'],
   COMPLETED: ['cash_mismatch', 'conduct', 'other'],
   CANCELLED: ['cancellation_review', 'other'],
 };
