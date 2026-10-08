@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-07 22:07 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/order-pages-wording-and-totals
+> Cập nhật lần cuối: 2026-10-08 21:43 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/profile-password-and-sm-areas
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -136,6 +136,11 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 
 Ở bước trò chuyện với AI, khi trợ lý đã trả lời mà chưa có dịch vụ (AI không kết nối được hoặc không chọn được), trang hiện "Chọn dịch vụ ở ô bên dưới để đặt thợ." thay vì "Trợ lý sẽ chọn dịch vụ...", để nút Đặt thợ ngay bị khoá không làm khách tưởng bị kẹt.
 
+### Đổi mật khẩu trong hồ sơ, menu khu vực (08/10/2026, nhánh `feat/profile-password-and-sm-areas`)
+
+- `components/account/ChangePasswordCard.vue` ở trang hồ sơ khách và tab Thông tin của kỹ thuật viên: gửi mã về email của tài khoản (`/auth/forgot-password`), nhập mã và mật khẩu mới (`/auth/reset-password`), xong thì đăng xuất để đăng nhập lại. Giống màn Bảo mật trên mobile.
+- Menu console có mục "Khu vực phục vụ" (`/console/service-areas`, quản lý dịch vụ và admin); trang đã có từ trước nhưng chưa có lối vào.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -190,6 +195,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
 - 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
