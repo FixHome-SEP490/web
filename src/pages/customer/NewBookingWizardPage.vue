@@ -1419,6 +1419,7 @@ const createAndFindTech = async () => {
                   <span class="text-ink-500 whitespace-nowrap">Dịch vụ sẽ đặt:</span>
                   <span class="font-semibold text-ink-900 min-w-0 truncate">{{ selectedService.name }}</span>
                 </div>
+                <p v-else-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value" class="text-warning-800" data-testid="ai-pick-service-hint">Chọn dịch vụ ở ô bên dưới để đặt thợ.</p>
                 <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
                 <label
                   v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"

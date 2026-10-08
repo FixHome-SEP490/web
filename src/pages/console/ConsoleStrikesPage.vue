@@ -49,17 +49,27 @@ async function loadStrikes() {
 
 const showWaiveModal = ref(false);
 const strikeToWaive = ref<StrikeRow | null>(null);
+const waiveReason = ref('');
+const waiveError = ref('');
 
 function openWaive(strike: StrikeRow) {
   strikeToWaive.value = strike;
+  waiveReason.value = '';
+  waiveError.value = '';
   showWaiveModal.value = true;
 }
 
 async function confirmWaive() {
   if (!strikeToWaive.value) return;
+  // The reason is kept on the strike and in the audit log.
+  const reason = waiveReason.value.trim();
+  if (reason.length < 5) {
+    waiveError.value = 'Ghi lý do miễn vi phạm, tối thiểu 5 ký tự.';
+    return;
+  }
   busy.value = true;
   try {
-    const updated = await ordersApi.waiveStrike(strikeToWaive.value.id, 'Miễn trừ bởi Service Manager/Admin');
+    const updated = await ordersApi.waiveStrike(strikeToWaive.value.id, reason);
     Object.assign(strikeToWaive.value, updated);
   } catch {
     window.alert('Không thể miễn trừ Strike. Vui lòng thử lại.');
@@ -161,13 +171,19 @@ onMounted(loadStrikes);
     <FhConfirmDialog
       :open="showWaiveModal"
       title="Miễn trừ Vi phạm (Waive Strike)"
-      consequence="Hành động này sẽ xóa 1 điểm Strike và mở khóa quyền đặt lịch/nhận đơn cho tài khoản ngay lập tức."
+      consequence="Vi phạm này chuyển sang đã miễn và không còn tính vào số vi phạm. Lệnh tạm khoá đang có (nếu có) vẫn giữ đến hết hạn."
       confirm-text="Xác nhận miễn trừ"
       cancel-text="Giữ nguyên"
       :danger="false"
       :loading="busy"
       @confirm="confirmWaive"
       @cancel="showWaiveModal = false"
-    />
+    >
+      <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
+        Lý do miễn <span class="font-normal text-ink-400">(lưu vào lịch sử vi phạm)</span>
+        <textarea v-model="waiveReason" rows="3" maxlength="500" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" />
+      </label>
+      <p v-if="waiveError" class="text-xs text-danger-700" role="alert">{{ waiveError }}</p>
+    </FhConfirmDialog>
   </div>
 </template>

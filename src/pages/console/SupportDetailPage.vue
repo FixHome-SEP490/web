@@ -25,8 +25,9 @@ import {
   isSafeEvidenceLink,
   isResponseOverdue,
   liablePartyLabels,
-  RESOLUTION_CODES,
   resolutionCodeLabels,
+  cashResolutionCodeLabels,
+  CASH_CONFIRMED_BY_MANAGER,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
 } from './support-cases.utils';
@@ -53,6 +54,16 @@ const amountText = ref<string | number>('');
 const actionBusy = ref(false);
 
 const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
+// Settling cash only makes sense when the case is resolved, not rejected.
+const codeLabels = computed<Record<string, string>>(() => {
+  if (usesStandardCodes.value) return resolutionCodeLabels;
+  if (finalStatus.value === 'rejected') return { no_action: cashResolutionCodeLabels.no_action };
+  return cashResolutionCodeLabels;
+});
+const settlesCash = computed(() => !usesStandardCodes.value && resolutionCode.value === CASH_CONFIRMED_BY_MANAGER);
+watch(codeLabels, (labels) => {
+  if (resolutionCode.value && !(resolutionCode.value in labels)) resolutionCode.value = '';
+});
 const canHold = computed(() => !!supportCase.value?.serviceOrderId && !isTerminal.value);
 const overdue = computed(() =>
   supportCase.value ? isResponseOverdue(supportCase.value.status, supportCase.value.respondBy) : false,
@@ -139,7 +150,7 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     formError.value = 'Mã xử lý không được vượt quá 128 ký tự.';
     return null;
   }
-  if (usesStandardCodes.value && !RESOLUTION_CODES.includes(code)) {
+  if (!(code in codeLabels.value)) {
     formError.value = 'Vui lòng chọn kết quả xử lý trong danh sách.';
     return null;
   }
@@ -378,15 +389,12 @@ watch(caseId, (id) => {
               </select>
             </label>
             <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              {{ usesStandardCodes ? 'Kết quả xử lý' : 'Resolution code' }} <span class="text-danger-600">*</span>
-              <select v-if="usesStandardCodes" v-model="resolutionCode" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+              Kết quả xử lý <span class="text-danger-600">*</span>
+              <select v-model="resolutionCode" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 <option value="" disabled>Chọn kết quả xử lý</option>
-                <option v-for="code in RESOLUTION_CODES" :key="code" :value="code">{{ resolutionCodeLabels[code] }}</option>
+                <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
-              <template v-else>
-                <input v-model="resolutionCode" maxlength="128" type="text" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Ví dụ: CASH_CONFIRMED" />
-                <span class="font-normal text-ink-400">Tối đa 128 ký tự · {{ resolutionCode.length }}/128</span>
-              </template>
+              <span v-if="settlesCash" class="font-normal leading-relaxed text-warning-800">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>
           <div v-if="usesStandardCodes" class="grid gap-4 sm:grid-cols-2">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import { ref, onMounted, computed } from 'vue';
 import {
   MapPin,
@@ -1255,6 +1256,7 @@ const handleSaveAvatar = async () => {
               </div>
             </div>
           </div>
+          <ChangePasswordCard />
         </div>
       </div>
 
