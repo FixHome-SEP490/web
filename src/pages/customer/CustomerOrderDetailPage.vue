@@ -835,7 +835,7 @@ const parsedReview = computed(() => {
           </p>
         </div>
         <div class="flex items-center gap-4 shrink-0">
-          <span class="text-xl font-semibold font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="order.grandTotal" /></span>
+          <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
           <FhButton v-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading" @click="handlePay">
             Thanh toán ngay
           </FhButton>
@@ -1178,7 +1178,7 @@ const parsedReview = computed(() => {
         <div v-if="!notQuotedYet" class="pt-4 border-t border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-baseline gap-3">
             <span class="text-ink-500">Tổng cộng</span>
-            <span class="text-2xl font-semibold font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="order.grandTotal" /></span>
+            <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
           </div>
           <div v-if="canDecideQuotation" class="flex items-center gap-2">
             <FhButton variant="secondary" size="md" :disabled="actionLoading" @click="handleRejectQuotation">
@@ -1327,8 +1327,8 @@ const parsedReview = computed(() => {
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-ink-900">Thanh toán đơn</h3>
-            <p class="text-2xl font-semibold font-num text-ink-900 whitespace-nowrap mt-1">
-              <FhMoney :amount="order?.grandTotal ?? 0" />
+            <p class="whitespace-nowrap mt-1">
+              <FhMoney :amount="order?.grandTotal ?? 0" emphasis />
             </p>
           </div>
           <button

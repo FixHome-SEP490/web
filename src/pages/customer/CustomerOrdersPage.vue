@@ -105,9 +105,9 @@ const isOverdue = (booking: BookingItem) =>
 const pendingLabel = (booking: BookingItem) => {
   if (booking.status === 'CANCELLED') return 'Đã huỷ trước khi có thợ';
   if (booking.status === 'MATCHED') return 'Đang chờ liên kết đơn thợ';
-  if (isOverdue(booking)) return 'Đã quá hạn, đang chờ điều phối viên hỗ trợ';
+  if (isOverdue(booking)) return 'Quá hạn, đang chờ hỗ trợ';
   if (booking.status === 'MATCHING') return 'Đang chờ thợ xác nhận';
-  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, đang chờ điều phối viên hỗ trợ';
+  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, chờ hỗ trợ';
   return 'Đang tìm thợ phù hợp';
 };
 
@@ -419,7 +419,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             @keydown.enter="router.push(`/app/bookings/${booking.id}`)"
           >
             <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-start justify-between gap-3">
+              <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
                 <h3 class="font-semibold text-ink-900 text-pretty">{{ booking.serviceName }}</h3>
                 <span
                   class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0"
@@ -472,7 +472,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             @keydown.enter="router.push(`/app/orders/${order.id}`)"
           >
             <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-start justify-between gap-3">
+              <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
                 <h3 class="font-semibold text-ink-900 text-pretty">{{ order.serviceName }}</h3>
                 <span
                   class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0"
