@@ -285,7 +285,9 @@ describe('ConsoleWarrantyPage', () => {
 
 describe('support helpers for the manager console', () => {
   it('offers one Vietnamese label per standard outcome', () => {
-    expect(RESOLUTION_CODES).toHaveLength(9);
+    // Mirrors the backend COMPLAINT_RESOLUTION_CODES, refund_to_wallet included (PO 08/10/2026).
+    expect(RESOLUTION_CODES).toHaveLength(10);
+    expect(resolutionCodeLabels.refund_to_wallet).toBe('Hoàn tiền vào ví khách');
     for (const code of RESOLUTION_CODES) expect(resolutionCodeLabels[code]).toBeTruthy();
   });
 

@@ -145,6 +145,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết tiến độ đơn' },
       },
       {
+        path: 'wallet',
+        name: 'customer-wallet',
+        component: () => import('../pages/customer/CustomerWalletPage.vue'),
+        meta: { title: 'Ví của tôi' },
+      },
+      {
         path: 'warranties',
         name: 'customer-warranties',
         component: () => import('../pages/customer/CustomerWarrantiesPage.vue'),

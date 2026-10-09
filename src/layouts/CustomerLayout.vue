@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   History,
   Bot,
+  Wallet,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -188,6 +189,10 @@ const handleLogout = async () => {
                 <router-link to="/app/history" class="flex lg:hidden items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
                   <History :size="16" class="text-ink-500" />
                   Lịch sử sửa chữa
+                </router-link>
+                <router-link to="/app/wallet" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50" data-testid="menu-wallet">
+                  <Wallet :size="16" class="text-ink-500" />
+                  Ví của tôi
                 </router-link>
               </div>
 

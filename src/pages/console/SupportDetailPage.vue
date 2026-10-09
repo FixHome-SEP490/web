@@ -60,6 +60,8 @@ const codeLabels = computed<Record<string, string>>(() => {
   if (finalStatus.value === 'rejected') return { no_action: cashResolutionCodeLabels.no_action };
   return cashResolutionCodeLabels;
 });
+// Refunds go into the customer's wallet (PO 08/10/2026): an amount is required and the case is accepted.
+const refundsToWallet = computed(() => usesStandardCodes.value && resolutionCode.value === 'refund_to_wallet');
 const settlesCash = computed(() => !usesStandardCodes.value && resolutionCode.value === CASH_CONFIRMED_BY_MANAGER);
 watch(codeLabels, (labels) => {
   if (resolutionCode.value && !(resolutionCode.value in labels)) resolutionCode.value = '';
@@ -158,6 +160,14 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
   const amount = rawAmount === '' ? undefined : Number(rawAmount);
   if (amount !== undefined && (!Number.isInteger(amount) || amount < 0)) {
     formError.value = 'Số tiền ghi nhận phải là số nguyên không âm (VND).';
+    return null;
+  }
+  if (refundsToWallet.value && (!amount || amount <= 0)) {
+    formError.value = 'Nhập số tiền hoàn vào ví khách (lớn hơn 0).';
+    return null;
+  }
+  if (refundsToWallet.value && finalStatus.value !== 'resolved') {
+    formError.value = 'Hoàn tiền vào ví chỉ dùng khi chấp nhận khiếu nại (Đã giải quyết).';
     return null;
   }
   if (reason.length < 10) {
@@ -394,6 +404,7 @@ watch(caseId, (id) => {
                 <option value="" disabled>Chọn kết quả xử lý</option>
                 <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
+              <span v-if="refundsToWallet" class="font-normal leading-relaxed text-warning-800" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
               <span v-if="settlesCash" class="font-normal leading-relaxed text-warning-800">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>
@@ -406,7 +417,8 @@ watch(caseId, (id) => {
               </select>
             </label>
             <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              Số tiền ghi nhận (VND) <span class="font-normal text-ink-400">(không bắt buộc)</span>
+              <template v-if="refundsToWallet">Số tiền hoàn vào ví khách (VND) <span class="text-danger-600">*</span></template>
+              <template v-else>Số tiền ghi nhận (VND) <span class="font-normal text-ink-400">(không bắt buộc)</span></template>
               <input v-model="amountText" type="number" min="0" step="1000" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" />
             </label>
           </div>
