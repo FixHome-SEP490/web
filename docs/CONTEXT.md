@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 00:14 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/unified-header-landing
+> Cập nhật lần cuối: 2026-10-10 00:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-ui-redesign
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -168,7 +168,15 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 ### Các bước của thợ trong đơn (08/10/2026, nhánh `feat/technician-order-steps`)
 
 - Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
-- Sau check-in có thẻ "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
+- Sau check-in, menu "Thêm" của trang công việc có "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
+
+### Giao diện kỹ thuật viên gọn lại (10/10/2026, nhánh `feat/technician-ui-redesign`)
+
+- Trang chi tiết công việc (`TechnicianJobDetailPage.vue`) chỉ còn: tiêu đề "Chi tiết công việc" kèm mã đơn, trạng thái và một menu "Thêm"; thẻ "việc cần làm" (một câu, một nút chính, "Bước n/5" và nút "Xem thêm"/"Thu gọn" mở danh sách năm bước); thẻ khách hàng (Gọi, Nhắn tin, Chỉ đường mỗi nút một lần, giá cố định, ảnh khách gửi); một khung gập "Ảnh hiện trường", "Linh kiện", "Chi phí phát sinh". Form báo giá và chọn cách thu tiền nằm trong thẻ việc cần làm khi tới bước đó. Dưới 640px nút chính dính ở đáy, phía trên thanh tab (route meta `actionBar`, layout nâng bong bóng chat lên).
+- "Rút khỏi đơn" đổi thành "Huỷ đơn" (menu "Thêm"), hộp xác nhận "Huỷ đơn sửa chữa?" ghi rõ bị trừ điểm uy tín; vẫn gọi `POST /service-orders/:id/cancel` với cùng danh sách lý do. "Cần thay đổi thợ" và "Báo cáo vấn đề" cũng vào menu này; `OrderComplaintPanel` có prop `inline` (chỉ hiện khi đã có báo cáo, form mở qua `openForm` được expose).
+- `TechnicianPartsSection` bỏ khung thẻ và khung quy tắc, lỗi đi qua `userFacingError`, phát sự kiện `summary` để trang mở mục Linh kiện khi có việc cần xử lý.
+- `TechnicianLayout`: "Đăng xuất" chỉ còn trong menu avatar; menu avatar chỉ còn Ví của tôi, Bảo hành, Xác minh danh tính và chỉ hiện dưới 1024px (thanh bên đã có đủ). Nút "Đang nhận việc" trên header là nút bật tắt duy nhất và chặn bật khi ví dưới mức ký quỹ (gợi ý Nạp tiền). Tiêu đề route khu `/tech` theo mục 7 của `FIXHOME-DESIGN-SYSTEM.md`.
+- Các trang Tổng quan, Công việc, Lời mời, Thu nhập, Bảo hành, Ví, Hồ sơ, Xác minh danh tính bỏ nút và đường dẫn trùng, bớt chữ, tải bằng `FhSkeleton`, lỗi có câu dễ hiểu và nút "Thử lại".
 
 ### Chứng chỉ khi đăng ký thợ (08/10/2026, nhánh `feat/technician-certificates`)
 
@@ -229,6 +237,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 00:40 (UTC+7) | ToanAltF4 | feat/technician-ui-redesign | Khu kỹ thuật viên gọn lại: trang công việc chỉ hiện việc cần làm, các bước sau Xem thêm, Huỷ đơn thay Rút khỏi đơn, bỏ nút trùng ở layout và các trang
 - 2026-10-10 00:14 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Gộp header thống nhất lên dev mới (giữ luật bỏ nghiệm thu ở landing)
 - 2026-10-10 00:00 (UTC+7) | ToanAltF4 | feat/faster-photo-handling | Ảnh: chuẩn hoá trước khi tải, nhận nhiều định dạng, song song
 - 2026-10-09 23:54 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Header thống nhất: menu tài khoản dùng chung, lịch sử sửa chữa vào menu avatar, landing xếp lại và rút gọn chữ
