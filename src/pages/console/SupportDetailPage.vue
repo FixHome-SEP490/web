@@ -26,6 +26,7 @@ import {
   isSafeEvidenceLink,
   isResponseOverdue,
   liablePartyLabels,
+  REFUND_CASE_TYPES,
   resolutionCodeLabels,
   cashResolutionCodeLabels,
   CASH_CONFIRMED_BY_MANAGER,
@@ -57,12 +58,19 @@ const actionBusy = ref(false);
 const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
 // Settling cash only makes sense when the case is resolved, not rejected.
 const codeLabels = computed<Record<string, string>>(() => {
-  if (usesStandardCodes.value) return resolutionCodeLabels;
+  if (usesStandardCodes.value) {
+    if (REFUND_CASE_TYPES.includes(supportCase.value!.caseType)) return resolutionCodeLabels;
+    return Object.fromEntries(Object.entries(resolutionCodeLabels).filter(([code]) => code !== 'refund_to_wallet'));
+  }
   if (finalStatus.value === 'rejected') return { no_action: cashResolutionCodeLabels.no_action };
   return cashResolutionCodeLabels;
 });
 // Refunds go into the customer's wallet (PO 08/10/2026): an amount is required and the case is accepted.
+// FixHome bears the refund (PO 09/10/2026), so the liable party starts at the platform.
 const refundsToWallet = computed(() => usesStandardCodes.value && resolutionCode.value === 'refund_to_wallet');
+watch(refundsToWallet, (refunds) => {
+  if (refunds && !liableParty.value) liableParty.value = 'platform';
+});
 const settlesCash = computed(() => !usesStandardCodes.value && resolutionCode.value === CASH_CONFIRMED_BY_MANAGER);
 watch(codeLabels, (labels) => {
   if (resolutionCode.value && !(resolutionCode.value in labels)) resolutionCode.value = '';
@@ -416,7 +424,7 @@ watch(caseId, (id) => {
                 <option value="" disabled>Chọn kết quả xử lý</option>
                 <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
-              <span v-if="refundsToWallet" class="font-normal leading-relaxed text-warning-800" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
+              <span v-if="refundsToWallet" class="font-normal leading-relaxed text-warning-800" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. FixHome chịu khoản hoàn; muốn thu lại từ thợ thì quản trị viên điều chỉnh ví thợ. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
               <span v-if="settlesCash" class="font-normal leading-relaxed text-warning-800">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>

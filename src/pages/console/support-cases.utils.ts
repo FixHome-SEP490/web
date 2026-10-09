@@ -52,6 +52,9 @@ export const cashResolutionCodeLabels: Record<string, string> = {
   no_action: 'Đóng case, không chốt tiền mặt',
 };
 
+// Money goes back into the customer's wallet only for a faulty part or a warranty failure (PO 09/10/2026).
+export const REFUND_CASE_TYPES: readonly SupportCaseType[] = ['parts_dispute', 'warranty_dispute'];
+
 export const liablePartyLabels: Record<string, string> = {
   technician: 'Kỹ thuật viên',
   customer: 'Khách hàng',
