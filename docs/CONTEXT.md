@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 00:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-ui-redesign
+> Cập nhật lần cuối: 2026-10-10 00:44 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/customer-ui-redesign
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -183,6 +183,10 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 - Bước KYC của onboarding có phần "Chứng chỉ nghề" không bắt buộc, tối đa 5 ảnh, ghi chú vàng "phải chụp từ bản đã công chứng"; gửi cùng hồ sơ với `documentType: certificate` (backend đã nhận sẵn).
 - Màn chờ duyệt và hồ sơ: "Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc." Bỏ các câu sai: "video khuôn mặt" (thực tế là ảnh), "tự động nhận diện", "trong vòng 24 giờ".
 
+### Bố cục khu khách hàng (PO 10/10/2026, nhánh `feat/customer-ui-redesign`)
+
+Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt nút và chữ. Mỗi hành động một lần trên một màn: trang chủ (`CustomerDashboard.vue`) bỏ thẻ "Đặt thợ", "Chẩn đoán hỏng hóc bằng AI", chip AI (đã có ở thanh trên), khẩu hiệu và dòng chú thích nhỏ; đơn, số đếm và dịch vụ gom vào một khối dạng hàng. Danh sách đơn (`CustomerOrdersPage.vue`) thành hàng chia hai nhóm "Yêu cầu đặt lịch" và "Đơn sửa chữa". Chi tiết đơn (`CustomerOrderDetailPage.vue`) gộp hai thẻ chi phí làm một (`data-testid="order-costs"`, chưa báo giá thì một dòng `order-not-quoted`), "Huỷ đơn" và "Yêu cầu bảo hành" khi không có khối bảo hành nằm trong menu "⋯" (`order-more`, `order-cancel`), đánh giá và yêu cầu bảo hành chỉ một nút; khung `pay-after-completion` giữ nguyên điều kiện. Chi tiết yêu cầu đặt lịch (`BookingDetailPage.vue`) có một bước kế tiếp mỗi lúc, "Huỷ yêu cầu đặt lịch" trong menu "⋯" (`booking-more`, nút `booking-start-cancel` giữ nguyên). Trang chọn thợ chỉ còn ô chọn (`select-technician-btn` nay nằm trên ô chọn) và nút "Xem hồ sơ". Bảo hành, ví, hồ sơ, lịch sử, thông báo gom thành khối có hàng và đường chia. Đang tải hiện khung xám đúng hình nội dung (`FhSkeleton`); tải hỏng hiện "Chưa tải được…, vui lòng thử lại." kèm nút "Thử lại", không hiện chữ lỗi của máy chủ. Test `tests/customer-ui-layout.spec.ts`.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -221,6 +225,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - Hai luồng đặt lịch tách riêng: thường (chọn dịch vụ trước) và có AI (chẩn đoán trước, đổi dịch vụ sau).
 - Bong bóng chat và trợ lý AI có ở mọi trang của khách hàng; kỹ thuật viên có bong bóng chat ở mọi trang.
+- Giao diện khu khách hàng (PO 10/10/2026): một hành động chính mỗi màn, mỗi hành động chỉ xuất hiện một lần, việc hiếm hoặc phá huỷ vào menu "⋯"; tải bằng khung xám đúng hình; không mã lỗi; gom thông tin liên quan vào một khối thay vì mỗi mục một thẻ; bỏ dòng chú thích nhỏ và khẩu hiệu.
 - Giao diện khách và kỹ thuật viên theo mục 17 của `FIXHOME-DESIGN-SYSTEM.md`: ít màu, vàng là ghi chú, đỏ là cảnh báo, không hiện mã lỗi, không xuống dòng trong nút, nhãn và số tiền.
 - Duyệt KYC và quản lý danh mục chỉ admin; quản lý dịch vụ không thấy các mục đó.
 - Khách chọn 1 đến 2 kỹ thuật viên; ví kỹ thuật viên tối thiểu 200.000 ₫ (PO xác nhận 07/10/2026).
@@ -237,6 +242,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 00:44 (UTC+7) | ToanAltF4 | feat/customer-ui-redesign | Khu khách hàng: mỗi hành động một lần, menu ⋯ cho huỷ, khung xám khi tải, gom thông tin vào một khối
 - 2026-10-10 00:40 (UTC+7) | ToanAltF4 | feat/technician-ui-redesign | Khu kỹ thuật viên gọn lại: trang công việc chỉ hiện việc cần làm, các bước sau Xem thêm, Huỷ đơn thay Rút khỏi đơn, bỏ nút trùng ở layout và các trang
 - 2026-10-10 00:14 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Gộp header thống nhất lên dev mới (giữ luật bỏ nghiệm thu ở landing)
 - 2026-10-10 00:00 (UTC+7) | ToanAltF4 | feat/faster-photo-handling | Ảnh: chuẩn hoá trước khi tải, nhận nhiều định dạng, song song

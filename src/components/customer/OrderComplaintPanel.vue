@@ -40,6 +40,7 @@ const copy = computed(() =>
   isTechnician.value
     ? {
         title: 'Báo cáo vấn đề về đơn này',
+        empty: 'Bạn chưa báo cáo vấn đề nào cho đơn này.',
         hint: 'Có vấn đề với khách hàng hoặc đơn này? Báo cho quản lý dịch vụ.',
         closed: 'Đơn này không còn nhận báo cáo vấn đề.',
         open: 'Báo cáo vấn đề',
@@ -49,6 +50,7 @@ const copy = computed(() =>
       }
     : {
         title: 'Khiếu nại về đơn này',
+        empty: 'Bạn chưa gửi khiếu nại nào cho đơn này.',
         hint: 'Có vấn đề với kỹ thuật viên hoặc đơn này? Gửi khiếu nại để FixHome xử lý.',
         closed: 'Đơn này không còn nhận khiếu nại. Nếu còn hạn bảo hành, hãy gửi yêu cầu bảo hành.',
         open: 'Gửi khiếu nại',
@@ -192,7 +194,7 @@ watch(() => props.orderId, loadCases);
         </li>
       </ul>
 
-      <div v-if="!inline" class="flex flex-wrap items-center justify-between gap-3" :class="cases.length > 0 ? 'pt-3 border-t border-ink-100' : ''">
+      <div v-if="!inline" class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-ink-100">
         <span class="text-sm text-ink-600 text-pretty">
           <template v-if="canComplain">{{ copy.hint }}</template>
           <template v-else>{{ copy.closed }}</template>
