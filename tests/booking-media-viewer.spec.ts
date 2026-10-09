@@ -133,6 +133,8 @@ describe('BookingMediaViewer', () => {
 
     expect(wrapper.text()).toContain('Ảnh riêng tư');
     expect(wrapper.text()).toContain('Ảnh cũ / liên kết công khai');
+    // No system words in front of customers and technicians (PO 10/10/2026).
+    expect(wrapper.text()).not.toMatch(/Backend|xác thực quyền/);
   });
 
   it('revokes a ready private preview after auth invalidation without retrying', async () => {
