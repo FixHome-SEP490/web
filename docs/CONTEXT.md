@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-09 19:38 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/admin-technician-search
+> Cập nhật lần cuối: 2026-10-09 20:04 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/availability-status
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,8 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Bỏ vi phạm thủ công (PO 09/10/2026): huỷ đơn tự trừ điểm uy tín nên trang Huỷ đơn (`ConsoleCancellationsPage.vue`) không còn nút "Xác nhận vi phạm" hay "Miễn Strike", chỉ hiện cột "Điểm uy tín" (`reputationDelta` từ backend: "Trừ 10 điểm uy tín" hoặc "Không trừ điểm") và nút Cấp Boost. Trang Vi phạm (`ConsoleStrikesPage.vue`) đã xoá, mục menu bỏ, `/console/strikes` chuyển sang `/console/reputation`; `ordersApi.getStrikes/waiveStrike` đã bỏ.
 
+Trạng thái nhận việc (PO 08/10/2026, backend #93): dashboard thợ đọc `GET /technicians/me/availability` và hiện "Đang nhận việc, theo lịch tới 17:00", "Ngoài giờ làm, tự nhận việc lại lúc 07:00 T7 10/10", "Tạm nghỉ nhận đơn", "Đang nghỉ tới ..." hoặc "Chưa đặt lịch làm" (`utils/availability.ts`); chấm xanh chỉ khi thật sự đang nhận việc. Nút vẫn là nút tay để tạm nghỉ.
+
 Tra cứu kỹ thuật viên cho admin (PO 08/10/2026, backend #92): trang `/console/admin/technician-directory` (`AdminTechnicianDirectoryPage.vue`, menu "Tra cứu kỹ thuật viên") tìm theo tên (không dấu cũng được), email, SĐT, CCCD, mã tài khoản, không theo địa chỉ; bấm một kết quả để xem đủ: tài khoản (CCCD, ngày sinh, mã), điểm uy tín, số dư ví, hồ sơ nghề, kỹ năng, lịch tuần, khu vực, đơn theo trạng thái và gần nhất, thay đổi điểm. API ở `api/admin-technicians.api.ts`.
 
 Yêu cầu đổi thợ (PO 08/10/2026, backend #91): trang chi tiết khiếu nại của SM, với case `technician_replacement` còn mở, có khung `components/console/TechnicianReplacementPanel.vue`: danh sách thợ phù hợp của booking (bỏ thợ đã báo; case mở chỉ với đơn thì lấy booking từ đơn), chọn thợ + lý do -> `POST /service-orders/:id/replace-technician`; hoặc "Huỷ đơn, không trừ điểm" (huỷ đơn bằng quyền SM rồi đóng case `order_cancelled_no_fee`). Báo giá đã duyệt thì backend từ chối đổi, câu lỗi hiện nguyên văn.
@@ -220,6 +222,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 20:04 (UTC+7) | ToanAltF4 | feat/availability-status | Dashboard thợ hiện trạng thái nhận việc theo lịch tuần
 - 2026-10-09 19:38 (UTC+7) | ToanAltF4 | feat/admin-technician-search | Admin tra cứu kỹ thuật viên và xem đủ thông tin
 - 2026-10-09 19:10 (UTC+7) | ToanAltF4 | feat/sm-replace-technician | SM xử lý yêu cầu đổi thợ: giao thợ khác hoặc huỷ không trừ điểm
 - 2026-10-09 18:33 (UTC+7) | ToanAltF4 | feat/customer-wallet-web | Ví khách: trang ví, nạp VNPay, trả hoá đơn bằng ví, SM hoàn tiền vào ví

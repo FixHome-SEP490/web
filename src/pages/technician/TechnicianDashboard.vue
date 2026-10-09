@@ -41,6 +41,7 @@ import {
 import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { sessionLabel } from '../../utils/booking-session';
+import { availabilityText, type TechnicianAvailability } from '../../utils/availability';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
@@ -113,6 +114,17 @@ const handleAcceptTopInvitation = async () => {
   }
 };
 
+// What the switch means right now: the weekly schedule turns receiving on and off, the switch pauses.
+const availability = ref<TechnicianAvailability | null>(null);
+const availabilityView = computed(() => availabilityText(availability.value, isAvailable.value));
+const loadAvailability = async () => {
+  try {
+    availability.value = await technicianProfileApi.getMyAvailability();
+  } catch {
+    availability.value = null;
+  }
+};
+
 const toggleAvailability = async () => {
   if (isAvailable.value === null || togglingAvailability.value) return;
   if (!isAvailable.value && wallet.value && !wallet.value.eligibleForJobs) {
@@ -132,6 +144,7 @@ const toggleAvailability = async () => {
       await technicianProfileApi.updateMyProfile({ isAvailable: newStatus });
     }
     isAvailable.value = newStatus;
+    await loadAvailability();
   } catch {
     // If update fails, revert
   } finally {
@@ -152,6 +165,7 @@ const loadVerification = async () => {
 
 const loadData = async () => {
   const verificationRequest = loadVerification();
+  void loadAvailability();
   const profileRequest = technicianProfileApi.getMyProfile()
     .then((p) => {
       profile.value = p;
@@ -271,8 +285,8 @@ const shortcuts = [
           <span
             data-testid="technician-receive-status"
             class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white"
-            :class="isAvailable === true ? 'bg-success-500' : 'bg-ink-400'"
-            :title="isAvailable === null ? 'Chưa xác định trạng thái nhận đơn' : isAvailable ? 'Đang nhận đơn mới' : 'Tạm ngưng nhận đơn mới'"
+            :class="availabilityView.receiving ? 'bg-success-500' : 'bg-ink-400'"
+            :title="availabilityView.title"
           />
         </div>
 
@@ -314,17 +328,17 @@ const shortcuts = [
           type="button"
           class="h-11 pl-3 pr-4 rounded-xl border flex items-center gap-2.5 text-left whitespace-nowrap transition-colors"
           :class="
-            isAvailable === true
+            availabilityView.receiving
               ? 'bg-success-50 border-success-200 text-success-800 hover:bg-success-100'
               : 'bg-white border-ink-200 text-ink-700 hover:bg-ink-50'
           "
           :disabled="togglingAvailability || isAvailable === null"
           @click="toggleAvailability"
         >
-          <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="isAvailable === true ? 'bg-success-500' : 'bg-ink-400'" />
-          <span class="flex flex-col leading-tight">
-            <span class="text-xs text-ink-500">Trạng thái ca</span>
-            <span class="text-sm font-semibold">{{ isAvailable === true ? 'Đang nhận việc' : isAvailable === false ? 'Tạm nghỉ nhận đơn' : 'Đang tải…' }}</span>
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="availabilityView.receiving ? 'bg-success-500' : 'bg-ink-400'" />
+          <span class="flex flex-col leading-tight" data-testid="availability-status">
+            <span class="text-sm font-semibold">{{ availabilityView.title }}</span>
+            <span class="text-xs text-ink-500">{{ availabilityView.detail }}</span>
           </span>
           <Loader2 v-if="togglingAvailability" :size="16" class="animate-spin" />
         </button>

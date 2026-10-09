@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const { getMyProfile, updateMyProfile, getTechnicianJobs, getMyInvitations } = vi.hoisted(() => ({
-  getMyProfile: vi.fn(), updateMyProfile: vi.fn(), getTechnicianJobs: vi.fn(), getMyInvitations: vi.fn(),
+const { getMyProfile, updateMyProfile, getTechnicianJobs, getMyInvitations, getMyAvailability } = vi.hoisted(() => ({
+  getMyProfile: vi.fn(), updateMyProfile: vi.fn(), getTechnicianJobs: vi.fn(), getMyInvitations: vi.fn(), getMyAvailability: vi.fn(),
 }));
-vi.mock('../src/api/technician-profile.api', () => ({ technicianProfileApi: { getMyProfile, updateMyProfile } }));
+vi.mock('../src/api/technician-profile.api', () => ({ technicianProfileApi: { getMyProfile, updateMyProfile, getMyAvailability } }));
 vi.mock('../src/api/orders.api', () => ({ ordersApi: { getTechnicianJobs } }));
 vi.mock('../src/api/technician-onboarding.api', () => ({ technicianOnboardingApi: { getStatus: vi.fn().mockResolvedValue({ onboardingStatus: 'approved', verificationStatus: 'verified' }) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getMyInvitations } }));
@@ -32,13 +32,15 @@ import TechnicianDashboard from '../src/pages/technician/TechnicianDashboard.vue
 beforeEach(() => {
   getMyProfile.mockReset(); getTechnicianJobs.mockReset(); getMyInvitations.mockReset();
   getTechnicianJobs.mockResolvedValue([]); getMyInvitations.mockResolvedValue([]);
+  // Without the schedule-based status the badge falls back to the manual switch.
+  getMyAvailability.mockReset().mockRejectedValue(new Error('not loaded'));
 });
 const badge = '[data-testid="technician-receive-status"]';
 
 describe('WEB-WIZARD-TECH real pause state on technician dashboard', () => {
   it.each([
-    [true, 'Đang nhận đơn mới'],
-    [false, 'Tạm ngưng nhận đơn mới'],
+    [true, 'Đang nhận việc'],
+    [false, 'Tạm nghỉ nhận đơn'],
   ])('shows source-backed isAvailable=%s rather than a hard-coded green badge', async (isAvailable, label) => {
     getMyProfile.mockResolvedValue({ isAvailable });
     const wrapper = mount(TechnicianDashboard, { global: { stubs: { FhButton: true, FhStatusPill: true, FhCountdown: true, 'router-link': true } } });
@@ -58,6 +60,18 @@ describe('WEB-WIZARD-TECH real pause state on technician dashboard', () => {
     expect(indicator.exists()).toBe(true);
     expect(indicator.attributes('title')).toBe('Chưa xác định trạng thái nhận đơn');
     expect(indicator.classes()).not.toContain('bg-emerald-500');
+    wrapper.unmount();
+  });
+
+  it('stays grey outside working hours even with the switch on, and says when it comes back (PO 08/10/2026)', async () => {
+    getMyProfile.mockResolvedValue({ isAvailable: true });
+    getMyAvailability.mockReset().mockResolvedValue({ state: 'off_hours', receiving: false, until: null, nextStartAt: '2030-01-02T01:00:00Z' });
+    const wrapper = mount(TechnicianDashboard, { global: { stubs: { FhButton: true, FhStatusPill: true, FhCountdown: true, 'router-link': true } } });
+    await flushPromises();
+    const indicator = wrapper.find(badge);
+    expect(indicator.attributes('title')).toBe('Ngoài giờ làm');
+    expect(indicator.classes()).toContain('bg-ink-400');
+    expect(wrapper.get('[data-testid="availability-status"]').text()).toContain('Tự nhận việc lại lúc 08:00');
     wrapper.unmount();
   });
 
