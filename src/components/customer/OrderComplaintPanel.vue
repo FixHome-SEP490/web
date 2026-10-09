@@ -177,7 +177,7 @@ watch(() => props.orderId, loadCases);
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-semibold text-ink-900">{{ complaintTypeLabel(item.caseType, role) }}</span>
             <FhStatusPill :status="item.status" :label="supportCaseStatusLabels[item.status]" />
-            <span v-if="item.isUrgent && isOpenCase(item)" class="text-[11px] font-semibold text-danger-700">
+            <span v-if="item.isUrgent && isOpenCase(item)" class="text-xs font-semibold text-danger-700">
               Cần hỗ trợ ngay
             </span>
           </div>

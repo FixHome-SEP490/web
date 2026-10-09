@@ -712,7 +712,7 @@ const confirmDelete = async () => {
                 </li>
               </ul>
             </div>
-            <p v-if="addressForm.ward || addressForm.province" class="text-[11px] text-ink-500 flex items-center gap-1">
+            <p v-if="addressForm.ward || addressForm.province" class="text-xs text-ink-500 flex items-center gap-1">
               <MapPin :size="12" class="shrink-0" />
               <span>{{ [addressForm.ward, addressForm.province].filter(Boolean).join(', ') }}</span>
             </p>

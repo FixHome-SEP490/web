@@ -6,15 +6,13 @@ import {
   MapPin,
   Briefcase,
   CheckCircle2,
-  ShieldCheck,
   Send,
-  Users,
   ArrowLeft,
   Eye,
-  Check,
 } from 'lucide-vue-next';
 import {
   FhButton,
+  FhSkeleton,
   FhStatusPill,
   FhEmptyState,
   FhMoney,
@@ -126,7 +124,7 @@ const successMessage = computed(() => selectedCount.value === 1
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-24">
-    <p v-if="rebookedChoose" role="status" data-testid="rebook-choose-notice" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-xs text-warning-800">
+    <p v-if="rebookedChoose" role="status" data-testid="rebook-choose-notice" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">
       Thợ cũ không rảnh buổi bạn chọn. Vui lòng chọn thợ khác cho yêu cầu mới.
     </p>
     <!-- Header -->
@@ -139,29 +137,11 @@ const successMessage = computed(() => selectedCount.value === 1
         <ArrowLeft :size="16" /> Quay lại
       </button>
 
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-            <Users class="text-brand-600" :size="24" />
-            Kỹ thuật viên phù hợp gần bạn
-          </h1>
-          <p class="text-sm text-ink-500 mt-1 text-pretty">
-            Các kỹ thuật viên làm đúng dịch vụ bạn cần, còn trống lịch và ở gần địa chỉ của bạn.
-          </p>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-ink-600">Đã chọn:</span>
-          <span class="text-sm font-semibold font-num whitespace-nowrap px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
-            {{ selectedCount }} / 2 thợ
-          </span>
-        </div>
-      </div>
+      <h1 class="text-2xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
     </div>
 
     <!-- Customer-ranked invitations: only the first technician is notified initially. -->
-    <div class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900 flex items-start gap-2.5 text-sm">
-      <ShieldCheck :size="16" class="text-warning-700 shrink-0 mt-0.5" />
+    <div class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900 text-sm">
       <div class="leading-relaxed text-pretty">
         <strong class="font-semibold">Chọn 1 hoặc 2 kỹ thuật viên theo thứ tự ưu tiên.</strong> Chọn 1 người thì người đó được mời ngay. Chọn 2 người thì người số 1 được mời trước, người số 2 là dự phòng và chỉ được mời khi người số 1 từ chối hoặc hết hạn phản hồi.
       </div>
@@ -177,35 +157,41 @@ const successMessage = computed(() => selectedCount.value === 1
     </div>
 
     <!-- Candidate List -->
-    <div v-if="loading" role="status" class="text-center py-16 text-sm text-ink-500">
-      Đang tải danh sách kỹ thuật viên…
+    <div v-if="loading" role="status" aria-label="Đang tải danh sách kỹ thuật viên" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100">
+      <div v-for="i in 3" :key="i" class="p-5 flex items-center gap-4">
+        <span class="w-12 shrink-0"><FhSkeleton height="48px" rounded="full" /></span>
+        <span class="flex-1 space-y-2">
+          <FhSkeleton width="40%" height="18px" />
+          <FhSkeleton width="70%" height="14px" />
+        </span>
+      </div>
     </div>
 
     <div
       v-else-if="loadError"
-      class="flex flex-wrap items-center gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      class="bg-white rounded-2xl border border-ink-200 p-6 flex flex-col items-center text-center gap-3"
       role="alert"
     >
-      <span class="flex-1">{{ loadError }}</span>
-      <button v-if="bookingId" class="font-semibold underline" type="button" @click="loadCandidates">Thử lại</button>
+      <p class="text-sm text-ink-700">{{ loadError }}</p>
+      <FhButton v-if="bookingId" variant="secondary" size="sm" @click="loadCandidates">Thử lại</FhButton>
     </div>
 
     <FhEmptyState
       v-else-if="candidates.length === 0"
       title="Chưa có kỹ thuật viên nhận được giờ hẹn này"
-      description="Kỹ thuật viên chỉ nhận đơn trong ca làm việc của mình và khi còn trống lịch. Thường là do giờ hẹn rơi vào tối muộn hoặc ban đêm; bạn hãy đổi sang giờ khác rồi tìm lại."
+      description="Kỹ thuật viên chỉ nhận đơn trong ca làm và khi còn trống lịch. Hãy đổi sang buổi khác rồi tìm lại."
       action-text="Đổi giờ hẹn"
       @action="router.push(`/app/bookings/${bookingId}`)"
     />
 
-    <div v-else class="space-y-3.5">
+    <div v-else class="space-y-3">
       <div
         v-for="tech in candidates"
         :key="tech.id"
         role="button"
         tabindex="0"
         :aria-pressed="selectedIds.includes(tech.id)"
-        class="group p-4 sm:p-5 rounded-2xl border bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors cursor-pointer select-none"
+        class="group p-4 sm:p-5 rounded-2xl border bg-white flex items-center justify-between gap-4 transition-colors cursor-pointer select-none"
         :class="selectedIds.includes(tech.id) ? 'border-brand-600 bg-brand-50/30 ring-2 ring-brand-500/20' : 'border-ink-200 hover:border-ink-300'"
         @click="toggleSelect(tech.id)"
         @keydown.enter.prevent="toggleSelect(tech.id)"
@@ -215,7 +201,9 @@ const successMessage = computed(() => selectedCount.value === 1
           <input
             type="checkbox"
             :checked="selectedIds.includes(tech.id)"
-            class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 cursor-pointer"
+            :aria-label="`Chọn ${tech.fullName}`"
+            data-testid="select-technician-btn"
+            class="w-5 h-5 rounded text-brand-600 focus:ring-brand-500 cursor-pointer shrink-0"
             @click.stop
             @change="handleCheckboxChange($event, tech.id)"
           />
@@ -242,6 +230,7 @@ const successMessage = computed(() => selectedCount.value === 1
             </div>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-600">
+              <span v-if="tech.reliabilityScore != null" class="whitespace-nowrap">Độ tin cậy <span class="font-num font-medium text-ink-900">{{ tech.reliabilityScore }}%</span></span>
               <span class="flex items-center gap-1 whitespace-nowrap font-num">
                 <template v-if="hasRating(tech.averageRating, tech.ratingCount)">
                   <Star :size="14" class="text-warning-500 fill-warning-400" /> {{ ratingLabel(tech.averageRating, tech.ratingCount) }} ({{ tech.ratingCount }})
@@ -265,33 +254,15 @@ const successMessage = computed(() => selectedCount.value === 1
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-ink-100">
-          <div class="text-right hidden sm:block mr-1">
-            <div class="text-xs text-ink-500 whitespace-nowrap">Độ tin cậy</div>
-            <div class="text-sm font-semibold text-ink-900 font-num">{{ tech.reliabilityScore != null ? `${tech.reliabilityScore}%` : '—' }}</div>
-          </div>
-
-          <!-- Nút Xem thông tin thợ -->
-          <FhButton
-            variant="secondary"
-            size="sm"
-            data-testid="view-profile-btn"
-            @click.stop="openProfileModal(tech)"
-          >
-            <Eye :size="14" class="text-ink-500" /> Xem hồ sơ
-          </FhButton>
-
-          <!-- Nút Chọn thợ -->
-          <FhButton
-            :variant="selectedIds.includes(tech.id) ? 'primary' : 'secondary'"
-            size="sm"
-            data-testid="select-technician-btn"
-            @click.stop="toggleSelect(tech.id)"
-          >
-            <Check v-if="selectedIds.includes(tech.id)" :size="14" class="mr-1" />
-            {{ selectedIds.includes(tech.id) ? `Ưu tiên #${selectedIds.indexOf(tech.id) + 1}` : 'Chọn thợ' }}
-          </FhButton>
-        </div>
+        <FhButton
+          variant="secondary"
+          size="sm"
+          data-testid="view-profile-btn"
+          class="self-start sm:self-center"
+          @click.stop="openProfileModal(tech)"
+        >
+          <Eye :size="14" class="text-ink-500" /> <span class="hidden sm:inline">Xem hồ sơ</span><span class="sm:hidden">Hồ sơ</span>
+        </FhButton>
       </div>
     </div>
 
@@ -328,8 +299,8 @@ const successMessage = computed(() => selectedCount.value === 1
     <!-- Floating Sticky Action Bar -->
     <div class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white border-t border-ink-200 py-3">
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4">
-        <div class="text-sm text-ink-600">
-          Đã chọn <strong class="text-ink-900 font-num">{{ selectedCount }}</strong>/2 kỹ thuật viên
+        <div class="text-sm text-ink-600 whitespace-nowrap">
+          Đã chọn: <strong class="text-ink-900 font-num">{{ selectedCount }}</strong>/2
         </div>
 
         <FhButton

@@ -73,7 +73,7 @@ function pick(s: SessionOption) {
           :data-testid="`session-day-${day.date}`"
           @click="activeDate = day.date"
         >
-          <span class="block text-[11px] font-medium">{{ day.weekday }}</span>
+          <span class="block text-xs font-medium">{{ day.weekday }}</span>
           <span class="block text-sm font-bold font-num">{{ day.dayMonth }}</span>
         </button>
       </div>
