@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-09 20:04 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/availability-status
+> Cập nhật lần cuối: 2026-10-09 20:34 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/refund-parts-only
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -132,7 +132,7 @@ Tra cứu kỹ thuật viên cho admin (PO 08/10/2026, backend #92): trang `/con
 
 Yêu cầu đổi thợ (PO 08/10/2026, backend #91): trang chi tiết khiếu nại của SM, với case `technician_replacement` còn mở, có khung `components/console/TechnicianReplacementPanel.vue`: danh sách thợ phù hợp của booking (bỏ thợ đã báo; case mở chỉ với đơn thì lấy booking từ đơn), chọn thợ + lý do -> `POST /service-orders/:id/replace-technician`; hoặc "Huỷ đơn, không trừ điểm" (huỷ đơn bằng quyền SM rồi đóng case `order_cancelled_no_fee`). Báo giá đã duyệt thì backend từ chối đổi, câu lỗi hiện nguyên văn.
 
-Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPage.vue`, mục "Ví của tôi" trong menu tài khoản) hiện số dư, nạp qua VNPay (10.000 - 50.000.000 ₫, trang trả về `?payment=success|failed&amount=`), lịch sử nạp/thanh toán/hoàn tiền; ghi rõ không rút được. Hộp thanh toán ở chi tiết đơn có "Trả bằng ví" (đọc số dư khi mở, thiếu thì gợi ý nạp thêm) bên cạnh VNPay; trả xong báo ngay rồi tải lại đơn ngầm (`loadOrder(true)`). Trang khiếu nại của SM có kết quả "Hoàn tiền vào ví khách" (`refund_to_wallet`), bắt nhập số tiền và chỉ dùng khi Đã giải quyết. API ở `api/customer-wallet.api.ts`.
+Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPage.vue`, mục "Ví của tôi" trong menu tài khoản) hiện số dư, nạp qua VNPay (10.000 - 50.000.000 ₫, trang trả về `?payment=success|failed&amount=`), lịch sử nạp/thanh toán/hoàn tiền; ghi rõ không rút được. Hộp thanh toán ở chi tiết đơn có "Trả bằng ví" (đọc số dư khi mở, thiếu thì gợi ý nạp thêm) bên cạnh VNPay; trả xong báo ngay rồi tải lại đơn ngầm (`loadOrder(true)`). Trang khiếu nại của SM có kết quả "Hoàn tiền vào ví khách" (`refund_to_wallet`), bắt nhập số tiền và chỉ dùng khi Đã giải quyết; từ 09/10/2026 lựa chọn này chỉ hiện với khiếu nại linh kiện (`parts_dispute`) và bảo hành (`warranty_dispute`) (`REFUND_CASE_TYPES` trong `support-cases.utils.ts`, khớp backend), bên chịu tự điền Nền tảng vì FixHome chịu khoản hoàn. API ở `api/customer-wallet.api.ts`.
 
 Đặt lịch theo buổi phía khách (PO 08/10/2026): form đặt lịch (`NewBookingWizardPage.vue`) chọn "Đặt trước theo buổi" (chip ngày 14 ngày tới + Sáng 8-12 / Chiều 13-18, giờ VN, `components/customer/BookingSessionPicker.vue`) hoặc "Tới ngay", kèm ô "Ghi chú cho thợ"; gửi `mode/date/slot/customerNote`, không còn `preferredStartAt`. Chi tiết booking (`BookingDetailPage.vue`) hiện lịch hẹn theo buổi và ghi chú; nút "Đổi buổi hẹn" mới tải `GET /bookings/:id/available-slots` (buổi thợ bận bị khoá kèm lý do), đổi được trước khi có thợ nhận (lượt mời cũ huỷ) và sau khi thợ nhận nhưng chưa xuất phát (thợ được báo). "Đặt lại thợ" (`components/customer/RebookDialog.vue`) ở đơn hoàn tất/đã huỷ (danh sách đơn, chi tiết đơn) và booking đã huỷ: chọn ngày + buổi (xem buổi thợ cũ bận), `POST /bookings/:id/rebook`; mời được thợ cũ thì mở booking mới, không thì sang trang chọn thợ với câu báo. Lời mời phía thợ (trang lời mời, tổng quan) hiện buổi hẹn.
 
@@ -222,6 +222,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 20:34 (UTC+7) | ToanAltF4 | feat/refund-parts-only | Hoàn tiền vào ví chỉ hiện với khiếu nại linh kiện, bảo hành; FixHome chịu
 - 2026-10-09 20:04 (UTC+7) | ToanAltF4 | feat/availability-status | Dashboard thợ hiện trạng thái nhận việc theo lịch tuần
 - 2026-10-09 19:38 (UTC+7) | ToanAltF4 | feat/admin-technician-search | Admin tra cứu kỹ thuật viên và xem đủ thông tin
 - 2026-10-09 19:10 (UTC+7) | ToanAltF4 | feat/sm-replace-technician | SM xử lý yêu cầu đổi thợ: giao thợ khác hoặc huỷ không trừ điểm

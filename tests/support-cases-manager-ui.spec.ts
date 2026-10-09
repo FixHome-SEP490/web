@@ -213,6 +213,23 @@ describe('SupportDetailPage for a complaint', () => {
     expect((wrapper.findAll('select')[1].element as HTMLSelectElement).value).toBe('');
     wrapper.unmount();
   });
+
+  it('offers a wallet refund only for a faulty part or a warranty, borne by FixHome', async () => {
+    const quality = await mountPage(baseCase({ caseType: 'quality' }));
+    expect(quality.findAll('select')[1].findAll('option').map((o) => o.attributes('value'))).not.toContain('refund_to_wallet');
+    quality.unmount();
+
+    for (const caseType of ['parts_dispute', 'warranty_dispute']) {
+      const wrapper = await mountPage(baseCase({ caseType }));
+      const selects = wrapper.findAll('select');
+      expect(selects[1].findAll('option').map((o) => o.attributes('value'))).toContain('refund_to_wallet');
+      await selects[1].setValue('refund_to_wallet');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="refund-wallet-hint"]').text()).toContain('FixHome chịu khoản hoàn');
+      expect((wrapper.findAll('select')[2].element as HTMLSelectElement).value).toBe('platform');
+      wrapper.unmount();
+    }
+  });
 });
 
 describe('SupportQueuePage', () => {
