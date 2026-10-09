@@ -373,6 +373,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Duyệt kỹ năng thợ', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/technician-directory',
+        name: 'admin-technician-directory',
+        component: () => import('../pages/console/admin/AdminTechnicianDirectoryPage.vue'),
+        meta: { title: 'Tra cứu kỹ thuật viên', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
