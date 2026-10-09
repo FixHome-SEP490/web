@@ -38,7 +38,8 @@ export const mediaApi = {
     const res = await apiClient.post<{ data: UploadedBookingPhoto }>(
       '/media/booking-photo-upload',
       form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
+      // Photos are shrunk before upload, but a weak connection still needs more than the 15s default.
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 },
     );
     const data = res.data?.data;
     if (
