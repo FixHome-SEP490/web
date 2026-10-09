@@ -392,6 +392,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Thanh toán', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/reviews',
+        name: 'admin-reviews',
+        component: () => import('../pages/console/admin/AdminReviewsPage.vue'),
+        meta: { title: 'Đánh giá của khách', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
