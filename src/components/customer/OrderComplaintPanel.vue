@@ -4,6 +4,7 @@ import { Camera, X } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import FhCard from '../FhCard.vue';
 import FhStatusPill from '../FhStatusPill.vue';
+import FhSkeleton from '../FhSkeleton.vue';
 import {
   supportCasesApi,
   type MySupportCase,
@@ -39,8 +40,7 @@ const copy = computed(() =>
   isTechnician.value
     ? {
         title: 'Báo cáo vấn đề về đơn này',
-        empty: 'Bạn chưa báo cáo vấn đề nào cho đơn này.',
-        hint: 'Nếu gặp vấn đề với khách hàng hoặc đơn sửa chữa, bạn có thể báo cho quản lý dịch vụ tại đây.',
+        hint: 'Có vấn đề với khách hàng hoặc đơn này? Báo cho quản lý dịch vụ.',
         closed: 'Đơn này không còn nhận báo cáo vấn đề.',
         open: 'Báo cáo vấn đề',
         formTitle: 'Báo cáo vấn đề',
@@ -49,8 +49,7 @@ const copy = computed(() =>
       }
     : {
         title: 'Khiếu nại về đơn này',
-        empty: 'Bạn chưa gửi khiếu nại nào cho đơn này.',
-        hint: 'Nếu có vấn đề với kỹ thuật viên hoặc đơn sửa chữa, bạn có thể gửi khiếu nại tại đây.',
+        hint: 'Có vấn đề với kỹ thuật viên hoặc đơn này? Gửi khiếu nại để FixHome xử lý.',
         closed: 'Đơn này không còn nhận khiếu nại. Nếu còn hạn bảo hành, hãy gửi yêu cầu bảo hành.',
         open: 'Gửi khiếu nại',
         formTitle: 'Gửi khiếu nại',
@@ -163,9 +162,9 @@ watch(() => props.orderId, loadCases);
         {{ notice.text }}
       </p>
 
-      <p v-if="loading && !inline" class="text-xs text-ink-500">Đang tải…</p>
-      <p v-else-if="loadError" role="alert" class="text-xs text-danger-700">{{ loadError }}</p>
-      <p v-else-if="cases.length === 0 && !inline" class="text-xs text-ink-600">
+      <div v-if="loading && !inline" aria-busy="true" aria-label="Đang tải"><FhSkeleton height="18px" :count="2" /></div>
+      <p v-else-if="loadError" role="alert" class="text-sm text-danger-700">{{ loadError }}</p>
+      <p v-else-if="cases.length === 0 && !inline" class="text-sm text-ink-600">
         {{ copy.empty }}
       </p>
 
@@ -183,18 +182,18 @@ watch(() => props.orderId, loadCases);
             </span>
           </div>
           <p class="text-xs text-ink-700 whitespace-pre-line">{{ item.reason }}</p>
-          <p v-if="isOpenCase(item) && item.respondBy" class="text-[11px] text-ink-500">
+          <p v-if="isOpenCase(item) && item.respondBy" class="text-xs text-ink-500">
             Quản lý dịch vụ dự kiến phản hồi trước {{ formatDateTimeVN(item.respondBy) }}
           </p>
           <p v-if="item.resolutionReason" class="text-xs text-ink-800 bg-ink-50 p-2 rounded-[var(--radius-sm)]">
             <span class="font-semibold">Kết quả xử lý:</span> {{ item.resolutionReason }}
           </p>
-          <p class="text-[11px] text-ink-500">Gửi lúc {{ formatDateTimeVN(item.createdAt) }}</p>
+          <p class="text-xs text-ink-500 font-num">Gửi lúc {{ formatDateTimeVN(item.createdAt) }}</p>
         </li>
       </ul>
 
-      <div v-if="!inline" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
-        <span class="text-[11px] text-ink-500">
+      <div v-if="!inline" class="flex flex-wrap items-center justify-between gap-3" :class="cases.length > 0 ? 'pt-3 border-t border-ink-100' : ''">
+        <span class="text-sm text-ink-600 text-pretty">
           <template v-if="canComplain">{{ copy.hint }}</template>
           <template v-else>{{ copy.closed }}</template>
         </span>
