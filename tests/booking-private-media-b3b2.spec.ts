@@ -208,7 +208,7 @@ describe('technician ServiceOrder private media access', () => {
     const fixed = wrapper.get('[data-testid="fixed-price-order-summary"]');
     expect(fixed.text()).toContain('Dịch vụ niêm yết đã chọn');
     expect(wrapper.get('[data-testid="fixed-price-breakdown"]').text()).toContain('170000');
-    expect(wrapper.find('[data-testid="fixed-price-start-repair"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="fixed-price-auto-start"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Gửi báo giá cho khách duyệt');
     wrapper.unmount();
   });

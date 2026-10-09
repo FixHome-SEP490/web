@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
+import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted, computed } from 'vue';
 import {
   MapPin,
@@ -1193,7 +1194,7 @@ const handleSaveAvatar = async () => {
                 <Clock :size="18" class="text-warning-600" />
                 Hồ sơ đang chờ phê duyệt
               </div>
-              <p>Quản trị viên FixHome đang đối chiếu CCCD và video khuôn mặt của bạn. Dự kiến hoàn tất trong 24 giờ.</p>
+              <p>Quản trị viên FixHome đang đối chiếu CCCD và ảnh chân dung của bạn. Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.</p>
               <router-link
                 to="/tech/kyc"
                 class="inline-flex items-center gap-1 font-bold text-warning-700 hover:text-warning-900 underline pt-1"
@@ -1256,6 +1257,7 @@ const handleSaveAvatar = async () => {
               </div>
             </div>
           </div>
+          <ReputationCard role="technician" />
           <ChangePasswordCard />
         </div>
       </div>
@@ -1774,7 +1776,7 @@ const handleSaveAvatar = async () => {
               <input
                 type="range"
                 min="1"
-                max="50"
+                max="40"
                 step="1"
                 v-model.number="locationRadiusKm"
                 class="w-full accent-brand-600 cursor-pointer"

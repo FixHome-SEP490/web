@@ -109,8 +109,40 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Bạn đang trên đường di chuyển tới nhà khách hàng');
-    expect(wrapper.text()).toContain('Xác nhận đến nơi ngay khi tới địa chỉ');
+    expect(wrapper.text()).toContain('Check-in và chụp ảnh sản phẩm');
 
+    wrapper.unmount();
+  });
+
+  it('offers "Cần thay đổi thợ" only after check-in and sends it to the manager', async () => {
+    let arrived = false;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') {
+        return { data: { data: { ...activeOrder, status: 'EN_ROUTE', arrivalVerified: arrived } } };
+      }
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const before = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
+    before.unmount();
+
+    arrived = true;
+    mockPost.mockResolvedValue({ data: { success: true, statusCode: 201, message: 'Created', data: {
+      id: 'case-1', caseType: 'technician_replacement', status: 'open', bookingId: null, serviceOrderId: 'job-test-101',
+      reason: 'x', description: null, resolutionCode: null, resolutionReason: null, resolvedAt: null, isUrgent: true,
+      respondBy: null, holdCompletion: false, createdAt: '2026-10-09T00:00:00Z', updatedAt: '2026-10-09T00:00:00Z',
+    } } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    const card = wrapper.get('[data-testid="replacement-card"]');
+    await card.findAll('button').find((b) => b.text().includes('Cần thay đổi thợ'))!.trigger('click');
+    await card.get('textarea').setValue('Máy là loại công nghiệp, ngoài kỹ năng');
+    await card.findAll('button').find((b) => b.text().includes('Gửi cho quản lý'))!.trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/support/cases', expect.objectContaining({ caseType: 'technician_replacement', serviceOrderId: 'job-test-101', isUrgent: true }));
+    expect(wrapper.text()).toContain('Đã báo quản lý dịch vụ');
     wrapper.unmount();
   });
 

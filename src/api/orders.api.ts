@@ -46,6 +46,13 @@ export interface RepairHistoryItem {
 export const isHistoricalOrder = (order: TechnicianOrderItem): order is HistoricalOrderItem =>
   (order as HistoricalOrderItem).historical === true;
 export interface ServiceOrderItem {
+  /** scheduled = one morning/afternoon session; urgent = come now (PO 08/10/2026). */
+  bookingMode?: 'scheduled' | 'urgent';
+  slot?: 'morning' | 'afternoon' | null;
+  /** Note the customer left for the technician, apart from the problem description. */
+  customerNote?: string | null;
+  /** The technician may set out from this instant (one hour before the appointment). */
+  departAvailableAt?: string | null;
   arrivalVerified?: boolean;
   beforeEvidenceCount?: number;
   afterEvidenceCount?: number;

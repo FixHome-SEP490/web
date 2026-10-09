@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-08 21:43 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/profile-password-and-sm-areas
+> Cập nhật lần cuối: 2026-10-09 10:31 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/reputation-web
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,8 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối thiểu 5 ký tự) trước khi miễn, lý do được lưu trên vi phạm và audit; trước đây gửi câu cố định. Câu báo hậu quả nay đúng với backend: miễn vi phạm không gỡ lệnh tạm khoá đang có.
 
+Điểm uy tín (PO 08/10/2026, backend `reputation`): hồ sơ khách (`/app/profile`) và thợ (`/tech/profile`) có `components/account/ReputationCard.vue` gọi `GET /reputation/me`, hiện điểm trên 100, hạn tạm khoá đặt lịch hoặc nhận đơn nếu đang bị khoá, khoá tài khoản khi hết điểm, quy tắc trừ điểm, ngày điểm làm mới và lịch sử. SM có trang `/console/reputation` (`ConsoleReputationPage.vue`, menu "Điểm uy tín"): lọc vai trò, tìm theo tên/email/SĐT, điểm thấp trước, phân trang theo `meta`, xem lịch sử, cộng hoặc trừ điểm kèm lý do (xem trước điểm mới). API ở `api/reputation.api.ts`.
+
 ### Trang đơn: tổng tiền, nút huỷ, câu chữ (07/10/2026, nhánh `fix/order-pages-wording-and-totals`)
 
 - Trang đơn của khách: khi báo giá chờ duyệt (chưa có hoá đơn) "Tổng công" và "Tổng phụ tùng" lấy tổng các dòng báo giá thay vì 0; có hoá đơn thì lấy số của đơn (đã gồm phát sinh). Nút Huỷ đơn chỉ hiện ở ACCEPTED và EN_ROUTE vì backend không cho khách huỷ khi đang sửa.
@@ -140,6 +142,21 @@ Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối th
 
 - `components/account/ChangePasswordCard.vue` ở trang hồ sơ khách và tab Thông tin của kỹ thuật viên: gửi mã về email của tài khoản (`/auth/forgot-password`), nhập mã và mật khẩu mới (`/auth/reset-password`), xong thì đăng xuất để đăng nhập lại. Giống màn Bảo mật trên mobile.
 - Menu console có mục "Khu vực phục vụ" (`/console/service-areas`, quản lý dịch vụ và admin); trang đã có từ trước nhưng chưa có lối vào.
+
+### Phía kỹ thuật viên theo buổi (08/10/2026, nhánh `feat/technician-sessions-ui`)
+
+- `utils/booking-session.ts`: nhãn buổi (sáng 8-12, chiều 13-18, "Tới ngay" cho đơn vãng lai) và `canDepartNow`. Trang công việc hiện lịch hẹn theo buổi, ghi chú của khách (vàng), nút Xuất phát chỉ sáng từ `departAvailableAt` (1 giờ trước giờ hẹn, backend cũng chặn).
+- `TechnicianLayout` gửi vị trí GPS mỗi 5 phút khi thợ đang nhận việc (`PATCH /technicians/me/location`), dùng cho đơn vãng lai. Thanh bán kính tối đa 40 km.
+
+### Các bước của thợ trong đơn (08/10/2026, nhánh `feat/technician-order-steps`)
+
+- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Sau check-in có thẻ "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
+
+### Chứng chỉ khi đăng ký thợ (08/10/2026, nhánh `feat/technician-certificates`)
+
+- Bước KYC của onboarding có phần "Chứng chỉ nghề" không bắt buộc, tối đa 5 ảnh, ghi chú vàng "phải chụp từ bản đã công chứng"; gửi cùng hồ sơ với `documentType: certificate` (backend đã nhận sẵn).
+- Màn chờ duyệt và hồ sơ: "Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc." Bỏ các câu sai: "video khuôn mặt" (thực tế là ảnh), "tự động nhận diện", "trong vòng 24 giờ".
 
 ## 4. Kiến trúc và thư mục chính
 
@@ -195,6 +212,10 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 10:31 (UTC+7) | ToanAltF4 | feat/reputation-web | Điểm uy tín: thẻ điểm ở hồ sơ khách và thợ, trang SM xem lịch sử và điều chỉnh điểm
+- 2026-10-09 00:14 (UTC+7) | ToanAltF4 | feat/technician-certificates | Đăng ký thợ: chứng chỉ không bắt buộc (bản công chứng), câu nhắc đến trụ sở sau khi gửi hồ sơ.
+- 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
+- 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.

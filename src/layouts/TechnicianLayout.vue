@@ -94,6 +94,20 @@ const needsDeposit = computed(
 const formatVnd = (amount: number) => `${Number(amount).toLocaleString('vi-VN')}\u00A0₫`;
 
 let invitationPoll: ReturnType<typeof setInterval> | null = null;
+let locationPing: ReturnType<typeof setInterval> | null = null;
+
+// Urgent jobs are offered by a GPS position younger than 15 minutes (PO 08/10/2026),
+// so the open web app reports it every 5 minutes while the technician takes jobs.
+const pingLocation = () => {
+  if (!isAvailable.value || typeof navigator === 'undefined' || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      void technicianProfileApi.reportLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyMeters: pos.coords.accuracy }).catch(() => undefined);
+    },
+    () => undefined,
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 },
+  );
+};
 
 onMounted(async () => {
   chatStore.initSocket();
@@ -110,10 +124,13 @@ onMounted(async () => {
   }
   await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus(), loadWalletSummary()]);
   invitationPoll = setInterval(refreshInvitationCount, 30000);
+  pingLocation();
+  locationPing = setInterval(pingLocation, 5 * 60_000);
 });
 
 onUnmounted(() => {
   if (invitationPoll) clearInterval(invitationPoll);
+  if (locationPing) clearInterval(locationPing);
 });
 
 const toggleAvailability = async () => {
