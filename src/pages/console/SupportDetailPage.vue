@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ArrowLeft, CheckCircle2, ExternalLink, FileText, LifeBuoy, LockKeyhole, ReceiptText } from 'lucide-vue-next';
+import { CheckCircle2, ExternalLink } from 'lucide-vue-next';
 import { ordersApi } from '../../api/orders.api';
 import TechnicianReplacementPanel from '../../components/console/TechnicianReplacementPanel.vue';
+import SupportCaseContext from '../../components/console/SupportCaseContext.vue';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
+import { consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
 import { useRoute, useRouter } from 'vue-router';
 import {
   FhButton,
   FhCard,
   FhConfirmDialog,
-  FhEmptyState,
   FhMoney,
   FhSkeleton,
   FhStatusPill,
@@ -92,9 +97,10 @@ async function loadCase(id: string) {
   successMessage.value = '';
   try {
     supportCase.value = await supportCasesApi.getCase(id);
-  } catch (reason) {
+  } catch {
     if (requestId !== latestRequest) return;
-    error.value = getSupportErrorMessage(reason, 'Không thể tải chi tiết support case từ Backend.');
+    // A failed load shows one plain sentence and a retry, never the server's text.
+    error.value = 'load';
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -148,7 +154,7 @@ async function retryCompletion() {
       ? 'Đơn đã được hoàn tất.'
       : 'Đơn chưa đủ điều kiện hoàn tất (thiếu xác nhận của khách hoặc thanh toán).';
   } catch (reason) {
-    error.value = getSupportErrorMessage(reason, 'Không thể kiểm tra lại hoàn tất đơn.');
+    error.value = getSupportErrorMessage(reason, 'Chưa kiểm tra lại được, vui lòng thử lại.');
   } finally {
     actionBusy.value = false;
   }
@@ -163,11 +169,11 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     .filter(Boolean);
 
   if (!code) {
-    formError.value = 'Mã xử lý là bắt buộc.';
+    formError.value = 'Chọn kết quả xử lý.';
     return null;
   }
   if (code.length > 128) {
-    formError.value = 'Mã xử lý không được vượt quá 128 ký tự.';
+    formError.value = 'Kết quả xử lý không hợp lệ.';
     return null;
   }
   if (!(code in codeLabels.value)) {
@@ -177,7 +183,7 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
   const rawAmount = String(amountText.value ?? '').trim();
   const amount = rawAmount === '' ? undefined : Number(rawAmount);
   if (amount !== undefined && (!Number.isInteger(amount) || amount < 0)) {
-    formError.value = 'Số tiền ghi nhận phải là số nguyên không âm (VND).';
+    formError.value = 'Số tiền phải là số nguyên không âm.';
     return null;
   }
   if (refundsToWallet.value && (!amount || amount <= 0)) {
@@ -197,11 +203,11 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     return null;
   }
   if (evidenceRefs.length > 20) {
-    formError.value = 'Chỉ được gửi tối đa 20 evidence reference.';
+    formError.value = 'Tối đa 20 bằng chứng.';
     return null;
   }
   if (evidenceRefs.some((ref) => ref.length > 500)) {
-    formError.value = 'Mỗi evidence reference không được vượt quá 500 ký tự.';
+    formError.value = 'Mỗi bằng chứng tối đa 500 ký tự.';
     return null;
   }
 
@@ -240,15 +246,26 @@ async function confirmResolution() {
   formError.value = '';
   try {
     supportCase.value = await supportCasesApi.resolveCase(supportCase.value.id, pendingPayload.value);
-    successMessage.value = 'Backend đã ghi nhận kết quả xử lý support case.';
+    successMessage.value = 'Đã lưu kết quả xử lý.';
     showConfirm.value = false;
     pendingPayload.value = null;
   } catch (reason) {
-    error.value = getSupportErrorMessage(reason, 'Backend không thể ghi nhận kết quả xử lý.');
+    error.value = getSupportErrorMessage(reason, 'Chưa lưu được kết quả, vui lòng thử lại.');
     showConfirm.value = false;
   } finally {
     submitting.value = false;
   }
+}
+
+const confirmConsequence = computed(() => {
+  const status = pendingPayload.value?.finalStatus === 'rejected' ? 'Từ chối' : 'Đã giải quyết';
+  const outcome = resolutionLabel(pendingPayload.value?.resolutionCode);
+  return `Yêu cầu sẽ đóng với trạng thái "${status}", kết quả "${outcome}".`;
+});
+
+function resolutionLabel(code: string | null | undefined): string {
+  if (!code) return '—';
+  return resolutionCodeLabels[code] ?? cashResolutionCodeLabels[code] ?? 'Kết quả khác';
 }
 
 function openEvidence(refValue: string) {
@@ -263,214 +280,166 @@ watch(caseId, (id) => {
 
 <template>
   <div class="mx-auto max-w-5xl space-y-6 pb-12">
-    <div class="flex items-center justify-between gap-3">
-      <button
-        class="inline-flex min-h-[36px] items-center gap-1.5 rounded px-2 text-xs font-semibold text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        type="button"
-        @click="router.push('/console/support')"
-      >
-        <ArrowLeft :size="16" />
-        Quay lại hàng đợi
-      </button>
-      <span class="font-mono text-[11px] text-ink-400">{{ caseId || '—' }}</span>
+    <div v-if="loading" class="space-y-4" aria-busy="true">
+      <FhSkeleton height="14px" width="140px" />
+      <FhSkeleton height="28px" width="320px" />
+      <FhSkeleton height="96px" :count="3" rounded="md" />
     </div>
 
-    <FhSkeleton v-if="loading" height="96px" :count="4" rounded="md" />
-
-    <div v-else-if="error && !supportCase" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
-      {{ error }}
-      <button class="ml-3 font-semibold underline" type="button" @click="loadCase(caseId)">Thử lại</button>
-    </div>
+    <template v-else-if="error && !supportCase">
+      <ConsolePageHeader title="Chi tiết yêu cầu hỗ trợ" back-to="/console/support" back-label="Yêu cầu hỗ trợ" />
+      <ConsoleLoadError @retry="loadCase(caseId)" />
+    </template>
 
     <template v-else-if="supportCase">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div class="mb-2 flex flex-wrap items-center gap-2">
-            <span class="rounded bg-brand-50 px-2 py-1 font-mono text-[11px] font-semibold text-brand-700">{{ supportCase.id }}</span>
-            <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
-            <span v-if="supportCase.isUrgent && !isTerminal" class="rounded bg-danger-50 px-2 py-1 text-[11px] font-semibold text-danger-700">Cần xử lý ngay</span>
-            <span v-if="overdue" class="rounded bg-warning-50 px-2 py-1 text-[11px] font-semibold text-warning-700">Quá hạn phản hồi ({{ formatSupportDate(supportCase.respondBy) }})</span>
-            <span v-if="supportCase.holdCompletion" class="rounded bg-info-50 px-2 py-1 text-[11px] font-semibold text-info-600">Đang giữ đơn không tự hoàn tất</span>
-          </div>
-          <h1 class="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink-900">
-            <LifeBuoy class="text-brand-600" :size="24" />
-            {{ supportCaseTypeLabels[supportCase.caseType] }}
-          </h1>
-          <p class="mt-1 max-w-3xl text-sm leading-relaxed text-ink-600">{{ supportCase.reason }}</p>
-        </div>
-        <FhButton
-          v-if="isCashCase(supportCase.caseType)"
-          variant="secondary"
-          size="sm"
-          @click="router.push(`/console/support/cash/${encodeURIComponent(supportCase.id)}`)"
-        >
-          <ReceiptText :size="14" />
-          Bản xem tiền mặt
-        </FhButton>
-      </div>
+      <ConsolePageHeader :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
+        <template #badges>
+          <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
+          <span v-if="supportCase.isUrgent && !isTerminal" class="whitespace-nowrap rounded bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700">Cần xử lý ngay</span>
+          <span v-if="overdue" class="whitespace-nowrap rounded bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700">Quá hạn phản hồi</span>
+          <span v-if="supportCase.holdCompletion" class="whitespace-nowrap rounded bg-info-50 px-2 py-0.5 text-xs font-medium text-info-600">Đang giữ đơn</span>
+        </template>
+        <template #meta>
+          <p class="mt-2 max-w-3xl text-sm text-ink-700 text-pretty">{{ supportCase.reason }}</p>
+        </template>
+        <template #actions>
+          <FhButton v-if="!isTerminal && supportCase.status === 'open'" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="startReview">
+            Nhận xử lý case này
+          </FhButton>
+          <ConsoleMoreMenu v-if="canHold || supportCase.serviceOrderId || isCashCase(supportCase.caseType)">
+            <ConsoleMenuItem v-if="canHold" :disabled="actionBusy" @click="toggleHold">
+              {{ supportCase.holdCompletion ? 'Bỏ giữ hoàn tất đơn' : 'Giữ đơn không tự hoàn tất' }}
+            </ConsoleMenuItem>
+            <ConsoleMenuItem v-if="canHold && !supportCase.holdCompletion" :disabled="actionBusy" @click="retryCompletion">
+              Kiểm tra lại hoàn tất đơn
+            </ConsoleMenuItem>
+            <ConsoleMenuItem v-if="supportCase.serviceOrderId" @click="router.push(`/console/orders/${supportCase.serviceOrderId}`)">
+              Xem đơn sửa chữa
+            </ConsoleMenuItem>
+            <ConsoleMenuItem
+              v-if="isCashCase(supportCase.caseType)"
+              @click="router.push(`/console/support/cash/${encodeURIComponent(supportCase.id)}`)"
+            >
+              Xem đối soát tiền mặt
+            </ConsoleMenuItem>
+          </ConsoleMoreMenu>
+        </template>
+      </ConsolePageHeader>
 
       <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
         {{ error }}
       </div>
       <div v-if="successMessage" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-        <CheckCircle2 :size="16" />
+        <CheckCircle2 :size="16" aria-hidden="true" />
         {{ successMessage }}
       </div>
 
-      <FhCard v-if="!isTerminal">
-        <h2 class="mb-1 text-h2 text-ink-900">Can thiệp</h2>
-        <p class="mb-4 text-xs text-ink-500">Đơn vẫn tiếp tục thực hiện. Bạn chỉ chặn được việc đơn tự hoàn tất và tự thanh toán khi cần xem xét kỹ.</p>
-        <div class="flex flex-wrap items-center gap-2">
-          <FhButton v-if="supportCase.status === 'open'" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="startReview">
-            Nhận xử lý case này
-          </FhButton>
-          <FhButton v-if="canHold" variant="secondary" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="toggleHold">
-            {{ supportCase.holdCompletion ? 'Bỏ giữ hoàn tất đơn' : 'Giữ đơn không tự hoàn tất' }}
-          </FhButton>
-          <FhButton v-if="canHold && !supportCase.holdCompletion" variant="ghost" size="sm" :disabled="actionBusy" @click="retryCompletion">
-            Kiểm tra lại hoàn tất đơn
-          </FhButton>
-          <FhButton v-if="supportCase.serviceOrderId" variant="ghost" size="sm" @click="router.push(`/console/orders/${supportCase.serviceOrderId}`)">
-            Xem đơn sửa chữa
-          </FhButton>
-        </div>
-      </FhCard>
-
       <TechnicianReplacementPanel v-if="isReplacementCase && !isTerminal" :support-case="supportCase" @done="onReplacementDone" />
 
-      <div class="grid gap-4 lg:grid-cols-2">
-        <FhCard>
-          <h2 class="mb-4 flex items-center gap-2 text-h2 text-ink-900"><FileText :size="18" class="text-brand-600" /> Metadata case</h2>
-          <dl class="grid gap-3 text-xs sm:grid-cols-2">
-            <div><dt class="text-ink-500">Booking ID</dt><dd class="mt-1 font-mono font-semibold text-ink-900">{{ supportCase.bookingId ?? '—' }}</dd></div>
-            <div><dt class="text-ink-500">Service order ID</dt><dd class="mt-1 font-mono font-semibold text-ink-900">{{ supportCase.serviceOrderId ?? '—' }}</dd></div>
-            <div><dt class="text-ink-500">Customer ID</dt><dd class="mt-1 font-mono text-ink-700">{{ supportCase.customerId ?? '—' }}</dd></div>
-            <div><dt class="text-ink-500">Technician ID</dt><dd class="mt-1 font-mono text-ink-700">{{ supportCase.technicianId ?? '—' }}</dd></div>
-            <div><dt class="text-ink-500">Manager phụ trách</dt><dd class="mt-1 font-mono text-ink-700">{{ supportCase.assignedManagerId ?? '—' }}</dd></div>
-            <div><dt class="text-ink-500">Tạo / cập nhật</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.createdAt) }}<br />{{ formatSupportDate(supportCase.updatedAt) }}</dd></div>
+      <div class="grid gap-6 lg:grid-cols-2">
+        <FhCard title="Thông tin">
+          <dl class="space-y-2.5 text-sm">
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Tạo lúc</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.createdAt) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.updatedAt) }}</dd></div>
+            <div v-if="supportCase.respondBy" class="flex justify-between gap-3"><dt class="text-ink-500">Hạn phản hồi</dt><dd class="whitespace-nowrap font-num" :class="overdue ? 'text-warning-700' : 'text-ink-800'">{{ formatSupportDate(supportCase.respondBy) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Người xử lý</dt><dd class="text-ink-800">{{ supportCase.assignedManagerId ? 'Đã có người nhận' : 'Chưa có người nhận' }}</dd></div>
           </dl>
-          <div v-if="supportCase.description" class="mt-4 border-t border-ink-100 pt-4 text-sm leading-relaxed text-ink-700">
-            <span class="text-xs font-semibold text-ink-500">Mô tả bổ sung</span>
-            <p class="mt-1">{{ supportCase.description }}</p>
+          <div v-if="supportCase.description" class="mt-4 border-t border-ink-100 pt-4">
+            <div class="text-sm text-ink-500">Mô tả thêm</div>
+            <p class="mt-1 text-sm text-ink-800 text-pretty">{{ supportCase.description }}</p>
           </div>
         </FhCard>
 
-        <FhCard>
-          <h2 class="mb-4 flex items-center gap-2 text-h2 text-ink-900"><LockKeyhole :size="18" class="text-brand-600" /> Evidence references</h2>
-          <p class="mb-3 text-xs leading-relaxed text-ink-500">Các giá trị dưới đây chỉ là opaque reference do Backend cung cấp; không đồng nghĩa quyền truy cập KYC công khai.</p>
-          <div v-if="supportCase.evidenceRefs?.length" class="space-y-2">
-            <div v-for="refValue in supportCase.evidenceRefs" :key="refValue" class="flex items-start gap-2 rounded border border-ink-100 bg-ink-50 px-3 py-2">
+        <FhCard title="Bằng chứng">
+          <ul v-if="supportCase.evidenceRefs?.length" class="space-y-2 text-sm">
+            <li v-for="(refValue, idx) in supportCase.evidenceRefs" :key="refValue">
               <a
                 v-if="isSafeEvidenceLink(refValue)"
-                class="min-w-0 break-all text-xs font-mono text-brand-700 underline hover:text-brand-900"
+                class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
                 :href="refValue"
                 target="_blank"
                 rel="noopener noreferrer"
+                :title="refValue"
                 @click.prevent="openEvidence(refValue)"
-              >{{ refValue }} <ExternalLink :size="12" class="inline" /></a>
-              <span v-else class="min-w-0 break-all text-xs font-mono text-ink-700">{{ refValue }}</span>
-            </div>
-          </div>
-          <p v-else class="text-xs italic text-ink-400">Backend chưa cung cấp evidence reference.</p>
+              >Bằng chứng {{ idx + 1 }} <ExternalLink :size="14" aria-hidden="true" /></a>
+              <span v-else class="break-all text-ink-700">{{ refValue }}</span>
+            </li>
+          </ul>
+          <p v-else class="text-sm text-ink-500">Chưa có bằng chứng.</p>
         </FhCard>
       </div>
 
-      <FhCard v-if="supportCase.booking || supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement">
-        <h2 class="mb-4 text-h2 text-ink-900">Context readonly từ Backend</h2>
-        <p class="mb-4 text-xs text-ink-500">Thông tin dưới đây chỉ để đối chiếu. Trang này không thay đổi Booking, ServiceOrder, Invoice hoặc CashSettlement.</p>
-        <div class="grid gap-4 xl:grid-cols-2">
-          <div v-if="supportCase.booking" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-4">
-            <h3 class="text-sm font-semibold text-ink-900">Booking</h3>
-            <dl class="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt class="text-ink-500">ID</dt><dd class="mt-1 font-mono text-ink-800">{{ supportCase.booking.id }}</dd></div><div><dt class="text-ink-500">Trạng thái</dt><dd class="mt-1"><FhStatusPill :status="supportCase.booking.status" /></dd></div><div><dt class="text-ink-500">Customer ID</dt><dd class="mt-1 font-mono text-ink-800">{{ supportCase.booking.customerId }}</dd></div><div><dt class="text-ink-500">Service ID</dt><dd class="mt-1 font-mono text-ink-800">{{ supportCase.booking.serviceId }}</dd></div></dl>
-          </div>
-          <div v-if="supportCase.serviceOrder" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-4">
-            <h3 class="text-sm font-semibold text-ink-900">ServiceOrder</h3>
-            <div class="mt-3 flex flex-wrap items-center gap-2"><span class="font-mono text-xs text-ink-700">{{ supportCase.serviceOrder.code }}</span><FhStatusPill :status="supportCase.serviceOrder.status" /></div>
-            <dl class="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt class="text-ink-500">Payment</dt><dd class="mt-1"><FhStatusPill :status="supportCase.serviceOrder.paymentStatus" /></dd></div><div><dt class="text-ink-500">ID</dt><dd class="mt-1 font-mono text-ink-800">{{ supportCase.serviceOrder.id }}</dd></div><div><dt class="text-ink-500">Công</dt><dd class="mt-1"><FhMoney :amount="supportCase.serviceOrder.laborTotal" /></dd></div><div><dt class="text-ink-500">Phụ tùng</dt><dd class="mt-1"><FhMoney :amount="supportCase.serviceOrder.partsTotal" /></dd></div><div class="col-span-2 border-t border-ink-200 pt-2"><dt class="text-ink-500">Tổng Backend</dt><dd class="mt-1"><FhMoney :amount="supportCase.serviceOrder.grandTotal" emphasis /></dd></div></dl>
-          </div>
-          <div v-if="supportCase.invoice" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-4">
-            <h3 class="text-sm font-semibold text-ink-900">Invoice</h3>
-            <dl class="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt class="text-ink-500">ID</dt><dd class="mt-1 font-mono text-ink-800">{{ supportCase.invoice.id }}</dd></div><div><dt class="text-ink-500">Payment</dt><dd class="mt-1"><FhStatusPill :status="supportCase.invoice.paymentStatus" /></dd></div><div><dt class="text-ink-500">Công</dt><dd class="mt-1"><FhMoney :amount="supportCase.invoice.laborTotal" /></dd></div><div><dt class="text-ink-500">Phụ tùng</dt><dd class="mt-1"><FhMoney :amount="supportCase.invoice.partsTotal" /></dd></div><div class="col-span-2 border-t border-ink-200 pt-2"><dt class="text-ink-500">Tổng Backend</dt><dd class="mt-1"><FhMoney :amount="supportCase.invoice.grandTotal" emphasis /></dd></div><div class="col-span-2 text-ink-500">Issued: {{ formatSupportDate(supportCase.invoice.issuedAt) }}<br />Paid: {{ formatSupportDate(supportCase.invoice.paidAt) }}</div></dl>
-          </div>
-          <div v-if="supportCase.cashSettlement" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-4">
-            <h3 class="text-sm font-semibold text-ink-900">CashSettlement</h3>
-            <div class="mt-3 flex items-center gap-2"><FhStatusPill :status="supportCase.cashSettlement.status" /><span class="font-mono text-[11px] text-ink-500">{{ supportCase.cashSettlement.id }}</span></div>
-            <dl class="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt class="text-ink-500">Đã khai báo</dt><dd class="mt-1"><FhMoney :amount="supportCase.cashSettlement.declaredAmount" emphasis /></dd></div><div><dt class="text-ink-500">Đã xác nhận</dt><dd class="mt-1"><FhMoney v-if="supportCase.cashSettlement.confirmedAmount != null" :amount="supportCase.cashSettlement.confirmedAmount" /><span v-else class="text-ink-400">—</span></dd></div><div><dt class="text-ink-500">Khai báo lúc</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.cashSettlement.declaredAt) }}</dd></div><div><dt class="text-ink-500">Xác nhận lúc</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.cashSettlement.confirmedAt) }}</dd></div></dl>
-            <p v-if="supportCase.cashSettlement.technicianNotes" class="mt-3 border-t border-ink-200 pt-3 text-xs leading-relaxed text-ink-600">{{ supportCase.cashSettlement.technicianNotes }}</p>
-          </div>
-        </div>
+      <SupportCaseContext
+        v-if="supportCase.booking || supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement"
+        :support-case="supportCase"
+      />
+
+      <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" title="Kết quả xử lý">
+        <dl class="space-y-2.5 text-sm">
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Kết quả</dt><dd class="text-right text-ink-900">{{ resolutionLabel(supportCase.resolutionCode) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Thời điểm</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.resolvedAt) }}</dd></div>
+          <div v-if="supportCase.liableParty" class="flex justify-between gap-3"><dt class="text-ink-500">Bên chịu trách nhiệm</dt><dd class="text-ink-800">{{ liablePartyLabels[supportCase.liableParty] ?? 'Chưa xác định' }}</dd></div>
+          <div v-if="supportCase.amount != null" class="flex justify-between gap-3"><dt class="text-ink-500">Số tiền</dt><dd><FhMoney :amount="supportCase.amount" /></dd></div>
+        </dl>
+        <p v-if="supportCase.resolutionReason" class="mt-4 border-t border-ink-100 pt-4 text-sm text-ink-800 text-pretty">{{ supportCase.resolutionReason }}</p>
       </FhCard>
 
-      <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" class="border-success-200">
-        <h2 class="mb-3 flex items-center gap-2 text-h2 text-ink-900"><CheckCircle2 :size="18" class="text-success-600" /> Kết quả đã ghi nhận</h2>
-        <dl class="grid gap-3 text-xs sm:grid-cols-3"><div><dt class="text-ink-500">Mã xử lý</dt><dd class="mt-1 font-mono font-semibold text-ink-900">{{ supportCase.resolutionCode ?? '—' }}</dd></div><div><dt class="text-ink-500">Thời điểm</dt><dd class="mt-1 text-ink-700">{{ formatSupportDate(supportCase.resolvedAt) }}</dd></div><div class="sm:col-span-1"><dt class="text-ink-500">Lý do</dt><dd class="mt-1 leading-relaxed text-ink-700">{{ supportCase.resolutionReason ?? '—' }}</dd></div><div v-if="supportCase.liableParty"><dt class="text-ink-500">Bên chịu trách nhiệm</dt><dd class="mt-1 text-ink-700">{{ liablePartyLabels[supportCase.liableParty] ?? supportCase.liableParty }}</dd></div><div v-if="supportCase.amount != null"><dt class="text-ink-500">Số tiền ghi nhận</dt><dd class="mt-1"><FhMoney :amount="supportCase.amount" /></dd></div></dl>
-      </FhCard>
-
-      <FhCard v-if="!isTerminal" class="border-brand-200">
-        <h2 class="mb-1 text-h2 text-ink-900">Ghi nhận kết quả xử lý</h2>
-        <p class="mb-5 text-xs text-ink-500">Backend là nơi quyết định trạng thái cuối cùng. Kiểm tra kỹ nội dung trước khi xác nhận.</p>
+      <FhCard v-if="!isTerminal" title="Ghi nhận kết quả">
         <form class="space-y-4" @submit.prevent="submitResolution">
           <div class="grid gap-4 sm:grid-cols-2">
-            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              Trạng thái cuối <span class="text-danger-600">*</span>
-              <select v-model="finalStatus" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-                <option value="resolved">resolved — Đã giải quyết</option>
-                <option value="rejected">rejected — Từ chối</option>
+            <label :class="consoleLabel">
+              Trạng thái cuối
+              <select v-model="finalStatus" :class="consoleField" class="h-10">
+                <option value="resolved">Đã giải quyết</option>
+                <option value="rejected">Từ chối</option>
               </select>
             </label>
-            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              Kết quả xử lý <span class="text-danger-600">*</span>
-              <select v-model="resolutionCode" required class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-                <option value="" disabled>Chọn kết quả xử lý</option>
+            <label :class="consoleLabel">
+              Kết quả xử lý
+              <select v-model="resolutionCode" required :class="consoleField" class="h-10">
+                <option value="" disabled>Chọn kết quả</option>
                 <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
-              <span v-if="refundsToWallet" class="font-normal leading-relaxed text-warning-800" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. FixHome chịu khoản hoàn; muốn thu lại từ thợ thì quản trị viên điều chỉnh ví thợ. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
-              <span v-if="settlesCash" class="font-normal leading-relaxed text-warning-800">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
+              <span v-if="refundsToWallet" class="font-normal text-warning-800 text-pretty" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. FixHome chịu khoản hoàn; muốn thu lại từ thợ thì quản trị viên điều chỉnh ví thợ. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
+              <span v-if="settlesCash" class="font-normal text-warning-800 text-pretty">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>
           <div v-if="usesStandardCodes" class="grid gap-4 sm:grid-cols-2">
-            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              Bên chịu trách nhiệm <span class="font-normal text-ink-400">(ghi nhận, không tự động chuyển tiền)</span>
-              <select v-model="liableParty" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <label :class="consoleLabel">
+              Bên chịu trách nhiệm
+              <select v-model="liableParty" :class="consoleField" class="h-10">
                 <option value="">Chưa xác định</option>
                 <option v-for="(label, value) in liablePartyLabels" :key="value" :value="value">{{ label }}</option>
               </select>
             </label>
-            <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-              <template v-if="refundsToWallet">Số tiền hoàn vào ví khách (VND) <span class="text-danger-600">*</span></template>
-              <template v-else>Số tiền ghi nhận (VND) <span class="font-normal text-ink-400">(không bắt buộc)</span></template>
-              <input v-model="amountText" type="number" min="0" step="1000" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" />
+            <label :class="consoleLabel">
+              <template v-if="refundsToWallet">Số tiền hoàn vào ví khách (₫)</template>
+              <template v-else>Số tiền ghi nhận (₫, không bắt buộc)</template>
+              <input v-model="amountText" type="number" min="0" step="1000" inputmode="numeric" :class="consoleField" class="h-10" />
             </label>
           </div>
-          <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-            Lý do xử lý <span class="text-danger-600">*</span>
-            <textarea v-model="resolutionReason" maxlength="2000" rows="5" required class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm font-normal leading-relaxed text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Nhập lý do có thể kiểm toán, tối thiểu 10 ký tự." />
-            <span class="font-normal text-ink-400">10–2000 ký tự · {{ resolutionReason.length }}/2000</span>
+          <label :class="consoleLabel">
+            Lý do xử lý
+            <textarea v-model="resolutionReason" maxlength="2000" rows="5" required :class="consoleTextarea" placeholder="Tối thiểu 10 ký tự" />
+            <span class="self-end font-num text-xs font-normal text-ink-500">{{ resolutionReason.length }}/2000</span>
           </label>
-          <label class="flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-            Evidence references <span class="font-normal text-ink-400">(tuỳ chọn, mỗi dòng một ref; tối đa 20 dòng, 500 ký tự/ref)</span>
-            <textarea v-model="evidenceRefsText" rows="3" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 font-mono text-xs text-ink-800 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="audit://case/123" />
+          <label :class="consoleLabel">
+            Bằng chứng (không bắt buộc, mỗi dòng một liên kết)
+            <textarea v-model="evidenceRefsText" rows="3" :class="consoleTextarea" />
           </label>
-          <div v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-800" role="alert">{{ formError }}</div>
+          <div v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ formError }}</div>
           <div class="flex justify-end">
             <FhButton type="submit" :disabled="submitting">Kiểm tra và xác nhận</FhButton>
           </div>
         </form>
       </FhCard>
 
-      <FhEmptyState
-        v-else
-        title="Case đã kết thúc"
-        description="Support case này đã có trạng thái cuối từ Backend; form resolution không còn khả dụng."
-        :icon="CheckCircle2"
-      />
-
       <FhConfirmDialog
         :open="showConfirm"
         :loading="submitting"
         :danger="pendingPayload?.finalStatus === 'rejected'"
-        title="Xác nhận kết quả support case"
-        :consequence="`Backend sẽ ghi nhận trạng thái cuối: ${pendingPayload?.finalStatus ?? '—'}. Hành động này không thay đổi dữ liệu Booking, ServiceOrder, Invoice hoặc CashSettlement.`"
+        title="Xác nhận kết quả xử lý"
+        :consequence="confirmConsequence"
         confirm-text="Gửi kết quả"
         cancel-text="Kiểm tra lại"
         @confirm="confirmResolution"

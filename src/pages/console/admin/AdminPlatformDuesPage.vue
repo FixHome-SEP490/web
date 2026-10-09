@@ -1,18 +1,36 @@
 <script setup lang="ts">
+// Admin, read only: what each completed order owes the platform. Due =
+// commission (snapshot) + FixHome parts (snapshot, no commission on parts).
 import { computed, onMounted, ref, watch } from 'vue';
-import { Receipt, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { FhButton, FhTable, FhStatusPill, FhMoney, FhSkeleton, type TableColumn } from '../../../components';
+import { FhMoney, FhStatusPill } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField } from '../../../components/console/console-ui';
 import { platformDuesApi, type PlatformDueRecord } from '../../../api/admin-platform-dues.api';
+import { userFacingError } from '../../../utils/user-facing-error';
 import { vnDateString } from '../../../utils/vn-time';
 
-const columns: TableColumn[] = [
-  { key: 'invoice', label: 'Hoá đơn / Đơn' },
-  { key: 'snapshots', label: 'Snapshot công & linh kiện' },
-  { key: 'commission', label: 'Hoa hồng (snapshot)' },
-  { key: 'due', label: 'Phải nộp Platform', align: 'right', width: '160px' },
-  { key: 'status', label: 'Trạng thái', width: '140px' },
-  { key: 'settledAt', label: 'Quyết toán', width: '130px' },
+const columns: ConsoleColumn[] = [
+  { key: 'order', label: 'Đơn' },
+  { key: 'labor', label: 'Tiền công', align: 'right', hideBelow: 'xl' },
+  { key: 'parts', label: 'Linh kiện FixHome', align: 'right', hideBelow: 'xl' },
+  { key: 'commission', label: 'Hoa hồng', align: 'right', hideBelow: 'lg' },
+  { key: 'due', label: 'Phải nộp', align: 'right' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'settledAt', label: 'Ngày nộp', hideBelow: 'xl' },
 ];
+
+// Mirrors PlatformDueStatus in the backend.
+const STATUS: Record<string, { label: string; tone: string }> = {
+  pending: { label: 'Chưa nộp', tone: 'PENDING' },
+  settled: { label: 'Đã nộp', tone: 'COMPLETED' },
+  cancelled: { label: 'Đã huỷ', tone: 'CANCELLED' },
+};
+const statusOf = (value: string) => STATUS[String(value).toLowerCase()] ?? { label: 'Trạng thái chưa xác định', tone: 'CANCELLED' };
 
 const statusFilter = ref('');
 const page = ref(1);
@@ -25,38 +43,6 @@ let latestRequest = 0;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredDues = computed<(PlatformDueRecord & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: pageSize }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      invoiceId: '',
-      serviceOrderId: '',
-      laborTotalSnapshot: 0,
-      fixHomePartsTotalSnapshot: 0,
-      commissionRateSnapshot: 0,
-      commissionAmountSnapshot: 0,
-      dueAmount: 0,
-      status: 'PENDING',
-      settledAt: null,
-      createdAt: '',
-      updatedAt: '',
-    } as unknown as PlatformDueRecord & { _isSkeleton: boolean }));
-  }
-  return dues.value;
-});
-
-function getErrorMessage(reason: unknown, fallback: string): string {
-  if (typeof reason === 'object' && reason !== null && 'response' in reason) {
-    const response = (reason as { response?: { data?: { message?: unknown } } }).response;
-    if (typeof response?.data?.message === 'string') return response.data.message;
-  }
-  if (reason instanceof Error && reason.message) return reason.message;
-  return fallback;
-}
-
 const loadDues = async () => {
   const requestId = ++latestRequest;
   loading.value = true;
@@ -65,7 +51,7 @@ const loadDues = async () => {
     const response = await platformDuesApi.listDues({
       page: page.value,
       limit: pageSize,
-      status: statusFilter.value.trim() || undefined,
+      status: statusFilter.value || undefined,
     });
     if (requestId !== latestRequest) return;
     dues.value = response.data;
@@ -74,7 +60,7 @@ const loadDues = async () => {
     if (requestId !== latestRequest) return;
     dues.value = [];
     total.value = 0;
-    error.value = getErrorMessage(reason, 'Không thể tải công nợ Platform từ Backend.');
+    error.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -96,109 +82,61 @@ watch(page, (nextPage, previousPage) => {
   if (nextPage !== previousPage) void loadDues();
 });
 
+/** The snapshot rate is a fraction (0.1 = 10%). */
+const ratePercent = (rate: number) => `${(Number(rate) * 100).toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`;
+
 const formatDate = (value: string | null) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : vnDateString(date);
+  return Number.isNaN(date.getTime()) ? '—' : vnDateString(date);
 };
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Receipt class="text-brand-600" :size="24" />
-          Kiểm toán Công nợ Platform
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Dữ liệu chỉ đọc từ <span class="font-mono">GET /finance/platform-dues</span>.
-          Công thức hiển thị: phải nộp = hoa hồng (snapshot) + linh kiện FixHome (snapshot, không chịu hoa hồng).
-        </p>
-      </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadDues">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Công nợ nền tảng" :count="loading || error ? null : total">
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading" @click="loadDues">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
+        <option value="">Tất cả trạng thái</option>
+        <option v-for="(item, key) in STATUS" :key="key" :value="key">{{ item.label }}</option>
+      </select>
     </div>
 
-    <div
-      v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-      role="alert"
-    >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadDues">Thử lại</button>
-    </div>
-
-    <FhTable
+    <ConsoleLoadError v-if="error" :message="error" @retry="loadDues" />
+    <ConsoleTable
+      v-else
       :columns="columns"
-      :rows="filteredDues"
+      :rows="dues"
       :loading="loading"
-      :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có công nợ phù hợp.'"
-      searchable
-      v-model:searchQuery="statusFilter"
-      search-placeholder="Lọc theo trạng thái (để trống = tất cả)..."
+      empty-text="Không có công nợ phù hợp."
     >
-      <template #toolbar>
-        <span class="text-[11px] text-ink-400 italic flex-1 text-right">Trang kiểm toán chỉ đọc — không thao tác quyết toán.</span>
+      <template #cell-order="{ row }">
+        <router-link :to="`/console/orders/${row.serviceOrderId}`" class="whitespace-nowrap text-brand-700 hover:underline">Xem đơn</router-link>
       </template>
-
-      <template #cell-invoice="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="180px" height="16px" class="mb-1" />
-          <FhSkeleton width="140px" height="12px" class="mb-1" />
-          <FhSkeleton width="100px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="text-xs text-ink-700 font-mono">Invoice: {{ row.invoiceId }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">Order: {{ row.serviceOrderId }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">Due: {{ row.id }}</div>
-        </div>
-      </template>
-      <template #cell-snapshots="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="120px" height="16px" class="mb-1" />
-          <FhSkeleton width="140px" height="16px" />
-        </div>
-        <div v-else>
-          <div class="text-xs text-ink-700 font-num">Công: <FhMoney :amount="row.laborTotalSnapshot" /></div>
-          <div class="text-xs text-ink-700 font-num">Linh kiện FH: <FhMoney :amount="row.fixHomePartsTotalSnapshot" /></div>
-        </div>
-      </template>
+      <template #cell-labor="{ row }"><FhMoney :amount="row.laborTotalSnapshot" /></template>
+      <template #cell-parts="{ row }"><FhMoney :amount="row.fixHomePartsTotalSnapshot" /></template>
       <template #cell-commission="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="80px" height="16px" class="mb-1" />
-          <FhSkeleton width="100px" height="16px" />
-        </div>
-        <div v-else>
-          <div class="text-xs text-ink-700 font-num">Tỉ lệ: {{ row.commissionRateSnapshot }}</div>
-          <div class="text-xs font-bold text-ink-900 font-num"><FhMoney :amount="row.commissionAmountSnapshot" /></div>
-        </div>
+        <FhMoney :amount="row.commissionAmountSnapshot" />
+        <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ ratePercent(row.commissionRateSnapshot) }}</div>
       </template>
       <template #cell-due="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="20px" />
-        <span v-else class="text-sm font-bold font-num text-brand-700"><FhMoney :amount="row.dueAmount" /></span>
+        <FhMoney :amount="row.dueAmount" />
       </template>
       <template #cell-status="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
-        <FhStatusPill v-else :status="String(row.status)" :label="String(row.status)" />
+        <FhStatusPill :status="statusOf(row.status).tone" :label="statusOf(row.status).label" />
       </template>
       <template #cell-settledAt="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
-        <span v-else class="text-xs text-ink-500 font-num">{{ formatDate(row.settledAt) }}</span>
+        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(row.settledAt) }}</span>
       </template>
-    </FhTable>
+    </ConsoleTable>
 
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} bản ghi</span>
-      <div class="flex items-center gap-2">
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" aria-label="Trang trước" @click="page--">
-          <ChevronLeft :size="16" />
-        </button>
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" aria-label="Trang sau" @click="page++">
-          <ChevronRight :size="16" />
-        </button>
-      </div>
-    </div>
+    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
   </div>
 </template>

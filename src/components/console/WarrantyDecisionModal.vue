@@ -165,7 +165,7 @@ async function submit() {
           <p class="font-semibold text-ink-800">Đề xuất của kỹ thuật viên</p>
           <p>{{ proposal ? inspectionResultLabels[proposal] : '—' }}</p>
           <p v-if="claim.visit.notCoveredReasonCode">
-            Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || claim.visit.notCoveredReasonCode }}
+            Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
           </p>
           <p class="whitespace-pre-line text-ink-700">{{ claim.visit.findings }}</p>
           <div v-if="claim.visit.evidenceRefs?.length" class="flex flex-wrap gap-2">

@@ -4,8 +4,8 @@
 // another technician (the order goes back to accepted, the reporter loses no
 // points) or cancels it without costing anyone points.
 import { onMounted, ref } from 'vue';
-import { UserCog } from 'lucide-vue-next';
-import { FhButton, FhCard } from '..';
+import { FhButton, FhCard, FhSkeleton } from '..';
+import { CONSOLE_LOAD_ERROR, consoleTextarea } from './console-ui';
 import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
 import { ordersApi } from '../../api/orders.api';
 import { supportCasesApi, type SupportCaseDetail } from '../../api/support-cases.api';
@@ -16,7 +16,7 @@ const emit = defineEmits<{ (e: 'done', message: string): void }>();
 
 const candidates = ref<TechnicianCandidate[]>([]);
 const loading = ref(true);
-const loadError = ref('');
+const loadError = ref(false);
 const chosen = ref('');
 const reason = ref('');
 const busy = ref(false);
@@ -33,14 +33,14 @@ async function bookingIdOf(): Promise<string> {
 
 async function load() {
   loading.value = true;
-  loadError.value = '';
+  loadError.value = false;
   try {
     const bookingId = await bookingIdOf();
     if (!bookingId) throw new Error('Yêu cầu không gắn với đơn nào.');
     const list = await bookingsApi.getCandidates(bookingId);
     candidates.value = list.filter((c) => c.id !== props.supportCase.technicianId);
-  } catch (err) {
-    loadError.value = getSupportErrorMessage(err, 'Chưa tải được danh sách thợ phù hợp.');
+  } catch {
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -98,17 +98,14 @@ onMounted(load);
 </script>
 
 <template>
-  <FhCard class="border-warning-200" data-testid="replacement-panel">
-    <h2 class="mb-1 text-h2 text-ink-900 flex items-center gap-2"><UserCog :size="18" /> Xử lý yêu cầu đổi thợ</h2>
-    <p class="mb-4 text-xs text-ink-500">
-      Thợ đã tới nơi và báo việc ngoài khả năng. Giao đơn cho thợ khác (thợ mới tự xuất phát và check-in) hoặc huỷ đơn. Cả hai cách đều không trừ điểm thợ đã báo.
-    </p>
-    <p v-if="loading" class="text-xs text-ink-400">Đang tải thợ phù hợp...</p>
-    <p v-else-if="loadError" class="text-xs text-danger-700">{{ loadError }}
-      <button type="button" class="font-semibold underline" @click="load">Thử lại</button>
+  <FhCard title="Đổi thợ" data-testid="replacement-panel">
+    <p class="mb-4 text-sm text-ink-600 text-pretty">Giao đơn cho thợ khác hoặc huỷ đơn. Thợ đã báo không bị trừ điểm.</p>
+    <FhSkeleton v-if="loading" height="40px" :count="3" />
+    <p v-else-if="loadError" class="text-sm text-ink-700">{{ CONSOLE_LOAD_ERROR }}
+      <button type="button" class="ml-1 font-medium text-brand-700 hover:underline" @click="load">Thử lại</button>
     </p>
     <template v-else>
-      <p v-if="candidates.length === 0" class="text-xs text-ink-500">Chưa có thợ nào khác rảnh và phù hợp cho đơn này. Bạn có thể huỷ đơn để khách đặt lại.</p>
+      <p v-if="candidates.length === 0" class="text-sm text-ink-600">Chưa có thợ khác rảnh và phù hợp. Có thể huỷ đơn để khách đặt lại.</p>
       <div v-else class="space-y-2 max-h-80 overflow-y-auto pr-1" role="radiogroup" aria-label="Thợ nhận đơn">
         <label
           v-for="c in candidates"
@@ -121,18 +118,18 @@ onMounted(load);
             <input v-model="chosen" type="radio" :value="c.id" />
             <span class="font-semibold text-ink-900 truncate">{{ c.fullName }}</span>
           </span>
-          <span class="shrink-0 text-xs text-ink-500">
-            <template v-if="typeof c.distanceKm === 'number'">{{ c.distanceKm.toFixed(1) }} km</template>
+          <span class="shrink-0 whitespace-nowrap text-xs text-ink-500">
+            <template v-if="typeof c.distanceKm === 'number'">{{ c.distanceKm.toFixed(1) }}&nbsp;km</template>
             <template v-if="typeof c.completedOrdersCount === 'number'"> · {{ c.completedOrdersCount }} đơn đã làm</template>
           </span>
         </label>
       </div>
     </template>
-    <label class="mt-4 flex flex-col gap-1.5 text-xs font-semibold text-ink-700">
-      Lý do <span class="font-normal text-ink-400">(gửi kèm thông báo, tối thiểu 10 ký tự)</span>
-      <textarea v-model="reason" rows="2" maxlength="500" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm font-normal" data-testid="replacement-reason" />
+    <label class="mt-4 flex flex-col gap-1.5 text-sm font-medium text-ink-700">
+      Lý do (gửi kèm thông báo)
+      <textarea v-model="reason" rows="2" maxlength="500" placeholder="Tối thiểu 10 ký tự" :class="consoleTextarea" data-testid="replacement-reason" />
     </label>
-    <p v-if="error" class="mt-2 text-xs text-danger-700" role="alert">{{ error }}</p>
+    <p v-if="error" class="mt-2 text-sm text-danger-700" role="alert">{{ error }}</p>
     <div class="mt-3 flex flex-wrap gap-2">
       <FhButton size="sm" :loading="busy" :disabled="busy || !candidates.length" data-testid="replacement-assign" @click="replace">Giao cho thợ đã chọn</FhButton>
       <FhButton variant="secondary" size="sm" :disabled="busy" data-testid="replacement-cancel" @click="cancelWithoutPoints">Huỷ đơn, không trừ điểm</FhButton>

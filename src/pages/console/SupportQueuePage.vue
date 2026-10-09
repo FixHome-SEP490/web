@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ChevronLeft, ChevronRight, Eye, LifeBuoy, RefreshCw, Search } from 'lucide-vue-next';
-import {
-  FhButton,
-  FhCard,
-  FhEmptyState,
-  FhStatusPill,
-  FhTable,
-  type TableColumn,
-} from '../../components';
+import { FhButton, FhStatusPill } from '../../components';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import { consoleField } from '../../components/console/console-ui';
 import {
   supportCasesApi,
   type SupportCaseStatus,
@@ -17,7 +15,6 @@ import {
 } from '../../api/support-cases.api';
 import {
   formatSupportDate,
-  getSupportErrorMessage,
   isCashCase,
   isResponseOverdue,
   supportCaseStatusLabels,
@@ -27,13 +24,12 @@ import { useRoute, useRouter } from 'vue-router';
 
 const router = useRouter();
 const route = useRoute();
-const columns: TableColumn[] = [
-  { key: 'type', label: 'Loại case', width: '180px' },
-  { key: 'status', label: 'Trạng thái', width: '140px' },
-  { key: 'reason', label: 'Lý do' },
-  { key: 'references', label: 'Booking / order' },
-  { key: 'createdAt', label: 'Tạo lúc', width: '170px' },
-  { key: 'actions', label: 'Chi tiết', width: '84px' },
+const columns: ConsoleColumn[] = [
+  { key: 'type', label: 'Loại' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'reason', label: 'Lý do', hideBelow: 'lg' },
+  { key: 'references', label: 'Đơn', hideBelow: 'xl' },
+  { key: 'createdAt', label: 'Tạo lúc', hideBelow: 'xl' },
 ];
 
 const caseTypes: SupportCaseType[] = [
@@ -65,13 +61,13 @@ const pageSize = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const loading = ref(true);
-const error = ref('');
+const error = ref(false);
 let latestRequest = 0;
 
 async function loadCases() {
   const requestId = ++latestRequest;
   loading.value = true;
-  error.value = '';
+  error.value = false;
   try {
     const response = await supportCasesApi.listCases({
       page: page.value,
@@ -84,11 +80,11 @@ async function loadCases() {
     if (requestId !== latestRequest) return;
     cases.value = response.data;
     total.value = response.meta.total;
-  } catch (reason) {
+  } catch {
     if (requestId !== latestRequest) return;
     cases.value = [];
     total.value = 0;
-    error.value = getSupportErrorMessage(reason, 'Không thể tải hàng đợi hỗ trợ từ Backend.');
+    error.value = true;
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -101,6 +97,8 @@ function applySearch() {
     void loadCases();
   }
 }
+
+const hasFilters = computed(() => !!(searchQuery.value.trim() || caseTypeFilter.value || statusFilter.value));
 
 function resetFilters() {
   searchQuery.value = '';
@@ -134,157 +132,78 @@ watch(page, (nextPage, previousPage) => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 class="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink-900">
-          <LifeBuoy class="text-brand-600" :size="24" />
-          Hàng đợi hỗ trợ
-        </h1>
-        <p class="mt-1 text-xs text-ink-500">
-          Service Manager rà soát các case ngoại lệ từ Backend và ghi nhận kết quả xử lý có kiểm soát.
-        </p>
-      </div>
-      <span class="w-fit rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-bold text-brand-700">
-        {{ total }} case
-      </span>
-    </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Yêu cầu hỗ trợ" :count="loading || error ? null : total" />
 
-    <div class="rounded-[var(--radius-sm)] border border-ink-200 bg-white p-3.5 shadow-[var(--shadow-e1)]">
-      <form class="flex flex-wrap items-end gap-3" role="search" @submit.prevent="applySearch">
-        <div class="relative min-w-[240px] flex-1 sm:max-w-sm">
-          <label class="sr-only" for="support-search">Tìm case hỗ trợ</label>
-          <input
-            id="support-search"
-            v-model="searchQuery"
-            type="search"
-            maxlength="200"
-            placeholder="Tìm theo lý do, booking hoặc service order..."
-            class="h-10 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 pl-9 pr-3 text-xs text-ink-800 focus:border-brand-600 focus:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          />
-          <Search :size="15" class="absolute left-3 top-3 text-ink-400" />
-        </div>
-
-        <label class="flex min-w-[190px] flex-col gap-1 text-[11px] font-semibold text-ink-500">
-          Loại case
-          <select
-            v-model="caseTypeFilter"
-            class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-xs font-normal text-ink-700 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          >
-            <option value="">Tất cả loại case</option>
-            <option v-for="caseType in caseTypes" :key="caseType" :value="caseType">
-              {{ supportCaseTypeLabels[caseType] }}
-            </option>
-          </select>
-        </label>
-
-        <label class="flex min-w-[160px] flex-col gap-1 text-[11px] font-semibold text-ink-500">
-          Trạng thái
-          <select
-            v-model="statusFilter"
-            class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-xs font-normal text-ink-700 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          >
-            <option value="">Tất cả trạng thái</option>
-            <option v-for="status in statuses" :key="status" :value="status">
-              {{ supportCaseStatusLabels[status] }}
-            </option>
-          </select>
-        </label>
-
-        <FhButton type="submit" size="sm">
-          <Search :size="14" />
-          Tìm kiếm
-        </FhButton>
-        <FhButton type="button" variant="ghost" size="sm" :disabled="loading" @click="resetFilters">
-          <RefreshCw :size="14" />
-          Xoá lọc
-        </FhButton>
-      </form>
-    </div>
-
-    <div v-if="error" class="flex items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadCases">Thử lại</button>
-    </div>
-
-    <FhCard v-if="loading || cases.length > 0" padding="none">
-      <FhTable
-        :columns="columns"
-        :rows="cases"
-        :loading="loading"
-        empty-text="Không có case phù hợp với bộ lọc."
+    <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="applySearch">
+      <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo lý do, mã yêu cầu" label="Tìm yêu cầu hỗ trợ" />
+      <select v-model="caseTypeFilter" :class="consoleField" aria-label="Loại yêu cầu">
+        <option value="">Tất cả loại</option>
+        <option v-for="caseType in caseTypes" :key="caseType" :value="caseType">
+          {{ supportCaseTypeLabels[caseType] }}
+        </option>
+      </select>
+      <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
+        <option value="">Tất cả trạng thái</option>
+        <option v-for="status in statuses" :key="status" :value="status">
+          {{ supportCaseStatusLabels[status] }}
+        </option>
+      </select>
+      <FhButton type="submit" variant="secondary" size="sm">Tìm</FhButton>
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="h-9 whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-sm font-medium text-ink-600 hover:text-ink-900"
+        :disabled="loading"
+        @click="resetFilters"
       >
-        <template #cell-type="{ row }">
-          <div class="text-xs font-semibold text-ink-900">{{ supportCaseTypeLabels[row.caseType] }}</div>
-          <div class="mt-0.5 font-mono text-[10px] text-ink-400">{{ row.caseType }}</div>
-        </template>
-        <template #cell-status="{ row }">
+        Xoá lọc
+      </button>
+    </form>
+
+    <ConsoleLoadError v-if="error" @retry="loadCases" />
+    <ConsoleTable
+      v-else
+      :columns="columns"
+      :rows="cases"
+      :loading="loading"
+      empty-text="Không có yêu cầu nào phù hợp."
+    >
+      <template #cell-type="{ row }">
+        <button
+          type="button"
+          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :aria-label="`Mở chi tiết ${supportCaseTypeLabels[row.caseType]}`"
+          @click="openCase(row)"
+        >
+          {{ supportCaseTypeLabels[row.caseType] }}
+        </button>
+      </template>
+      <template #cell-status="{ row }">
+        <div class="flex flex-wrap gap-1">
           <FhStatusPill :status="row.status" :label="supportCaseStatusLabels[row.status]" />
-          <div class="mt-1 flex flex-wrap gap-1">
-            <span v-if="row.isUrgent && (row.status === 'open' || row.status === 'in_review')" class="rounded bg-danger-50 px-1.5 py-0.5 text-[10px] font-semibold text-danger-700">Cần xử lý ngay</span>
-            <span v-if="isResponseOverdue(row.status, row.respondBy)" class="rounded bg-warning-50 px-1.5 py-0.5 text-[10px] font-semibold text-warning-700">Quá hạn phản hồi</span>
-            <span v-if="row.holdCompletion" class="rounded bg-info-50 px-1.5 py-0.5 text-[10px] font-semibold text-info-600">Đang giữ đơn</span>
-          </div>
-        </template>
-        <template #cell-reason="{ row }">
-          <div class="max-w-[360px] text-xs font-medium leading-relaxed text-ink-800 line-clamp-2">{{ row.reason }}</div>
-          <div v-if="row.description" class="mt-0.5 max-w-[360px] text-[11px] text-ink-400 line-clamp-1">{{ row.description }}</div>
-        </template>
-        <template #cell-references="{ row }">
-          <div class="space-y-0.5 font-mono text-[11px] text-ink-600">
-            <div>Booking: {{ row.bookingId ?? '—' }}</div>
-            <div>Order: {{ row.serviceOrderId ?? '—' }}</div>
-          </div>
-        </template>
-        <template #cell-createdAt="{ row }">
-          <span class="font-num text-xs text-ink-600">{{ formatSupportDate(row.createdAt) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <button
-            class="inline-flex min-h-[36px] items-center justify-center rounded p-2 text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            type="button"
-            title="Mở chi tiết"
-            :aria-label="`Mở chi tiết ${row.id}`"
-            @click="openCase(row)"
-          >
-            <Eye :size="16" />
-          </button>
-        </template>
-      </FhTable>
-    </FhCard>
+          <span v-if="row.isUrgent && (row.status === 'open' || row.status === 'in_review')" class="whitespace-nowrap rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Cần xử lý ngay</span>
+          <span v-if="isResponseOverdue(row.status, row.respondBy)" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">Quá hạn phản hồi</span>
+          <span v-if="row.holdCompletion" class="whitespace-nowrap rounded bg-info-50 px-1.5 py-0.5 text-xs font-medium text-info-600">Đang giữ đơn</span>
+        </div>
+      </template>
+      <template #cell-reason="{ row }">
+        <div class="line-clamp-2 max-w-96 text-ink-800" :title="row.description || row.reason">{{ row.reason }}</div>
+      </template>
+      <template #cell-references="{ row }">
+        <router-link
+          v-if="row.serviceOrderId"
+          :to="`/console/orders/${row.serviceOrderId}`"
+          class="whitespace-nowrap text-brand-700 hover:underline"
+        >Xem đơn</router-link>
+        <span v-else-if="row.bookingId" class="whitespace-nowrap text-ink-600">Chưa có đơn</span>
+        <span v-else class="text-ink-400">—</span>
+      </template>
+      <template #cell-createdAt="{ row }">
+        <span class="whitespace-nowrap font-num text-ink-600">{{ formatSupportDate(row.createdAt) }}</span>
+      </template>
+    </ConsoleTable>
 
-    <FhCard v-else-if="!error">
-      <FhEmptyState
-        title="Hàng đợi đang trống"
-        description="Không có support case nào phù hợp với bộ lọc hiện tại."
-        :icon="LifeBuoy"
-        action-text="Xoá bộ lọc"
-        @action="resetFilters"
-      />
-    </FhCard>
-
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} case</span>
-      <div class="flex items-center gap-2">
-        <button
-          class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-          type="button"
-          aria-label="Trang trước"
-          :disabled="page <= 1 || loading"
-          @click="page--"
-        >
-          <ChevronLeft :size="16" />
-        </button>
-        <button
-          class="rounded border border-ink-200 p-2 transition-colors hover:bg-ink-100 disabled:opacity-40"
-          type="button"
-          aria-label="Trang sau"
-          :disabled="page >= totalPages || loading"
-          @click="page++"
-        >
-          <ChevronRight :size="16" />
-        </button>
-      </div>
-    </div>
+    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
   </div>
 </template>

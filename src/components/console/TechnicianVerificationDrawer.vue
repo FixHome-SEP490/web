@@ -144,6 +144,9 @@ const formatDate = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN');
 };
+
+const STATUS_TEXT: Record<string, string> = { PENDING: 'Đang chờ duyệt', VERIFIED: 'Đã duyệt', REJECTED: 'Đã từ chối' };
+const statusText = computed(() => STATUS_TEXT[String(props.verification?.status ?? '').toUpperCase()] ?? 'Trạng thái chưa xác định');
 </script>
 
 <template>
@@ -163,22 +166,24 @@ const formatDate = (value: string) => {
       <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white shrink-0">
         <div class="flex flex-col">
           <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-            Hồ sơ Thẩm định Kỹ thuật viên
+            Hồ sơ kỹ thuật viên
           </h2>
-          <p class="text-sm text-gray-500 font-medium">
-            {{ technician?.fullName || technician?.id }} • Trạng thái: 
+          <p class="flex flex-wrap items-center gap-2 text-sm text-gray-500 font-medium">
+            {{ technician?.fullName || 'Kỹ thuật viên' }}
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
                   :class="{
                     'bg-amber-100 text-amber-700': verification?.status === 'PENDING',
                     'bg-green-100 text-green-700': verification?.status === 'VERIFIED',
                     'bg-red-100 text-red-700': verification?.status === 'REJECTED'
                   }">
-              {{ verification?.status }}
+              {{ statusText }}
             </span>
           </p>
         </div>
         <button
-          class="p-2 text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors focus:outline-none"
+          type="button"
+          class="p-2 text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          aria-label="Đóng"
           @click="close"
         >
           <X :size="24" />
@@ -192,7 +197,7 @@ const formatDate = (value: string) => {
         <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
             <User class="text-brand-600" :size="20" />
-            Thông tin cá nhân & Pháp lý
+            Thông tin cá nhân
           </h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
             <div>
@@ -226,13 +231,13 @@ const formatDate = (value: string) => {
         <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
             <FileBadge class="text-brand-600" :size="20" />
-            Hồ sơ định danh eKYC
+            Giấy tờ xác minh
           </h3>
           
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
             <!-- Mặt trước -->
             <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">CCCD Mặt trước</p>
+              <p class="text-xs font-semibold text-gray-600 text-center">CCCD mặt trước</p>
               <button 
                 class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
                 @click="frontIdDoc?.id ? handlePreview('CCCD mặt trước', frontIdDoc.id) : null"
@@ -255,7 +260,7 @@ const formatDate = (value: string) => {
             
             <!-- Mặt sau -->
             <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">CCCD Mặt sau</p>
+              <p class="text-xs font-semibold text-gray-600 text-center">CCCD mặt sau</p>
               <button 
                 class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
                 @click="backIdDoc?.id ? handlePreview('CCCD mặt sau', backIdDoc.id) : null"
@@ -278,7 +283,7 @@ const formatDate = (value: string) => {
             
             <!-- Chân dung / Video -->
             <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">Ảnh/Video khuôn mặt</p>
+              <p class="text-xs font-semibold text-gray-600 text-center">Khuôn mặt</p>
               <button 
                 class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
                 @click="(facePhotoDoc?.id || faceVideoDoc?.id) ? handlePreview('Xác minh khuôn mặt', (facePhotoDoc?.id || faceVideoDoc?.id) as string) : null"
@@ -314,19 +319,19 @@ const formatDate = (value: string) => {
         <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
             <Briefcase class="text-brand-600" :size="20" />
-            Chuyên môn & Kinh nghiệm
+            Chuyên môn
           </h3>
           
           <div class="space-y-5">
             <div class="flex flex-wrap items-center gap-3">
-              <span class="text-sm font-medium text-gray-500">Số năm kinh nghiệm:</span>
+              <span class="text-sm font-medium text-gray-500">Kinh nghiệm</span>
               <span class="inline-flex items-center justify-center px-3 py-1 bg-brand-50 text-brand-700 font-bold text-sm rounded-lg border border-brand-100">
                 {{ profileInfo?.yearsExperience != null ? `${profileInfo.yearsExperience} năm` : '—' }}
               </span>
             </div>
             
             <div>
-              <p class="text-sm font-medium text-gray-500 mb-2">Dịch vụ đăng ký nhận thầu:</p>
+              <p class="text-sm font-medium text-gray-500 mb-2">Dịch vụ đăng ký</p>
               <div class="flex flex-wrap gap-2">
                 <span v-for="(skill, index) in profileInfo?.skills" :key="index" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-800 text-sm font-semibold rounded-lg border border-gray-200">
                   {{ skill.name }}
@@ -337,7 +342,7 @@ const formatDate = (value: string) => {
             </div>
             
             <div>
-              <p class="text-sm font-medium text-gray-500 mb-2">Giới thiệu bản thân / Kinh nghiệm:</p>
+              <p class="text-sm font-medium text-gray-500 mb-2">Giới thiệu</p>
               <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm text-gray-700 leading-relaxed italic">
                 {{ profileInfo?.bio ? `"${profileInfo.bio}"` : 'Chưa cập nhật giới thiệu' }}
               </div>
@@ -349,25 +354,21 @@ const formatDate = (value: string) => {
         <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
             <MapPin class="text-brand-600" :size="20" />
-            Địa chỉ & Khu vực hoạt động
+            Địa chỉ và khu vực
           </h3>
           
           <div class="space-y-4">
             <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Địa chỉ thường trú / Nơi ở hiện tại</p>
+              <p class="text-xs text-gray-500 font-medium mb-1">Địa chỉ</p>
               <p class="text-sm font-semibold text-gray-900">{{ profileInfo?.address || '—' }}</p>
-            </div>
-            
-            <div class="flex items-center gap-4 py-2">
-              <div class="flex-1 h-px bg-gray-100"></div>
             </div>
             
             <div>
               <p class="text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
-                Bán kính hoạt động tối đa: 
+ Bán kính nhận việc
                 <span class="font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-100">{{ profileInfo?.serviceRadiusKm != null ? `${profileInfo.serviceRadiusKm} km` : '—' }}</span>
               </p>
-              <p class="text-sm font-medium text-gray-500 mb-2 mt-4">Khu vực tiếp nhận công việc:</p>
+              <p class="text-sm font-medium text-gray-500 mb-2 mt-4">Khu vực nhận việc</p>
               <div class="flex flex-wrap gap-2">
                 <span v-for="area in formattedServiceAreas" :key="area" class="inline-flex items-center px-2.5 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-md border border-green-200">
                   {{ area }}
@@ -386,7 +387,7 @@ const formatDate = (value: string) => {
           @click="close"
           class="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
         >
-          Đóng / Quay lại
+          Đóng
         </button>
         <div class="flex gap-3">
           <button 
