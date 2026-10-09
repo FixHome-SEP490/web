@@ -169,21 +169,8 @@ export interface CancellationRecord {
   actorName?: string | null;
   actorRole?: string | null;
   orderCode?: string | null;
-}
-
-export interface StrikeRecord {
-  id: string;
-  userId: string;
-  cancellationId: string;
-  status: 'ACTIVE' | 'WAIVED' | 'active' | 'waived';
-  waivedByUserId?: string | null;
-  waiveReason?: string | null;
-  createdAt: string;
-  userName?: string | null;
-  userRole?: string | null;
-  userSuspendedUntil?: string | null;
-  serviceOrderId?: string | null;
-  orderCode?: string | null;
+  /** Reputation points this cancellation cost whoever cancelled (negative), or null when it cost nothing. */
+  reputationDelta?: number | null;
 }
 
 export interface WarrantyItem {
@@ -764,25 +751,10 @@ export const ordersApi = {
 
   async reviewCancellation(
     id: string,
-    body: {
-      /** BRX-032: staff confirm a customer/technician cancellation was a violation; records a strike. */
-      confirmViolation?: boolean;
-      waiveStrike?: boolean;
-      waiveReason?: string;
-      grantPriorityBoost?: boolean;
-    },
+    // Violations are no longer confirmed by hand: cancelling costs reputation points by itself (PO 09/10/2026).
+    body: { grantPriorityBoost?: boolean },
   ): Promise<CancellationRecord> {
     const res = await apiClient.post<{ data: CancellationRecord }>(`/cancellations/${id}/review`, body);
-    return res.data.data;
-  },
-
-  async getStrikes(userId?: string): Promise<StrikeRecord[]> {
-    const res = await apiClient.get<{ data: StrikeRecord[] }>('/strikes', { params: { userId } });
-    return res.data.data;
-  },
-
-  async waiveStrike(id: string, reason: string): Promise<StrikeRecord> {
-    const res = await apiClient.post<{ data: StrikeRecord }>(`/strikes/${id}/waive`, { reason });
     return res.data.data;
   },
 };

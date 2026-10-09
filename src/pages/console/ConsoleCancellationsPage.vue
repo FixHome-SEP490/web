@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Ban, Zap, ShieldAlert } from 'lucide-vue-next';
-import { FhCard, FhTable, FhStatusPill, FhButton, FhConfirmDialog, FhSkeleton, FhEmptyState } from '../../components';
+import { Ban, Zap } from 'lucide-vue-next';
+import { FhCard, FhTable, FhStatusPill, FhButton, FhSkeleton, FhEmptyState } from '../../components';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
-import { userFacingError } from '../../utils/user-facing-error';
 
 interface CancellationRow extends CancellationRecord {
   orderCode: string;
@@ -24,14 +23,15 @@ const loadError = ref('');
 const rows = ref<CancellationRow[]>([]);
 const busyId = ref('');
 
-/** Only a customer's or a technician's own cancellation can be a violation (BRX-032). */
-const canConfirmViolation = (row: CancellationRow) =>
-  !row.reviewedByUserId &&
-  !row.strikeApplied &&
-  ['CUSTOMER', 'TECHNICIAN'].includes(String(row.actor ?? '').toUpperCase());
-
-const violationTarget = ref<CancellationRow | null>(null);
-const confirmingViolation = ref(false);
+/**
+ * Cancelling costs reputation points by itself (PO 09/10/2026); the list only
+ * shows what it cost. Nothing is deducted for a staff cancellation, or for a
+ * technician who checked in and asked for another technician.
+ */
+function pointsLabel(row: CancellationRow): string {
+  const delta = row.reputationDelta;
+  return typeof delta === 'number' && delta < 0 ? `Trừ ${-delta} điểm uy tín` : 'Không trừ điểm';
+}
 
 async function loadCancellations() {
   loading.value = true;
@@ -64,41 +64,6 @@ async function handleGrantBoost(row: CancellationRow) {
   }
 }
 
-async function handleWaiveStrike(row: CancellationRow) {
-  const reason = window.prompt('Lý do miễn Strike:');
-  if (!reason) return;
-  busyId.value = row.id;
-  try {
-    const updated = await ordersApi.reviewCancellation(row.id, { waiveStrike: true, waiveReason: reason });
-    Object.assign(row, updated);
-  } catch {
-    window.alert('Không thể miễn Strike. Vui lòng thử lại.');
-  } finally {
-    busyId.value = '';
-  }
-}
-
-function askConfirmViolation(row: CancellationRow) {
-  violationTarget.value = row;
-}
-
-async function confirmViolation() {
-  const row = violationTarget.value;
-  if (!row) return;
-  confirmingViolation.value = true;
-  busyId.value = row.id;
-  try {
-    await ordersApi.reviewCancellation(row.id, { confirmViolation: true });
-    violationTarget.value = null;
-    await loadCancellations();
-  } catch (err) {
-    window.alert(userFacingError(err, 'Không thể xác nhận vi phạm. Vui lòng thử lại.'));
-  } finally {
-    confirmingViolation.value = false;
-    busyId.value = '';
-  }
-}
-
 onMounted(loadCancellations);
 </script>
 
@@ -109,10 +74,10 @@ onMounted(loadCancellations);
       <div>
         <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
           <Ban class="text-danger-600" :size="24" />
-          Quản lý Huỷ đơn, Strike & Priority Boost
+          Huỷ đơn & Priority Boost
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Theo dõi nguồn gốc huỷ đơn (Customer / Technician), miễn Strike oan và cấp Priority Boost cho thợ khi khách huỷ sau arrival.
+          Ai huỷ, huỷ lúc nào, đã trừ bao nhiêu điểm uy tín. Huỷ đơn tự trừ điểm; điều chỉnh điểm ở trang Điểm uy tín. Cấp Priority Boost cho thợ khi khách huỷ sau khi thợ đã đến.
         </p>
       </div>
     </div>
@@ -140,8 +105,8 @@ onMounted(loadCancellations);
           { key: 'actor', label: 'Đối tượng huỷ' },
           { key: 'state', label: 'Thời điểm huỷ' },
           { key: 'reason', label: 'Lý do ghi nhận' },
-          { key: 'remedy', label: 'Biện pháp chế tài' },
-          { key: 'actions', label: 'Xử lý', width: '200px' },
+          { key: 'remedy', label: 'Điểm uy tín' },
+          { key: 'actions', label: 'Xử lý', width: '140px' },
         ]"
         :rows="rows"
       >
@@ -164,65 +129,34 @@ onMounted(loadCancellations);
         </template>
 
         <template #cell-reason="{ row }">
-          <span class="text-xs text-ink-600 italic line-clamp-2">"{{ row.reason }}"</span>
+          <span class="block max-w-[220px] whitespace-normal break-words text-xs text-ink-600 italic line-clamp-2">"{{ row.reason }}"</span>
         </template>
 
         <template #cell-remedy="{ row }">
-          <div class="space-y-1">
-            <div v-if="row.strikeApplied" class="flex items-center gap-1 text-[11px] font-semibold text-danger-600">
-              <ShieldAlert :size="12" /> +1 Strike vi phạm
-            </div>
-            <span v-if="!row.reviewedByUserId" class="text-[10px] text-warning-600 font-semibold">
-              Chờ SM xử lý
-            </span>
-            <span v-else class="text-[10px] text-success-600 font-semibold">Đã xử lý</span>
-          </div>
+          <span
+            class="text-xs font-semibold whitespace-nowrap"
+            :class="typeof row.reputationDelta === 'number' && row.reputationDelta < 0 ? 'text-danger-600' : 'text-ink-500'"
+            data-testid="cancellation-points"
+          >
+            {{ pointsLabel(row) }}
+          </span>
         </template>
 
         <template #cell-actions="{ row }">
           <span v-if="row.reviewedByUserId" class="text-xs text-ink-400 font-semibold">Đã xử lý</span>
-          <div v-else class="flex flex-wrap items-center gap-2">
-            <FhButton
-              v-if="canConfirmViolation(row)"
-              variant="danger"
-              size="sm"
-              :disabled="busyId === row.id"
-              data-testid="confirm-violation"
-              @click="askConfirmViolation(row)"
-            >
-              <ShieldAlert :size="13" class="mr-1" /> Xác nhận vi phạm
-            </FhButton>
-            <FhButton
-              variant="primary"
-              size="sm"
-              :disabled="busyId === row.id"
-              @click="handleGrantBoost(row)"
-            >
-              <Zap :size="13" class="mr-1" /> Cấp Boost
-            </FhButton>
-            <FhButton
-              v-if="row.strikeApplied"
-              variant="ghost"
-              size="sm"
-              :disabled="busyId === row.id"
-              @click="handleWaiveStrike(row)"
-            >
-              Miễn Strike
-            </FhButton>
-          </div>
+          <FhButton
+            v-else
+            variant="primary"
+            size="sm"
+            class="whitespace-nowrap"
+            :disabled="busyId === row.id"
+            @click="handleGrantBoost(row)"
+          >
+            <Zap :size="13" class="mr-1" /> Cấp Boost
+          </FhButton>
         </template>
       </FhTable>
     </FhCard>
 
-    <FhConfirmDialog
-      :open="!!violationTarget"
-      title="Xác nhận vi phạm huỷ đơn"
-      :consequence="`Ghi 1 Strike cho ${violationTarget ? roleLabel(violationTarget.actor).toLowerCase() : ''} ${violationTarget?.actorName ?? ''}. Đủ ngưỡng Strike thì tài khoản bị tạm khoá theo cấu hình hệ thống.`"
-      confirm-text="Xác nhận vi phạm"
-      cancel-text="Quay lại"
-      :loading="confirmingViolation"
-      @confirm="confirmViolation"
-      @cancel="violationTarget = null"
-    />
   </div>
 </template>

@@ -315,9 +315,8 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'strikes',
-        name: 'console-strikes',
-        component: () => import('../pages/console/ConsoleStrikesPage.vue'),
-        meta: { title: 'Vi phạm & Đình chỉ', roles: ['SERVICE_MANAGER'] },
+        // Strikes gave way to reputation points (PO 08-09/10/2026).
+        redirect: '/console/reputation',
       },
       {
         path: 'reputation',
