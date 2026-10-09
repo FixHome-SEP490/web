@@ -132,6 +132,9 @@ onMounted(() => void loadQueue());
         <p class="mt-1 text-xs text-ink-500">
           Kỹ thuật viên phụ trách kiểm tra và đề xuất kết luận; kết luận chỉ có hiệu lực sau khi quản lý dịch vụ duyệt.
         </p>
+        <p v-if="!canDecide" class="mt-1 text-xs text-warning-800" data-testid="warranty-read-only">
+          Bạn đang xem ở chế độ chỉ đọc. Phân công, duyệt, từ chối và đóng yêu cầu do quản lý dịch vụ thực hiện.
+        </p>
       </div>
       <div class="flex gap-2" role="tablist" aria-label="Chế độ xem">
         <FhButton :variant="tab === 'queue' ? 'primary' : 'secondary'" size="sm" role="tab" :aria-selected="tab === 'queue'" @click="tab = 'queue'">

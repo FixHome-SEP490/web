@@ -72,6 +72,7 @@ const navigation = computed(() => [
             { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
             { label: 'Ví khách hàng', path: '/console/admin/customer-wallets', icon: WalletCards },
             { label: 'Thanh toán', path: '/console/admin/payments', icon: CreditCard },
+            { label: 'Yêu cầu bảo hành', path: '/console/warranty', icon: ShieldCheck },
             { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },
