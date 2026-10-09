@@ -364,4 +364,9 @@ export const bookingsApi = {
   async assignTechnicianToBooking(bookingId: string, technicianId: string, reason: string): Promise<void> {
     await apiClient.post(`/bookings/${bookingId}/assign`, { technicianId, reason });
   },
+
+  /** Service Manager: give the order to another technician after the one on site reported "Cần thay đổi thợ". */
+  async replaceTechnicianAfterReport(orderId: string, technicianId: string, reason: string): Promise<void> {
+    await apiClient.post(`/service-orders/${orderId}/replace-technician`, { technicianId, reason });
+  },
 };

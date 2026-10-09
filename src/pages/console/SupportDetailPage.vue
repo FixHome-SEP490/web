@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { ArrowLeft, CheckCircle2, ExternalLink, FileText, LifeBuoy, LockKeyhole, ReceiptText } from 'lucide-vue-next';
 import { ordersApi } from '../../api/orders.api';
+import TechnicianReplacementPanel from '../../components/console/TechnicianReplacementPanel.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   FhButton,
@@ -89,6 +90,15 @@ async function loadCase(id: string) {
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
+}
+
+// "Cần thay đổi thợ" cases get their own handling (PO 08/10/2026).
+const isReplacementCase = computed(() => supportCase.value?.caseType === 'technician_replacement' && !!supportCase.value?.serviceOrderId);
+async function onReplacementDone(message: string) {
+  const id = supportCase.value?.id;
+  if (!id) return;
+  await loadCase(id);
+  successMessage.value = message;
 }
 
 async function runAction(action: () => Promise<SupportCaseDetail>, success: string) {
@@ -317,6 +327,8 @@ watch(caseId, (id) => {
           </FhButton>
         </div>
       </FhCard>
+
+      <TechnicianReplacementPanel v-if="isReplacementCase && !isTerminal" :support-case="supportCase" @done="onReplacementDone" />
 
       <div class="grid gap-4 lg:grid-cols-2">
         <FhCard>
