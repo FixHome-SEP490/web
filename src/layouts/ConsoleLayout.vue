@@ -27,6 +27,7 @@ import {
   Gauge,
   UserSearch,
   WalletCards,
+  CreditCard,
 } from 'lucide-vue-next';
 
 
@@ -70,6 +71,7 @@ const navigation = computed(() => [
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
             { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
             { label: 'Ví khách hàng', path: '/console/admin/customer-wallets', icon: WalletCards },
+            { label: 'Thanh toán', path: '/console/admin/payments', icon: CreditCard },
             { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },
