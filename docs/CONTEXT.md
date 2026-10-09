@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 02:09 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/booking-media-caption
+> Cập nhật lần cuối: 2026-10-10 02:37 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/schedule-24h
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -112,6 +112,8 @@ Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau 
 ### Kỹ thuật viên (`/tech`)
 
 Onboarding và KYC, bật tắt nhận việc (cần đủ số dư ví), lời mời (nhận hoặc từ chối), danh sách và chi tiết công việc (đi đến, check-in GPS, bắt đầu sửa, ảnh trước và sau, báo giá, chi phí phát sinh, linh kiện, khai tiền mặt, huỷ), bảo hành, thu nhập, ví (nạp qua VNPay, tài khoản ngân hàng, rút tiền qua payOS), hồ sơ (kỹ năng và giá công, lịch, ngày nghỉ, đánh giá).
+
+Lịch làm việc hằng tuần (PO 10/10/2026) chọn giờ bằng `components/technician/TimeSelect24.vue`: 24 giờ, mỗi 30 phút, không có SA/CH; giờ kết thúc "24:00" lưu là `23:59` (backend chỉ nhận `HH:mm` và so chữ bắt đầu < kết thúc); giờ lẻ đã lưu (vd `08:15`) giữ nguyên. Chọn giờ cho ngày đang nghỉ thì tự bật ngày đó; công tắc vẫn dùng để tắt ngày.
 
 ### Console (`/console`)
 
@@ -247,6 +249,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 02:37 (UTC+7) | ToanAltF4 | feat/schedule-24h | Lịch làm việc hằng tuần của thợ chọn giờ theo 24 giờ (ô chọn mỗi 30 phút, 24:00 lưu là 23:59, giữ giờ lẻ đã lưu), chọn giờ cho ngày nghỉ thì tự bật ngày đó.
 - 2026-10-10 02:09 (UTC+7) | ToanAltF4 | fix/booking-media-caption | Khung ảnh hiện trường bỏ dòng chú thích nhỏ có chữ Backend hiện cho thợ và khách
 - 2026-10-10 01:42 (UTC+7) | ToanAltF4 | feat/avatar-upload | Ảnh đại diện chọn từ máy rồi tải lên (POST /media/upload, Cloudinary), bỏ ô dán link: hộp AvatarDialog dùng chung cho hồ sơ khách, hồ sơ thợ và menu tài khoản của quản lý/admin trên thanh bên; ảnh cắt vuông 512 px, xoay đúng chiều (squareAvatar trong utils/image-for-ai.ts); lỗi chỉ báo thử lại
 - 2026-10-10 01:27 (UTC+7) | ToanAltF4 | feat/technician-default-warranty | Hồ sơ thợ có khối Bảo hành công mặc định (lưu qua PUT /technicians/me/warranty-default, tuỳ chọn áp cho mọi dịch vụ); ô bảo hành của từng dịch vụ để trống thì theo mặc định thay vì tự điền 30; form báo giá có ô Bảo hành công điền sẵn theo đơn, gửi warrantyDays cho mọi dòng công; khách thấy Bảo hành N ngày ở dòng tiền công (cả đơn giá cố định); bước báo giá của đơn giá cố định hiện bảo hành công

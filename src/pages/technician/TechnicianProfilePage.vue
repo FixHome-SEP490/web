@@ -2,6 +2,7 @@
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
+import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
 import { ref, onMounted, computed, watch } from 'vue';
 import {
   MapPin,
@@ -163,7 +164,19 @@ const initScheduleDraft = () => {
   });
 };
 
+// Picking a time for a day that is off switches that day on (PO 10/10/2026).
+const setScheduleTime = (day: number, field: 'startTime' | 'endTime', value: string) => {
+  const slot = weeklyScheduleDraft.value[day];
+  slot[field] = value;
+  slot.enabled = true;
+};
+
 const handleSaveSchedule = async () => {
+  const invalidDay = weeklyScheduleDraft.value.findIndex((slot) => slot.enabled && slot.startTime >= slot.endTime);
+  if (invalidDay >= 0) {
+    showFeedback(`${DAY_NAMES[invalidDay]}: giờ kết thúc phải sau giờ bắt đầu.`, 'error');
+    return;
+  }
   savingSchedule.value = true;
   try {
     const schedules = weeklyScheduleDraft.value
@@ -1245,22 +1258,24 @@ const openAvatarModal = () => {
                 <span class="w-20 text-sm font-semibold whitespace-nowrap" :class="slot.enabled ? 'text-ink-900' : 'text-ink-500'">{{ DAY_NAMES[day] }}</span>
               </label>
 
-              <div v-if="slot.enabled" class="flex items-center gap-2 text-sm">
-                <input
-                  v-model="slot.startTime"
-                  type="time"
-                  :aria-label="`Giờ bắt đầu ${DAY_NAMES[day]}`"
-                  class="h-10 px-2.5 bg-white border border-ink-200 rounded-xl font-num text-ink-900 focus:outline-none focus:border-brand-600"
+              <div class="flex items-center gap-2 text-sm">
+                <span v-if="!slot.enabled" class="text-sm text-ink-400">Nghỉ</span>
+                <TimeSelect24
+                  :model-value="slot.startTime"
+                  kind="start"
+                  :muted="!slot.enabled"
+                  :label="`Giờ bắt đầu ${DAY_NAMES[day]}`"
+                  @update:model-value="setScheduleTime(day, 'startTime', $event)"
                 />
                 <span class="text-ink-400" aria-hidden="true">–</span>
-                <input
-                  v-model="slot.endTime"
-                  type="time"
-                  :aria-label="`Giờ kết thúc ${DAY_NAMES[day]}`"
-                  class="h-10 px-2.5 bg-white border border-ink-200 rounded-xl font-num text-ink-900 focus:outline-none focus:border-brand-600"
+                <TimeSelect24
+                  :model-value="slot.endTime"
+                  kind="end"
+                  :muted="!slot.enabled"
+                  :label="`Giờ kết thúc ${DAY_NAMES[day]}`"
+                  @update:model-value="setScheduleTime(day, 'endTime', $event)"
                 />
               </div>
-              <span v-else class="text-sm text-ink-400">Nghỉ</span>
             </li>
           </ul>
 
