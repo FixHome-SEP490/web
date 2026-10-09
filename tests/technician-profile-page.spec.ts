@@ -15,6 +15,7 @@ const { technicianProfileApi, profileApi, technicianVerificationApi, catalogApi,
     updateMyProfile: vi.fn(),
     setSkillPricing: vi.fn(),
     updateMySchedule: vi.fn(),
+    setDefaultLaborWarranty: vi.fn(),
   },
   profileApi: { getAddresses: vi.fn(), updateMe: vi.fn() },
   technicianVerificationApi: { getMyVerification: vi.fn() },
@@ -149,6 +150,49 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
       typicalWarrantyDays: 30,
       listedLaborPrice: 200000,
     });
+  });
+
+  it('sets the default labor warranty, for every service when asked (PO 10/10/2026)', async () => {
+    technicianProfileApi.getMyProfile.mockResolvedValue({ ...PROFILE, defaultLaborWarrantyDays: 30 });
+    technicianProfileApi.setDefaultLaborWarranty.mockResolvedValue({ defaultLaborWarrantyDays: 90, servicesUpdated: 1 });
+    technicianProfileApi.getMyServices.mockResolvedValue([{ ...OFFERING, typicalWarrantyDays: null }]);
+    const wrapper = await mountPage();
+    await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Dịch vụ và giá công'))!.trigger('click');
+
+    const input = wrapper.get('#tp-default-warranty');
+    expect((input.element as HTMLInputElement).value).toBe('30');
+    expect(buttonsWith(wrapper, 'Lưu mặc định')).toHaveLength(0);
+    // A service without its own value shows the default instead of a made-up 30.
+    expect((wrapper.get('#tp-warranty-s-1').element as HTMLInputElement).value).toBe('');
+    expect(wrapper.get('#tp-warranty-s-1').attributes('placeholder')).toBe('30 (mặc định)');
+
+    await input.setValue('400');
+    expect(buttonsWith(wrapper, 'Lưu mặc định')[0].attributes('disabled')).toBeDefined();
+
+    await input.setValue('90');
+    await wrapper.get('[data-testid="warranty-apply-all"]').setValue(true);
+    technicianProfileApi.getMyServices.mockResolvedValue([{ ...OFFERING, typicalWarrantyDays: 90 }]);
+    await wrapper.get('[data-testid="default-warranty"]').trigger('submit');
+    await flushPromises();
+
+    expect(technicianProfileApi.setDefaultLaborWarranty).toHaveBeenCalledWith(90, true);
+    expect(wrapper.text()).toContain('Đã đặt bảo hành 90 ngày cho mọi dịch vụ.');
+    expect((wrapper.get('#tp-warranty-s-1').element as HTMLInputElement).value).toBe('90');
+    expect(buttonsWith(wrapper, 'Lưu mặc định')).toHaveLength(0);
+  });
+
+  it('a failed save of the default says only to try again', async () => {
+    technicianProfileApi.setDefaultLaborWarranty.mockRejectedValue({ response: { status: 500, data: { error: { code: 'INTERNAL', message: 'Internal server error' } } } });
+    const wrapper = await mountPage();
+    await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Dịch vụ và giá công'))!.trigger('click');
+
+    await wrapper.get('#tp-default-warranty').setValue('60');
+    await wrapper.get('[data-testid="default-warranty"]').trigger('submit');
+    await flushPromises();
+
+    expect(technicianProfileApi.setDefaultLaborWarranty).toHaveBeenCalledWith(60, false);
+    expect(wrapper.text()).toContain('Chưa lưu được. Vui lòng thử lại.');
+    expect(wrapper.text()).not.toMatch(/Internal server error|INTERNAL|500/);
   });
 
   it('skill levels read as Vietnamese words, not enum codes', async () => {

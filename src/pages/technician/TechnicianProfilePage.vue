@@ -2,7 +2,7 @@
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import {
   MapPin,
   CheckCircle2,
@@ -300,8 +300,8 @@ const loadServicesAndOfferings = async () => {
       drafts[service.id] = {
         enabled: offering?.isActive ?? false,
         listedLaborPrice: offering?.listedLaborPrice != null ? String(offering.listedLaborPrice) : '',
-        typicalWarrantyDays:
-          offering?.typicalWarrantyDays != null ? String(offering.typicalWarrantyDays) : '30',
+        // Empty = the technician's default warranty applies.
+        typicalWarrantyDays: offering?.typicalWarrantyDays != null ? String(offering.typicalWarrantyDays) : '',
         level: offering?.level ?? 'INTERMEDIATE',
       };
     }
@@ -320,13 +320,46 @@ const isSkillDirty = (serviceId: string): boolean => {
   const offering = myOfferings.value.get(serviceId);
   if (!offering) return draft.enabled;
   const savedPrice = offering.listedLaborPrice != null ? String(offering.listedLaborPrice) : '';
-  const savedWarranty = offering.typicalWarrantyDays != null ? String(offering.typicalWarrantyDays) : '30';
+  const savedWarranty = offering.typicalWarrantyDays != null ? String(offering.typicalWarrantyDays) : '';
   return (
     draft.enabled !== offering.isActive ||
     String(draft.listedLaborPrice ?? '') !== savedPrice ||
     String(draft.typicalWarrantyDays ?? '') !== savedWarranty ||
     draft.level !== (offering.level ?? 'INTERMEDIATE')
   );
+};
+
+// ----------------- Bảo hành công mặc định (PO 10/10/2026) -----------------
+const MAX_WARRANTY_DAYS = 365;
+const defaultWarrantyDraft = ref('');
+const applyWarrantyToAll = ref(false);
+const savingDefaultWarranty = ref(false);
+const savedDefaultWarranty = computed(() => technicianProfile.value?.defaultLaborWarrantyDays ?? null);
+const defaultWarrantyValid = computed(() => {
+  const days = Number(defaultWarrantyDraft.value);
+  return defaultWarrantyDraft.value !== '' && Number.isInteger(days) && days >= 0 && days <= MAX_WARRANTY_DAYS;
+});
+const defaultWarrantyDirty = computed(
+  () => applyWarrantyToAll.value || defaultWarrantyDraft.value !== (savedDefaultWarranty.value == null ? '' : String(savedDefaultWarranty.value)),
+);
+watch(savedDefaultWarranty, (days) => { defaultWarrantyDraft.value = days == null ? '' : String(days); }, { immediate: true });
+
+const handleSaveDefaultWarranty = async () => {
+  if (!defaultWarrantyValid.value) return;
+  savingDefaultWarranty.value = true;
+  try {
+    const days = Number(defaultWarrantyDraft.value);
+    const toAll = applyWarrantyToAll.value;
+    await technicianProfileApi.setDefaultLaborWarranty(days, toAll);
+    if (technicianProfile.value) technicianProfile.value = { ...technicianProfile.value, defaultLaborWarrantyDays: days };
+    applyWarrantyToAll.value = false;
+    if (toAll) await loadServicesAndOfferings();
+    showFeedback(toAll ? `Đã đặt bảo hành ${days} ngày cho mọi dịch vụ.` : `Đã đặt bảo hành mặc định ${days} ngày.`);
+  } catch {
+    showFeedback('Chưa lưu được. Vui lòng thử lại.', 'error');
+  } finally {
+    savingDefaultWarranty.value = false;
+  }
 };
 
 const isFixedPrice = (service: ServiceItem) => String(service.pricingMode).toLowerCase() === 'fixed_price';
@@ -960,6 +993,41 @@ const openAvatarModal = () => {
 
       <!-- TAB: Dịch vụ và giá công -->
       <div v-if="activeTab === 'services'" class="space-y-4">
+        <form
+          class="p-4 sm:p-5 bg-white rounded-2xl border border-ink-200/80 shadow-xs flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
+          data-testid="default-warranty"
+          @submit.prevent="handleSaveDefaultWarranty"
+        >
+          <div class="sm:w-56">
+            <label for="tp-default-warranty" class="block text-sm font-medium text-ink-700 mb-1">Bảo hành công mặc định</label>
+            <div class="relative">
+              <input
+                id="tp-default-warranty"
+                v-model="defaultWarrantyDraft"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                :max="MAX_WARRANTY_DAYS"
+                step="1"
+                placeholder="VD: 30"
+                class="w-full h-11 pl-3 pr-14 bg-white border border-ink-200 rounded-xl font-num focus:outline-none focus:border-brand-600"
+              />
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-500 pointer-events-none">ngày</span>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 h-11 text-sm text-ink-700 cursor-pointer select-none">
+            <input v-model="applyWarrantyToAll" type="checkbox" class="w-4 h-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500" data-testid="warranty-apply-all" />
+            Áp dụng cho mọi dịch vụ
+          </label>
+          <button
+            v-if="defaultWarrantyDirty"
+            type="submit"
+            class="h-11 px-5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed sm:ml-auto whitespace-nowrap"
+            :disabled="!defaultWarrantyValid || savingDefaultWarranty"
+          >
+            {{ savingDefaultWarranty ? 'Đang lưu…' : 'Lưu mặc định' }}
+          </button>
+        </form>
         <div class="flex flex-col md:flex-row gap-3">
           <div class="relative flex-1">
             <label for="tp-service-search" class="sr-only">Tìm dịch vụ</label>
@@ -1085,8 +1153,8 @@ const openAvatarModal = () => {
                     type="number"
                     inputmode="numeric"
                     min="0"
-                    max="365"
-                    placeholder="30"
+                    :max="MAX_WARRANTY_DAYS"
+                    :placeholder="savedDefaultWarranty != null ? `${savedDefaultWarranty} (mặc định)` : '30'"
                     class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl font-num focus:outline-none focus:border-brand-600"
                   />
                 </div>

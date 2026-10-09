@@ -84,6 +84,8 @@ export interface ServiceOrderItem {
   laborTotal: number;
   partsTotal: number;
   grandTotal: number;
+  /** Labor warranty fixed when the technician took the order; null on older orders. */
+  laborWarrantyDays?: number | null;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'unpaid' | 'paid' | 'refunded';
   createdAt: string;
   completedAt?: string | null;
@@ -105,6 +107,7 @@ export interface ServiceOrderItem {
       unitPrice: number;
       lineTotal: number;
       warrantyDays?: number;
+      warrantyDaysSnapshot?: number;
     }[];
   };
   cashSettlement?: {
@@ -259,10 +262,12 @@ function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
   return { ...order, status: order.status.toUpperCase() as CanonicalOrderStatus,
     paymentStatus: order.paymentStatus.toUpperCase() as ServiceOrderItem['paymentStatus'],
     laborTotal: Number(order.laborTotal), partsTotal: Number(order.partsTotal), grandTotal: Number(order.grandTotal),
+    laborWarrantyDays: order.laborWarrantyDays == null ? null : Number(order.laborWarrantyDays),
     quotation: order.quotation ? { ...order.quotation,
       items: order.quotation.items.map(item => ({ ...item,
         type: String(item.type).toLowerCase() === 'labor' ? 'LABOR' : 'PARTS',
         quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), lineTotal: Number(item.lineTotal),
+        warrantyDays: item.warrantyDays ?? (item.warrantyDaysSnapshot != null ? Number(item.warrantyDaysSnapshot) : undefined),
       })),
     } : undefined,
   };
@@ -453,6 +458,8 @@ export const ordersApi = {
             description: item.description.trim(),
             quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
             unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+            // Left out, the server uses the technician's default labor warranty.
+            ...(item.warrantyDays != null ? { warrantyDays: Math.max(0, Math.round(Number(item.warrantyDays))) } : {}),
           };
         }
         const partSource = item.partSource || 'technician';
@@ -515,6 +522,8 @@ export const ordersApi = {
             description: item.description.trim(),
             quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
             unitPrice: Math.max(0, Math.round(Number(item.unitPrice) || 0)),
+            // Left out, the server uses the technician's default labor warranty.
+            ...(item.warrantyDays != null ? { warrantyDays: Math.max(0, Math.round(Number(item.warrantyDays))) } : {}),
           };
         }
         const partSource = item.partSource || 'technician';
