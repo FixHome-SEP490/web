@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted } from 'vue';
@@ -29,7 +30,6 @@ const loadingAddresses = ref(false);
 // Modals
 const showEditProfileModal = ref(false);
 const showAvatarModal = ref(false);
-const newAvatarUrl = ref('');
 
 // Address Modal
 const showAddressModal = ref(false);
@@ -293,31 +293,7 @@ const handleSaveProfile = async () => {
   }
 };
 
-const handleSaveAvatar = async () => {
-  try {
-    const updated = await profileApi.updateMe({
-      avatarUrl: newAvatarUrl.value.trim() || undefined,
-    });
-    if (authStore.user && authStore.token) {
-      authStore.setAuth(authStore.token, {
-        ...authStore.user,
-        ...updated,
-        role: authStore.user.role,
-      });
-      avatarUrl.value = newAvatarUrl.value.trim();
-    }
-    await authStore.fetchProfile();
-    if (authStore.user) {
-      avatarUrl.value = authStore.user.avatarUrl ?? '';
-    }
-    showAvatarModal.value = false;
-  } catch {
-    alert('Không thể cập nhật ảnh đại diện. Vui lòng thử lại.');
-  }
-};
-
 const openAvatarModal = () => {
-  newAvatarUrl.value = avatarUrl.value;
   showAvatarModal.value = true;
 };
 
@@ -610,43 +586,7 @@ const confirmDelete = async () => {
     </div>
     </Transition>
 
-    <!-- Edit Avatar Modal -->
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="showAvatarModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-      >
-      <div class="bg-white rounded-md max-w-sm w-full p-6 shadow-xl space-y-5">
-        <h3 class="text-lg font-bold text-ink-900">
-          Đổi ảnh đại diện
-        </h3>
-
-        <div class="space-y-4 text-sm">
-          <div>
-            <label class="block font-semibold text-ink-700 mb-1.5">Đường dẫn ảnh (URL)</label>
-            <input v-model="newAvatarUrl" type="text" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600" placeholder="https://..." />
-            <p class="text-xs text-ink-500 mt-1.5">Dán đường dẫn ảnh hợp lệ (jpg, png) vào đây để cập nhật avatar của bạn.</p>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showAvatarModal = false">
-            Huỷ bỏ
-          </FhButton>
-          <FhButton variant="primary" size="sm" @click="handleSaveAvatar">
-            Lưu ảnh
-          </FhButton>
-        </div>
-      </div>
-    </div>
-    </Transition>
+    <AvatarDialog :open="showAvatarModal" @close="showAvatarModal = false" @saved="(url) => (avatarUrl = url)" />
 
     <!-- Add Address Modal -->
     <Transition

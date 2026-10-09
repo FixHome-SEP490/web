@@ -185,3 +185,32 @@ export async function normalizeForUpload(file: File): Promise<File | null> {
     return null;
   }
 }
+
+/** Avatars are shown round and small; 512 px is sharp on a retina header and only tens of KB. */
+export const AVATAR_EDGE = 512;
+
+/**
+ * The picture cropped to its centre square, upright, as a 512 px JPEG ready to upload as an avatar.
+ * Null when the browser cannot read it.
+ */
+export async function squareAvatar(file: File): Promise<File | null> {
+  try {
+    const picture = await decode(file);
+    try {
+      const side = Math.min(picture.width, picture.height);
+      const edge = Math.min(AVATAR_EDGE, side);
+      const canvas = document.createElement('canvas');
+      canvas.width = edge;
+      canvas.height = edge;
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      context.drawImage(picture.source, (picture.width - side) / 2, (picture.height - side) / 2, side, side, 0, 0, edge, edge);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', UPLOAD_QUALITY));
+      return blob ? new File([blob], 'avatar.jpg', { type: 'image/jpeg' }) : null;
+    } finally {
+      picture.release();
+    }
+  } catch {
+    return null;
+  }
+}
