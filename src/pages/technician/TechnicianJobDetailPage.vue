@@ -1,45 +1,44 @@
 <script setup lang="ts">
 import { supportCasesApi } from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
-import { computed, ref, onMounted, onUnmounted, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, reactive, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import {
   ArrowLeft,
   MapPin,
   Camera,
   CheckCircle2,
-  FileText,
-  ShieldCheck,
+  Circle,
   Phone,
   Plus,
   Trash2,
   Navigation,
-  DollarSign,
   AlertCircle,
   MessageSquare,
   Loader2,
   X,
-  CreditCard,
-  Banknote,
   RefreshCw,
-  Package,
   AlertTriangle,
   Search,
-  Wrench,
-  Clock,
-  ExternalLink,
-  Eye,
-  LogOut,
+  ShieldCheck,
+  MoreHorizontal,
+  ChevronDown,
   Calendar,
-  Sparkles,
   Star,
+  Banknote,
+  Smartphone,
+  UserRoundX,
+  Flag,
+  Ban,
+  FileText,
 } from 'lucide-vue-next';
 import {
   FhButton,
   FhCard,
   FhStatusPill,
-  FhCostBreakdown,
   FhMoney,
+  FhSkeleton,
   BookingMediaViewer,
   TechnicianPartsSection,
 } from '../../components';
@@ -59,6 +58,7 @@ import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 import { userFacingError } from '../../utils/user-facing-error';
+import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
 const route = useRoute();
@@ -69,6 +69,7 @@ let loadGeneration = 0;
 let disposed = false;
 
 const loading = ref(true);
+const loadFailed = ref(false);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
 // Re-evaluated every 30 s so the depart button lights up on time without a reload.
@@ -87,7 +88,7 @@ const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(nu
 const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
 const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
 
-// Workspace Steps State
+// Work steps state
 const isEnRoute = ref(false);
 const gpsCheckedIn = ref(false);
 const beforePhotoUploaded = ref(false);
@@ -113,17 +114,18 @@ const parsedCustomerReview = computed(() => {
   return { tags: [] as string[], text: raw };
 });
 
-// Cash Settlement State
+// Cash settlement state
 const declaredCashAmount = ref<number>(0);
 const technicianCashNotes = ref('');
 const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
-// Quotation Items Form
+// Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
+const editingQuotation = ref(false);
 
-// Additional Cost (Chi phí phát sinh)
+// Additional cost (chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const showAdditionalCostForm = ref(false);
 const acReviseId = ref<string | null>(null);
@@ -156,11 +158,22 @@ const previewImage = (url: string) => {
 const activePreviewEvidence = computed(() => evidences.value.find((e) => e.mediaUrl === previewModalUrl.value));
 const uploadingPhase = ref<'BEFORE' | 'AFTER' | null>(null);
 
-// Withdrawal / Cancellation Modal
+// Rare actions live in one "Thêm" menu instead of separate cards.
+const moreOpen = ref(false);
+const complaintPanel = ref<{ openForm: () => void } | null>(null);
+const sections = reactive({ photos: false, parts: false, extra: false });
+const partsSummary = ref<{ count: number; needsAction: boolean }>({ count: 0, needsAction: false });
+const onPartsSummary = (value: { count: number; needsAction: boolean }) => {
+  partsSummary.value = value;
+  if (value.needsAction) sections.parts = true;
+};
+
+// Cancel the order (the technician's "Huỷ đơn"; same cancel API and reasons as before).
 const showWithdrawModal = ref(false);
 const withdrawReason = ref('Sự cố phương tiện giao thông trên đường (hỏng xe, va chạm)');
 const customWithdrawReason = ref('');
 const withdrawing = ref(false);
+const withdrawError = ref('');
 
 const WITHDRAW_REASONS = [
   'Sự cố phương tiện giao thông trên đường (hỏng xe, va chạm)',
@@ -177,6 +190,12 @@ const canWithdraw = computed(() => {
   return s === 'ACCEPTED' || (s === 'EN_ROUTE' && !gpsCheckedIn.value);
 });
 
+const openWithdraw = () => {
+  moreOpen.value = false;
+  withdrawError.value = '';
+  showWithdrawModal.value = true;
+};
+
 const handleWithdrawOrder = async () => {
   const reason =
     withdrawReason.value === 'Lý do khác (tự nhập)'
@@ -184,29 +203,27 @@ const handleWithdrawOrder = async () => {
       : withdrawReason.value;
 
   if (!reason) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng cung cấp lý do rút khỏi đơn.' };
+    withdrawError.value = 'Vui lòng ghi lý do huỷ đơn.';
     return;
   }
 
   withdrawing.value = true;
   actionLoading.value = true;
+  withdrawError.value = '';
   try {
     await ordersApi.cancelOrder(jobId, reason);
     showWithdrawModal.value = false;
-    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-      window.alert('Đã rút khỏi đơn hàng thành công. Hệ thống sẽ điều phối kỹ thuật viên khác cho khách hàng.');
-    }
+    toast.success('Đã huỷ đơn.');
     await router.push('/tech/jobs');
   } catch (err: unknown) {
-    const msg = userFacingError(err, 'Không thể rút khỏi đơn. Vui lòng thử lại.');
-    actionMessage.value = { type: 'error', text: msg };
+    withdrawError.value = userFacingError(err, 'Chưa huỷ được đơn. Vui lòng thử lại.');
   } finally {
     withdrawing.value = false;
     actionLoading.value = false;
   }
 };
 
-// Google Maps Navigation URL
+// Google Maps navigation URL
 const googleMapsUrl = computed(() => {
   if (job.value?.destination?.lat != null && job.value?.destination?.lng != null) {
     return `https://www.google.com/maps/dir/?api=1&destination=${job.value.destination.lat},${job.value.destination.lng}`;
@@ -217,187 +234,234 @@ const googleMapsUrl = computed(() => {
   return null;
 });
 
-// Interactive 5-Step Pipeline Determination
+const statusUpper = computed(() => String(job.value?.status ?? '').toUpperCase());
+const isCancelled = computed(() => statusUpper.value === 'CANCELLED');
+const isPaid = computed(() => String(job.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
+const hasBeforePhoto = computed(() => beforePhotoUploaded.value || beforeEvidences.value.length > 0);
+const hasAfterPhoto = computed(() => afterPhotoUploaded.value || afterEvidences.value.length > 0);
+const quotationRejected = computed(() => String(job.value?.quotation?.status ?? '').toLowerCase() === 'rejected');
+const isRepairing = computed(() => statusUpper.value === 'UNDER_REPAIR' || statusUpper.value === 'IN_PROGRESS');
+
+// Five steps; the page shows the current one and lists all of them only on "Xem thêm".
 const currentStepNumber = computed<1 | 2 | 3 | 4 | 5>(() => {
   if (!job.value) return 1;
-  const s = String(job.value.status).toUpperCase();
+  const s = statusUpper.value;
   if (s === 'COMPLETED' || completionRequested.value || isCompleted.value) return 5;
-  if (s === 'UNDER_REPAIR' || s === 'IN_PROGRESS') return 4;
-  if (s === 'EN_ROUTE' && gpsCheckedIn.value) return 3;
+  if (isRepairing.value) return 4;
+  if (s === 'EN_ROUTE' && gpsCheckedIn.value && hasBeforePhoto.value) return 3;
   if (s === 'EN_ROUTE') return 2;
   return 1; // ACCEPTED
 });
 
-const scrollToStep = (stepId: string) => {
-  const el = document.getElementById(stepId);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-};
+const steps = computed(() =>
+  [
+    'Xuất phát',
+    'Đến nơi, chụp ảnh máy',
+    isFixedPriceOrder.value ? 'Chuyển sang sửa chữa' : 'Báo giá cho khách',
+    'Sửa xong, chụp ảnh',
+    'Thu tiền',
+  ].map((label, index) => {
+    const n = index + 1;
+    const done = isCompleted.value || n < currentStepNumber.value;
+    return { n, label, state: done ? ('done' as const) : n === currentStepNumber.value ? ('current' as const) : ('todo' as const) };
+  }),
+);
+const stepsExpanded = ref(false);
 
-// Hero Action Computed Banner
-const heroAction = computed(() => {
+/** Show the quotation form while there is none, it was refused, or the technician reopens it. */
+const showQuotationForm = computed(
+  () => currentStepNumber.value === 3 && !isFixedPriceOrder.value && (!quotationSubmitted.value || quotationRejected.value || editingQuotation.value),
+);
+/** The payment step asks how the customer pays until a cash declaration exists. */
+const showPaymentChoice = computed(
+  () => completionRequested.value && !isCompleted.value && !isPaid.value && !cashSettled.value,
+);
+
+interface PrimaryAction {
+  label: string;
+  run: () => unknown;
+  icon: Component;
+  disabled?: boolean;
+  loading?: boolean;
+}
+interface NowStep {
+  title: string;
+  hint?: string;
+  action?: PrimaryAction;
+}
+
+/** What the technician has to do now: one line and at most one primary button. */
+const nowStep = computed<NowStep | null>(() => {
   if (!job.value) return null;
-  const s = String(job.value.status).toUpperCase();
+  const s = statusUpper.value;
+
+  if (s === 'CANCELLED') return { title: 'Đơn đã huỷ' };
 
   if (s === 'COMPLETED' || isCompleted.value) {
-    return {
-      title: 'Đơn hàng đã hoàn tất thành công!',
-      subtitle: 'Khách đã thanh toán. Tiền công đã được ghi nhận vào tài khoản ví của bạn.',
-      badge: 'Hoàn tất',
-      badgeClass: 'bg-success-100 text-success-800 border-success-300',
-      btnText: 'Xem danh sách việc',
-      btnAction: () => router.push('/tech/jobs'),
-      btnIcon: 'check',
-      btnVariant: 'secondary' as const,
-      btnDisabled: false,
-      btnLoading: false,
-    };
+    return { title: 'Đơn đã hoàn thành', hint: 'Tiền công đã được ghi nhận vào ví của bạn.' };
   }
 
   // No customer acceptance (PO 09/10/2026): once completed with the after photo, only the payment is left.
   if (completionRequested.value) {
-    if (job.value.paymentStatus?.toUpperCase() === 'PAID') {
+    if (isPaid.value) {
       return {
-        title: 'Khách đã thanh toán thành công!',
-        subtitle: 'Hệ thống đang cập nhật trạng thái hoàn tất đơn hàng. Tiền công đã được ghi nhận.',
-        badge: 'Đã thanh toán',
-        badgeClass: 'bg-success-100 text-success-800 border-success-300',
-        btnText: 'Làm mới & Hoàn tất ca',
-        btnAction: refreshJobStatus,
-        btnIcon: 'refresh',
-        btnVariant: 'primary' as const,
-        btnDisabled: false,
-        btnLoading: refreshingStatus.value,
+        title: 'Khách đã thanh toán',
+        hint: 'Đơn sẽ sớm chuyển sang hoàn thành.',
+        action: { label: 'Làm mới', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value },
       };
     }
-    return {
-      title: 'Đã hoàn thành! Chuyển sang thu tiền',
-      subtitle:
-        hasCashPayment.value === 'YES'
-          ? 'Khai báo số tiền mặt đã thu từ khách để khách xác nhận đối soát trên ứng dụng.'
-          : 'Nhắc khách hàng thanh toán trực tuyến qua ứng dụng FixHome (VNPAY / ví).',
-      badge: 'Chờ thanh toán',
-      badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-      btnText: hasCashPayment.value === 'YES' ? 'Khai báo thu tiền mặt' : 'Kiểm tra thanh toán Online',
-      btnAction: hasCashPayment.value === 'YES' ? handleDeclareCash : refreshJobStatus,
-      btnIcon: hasCashPayment.value === 'YES' ? 'dollar' : 'refresh',
-      btnVariant: 'primary' as const,
-      btnDisabled: actionLoading.value,
-      btnLoading: actionLoading.value || refreshingStatus.value,
-    };
+    if (cashSettled.value) {
+      return {
+        title: cashSettlementStatus.value === 'confirmed' ? 'Khách đã xác nhận tiền mặt' : 'Chờ khách xác nhận tiền mặt',
+        action: { label: 'Kiểm tra lại', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value },
+      };
+    }
+    if (hasCashPayment.value === 'YES') {
+      return {
+        title: 'Thu tiền',
+        hint: 'Nhập số tiền mặt đã thu, khách sẽ xác nhận trong ứng dụng.',
+        action: {
+          label: 'Khai báo đã thu tiền mặt',
+          run: handleDeclareCash,
+          icon: Banknote,
+          disabled: actionLoading.value,
+          loading: actionLoading.value,
+        },
+      };
+    }
+    if (hasCashPayment.value === 'NO') {
+      return {
+        title: 'Thu tiền',
+        hint: 'Nhắc khách thanh toán trong ứng dụng FixHome.',
+        action: { label: 'Kiểm tra thanh toán', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value },
+      };
+    }
+    return { title: 'Thu tiền', hint: 'Khách trả bằng cách nào?' };
   }
 
-  if (s === 'UNDER_REPAIR' || s === 'IN_PROGRESS') {
-    const hasAfter = afterPhotoUploaded.value || afterEvidences.value.length > 0;
-    if (!hasAfter) {
+  if (isRepairing.value) {
+    if (!hasAfterPhoto.value) {
       return {
-        title: 'Đang tiến hành sửa chữa',
-        subtitle: 'Sửa xong bấm Hoàn thành và chụp ảnh sản phẩm sau khi sửa; khách thanh toán là đơn hoàn tất.',
-        badge: 'ĐANG SỬA CHỮA',
-        badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-        btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Hoàn thành (chụp ảnh sau sửa)',
-        btnAction: () => afterFile.value?.click(),
-        btnIcon: 'camera',
-        btnVariant: 'primary' as const,
-        btnDisabled: actionLoading.value,
-        btnLoading: uploadingPhase.value === 'AFTER',
+        title: 'Đang sửa chữa',
+        hint: 'Sửa xong, chụp ảnh máy để hoàn thành.',
+        action: {
+          label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Hoàn thành (chụp ảnh sau sửa)',
+          run: () => afterFile.value?.click(),
+          icon: Camera,
+          disabled: actionLoading.value,
+          loading: uploadingPhase.value === 'AFTER',
+        },
       };
     }
     return {
-      title: 'Đã có ảnh sau sửa — Sẵn sàng hoàn thành',
-      subtitle: 'Kiểm tra lại linh kiện/chi phí phát sinh, sau đó bấm Hoàn thành; khách chỉ còn thanh toán.',
-      badge: 'Sẵn sàng hoàn thành',
-      badgeClass: 'bg-success-100 text-success-800 border-success-300',
-      btnText: 'Hoàn thành ngay',
-      btnAction: handleCompleteOrder,
-      btnIcon: 'shield',
-      btnVariant: 'primary' as const,
-      btnDisabled: actionLoading.value,
-      btnLoading: actionLoading.value,
+      title: 'Sẵn sàng hoàn thành',
+      hint: 'Đã có ảnh sau sửa.',
+      action: {
+        label: 'Hoàn thành',
+        run: handleCompleteOrder,
+        icon: ShieldCheck,
+        disabled: actionLoading.value,
+        loading: actionLoading.value,
+      },
     };
   }
 
   if (s === 'EN_ROUTE' && gpsCheckedIn.value) {
-    const hasBefore = beforePhotoUploaded.value || beforeEvidences.value.length > 0;
-    if (!hasBefore) {
+    if (!hasBeforePhoto.value) {
       return {
-        title: 'Đã xác nhận đến nơi — Chụp ảnh hiện trạng trước sửa chữa',
-        subtitle: 'Bắt buộc chụp ít nhất 1 ảnh hiện trạng hư hỏng trước khi bắt đầu tháo máy sửa chữa.',
-        badge: 'Cần ảnh hiện trạng',
-        badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-        btnText: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh...' : 'Chụp / Chọn ảnh hiện trạng (trước sửa chữa)',
-        btnAction: openBeforeEvidencePicker,
-        btnIcon: 'camera',
-        btnVariant: 'primary' as const,
-        btnDisabled: actionLoading.value,
-        btnLoading: uploadingPhase.value === 'BEFORE',
+        title: 'Chụp ảnh máy trước khi sửa',
+        hint: 'Cần ít nhất 1 ảnh.',
+        action: {
+          label: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh…' : 'Chụp ảnh máy',
+          run: openBeforeEvidencePicker,
+          icon: Camera,
+          disabled: actionLoading.value,
+          loading: uploadingPhase.value === 'BEFORE',
+        },
       };
     }
     if (isFixedPriceOrder.value) {
       return {
-        title: 'Đã check-in và có ảnh sản phẩm — Đơn chuyển sang sửa chữa',
-        subtitle: 'Đơn giá cố định tự chuyển sang đang sửa sau khi check-in có ảnh. Tải lại nếu trạng thái chưa đổi.',
-        badge: 'SẴN SÀNG SỬA',
-        badgeClass: 'bg-success-100 text-success-800 border-success-300',
-        btnText: 'Tải lại trạng thái',
-        btnAction: () => loadJob(jobId, { silent: true }),
-        btnIcon: 'refresh',
-        btnVariant: 'primary' as const,
-        btnDisabled: actionLoading.value,
-        btnLoading: actionLoading.value,
+        title: 'Chờ chuyển sang sửa chữa',
+        hint: 'Giá cố định, không cần báo giá.',
+        action: {
+          label: 'Tải lại trạng thái',
+          run: () => loadJob(jobId, { silent: true }),
+          icon: RefreshCw,
+          disabled: actionLoading.value,
+          loading: actionLoading.value,
+        },
+      };
+    }
+    if (showQuotationForm.value) {
+      return {
+        title: quotationRejected.value ? 'Khách chưa đồng ý báo giá' : 'Gửi báo giá cho khách',
+        hint: quotationRejected.value ? 'Sửa lại rồi gửi lần nữa.' : undefined,
+        action: {
+          label: 'Gửi báo giá cho khách duyệt',
+          run: handleSubmitQuotation,
+          icon: FileText,
+          disabled: !beforePhotoUploaded.value || actionLoading.value,
+          loading: actionLoading.value,
+        },
       };
     }
     return {
-      title: 'Đã check-in và có ảnh sản phẩm — Gửi báo giá cho khách',
-      subtitle: 'Kiểm tra máy, nhập tiền công và linh kiện rồi gửi báo giá. Khách duyệt xong đơn tự chuyển sang sửa chữa.',
-      badge: 'Lập báo giá',
-      badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-      btnText: 'Kiểm tra khách đã duyệt chưa',
-      btnAction: () => loadJob(jobId, { silent: true }),
-      btnIcon: 'refresh',
-      btnVariant: 'primary' as const,
-      btnDisabled: actionLoading.value,
-      btnLoading: actionLoading.value,
+      title: 'Chờ khách duyệt báo giá',
+      hint: 'Khách duyệt xong, đơn tự chuyển sang sửa chữa.',
+      action: {
+        label: 'Kiểm tra khách đã duyệt chưa',
+        run: () => loadJob(jobId, { silent: true }),
+        icon: RefreshCw,
+        disabled: actionLoading.value,
+        loading: actionLoading.value,
+      },
     };
   }
 
-  if (s === 'EN_ROUTE' && !gpsCheckedIn.value) {
+  if (s === 'EN_ROUTE') {
     return {
-      title: 'Bạn đang trên đường di chuyển tới nhà khách hàng',
-      subtitle: 'Tới địa chỉ của khách thì bấm Check-in và chụp ảnh sản phẩm; hệ thống kiểm tra vị trí rồi lưu ảnh.',
-      badge: 'Đang di chuyển',
-      badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-      btnText: 'Check-in và chụp ảnh sản phẩm',
-      btnAction: () => beforeFile.value?.click(),
-      btnIcon: 'map-pin',
-      btnVariant: 'primary' as const,
-      btnDisabled: actionLoading.value,
-      btnLoading: actionLoading.value,
+      title: 'Đang đến nhà khách',
+      hint: 'Tới nơi thì check-in và chụp ảnh máy.',
+      action: {
+        label: 'Check-in và chụp ảnh sản phẩm',
+        run: () => beforeFile.value?.click(),
+        icon: MapPin,
+        disabled: actionLoading.value,
+        loading: actionLoading.value,
+      },
     };
   }
 
-  // s === 'ACCEPTED'
-  const departOpen = canDepartNow(job.value?.departAvailableAt, nowTick.value);
+  // ACCEPTED
+  const departOpen = canDepartNow(job.value.departAvailableAt, nowTick.value);
   return {
-    title: 'Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách',
-    subtitle: departOpen
-      ? 'Bấm bắt đầu di chuyển để hệ thống gửi thông báo và định vị trực tiếp cho khách hàng.'
-      : `Nút xuất phát mở lúc ${vnDateTimeString(job.value!.departAvailableAt!)} (1 giờ trước giờ hẹn).`,
-    badge: 'Chờ khởi hành',
-    badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-    btnText: 'Bắt đầu di chuyển',
-    btnAction: handleEnRoute,
-    btnIcon: 'navigation',
-    btnVariant: 'primary' as const,
-    btnDisabled: actionLoading.value || !departOpen,
-    btnLoading: actionLoading.value,
+    title: 'Xuất phát đến nhà khách',
+    hint: departOpen ? undefined : `Được xuất phát từ ${vnDateTimeString(job.value.departAvailableAt!)}.`,
+    action: {
+      label: 'Bắt đầu di chuyển',
+      run: handleEnRoute,
+      icon: Navigation,
+      disabled: actionLoading.value || !departOpen,
+      loading: actionLoading.value,
+    },
   };
 });
 
+const canReport = computed(
+  () =>
+    !!job.value &&
+    allowedComplaintTypes(String(job.value.status), job.value.completedAt ?? null, new Date(), 'technician').length > 0,
+);
+
+const openReport = () => {
+  moreOpen.value = false;
+  complaintPanel.value?.openForm();
+};
+
 async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
   if (!evidence) return;
-  if (!window.confirm('Bạn có chắc chắn muốn xóa ảnh này không?')) return;
+  if (!window.confirm('Xoá ảnh này?')) return;
   actionLoading.value = true;
   actionMessage.value = null;
   try {
@@ -409,10 +473,9 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
       previewModalUrl.value = null;
     }
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: 'Đã xóa ảnh bằng chứng thành công.' };
+    actionMessage.value = { type: 'success', text: 'Đã xoá ảnh.' };
   } catch (err: unknown) {
-    const errorMsg = userFacingError(err, 'Không thể xóa ảnh. Vui lòng thử lại.');
-    actionMessage.value = { type: 'error', text: errorMsg };
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa xoá được ảnh. Vui lòng thử lại.') };
   } finally {
     actionLoading.value = false;
   }
@@ -428,18 +491,17 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: File
   try {
     for (const file of files) {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
-        throw new Error('Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP dưới 10 MB');
+        throw new Error('Chỉ nhận ảnh JPEG, PNG hoặc WebP dưới 10 MB.');
       }
       await ordersApi.uploadEvidence(jobId, { phase, file });
     }
     await loadJob(jobId, { silent: true });
-    actionMessage.value = {
-      type: 'success',
-      text: `Đã lưu ${files.length > 1 ? files.length + ' ảnh' : 'ảnh'} bằng chứng thành công.`,
-    };
+    actionMessage.value = { type: 'success', text: files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.' };
   } catch (err: unknown) {
-    const errorMsg = userFacingError(err, 'Chưa lưu được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB và thử lại.');
-    actionMessage.value = { type: 'error', text: errorMsg };
+    actionMessage.value = {
+      type: 'error',
+      text: userFacingError(err, 'Chưa lưu được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB rồi thử lại.'),
+    };
   } finally {
     actionLoading.value = false;
     uploadingPhase.value = null;
@@ -449,9 +511,11 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: File
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && previewModalUrl.value) {
-    previewModalUrl.value = null;
-  }
+  if (e.key !== 'Escape') return;
+  if (previewModalUrl.value) previewModalUrl.value = null;
+  else if (moreOpen.value) moreOpen.value = false;
+  else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
+  else if (replacementOpen.value && !replacementSending.value) replacementOpen.value = false;
 };
 
 onMounted(() => {
@@ -465,6 +529,7 @@ const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {
   const isCurrent = () => !disposed && generation === loadGeneration && requestedJobId === jobId;
   if (!options.silent) {
     loading.value = true;
+    loadFailed.value = false;
     bookingForMedia.value = null;
   }
   try {
@@ -478,6 +543,7 @@ const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {
     }
     historicalJob.value = null;
     job.value = data;
+    loadFailed.value = false;
     isEnRoute.value = data.status !== 'ACCEPTED';
     gpsCheckedIn.value = !!data.arrivalVerified;
     if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
@@ -534,7 +600,12 @@ const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {
       }
     }
   } catch {
-    if (isCurrent()) actionMessage.value = { type: 'error', text: 'Không thể tải công việc. Vui lòng thử lại.' };
+    if (!isCurrent()) return;
+    if (job.value || historicalJob.value) {
+      actionMessage.value = { type: 'error', text: 'Chưa cập nhật được công việc. Vui lòng thử lại.' };
+    } else {
+      loadFailed.value = true;
+    }
   } finally {
     if (isCurrent() && !options.silent) loading.value = false;
   }
@@ -640,16 +711,16 @@ const handleEnRoute = async () => {
     isEnRoute.value = true;
     if (job.value) job.value.status = 'EN_ROUTE';
     startLocationPing();
-    actionMessage.value = { type: 'success', text: 'Đã cập nhật: Đang trên đường tới nhà khách!' };
+    actionMessage.value = { type: 'success', text: 'Đã báo khách là bạn đang đến.' };
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể chuyển trạng thái đang di chuyển' };
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa bắt đầu di chuyển được. Vui lòng thử lại.') };
   } finally {
     actionLoading.value = false;
   }
 };
 
 const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accuracyMeters: number }> => {
-  // 1. Thử lấy vị trí từ trình duyệt bằng chế độ tiêu chuẩn (enableHighAccuracy: false)
+  // 1. Standard accuracy first, then high accuracy.
   if (typeof navigator !== 'undefined' && navigator.geolocation) {
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -665,7 +736,6 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
         accuracyMeters: pos.coords.accuracy,
       };
     } catch {
-      // 2. Thử tiếp với enableHighAccuracy: true
       try {
         const posHigh = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -680,14 +750,14 @@ const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accu
           accuracyMeters: posHigh.coords.accuracy,
         };
       } catch {
-        // Cả 2 đều thất bại do thiết bị không có cảm biến định vị hoặc bị chặn
+        // No location sensor, or the permission is blocked.
       }
     }
   }
 
-  // Check-in chỉ dùng vị trí GPS thật của thiết bị lúc bấm; không thay bằng
-  // vị trí cũ hay toạ độ địa chỉ khách.
-  throw new Error('Không thể xác định vị trí hiện tại. Vui lòng kiểm tra thiết bị định vị.');
+  // Check-in uses only the device's real GPS position at the moment of the tap;
+  // never an old position or the customer's address.
+  throw new Error('Không lấy được vị trí. Bật định vị rồi thử lại.');
 };
 
 const handleCheckIn = async () => {
@@ -703,22 +773,23 @@ const handleCheckIn = async () => {
 
     if (result.result !== 'valid') {
       if (result.result === 'out_of_geofence') {
-        const dist = typeof result.distanceMeters === 'number' ? `${Math.round(result.distanceMeters)}m` : 'ngoài phạm vi';
-        throw new Error(`Vị trí hiện tại cách địa chỉ khách hàng ${dist} , ngoài bán kính cho phép. Hãy di chuyển tới nhà khách rồi thử lại.`);
+        const dist = typeof result.distanceMeters === 'number' ? `${Math.round(result.distanceMeters)} m` : 'xa';
+        throw new Error(`Bạn đang cách nhà khách ${dist}. Tới gần hơn rồi thử lại.`);
       }
       if (result.result === 'low_accuracy') {
-        const acc = typeof result.accuracyMeters === 'number' ? `${Math.round(result.accuracyMeters)}m` : 'quá lớn';
-        throw new Error(`Độ chính xác GPS chưa đạt (sai số ${acc}). Vui lòng ra nơi thoáng hoặc bật GPS trên điện thoại.`);
+        throw new Error('Định vị chưa đủ chính xác. Ra chỗ thoáng hoặc bật GPS rồi thử lại.');
       }
-      throw new Error('Vị trí chưa đủ chính xác hoặc ngoài phạm vi địa chỉ.');
+      throw new Error('Chưa xác nhận được vị trí. Tới đúng địa chỉ rồi thử lại.');
     }
 
     gpsCheckedIn.value = true;
     stopLocationPing();
-    actionMessage.value = { type: 'success', text: 'Đã xác nhận vị trí đến nơi thành công!' };
+    actionMessage.value = { type: 'success', text: 'Đã xác nhận đến nơi.' };
   } catch (err: unknown) {
-    const message = (err as Error)?.message || 'Chưa xác nhận được vị trí. Hãy kiểm tra quyền GPS và thử lại tại địa chỉ sửa chữa.';
-    actionMessage.value = { type: 'error', text: message };
+    actionMessage.value = {
+      type: 'error',
+      text: userFacingError(err, 'Chưa xác nhận được vị trí. Kiểm tra quyền định vị rồi thử lại tại địa chỉ sửa chữa.'),
+    };
   } finally {
     actionLoading.value = false;
   }
@@ -741,7 +812,7 @@ const handleUploadBefore = async () => {
   }
   await uploadSelectedEvidence('BEFORE', files);
 };
-// "Hoàn thành": the after photo, then the completion request to the customer.
+// "Hoàn thành": the after photo, then the completion request.
 const handleUploadAfter = async () => {
   const hadAfter = afterEvidences.value.length > 0;
   await uploadSelectedEvidence('AFTER', afterFile.value?.files);
@@ -753,9 +824,11 @@ const handleSubmitQuotation = async () => {
   try {
     await ordersApi.submitQuotation(jobId, quotationItems.value);
     quotationSubmitted.value = true;
+    editingQuotation.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi báo giá, chờ khách duyệt.' };
-  } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa gửi được báo giá. Kiểm tra nội dung, giá và trạng thái đơn.' };
+    await loadJob(jobId, { silent: true });
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa gửi được báo giá. Kiểm tra nội dung và giá rồi thử lại.') };
   } finally {
     actionLoading.value = false;
   }
@@ -766,7 +839,7 @@ const acLaborTotal = () =>
 const acPartsTotal = () =>
   acItems.value.filter((i) => i.type === 'PARTS').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 
-// FixHome Parts Catalog Picker State for Additional Cost
+// FixHome parts catalog picker for additional costs
 const showAcPartPicker = ref(false);
 const acPartSearchQuery = ref('');
 const acPartActiveCategory = ref('ALL');
@@ -778,11 +851,11 @@ const acTargetItemIndex = ref<number | null>(null);
 
 const AC_CATEGORY_TABS = [
   { label: 'Tất cả', value: 'ALL' },
-  { label: 'Điều hòa / Máy lạnh', value: 'Điều hòa' },
+  { label: 'Điều hòa', value: 'Điều hòa' },
   { label: 'Máy giặt', value: 'Máy giặt' },
   { label: 'Tủ lạnh', value: 'Tủ lạnh' },
   { label: 'Bình nóng lạnh', value: 'Bình nóng lạnh' },
-  { label: 'Quạt / Thiết bị khác', value: 'Quạt' },
+  { label: 'Quạt, thiết bị khác', value: 'Quạt' },
 ];
 
 const formatAcWarrantyBadge = (days?: number | null): string => {
@@ -804,7 +877,7 @@ const loadAcCatalog = async () => {
       acPartsMap.value.set(p.id, p);
     }
   } catch {
-    // Ignore catalog fetch errors
+    // The picker shows its empty state; typing searches again.
   }
 };
 
@@ -907,7 +980,7 @@ const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician'
       type === 'LABOR'
         ? 'Hạng mục công phát sinh'
         : partSource === 'external'
-          ? 'Linh kiện ngoài (EXTERNAL)'
+          ? 'Linh kiện mua ngoài'
           : 'Tên linh kiện phát sinh',
     quantity: 1,
     unitPrice: 0,
@@ -935,6 +1008,7 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
     : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
   acEvidenceUrls.value = revise?.evidenceUrls ? [...revise.evidenceUrls] : [];
   showAdditionalCostForm.value = true;
+  sections.extra = true;
   void loadAcCatalog();
 }
 
@@ -947,7 +1021,7 @@ async function handleUploadAcEvidence(file?: File) {
     const media = await mediaApi.upload(file);
     acEvidenceUrls.value.push(media.url);
   } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa tải được ảnh bằng chứng. Chọn JPEG/PNG/WebP dưới 10 MB.' };
+    actionMessage.value = { type: 'error', text: 'Chưa tải được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB.' };
   } finally {
     acUploading.value = false;
   }
@@ -955,7 +1029,7 @@ async function handleUploadAcEvidence(file?: File) {
 
 async function handleSubmitAdditionalCost() {
   if (!acReason.value.trim()) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng mô tả lý do phát sinh.' };
+    actionMessage.value = { type: 'error', text: 'Vui lòng ghi lý do phát sinh.' };
     return;
   }
 
@@ -966,19 +1040,13 @@ async function handleSubmitAdditionalCost() {
   });
 
   if (validItems.length === 0) {
-    actionMessage.value = {
-      type: 'error',
-      text: 'Vui lòng thêm ít nhất 1 hạng mục chi phí phát sinh (nhập mô tả công hoặc chọn linh kiện).',
-    };
+    actionMessage.value = { type: 'error', text: 'Thêm ít nhất 1 hạng mục phát sinh.' };
     return;
   }
 
   const hasEmptyDesc = validItems.some((i) => !i.description?.trim());
   if (hasEmptyDesc) {
-    actionMessage.value = {
-      type: 'error',
-      text: 'Vui lòng nhập đầy đủ mô tả cho tất cả các hạng mục phát sinh.',
-    };
+    actionMessage.value = { type: 'error', text: 'Ghi mô tả cho mọi hạng mục phát sinh.' };
     return;
   }
 
@@ -999,16 +1067,24 @@ async function handleSubmitAdditionalCost() {
       : await ordersApi.createAdditionalCost(jobId, body);
     additionalCosts.value = [saved, ...additionalCosts.value.filter((c) => c.id !== acReviseId.value)];
     showAdditionalCostForm.value = false;
-    actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu chi phí phát sinh, chờ khách duyệt.' };
+    actionMessage.value = { type: 'success', text: 'Đã gửi chi phí phát sinh, chờ khách duyệt.' };
   } catch (err: unknown) {
     actionMessage.value = {
       type: 'error',
-      text: userFacingError(err, 'Không thể gửi yêu cầu chi phí phát sinh. Vui lòng kiểm tra lại thông tin.'),
+      text: userFacingError(err, 'Chưa gửi được chi phí phát sinh. Vui lòng thử lại.'),
     };
   } finally {
     acSubmitting.value = false;
   }
 }
+
+const AC_STATUS_LABELS: Record<string, string> = {
+  PENDING_APPROVAL: 'Chờ khách duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Bị từ chối',
+  EXPIRED: 'Hết hạn chờ duyệt',
+  CANCELLED: 'Đã huỷ',
+};
 
 // "Cần thay đổi thợ" (PO 08/10/2026): after check-in, when the job is outside the
 // technician's skills, the Service Manager gets a case to send someone else.
@@ -1017,11 +1093,16 @@ const replacementReason = ref('');
 const replacementSending = ref(false);
 const replacementSent = ref(false);
 const replacementError = ref('');
-const canAskReplacement = computed(() => gpsCheckedIn.value && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(job.value?.status ?? '').toUpperCase()) && !completionRequested.value);
+const canAskReplacement = computed(() => gpsCheckedIn.value && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value) && !completionRequested.value);
+const openReplacement = () => {
+  moreOpen.value = false;
+  replacementError.value = '';
+  replacementOpen.value = true;
+};
 const sendReplacement = async () => {
   const reason = replacementReason.value.trim();
   if (reason.length < 10) {
-    replacementError.value = 'Ghi rõ vì sao cần thay thợ, tối thiểu 10 ký tự.';
+    replacementError.value = 'Ghi rõ vì sao cần đổi thợ, tối thiểu 10 ký tự.';
     return;
   }
   replacementSending.value = true;
@@ -1031,7 +1112,7 @@ const sendReplacement = async () => {
     replacementSent.value = true;
     replacementOpen.value = false;
   } catch (err) {
-    replacementError.value = userFacingError(err, 'Chưa gửi được, thử lại sau.');
+    replacementError.value = userFacingError(err, 'Chưa gửi được. Vui lòng thử lại.');
   } finally {
     replacementSending.value = false;
   }
@@ -1042,9 +1123,12 @@ const handleCompleteOrder = async () => {
   try {
     await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất công việc' });
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: 'Đã hoàn thành. Chờ khách thanh toán để hoàn tất đơn.' };
-  } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa thể hoàn thành. Kiểm tra ảnh sau sửa và chi phí chờ duyệt.' };
+    actionMessage.value = { type: 'success', text: 'Đã hoàn thành. Chờ khách thanh toán.' };
+  } catch (err) {
+    actionMessage.value = {
+      type: 'error',
+      text: userFacingError(err, 'Chưa hoàn thành được. Kiểm tra ảnh sau sửa và chi phí đang chờ duyệt.'),
+    };
   } finally {
     actionLoading.value = false;
   }
@@ -1052,7 +1136,7 @@ const handleCompleteOrder = async () => {
 
 const handleDeclareCash = async () => {
   if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng nhập số tiền mặt đã thu từ khách!' };
+    actionMessage.value = { type: 'error', text: 'Vui lòng nhập số tiền mặt đã thu.' };
     return;
   }
   try {
@@ -1068,12 +1152,9 @@ const handleDeclareCash = async () => {
       | 'pending_confirmation'
       | 'confirmed'
       | 'disputed';
-    actionMessage.value = {
-      type: 'success',
-      text: 'Đã gửi khai báo thu tiền mặt! Chờ khách hàng bấm xác nhận trên ứng dụng.',
-    };
+    actionMessage.value = { type: 'success', text: 'Đã khai báo tiền mặt, chờ khách xác nhận.' };
   } catch (err) {
-    actionMessage.value = { type: 'error', text: (err as Error)?.message || 'Không thể khai báo thu tiền mặt.' };
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.') };
   } finally {
     actionLoading.value = false;
   }
@@ -1081,29 +1162,35 @@ const handleDeclareCash = async () => {
 
 const refreshingStatus = ref(false);
 const refreshJobStatus = async () => {
+  moreOpen.value = false;
   refreshingStatus.value = true;
   try {
     await loadJob(jobId, { silent: true });
     if (isCompleted.value || job.value?.status === 'COMPLETED') {
-      actionMessage.value = {
-        type: 'success',
-        text: 'Đơn hàng đã hoàn tất thành công! Tiền công đã được ghi nhận vào tài khoản của bạn.',
-      };
-    } else if (job.value?.paymentStatus?.toUpperCase() === 'PAID') {
-      actionMessage.value = { type: 'success', text: 'Khách hàng đã thanh toán trực tuyến thành công.' };
+      actionMessage.value = { type: 'success', text: 'Đơn đã hoàn thành.' };
+    } else if (isPaid.value) {
+      actionMessage.value = { type: 'success', text: 'Khách đã thanh toán.' };
     } else {
-      actionMessage.value = { type: 'success', text: 'Đã cập nhật trạng thái đơn hàng mới nhất.' };
+      actionMessage.value = { type: 'success', text: 'Đã cập nhật.' };
     }
   } catch {
-    actionMessage.value = { type: 'error', text: 'Không thể làm mới trạng thái. Vui lòng thử lại.' };
+    actionMessage.value = { type: 'error', text: 'Chưa cập nhật được. Vui lòng thử lại.' };
   } finally {
     refreshingStatus.value = false;
+  }
+};
+
+const toggleMore = async () => {
+  moreOpen.value = !moreOpen.value;
+  if (moreOpen.value) {
+    await nextTick();
+    document.querySelector<HTMLElement>('[data-more-menu] [role="menuitem"]')?.focus();
   }
 };
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6 pb-24">
+  <div class="max-w-3xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
     <input
       ref="beforeFile"
       type="file"
@@ -1121,951 +1208,727 @@ const refreshJobStatus = async () => {
       @change="handleUploadAfter"
     />
 
-    <!-- Top Navigation & Actions Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-ink-200/80 shadow-xs">
-      <button
-        class="inline-flex items-center gap-1.5 text-xs font-bold text-ink-700 hover:text-brand-600 transition-colors cursor-pointer"
-        type="button"
-        @click="router.push('/tech/jobs')"
-      >
-        <ArrowLeft :size="15" /> Quay lại danh sách việc
-      </button>
+    <a
+      href="/tech/jobs"
+      class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
+      @click.prevent="router.push('/tech/jobs')"
+    >
+      <ArrowLeft :size="16" /> Công việc
+    </a>
 
-      <div class="flex items-center gap-2">
-        <FhStatusPill v-if="job" :status="job.status" />
-
-        <button
-          v-if="job"
-          type="button"
-          class="p-1.5 text-ink-500 hover:text-brand-600 rounded-lg hover:bg-ink-100 transition-colors"
-          title="Làm mới trạng thái đơn"
-          :disabled="refreshingStatus"
-          @click="refreshJobStatus"
-        >
-          <RefreshCw :size="15" :class="{ 'animate-spin': refreshingStatus }" />
-        </button>
-
-        <!-- Emergency Withdrawal (Rút khỏi đơn trước khi check-in) -->
-        <button
-          v-if="canWithdraw"
-          type="button"
-          class="px-2.5 py-1 text-xs font-semibold text-danger-700 hover:text-white hover:bg-danger-600 rounded-lg border border-danger-200 transition-all flex items-center gap-1 shadow-xs"
-          title="Rút khỏi đơn nếu bạn gặp sự cố phương tiện hoặc việc đột xuất"
-          @click="showWithdrawModal = true"
-        >
-          <LogOut :size="13" /> Rút khỏi đơn
-        </button>
+    <!-- Loading: the shape of the page that is coming -->
+    <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải công việc">
+      <FhSkeleton height="28px" width="55%" />
+      <FhSkeleton height="18px" width="35%" />
+      <div class="bg-white rounded-md border border-ink-200 p-5 sm:p-6 space-y-3">
+        <FhSkeleton height="22px" width="60%" />
+        <FhSkeleton height="16px" width="80%" />
+        <FhSkeleton height="44px" width="200px" rounded="md" />
+      </div>
+      <div class="bg-white rounded-md border border-ink-200 p-5 sm:p-6 space-y-3">
+        <FhSkeleton height="18px" width="40%" />
+        <FhSkeleton height="16px" :count="3" />
       </div>
     </div>
 
-    <!-- Alert / Action Banner -->
-    <div
-      v-if="actionMessage"
-      class="p-3.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-xs transition-all"
-      :class="
-        actionMessage.type === 'success'
-          ? 'bg-success-50 text-success-800 border border-success-200'
-          : 'bg-danger-50 text-danger-800 border border-danger-200'
-      "
-    >
-      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
-      <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
-      <span class="flex-1">{{ actionMessage.text }}</span>
-      <button type="button" class="text-ink-400 hover:text-ink-700" @click="actionMessage = null" aria-label="Đóng"><X :size="16" /></button>
-    </div>
-
-    <!-- Loading State -->
-    <div v-if="loading" class="text-center py-20 text-ink-500 font-medium text-xs">
-      <Sparkles class="animate-spin text-brand-600 mx-auto mb-2" :size="30" />
-      Đang tải không gian làm việc của thợ...
-    </div>
-
-    <!-- Historical Read-Only Detail (Preserved for security & testing) -->
+    <!-- Historical read-only detail: the technician no longer holds this order -->
     <div
       v-else-if="historicalJob"
       data-testid="technician-historical-detail"
-      class="rounded-2xl border border-ink-200 bg-white p-6 space-y-3 shadow-xs"
+      class="rounded-md border border-ink-200 bg-white p-5 sm:p-6 space-y-3 shadow-(--shadow-e1)"
     >
-      <div class="flex items-center justify-between border-b border-ink-100 pb-3">
-        <h1 class="text-base font-bold text-ink-900">Lịch sử công việc: {{ historicalJob.code }}</h1>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h1 class="text-lg font-bold text-ink-900">Công việc <span class="font-num whitespace-nowrap">{{ historicalJob.code }}</span></h1>
         <FhStatusPill :status="historicalJob.status" />
       </div>
-      <p class="text-xs text-ink-600">
-        Ngày ghi nhận: {{ vnDateString(historicalJob.createdAt) }}
-      </p>
-      <p class="text-xs text-ink-500 leading-relaxed bg-ink-50 p-3 rounded-xl border border-ink-200">
-        Bạn không còn được giao đơn này. Thông tin riêng tư của khách và các thao tác thực hiện công việc không còn khả dụng theo chính sách bảo mật của FixHome.
-      </p>
-      <FhButton variant="secondary" size="sm" @click="router.push('/tech/jobs')">
-        Quay về danh sách đơn
-      </FhButton>
+      <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
+      <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>
     </div>
 
-    <!-- Active Job Workspace -->
-    <div v-else-if="job" class="space-y-6">
-      <!-- 🌟 HERO NEXT STEP ACTION CARD (Tập trung hành động cốt lõi cho thợ) -->
-      <div
-        v-if="heroAction"
-        class="bg-brand-600 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-brand-700/50 space-y-4 relative overflow-hidden"
-      >
-        <div class="absolute -right-8 -bottom-8 opacity-10 pointer-events-none">
-          <Wrench :size="160" />
-        </div>
+    <!-- Could not load at all: one friendly line and a retry -->
+    <div v-else-if="loadFailed && !job" class="rounded-md border border-ink-200 bg-white p-6 text-center space-y-3" role="alert">
+      <p class="text-sm text-ink-700">Chưa tải được công việc. Vui lòng thử lại.</p>
+      <FhButton variant="secondary" @click="loadJob(jobId)">Thử lại</FhButton>
+    </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-          <div class="flex items-center gap-2">
-            <span class="whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide border font-mono" :class="heroAction.badgeClass">
-              {{ heroAction.badge }}
-            </span>
-            <span class="text-white/40 text-xs">•</span>
-            <span class="text-white/70 text-xs font-mono">Đơn #{{ job.code }}</span>
+    <template v-else-if="job">
+      <!-- 1. Header: title, code, status, one overflow menu -->
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">Chi tiết công việc</h1>
+          <div class="mt-1.5 flex flex-wrap items-center gap-2">
+            <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
+            <FhStatusPill :status="job.status" />
           </div>
-
-          <span class="text-xs text-brand-200 font-medium flex items-center gap-1">
-            <Clock :size="13" /> Bước {{ currentStepNumber }}/5 của quy trình
-          </span>
         </div>
 
-        <div class="space-y-1.5">
-          <h2 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>{{ heroAction.title }}</span>
-          </h2>
-          <p class="text-xs sm:text-sm text-brand-100/90 leading-relaxed max-w-2xl">
-            {{ heroAction.subtitle }}
-          </p>
+        <div class="relative shrink-0" data-more-menu>
+          <button
+            type="button"
+            class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            aria-haspopup="menu"
+            :aria-expanded="moreOpen"
+            data-testid="job-more-button"
+            @click="toggleMore"
+          >
+            <MoreHorizontal :size="18" />
+            Thêm
+          </button>
+          <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
+          <div
+            v-if="moreOpen"
+            role="menu"
+            class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+          >
+            <button type="button" role="menuitem" class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left" @click="refreshJobStatus">
+              <RefreshCw :size="16" class="text-ink-500" :class="{ 'animate-spin': refreshingStatus }" />
+              Làm mới
+            </button>
+            <button
+              v-if="canAskReplacement && !replacementSent"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              @click="openReplacement"
+            >
+              <UserRoundX :size="16" class="text-ink-500" />
+              Cần thay đổi thợ
+            </button>
+            <button
+              v-if="canReport"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              @click="openReport"
+            >
+              <Flag :size="16" class="text-ink-500" />
+              Báo cáo vấn đề
+            </button>
+            <template v-if="canWithdraw">
+              <div class="my-1.5 border-t border-ink-100" />
+              <button
+                type="button"
+                role="menuitem"
+                class="w-full h-11 px-4 flex items-center gap-3 text-danger-600 hover:bg-danger-50 text-left"
+                @click="openWithdraw"
+              >
+                <Ban :size="16" />
+                Huỷ đơn
+              </button>
+            </template>
+          </div>
         </div>
+      </div>
 
-        <!-- Primary CTA + Quick Tool Buttons -->
-        <div class="pt-2 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2 flex-wrap">
-            <!-- Dynamic Main CTA Button -->
+      <!-- Result of the last action -->
+      <div
+        v-if="actionMessage"
+        class="px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
+        :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-700 border-danger-200'"
+        :role="actionMessage.type === 'success' ? 'status' : 'alert'"
+      >
+        <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0 mt-px" />
+        <AlertCircle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
+        <span class="flex-1 min-w-0 text-pretty">{{ actionMessage.text }}</span>
+        <button type="button" class="shrink-0 -m-1 p-1 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng thông báo" @click="actionMessage = null">
+          <X :size="16" />
+        </button>
+      </div>
+
+      <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
+      <FhCard v-if="nowStep" data-testid="job-now">
+        <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
+        <p v-if="nowStep.hint" class="mt-1 text-sm text-ink-600 text-pretty">{{ nowStep.hint }}</p>
+        <p v-if="replacementSent" class="mt-3 text-sm text-success-700" role="status">
+          Đã báo quản lý dịch vụ để đổi thợ. Quản lý sẽ liên hệ bạn.
+        </p>
+
+        <!-- Quotation form (inspection jobs, after check-in with a photo) -->
+        <div v-if="showQuotationForm" class="mt-4 space-y-3" data-testid="quotation-form">
+          <div
+            v-for="(item, idx) in quotationItems"
+            :key="idx"
+            class="flex flex-wrap sm:flex-nowrap items-center gap-2"
+          >
+            <span class="shrink-0 w-20 text-xs font-medium text-ink-500 whitespace-nowrap">{{ item.type === 'LABOR' ? 'Tiền công' : 'Linh kiện' }}</span>
+            <input
+              v-model="item.description"
+              type="text"
+              placeholder="Mô tả công việc hoặc tên linh kiện..."
+              :aria-label="item.type === 'LABOR' ? 'Mô tả công việc' : 'Tên linh kiện'"
+              class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
+            />
+            <input
+              v-model.number="item.unitPrice"
+              type="number"
+              step="10000"
+              inputmode="numeric"
+              placeholder="Đơn giá"
+              aria-label="Đơn giá"
+              class="w-32 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right"
+            />
             <button
               type="button"
-              class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-brand-900 bg-white hover:bg-brand-50 active:scale-95 shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="heroAction.btnDisabled || heroAction.btnLoading"
-              @click="heroAction.btnAction"
+              class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center"
+              aria-label="Xoá dòng này"
+              @click="removeItem(idx)"
             >
-              <Loader2 v-if="heroAction.btnLoading" :size="16" class="animate-spin text-brand-700" />
-              <Navigation v-else-if="heroAction.btnIcon === 'navigation'" :size="16" class="text-brand-600" />
-              <MapPin v-else-if="heroAction.btnIcon === 'map-pin'" :size="16" class="text-brand-600" />
-              <Camera v-else-if="heroAction.btnIcon === 'camera'" :size="16" class="text-brand-600" />
-              <Wrench v-else-if="heroAction.btnIcon === 'wrench'" :size="16" class="text-brand-600" />
-              <ShieldCheck v-else-if="heroAction.btnIcon === 'shield'" :size="16" class="text-brand-600" />
-              <DollarSign v-else-if="heroAction.btnIcon === 'dollar'" :size="16" class="text-brand-600" />
-              <RefreshCw v-else-if="heroAction.btnIcon === 'refresh'" :size="16" class="text-brand-600" />
-              <CheckCircle2 v-else :size="16" class="text-success-600" />
-              <span>{{ heroAction.btnText }}</span>
+              <Trash2 :size="16" />
             </button>
           </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addItem('LABOR')">
+              <Plus :size="16" /> Thêm công thợ
+            </button>
+            <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addItem('PARTS')">
+              <Plus :size="16" /> Thêm linh kiện
+            </button>
+          </div>
+          <dl class="pt-3 border-t border-ink-100 space-y-1 text-sm">
+            <div class="flex justify-between gap-3 text-ink-600"><dt>Tiền công</dt><dd class="font-num whitespace-nowrap"><FhMoney :amount="laborTotal()" /></dd></div>
+            <div class="flex justify-between gap-3 text-ink-600"><dt>Linh kiện</dt><dd class="font-num whitespace-nowrap"><FhMoney :amount="partsTotal()" /></dd></div>
+            <div class="flex justify-between gap-3 font-semibold text-ink-900"><dt>Tổng báo giá</dt><dd class="font-num whitespace-nowrap"><FhMoney :amount="laborTotal() + partsTotal()" /></dd></div>
+          </dl>
+        </div>
+        <button
+          v-else-if="currentStepNumber === 3 && !isFixedPriceOrder && quotationSubmitted && !quotationRejected"
+          type="button"
+          class="mt-2 h-10 -ml-1 px-1 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap"
+          @click="editingQuotation = true"
+        >
+          Gửi lại báo giá khác
+        </button>
 
-          <!-- Secondary Shortcuts: Navigation + Call + Chat -->
-          <div class="flex items-center gap-2">
+        <!-- Payment: how the customer pays, then the cash amount -->
+        <div v-if="showPaymentChoice" class="mt-4 space-y-3" data-testid="payment-choice">
+          <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Khách trả bằng cách nào">
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="hasCashPayment === 'YES'"
+              class="h-11 px-3 rounded-xl border text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+              :class="hasCashPayment === 'YES' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+              @click="hasCashPayment = 'YES'"
+            >
+              <Banknote :size="16" /> Có thu tiền mặt
+            </button>
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="hasCashPayment === 'NO'"
+              class="h-11 px-3 rounded-xl border text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+              :class="hasCashPayment === 'NO' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+              @click="hasCashPayment = 'NO'"
+            >
+              <Smartphone :size="16" /> Khách trả online
+            </button>
+          </div>
+          <div v-if="hasCashPayment === 'YES'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="block mb-1 font-medium text-ink-700">Số tiền đã thu (₫)</span>
+              <input
+                v-model.number="declaredCashAmount"
+                type="number"
+                step="10000"
+                inputmode="numeric"
+                placeholder="VD: 300000"
+                class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-ink-900"
+              />
+            </label>
+            <label class="block text-sm">
+              <span class="block mb-1 font-medium text-ink-700">Ghi chú</span>
+              <input
+                v-model="technicianCashNotes"
+                type="text"
+                placeholder="VD: Đã nhận đủ tiền mặt từ khách"
+                class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl text-sm"
+              />
+            </label>
+          </div>
+        </div>
+        <p v-if="cashSettled && !isCompleted" class="mt-2 text-sm text-ink-600">
+          Đã khai báo <span class="font-num whitespace-nowrap"><FhMoney :amount="declaredCashAmount" /></span>.
+        </p>
+
+        <!-- Completed: the customer's review, if any -->
+        <div v-if="isCompleted" class="mt-4 pt-4 border-t border-ink-100 space-y-2 text-sm" data-testid="customer-review">
+          <template v-if="customerReview">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="inline-flex items-center gap-0.5" :aria-label="`${customerReview.rating} trên 5 sao`">
+                <Star
+                  v-for="s in 5"
+                  :key="s"
+                  :size="16"
+                  :class="s <= customerReview.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
+                />
+              </span>
+              <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ customerReview.rating }}/5</span>
+              <span v-if="customerReview.createdAt" class="text-ink-500 font-num whitespace-nowrap">{{ vnDateTimeString(customerReview.createdAt) }}</span>
+            </div>
+            <div v-if="parsedCustomerReview.tags.length > 0" class="flex flex-wrap gap-1.5">
+              <span
+                v-for="tag in parsedCustomerReview.tags"
+                :key="tag"
+                class="px-2.5 py-1 rounded-full text-xs font-medium bg-ink-100 text-ink-700 whitespace-nowrap"
+              >
+                {{ tag }}
+              </span>
+            </div>
+            <p v-if="parsedCustomerReview.text" class="text-ink-800 text-pretty">“{{ parsedCustomerReview.text }}”</p>
+          </template>
+          <p v-else class="text-ink-500">Khách chưa đánh giá.</p>
+        </div>
+
+        <div v-if="nowStep.action" class="hidden sm:flex mt-5">
+          <FhButton
+            variant="primary"
+            :disabled="nowStep.action.disabled"
+            :loading="nowStep.action.loading"
+            @click="nowStep.action.run"
+          >
+            <component :is="nowStep.action.icon" v-if="!nowStep.action.loading" :size="16" />
+            {{ nowStep.action.label }}
+          </FhButton>
+        </div>
+
+        <div v-if="!isCancelled" class="mt-5 pt-3 border-t border-ink-100">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm text-ink-500 whitespace-nowrap">
+              {{ isCompleted ? 'Đã xong 5/5 bước' : `Bước ${currentStepNumber}/5` }}
+            </span>
+            <button
+              type="button"
+              class="h-10 px-2 -mr-2 rounded-lg text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1 whitespace-nowrap"
+              :aria-expanded="stepsExpanded"
+              aria-controls="job-steps"
+              data-testid="steps-toggle"
+              @click="stepsExpanded = !stepsExpanded"
+            >
+              {{ stepsExpanded ? 'Thu gọn' : 'Xem thêm' }}
+              <ChevronDown :size="16" class="transition-transform" :class="{ 'rotate-180': stepsExpanded }" />
+            </button>
+          </div>
+          <ol v-if="stepsExpanded" id="job-steps" class="mt-2 space-y-1" data-testid="job-steps">
+            <li v-for="step in steps" :key="step.n" class="flex items-center gap-3 py-1.5 text-sm">
+              <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 text-success-600" />
+              <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] rounded-full border-[5px] border-brand-600" />
+              <Circle v-else :size="18" class="shrink-0 text-ink-300" />
+              <span
+                class="flex-1 min-w-0"
+                :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'text-ink-600' : 'text-ink-500'"
+              >
+                {{ step.label }}
+              </span>
+              <span v-if="step.state === 'current'" class="shrink-0 text-xs font-medium text-brand-700 whitespace-nowrap">Đang làm</span>
+            </li>
+          </ol>
+        </div>
+      </FhCard>
+
+      <!-- 3. Customer and job: secondary actions appear once, here -->
+      <FhCard data-testid="job-summary">
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p class="text-base font-semibold text-ink-900">{{ job.customerName }}</p>
+            <span v-if="job.customerPhone" class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.customerPhone }}</span>
+          </div>
+          <ul class="space-y-2 text-sm text-ink-700">
+            <li class="flex items-start gap-2.5">
+              <FileText :size="16" class="shrink-0 mt-0.5 text-ink-400" />
+              <span class="min-w-0 font-medium text-ink-900">{{ job.serviceName }}</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <Calendar :size="16" class="shrink-0 mt-0.5 text-ink-400" />
+              <span class="min-w-0">{{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <MapPin :size="16" class="shrink-0 mt-0.5 text-ink-400" />
+              <span class="min-w-0 text-pretty">{{ job.addressSummary }}</span>
+            </li>
+          </ul>
+          <p
+            v-if="job.customerNote"
+            class="text-sm text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-3 py-2 text-pretty"
+            data-testid="customer-note"
+          >
+            Ghi chú của khách: {{ job.customerNote }}
+          </p>
+          <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 pt-1">
+            <a
+              v-if="job.customerPhone"
+              :href="'tel:' + job.customerPhone"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            >
+              <Phone :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Gọi
+            </a>
+            <button
+              type="button"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              @click="handleChatWithCustomer"
+            >
+              <MessageSquare :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Nhắn tin
+            </button>
             <a
               v-if="googleMapsUrl"
               :href="googleMapsUrl"
               target="_blank"
               rel="noopener noreferrer"
-              class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/20"
-              title="Mở chỉ đường trên ứng dụng Google Maps"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
-              <Navigation :size="14" class="text-warning-400" />
-              <span>Chỉ đường</span>
-              <ExternalLink :size="12" class="opacity-60" />
+              <Navigation :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Chỉ đường
             </a>
+          </div>
 
-            <a
-              v-if="job.customerPhone"
-              :href="'tel:' + job.customerPhone"
-              class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/20"
-              title="Gọi điện trực tiếp cho khách hàng"
-            >
-              <Phone :size="14" class="text-success-400" />
-              <span>Gọi</span>
-            </a>
+          <!-- Fixed price saved with the booking: no quotation for these jobs -->
+          <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="pt-3 border-t border-ink-100 space-y-1.5 text-sm">
+            <div v-if="fixedPriceTotal != null" data-testid="fixed-price-breakdown" class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+              <span class="text-ink-600">Giá cố định</span>
+              <span class="font-num font-semibold text-ink-900 whitespace-nowrap">
+                <FhMoney :amount="fixedPriceTotal" />
+                <span v-if="Number(job.quantity ?? 1) > 1" class="font-normal text-ink-500"> (<FhMoney :amount="job.fixedUnitPrice ?? 0" /> × {{ job.quantity }})</span>
+              </span>
+            </div>
+            <p v-else role="status" class="text-danger-700">Chưa có giá cố định đã lưu. Báo quản lý dịch vụ trước khi sửa.</p>
+            <p v-if="job.scopeDescription" class="text-ink-600 text-pretty">{{ job.scopeDescription }}</p>
+            <p v-if="currentStepNumber <= 3 && !completionRequested" class="text-ink-500" data-testid="fixed-price-auto-start">
+              Check-in có ảnh xong, đơn tự chuyển sang sửa chữa.
+            </p>
+          </div>
 
+          <!-- What the customer sent with the booking -->
+          <div v-if="bookingForMedia && bookingMedia.length > 0" class="pt-3 border-t border-ink-100 space-y-2">
+            <p class="text-sm font-medium text-ink-700">Ảnh khách gửi</p>
+            <BookingMediaViewer :booking-id="bookingMediaBookingId" :media="bookingMedia" />
+          </div>
+        </div>
+      </FhCard>
+
+      <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
+      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details">
+        <div class="divide-y divide-ink-100">
+          <!-- Photos -->
+          <section>
             <button
               type="button"
-              class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/20"
-              title="Nhắn tin với khách hàng"
-              @click="handleChatWithCustomer"
+              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              :aria-expanded="sections.photos"
+              aria-controls="job-photos"
+              @click="sections.photos = !sections.photos"
             >
-              <MessageSquare :size="14" class="text-brand-300" />
-              <span>Nhắn tin</span>
+              <span class="text-base font-semibold text-ink-900">Ảnh hiện trường</span>
+              <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
+                {{ beforeEvidences.length + afterEvidences.length }} ảnh
+                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.photos }" />
+              </span>
             </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 🗺️ Order Info & Customer Card -->
-      <FhCard>
-        <div class="space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 pb-3">
-            <div>
-              <p class="text-[11px] font-mono text-ink-400">Mã đơn: {{ job.code }}</p>
-              <h1 class="text-base font-bold text-ink-900 mt-0.5 flex items-center gap-2">
-                <span>{{ job.customerName }}</span>
-                <span class="text-xs font-medium text-ink-400 font-mono">({{ job.customerPhone }})</span>
-              </h1>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors shadow-xs"
-                @click="handleChatWithCustomer"
-              >
-                <MessageSquare :size="13" /> Nhắn tin cho khách
-              </button>
-              <a
-                v-if="job.customerPhone"
-                :href="'tel:' + job.customerPhone"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-50 text-brand-700 text-xs font-bold hover:bg-brand-100 transition-colors border border-brand-200"
-              >
-                <Phone :size="13" /> Gọi điện
-              </a>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div class="space-y-1.5">
-              <span class="text-ink-400 text-[11px] block">Dịch vụ yêu cầu:</span>
-              <h2 class="font-bold text-sm text-ink-900">{{ job.serviceName }}</h2>
-              <p class="text-ink-500 flex items-center gap-1 font-medium">
-                <Calendar :size="13" class="text-brand-600" />
-                Lịch hẹn: {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
-              </p>
-              <p v-if="job.customerNote" class="text-warning-800 bg-warning-50 border border-warning-200 rounded-lg px-2 py-1 font-medium" data-testid="customer-note">
-                Ghi chú của khách: {{ job.customerNote }}
-              </p>
-            </div>
-
-            <div class="space-y-1.5 bg-ink-50/70 p-3 rounded-2xl border border-ink-100">
-              <div class="flex items-center justify-between">
-                <span class="text-ink-400 text-[11px] block">Địa chỉ thực hiện:</span>
-                <a
-                  v-if="googleMapsUrl"
-                  :href="googleMapsUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="whitespace-nowrap text-[11px] font-bold text-brand-600 hover:underline flex items-center gap-1"
-                >
-                  <Navigation :size="11" /> Chỉ đường Maps
-                </a>
-              </div>
-              <p class="text-xs text-ink-700 flex items-start gap-1.5 font-medium leading-relaxed">
-                <MapPin :size="14" class="text-brand-600 shrink-0 mt-0.5" />
-                <span>{{ job.addressSummary }}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </FhCard>
-
-      <!-- Customer Initial Media (Khách báo lỗi khi đặt lịch) -->
-      <div v-if="bookingForMedia && bookingMedia.length > 0" class="space-y-2">
-        <div class="flex items-center gap-1.5 text-xs font-bold text-ink-800">
-          <Eye :size="14" class="text-brand-600" />
-          <span>Ảnh / Video khách hàng gửi khi đặt lịch:</span>
-        </div>
-        <BookingMediaViewer
-          :booking-id="bookingMediaBookingId"
-          :media="bookingMedia"
-        />
-      </div>
-
-      <FhCard v-if="canAskReplacement || replacementSent" class="border-warning-200" data-testid="replacement-card">
-        <div class="space-y-2 text-sm">
-          <p class="font-bold text-ink-900">Cần thay đổi thợ?</p>
-          <p v-if="replacementSent" class="text-success-700">Đã báo quản lý dịch vụ. Quản lý sẽ liên hệ và sắp xếp thợ khác.</p>
-          <template v-else>
-            <p class="text-ink-600 text-xs">Dùng khi đã tới nơi kiểm tra và thấy việc nằm ngoài kỹ năng của bạn. Trường hợp này được quản lý xem xét, không tự trừ điểm uy tín.</p>
-            <FhButton v-if="!replacementOpen" variant="secondary" size="sm" @click="replacementOpen = true">Cần thay đổi thợ</FhButton>
-            <div v-else class="space-y-2">
-              <textarea v-model="replacementReason" rows="3" maxlength="1000" class="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm" placeholder="Ví dụ: máy là loại công nghiệp, cần thợ chuyên điện lạnh công nghiệp" />
-              <p v-if="replacementError" class="text-xs text-danger-700" role="alert">{{ replacementError }}</p>
-              <div class="flex gap-2">
-                <FhButton size="sm" :loading="replacementSending" @click="sendReplacement">Gửi cho quản lý</FhButton>
-                <FhButton variant="ghost" size="sm" :disabled="replacementSending" @click="replacementOpen = false">Huỷ</FhButton>
-              </div>
-            </div>
-          </template>
-        </div>
-      </FhCard>
-
-      <OrderComplaintPanel
-        :order-id="job.id"
-        :order-status="job.status"
-        :completed-at="job.completedAt"
-        role="technician"
-      />
-
-      <!-- 🚦 5-STEP INTERACTIVE WORKFLOW PIPELINE -->
-      <div class="space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-ink-900 tracking-wide flex items-center gap-2">
-            <span>Quy trình thực thi đơn hàng</span>
-          </h3>
-          <span class="text-xs text-ink-500 font-medium">Bấm vào bước để xem chi tiết</span>
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 select-none">
-          <button
-            type="button"
-            class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
-            :class="
-              currentStepNumber > 1
-                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
-                : currentStepNumber === 1
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
-                  : 'bg-ink-50/60 border-ink-200 text-ink-400'
-            "
-            @click="scrollToStep('step-en-route')"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-ink-500">Bước 1</span>
-              <CheckCircle2 v-if="currentStepNumber > 1" :size="13" class="text-success-600" />
-              <Navigation v-else :size="13" :class="currentStepNumber === 1 ? 'text-brand-600' : 'text-ink-400'" />
-            </div>
-            <div class="text-xs font-bold truncate">Khởi hành</div>
-          </button>
-
-          <button
-            type="button"
-            class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
-            :class="
-              gpsCheckedIn
-                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
-                : currentStepNumber === 2
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
-                  : 'bg-ink-50/60 border-ink-200 text-ink-400'
-            "
-            @click="scrollToStep('step-check-in')"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-ink-500">Bước 2</span>
-              <CheckCircle2 v-if="gpsCheckedIn" :size="13" class="text-success-600" />
-              <MapPin v-else :size="13" :class="currentStepNumber === 2 ? 'text-brand-600' : 'text-ink-400'" />
-            </div>
-            <div class="text-xs font-bold truncate">Xác nhận đến nơi</div>
-          </button>
-
-          <button
-            type="button"
-            class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
-            :class="
-              beforePhotoUploaded || String(job.status).toUpperCase() === 'UNDER_REPAIR' || currentStepNumber > 3
-                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
-                : currentStepNumber === 3
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
-                  : 'bg-ink-50/60 border-ink-200 text-ink-400'
-            "
-            @click="scrollToStep('step-before-evidence')"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-ink-500">Bước 3</span>
-              <CheckCircle2 v-if="beforePhotoUploaded || currentStepNumber > 3" :size="13" class="text-success-600" />
-              <Camera v-else :size="13" :class="currentStepNumber === 3 ? 'text-brand-600' : 'text-ink-400'" />
-            </div>
-            <div class="text-xs font-bold truncate">Ảnh hiện trạng</div>
-          </button>
-
-          <button
-            type="button"
-            class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between"
-            :class="
-              completionRequested || currentStepNumber > 4
-                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
-                : currentStepNumber === 4
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
-                  : 'bg-ink-50/60 border-ink-200 text-ink-400'
-            "
-            @click="scrollToStep('step-under-repair')"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-ink-500">Bước 4</span>
-              <CheckCircle2 v-if="completionRequested || currentStepNumber > 4" :size="13" class="text-success-600" />
-              <Wrench v-else :size="13" :class="currentStepNumber === 4 ? 'text-brand-600' : 'text-ink-400'" />
-            </div>
-            <div class="text-xs font-bold truncate">Sửa chữa</div>
-          </button>
-
-          <button
-            type="button"
-            class="p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between col-span-2 sm:col-span-1"
-            :class="
-              isCompleted
-                ? 'bg-success-50/80 border-success-200 text-success-900 shadow-2xs'
-                : currentStepNumber === 5
-                  ? 'bg-white border-brand-500 ring-2 ring-brand-100 text-brand-900 font-bold shadow-xs'
-                  : 'bg-ink-50/60 border-ink-200 text-ink-400'
-            "
-            @click="scrollToStep('step-completion')"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-ink-500">Bước 5</span>
-              <CheckCircle2 v-if="isCompleted" :size="13" class="text-success-600" />
-              <ShieldCheck v-else :size="13" :class="currentStepNumber === 5 ? 'text-brand-600' : 'text-ink-400'" />
-            </div>
-            <div class="text-xs font-bold truncate">Hoàn thành</div>
-          </button>
-        </div>
-
-        <!-- Flow 1 & 2: Parts Request & Handover Management Section -->
-        <TechnicianPartsSection
-          :order-id="job.id"
-          :order-status="job.status"
-          @parts-updated="loadJob(jobId, { silent: true })"
-        />
-
-        <!-- STEP 1: Khởi hành đến nhà khách -->
-        <div id="step-en-route">
-          <FhCard title="1. Khởi hành đến nhà khách">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
-              <div class="space-y-1 max-w-md">
-                <p class="text-ink-600">
-                  Cập nhật trạng thái khi bắt đầu di chuyển để khách hàng theo dõi thời gian dự kiến tới nơi.
-                </p>
-                <div v-if="isEnRoute" class="text-success-700 font-medium flex items-center gap-1.5">
-                  <CheckCircle2 :size="14" /> Định vị di chuyển thời gian thực đang hoạt động.
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 w-full sm:w-auto">
-                <a
-                  v-if="googleMapsUrl"
-                  :href="googleMapsUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="whitespace-nowrap px-3 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold text-xs flex items-center gap-1 transition-colors"
-                >
-                  <Navigation :size="13" class="text-brand-600" /> Chỉ đường Maps
-                </a>
-
-                <FhButton
-                  :variant="isEnRoute ? 'secondary' : 'primary'"
-                  size="sm"
-                  :disabled="isEnRoute || actionLoading || !canDepartNow(job?.departAvailableAt, nowTick)"
-                  @click="handleEnRoute"
-                >
-                  <CheckCircle2 v-if="isEnRoute" :size="15" class="mr-1.5 text-success-600" />
-                  <Navigation v-else :size="15" class="mr-1.5" />
-                  {{ isEnRoute ? 'Đang trên đường di chuyển' : 'Bấm Bắt đầu di chuyển' }}
-                </FhButton>
-              </div>
-            </div>
-          </FhCard>
-        </div>
-
-        <!-- STEP 2: GPS Geofence Check-in -->
-        <div id="step-check-in">
-          <FhCard title="2. Xác nhận có mặt tại hiện trường">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
-              <div class="space-y-1 max-w-md">
-                <p class="text-ink-600">
-                  Cần xác nhận đã đến địa chỉ khách để mở khoá chụp ảnh hiện trạng và lập báo giá.
-                </p>
-                <div v-if="gpsCheckedIn" class="text-success-700 font-medium flex items-center gap-1.5">
-                  <CheckCircle2 :size="14" /> Bạn đã xác nhận có mặt tại hiện trường.
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 flex-wrap">
-                <FhButton
-                  :variant="gpsCheckedIn ? 'secondary' : 'primary'"
-                  size="sm"
-                  :disabled="gpsCheckedIn || !isEnRoute || actionLoading"
-                  @click="handleCheckIn()"
-                >
-                  <CheckCircle2 v-if="gpsCheckedIn" :size="15" class="mr-1.5 text-success-600" />
-                  <MapPin v-else :size="15" class="mr-1.5" />
-                  {{ gpsCheckedIn ? 'Đã xác nhận đến nơi' : 'Xác nhận đến nơi' }}
-                </FhButton>
-
-              </div>
-            </div>
-          </FhCard>
-        </div>
-
-        <!-- STEP 3: Evidence BEFORE -->
-        <div id="step-before-evidence">
-          <FhCard title="3. Ảnh hiện trạng trước sửa chữa">
-            <div class="space-y-3 text-xs">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-ink-600">
-                  Quy chuẩn bắt buộc: Phải có ít nhất 1 ảnh trước sửa chữa trước khi lập báo giá nhằm tránh tranh chấp.
-                </p>
-                <span
-                  v-if="beforeEvidences.length > 0"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200"
-                >
-                  <CheckCircle2 :size="14" /> Đã tải {{ beforeEvidences.length }} ảnh (Đạt yêu cầu tối thiểu)
-                </span>
-                <span
-                  v-else
-                  class="inline-flex items-center gap-1 text-xs font-medium text-warning-800 bg-warning-50 px-2 py-0.5 rounded border border-warning-200"
-                >
-                  <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh
-                </span>
-              </div>
-
-              <!-- Upload Action Button -->
-              <div class="flex items-center gap-3 pt-1">
-                <div
-                  class="px-4 py-3 rounded-2xl border-2 border-dashed flex items-center gap-3 cursor-pointer transition-colors"
-                  :class="
-                    !gpsCheckedIn
-                      ? 'border-ink-200 text-ink-300 cursor-not-allowed bg-ink-50/50'
-                      : 'border-brand-300 hover:border-brand-500 bg-brand-50/20 hover:bg-brand-50/60 text-brand-700'
-                  "
-                  data-testid="before-evidence-picker"
-                  role="button"
-                  :tabindex="gpsCheckedIn && !actionLoading ? 0 : -1"
-                  :aria-disabled="!gpsCheckedIn || actionLoading"
-                  @click="openBeforeEvidencePicker"
-                  @keydown.enter.prevent="openBeforeEvidencePicker"
-                  @keydown.space.prevent="openBeforeEvidencePicker"
-                >
-                  <Loader2 v-if="uploadingPhase === 'BEFORE'" :size="20" class="shrink-0 animate-spin text-brand-600" />
-                  <Camera v-else :size="20" class="shrink-0" />
-                  <div class="text-left">
-                    <div class="font-bold text-xs">
-                      {{
-                        uploadingPhase === 'BEFORE'
-                          ? 'Đang tải lên...'
-                          : beforeEvidences.length > 0
-                            ? '+ Tải thêm ảnh hiện trạng'
-                            : 'Chụp / Chọn ảnh hiện trạng lỗi'
-                      }}
-                    </div>
-                    <div class="text-[10px] text-ink-400">Chọn 1 hoặc nhiều ảnh (JPEG, PNG, WebP &le; 10MB)</div>
-                  </div>
-                </div>
-                <p class="text-[11px] text-ink-500 hidden sm:block">
-                  Cho phép tải lên nhiều lần. Mỗi ảnh tải lên sẽ hiển thị ngay bên dưới.
-                </p>
-              </div>
-
-              <!-- Uploaded BEFORE Photos Display -->
-              <div class="pt-2 border-t border-ink-100 space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="font-bold text-ink-700 text-xs">
-                    Ảnh hiện trạng đã tải lên ({{ beforeEvidences.length }} ảnh):
-                  </span>
-                  <span v-if="beforeEvidences.length > 0" class="text-[10px] text-ink-400">
-                    Nhấp vào ảnh để xem phóng to
-                  </span>
-                </div>
-
-                <div v-if="beforeEvidences.length > 0" class="flex flex-wrap items-center gap-3">
+            <div v-show="sections.photos" id="job-photos" class="px-5 sm:px-6 pb-5 space-y-4">
+              <div class="space-y-2">
+                <p class="text-sm font-medium text-ink-700">Trước khi sửa</p>
+                <div class="flex flex-wrap gap-2.5">
                   <div
                     v-for="(img, idx) in beforeEvidences"
                     :key="img.id || idx"
-                    class="w-24 h-24 rounded-xl border border-ink-200 overflow-hidden relative group bg-ink-100 shadow-xs cursor-pointer hover:border-brand-500 transition-all"
-                    @click="previewImage(img.mediaUrl)"
+                    class="relative w-20 h-20 rounded-xl overflow-hidden border border-ink-200 bg-ink-100"
                   >
-                    <img
-                      :src="img.mediaUrl"
-                      :alt="'Ảnh hiện trạng ' + (idx + 1)"
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
-                      #{{ idx + 1 }}
-                    </span>
+                    <button type="button" class="w-full h-full" :aria-label="`Xem ảnh trước sửa ${idx + 1}`" @click="previewImage(img.mediaUrl)">
+                      <img :src="img.mediaUrl" :alt="`Ảnh trước sửa ${idx + 1}`" class="w-full h-full object-cover" />
+                    </button>
                     <button
+                      v-if="!isCompleted"
                       type="button"
-                      class="absolute top-1 right-1 bg-danger-600 hover:bg-danger-700 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-md transition-all z-10 hover:scale-110"
-                      title="Xóa ảnh này"
+                      class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
+                      aria-label="Xoá ảnh này"
                       :disabled="actionLoading"
-                      @click.stop="handleDeleteEvidence(img)"
+                      @click="handleDeleteEvidence(img)"
                     >
                       <X :size="12" />
                     </button>
-                    <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold pointer-events-none">
-                      Phóng to
-                    </div>
+                  </div>
+                  <div
+                    v-if="!isCompleted"
+                    class="w-20 h-20 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors"
+                    :class="!gpsCheckedIn || actionLoading ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
+                    data-testid="before-evidence-picker"
+                    role="button"
+                    :aria-label="gpsCheckedIn ? 'Thêm ảnh trước khi sửa' : 'Check-in xong mới thêm được ảnh'"
+                    :tabindex="gpsCheckedIn && !actionLoading ? 0 : -1"
+                    :aria-disabled="!gpsCheckedIn || actionLoading"
+                    @click="openBeforeEvidencePicker"
+                    @keydown.enter.prevent="openBeforeEvidencePicker"
+                    @keydown.space.prevent="openBeforeEvidencePicker"
+                  >
+                    <Loader2 v-if="uploadingPhase === 'BEFORE'" :size="18" class="animate-spin" />
+                    <Camera v-else :size="18" />
+                    Thêm
                   </div>
                 </div>
-                <div v-else class="py-4 text-center rounded-xl bg-ink-50 border border-dashed border-ink-200 text-ink-400 text-xs">
-                  Chưa có ảnh nào. Vui lòng bấm vào ô chụp / chọn ảnh ở trên để tải lên tối thiểu 1 ảnh.
-                </div>
               </div>
-            </div>
-          </FhCard>
-        </div>
-
-        <!-- STEP 3.5: Quotation or Fixed-Price Section -->
-        <FhCard :title="isFixedPriceOrder ? '4. Giá cố định theo yêu cầu đặt lịch' : '4. Lập báo giá phân tách Công & Phụ tùng'">
-          <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="space-y-3 text-sm">
-            <p class="font-semibold text-brand-800">
-              Dịch vụ có giá cố định theo yêu cầu đặt lịch đã đặt; không lập báo giá kiểm tra hiện trường lần nữa.
-            </p>
-            <p v-if="job?.scopeDescription" class="text-ink-700">Phạm vi đã đặt: {{ job.scopeDescription }}</p>
-            <div v-if="fixedPriceTotal != null" data-testid="fixed-price-breakdown" class="rounded-xl bg-ink-50 border border-ink-200 p-3 space-y-1">
-              <p>Đơn giá đã lưu: <FhMoney :amount="job?.fixedUnitPrice ?? 0" /></p>
-              <p>Số lượng đã đặt: {{ job?.quantity ?? 1 }}</p>
-              <p class="font-semibold">Giá công theo yêu cầu đặt lịch: <FhMoney :amount="fixedPriceTotal" /></p>
-              <p class="text-ink-500 text-xs">Không bao gồm chi phí phát sinh được duyệt riêng (nếu có).</p>
-            </div>
-            <p v-else role="status" class="text-danger-700">
-              Chưa có giá cố định đã lưu trong đơn; cần kiểm tra dữ liệu Booking trước khi bắt đầu sửa.
-            </p>
-            <p class="text-ink-500" data-testid="fixed-price-auto-start">Check-in có ảnh sản phẩm xong, đơn tự chuyển sang sửa chữa.</p>
-          </div>
-
-          <div v-else class="space-y-4 text-xs">
-            <FhCostBreakdown :labor-total="laborTotal()" :parts-total="partsTotal()" />
-
-            <div class="space-y-2">
-              <div class="flex items-center justify-between font-semibold text-ink-700">
-                <span>Hạng mục chi phí:</span>
-                <div class="flex gap-2">
+              <div v-if="currentStepNumber >= 4 || afterEvidences.length > 0" class="space-y-2">
+                <p class="text-sm font-medium text-ink-700">Sau khi sửa</p>
+                <div class="flex flex-wrap gap-2.5">
+                  <div
+                    v-for="(img, idx) in afterEvidences"
+                    :key="img.id || idx"
+                    class="relative w-20 h-20 rounded-xl overflow-hidden border border-ink-200 bg-ink-100"
+                  >
+                    <button type="button" class="w-full h-full" :aria-label="`Xem ảnh sau sửa ${idx + 1}`" @click="previewImage(img.mediaUrl)">
+                      <img :src="img.mediaUrl" :alt="`Ảnh sau sửa ${idx + 1}`" class="w-full h-full object-cover" />
+                    </button>
+                    <button
+                      v-if="!isCompleted"
+                      type="button"
+                      class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
+                      aria-label="Xoá ảnh này"
+                      :disabled="actionLoading"
+                      @click="handleDeleteEvidence(img)"
+                    >
+                      <X :size="12" />
+                    </button>
+                  </div>
                   <button
+                    v-if="!isCompleted"
                     type="button"
-                    class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1"
-                    @click="addItem('LABOR')"
+                    class="w-20 h-20 rounded-xl border border-dashed border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 flex flex-col items-center justify-center gap-1 text-xs font-medium disabled:opacity-50"
+                    aria-label="Thêm ảnh sau khi sửa"
+                    :disabled="actionLoading"
+                    @click="afterFile?.click()"
                   >
-                    <Plus :size="13" /> Thêm công thợ
-                  </button>
-                  <button
-                    type="button"
-                    class="text-[11px] text-ink-700 font-bold hover:underline flex items-center gap-1"
-                    @click="addItem('PARTS')"
-                  >
-                    <Plus :size="13" /> Thêm linh kiện
-                  </button>
-                </div>
-              </div>
-
-              <div class="space-y-2">
-                <div
-                  v-for="(item, idx) in quotationItems"
-                  :key="idx"
-                  class="p-2.5 rounded-xl bg-ink-50 border border-ink-200 flex items-center gap-2"
-                >
-                  <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                    :class="item.type === 'LABOR' ? 'bg-brand-100 text-brand-800' : 'bg-ink-200 text-ink-800'"
-                  >
-                    {{ item.type === 'LABOR' ? 'Công' : 'Linh kiện' }}
-                  </span>
-
-                  <input
-                    v-model="item.description"
-                    type="text"
-                    placeholder="Mô tả công việc hoặc tên linh kiện..."
-                    class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
-                  />
-
-                  <input
-                    v-model.number="item.unitPrice"
-                    type="number"
-                    step="10000"
-                    placeholder="Đơn giá"
-                    class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
-                  />
-
-                  <button
-                    type="button"
-                    class="p-1 text-ink-400 hover:text-danger-500 rounded"
-                    @click="removeItem(idx)"
-                  >
-                    <Trash2 :size="14" />
+                    <Loader2 v-if="uploadingPhase === 'AFTER'" :size="18" class="animate-spin" />
+                    <Camera v-else :size="18" />
+                    Thêm
                   </button>
                 </div>
               </div>
             </div>
+          </section>
 
-            <div class="pt-3 border-t border-ink-100 flex items-center justify-between">
-              <div class="text-xs">
-                <span class="text-ink-400">Tổng báo giá: </span>
-                <span class="font-bold text-brand-700 font-num text-sm">
-                  <FhMoney :amount="laborTotal() + partsTotal()" />
-                </span>
-              </div>
-
-              <div class="flex gap-2">
-                <FhButton
-                  variant="primary"
-                  size="sm"
-                  :disabled="!beforePhotoUploaded || actionLoading"
-                  @click="handleSubmitQuotation"
-                >
-                  <FileText :size="14" class="mr-1.5" /> Gửi báo giá cho khách duyệt
-                </FhButton>
-              </div>
+          <!-- Parts -->
+          <section>
+            <button
+              type="button"
+              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              :aria-expanded="sections.parts"
+              aria-controls="job-parts"
+              @click="sections.parts = !sections.parts"
+            >
+              <span class="text-base font-semibold text-ink-900">Linh kiện</span>
+              <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
+                <span v-if="partsSummary.needsAction" class="px-2 py-0.5 rounded-full bg-warning-50 text-warning-800 text-xs font-medium">Cần xử lý</span>
+                <template v-else-if="partsSummary.count > 0">{{ partsSummary.count }} yêu cầu</template>
+                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.parts }" />
+              </span>
+            </button>
+            <div v-show="sections.parts" id="job-parts" class="px-5 sm:px-6 pb-5">
+              <TechnicianPartsSection
+                :order-id="job.id"
+                :order-status="job.status"
+                @parts-updated="loadJob(jobId, { silent: true })"
+                @summary="onPartsSummary"
+              />
             </div>
-          </div>
-        </FhCard>
+          </section>
 
-        <!-- STEP 4: Chi phí phát sinh (Additional Cost) -->
-        <div id="step-under-repair">
-          <FhCard v-if="job && (job.status === 'UNDER_REPAIR' || job.status === 'IN_PROGRESS' || isCompleted)" title="Chi phí phát sinh ngoài phạm vi ban đầu">
-            <div class="space-y-3 text-xs">
-              <div
-                v-for="cost in additionalCosts"
-                :key="cost.id"
-                class="p-3 rounded-xl bg-ink-50 border border-ink-200 space-y-2"
-              >
-                <div class="flex items-center justify-between">
-                  <FhStatusPill
-                    :status="cost.status"
-                    :label="
-                      {
-                        PENDING_APPROVAL: 'Chờ khách duyệt',
-                        APPROVED: 'Đã duyệt',
-                        REJECTED: 'Bị từ chối',
-                        EXPIRED: 'Hết hạn chờ duyệt',
-                        CANCELLED: 'Đã huỷ',
-                      }[cost.status]
-                    "
-                  />
-                  <span class="font-num font-bold text-ink-800">
-                    <FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" />
-                  </span>
-                </div>
-                <p class="text-ink-600 italic">"{{ cost.reason }}"</p>
-                <FhButton
-                  v-if="['REJECTED', 'EXPIRED'].includes(cost.status)"
-                  variant="ghost"
-                  size="sm"
-                  @click="openAdditionalCostForm(cost)"
-                >
-                  Sửa lại & gửi lần nữa
-                </FhButton>
-              </div>
+          <!-- Additional costs: only once the repair has started -->
+          <section v-if="isRepairing || isCompleted">
+            <button
+              type="button"
+              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              :aria-expanded="sections.extra"
+              aria-controls="job-extra-costs"
+              @click="sections.extra = !sections.extra"
+            >
+              <span class="text-base font-semibold text-ink-900">Chi phí phát sinh</span>
+              <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
+                <template v-if="additionalCosts.length > 0">{{ additionalCosts.length }} yêu cầu</template>
+                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.extra }" />
+              </span>
+            </button>
+            <div v-show="sections.extra" id="job-extra-costs" class="px-5 sm:px-6 pb-5 space-y-3 text-sm">
+              <ul v-if="additionalCosts.length > 0" class="divide-y divide-ink-100">
+                <li v-for="cost in additionalCosts" :key="cost.id" class="py-3 first:pt-0 space-y-1">
+                  <div class="flex items-center justify-between gap-3">
+                    <FhStatusPill :status="cost.status" :label="AC_STATUS_LABELS[cost.status]" />
+                    <span class="font-num font-semibold text-ink-900 whitespace-nowrap">
+                      <FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta)" />
+                    </span>
+                  </div>
+                  <p class="text-ink-600 text-pretty">{{ cost.reason }}</p>
+                  <button
+                    v-if="['REJECTED', 'EXPIRED'].includes(cost.status) && isRepairing"
+                    type="button"
+                    class="h-10 -ml-1 px-1 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap"
+                    @click="openAdditionalCostForm(cost)"
+                  >
+                    Sửa và gửi lại
+                  </button>
+                </li>
+              </ul>
+              <p v-else-if="!showAdditionalCostForm" class="text-ink-500">Chưa có chi phí phát sinh.</p>
 
               <FhButton
-                v-if="!showAdditionalCostForm"
+                v-if="!showAdditionalCostForm && isRepairing"
                 variant="secondary"
                 size="sm"
                 @click="openAdditionalCostForm()"
               >
-                <Plus :size="13" class="mr-1" /> Tạo yêu cầu chi phí phát sinh
+                <Plus :size="14" /> Tạo chi phí phát sinh
               </FhButton>
 
-              <!-- Additional Cost Form -->
-              <div v-if="showAdditionalCostForm" class="space-y-3 pt-2 border-t border-ink-100">
-                <textarea
-                  v-model="acReason"
-                  rows="2"
-                  placeholder="Mô tả sự cố phát sinh ngoài phạm vi ban đầu..."
-                  class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-                ></textarea>
-
-                <div class="flex flex-wrap items-center justify-between font-semibold text-ink-700 gap-2">
-                  <span>Hạng mục chi phí phát sinh:</span>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1"
-                      @click="addAcItem('LABOR')"
-                    >
-                      <Plus :size="13" /> + Công thợ
-                    </button>
-                    <button
-                      type="button"
-                      class="text-[11px] text-brand-600 font-bold hover:underline flex items-center gap-1"
-                      @click="addAcItem('PARTS', 'fixhome')"
-                    >
-                      <Plus :size="13" /> + LK FixHome
-                    </button>
-                    <button
-                      type="button"
-                      class="text-[11px] text-warning-700 font-bold hover:underline flex items-center gap-1"
-                      @click="addAcItem('PARTS', 'external')"
-                    >
-                      <Plus :size="13" /> + LK Ngoài (EXTERNAL)
-                    </button>
-                  </div>
-                </div>
+              <!-- Additional cost form -->
+              <div v-if="showAdditionalCostForm" class="space-y-3 pt-3 border-t border-ink-100">
+                <label class="block">
+                  <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh</span>
+                  <textarea
+                    v-model="acReason"
+                    rows="2"
+                    placeholder="Ví dụ: hỏng thêm quạt dàn nóng"
+                    class="w-full p-3 bg-white border border-ink-200 rounded-xl text-sm"
+                  ></textarea>
+                </label>
 
                 <div class="space-y-2">
                   <div
                     v-for="(item, idx) in acItems"
                     :key="idx"
-                    class="p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center gap-2 transition-all"
-                    :class="
-                      item.partSource === 'fixhome'
-                        ? 'bg-brand-50/40 border-brand-200'
-                        : item.partSource === 'external'
-                          ? 'bg-warning-50/40 border-warning-200'
-                          : 'bg-ink-50 border-ink-200'
-                    "
+                    class="flex flex-wrap sm:flex-nowrap items-center gap-2"
                   >
-                    <div class="flex items-center gap-1.5 shrink-0">
-                      <span
-                        class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                        :class="
-                          item.type === 'LABOR'
-                            ? 'bg-brand-100 text-brand-800'
-                            : item.partSource === 'external'
-                              ? 'bg-warning-100 text-warning-900 border border-warning-300'
-                              : 'bg-brand-100 text-brand-800 border border-brand-200'
-                        "
-                      >
-                        {{ item.type === 'LABOR' ? 'Công' : item.partSource === 'external' ? 'LK Ngoài' : 'LK FixHome' }}
-                      </span>
-                      <select
-                        v-if="item.type === 'PARTS'"
-                        v-model="item.partSource"
-                        class="h-7 px-1.5 bg-white border border-ink-200 rounded text-[11px]"
-                        @change="if (item.partSource === 'fixhome' && !item.partCatalogId) openAcPartPicker(idx);"
-                      >
-                        <option value="fixhome">Kho FixHome</option>
-                        <option value="technician">Thợ tự có</option>
-                        <option value="external">Mua ngoài</option>
-                      </select>
-                    </div>
+                    <select
+                      v-if="item.type === 'PARTS'"
+                      v-model="item.partSource"
+                      aria-label="Nguồn linh kiện"
+                      class="shrink-0 w-32 h-10 px-2 bg-white border border-ink-200 rounded-xl text-sm"
+                      @change="if (item.partSource === 'fixhome' && !item.partCatalogId) openAcPartPicker(idx);"
+                    >
+                      <option value="fixhome">Kho FixHome</option>
+                      <option value="technician">Thợ tự có</option>
+                      <option value="external">Mua ngoài</option>
+                    </select>
+                    <span v-else class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
 
-                    <!-- FixHome Part with catalog info -->
+                    <!-- FixHome part picked from the catalog -->
                     <div
                       v-if="item.type === 'PARTS' && item.partSource === 'fixhome' && item.partCatalogId"
-                      class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded border border-brand-200"
+                      class="flex-1 min-w-0 flex items-center justify-between gap-2"
                     >
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2 flex-wrap">
-                          <span class="font-bold text-ink-900 text-xs truncate">{{ item.description }}</span>
-                          <span
-                            v-if="item.partSku"
-                            class="text-[10px] font-mono px-1.5 py-0.2 bg-brand-50 text-brand-700 rounded border border-brand-200 font-semibold"
-                          >
-                            {{ item.partSku }}
-                          </span>
-                          <span
-                            class="whitespace-nowrap inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 shrink-0"
-                            :title="item.warrantyPolicy || undefined"
-                          >
-                            <ShieldCheck :size="11" />
-                            {{ formatAcWarrantyBadge(item.warrantyDays) }}
-                          </span>
-                        </div>
-                        <p v-if="item.warrantyPolicy" class="text-[10px] text-ink-500 mt-0.5 truncate">
-                          {{ item.warrantyPolicy }}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        class="text-[11px] text-brand-600 hover:text-brand-800 font-semibold underline shrink-0 cursor-pointer"
-                        @click="openAcPartPicker(idx)"
-                      >
-                        Đổi linh kiện
+                      <span class="min-w-0 truncate font-medium text-ink-900" :title="item.warrantyPolicy || item.description">{{ item.description }}</span>
+                      <span class="shrink-0 inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap">
+                        <ShieldCheck :size="12" /> {{ formatAcWarrantyBadge(item.warrantyDays) }}
+                      </span>
+                      <button type="button" class="shrink-0 h-10 px-2 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap" @click="openAcPartPicker(idx)">
+                        Đổi
                       </button>
                     </div>
-
-                    <!-- FixHome Part without catalog info -->
-                    <div v-else-if="item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId" class="flex-1">
-                      <button
-                        type="button"
-                        class="w-full h-8 px-3 rounded border border-dashed border-brand-400 bg-white hover:bg-brand-50 text-brand-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        @click="openAcPartPicker(idx)"
-                      >
-                        <Search :size="13" /> Bấm để chọn linh kiện từ kho FixHome (Xem giá & bảo hành)
-                      </button>
-                    </div>
-
-                    <!-- Normal Input (Labor or External) -->
+                    <button
+                      v-else-if="item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId"
+                      type="button"
+                      class="flex-1 min-w-0 h-10 px-3 rounded-xl border border-dashed border-ink-300 text-ink-700 hover:border-brand-500 hover:text-brand-700 text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      @click="openAcPartPicker(idx)"
+                    >
+                      <Search :size="14" /> Chọn linh kiện FixHome
+                    </button>
                     <input
                       v-else
                       v-model="item.description"
                       type="text"
-                      :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh...' : 'Tên linh kiện ngoài...'"
-                      class="flex-1 h-8 px-2 bg-white border border-ink-200 rounded text-xs"
+                      :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
+                      :aria-label="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
+                      class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
                     />
 
-                    <!-- Quantity, Price and Delete -->
-                    <div class="flex items-center gap-1.5 shrink-0">
-                      <span class="text-ink-400 text-[11px]">SL:</span>
-                      <input
-                        v-model.number="item.quantity"
-                        type="number"
-                        min="1"
-                        class="w-12 h-8 px-1.5 bg-white border border-ink-200 rounded text-xs text-center font-num font-bold"
-                      />
-
-                      <div
-                        v-if="item.partSource === 'fixhome' && item.partCatalogId"
-                        class="min-w-[100px] text-right px-2 py-1 bg-white rounded border border-brand-200"
-                      >
-                        <span class="text-[10px] text-ink-400 block -mb-0.5">Đơn giá kho:</span>
-                        <span class="font-num font-bold text-brand-700 text-xs">
-                          <FhMoney :amount="item.unitPrice" />
-                        </span>
-                      </div>
-                      <input
-                        v-else
-                        v-model.number="item.unitPrice"
-                        type="number"
-                        step="10000"
-                        placeholder="Đơn giá"
-                        class="w-24 h-8 px-2 bg-white border border-ink-200 rounded text-xs font-num font-bold text-right"
-                      />
-
-                      <button
-                        type="button"
-                        class="p-1 text-ink-400 hover:text-danger-500 rounded transition-colors"
-                        title="Xóa"
-                        @click="removeAcItem(idx)"
-                      >
-                        <Trash2 :size="14" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Fulfillment Method for FixHome parts -->
-                <div
-                  v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome')"
-                  class="p-2.5 rounded-xl bg-brand-50 border border-brand-200 space-y-2 text-xs"
-                >
-                  <div class="font-semibold text-brand-900 flex items-center gap-1.5">
-                    <Package :size="14" /> Phương thức nhận linh kiện FixHome:
-                  </div>
-                  <div class="flex items-center gap-4">
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" v-model="acFulfillmentMethod" value="pickup" class="text-brand-600" />
-                      <span class="text-ink-700">Nhận tại kho FixHome (Tự đến lấy - 0đ)</span>
-                    </label>
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" v-model="acFulfillmentMethod" value="delivery" class="text-brand-600" />
-                      <span class="text-ink-700">Giao đến tận nơi</span>
-                    </label>
-                  </div>
-                  <div v-if="acFulfillmentMethod === 'delivery'" class="flex items-center gap-2 pt-1">
-                    <span class="text-ink-600">Phí giao hàng dự kiến:</span>
                     <input
-                      v-model.number="acShippingFee"
+                      v-model.number="item.quantity"
                       type="number"
-                      step="5000"
-                      placeholder="Phí ship (VNĐ)"
-                      class="w-32 h-7 px-2 bg-white border border-brand-300 rounded text-xs font-num font-bold"
+                      min="1"
+                      inputmode="numeric"
+                      aria-label="Số lượng"
+                      class="shrink-0 w-14 h-10 px-2 bg-white border border-ink-200 rounded-xl text-sm text-center font-num"
                     />
-                    <span class="text-ink-400 text-[11px]">VNĐ (tính vào tổng thanh toán)</span>
+                    <span
+                      v-if="item.partSource === 'fixhome' && item.partCatalogId"
+                      class="shrink-0 w-28 text-right font-num text-ink-900 whitespace-nowrap"
+                    >
+                      <FhMoney :amount="item.unitPrice" />
+                    </span>
+                    <input
+                      v-else
+                      v-model.number="item.unitPrice"
+                      type="number"
+                      step="10000"
+                      inputmode="numeric"
+                      placeholder="Đơn giá"
+                      aria-label="Đơn giá"
+                      class="shrink-0 w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right"
+                    />
+                    <button
+                      type="button"
+                      class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center"
+                      aria-label="Xoá dòng này"
+                      @click="removeAcItem(idx)"
+                    >
+                      <Trash2 :size="16" />
+                    </button>
                   </div>
                 </div>
 
-                <!-- Disclaimer for External parts -->
-                <div
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('LABOR')">
+                    <Plus :size="16" /> Tiền công
+                  </button>
+                  <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS', 'fixhome')">
+                    <Plus :size="16" /> Linh kiện FixHome
+                  </button>
+                  <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS', 'external')">
+                    <Plus :size="16" /> Linh kiện mua ngoài
+                  </button>
+                </div>
+
+                <!-- How FixHome parts reach the technician -->
+                <div v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome')" class="space-y-2">
+                  <p class="font-medium text-ink-700">Nhận linh kiện FixHome</p>
+                  <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <label class="inline-flex items-center gap-2 min-h-10 cursor-pointer">
+                      <input v-model="acFulfillmentMethod" type="radio" value="pickup" />
+                      <span class="text-ink-700">Tự lấy tại kho</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 min-h-10 cursor-pointer">
+                      <input v-model="acFulfillmentMethod" type="radio" value="delivery" />
+                      <span class="text-ink-700">Giao tới nơi</span>
+                    </label>
+                    <label v-if="acFulfillmentMethod === 'delivery'" class="inline-flex items-center gap-2">
+                      <span class="text-ink-600 whitespace-nowrap">Phí giao (₫)</span>
+                      <input
+                        v-model.number="acShippingFee"
+                        type="number"
+                        step="5000"
+                        inputmode="numeric"
+                        class="w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <p
                   v-if="acItems.some((i) => i.partSource === 'external')"
-                  class="p-2.5 rounded-xl bg-warning-50 border border-warning-200 text-warning-900 text-xs flex items-start gap-2"
+                  class="px-3 py-2 rounded-xl bg-warning-50 border border-warning-200 text-warning-800 flex items-start gap-2"
                 >
-                  <AlertTriangle :size="16" class="text-warning-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p class="font-semibold">Lưu ý về linh kiện ngoài (EXTERNAL):</p>
-                    <p class="text-[11px] text-warning-800">
-                      Linh kiện mua ngoài không thuộc chính sách bảo hành của FixHome. Khách hàng sẽ phải tích xác nhận chấp nhận rủi ro khi duyệt yêu cầu phát sinh này.
-                    </p>
-                  </div>
-                </div>
+                  <AlertTriangle :size="16" class="text-warning-600 mt-0.5 shrink-0" />
+                  <span class="text-pretty">Linh kiện mua ngoài không được FixHome bảo hành. Khách phải đồng ý điều này khi duyệt.</span>
+                </p>
 
-                <div class="space-y-2">
+                <div class="space-y-1.5">
+                  <p class="font-medium text-ink-700">Ảnh (không bắt buộc)</p>
                   <div class="flex items-center gap-2 flex-wrap">
-                    <img v-for="url in acEvidenceUrls" :key="url" :src="url" class="w-14 h-14 rounded-xl object-cover border border-ink-200" />
-                    <div
-                      class="w-14 h-14 rounded-xl border-2 border-dashed border-ink-300 hover:border-brand-500 flex items-center justify-center cursor-pointer text-ink-400"
+                    <img v-for="url in acEvidenceUrls" :key="url" :src="url" alt="Ảnh chi phí phát sinh" class="w-14 h-14 rounded-xl object-cover border border-ink-200" />
+                    <button
+                      type="button"
+                      class="w-14 h-14 rounded-xl border border-dashed border-ink-300 hover:border-brand-500 flex items-center justify-center text-ink-500"
+                      aria-label="Thêm ảnh chi phí phát sinh"
+                      :disabled="acUploading"
                       @click="acFile?.click()"
                     >
-                      <Camera :size="18" />
-                    </div>
+                      <Loader2 v-if="acUploading" :size="18" class="animate-spin" />
+                      <Camera v-else :size="18" />
+                    </button>
                     <input
                       ref="acFile"
                       type="file"
@@ -2074,13 +1937,12 @@ const refreshJobStatus = async () => {
                       @change="handleUploadAcEvidence(($event.target as HTMLInputElement).files?.[0])"
                     />
                   </div>
-                  <span class="text-[11px] text-ink-400">Ảnh bằng chứng sự cố phát sinh (không bắt buộc)</span>
                 </div>
 
-                <div class="pt-2 border-t border-ink-100 flex items-center justify-between">
-                  <div>
-                    <span class="text-ink-500 text-xs">Tổng phát sinh: </span>
-                    <span class="font-bold text-brand-700 font-num text-sm">
+                <div class="pt-3 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
+                  <p class="text-ink-600 whitespace-nowrap">
+                    Tổng phát sinh:
+                    <span class="font-num font-semibold text-ink-900">
                       <FhMoney
                         :amount="
                           acLaborTotal() +
@@ -2091,738 +1953,247 @@ const refreshJobStatus = async () => {
                         "
                       />
                     </span>
-                  </div>
+                  </p>
                   <div class="flex gap-2">
                     <FhButton variant="ghost" size="sm" @click="showAdditionalCostForm = false">Huỷ</FhButton>
                     <FhButton
                       variant="primary"
                       size="sm"
                       :disabled="acSubmitting || acUploading"
+                      :loading="acSubmitting"
                       @click="handleSubmitAdditionalCost"
                     >
-                      Gửi yêu cầu
+                      Gửi cho khách duyệt
                     </FhButton>
                   </div>
                 </div>
               </div>
             </div>
-          </FhCard>
+          </section>
         </div>
+      </FhCard>
 
-        <!-- STEP 5: Evidence AFTER & Complete Repair -->
-        <div id="step-completion">
-          <FhCard title="5. Ảnh sau sửa chữa & Hoàn thành">
-            <div class="space-y-4 text-xs">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-ink-600">
-                  Quy chuẩn FixHome: Cần ít nhất 1 ảnh sau sửa chữa trước khi bấm Hoàn thành. Hoàn thành xong khách chỉ còn thanh toán, không phải nghiệm thu.
-                </p>
-                <span
-                  v-if="afterEvidences.length > 0"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200"
-                >
-                  <CheckCircle2 :size="14" /> Đã tải {{ afterEvidences.length }} ảnh sau sửa (Đạt yêu cầu tối thiểu)
-                </span>
-                <span
-                  v-else
-                  class="inline-flex items-center gap-1 text-xs font-medium text-warning-800 bg-warning-50 px-2 py-0.5 rounded border border-warning-200"
-                >
-                  <AlertCircle :size="14" /> Yêu cầu tối thiểu 1 ảnh sau sửa
-                </span>
-              </div>
+      <!-- Reports already sent; the form opens from the "Thêm" menu -->
+      <OrderComplaintPanel
+        ref="complaintPanel"
+        :order-id="job.id"
+        :order-status="job.status"
+        :completed-at="job.completedAt"
+        role="technician"
+        inline
+      />
+    </template>
 
-              <!-- Upload Action Button -->
-              <div class="flex items-center gap-3 pt-1">
-                <div
-                  class="px-4 py-3 rounded-2xl border-2 border-dashed flex items-center gap-3 cursor-pointer transition-colors border-brand-300 hover:border-brand-500 bg-brand-50/20 hover:bg-brand-50/60 text-brand-700"
-                  role="button"
-                  :tabindex="!actionLoading ? 0 : -1"
-                  @click="afterFile?.click()"
-                >
-                  <Loader2 v-if="uploadingPhase === 'AFTER'" :size="20" class="shrink-0 animate-spin text-brand-600" />
-                  <Camera v-else :size="20" class="shrink-0" />
-                  <div class="text-left">
-                    <div class="font-bold text-xs">
-                      {{
-                        uploadingPhase === 'AFTER'
-                          ? 'Đang tải lên...'
-                          : afterEvidences.length > 0
-                            ? '+ Tải thêm ảnh sau sửa'
-                            : 'Chụp / Chọn ảnh sau sửa'
-                      }}
-                    </div>
-                    <div class="text-[10px] text-ink-400">Chọn 1 hoặc nhiều ảnh (JPEG, PNG, WebP &le; 10MB)</div>
-                  </div>
-                </div>
-                <p class="text-[11px] text-ink-500 hidden sm:block">
-                  Cho phép tải lên nhiều lần. Mỗi ảnh tải lên sẽ hiển thị ngay bên dưới.
-                </p>
-              </div>
-
-              <!-- Uploaded AFTER Photos Display -->
-              <div class="pt-2 border-t border-ink-100 space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="font-bold text-ink-700 text-xs">
-                    Ảnh sau sửa đã tải lên ({{ afterEvidences.length }} ảnh):
-                  </span>
-                  <span v-if="afterEvidences.length > 0" class="text-[10px] text-ink-400">
-                    Nhấp vào ảnh để xem phóng to
-                  </span>
-                </div>
-
-                <div v-if="afterEvidences.length > 0" class="flex flex-wrap items-center gap-3">
-                  <div
-                    v-for="(img, idx) in afterEvidences"
-                    :key="img.id || idx"
-                    class="w-24 h-24 rounded-xl border border-ink-200 overflow-hidden relative group bg-ink-100 shadow-xs cursor-pointer hover:border-brand-500 transition-all"
-                    @click="previewImage(img.mediaUrl)"
-                  >
-                    <img
-                      :src="img.mediaUrl"
-                      :alt="'Ảnh sau sửa ' + (idx + 1)"
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
-                      #{{ idx + 1 }}
-                    </span>
-                    <button
-                      type="button"
-                      class="absolute top-1 right-1 bg-danger-600 hover:bg-danger-700 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-md transition-all z-10 hover:scale-110"
-                      title="Xóa ảnh này"
-                      :disabled="actionLoading"
-                      @click.stop="handleDeleteEvidence(img)"
-                    >
-                      <X :size="12" />
-                    </button>
-                    <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold pointer-events-none">
-                      Phóng to
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="py-4 text-center rounded-xl bg-ink-50 border border-dashed border-ink-200 text-ink-400 text-xs">
-                  Chưa có ảnh sau sửa nào. Vui lòng bấm vào ô chụp / chọn ảnh ở trên để tải lên tối thiểu 1 ảnh.
-                </div>
-              </div>
-
-              <div class="pt-4 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
-                <div class="text-xs">
-                  <span
-                    v-if="completionRequested"
-                    class="inline-flex items-center gap-1.5 text-success-700 font-semibold bg-success-50 px-2.5 py-1 rounded border border-success-200"
-                  >
-                    <CheckCircle2 :size="14" /> Đã hoàn thành (chờ khách thanh toán)
-                  </span>
-                  <span v-else class="text-ink-500">
-                    Sau khi chụp và tải ảnh sau sửa, bấm nút bên phải để hoàn thành.
-                  </span>
-                </div>
-                <FhButton
-                  variant="primary"
-                  size="md"
-                  :disabled="completionRequested || isCompleted || actionLoading || (!afterPhotoUploaded && afterEvidences.length === 0)"
-                  @click="handleCompleteOrder"
-                >
-                  <ShieldCheck :size="16" class="mr-1.5" />
-                  {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã hoàn thành' : 'Hoàn thành' }}
-                </FhButton>
-              </div>
-            </div>
-          </FhCard>
-
-          <!-- Customer Acceptance & Payment Resolution Card -->
-          <div class="mt-5">
-            <FhCard title="6. Thanh toán">
-              <div class="space-y-4 text-xs">
-                <p class="text-ink-600 leading-relaxed">
-                  Quy chuẩn thực thi: <strong>1. Thợ hoàn thành, có ảnh sau sửa → 2. Khách thanh toán (tiền mặt hoặc online) → 3. Hệ thống hoàn tất ca.</strong> Khách không phải bấm nghiệm thu.
-                </p>
-
-                <!-- Case: COMPLETED -->
-                <div
-                  v-if="isCompleted || job?.status === 'COMPLETED'"
-                  class="p-4 rounded-2xl border-2 border-success-500 bg-success-50 space-y-3"
-                >
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2 font-bold text-success-900 text-sm">
-                      <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
-                      <span>Đơn hàng đã hoàn tất thành công (COMPLETED)!</span>
-                    </div>
-                    <span class="whitespace-nowrap text-xs font-bold text-success-800 bg-success-100 px-2.5 py-0.5 rounded-full border border-success-300">
-                      Hoàn tất
-                    </span>
-                  </div>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-success-800">
-                    <div class="flex items-center gap-1.5">
-                      <CheckCircle2 :size="14" class="text-success-600" /> Công việc: Đã hoàn thành, có ảnh sau sửa
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <CheckCircle2 :size="14" class="text-success-600" /> Thanh toán: Đã thanh toán (PAID)
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <CheckCircle2 :size="14" class="text-success-600" /> Bảo hành điện tử: Đã kích hoạt
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <CheckCircle2 :size="14" class="text-success-600" /> Tiền công thợ: Đã ghi nhận vào tài khoản
-                    </div>
-                  </div>
-                  <div class="pt-2 flex justify-end">
-                    <FhButton class="whitespace-nowrap" variant="primary" size="sm" @click="router.push('/tech/jobs')">
-                      <CheckCircle2 :size="14" class="mr-1.5" />
-                      Hoàn tất ca & Về danh sách việc
-                    </FhButton>
-                  </div>
-                </div>
-
-                <!-- Case: In Progress Resolution -->
-                <template v-else>
-                  <!-- Payment: no customer acceptance step since PO 09/10/2026 -->
-                  <div class="border border-ink-200 rounded-2xl p-4 space-y-3 bg-white">
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2 font-bold text-ink-900 text-xs">
-                        <CreditCard :size="16" class="text-brand-600 shrink-0" />
-                        <span>Hình thức thanh toán</span>
-                      </div>
-                      <span
-                        v-if="job?.paymentStatus?.toUpperCase() === 'PAID'"
-                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success-100 text-success-800"
-                      >
-                        Đã thanh toán
-                      </span>
-                      <span
-                        v-else
-                        class="whitespace-nowrap text-[11px] font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-800"
-                      >
-                        Chưa thanh toán
-                      </span>
-                    </div>
-
-                    <!-- Payment Mode Selector -->
-                    <div v-if="!cashSettled" class="space-y-2">
-                      <label class="block font-semibold text-ink-700">Khách hàng thanh toán bằng hình thức nào?</label>
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          class="p-3.5 rounded-2xl border-2 text-left flex items-start gap-3 transition-all cursor-pointer"
-                          :class="hasCashPayment === 'YES' ? 'border-brand-500 bg-brand-50/60 shadow-xs' : 'border-ink-200 hover:border-ink-300 bg-white'"
-                          @click="hasCashPayment = 'YES'"
-                        >
-                          <Banknote
-                            :size="22"
-                            class="shrink-0 mt-0.5"
-                            :class="hasCashPayment === 'YES' ? 'text-brand-600' : 'text-ink-400'"
-                          />
-                          <div>
-                            <div class="font-bold text-ink-900 flex items-center gap-1.5">
-                              Có thu tiền mặt
-                              <span v-if="hasCashPayment === 'YES'" class="w-2 h-2 rounded-full bg-brand-600"></span>
-                            </div>
-                            <div class="text-[11px] text-ink-500 mt-0.5">
-                              Khách trả tiền mặt trực tiếp cho thợ. Thợ cần khai báo số tiền để khách xác nhận.
-                            </div>
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          class="p-3.5 rounded-2xl border-2 text-left flex items-start gap-3 transition-all cursor-pointer"
-                          :class="hasCashPayment === 'NO' ? 'border-success-500 bg-success-50/60 shadow-xs' : 'border-ink-200 hover:border-ink-300 bg-white'"
-                          @click="hasCashPayment = 'NO'"
-                        >
-                          <CreditCard
-                            :size="22"
-                            class="shrink-0 mt-0.5"
-                            :class="hasCashPayment === 'NO' ? 'text-success-600' : 'text-ink-400'"
-                          />
-                          <div>
-                            <div class="font-bold text-ink-900 flex items-center gap-1.5">
-                              Không thu tiền mặt (Khách trả Online)
-                              <span v-if="hasCashPayment === 'NO'" class="w-2 h-2 rounded-full bg-success-600"></span>
-                            </div>
-                            <div class="text-[11px] text-ink-500 mt-0.5">
-                              Khách tự thanh toán online qua ứng dụng FixHome (VNPAY / Ví điện tử / Thẻ).
-                            </div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Case 1: Đã đối soát tiền mặt -->
-                    <div v-if="cashSettled" class="p-3.5 bg-brand-50 rounded-2xl border border-brand-200 space-y-1.5">
-                      <div class="flex items-center gap-2 font-semibold text-brand-900">
-                        <CheckCircle2 :size="16" class="text-brand-600" />
-                        <span>
-                          Trạng thái đối soát:
-                          {{ cashSettlementStatus === 'confirmed' ? 'Khách đã xác nhận số tiền mặt (PAID)' : 'Đang chờ khách duyệt số tiền' }}
-                        </span>
-                      </div>
-                      <p class="text-brand-700 text-[11px]">
-                        Số tiền khai báo: <strong><FhMoney :amount="declaredCashAmount" /></strong>
-                      </p>
-                      <div class="pt-1 flex items-center gap-2">
-                        <FhButton variant="secondary" size="sm" :disabled="refreshingStatus" @click="refreshJobStatus">
-                          <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
-                          Kiểm tra khách đã xác nhận tiền mặt chưa
-                        </FhButton>
-                      </div>
-                    </div>
-
-                    <!-- Case 2: Khách trả Online -->
-                    <div v-else-if="hasCashPayment === 'NO'" class="space-y-3 pt-1">
-                      <div class="p-4 bg-brand-50/50 rounded-2xl border border-brand-200 space-y-3">
-                        <div class="flex items-center justify-between">
-                          <div class="flex items-center gap-2 font-bold text-ink-900 text-xs">
-                            <CreditCard :size="16" class="text-brand-600" />
-                            <span>Hình thức: Khách hàng thanh toán trực tuyến</span>
-                          </div>
-                        </div>
-
-                        <!-- 2-step timeline: no customer acceptance (PO 09/10/2026) -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
-                          <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
-                            <CheckCircle2 :size="15" class="text-success-600 shrink-0 mt-0.5" />
-                            <div>
-                              <div class="font-bold text-ink-800">1. Việc của thợ</div>
-                              <div class="text-[10px] text-success-700 font-medium">Đã hoàn thành</div>
-                            </div>
-                          </div>
-
-                          <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
-                            <CheckCircle2 v-if="job?.paymentStatus?.toUpperCase() === 'PAID'" :size="15" class="text-success-600 shrink-0 mt-0.5" />
-                            <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
-                            <div>
-                              <div class="font-bold text-ink-800">2. Thanh toán Online</div>
-                              <div class="text-[10px]" :class="job?.paymentStatus?.toUpperCase() === 'PAID' ? 'text-success-700 font-medium' : 'text-warning-700'">
-                                {{ job?.paymentStatus?.toUpperCase() === 'PAID' ? 'Đã thanh toán (PAID)' : 'Chờ khách trả VNPAY/Ví' }}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <p class="text-ink-600 text-[11px] leading-relaxed">
-                          <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
-                        </p>
-
-                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-brand-100">
-                          <button
-                            type="button"
-                            class="text-[11px] text-ink-500 hover:text-ink-800 underline cursor-pointer"
-                            @click="hasCashPayment = 'YES'"
-                          >
-                            Khách đổi ý muốn trả tiền mặt?
-                          </button>
-
-                          <div class="flex items-center gap-2">
-                            <FhButton
-                              variant="secondary"
-                              size="sm"
-                              :disabled="refreshingStatus"
-                              @click="refreshJobStatus"
-                            >
-                              <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
-                              Kiểm tra trạng thái thanh toán
-                            </FhButton>
-
-                            <button
-                              type="button"
-                              class="px-3 py-1.5 rounded-xl border border-ink-300 text-ink-700 text-xs font-semibold hover:bg-ink-50 transition-colors"
-                              @click="router.push('/tech/jobs')"
-                            >
-                              Tạm rời về danh sách việc
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Case 3: Thu tiền mặt -->
-                    <div v-else-if="hasCashPayment === 'YES'" class="space-y-3 pt-2 border-t border-ink-100">
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label class="block font-semibold text-ink-700 mb-1">Số tiền mặt thực thu (VNĐ):</label>
-                          <input
-                            v-model.number="declaredCashAmount"
-                            type="number"
-                            step="10000"
-                            placeholder="VD: 300000"
-                            class="w-full h-9 px-3 bg-white border border-ink-200 rounded-xl text-xs font-num font-bold text-ink-900"
-                          />
-                        </div>
-                        <div>
-                          <label class="block font-semibold text-ink-700 mb-1">Ghi chú / Mã biên lai:</label>
-                          <input
-                            v-model="technicianCashNotes"
-                            type="text"
-                            placeholder="VD: Đã nhận đủ tiền mặt từ khách"
-                            class="w-full h-9 px-3 bg-white border border-ink-200 rounded-xl text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div class="flex items-center justify-between pt-2">
-                        <button
-                          type="button"
-                          class="text-[11px] text-ink-500 hover:text-ink-800 underline cursor-pointer"
-                          @click="hasCashPayment = 'NO'"
-                        >
-                          Khách chuyển sang thanh toán online?
-                        </button>
-
-                        <FhButton
-                          variant="primary"
-                          size="sm"
-                          :disabled="!completionRequested || actionLoading"
-                          @click="handleDeclareCash"
-                        >
-                          <DollarSign :size="14" class="mr-1" />
-                          Khai báo đã thu tiền mặt
-                        </FhButton>
-                      </div>
-                    </div>
-
-                    <!-- Case 4: Chưa chọn -->
-                    <div v-else class="text-ink-400 text-xs italic">
-                      Vui lòng chọn hình thức thanh toán của khách ở trên (Có thu tiền mặt hoặc Không thu tiền mặt).
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </FhCard>
-
-            <!-- Đánh giá từ khách hàng cho đơn này -->
-            <FhCard
-              v-if="isCompleted || String(job?.status).toUpperCase() === 'COMPLETED'"
-              class="border border-warning-200 bg-warning-50/20 shadow-xs"
-            >
-              <template #header>
-                <div class="flex items-center justify-between w-full">
-                  <div class="flex items-center gap-2">
-                    <Star :size="18" class="text-warning-500 fill-warning-400" />
-                    <span class="font-bold text-sm text-ink-900">Đánh giá từ khách hàng</span>
-                  </div>
-                  <span
-                    v-if="customerReview"
-                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-success-100 text-success-800 border border-success-200"
-                  >
-                    <CheckCircle2 :size="12" /> Đã cập nhật vào uy tín thợ
-                  </span>
-                  <span
-                    v-else
-                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-ink-100 text-ink-600"
-                  >
-                    Chờ khách hàng gửi đánh giá
-                  </span>
-                </div>
-              </template>
-
-              <div v-if="customerReview" class="space-y-3 text-xs">
-                <div class="flex flex-wrap items-center gap-3">
-                  <div class="flex items-center gap-1">
-                    <Star
-                      v-for="s in 5"
-                      :key="s"
-                      :size="20"
-                      :class="s <= customerReview.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
-                    />
-                  </div>
-                  <span class="font-bold text-ink-900 font-num text-sm">
-                    {{ customerReview.rating }}/5 sao
-                  </span>
-                  <span v-if="customerReview.createdAt" class="text-ink-400 font-num text-[11px]">
-                    • {{ vnDateTimeString(customerReview.createdAt) }}
-                  </span>
-                </div>
-
-                <!-- Tags from customer review -->
-                <div v-if="parsedCustomerReview.tags.length > 0" class="flex flex-wrap gap-1.5 pt-1">
-                  <span
-                    v-for="tag in parsedCustomerReview.tags"
-                    :key="tag"
-                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200"
-                  >
-                    <Sparkles :size="11" class="text-brand-600" />
-                    {{ tag }}
-                  </span>
-                </div>
-
-                <!-- Review text -->
-                <p v-if="parsedCustomerReview.text" class="p-3.5 rounded-xl bg-white border border-ink-150 text-ink-800 leading-relaxed shadow-2xs">
-                  "{{ parsedCustomerReview.text }}"
-                </p>
-
-                <p class="text-[11px] text-ink-500 italic">
-                  Điểm đánh giá này đã được hệ thống tính vào chỉ số uy tín trung bình trong hồ sơ nhận việc của bạn.
-                </p>
-              </div>
-
-              <div v-else class="text-xs text-ink-500 py-3 text-center">
-                Đơn sửa chữa đã hoàn thành. Khách hàng sẽ nhận được thông báo để đánh giá số sao và để lại nhận xét cho bạn.
-              </div>
-            </FhCard>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 📱 MOBILE STICKY BOTTOM ACTION BAR (Thuận tiện thao tác 1 chạm trên di động) -->
+    <!-- Phones: the one primary action sits above the tab bar, always in reach -->
     <div
-      v-if="job && heroAction && !historicalJob"
-      class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-ink-200 p-3 sm:hidden shadow-lg"
+      v-if="job && nowStep?.action && !historicalJob && !loading"
+      class="sm:hidden fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-white border-t border-ink-200 px-4 py-3"
+      data-testid="job-action-bar"
     >
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs bg-brand-600 text-white shadow-xs flex items-center justify-center gap-1.5 active:scale-98 transition-all disabled:opacity-50"
-          :disabled="heroAction.btnDisabled || heroAction.btnLoading"
-          @click="heroAction.btnAction"
-        >
-          <Loader2 v-if="heroAction.btnLoading" :size="15" class="animate-spin text-white" />
-          <span class="whitespace-nowrap truncate">{{ heroAction.btnText }}</span>
-        </button>
-
-        <a
-          v-if="googleMapsUrl"
-          :href="googleMapsUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="p-2.5 rounded-xl bg-ink-100 hover:bg-ink-200 text-ink-800 transition-colors"
-          title="Chỉ đường Maps"
-        >
-          <Navigation :size="18" class="text-brand-600" />
-        </a>
-
-        <a
-          v-if="job.customerPhone"
-          :href="'tel:' + job.customerPhone"
-          class="p-2.5 rounded-xl bg-success-50 text-success-700 hover:bg-success-100 transition-colors"
-          title="Gọi khách"
-        >
-          <Phone :size="18" />
-        </a>
-      </div>
+      <FhButton
+        variant="primary"
+        block
+        :disabled="nowStep.action.disabled"
+        :loading="nowStep.action.loading"
+        @click="nowStep.action.run"
+      >
+        <component :is="nowStep.action.icon" v-if="!nowStep.action.loading" :size="16" />
+        {{ nowStep.action.label }}
+      </FhButton>
     </div>
 
-    <!-- MODAL: Rút khỏi đơn (Technician Withdrawal) -->
+    <!-- Dialog: cancel the order -->
     <div
       v-if="showWithdrawModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
-      @click.self="showWithdrawModal = false"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      @click.self="!withdrawing && (showWithdrawModal = false)"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-ink-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-order-title"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
+        data-testid="cancel-order-dialog"
+      >
         <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-2.5 text-danger-700">
-            <div class="p-2 rounded-xl bg-danger-50 text-danger-600">
-              <LogOut :size="20" />
-            </div>
-            <div>
-              <h3 class="text-base font-bold text-ink-900">Rút khỏi đơn nhận việc</h3>
-              <p class="text-xs text-ink-500">Chỉ áp dụng khi bạn gặp sự cố trước khi đến nơi</p>
-            </div>
+          <div>
+            <h3 id="cancel-order-title" class="text-lg font-bold text-ink-900">Huỷ đơn sửa chữa?</h3>
+            <p class="mt-1 text-sm text-danger-700">Huỷ đơn sẽ bị trừ điểm uy tín.</p>
           </div>
-          <button
-            type="button"
-            class="text-ink-400 hover:text-ink-700 p-1 rounded-lg"
-            @click="showWithdrawModal = false"
-          >
+          <button type="button" class="shrink-0 -m-1 p-2 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng" :disabled="withdrawing" @click="showWithdrawModal = false">
             <X :size="18" />
           </button>
         </div>
 
-        <div class="p-3 bg-warning-50 rounded-2xl border border-warning-200 text-warning-900 text-xs leading-relaxed">
-          <strong>Lưu ý:</strong> Khi bạn rút khỏi đơn, hệ thống FixHome sẽ tự động điều phối thợ tiếp theo trong danh sách ưu tiên của khách. Vui lòng chọn lý do chính xác để không ảnh hưởng đến điểm uy tín kỹ thuật viên.
+        <fieldset class="space-y-1.5 text-sm">
+          <legend class="mb-2 font-medium text-ink-800">Lý do</legend>
+          <label
+            v-for="r in WITHDRAW_REASONS"
+            :key="r"
+            class="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border cursor-pointer"
+            :class="withdrawReason === r ? 'border-brand-600 bg-brand-50 text-ink-900' : 'border-ink-200 bg-white text-ink-700'"
+          >
+            <input v-model="withdrawReason" type="radio" :value="r" class="mt-0.5" />
+            <span>{{ r }}</span>
+          </label>
+          <textarea
+            v-if="withdrawReason === 'Lý do khác (tự nhập)'"
+            v-model="customWithdrawReason"
+            rows="2"
+            aria-label="Lý do khác"
+            placeholder="Ghi lý do"
+            class="mt-1 w-full p-3 bg-white border border-ink-200 rounded-xl text-sm"
+          ></textarea>
+        </fieldset>
+
+        <p v-if="withdrawError" role="alert" class="text-sm text-danger-700">{{ withdrawError }}</p>
+
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" :disabled="withdrawing" @click="showWithdrawModal = false">Giữ lại đơn</FhButton>
+          <FhButton variant="danger" :loading="withdrawing" :disabled="withdrawing" @click="handleWithdrawOrder">Huỷ đơn sửa chữa</FhButton>
         </div>
+      </div>
+    </div>
 
-        <div class="space-y-2 text-xs">
-          <label class="block font-bold text-ink-800">Lý do rút khỏi đơn:</label>
-          <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-            <label
-              v-for="r in WITHDRAW_REASONS"
-              :key="r"
-              class="flex items-start gap-2 p-2 rounded-xl border cursor-pointer transition-all"
-              :class="withdrawReason === r ? 'border-brand-500 bg-brand-50/60 font-semibold text-brand-900' : 'border-ink-200 bg-white text-ink-700'"
-            >
-              <input type="radio" v-model="withdrawReason" :value="r" class="mt-0.5 text-brand-600" />
-              <span>{{ r }}</span>
-            </label>
-          </div>
-
-          <div v-if="withdrawReason === 'Lý do khác (tự nhập)'" class="pt-1">
-            <textarea
-              v-model="customWithdrawReason"
-              rows="2"
-              placeholder="Nhập chi tiết lý do..."
-              class="w-full p-2.5 bg-white border border-ink-200 rounded-xl text-xs"
-            ></textarea>
-          </div>
+    <!-- Dialog: ask the manager for another technician -->
+    <div
+      v-if="replacementOpen"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      @click.self="!replacementSending && (replacementOpen = false)"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="replacement-title"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+        data-testid="replacement-card"
+      >
+        <div>
+          <h3 id="replacement-title" class="text-lg font-bold text-ink-900">Cần thay đổi thợ</h3>
+          <p class="mt-1 text-sm text-ink-600">Việc nằm ngoài kỹ năng của bạn? Quản lý sẽ xem xét, không tự trừ điểm.</p>
         </div>
+        <textarea
+          v-model="replacementReason"
+          rows="3"
+          maxlength="1000"
+          aria-label="Lý do cần thay đổi thợ"
+          class="w-full rounded-xl border border-ink-200 px-3 py-2 text-sm"
+          placeholder="Ví dụ: máy công nghiệp, cần thợ điện lạnh công nghiệp"
+        />
+        <p v-if="replacementError" class="text-sm text-danger-700" role="alert">{{ replacementError }}</p>
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" :disabled="replacementSending" @click="replacementOpen = false">Đóng</FhButton>
+          <FhButton :loading="replacementSending" @click="sendReplacement">Gửi cho quản lý</FhButton>
+        </div>
+      </div>
+    </div>
 
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showWithdrawModal = false">
-            Đóng
+    <!-- Photo preview -->
+    <div
+      v-if="previewModalUrl"
+      class="fixed inset-0 z-50 bg-ink-900/85 flex items-center justify-center p-4"
+      @click.self="previewModalUrl = null"
+    >
+      <div role="dialog" aria-modal="true" aria-label="Xem ảnh" class="relative max-w-3xl w-full bg-white rounded-[20px] overflow-hidden p-3 space-y-3">
+        <div class="flex items-center justify-end gap-2">
+          <FhButton
+            v-if="activePreviewEvidence && !isCompleted"
+            variant="ghost"
+            size="sm"
+            :disabled="actionLoading"
+            @click="handleDeleteEvidence(activePreviewEvidence)"
+          >
+            <Trash2 :size="14" /> Xoá ảnh
           </FhButton>
           <button
             type="button"
-            class="px-4 py-2 rounded-xl bg-danger-600 hover:bg-danger-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
-            :disabled="withdrawing"
-            @click="handleWithdrawOrder"
-          >
-            <Loader2 v-if="withdrawing" :size="14" class="animate-spin" />
-            <span>Xác nhận rút đơn</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Evidence Image Preview Lightbox Modal -->
-    <div
-      v-if="previewModalUrl"
-      class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-xs"
-      @click.self="previewModalUrl = null"
-    >
-      <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-4 border border-ink-200 space-y-3">
-        <div class="flex items-center justify-between pb-2 border-b border-ink-100">
-          <span class="text-xs font-bold text-ink-800">Xem ảnh chi tiết</span>
-          <div class="flex items-center gap-2">
-            <button
-              v-if="activePreviewEvidence"
-              type="button"
-              class="px-2.5 py-1 text-xs font-semibold text-danger-700 hover:bg-danger-50 rounded-lg border border-danger-200 flex items-center gap-1 transition-colors"
-              :disabled="actionLoading"
-              @click="handleDeleteEvidence(activePreviewEvidence)"
-            >
-              <Trash2 :size="13" /> Xóa ảnh này
-            </button>
-            <button
-              type="button"
-              class="bg-ink-100 hover:bg-ink-200 text-ink-700 w-7 h-7 rounded-full flex items-center justify-center transition-colors font-bold text-xs"
-              aria-label="Đóng"
-              @click="previewModalUrl = null"
-            >
-              <X :size="18" />
-            </button>
-          </div>
-        </div>
-        <div class="flex items-center justify-center bg-black/5 rounded-xl overflow-hidden max-h-[78vh]">
-          <img :src="previewModalUrl" alt="Xem ảnh phóng to" class="max-h-[76vh] max-w-full object-contain" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal: Chọn linh kiện từ kho FixHome cho chi phí phát sinh -->
-    <div
-      v-if="showAcPartPicker"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
-      @click.self="showAcPartPicker = false"
-    >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-ink-200">
-        <!-- Modal Header -->
-        <div class="p-4 border-b border-ink-200 flex items-center justify-between bg-ink-25">
-          <div class="flex items-center gap-2">
-            <div class="p-2 rounded-xl bg-brand-600 text-white shadow-xs">
-              <Wrench :size="18" />
-            </div>
-            <div>
-              <h3 class="font-bold text-ink-900 text-sm">Kho linh kiện chính hãng FixHome</h3>
-              <p class="text-[11px] text-ink-500">
-                Tra cứu trong danh mục linh kiện của FixHome. Tự động lấy đơn giá niêm yết và thời hạn bảo hành.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="text-ink-400 hover:text-ink-700 p-1.5 rounded-lg hover:bg-ink-100 transition-colors"
-            @click="showAcPartPicker = false"
+            class="w-10 h-10 rounded-full bg-ink-100 hover:bg-ink-200 text-ink-700 flex items-center justify-center"
+            aria-label="Đóng"
+            @click="previewModalUrl = null"
           >
             <X :size="18" />
           </button>
         </div>
+        <div class="flex items-center justify-center bg-ink-50 rounded-xl overflow-hidden max-h-[78vh]">
+          <img :src="previewModalUrl" alt="Ảnh phóng to" class="max-h-[76vh] max-w-full object-contain" />
+        </div>
+      </div>
+    </div>
 
-        <!-- Category Tabs -->
-        <div class="px-4 pt-3 pb-1 border-b border-ink-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          <button
-            v-for="cat in AC_CATEGORY_TABS"
-            :key="cat.value"
-            type="button"
-            class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 cursor-pointer"
-            :class="
-              acPartActiveCategory === cat.value
-                ? 'bg-brand-600 text-white shadow-xs'
-                : 'bg-ink-50 text-ink-700 hover:bg-brand-50 border border-ink-200'
-            "
-            @click="selectAcCategory(cat.value)"
-          >
-            {{ cat.label }}
+    <!-- Picker: a FixHome part for an additional cost -->
+    <div
+      v-if="showAcPartPicker"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      @click.self="showAcPartPicker = false"
+    >
+      <div role="dialog" aria-modal="true" aria-labelledby="part-picker-title" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-2xl max-h-[85dvh] flex flex-col overflow-hidden">
+        <div class="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
+          <h3 id="part-picker-title" class="text-lg font-bold text-ink-900">Chọn linh kiện FixHome</h3>
+          <button type="button" class="w-10 h-10 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center" aria-label="Đóng" @click="showAcPartPicker = false">
+            <X :size="18" />
           </button>
         </div>
 
-        <!-- Search Bar -->
-        <div class="p-3 border-b border-ink-100 bg-white">
+        <div class="px-5 pt-3 space-y-3">
           <div class="relative">
-            <Search :size="16" class="absolute left-3 top-2.5 text-ink-400" />
+            <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
               v-model="acPartSearchQuery"
               type="text"
-              placeholder="Tìm theo tên linh kiện, mã SKU, hãng sản xuất..."
-              class="w-full h-9 pl-9 pr-8 bg-ink-50 border border-ink-200 rounded-xl text-xs focus:bg-white transition-colors"
+              placeholder="Tên linh kiện, mã hoặc hãng"
+              aria-label="Tìm linh kiện"
+              class="w-full h-11 pl-9 pr-10 bg-white border border-ink-200 rounded-xl text-sm"
               @input="onAcPartSearchInput"
             />
             <button
               v-if="acPartSearchQuery"
               type="button"
-              class="absolute right-2.5 top-2.5 text-ink-400 hover:text-ink-700"
+              class="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 flex items-center justify-center"
+              aria-label="Xoá tìm kiếm"
               @click="clearAcSearch"
             >
               <X :size="14" />
             </button>
           </div>
+          <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-3">
+            <button
+              v-for="cat in AC_CATEGORY_TABS"
+              :key="cat.value"
+              type="button"
+              class="h-9 px-3 rounded-full text-sm font-medium shrink-0 whitespace-nowrap border"
+              :class="acPartActiveCategory === cat.value ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'"
+              @click="selectAcCategory(cat.value)"
+            >
+              {{ cat.label }}
+            </button>
+          </div>
         </div>
 
-        <!-- Part Results List -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-2">
-          <div v-if="isAcPartSearching" class="text-center py-10 text-xs text-ink-400">
-            <Loader2 :size="20" class="animate-spin text-brand-600 mx-auto mb-1" />
-            Đang tìm kiếm trong kho...
+        <div class="flex-1 overflow-y-auto border-t border-ink-100">
+          <div v-if="isAcPartSearching" class="p-5 space-y-3" aria-busy="true" aria-label="Đang tìm linh kiện">
+            <FhSkeleton height="48px" rounded="md" :count="3" />
           </div>
-          <div v-else-if="acPartSearchResults.length === 0" class="text-center py-10 text-xs text-ink-400">
-            Không tìm thấy linh kiện nào phù hợp.
-          </div>
-          <div
-            v-for="part in acPartSearchResults"
-            :key="part.id"
-            class="p-3 rounded-2xl border border-ink-200 hover:border-brand-400 hover:bg-brand-50/20 transition-all flex items-center justify-between gap-3 cursor-pointer group"
-            @click="selectPartForAc(part)"
-          >
-            <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-bold text-ink-900 text-xs group-hover:text-brand-700 transition-colors">
-                  {{ part.name }}
-                </span>
-                <span v-if="part.sku" class="text-[10px] font-mono px-1.5 py-0.2 bg-ink-100 text-ink-600 rounded">
-                  {{ part.sku }}
-                </span>
-                <span
-                  class="whitespace-nowrap inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
-                >
-                  <ShieldCheck :size="11" /> {{ formatAcWarrantyBadge(part.warrantyDays) }}
-                </span>
-              </div>
-              <p class="text-[11px] text-ink-500 line-clamp-1">{{ part.description }}</p>
-            </div>
-
-            <div class="text-right shrink-0 flex items-center gap-3">
-              <div>
-                <span class="font-bold text-sm text-brand-700 font-num block">
-                  <FhMoney :amount="part.sellingPrice" />
-                </span>
-                <span class="text-[10px] text-ink-400 block">Đơn giá niêm yết</span>
-              </div>
+          <p v-else-if="acPartSearchResults.length === 0" class="p-8 text-center text-sm text-ink-500">
+            Không tìm thấy linh kiện phù hợp.
+          </p>
+          <ul v-else class="divide-y divide-ink-100">
+            <li v-for="part in acPartSearchResults" :key="part.id">
               <button
                 type="button"
-                class="px-3 py-1.5 rounded-xl bg-brand-600 text-white font-bold text-xs group-hover:bg-brand-700 transition-colors shadow-xs"
+                class="w-full px-5 py-3 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+                @click="selectPartForAc(part)"
               >
-                Chọn
+                <span class="min-w-0 flex-1">
+                  <span class="block font-medium text-ink-900 truncate">{{ part.name }}</span>
+                  <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-500">
+                    <span v-if="part.sku" class="font-num whitespace-nowrap">{{ part.sku }}</span>
+                    <span class="inline-flex items-center gap-1 text-success-700 whitespace-nowrap"><ShieldCheck :size="12" /> {{ formatAcWarrantyBadge(part.warrantyDays) }}</span>
+                  </span>
+                </span>
+                <span class="shrink-0 font-num font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="part.sellingPrice" /></span>
               </button>
-            </div>
-          </div>
+            </li>
+          </ul>
         </div>
       </div>
     </div>

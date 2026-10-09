@@ -128,6 +128,26 @@ describe('OrderComplaintPanel', () => {
     wrapper.unmount();
   });
 
+  it('inline (technician job page): hidden until a report exists, the page opens the form', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope([], { ...listMeta, total: 0, totalPages: 0 }));
+    const wrapper = await mountPanel({ role: 'technician', inline: true });
+
+    expect(wrapper.text()).toBe('');
+    (wrapper.vm as unknown as { openForm: () => void }).openForm();
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('#complaint-type').exists()).toBe(true);
+    wrapper.unmount();
+
+    apiClientMock.get.mockResolvedValueOnce(envelope([mineRow({ caseType: 'conduct' })], listMeta));
+    const withCase = await mountPanel({ role: 'technician', inline: true });
+    expect(withCase.text()).toContain('Báo cáo đã gửi');
+    expect(withCase.text()).toContain('Thái độ hoặc hành vi của khách hàng');
+    // No second "Báo cáo vấn đề" button: the job page menu already has it.
+    expect(withCase.findAll('button').some((b) => b.text().includes('Báo cáo vấn đề'))).toBe(false);
+    withCase.unmount();
+  });
+
   it('blocks a too-short description and does not call the API', async () => {
     apiClientMock.get.mockResolvedValueOnce(envelope([], { ...listMeta, total: 0, totalPages: 0 }));
     const wrapper = await mountPanel();

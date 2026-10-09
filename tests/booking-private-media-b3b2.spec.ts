@@ -155,9 +155,10 @@ afterEach(() => {
 });
 
 describe('technician ServiceOrder private media access', () => {
+  // The customer's media sits inside the job summary card, so the card renders its slot.
   const pickerStubs = { ...stubs, FhCard: { template: '<section><slot /></section>' } };
   it('shows private media only for an active assigned winner with a full Booking response', async () => {
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
     await flushPromises();
 
     expect(mocks.getBooking).toHaveBeenCalledWith('booking-1');
@@ -243,7 +244,7 @@ describe('technician ServiceOrder private media access', () => {
       id: 'job-old', code: 'SO-OLD', status: 'ACCEPTED', historical: true,
       createdAt: '2026-01-01T00:00:00.000Z', completedAt: null, cancelledAt: null,
     });
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
     await flushPromises();
 
     expect(mocks.getBooking).not.toHaveBeenCalled();
@@ -260,7 +261,7 @@ describe('technician ServiceOrder private media access', () => {
     mocks.getBooking.mockReset();
     if (bookingResponse instanceof Error) mocks.getBooking.mockRejectedValueOnce(bookingResponse);
     else mocks.getBooking.mockResolvedValueOnce(bookingResponse);
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
     await flushPromises();
 
     expect(wrapper.find('[data-testid="booking-media-viewer"]').exists()).toBe(false);
@@ -271,7 +272,7 @@ describe('technician ServiceOrder private media access', () => {
   it('ignores a late Booking response after detail unmount', async () => {
     let resolveBooking!: (value: unknown) => void;
     mocks.getBooking.mockImplementationOnce(() => new Promise((resolve) => { resolveBooking = resolve; }));
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
     await flushPromises();
     wrapper.unmount();
     resolveBooking(fullBooking());
@@ -283,7 +284,7 @@ describe('technician ServiceOrder private media access', () => {
   it('ignores a late Booking response after navigating to another ServiceOrder', async () => {
     let resolveOldBooking!: (value: unknown) => void;
     mocks.getBooking.mockImplementationOnce(() => new Promise((resolve) => { resolveOldBooking = resolve; }));
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
     await flushPromises();
 
     mocks.getTechnicianOrder.mockResolvedValueOnce({ ...activeJob, id: 'job-2', bookingId: 'booking-2' });

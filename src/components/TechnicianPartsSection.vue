@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
   Package,
   Plus,
@@ -21,7 +21,8 @@ import {
   Clock,
   Layers,
 } from 'lucide-vue-next';
-import { FhButton, FhCard, FhMoney } from './index';
+import { FhButton, FhMoney, FhSkeleton } from './index';
+import { userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
   type PartRequest,
@@ -39,6 +40,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'parts-updated'): void;
+  /** How many requests exist and whether one waits for the technician (QR handover, used/returned). */
+  (e: 'summary', value: { count: number; needsAction: boolean }): void;
 }>();
 
 const loading = ref(true);
@@ -100,6 +103,19 @@ const hasActivePreRepair = computed(() =>
   ),
 );
 
+const needsAction = computed(() =>
+  partRequests.value.some(
+    (pr) =>
+      (pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') ||
+      (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering') ||
+      (isUnderRepair.value && pr.status === 'received' && pr.items.some((item) => !item.usageStatus || item.usageStatus === 'pending')),
+  ),
+);
+watch(
+  () => [partRequests.value.length, needsAction.value] as const,
+  ([count, action]) => emit('summary', { count, needsAction: action }),
+);
+
 const selectedTotalQuantity = computed(() =>
   selectedItems.value.reduce((sum, item) => sum + item.quantity, 0),
 );
@@ -154,8 +170,7 @@ const loadPartRequests = async () => {
     partRequests.value = await partRequestsApi.getByOrderId(props.orderId);
   } catch (err: unknown) {
     actionError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Không thể tải danh sách yêu cầu linh kiện.';
+      userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
   } finally {
     loading.value = false;
   }
@@ -333,8 +348,7 @@ const submitPreRepairRequest = async () => {
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Không thể tạo yêu cầu linh kiện.';
+      userFacingError(err, 'Không thể tạo yêu cầu linh kiện.');
   } finally {
     actionLoading.value = false;
   }
@@ -362,8 +376,7 @@ const handleReceiveQr = async (requestId: string) => {
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Mã QR không hợp lệ hoặc không khớp.';
+      userFacingError(err, 'Mã QR không hợp lệ hoặc không khớp.');
   } finally {
     actionLoading.value = false;
   }
@@ -388,8 +401,7 @@ const handleUpdateUsage = async (
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
-      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-      'Không thể cập nhật trạng thái linh kiện.';
+      userFacingError(err, 'Không thể cập nhật trạng thái linh kiện.');
   } finally {
     actionLoading.value = false;
   }
@@ -435,8 +447,7 @@ const getStatusBadgeClass = (status: string) => {
 </script>
 
 <template>
-  <FhCard title="Linh kiện sửa chữa">
-    <div class="space-y-4 text-xs">
+  <div class="space-y-4 text-xs">
       <!-- Alerts -->
       <div
         v-if="actionSuccess"
@@ -454,43 +465,13 @@ const getStatusBadgeClass = (status: string) => {
         <span>{{ actionError }}</span>
       </div>
 
-      <!-- Flow explanation rule banner -->
-      <div class="rounded-lg bg-brand-50/70 border border-brand-200 p-3 text-brand-900 space-y-1.5">
-        <p class="font-bold flex items-center gap-1.5 text-[11px] text-brand-800">
-          <Package :size="14" class="text-brand-600" />
-          Quy tắc quản lý linh kiện FixHome:
-        </p>
-        <ul class="list-disc list-inside space-y-0.5 text-[11px] text-ink-700">
-          <li>
-            <strong>Linh kiện dự kiến:</strong> Lấy trước từ kho FixHome để mang theo khi đến nhà khách,
-            <em>không tự động tính tiền khách hàng</em>.
-          </li>
-          <li>
-            <strong>Tính phí khách hàng:</strong> Khách chỉ thanh toán cho linh kiện
-            <em>thực tế được sử dụng</em> và đã được khách duyệt qua Báo giá / Chi phí phát sinh.
-          </li>
-          <li>
-            <strong>Linh kiện không dùng:</strong> Đánh dấu <em>Hoàn trả</em> mang về kho, hoàn toàn
-            không tính vào chi phí đơn hàng.
-          </li>
-        </ul>
-      </div>
-
       <!-- Action: Create Pre-Repair Request (Only in ACCEPTED state) -->
       <div
         v-if="isAccepted && !hasActivePreRepair"
-        class="p-4 border border-ink-200 rounded-xl bg-white shadow-xs space-y-4"
+        class="space-y-4"
       >
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h4 class="font-bold text-ink-900 text-sm flex items-center gap-1.5">
-              <Wrench :size="16" class="text-brand-600" />
-              Chuẩn bị linh kiện trước khi đi (Pre-Repair)
-            </h4>
-            <p class="text-ink-600 text-xs">
-              Dựa vào mô tả hỏng hóc, chẩn đoán AI và ảnh của khách, bạn có thể xin cấp linh kiện dự kiến mang theo.
-            </p>
-          </div>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-ink-700 min-w-0">Cần mang linh kiện của FixHome theo? Xin trước khi đi.</p>
           <FhButton
             v-if="!showCreateForm"
             variant="primary"
@@ -511,8 +492,8 @@ const getStatusBadgeClass = (status: string) => {
                 v-model="fulfillmentMethod"
                 class="w-full text-xs rounded border border-ink-300 p-2 bg-white text-ink-900 focus:outline-brand-500"
               >
-                <option value="pickup">🏪 Tự lấy tại kho FixHome (PICKUP)</option>
-                <option value="delivery">🚚 Yêu cầu giao hàng tới địa chỉ (DELIVERY)</option>
+                <option value="pickup">Tự lấy tại kho FixHome</option>
+                <option value="delivery">Giao tới địa chỉ</option>
               </select>
             </div>
 
@@ -533,14 +514,11 @@ const getStatusBadgeClass = (status: string) => {
               <div>
                 <h5 class="font-bold text-brand-900 text-xs flex items-center gap-1.5">
                   <Search :size="14" class="text-brand-600" />
-                  Tìm kiếm & Chọn linh kiện chính hãng FixHome
+                  Chọn linh kiện FixHome
                 </h5>
-                <p class="text-[11px] text-ink-500">
-                  Tra cứu trong danh mục linh kiện của FixHome. Xem giá niêm yết và thời hạn bảo hành.
-                </p>
               </div>
               <span class="text-[11px] font-medium text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-full">
-                {{ catalogParts.length > 0 ? `${catalogParts.length}+ linh kiện sẵn có` : 'Đang kết nối kho' }}
+                {{ catalogParts.length > 0 ? `${catalogParts.length}+ linh kiện` : 'Đang tải…' }}
               </span>
             </div>
 
@@ -569,7 +547,7 @@ const getStatusBadgeClass = (status: string) => {
                 <input
                   v-model="searchQuery"
                   type="text"
-                  placeholder="Gõ tên linh kiện (Bo mạch, Block, Van xả...), mã SKU (AC001) hoặc hãng (Daikin, Panasonic)..."
+                  placeholder="Tên linh kiện, mã hoặc hãng"
                   class="w-full text-xs rounded-lg border border-ink-300 pl-9 pr-16 py-2 bg-white text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-hidden transition-all"
                   @focus="showSearchDropdown = true"
                   @input="onSearchInput"
@@ -603,9 +581,6 @@ const getStatusBadgeClass = (status: string) => {
                 >
                   <Package :size="20" class="mx-auto text-ink-300" />
                   <p class="font-medium text-ink-700">Không tìm thấy linh kiện phù hợp</p>
-                  <p class="text-[11px] text-ink-400">
-                    Hãy thử tìm bằng từ khoá chung (ví dụ: "Block", "Van", "Cảm biến", "Bo mạch") hoặc mã SKU.
-                  </p>
                 </div>
 
                 <div
@@ -896,23 +871,16 @@ const getStatusBadgeClass = (status: string) => {
       </div>
 
       <!-- Part Requests List -->
-      <div v-if="loading" class="text-center py-6 text-ink-400">
-        <Loader2 :size="20" class="animate-spin inline mr-1.5 text-brand-600" /> Đang tải thông tin linh kiện...
+      <div v-if="loading" class="space-y-2" aria-busy="true" aria-label="Đang tải linh kiện">
+        <FhSkeleton height="16px" width="40%" />
+        <FhSkeleton height="44px" rounded="md" />
       </div>
 
-      <div
-        v-else-if="partRequests.length === 0 && !showCreateForm"
-        class="text-center py-8 text-ink-500 border border-dashed border-ink-200 rounded-xl bg-ink-25"
-      >
-        <Package :size="28" class="mx-auto text-ink-400 mb-1.5" />
-        <p class="font-semibold text-ink-800">Chưa có yêu cầu linh kiện nào cho đơn hàng này.</p>
-        <p class="text-[11px] text-ink-400">
-          Nếu cần linh kiện dự kiến trước khi đi hoặc phát sinh khi sửa, hãy bấm "Tạo yêu cầu linh kiện" ở trên.
-        </p>
-      </div>
+      <p v-else-if="partRequests.length === 0 && !showCreateForm" class="text-sm text-ink-500">
+        Chưa có yêu cầu linh kiện.
+      </p>
 
       <div v-else class="space-y-4">
-        <h4 class="font-bold text-ink-900 text-xs">Lịch sử yêu cầu linh kiện ({{ partRequests.length }} đợt)</h4>
 
         <div
           v-for="pr in partRequests"
@@ -971,7 +939,7 @@ const getStatusBadgeClass = (status: string) => {
           >
             <div class="flex items-center gap-2 text-xs text-warning-800">
               <Clock :size="14" class="text-warning-600 shrink-0" />
-              <span>Đang chờ Quản lý kho chuẩn bị linh kiện...</span>
+              <span>Đang chờ chuẩn bị linh kiện…</span>
             </div>
           </div>
 
@@ -1000,16 +968,13 @@ const getStatusBadgeClass = (status: string) => {
               </div>
             </div>
 
-            <p class="text-[11px] text-brand-800">
-              Quản lý dịch vụ đã chuẩn bị xong. Khi bạn đến kho hoặc nhận từ người giao, hãy quét hoặc nhập mã QR token để xác nhận:
-            </p>
 
             <!-- Input QR Token form -->
             <div v-if="showQrInput === pr.id" class="flex flex-wrap items-center gap-2 pt-1">
               <input
                 v-model="qrTokenInput"
                 type="text"
-                placeholder="Nhập mã QR token (VD: FH-PR-...)"
+                placeholder="Nhập mã trên phiếu (VD: FH-PR-...)"
                 class="flex-1 min-w-[200px] text-xs rounded border border-brand-300 p-2 bg-white"
               />
               <FhButton
@@ -1128,6 +1093,5 @@ const getStatusBadgeClass = (status: string) => {
           </div>
         </div>
       </div>
-    </div>
-  </FhCard>
+  </div>
 </template>

@@ -25,8 +25,13 @@ const props = withDefaults(
     orderStatus: string;
     completedAt?: string | null;
     role?: ComplaintRole;
+    /**
+     * Inline: shown only once a report exists, without the empty text and footer button;
+     * the page opens the form itself through the exposed `openForm` (technician job page).
+     */
+    inline?: boolean;
   }>(),
-  { role: 'customer', completedAt: null },
+  { role: 'customer', completedAt: null, inline: false },
 );
 
 const isTechnician = computed(() => props.role === 'technician');
@@ -140,12 +145,14 @@ async function submit() {
   }
 }
 
+defineExpose({ openForm });
+
 onMounted(loadCases);
 watch(() => props.orderId, loadCases);
 </script>
 
 <template>
-  <FhCard :title="copy.title">
+  <FhCard v-if="!inline || cases.length > 0 || notice || loadError" :title="inline ? 'Báo cáo đã gửi' : copy.title">
     <div class="space-y-3 text-sm">
       <p
         v-if="notice"
@@ -156,13 +163,13 @@ watch(() => props.orderId, loadCases);
         {{ notice.text }}
       </p>
 
-      <p v-if="loading" class="text-xs text-ink-500">Đang tải…</p>
+      <p v-if="loading && !inline" class="text-xs text-ink-500">Đang tải…</p>
       <p v-else-if="loadError" role="alert" class="text-xs text-danger-700">{{ loadError }}</p>
-      <p v-else-if="cases.length === 0" class="text-xs text-ink-600">
+      <p v-else-if="cases.length === 0 && !inline" class="text-xs text-ink-600">
         {{ copy.empty }}
       </p>
 
-      <ul v-else class="space-y-2">
+      <ul v-else-if="cases.length > 0" class="space-y-2">
         <li
           v-for="item in cases"
           :key="item.id"
@@ -186,7 +193,7 @@ watch(() => props.orderId, loadCases);
         </li>
       </ul>
 
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
+      <div v-if="!inline" class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
         <span class="text-[11px] text-ink-500">
           <template v-if="canComplain">{{ copy.hint }}</template>
           <template v-else>{{ copy.closed }}</template>

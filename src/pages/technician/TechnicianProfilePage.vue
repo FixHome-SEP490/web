@@ -5,35 +5,23 @@ import { ref, onMounted, computed } from 'vue';
 import {
   MapPin,
   CheckCircle2,
-  Calendar,
-  Clock,
-  Phone,
-  Mail,
   Camera,
   Star,
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
-  Check,
   Plus,
   Trash2,
   X,
   Search,
   UploadCloud,
   AlertCircle,
-  Award,
-  Sparkles,
   ChevronRight,
-  Briefcase,
-  FileCheck2,
-  RefreshCw,
-  Power,
-  Navigation,
 } from 'lucide-vue-next';
 import {
   FhButton,
   FhConfirmDialog,
-  FhStatusPill,
+  FhSkeleton,
   MapTilerMap,
   type MapMarker,
 } from '../../components';
@@ -54,18 +42,30 @@ import { catalogApi, type ServiceItem, type ServiceCategory } from '../../api/ca
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const authStore = useAuthStore();
 
 // ----------------- State & Navigation -----------------
 type TabKey = 'info' | 'services' | 'schedule' | 'location' | 'reviews';
 const activeTab = ref<TabKey>('info');
+const profileTabs: { key: TabKey; label: string }[] = [
+  { key: 'info', label: 'Thông tin' },
+  { key: 'services', label: 'Dịch vụ và giá công' },
+  { key: 'schedule', label: 'Lịch làm việc' },
+  { key: 'location', label: 'Khu vực nhận việc' },
+  { key: 'reviews', label: 'Đánh giá' },
+];
+
+/** A checklist row either opens its tab here or, for identity, links away. */
+const openChecklistItem = (item: { targetTab: TabKey; to?: string }) => {
+  if (!item.to) activeTab.value = item.targetTab;
+};
 
 const loading = ref(true);
 const loadError = ref('');
 const technicianProfile = ref<TechnicianProfileView | null>(null);
 const kycVerification = ref<MyVerification | null>(null);
-const togglingAvailability = ref(false);
 const saveFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(null);
 
 // ----------------- Reviews State -----------------
@@ -174,9 +174,9 @@ const handleSaveSchedule = async () => {
       .map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime }));
     await technicianProfileApi.updateMySchedule(schedules);
     await loadProfile();
-    showFeedback('Lịch làm việc hàng tuần đã được cập nhật thành công!');
-  } catch {
-    showFeedback('Không thể cập nhật lịch làm việc. Vui lòng thử lại.', 'error');
+    showFeedback('Đã lưu lịch làm việc.');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể lưu lịch làm việc. Vui lòng thử lại.'), 'error');
   } finally {
     savingSchedule.value = false;
   }
@@ -192,7 +192,7 @@ const applyMonToFriPreset = () => {
       endTime: monEnd,
     };
   }
-  showFeedback('Đã áp dụng giờ làm cho Thứ 2 - Thứ 6');
+  showFeedback('Đã áp dụng cho Thứ Hai đến Thứ Sáu. Bấm Lưu để giữ.');
 };
 
 const applyAllWeekPreset = () => {
@@ -205,7 +205,7 @@ const applyAllWeekPreset = () => {
       endTime: baseEnd,
     };
   }
-  showFeedback('Đã bật nhận việc cho tất cả 7 ngày trong tuần');
+  showFeedback('Đã áp dụng cho cả tuần. Bấm Lưu để giữ.');
 };
 
 // ----------------- Ngày nghỉ (Time Off) -----------------
@@ -229,11 +229,11 @@ const loadTimeOff = async () => {
 
 const handleAddTimeOff = async () => {
   if (!newTimeOff.value.startDate || !newTimeOff.value.endDate) {
-    showFeedback('Vui lòng chọn ngày bắt đầu và kết thúc', 'error');
+    showFeedback('Vui lòng chọn ngày bắt đầu và ngày kết thúc.', 'error');
     return;
   }
   if (newTimeOff.value.startDate > newTimeOff.value.endDate) {
-    showFeedback('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu', 'error');
+    showFeedback('Ngày kết thúc phải từ ngày bắt đầu trở đi.', 'error');
     return;
   }
   savingTimeOff.value = true;
@@ -245,9 +245,9 @@ const handleAddTimeOff = async () => {
     });
     newTimeOff.value = { startDate: '', endDate: '', reason: '' };
     await loadTimeOff();
-    showFeedback('Đã thêm khoảng thời gian nghỉ thành công!');
-  } catch {
-    showFeedback('Không thể thêm ngày nghỉ. Vui lòng kiểm tra lại khoảng ngày.', 'error');
+    showFeedback('Đã thêm ngày nghỉ.');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể thêm ngày nghỉ. Vui lòng kiểm tra lại khoảng ngày.'), 'error');
   } finally {
     savingTimeOff.value = false;
   }
@@ -261,8 +261,8 @@ const handleDeleteTimeOff = async () => {
     timeOffList.value = timeOffList.value.filter((t) => t.id !== confirmDeleteTimeOff.value?.id);
     confirmDeleteTimeOff.value = null;
     showFeedback('Đã xoá ngày nghỉ.');
-  } catch {
-    showFeedback('Không thể xoá ngày nghỉ. Vui lòng thử lại.', 'error');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể xoá ngày nghỉ. Vui lòng thử lại.'), 'error');
   } finally {
     deletingTimeOff.value = false;
   }
@@ -315,6 +315,30 @@ const loadServicesAndOfferings = async () => {
   }
 };
 
+/** True when the row differs from what is saved, so its save button shows. */
+const isSkillDirty = (serviceId: string): boolean => {
+  const draft = skillDrafts.value[serviceId];
+  if (!draft) return false;
+  const offering = myOfferings.value.get(serviceId);
+  if (!offering) return draft.enabled;
+  const savedPrice = offering.listedLaborPrice != null ? String(offering.listedLaborPrice) : '';
+  const savedWarranty = offering.typicalWarrantyDays != null ? String(offering.typicalWarrantyDays) : '30';
+  return (
+    draft.enabled !== offering.isActive ||
+    String(draft.listedLaborPrice ?? '') !== savedPrice ||
+    String(draft.typicalWarrantyDays ?? '') !== savedWarranty ||
+    draft.level !== (offering.level ?? 'INTERMEDIATE')
+  );
+};
+
+const isFixedPrice = (service: ServiceItem) => String(service.pricingMode).toLowerCase() === 'fixed_price';
+
+const SKILL_STATUS_LABELS: Record<string, string> = {
+  pending: 'Chờ duyệt chứng chỉ',
+  verified: 'Đã duyệt chứng chỉ',
+  rejected: 'Chứng chỉ bị từ chối',
+};
+
 const filteredServices = computed(() => {
   let list = catalogServices.value;
 
@@ -356,9 +380,9 @@ const handleSaveSkill = async (service: ServiceItem) => {
     });
     myOfferings.value.set(service.id, offering);
     await loadProfile();
-    showFeedback(`Đã lưu cấu hình dịch vụ "${service.name}"`);
-  } catch {
-    showFeedback(`Không thể lưu kỹ năng "${service.name}". Vui lòng thử lại.`, 'error');
+    showFeedback(`Đã lưu "${service.name}".`);
+  } catch (err) {
+    showFeedback(userFacingError(err, `Không thể lưu "${service.name}". Vui lòng thử lại.`), 'error');
   } finally {
     savingSkillId.value = null;
   }
@@ -380,10 +404,10 @@ const handleUploadEvidence = async (serviceId: string, event: Event) => {
       fileSize: file.size,
       mimeType: file.type,
     });
-    showFeedback('Đã tải lên hồ sơ tín chỉ thành công. Quản trị viên FixHome sẽ xem xét hồ sơ của bạn.');
+    showFeedback('Đã gửi chứng chỉ. FixHome sẽ xem xét.');
     await loadServicesAndOfferings();
-  } catch {
-    showFeedback('Không thể gửi hồ sơ tín chỉ. Vui lòng thử lại.', 'error');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể gửi chứng chỉ. Vui lòng thử lại.'), 'error');
   } finally {
     evidenceUploadingId.value = null;
   }
@@ -491,7 +515,7 @@ const syncLocationStateFromAddress = () => {
 
 const handleSaveLocation = async () => {
   if (!locationLine1.value.trim() || locationLat.value === '' || locationLng.value === '') {
-    showFeedback('Vui lòng tìm kiếm hoặc chọn vị trí trên bản đồ trước khi lưu.', 'error');
+    showFeedback('Vui lòng tìm địa chỉ hoặc chọn vị trí trên bản đồ.', 'error');
     return;
   }
   savingLocation.value = true;
@@ -512,9 +536,9 @@ const handleSaveLocation = async () => {
     }
     await technicianProfileApi.updateMyProfile({ serviceRadiusKm: locationRadiusKm.value });
     await loadProfile();
-    showFeedback('Địa chỉ hoạt động và bán kính nhận việc đã được cập nhật!');
-  } catch {
-    showFeedback('Không thể lưu vị trí. Vui lòng kiểm tra lại.', 'error');
+    showFeedback('Đã lưu khu vực nhận việc.');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể lưu vị trí. Vui lòng thử lại.'), 'error');
   } finally {
     savingLocation.value = false;
   }
@@ -523,40 +547,40 @@ const handleSaveLocation = async () => {
 // ----------------- Profile Completeness Metric -----------------
 const profileCompleteness = computed(() => {
   let score = 0;
-  const items: { label: string; done: boolean; targetTab: TabKey }[] = [];
+  const items: { label: string; done: boolean; targetTab: TabKey; to?: string }[] = [];
 
   // 1. Avatar
   const hasAvatar = Boolean(avatarUrl.value);
   if (hasAvatar) score += 15;
-  items.push({ label: 'Ảnh đại diện thợ chuyên nghiệp', done: hasAvatar, targetTab: 'info' });
+  items.push({ label: 'Ảnh đại diện', done: hasAvatar, targetTab: 'info' });
 
   // 2. Personal contact & bio
   const hasBio = Boolean(technicianProfile.value?.bio && technicianProfile.value.bio.trim().length > 10);
   const hasPhone = Boolean(authStore.user?.phoneNumber);
   const hasInfo = hasBio && hasPhone;
   if (hasInfo) score += 20;
-  items.push({ label: 'Số điện thoại & giới thiệu kinh nghiệm', done: hasInfo, targetTab: 'info' });
+  items.push({ label: 'Số điện thoại và giới thiệu', done: hasInfo, targetTab: 'info' });
 
   // 3. KYC Status
   const isKycVerified = kycVerification.value?.status === 'VERIFIED';
   if (isKycVerified) score += 25;
-  items.push({ label: 'Xác minh danh tính (CCCD & Video)', done: isKycVerified, targetTab: 'info' });
+  items.push({ label: 'Xác minh danh tính', done: isKycVerified, targetTab: 'info', to: '/tech/kyc' });
 
   // 4. Skills
   const activeSkillsCount = technicianProfile.value?.skills.length ?? 0;
   const hasSkills = activeSkillsCount > 0;
   if (hasSkills) score += 20;
-  items.push({ label: 'Kỹ năng & dịch vụ sửa chữa', done: hasSkills, targetTab: 'services' });
+  items.push({ label: 'Dịch vụ nhận làm', done: hasSkills, targetTab: 'services' });
 
   // 5. Working schedule
   const hasSchedule = uniqueSchedule.value.length > 0;
   if (hasSchedule) score += 10;
-  items.push({ label: 'Lịch nhận việc hàng tuần', done: hasSchedule, targetTab: 'schedule' });
+  items.push({ label: 'Lịch làm việc', done: hasSchedule, targetTab: 'schedule' });
 
   // 6. Location & Radius
   const hasLocation = Boolean(technicianAddress.value?.lat && technicianAddress.value?.lng);
   if (hasLocation) score += 10;
-  items.push({ label: 'Địa chỉ hoạt động & bán kính', done: hasLocation, targetTab: 'location' });
+  items.push({ label: 'Khu vực nhận việc', done: hasLocation, targetTab: 'location' });
 
   return {
     score: Math.min(score, 100),
@@ -592,37 +616,22 @@ const loadProfile = async () => {
 
     initScheduleDraft();
     syncLocationStateFromAddress();
-  } catch {
-    loadError.value = 'Không thể tải hồ sơ kỹ thuật viên. Vui lòng kiểm tra kết nối mạng và thử lại.';
+  } catch (err) {
+    loadError.value = userFacingError(err, 'Không thể tải hồ sơ. Vui lòng thử lại.');
   }
 };
 
-onMounted(async () => {
+const loadAll = async () => {
   loading.value = true;
+  loadError.value = '';
   await loadProfile();
   await Promise.all([loadServicesAndOfferings(), loadTimeOff(), loadReviews()]);
   loading.value = false;
-});
-
-// ----------------- Availability & Actions -----------------
-const toggleAvailability = async () => {
-  if (!technicianProfile.value || togglingAvailability.value) return;
-  const next = !technicianProfile.value.isAvailable;
-  togglingAvailability.value = true;
-  try {
-    technicianProfile.value = await technicianProfileApi.updateMyProfile({ isAvailable: next });
-    showFeedback(
-      next
-        ? 'Bạn đang BẬT nhận đơn. Khách hàng trong khu vực có thể tìm thấy bạn!'
-        : 'Đã chuyển sang trạng thái TẠM NGHỈ. Hệ thống sẽ không điều phối đơn mới.',
-    );
-  } catch {
-    showFeedback('Không thể cập nhật trạng thái nhận việc. Vui lòng thử lại.', 'error');
-  } finally {
-    togglingAvailability.value = false;
-  }
 };
 
+onMounted(loadAll);
+
+// ----------------- Actions -----------------
 const handleSaveProfileInfo = async () => {
   isSavingInfo.value = true;
   try {
@@ -645,9 +654,9 @@ const handleSaveProfileInfo = async () => {
       });
     }
     await authStore.fetchProfile();
-    showFeedback('Thông tin cá nhân đã được lưu thành công!');
-  } catch {
-    showFeedback('Không thể cập nhật hồ sơ cá nhân. Vui lòng thử lại.', 'error');
+    showFeedback('Đã lưu thay đổi.');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể lưu hồ sơ. Vui lòng thử lại.'), 'error');
   } finally {
     isSavingInfo.value = false;
   }
@@ -674,9 +683,9 @@ const handleSaveAvatar = async () => {
     }
     await authStore.fetchProfile();
     showAvatarModal.value = false;
-    showFeedback('Đã cập nhật ảnh đại diện mới.');
-  } catch {
-    showFeedback('Không thể cập nhật ảnh đại diện. Vui lòng thử lại.', 'error');
+    showFeedback('Đã cập nhật ảnh đại diện.');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Không thể cập nhật ảnh đại diện. Vui lòng thử lại.'), 'error');
   } finally {
     savingAvatar.value = false;
   }
@@ -685,1310 +694,790 @@ const handleSaveAvatar = async () => {
 
 <template>
   <div class="max-w-6xl mx-auto space-y-6 pb-16">
-    <!-- Toast Feedback Notification -->
+    <!-- Save feedback -->
     <Transition
-      enter-active-class="transition duration-300 ease-out"
+      enter-active-class="transition duration-200 ease-out"
       enter-from-class="opacity-0 translate-y-2"
       enter-to-class="opacity-100 translate-y-0"
-      leave-active-class="transition duration-200 ease-in"
+      leave-active-class="transition duration-150 ease-in"
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 translate-y-2"
     >
       <div
         v-if="saveFeedback"
-        class="fixed top-20 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl border text-sm font-semibold backdrop-blur-md"
+        class="fixed top-20 right-4 sm:right-6 left-4 sm:left-auto sm:max-w-sm z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-sm font-medium"
         :class="
           saveFeedback.type === 'success'
             ? 'bg-success-900/90 text-white border-success-500/50'
             : 'bg-danger-900/90 text-white border-danger-500/50'
         "
-        role="alert"
+        role="status"
+        aria-live="polite"
       >
         <CheckCircle2 v-if="saveFeedback.type === 'success'" :size="18" class="text-success-400 shrink-0" />
         <AlertCircle v-else :size="18" class="text-danger-400 shrink-0" />
-        <span>{{ saveFeedback.message }}</span>
+        <span class="min-w-0 text-pretty">{{ saveFeedback.message }}</span>
       </div>
     </Transition>
 
-    <!-- Loading Skeleton State -->
-    <div v-if="loading" class="space-y-6 animate-pulse">
-      <div class="h-64 rounded-3xl bg-ink-200/70"></div>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="h-28 rounded-2xl bg-ink-100"></div>
-        <div class="h-28 rounded-2xl bg-ink-100"></div>
-        <div class="h-28 rounded-2xl bg-ink-100"></div>
-        <div class="h-28 rounded-2xl bg-ink-100"></div>
-      </div>
-      <div class="h-96 rounded-2xl bg-ink-100"></div>
-    </div>
-
-    <!-- Error State -->
-    <div
-      v-else-if="loadError"
-      class="p-6 rounded-2xl border border-danger-200 bg-danger-50 text-danger-800 flex items-center justify-between gap-4"
-    >
-      <div class="flex items-center gap-3">
-        <AlertCircle :size="24" class="text-danger-600 shrink-0" />
-        <div>
-          <h3 class="font-bold text-base">Đã xảy ra lỗi khi tải hồ sơ</h3>
-          <p class="text-sm text-danger-700 mt-0.5">{{ loadError }}</p>
+    <!-- Loading: same shape as the page -->
+    <div v-if="loading" class="space-y-6" aria-busy="true" aria-label="Đang tải hồ sơ">
+      <div class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200/80 flex items-center gap-5">
+        <div class="shrink-0"><FhSkeleton width="80px" height="80px" rounded="lg" /></div>
+        <div class="flex-1 space-y-3">
+          <FhSkeleton width="220px" height="24px" />
+          <FhSkeleton width="320px" height="16px" />
         </div>
       </div>
-      <FhButton variant="primary" size="sm" @click="loadProfile">
-        <RefreshCw :size="15" /> Thử lại
-      </FhButton>
+      <FhSkeleton height="52px" rounded="lg" />
+      <div class="p-6 rounded-2xl bg-white border border-ink-200/80 space-y-5">
+        <FhSkeleton width="200px" height="20px" />
+        <FhSkeleton height="44px" :count="4" />
+      </div>
+    </div>
+
+    <!-- Load failed -->
+    <div
+      v-else-if="loadError"
+      class="px-4 py-3 rounded-2xl border border-danger-200 bg-danger-50 text-danger-700 flex items-center gap-3"
+    >
+      <AlertCircle :size="18" class="text-danger-600 shrink-0" />
+      <p class="min-w-0 flex-1 text-sm font-medium">{{ loadError }}</p>
+      <FhButton variant="secondary" size="sm" @click="loadAll">Thử lại</FhButton>
     </div>
 
     <template v-else-if="technicianProfile">
-      <!-- 1. EXECUTIVE HERO BANNER: Identity, Availability & Quick Status -->
-      <div
-        class="relative overflow-hidden rounded-3xl bg-brand-600 text-white p-6 sm:p-8 shadow-xl border border-white/10"
-      >
-
-        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <!-- Left: Avatar + Identity + Key Chips -->
-          <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-            <!-- Avatar with Camera Button & Online Pulse Ring -->
-            <div class="relative w-28 h-28 shrink-0">
-              <div
-                class="w-full h-full rounded-2xl border-2 shadow-lg overflow-hidden flex items-center justify-center transition-transform hover:scale-105"
-                :class="
-                  technicianProfile.isAvailable
-                    ? 'border-success-400/80 bg-brand-900 text-brand-200 ring-4 ring-success-500/20'
-                    : 'border-ink-600 bg-ink-800 text-ink-300 ring-4 ring-ink-700/20'
-                "
-              >
-                <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" alt="Avatar" />
-                <span v-else class="text-4xl font-bold font-num">
-                  {{ authStore.user?.fullName?.charAt(0) ?? 'T' }}
-                </span>
-              </div>
-
-              <!-- Edit Avatar Button -->
-              <button
-                type="button"
-                @click="openAvatarModal"
-                class="absolute -bottom-1 -right-1 w-9 h-9 rounded-xl bg-brand-600 hover:bg-brand-500 text-white shadow-md flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer border border-white/30"
-                title="Thay đổi ảnh đại diện"
-              >
-                <Camera :size="16" />
-              </button>
-            </div>
-
-            <!-- Identity Information -->
-            <div class="text-center sm:text-left space-y-2">
-              <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-                <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                  {{ authStore.user?.fullName || 'Kỹ thuật viên' }}
-                </h1>
-
-                <!-- KYC Badge -->
-                <div
-                  v-if="kycVerification?.status === 'VERIFIED'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-success-500/20 text-success-300 border border-success-500/40 text-xs font-bold"
-                  title="Hồ sơ danh tính CCCD đã được FixHome xác thực"
-                >
-                  <ShieldCheck :size="14" class="text-success-400" />
-                  <span>Đã định danh CCCD</span>
-                </div>
-                <div
-                  v-else-if="kycVerification?.status === 'PENDING'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warning-500/20 text-warning-300 border border-warning-500/40 text-xs font-bold"
-                  title="CCCD đang chờ Admin FixHome phê duyệt"
-                >
-                  <ShieldQuestion :size="14" class="text-warning-400" />
-                  <span>Chờ duyệt CCCD</span>
-                </div>
-                <router-link
-                  v-else
-                  to="/tech/kyc"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-danger-500/20 text-danger-300 border border-danger-500/40 text-xs font-bold hover:bg-danger-500/30 transition-colors"
-                >
-                  <ShieldAlert :size="14" class="text-danger-400" />
-                  <span>Chưa xác minh KYC &rarr;</span>
-                </router-link>
-              </div>
-
-              <!-- Subtitle & Meta -->
-              <div class="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-medium text-ink-300">
-                <span class="flex items-center gap-1.5">
-                  <Briefcase :size="14" class="text-brand-400" />
-                  {{ technicianProfile.yearsExperience }} năm kinh nghiệm thực tế
-                </span>
-                <span class="hidden sm:inline text-ink-600">•</span>
-                <span class="flex items-center gap-1.5">
-                  <Star :size="14" class="text-warning-400 fill-warning-400" />
-                  <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
-                    <strong class="text-white">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</strong> ({{ technicianProfile.ratingCount }} đánh giá)
-                  </template>
-                  <template v-else>Chưa có đánh giá</template>
-                </span>
-                <span class="hidden sm:inline text-ink-600">•</span>
-                <span class="flex items-center gap-1.5">
-                  <Award :size="14" class="text-brand-400" />
-                  Độ tin cậy: <strong class="text-white">{{ technicianProfile.reliabilityScore != null ? `${technicianProfile.reliabilityScore}%` : '—' }}</strong>
-                </span>
-              </div>
-
-              <!-- Location Quick Badge -->
-              <p class="text-xs text-ink-300/90 flex items-center justify-center sm:justify-start gap-1.5 pt-0.5">
-                <MapPin :size="13" class="text-danger-400 shrink-0" />
-                <span v-if="technicianAddress">
-                  {{ technicianAddress.line1 }}, {{ [technicianAddress.ward, technicianAddress.district].filter(Boolean).join(', ') }}
-                  (bán kính {{ technicianProfile.serviceRadiusKm }} km)
-                </span>
-                <span v-else class="text-warning-300">Chưa cài đặt địa chỉ nhận đơn</span>
-              </p>
-            </div>
+      <!-- Identity -->
+      <section class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-4 sm:gap-5">
+        <div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0">
+          <div class="w-full h-full rounded-2xl overflow-hidden border border-ink-200 bg-ink-100 text-ink-500 flex items-center justify-center">
+            <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" alt="Ảnh đại diện" />
+            <span v-else class="text-2xl font-bold">{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
           </div>
+          <button
+            type="button"
+            class="absolute -bottom-2 -right-2 w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-700 hover:bg-ink-50 shadow-sm flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            aria-label="Đổi ảnh đại diện"
+            title="Đổi ảnh đại diện"
+            @click="openAvatarModal"
+          >
+            <Camera :size="16" />
+          </button>
+        </div>
 
-          <!-- Right: Availability Master Switch & Quick Action -->
-          <div class="flex flex-col items-center lg:items-end gap-3 shrink-0 pt-2 lg:pt-0">
-            <div class="text-xs font-bold text-ink-400">
-              Trạng thái tiếp nhận việc:
-            </div>
-
-            <!-- Big Availability Toggle Button -->
-            <button
-              type="button"
-              :disabled="togglingAvailability"
-              @click="toggleAvailability"
-              class="group relative inline-flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all duration-300 hover:scale-102 active:scale-98 cursor-pointer disabled:opacity-60 border"
-              :class="
-                technicianProfile.isAvailable
-                  ? 'bg-success-600/90 hover:bg-success-500 text-white border-success-400/40 ring-4 ring-success-500/20'
-                  : 'bg-ink-800 hover:bg-ink-700 text-ink-300 border-ink-600 ring-4 ring-ink-700/20'
-              "
+        <div class="min-w-0 flex-1 space-y-1.5">
+          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
+              {{ authStore.user?.fullName || 'Kỹ thuật viên' }}
+            </h1>
+            <span
+              v-if="kycVerification?.status === 'VERIFIED'"
+              class="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 text-xs font-semibold"
             >
-              <span
-                class="w-3.5 h-3.5 rounded-full transition-transform group-hover:scale-110 flex items-center justify-center"
-                :class="technicianProfile.isAvailable ? 'bg-white shadow-xs' : 'bg-ink-500'"
-              >
-                <Power :size="10" :class="technicianProfile.isAvailable ? 'text-success-600' : 'text-ink-900'" />
-              </span>
-              <span>
-                {{ technicianProfile.isAvailable ? 'Đang sẵn sàng nhận việc' : 'Tạm dừng nhận việc' }}
-              </span>
-            </button>
-
-            <!-- Completeness Mini Bar -->
-            <div class="w-full sm:w-60 bg-white/10 rounded-xl p-2.5 border border-white/10 text-xs space-y-1.5">
-              <div class="flex items-center justify-between font-semibold">
-                <span class="text-ink-300 flex items-center gap-1">
-                  <Sparkles :size="13" class="text-brand-300" />
-                  Độ hoàn thiện hồ sơ
-                </span>
-                <span class="font-num font-bold text-success-300">{{ profileCompleteness.score }}%</span>
-              </div>
-              <div class="w-full h-1.5 rounded-full bg-white/20 overflow-hidden">
-                <div
-                  class="h-full rounded-full transition-all duration-500"
-                  :class="profileCompleteness.score >= 80 ? 'bg-success-400' : profileCompleteness.score >= 50 ? 'bg-warning-400' : 'bg-danger-400'"
-                  :style="{ width: `${profileCompleteness.score}%` }"
-                ></div>
-              </div>
-            </div>
+              <ShieldCheck :size="14" /> Đã xác minh danh tính
+            </span>
+            <span
+              v-else-if="kycVerification?.status === 'PENDING'"
+              class="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warning-50 text-warning-700 border border-warning-200 text-xs font-semibold"
+            >
+              <ShieldQuestion :size="14" /> Chờ duyệt danh tính
+            </span>
+            <span
+              v-else
+              class="whitespace-nowrap inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-danger-50 text-danger-700 border border-danger-200 text-xs font-semibold"
+            >
+              <ShieldAlert :size="14" /> Chưa xác minh danh tính
+            </span>
           </div>
-        </div>
-      </div>
 
-      <!-- 2. METRICS OVERVIEW CARDS (Desktop 4-column KPI strip) -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- KPI 1: Đánh giá -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-400 transition-all flex items-center gap-4 cursor-pointer group"
-          @click="activeTab = 'reviews'"
-          title="Bấm để xem danh sách đánh giá từ khách hàng"
-        >
-          <div class="w-12 h-12 rounded-xl bg-warning-50 text-warning-600 flex items-center justify-center shrink-0 border border-warning-200 group-hover:scale-105 transition-transform">
-            <Star :size="24" class="fill-warning-500 text-warning-500" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm text-ink-500">Đánh giá khách hàng</div>
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-600">
+            <span class="whitespace-nowrap">{{ technicianProfile.yearsExperience }} năm kinh nghiệm</span>
+            <span class="whitespace-nowrap inline-flex items-center gap-1">
+              <Star :size="14" class="text-warning-400 fill-warning-400" />
               <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
-                <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</span>
-                <span class="whitespace-nowrap text-xs text-ink-500 font-medium">/ 5.0 ({{ technicianProfile.ratingCount }} lượt)</span>
+                <strong class="font-semibold text-ink-900 font-num">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</strong>
+                ({{ technicianProfile.ratingCount }} đánh giá)
               </template>
-              <span v-else class="whitespace-nowrap text-lg font-semibold text-ink-500">Chưa có đánh giá</span>
-            </div>
+              <template v-else>Chưa có đánh giá</template>
+            </span>
+            <span class="whitespace-nowrap">
+              Độ tin cậy
+              <strong class="font-semibold text-ink-900 font-num">{{ technicianProfile.reliabilityScore != null ? `${technicianProfile.reliabilityScore}%` : '—' }}</strong>
+            </span>
           </div>
-        </div>
 
-        <!-- KPI 2: Điểm tin cậy -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-400 transition-all flex items-center gap-4 cursor-pointer group"
-          @click="activeTab = 'info'"
-          title="Bấm để xem hồ sơ xác thực và chỉ số uy tín"
-        >
-          <div class="w-12 h-12 rounded-xl bg-success-50 text-success-600 flex items-center justify-center shrink-0 border border-success-200 group-hover:scale-105 transition-transform">
-            <ShieldCheck :size="24" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm text-ink-500">Điểm độ tin cậy</div>
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
-              <span class="whitespace-nowrap text-2xl font-bold font-num text-success-700">{{ technicianProfile.reliabilityScore != null ? `${technicianProfile.reliabilityScore}%` : '—' }}</span>
-            </div>
-          </div>
+          <p class="text-sm text-ink-500 flex items-center gap-1.5 min-w-0">
+            <MapPin :size="14" class="text-ink-400 shrink-0" />
+            <span v-if="technicianAddress" class="truncate" :title="technicianAddress.line1">
+              {{ technicianAddress.line1 }}
+            </span>
+            <span v-else class="truncate">Chưa có địa chỉ nhận việc</span>
+            <span class="shrink-0 whitespace-nowrap">· {{ technicianProfile.serviceRadiusKm }} km</span>
+          </p>
         </div>
+      </section>
 
-        <!-- KPI 3: Dịch vụ đảm nhận -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-300 transition-all flex items-center gap-4 cursor-pointer"
-          @click="activeTab = 'services'"
-        >
-          <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
-            <FileCheck2 :size="24" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm text-ink-500">Dịch vụ nhận làm</div>
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
-              <span class="whitespace-nowrap text-2xl font-bold font-num text-ink-900">{{ technicianProfile.skills.length }}</span>
-              <span class="whitespace-nowrap text-xs text-brand-600 font-bold hover:underline">Quản lý giá &rarr;</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- KPI 4: Bán kính phủ sóng -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs hover:border-brand-300 transition-all flex items-center gap-4 cursor-pointer"
-          @click="activeTab = 'location'"
-        >
-          <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-200">
-            <Navigation :size="24" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm text-ink-500">Bán kính quét đơn</div>
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-0.5">
-              <span class="whitespace-nowrap text-2xl font-bold font-num text-brand-700">{{ technicianProfile.serviceRadiusKm }} km</span>
-              <span class="whitespace-nowrap text-xs text-brand-600 font-bold hover:underline">Xem bản đồ &rarr;</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. DESKTOP TAB NAVIGATION (Sticky-friendly, clear segmentation) -->
+      <!-- Tabs -->
       <div class="bg-white rounded-2xl border border-ink-200 p-1.5 flex items-center gap-1 overflow-x-auto" role="tablist">
         <button
+          v-for="t in profileTabs"
+          :key="t.key"
           type="button"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
-          :class="
-            activeTab === 'info'
-              ? 'bg-brand-50 text-brand-700 font-semibold'
-              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
-          "
-          @click="activeTab = 'info'"
+          role="tab"
+          :aria-selected="activeTab === t.key"
+          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          :class="activeTab === t.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'"
+          @click="activeTab = t.key"
         >
-          <Briefcase :size="16" />
-          <span>Hồ sơ cá nhân &amp; xác minh</span>
-        </button>
-
-        <button
-          type="button"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer relative"
-          :class="
-            activeTab === 'services'
-              ? 'bg-brand-50 text-brand-700 font-semibold'
-              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
-          "
-          @click="activeTab = 'services'"
-        >
-          <FileCheck2 :size="16" />
-          <span>Kỹ năng &amp; Đơn giá công</span>
+          <span>{{ t.label }}</span>
           <span
-            v-if="technicianProfile.skills.length > 0"
-            class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-num font-bold"
-            :class="activeTab === 'services' ? 'bg-white text-brand-700' : 'bg-brand-100 text-brand-700'"
+            v-if="t.key === 'services' && technicianProfile.skills.length > 0"
+            class="px-1.5 rounded-full text-xs font-num font-semibold"
+            :class="activeTab === t.key ? 'bg-white text-brand-700' : 'bg-ink-100 text-ink-600'"
           >
             {{ technicianProfile.skills.length }}
           </span>
         </button>
-
-        <button
-          type="button"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
-          :class="
-            activeTab === 'schedule'
-              ? 'bg-brand-50 text-brand-700 font-semibold'
-              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
-          "
-          @click="activeTab = 'schedule'"
-        >
-          <Calendar :size="16" />
-          <span>Thời gian &amp; Lịch nghỉ</span>
-        </button>
-
-        <button
-          type="button"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer"
-          :class="
-            activeTab === 'location'
-              ? 'bg-brand-50 text-brand-700 font-semibold'
-              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
-          "
-          @click="activeTab = 'location'"
-        >
-          <MapPin :size="16" />
-          <span>Khu vực &amp; Bản đồ quét</span>
-        </button>
-
-        <button
-          type="button"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer relative"
-          :class="
-            activeTab === 'reviews'
-              ? 'bg-brand-50 text-brand-700 font-semibold'
-              : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'
-          "
-          @click="activeTab = 'reviews'"
-        >
-          <Star :size="16" :class="activeTab === 'reviews' ? 'fill-warning-400 text-warning-400' : 'fill-warning-400 text-warning-400'" />
-          <span>Đánh giá &amp; Uy tín</span>
-          <span
-            v-if="technicianProfile.ratingCount > 0"
-            class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-num font-bold"
-            :class="activeTab === 'reviews' ? 'bg-white text-brand-700' : 'bg-warning-100 text-warning-800'"
-          >
-            {{ technicianProfile.ratingCount }}
-          </span>
-        </button>
       </div>
 
-      <!-- 4. TAB CONTENTS -->
-
-      <!-- TAB 1: THÔNG TIN CÁ NHÂN & KYC -->
-      <div v-if="activeTab === 'info'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Left: Form thông tin cá nhân (2 cols) -->
+      <!-- TAB: Thông tin -->
+      <div v-if="activeTab === 'info'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div class="lg:col-span-2 space-y-6">
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
-            <div class="flex items-center justify-between border-b border-ink-100 pb-4">
-              <div>
-                <h2 class="text-lg font-bold text-ink-900">Thông tin hiển thị cho khách hàng</h2>
-                <p class="text-xs text-ink-500 mt-0.5">Khách hàng sẽ thấy họ tên, lời giới thiệu và kinh nghiệm của bạn khi book lịch.</p>
-              </div>
+          <!-- Identity check status: only when something is left to do -->
+          <div
+            v-if="kycVerification?.status === 'REJECTED'"
+            class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <div class="min-w-0 flex-1 text-sm space-y-0.5">
+              <p class="font-semibold">Hồ sơ xác minh danh tính bị từ chối.</p>
+              <p v-if="kycVerification.rejectionReason" class="text-pretty">Lý do: {{ kycVerification.rejectionReason }}</p>
             </div>
+            <router-link
+              to="/tech/kyc"
+              class="shrink-0 inline-flex items-center justify-center h-10 px-4 rounded-xl bg-danger-600 text-white text-sm font-semibold whitespace-nowrap hover:bg-danger-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger-600 focus-visible:ring-offset-2"
+            >
+              Nộp lại hồ sơ
+            </router-link>
+          </div>
+          <div
+            v-else-if="kycVerification?.status === 'PENDING'"
+            class="px-4 py-3 rounded-2xl bg-warning-50 border border-warning-200 text-warning-800 flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <p class="min-w-0 flex-1 text-sm text-pretty">
+              Hồ sơ danh tính đang chờ duyệt. Vui lòng đến trụ sở FixHome để xác minh.
+            </p>
+            <router-link
+              to="/tech/kyc"
+              class="shrink-0 inline-flex items-center h-10 px-3 rounded-xl text-sm font-semibold text-warning-800 hover:bg-warning-100 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            >
+              Xem tiến trình
+            </router-link>
+          </div>
+          <div
+            v-else-if="kycVerification?.status !== 'VERIFIED'"
+            class="px-4 py-3 rounded-2xl bg-warning-50 border border-warning-200 text-warning-800 flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <p class="min-w-0 flex-1 text-sm text-pretty">Bạn chưa gửi hồ sơ xác minh danh tính.</p>
+            <router-link
+              to="/tech/kyc"
+              class="shrink-0 inline-flex items-center justify-center h-10 px-4 rounded-xl bg-brand-600 text-white text-sm font-semibold whitespace-nowrap hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            >
+              Xác minh ngay
+            </router-link>
+          </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm">
-              <!-- Họ và tên -->
+          <!-- Public profile form -->
+          <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
+            <h2 class="text-lg font-semibold text-ink-900">Thông tin hiển thị cho khách hàng</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <label class="block font-semibold text-ink-800 mb-1.5">Họ và tên thợ *</label>
+                <label for="tp-full-name" class="block font-medium text-ink-700 mb-1.5">Họ và tên *</label>
                 <input
+                  id="tp-full-name"
                   v-model="fullName"
                   type="text"
-                  placeholder="Ví dụ: Nguyễn Văn Hoàng"
-                  class="w-full h-10 px-3.5 bg-ink-25 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-600 transition-colors"
+                  autocomplete="name"
+                  placeholder="VD: Nguyễn Văn Hoàng"
+                  class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
-
-              <!-- Số điện thoại -->
               <div>
-                <label class="block font-semibold text-ink-800 mb-1.5">Số điện thoại liên hệ *</label>
-                <div class="relative">
-                  <input
-                    v-model="phoneNumber"
-                    type="text"
-                    placeholder="0912 345 678"
-                    class="w-full h-10 pl-9 pr-3.5 bg-ink-25 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-600 font-num transition-colors"
-                  />
-                  <Phone :size="16" class="absolute left-3 top-3 text-ink-400 pointer-events-none" />
-                </div>
-              </div>
-
-              <!-- Email (Readonly) -->
-              <div>
-                <label class="block font-semibold text-ink-800 mb-1.5">Địa chỉ Email tài khoản</label>
-                <div class="relative">
-                  <input
-                    :value="authStore.user?.email"
-                    type="email"
-                    readonly
-                    disabled
-                    class="w-full h-10 pl-9 pr-3.5 bg-ink-100/70 border border-ink-200 rounded-xl text-ink-600 cursor-not-allowed text-xs font-mono"
-                  />
-                  <Mail :size="16" class="absolute left-3 top-3 text-ink-400 pointer-events-none" />
-                </div>
-                <p class="text-[11px] text-ink-400 mt-1">Email được đồng bộ cùng tài khoản đăng nhập.</p>
-              </div>
-
-              <!-- Số năm kinh nghiệm -->
-              <div>
-                <label class="block font-semibold text-ink-800 mb-1.5">Kinh nghiệm trong nghề (năm) *</label>
+                <label for="tp-phone" class="block font-medium text-ink-700 mb-1.5">Số điện thoại *</label>
                 <input
+                  id="tp-phone"
+                  v-model="phoneNumber"
+                  type="tel"
+                  autocomplete="tel"
+                  placeholder="0912 345 678"
+                  class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] font-num focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
+                />
+              </div>
+              <div>
+                <label for="tp-email" class="block font-medium text-ink-700 mb-1.5">Email</label>
+                <input
+                  id="tp-email"
+                  :value="authStore.user?.email"
+                  type="email"
+                  readonly
+                  disabled
+                  class="w-full h-11 px-3.5 bg-ink-100/70 border border-ink-200 rounded-xl text-[15px] text-ink-600 cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label for="tp-years" class="block font-medium text-ink-700 mb-1.5">Số năm kinh nghiệm *</label>
+                <input
+                  id="tp-years"
                   v-model.number="yearsExperience"
                   type="number"
+                  inputmode="numeric"
                   min="0"
                   max="60"
-                  class="w-full h-10 px-3.5 bg-ink-25 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-600 font-num transition-colors"
+                  class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] font-num focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
-
-              <!-- Lời giới thiệu / Bio -->
               <div class="sm:col-span-2">
-                <label class="block font-semibold text-ink-800 mb-1.5">Lời giới thiệu chuyên môn &amp; cam kết dịch vụ</label>
+                <label for="tp-bio" class="block font-medium text-ink-700 mb-1.5">Giới thiệu</label>
                 <textarea
+                  id="tp-bio"
                   v-model="bio"
                   rows="4"
-                  placeholder="Ví dụ: Tôi có hơn 8 năm kinh nghiệm chuyên sâu về điện lạnh tử lạnh, máy giặt, điều hoà các hãng Panasonic, Daikin, LG. Cam kết đúng hẹn, chẩn đoán đúng bệnh, báo đúng giá và bảo hành dài hạn."
-                  class="w-full p-3.5 bg-ink-25 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-600 leading-relaxed transition-colors text-sm"
+                  placeholder="VD: 8 năm sửa điều hoà, tủ lạnh, máy giặt. Đúng hẹn, báo đúng giá."
+                  class="w-full p-3.5 bg-white border border-ink-200 rounded-xl text-[15px] leading-relaxed focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
                 ></textarea>
-                <p class="text-[11px] text-ink-500 mt-1">Lời giới thiệu chân thành và rõ ràng giúp khách hàng tin tưởng và chọn bạn nhiều hơn 40%.</p>
               </div>
             </div>
 
-            <!-- Actions -->
-            <div class="flex items-center justify-end gap-3 pt-4 border-t border-ink-100">
+            <div class="flex justify-end pt-4 border-t border-ink-100">
               <FhButton variant="primary" size="md" :loading="isSavingInfo" @click="handleSaveProfileInfo">
-                <Check :size="16" /> Lưu thay đổi hồ sơ
+                Lưu thay đổi
               </FhButton>
             </div>
-          </div>
+          </section>
         </div>
 
-        <!-- Right: Trạng thái KYC & Checklist chất lượng (1 col) -->
         <div class="space-y-6">
-          <!-- Card KYC Status -->
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="font-bold text-ink-900 text-base">Xác minh danh tính (KYC)</h3>
-              <FhStatusPill
-                :status="
-                  kycVerification?.status === 'VERIFIED'
-                    ? 'COMPLETED'
-                    : kycVerification?.status === 'PENDING'
-                      ? 'PENDING'
-                      : 'FAILED'
-                "
-                :label="
-                  kycVerification?.status === 'VERIFIED'
-                    ? 'Đã duyệt'
-                    : kycVerification?.status === 'PENDING'
-                      ? 'Chờ duyệt'
-                      : 'Chưa đạt'
-                "
-              />
+          <!-- Profile completeness: one list, each row goes where it is fixed -->
+          <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
+            <div class="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
+              <h3 class="text-base font-semibold text-ink-900">Hoàn thiện hồ sơ</h3>
+              <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ profileCompleteness.score }}%</span>
             </div>
-
-            <!-- KYC Details Box -->
-            <div
-              v-if="kycVerification?.status === 'VERIFIED'"
-              class="p-4 rounded-xl bg-success-50 border border-success-200 space-y-2 text-xs text-success-800"
-            >
-              <div class="flex items-center gap-2 font-bold text-success-900">
-                <ShieldCheck :size="18" class="text-success-600" />
-                Hồ sơ định danh đã được chứng thực
-              </div>
-              <p>Bạn đã hoàn tất đối soát CCCD 2 mặt và video nhận diện khuôn mặt FPT.AI. Tài khoản có độ tin cậy tuyệt đối.</p>
-              <router-link
-                to="/tech/kyc"
-                class="whitespace-nowrap inline-flex items-center gap-1 font-bold text-success-700 hover:text-success-900 underline pt-1"
-              >
-                Xem chi tiết hồ sơ KYC &rarr;
-              </router-link>
-            </div>
-
-            <div
-              v-else-if="kycVerification?.status === 'PENDING'"
-              class="p-4 rounded-xl bg-warning-50 border border-warning-200 space-y-2 text-xs text-warning-800"
-            >
-              <div class="flex items-center gap-2 font-bold text-warning-900">
-                <Clock :size="18" class="text-warning-600" />
-                Hồ sơ đang chờ phê duyệt
-              </div>
-              <p>Quản trị viên FixHome đang đối chiếu CCCD và ảnh chân dung của bạn. Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.</p>
-              <router-link
-                to="/tech/kyc"
-                class="inline-flex items-center gap-1 font-bold text-warning-700 hover:text-warning-900 underline pt-1"
-              >
-                Kiểm tra tiến trình &rarr;
-              </router-link>
-            </div>
-
-            <div
-              v-else-if="kycVerification?.status === 'REJECTED'"
-              class="p-4 rounded-xl bg-danger-50 border border-danger-200 space-y-2 text-xs text-danger-800"
-            >
-              <div class="flex items-center gap-2 font-bold text-danger-900">
-                <AlertCircle :size="18" class="text-danger-600" />
-                Hồ sơ bị từ chối phê duyệt
-              </div>
-              <p v-if="kycVerification.rejectionReason" class="font-medium text-danger-700">
-                Lý do: {{ kycVerification.rejectionReason }}
-              </p>
-              <router-link
-                to="/tech/kyc"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-danger-600 text-white rounded-lg font-bold hover:bg-danger-700 transition-colors mt-2"
-              >
-                Nộp lại hồ sơ CCCD ngay
-              </router-link>
-            </div>
-
-            <div v-else class="p-4 rounded-xl bg-ink-50 border border-ink-200 space-y-2 text-xs text-ink-700">
-              <div class="flex items-center gap-2 font-bold text-ink-900">
-                <ShieldAlert :size="18" class="text-warning-600" />
-                Chưa gửi hồ sơ xác minh CCCD
-              </div>
-              <p>Để nhận các đơn sửa chữa giá trị cao và hiển thị huy hiệu xác thực, hãy chụp CCCD và quay video xác minh.</p>
-              <router-link
-                to="/tech/kyc"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 transition-colors mt-1"
-              >
-                Xác thực ngay tại đây &rarr;
-              </router-link>
-            </div>
-          </div>
-
-          <!-- Quality Checklist -->
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-4">
-            <h3 class="font-bold text-ink-900 text-base">Checklist hoàn thiện hồ sơ</h3>
-            <div class="space-y-3">
-              <div
-                v-for="(item, idx) in profileCompleteness.items"
-                :key="idx"
-                class="flex items-center justify-between gap-3 text-xs p-2.5 rounded-xl border transition-colors cursor-pointer"
-                :class="item.done ? 'bg-success-50/50 border-success-200 text-ink-800' : 'bg-ink-50 border-ink-200 text-ink-600 hover:border-brand-400'"
-                @click="activeTab = item.targetTab"
-              >
-                <div class="flex items-center gap-2">
-                  <CheckCircle2 v-if="item.done" :size="16" class="text-success-600 shrink-0" />
-                  <div v-else class="w-4 h-4 rounded-full border border-ink-400 shrink-0"></div>
-                  <span :class="{ 'font-semibold text-ink-900': item.done }">{{ item.label }}</span>
-                </div>
-                <ChevronRight :size="14" class="text-ink-400" />
-              </div>
-            </div>
-          </div>
+            <ul class="divide-y divide-ink-100 border-t border-ink-100">
+              <li v-for="item in profileCompleteness.items" :key="item.label">
+                <component
+                  :is="item.to ? 'router-link' : 'button'"
+                  :to="item.to"
+                  :type="item.to ? undefined : 'button'"
+                  class="w-full min-h-12 px-5 py-2.5 flex items-center gap-3 text-left text-sm hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
+                  @click="openChecklistItem(item)"
+                >
+                  <CheckCircle2 v-if="item.done" :size="18" class="text-success-600 shrink-0" />
+                  <span v-else class="w-[18px] h-[18px] rounded-full border-2 border-ink-300 shrink-0" aria-hidden="true" />
+                  <span class="min-w-0 flex-1" :class="item.done ? 'text-ink-900' : 'text-ink-600'">{{ item.label }}</span>
+                  <ChevronRight :size="16" class="text-ink-400 shrink-0" />
+                </component>
+              </li>
+            </ul>
+          </section>
           <ReputationCard role="technician" />
           <ChangePasswordCard />
         </div>
       </div>
 
-      <!-- TAB 2: KỸ NĂNG & BẢNG GIÁ CÔNG (SERVICES & PRICING) -->
-      <div v-if="activeTab === 'services'" class="space-y-6">
-        <!-- Control Strip: Search, Categories, Status filter -->
-        <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 space-y-4">
-          <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-            <!-- Search bar -->
-            <div class="relative w-full md:w-96">
-              <input
-                v-model="serviceSearchQuery"
-                type="text"
-                placeholder="Tìm kiếm dịch vụ (ví dụ: máy lạnh, điện nước, rò rỉ...)"
-                class="w-full h-10 pl-10 pr-4 bg-ink-25 border border-ink-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-brand-600 transition-colors"
-              />
-              <Search :size="16" class="absolute left-3.5 top-3 text-ink-400 pointer-events-none" />
-            </div>
-
-            <!-- Filters -->
-            <div class="flex items-center gap-3 w-full md:w-auto">
-              <!-- Category select -->
-              <select
-                v-model="selectedCategoryId"
-                class="h-10 px-3 bg-ink-25 border border-ink-200 rounded-xl text-xs font-semibold text-ink-700 focus:bg-white focus:outline-none focus:border-brand-600"
-              >
-                <option value="ALL">Tất cả chuyên mục</option>
-                <option v-for="cat in catalogCategories" :key="cat.id" :value="cat.id">
-                  {{ cat.name }}
-                </option>
-              </select>
-
-              <!-- Status select -->
-              <select
-                v-model="selectedSkillFilter"
-                class="h-10 px-3 bg-ink-25 border border-ink-200 rounded-xl text-xs font-semibold text-ink-700 focus:bg-white focus:outline-none focus:border-brand-600"
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="ACTIVE">Đang bật nhận làm</option>
-                <option value="VERIFIED">Đã cấp chứng chỉ</option>
-                <option value="PENDING">Chờ FixHome duyệt</option>
-              </select>
-            </div>
+      <!-- TAB: Dịch vụ và giá công -->
+      <div v-if="activeTab === 'services'" class="space-y-4">
+        <div class="flex flex-col md:flex-row gap-3">
+          <div class="relative flex-1">
+            <label for="tp-service-search" class="sr-only">Tìm dịch vụ</label>
+            <input
+              id="tp-service-search"
+              v-model="serviceSearchQuery"
+              type="search"
+              placeholder="Tìm dịch vụ"
+              class="w-full h-11 pl-10 pr-4 bg-white border border-ink-200 rounded-xl text-[15px] focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
+            />
+            <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
           </div>
-
-          <!-- Helper Banner -->
-          <div class="flex items-start gap-3 p-3.5 rounded-xl bg-brand-50 border border-brand-200 text-xs text-brand-800">
-            <Sparkles :size="18" class="text-brand-600 shrink-0 mt-0.5" />
-            <div>
-              <p class="font-semibold">Quy định nhận đơn chuyên môn FixHome:</p>
-              <p class="text-ink-600 mt-0.5">
-                Khi bật nhận dịch vụ, bạn có thể thiết lập giá công dự kiến và cam kết bảo hành. Đối với các kỹ năng đòi hỏi chứng chỉ, hãy đính kèm bằng nghề/chứng nhận đào tạo để chuyên viên kiểm duyệt và ưu tiên điều phối đơn cao cấp.
-              </p>
-            </div>
+          <div class="grid grid-cols-2 md:flex gap-3">
+            <select
+              v-model="selectedCategoryId"
+              aria-label="Chuyên mục"
+              class="h-11 px-3 bg-white border border-ink-200 rounded-xl text-sm text-ink-700 focus:outline-none focus:border-brand-600"
+            >
+              <option value="ALL">Tất cả chuyên mục</option>
+              <option v-for="cat in catalogCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            </select>
+            <select
+              v-model="selectedSkillFilter"
+              aria-label="Trạng thái"
+              class="h-11 px-3 bg-white border border-ink-200 rounded-xl text-sm text-ink-700 focus:outline-none focus:border-brand-600"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="ACTIVE">Đang nhận làm</option>
+              <option value="VERIFIED">Đã duyệt chứng chỉ</option>
+              <option value="PENDING">Chờ duyệt chứng chỉ</option>
+            </select>
           </div>
         </div>
 
-        <!-- Services List -->
-        <div v-if="loadingSkills" class="py-16 text-center text-ink-400 text-sm">
-          Đang tải danh mục dịch vụ...
+        <div v-if="loadingSkills" class="p-5 rounded-2xl bg-white border border-ink-200/80" aria-busy="true">
+          <FhSkeleton height="56px" :count="6" />
         </div>
 
-        <div v-else-if="filteredServices.length === 0" class="py-16 text-center bg-white rounded-2xl border border-ink-200 text-ink-500 text-sm space-y-2">
-          <FileCheck2 :size="32" class="mx-auto text-ink-400" />
-          <p class="font-semibold">Không tìm thấy dịch vụ nào phù hợp</p>
-          <p class="text-xs text-ink-400">Hãy thử đổi từ khoá tìm kiếm hoặc chọn chuyên mục khác.</p>
+        <div
+          v-else-if="filteredServices.length === 0"
+          class="py-12 px-4 text-center bg-white rounded-2xl border border-ink-200/80 text-sm text-ink-500"
+        >
+          Không tìm thấy dịch vụ phù hợp.
         </div>
 
-        <div v-else class="space-y-4">
-          <div
-            v-for="service in filteredServices"
-            :key="service.id"
-            class="bg-white rounded-2xl border transition-all p-5 shadow-xs"
-            :class="
-              skillDrafts[service.id]?.enabled
-                ? 'border-brand-300 ring-2 ring-brand-500/10'
-                : 'border-ink-200/80 hover:border-ink-300'
-            "
-          >
-            <!-- Card Header: Switch + Name + Pricing Mode + Status Badge -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-ink-100">
-              <div class="flex items-start sm:items-center gap-3">
-                <!-- Master Toggle Switch for this service -->
-                <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5 sm:mt-0">
-                  <input
-                    type="checkbox"
-                    v-model="skillDrafts[service.id].enabled"
-                    class="sr-only peer"
-                  />
-                  <div
-                    class="w-11 h-6 bg-ink-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"
-                  ></div>
-                </label>
-
-                <div>
-                  <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-ink-900 text-base">{{ service.name }}</h3>
-                    <span
-                      class="px-2 py-0.5 rounded text-[10px] font-bold"
-                      :class="
-                        String(service.pricingMode).toLowerCase() === 'fixed_price'
-                          ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                          : 'bg-success-50 text-success-700 border border-success-200'
-                      "
-                    >
-                      {{ String(service.pricingMode).toLowerCase() === 'fixed_price' ? 'Giá cố định' : 'Giá khảo sát / Công' }}
-                    </span>
-                  </div>
-                  <p class="text-xs text-ink-500 mt-0.5 line-clamp-1">
-                    {{ service.description || service.scopeDescription || 'Dịch vụ sửa chữa kỹ thuật tiêu chuẩn' }}
-                  </p>
-                </div>
-              </div>
-
-              <!-- Verification status badge & Save button -->
-              <div class="flex items-center gap-2 self-end sm:self-center">
-                <!-- Certification Status Pill -->
+        <ul v-else class="bg-white rounded-2xl border border-ink-200/80 shadow-xs divide-y divide-ink-100">
+          <li v-for="service in filteredServices" :key="service.id" class="p-4 sm:p-5 space-y-4">
+            <div class="flex items-center gap-3">
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 p-2 -m-2">
+                <input
+                  v-model="skillDrafts[service.id].enabled"
+                  type="checkbox"
+                  class="sr-only peer"
+                  :aria-label="`Nhận làm ${service.name}`"
+                />
                 <span
-                  v-if="myOfferings.get(service.id)"
-                  class="px-2.5 py-1 rounded-full text-xs font-bold"
-                  :class="{
-                    'bg-warning-50 text-warning-700 border border-warning-200':
-                      myOfferings.get(service.id)?.verificationStatus === 'pending',
-                    'bg-success-50 text-success-700 border border-success-200':
-                      myOfferings.get(service.id)?.verificationStatus === 'verified',
-                    'bg-danger-50 text-danger-700 border border-danger-200':
-                      myOfferings.get(service.id)?.verificationStatus === 'rejected',
-                  }"
-                >
-                  {{
-                    { pending: 'Chờ duyệt chứng chỉ', verified: 'Đã cấp chứng chỉ', rejected: 'Bị từ chối' }[
-                      myOfferings.get(service.id)?.verificationStatus ?? 'pending'
-                    ]
-                  }}
-                </span>
+                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"
+                ></span>
+              </label>
 
-                <FhButton
-                  size="sm"
-                  variant="primary"
-                  :loading="savingSkillId === service.id"
-                  @click="handleSaveSkill(service)"
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h3 class="font-semibold text-ink-900 text-[15px]">{{ service.name }}</h3>
+                  <span
+                    class="whitespace-nowrap px-2 py-0.5 rounded-md text-xs font-medium"
+                    :class="isFixedPrice(service) ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-600'"
+                  >
+                    {{ isFixedPrice(service) ? 'Giá cố định' : 'Giá theo khảo sát' }}
+                  </span>
+                  <span
+                    v-if="myOfferings.get(service.id)"
+                    class="whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-semibold border"
+                    :class="{
+                      'bg-warning-50 text-warning-700 border-warning-200': myOfferings.get(service.id)?.verificationStatus === 'pending',
+                      'bg-success-50 text-success-700 border-success-200': myOfferings.get(service.id)?.verificationStatus === 'verified',
+                      'bg-danger-50 text-danger-700 border-danger-200': myOfferings.get(service.id)?.verificationStatus === 'rejected',
+                    }"
+                  >
+                    {{ SKILL_STATUS_LABELS[myOfferings.get(service.id)?.verificationStatus ?? 'pending'] }}
+                  </span>
+                </div>
+                <p
+                  v-if="service.description || service.scopeDescription"
+                  class="text-sm text-ink-500 truncate"
+                  :title="service.description || service.scopeDescription || undefined"
                 >
-                  <Check :size="14" /> Lưu cấu hình
-                </FhButton>
+                  {{ service.description || service.scopeDescription }}
+                </p>
               </div>
+
+              <FhButton
+                v-if="isSkillDirty(service.id) || savingSkillId === service.id"
+                size="sm"
+                variant="primary"
+                :loading="savingSkillId === service.id"
+                @click="handleSaveSkill(service)"
+              >
+                Lưu
+              </FhButton>
             </div>
 
-            <!-- Parameters Grid (only when enabled) -->
-            <div v-if="skillDrafts[service.id]?.enabled" class="pt-4 space-y-4">
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <!-- Giá công niêm yết -->
+            <div v-if="skillDrafts[service.id]?.enabled" class="sm:pl-14 space-y-3">
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                 <div>
-                  <label class="block font-semibold text-ink-700 mb-1">
-                    Giá công niêm yết (VNĐ)
-                    <span v-if="String(service.pricingMode).toLowerCase() === 'fixed_price'" class="text-ink-400 font-normal">
-                      (Cố định theo hệ thống)
-                    </span>
-                  </label>
-                  <div class="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      step="10000"
-                      v-model="skillDrafts[service.id].listedLaborPrice"
-                      :disabled="String(service.pricingMode).toLowerCase() === 'fixed_price'"
-                      class="w-full h-9 px-3 bg-ink-25 border border-ink-200 rounded-xl font-num disabled:opacity-50 disabled:bg-ink-100"
-                      :placeholder="String(service.pricingMode).toLowerCase() === 'fixed_price' ? 'Đã cố định' : 'VD: 150000'"
-                    />
-                  </div>
-                </div>
-
-                <!-- Cam kết bảo hành -->
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Cam kết bảo hành (ngày)</label>
+                  <label :for="`tp-price-${service.id}`" class="block font-medium text-ink-700 mb-1">Giá công (₫)</label>
                   <input
+                    :id="`tp-price-${service.id}`"
+                    v-model="skillDrafts[service.id].listedLaborPrice"
                     type="number"
+                    inputmode="numeric"
+                    min="0"
+                    step="10000"
+                    :disabled="isFixedPrice(service)"
+                    :placeholder="isFixedPrice(service) ? 'Theo giá cố định' : 'VD: 150000'"
+                    class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl font-num disabled:bg-ink-100 disabled:text-ink-500 focus:outline-none focus:border-brand-600"
+                  />
+                </div>
+                <div>
+                  <label :for="`tp-warranty-${service.id}`" class="block font-medium text-ink-700 mb-1">Bảo hành (ngày)</label>
+                  <input
+                    :id="`tp-warranty-${service.id}`"
+                    v-model="skillDrafts[service.id].typicalWarrantyDays"
+                    type="number"
+                    inputmode="numeric"
                     min="0"
                     max="365"
-                    v-model="skillDrafts[service.id].typicalWarrantyDays"
-                    class="w-full h-9 px-3 bg-ink-25 border border-ink-200 rounded-xl font-num"
                     placeholder="30"
+                    class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl font-num focus:outline-none focus:border-brand-600"
                   />
                 </div>
-
-                <!-- Trình độ tay nghề -->
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Cấp độ tay nghề của bạn</label>
+                <div class="col-span-2 sm:col-span-1">
+                  <label :for="`tp-level-${service.id}`" class="block font-medium text-ink-700 mb-1">Tay nghề</label>
                   <select
+                    :id="`tp-level-${service.id}`"
                     v-model="skillDrafts[service.id].level"
-                    class="w-full h-9 px-3 bg-ink-25 border border-ink-200 rounded-xl font-semibold"
+                    class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"
                   >
-                    <option value="BEGINNER">Thợ mới (BEGINNER)</option>
-                    <option value="INTERMEDIATE">Thợ lành nghề (INTERMEDIATE)</option>
-                    <option value="ADVANCED">Thợ kỹ thuật cao (ADVANCED)</option>
-                    <option value="EXPERT">Chuyên gia tay nghề (EXPERT)</option>
+                    <option value="BEGINNER">Thợ mới</option>
+                    <option value="INTERMEDIATE">Thợ lành nghề</option>
+                    <option value="ADVANCED">Thợ kỹ thuật cao</option>
+                    <option value="EXPERT">Chuyên gia</option>
                   </select>
                 </div>
               </div>
 
-              <!-- Evidence Upload & Verification Detail -->
-              <div class="p-3.5 rounded-xl bg-ink-50/70 border border-ink-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div class="flex items-center gap-2.5">
-                  <Award :size="18" class="text-brand-600 shrink-0" />
-                  <div>
-                    <span class="font-semibold text-ink-800">Chứng chỉ hành nghề chuyên môn: </span>
-                    <span class="text-ink-600">
-                      {{
-                        myOfferings.get(service.id)?.verificationStatus === 'verified'
-                          ? 'Chứng chỉ của bạn đã được kiểm duyệt và chấp thuận.'
-                          : 'Đính kèm bằng trung cấp, chứng chỉ nghề hoặc giấy chứng nhận hãng để tăng tỷ lệ nhận đơn.'
-                      }}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-3">
-                  <!-- Rejection reason button -->
-                  <button
-                    v-if="myOfferings.get(service.id)?.verificationStatus === 'rejected'"
-                    type="button"
-                    class="text-danger-600 hover:text-danger-800 font-bold underline cursor-pointer"
-                    @click="showRejectionReason(service.id)"
-                  >
-                    Xem lý do từ chối
-                  </button>
-
-                  <!-- Upload file trigger -->
-                  <label
-                    v-if="myOfferings.get(service.id)?.verificationStatus !== 'verified'"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-brand-300 text-brand-700 font-bold hover:bg-brand-50 cursor-pointer shadow-xs transition-colors"
-                  >
-                    <UploadCloud :size="14" />
-                    <span>{{ evidenceUploadingId === service.id ? 'Đang tải lên...' : 'Tải lên chứng chỉ' }}</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
-                      class="hidden"
-                      :disabled="evidenceUploadingId === service.id"
-                      @change="handleUploadEvidence(service.id, $event)"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <!-- Rejection Reason Alert if clicked -->
               <div
-                v-if="rejectionReasons[service.id]"
-                class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-800 flex items-start gap-2"
+                v-if="myOfferings.get(service.id)?.verificationStatus !== 'verified'"
+                class="flex flex-wrap items-center gap-2"
               >
-                <AlertCircle :size="16" class="text-danger-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong class="font-bold">Phản hồi từ bộ phận thẩm định:</strong>
-                  <p class="mt-0.5">{{ rejectionReasons[service.id] }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 3: THỜI GIAN & LỊCH LÀM VIỆC (SCHEDULE & TIME OFF) -->
-      <div v-if="activeTab === 'schedule'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Weekly Working Schedule (2 cols) -->
-        <div class="lg:col-span-2 space-y-6">
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-ink-100 pb-4">
-              <div>
-                <h2 class="text-lg font-bold text-ink-900">Lịch làm việc cố định hàng tuần</h2>
-                <p class="text-xs text-ink-500 mt-0.5">Khách hàng chỉ có thể đặt lịch hẹn vào các khung giờ bạn đã bật.</p>
-              </div>
-
-              <!-- Quick Presets -->
-              <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  @click="applyMonToFriPreset"
-                  class="px-2.5 py-1.5 rounded-lg bg-ink-100 hover:bg-ink-200 text-ink-700 text-xs font-semibold transition-colors cursor-pointer"
+                <label
+                  class="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl bg-white border border-ink-200 text-ink-700 text-sm font-semibold hover:bg-ink-50 cursor-pointer whitespace-nowrap focus-within:ring-2 focus-within:ring-brand-600"
                 >
-                  T2 - T6
-                </button>
+                  <UploadCloud :size="16" />
+                  <span>{{ evidenceUploadingId === service.id ? 'Đang tải lên…' : 'Tải lên chứng chỉ' }}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    class="sr-only"
+                    :disabled="evidenceUploadingId === service.id"
+                    @change="handleUploadEvidence(service.id, $event)"
+                  />
+                </label>
                 <button
+                  v-if="myOfferings.get(service.id)?.verificationStatus === 'rejected' && rejectionReasons[service.id] === undefined"
                   type="button"
-                  @click="applyAllWeekPreset"
-                  class="px-2.5 py-1.5 rounded-lg bg-ink-100 hover:bg-ink-200 text-ink-700 text-xs font-semibold transition-colors cursor-pointer"
+                  class="h-10 px-3 rounded-xl text-sm font-semibold text-danger-600 hover:bg-danger-50 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-danger-600"
+                  @click="showRejectionReason(service.id)"
                 >
-                  Cả tuần (T2 - CN)
+                  Xem lý do từ chối
                 </button>
               </div>
-            </div>
 
-            <!-- Days Grid / Rows -->
-            <div class="space-y-3">
-              <div
-                v-for="(slot, day) in weeklyScheduleDraft"
-                :key="day"
-                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border transition-all"
-                :class="
-                  slot.enabled
-                    ? 'bg-white border-brand-200 shadow-xs'
-                    : 'bg-ink-50/60 border-ink-200/60 opacity-70'
-                "
-              >
-                <!-- Day label + Toggle -->
-                <div class="flex items-center gap-3">
-                  <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input type="checkbox" v-model="slot.enabled" class="sr-only peer" />
-                    <div
-                      class="w-10 h-5 bg-ink-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"
-                    ></div>
-                  </label>
-                  <div>
-                    <span class="font-bold text-sm text-ink-900">{{ DAY_NAMES[day] }}</span>
-                    <span
-                      class="ml-2 text-[11px] font-bold px-1.5 py-0.2 rounded"
-                      :class="slot.enabled ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-500'"
-                    >
-                      {{ slot.enabled ? 'Nhận việc' : 'Nghỉ' }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Time Inputs -->
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-ink-500 font-medium">Từ:</span>
-                  <input
-                    type="time"
-                    v-model="slot.startTime"
-                    :disabled="!slot.enabled"
-                    class="h-9 px-2.5 bg-ink-25 border border-ink-200 rounded-lg font-num font-bold text-ink-800 disabled:opacity-40"
-                  />
-                  <span class="text-ink-400">–</span>
-                  <span class="text-ink-500 font-medium">Đến:</span>
-                  <input
-                    type="time"
-                    v-model="slot.endTime"
-                    :disabled="!slot.enabled"
-                    class="h-9 px-2.5 bg-ink-25 border border-ink-200 rounded-lg font-num font-bold text-ink-800 disabled:opacity-40"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- Save Schedule CTA -->
-            <div class="flex justify-end pt-4 border-t border-ink-100">
-              <FhButton variant="primary" size="md" :loading="savingSchedule" @click="handleSaveSchedule">
-                <Check :size="16" /> Lưu lịch làm việc tuần
-              </FhButton>
-            </div>
-          </div>
-        </div>
-
-        <!-- Time Off Management (1 col) -->
-        <div class="space-y-6">
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-5">
-            <div>
-              <h3 class="font-bold text-ink-900 text-base">Đăng ký ngày nghỉ / Vắng mặt</h3>
-              <p class="text-xs text-ink-500 mt-0.5">Hệ thống sẽ tự động khóa nhận lịch trong những khoảng ngày này.</p>
-            </div>
-
-            <!-- Add Time Off Form -->
-            <div class="space-y-3.5 text-xs p-4 rounded-xl bg-ink-25 border border-ink-200">
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Từ ngày *</label>
-                  <input
-                    type="date"
-                    v-model="newTimeOff.startDate"
-                    class="w-full h-9 px-2.5 bg-white border border-ink-200 rounded-lg font-num"
-                  />
-                </div>
-                <div>
-                  <label class="block font-semibold text-ink-700 mb-1">Đến ngày *</label>
-                  <input
-                    type="date"
-                    v-model="newTimeOff.endDate"
-                    class="w-full h-9 px-2.5 bg-white border border-ink-200 rounded-lg font-num"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label class="block font-semibold text-ink-700 mb-1">Lý do nghỉ (tùy chọn)</label>
-                <input
-                  type="text"
-                  v-model="newTimeOff.reason"
-                  placeholder="Về quê, việc gia đình, khám bệnh..."
-                  class="w-full h-9 px-3 bg-white border border-ink-200 rounded-lg text-xs"
-                />
-              </div>
-
-              <FhButton
-                variant="secondary"
-                size="sm"
-                block
-                :loading="savingTimeOff"
-                :disabled="!newTimeOff.startDate || !newTimeOff.endDate"
-                @click="handleAddTimeOff"
-              >
-                <Plus :size="14" /> Thêm khoảng ngày nghỉ
-              </FhButton>
-            </div>
-
-            <!-- Time Off List -->
-            <div class="space-y-2.5 pt-2">
-              <div class="text-xs font-bold text-ink-500">
-                Các đợt nghỉ đã lên lịch ({{ timeOffList.length }})
-              </div>
-
-              <div v-if="loadingTimeOff" class="text-xs text-ink-400 py-3 text-center">
-                Đang tải danh sách ngày nghỉ...
-              </div>
-
-              <div v-else-if="timeOffList.length === 0" class="text-xs text-ink-500 py-6 text-center border border-dashed border-ink-200 rounded-xl">
-                Bạn chưa có lịch nghỉ nào.
-              </div>
-
-              <div
-                v-for="t in timeOffList"
-                :key="t.id"
-                class="flex items-center justify-between gap-3 p-3 rounded-xl bg-ink-25 border border-ink-200 hover:border-ink-300 transition-colors"
-              >
-                <div class="min-w-0">
-                  <p class="font-bold text-xs text-ink-900 font-num">
-                    {{ vnDateString(t.startAt) }} – {{ vnDateString(t.endAt) }}
-                  </p>
-                  <p v-if="t.reason" class="text-[11px] text-ink-500 truncate mt-0.5">
-                    {{ t.reason }}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="p-1.5 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors cursor-pointer"
-                  title="Xoá lịch nghỉ"
-                  @click="confirmDeleteTimeOff = t"
-                >
-                  <Trash2 :size="15" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 4: KHU VỰC HOẠT ĐỘNG & BẢN ĐỒ (LOCATION & MAP) -->
-      <div v-if="activeTab === 'location'" class="space-y-6">
-        <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-ink-100 pb-4">
-            <div>
-              <h2 class="text-lg font-bold text-ink-900">Địa chỉ hoạt động &amp; Bán kính quét đơn</h2>
-              <p class="text-xs text-ink-500 mt-0.5">
-                FixHome dựa vào vị trí này để ghép các cuốc sửa chữa gần bạn nhất, tối ưu thời gian di chuyển.
+              <p v-if="rejectionReasons[service.id]" class="text-sm text-danger-700 text-pretty">
+                Lý do từ chối: {{ rejectionReasons[service.id] }}
               </p>
             </div>
-            <FhButton variant="primary" size="md" :loading="savingLocation" @click="handleSaveLocation">
-              <Check :size="16" /> Lưu vị trí &amp; Bán kính
+          </li>
+        </ul>
+      </div>
+
+      <!-- TAB: Lịch làm việc -->
+      <div v-if="activeTab === 'schedule'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold text-ink-900">Lịch làm việc hằng tuần</h2>
+            <div class="flex items-center gap-2" role="group" aria-label="Áp dụng nhanh">
+              <button
+                type="button"
+                class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                @click="applyMonToFriPreset"
+              >
+                Thứ Hai – Thứ Sáu
+              </button>
+              <button
+                type="button"
+                class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                @click="applyAllWeekPreset"
+              >
+                Cả tuần
+              </button>
+            </div>
+          </div>
+
+          <ul class="divide-y divide-ink-100 border-y border-ink-100">
+            <li
+              v-for="(slot, day) in weeklyScheduleDraft"
+              :key="day"
+              class="py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+            >
+              <label class="flex items-center gap-3 cursor-pointer min-h-10">
+                <input v-model="slot.enabled" type="checkbox" class="sr-only peer" :aria-label="`Làm việc ${DAY_NAMES[day]}`" />
+                <span
+                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative shrink-0 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"
+                ></span>
+                <span class="w-20 text-sm font-semibold whitespace-nowrap" :class="slot.enabled ? 'text-ink-900' : 'text-ink-500'">{{ DAY_NAMES[day] }}</span>
+              </label>
+
+              <div v-if="slot.enabled" class="flex items-center gap-2 text-sm">
+                <input
+                  v-model="slot.startTime"
+                  type="time"
+                  :aria-label="`Giờ bắt đầu ${DAY_NAMES[day]}`"
+                  class="h-10 px-2.5 bg-white border border-ink-200 rounded-xl font-num text-ink-900 focus:outline-none focus:border-brand-600"
+                />
+                <span class="text-ink-400" aria-hidden="true">–</span>
+                <input
+                  v-model="slot.endTime"
+                  type="time"
+                  :aria-label="`Giờ kết thúc ${DAY_NAMES[day]}`"
+                  class="h-10 px-2.5 bg-white border border-ink-200 rounded-xl font-num text-ink-900 focus:outline-none focus:border-brand-600"
+                />
+              </div>
+              <span v-else class="text-sm text-ink-400">Nghỉ</span>
+            </li>
+          </ul>
+
+          <div class="flex justify-end">
+            <FhButton variant="primary" size="md" :loading="savingSchedule" @click="handleSaveSchedule">
+              Lưu lịch làm việc
+            </FhButton>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
+          <h3 class="text-base font-semibold text-ink-900">Ngày nghỉ</h3>
+
+          <div class="space-y-3 text-sm">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="tp-off-start" class="block font-medium text-ink-700 mb-1">Từ ngày</label>
+                <input
+                  id="tp-off-start"
+                  v-model="newTimeOff.startDate"
+                  type="date"
+                  class="w-full h-11 px-2.5 bg-white border border-ink-200 rounded-xl font-num focus:outline-none focus:border-brand-600"
+                />
+              </div>
+              <div>
+                <label for="tp-off-end" class="block font-medium text-ink-700 mb-1">Đến ngày</label>
+                <input
+                  id="tp-off-end"
+                  v-model="newTimeOff.endDate"
+                  type="date"
+                  class="w-full h-11 px-2.5 bg-white border border-ink-200 rounded-xl font-num focus:outline-none focus:border-brand-600"
+                />
+              </div>
+            </div>
+            <div>
+              <label for="tp-off-reason" class="block font-medium text-ink-700 mb-1">Lý do (không bắt buộc)</label>
+              <input
+                id="tp-off-reason"
+                v-model="newTimeOff.reason"
+                type="text"
+                placeholder="VD: Việc gia đình"
+                class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"
+              />
+            </div>
+            <FhButton
+              variant="secondary"
+              size="md"
+              block
+              :loading="savingTimeOff"
+              :disabled="!newTimeOff.startDate || !newTimeOff.endDate"
+              @click="handleAddTimeOff"
+            >
+              <Plus :size="16" /> Thêm ngày nghỉ
             </FhButton>
           </div>
 
-          <!-- Address Autocomplete Search & Radius Inputs -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <!-- Address input with autocomplete dropdown -->
-            <div class="lg:col-span-2 space-y-2">
-              <label class="block font-semibold text-xs text-ink-800">
-                Địa chỉ điểm xuất phát (Số nhà, ngõ/đường, phường xã) *
-              </label>
-              <div class="relative">
-                <input
-                  v-model="locationLine1"
-                  type="text"
-                  placeholder="Nhập địa chỉ nhà hoặc cửa hàng (VD: 25 Ngõ 12 Đội Cấn...)"
-                  class="w-full h-10 pl-10 pr-4 bg-ink-25 border border-ink-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-brand-600 transition-colors"
-                  @input="onLocationSearchInput"
-                />
-                <MapPin :size="16" class="absolute left-3.5 top-3 text-ink-400 pointer-events-none" />
-
-                <!-- Suggestions Dropdown -->
-                <ul
-                  v-if="locationSuggestions.length"
-                  class="absolute z-20 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-56 overflow-auto divide-y divide-ink-100 text-xs"
-                >
-                  <li
-                    v-for="s in locationSuggestions"
-                    :key="s.placeId"
-                    class="px-4 py-2.5 hover:bg-brand-50 hover:text-brand-700 cursor-pointer flex items-center gap-2.5 transition-colors"
-                    @click="selectLocationSuggestion(s)"
-                  >
-                    <MapPin :size="14" class="text-brand-600 shrink-0" />
-                    <span>{{ s.description }}</span>
-                  </li>
-                </ul>
+          <div v-if="loadingTimeOff" aria-busy="true"><FhSkeleton height="48px" :count="2" /></div>
+          <p v-else-if="timeOffList.length === 0" class="text-sm text-ink-500 pt-1">Chưa có ngày nghỉ nào.</p>
+          <ul v-else class="divide-y divide-ink-100 border-t border-ink-100">
+            <li v-for="t in timeOffList" :key="t.id" class="py-2.5 flex items-center gap-3">
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-ink-900 font-num whitespace-nowrap">
+                  {{ vnDateString(t.startAt) }} – {{ vnDateString(t.endAt) }}
+                </p>
+                <p v-if="t.reason" class="text-sm text-ink-500 truncate">{{ t.reason }}</p>
               </div>
-
-              <!-- Selected Address Chips -->
-              <div v-if="locationWard || locationDistrict || locationProvince" class="flex flex-wrap items-center gap-2 pt-1 text-xs text-ink-600">
-                <span class="font-semibold text-ink-700">Khu vực nhận diện:</span>
-                <span v-if="locationWard" class="px-2 py-0.5 rounded bg-ink-100 text-ink-700 font-medium">
-                  {{ locationWard }}
-                </span>
-                <span v-if="locationDistrict" class="px-2 py-0.5 rounded bg-ink-100 text-ink-700 font-medium">
-                  {{ locationDistrict }}
-                </span>
-                <span v-if="locationProvince" class="px-2 py-0.5 rounded bg-ink-100 text-ink-700 font-medium">
-                  {{ locationProvince }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Service Radius Slider & Input -->
-            <div class="space-y-2 p-4 rounded-xl bg-brand-50/60 border border-brand-200 text-xs">
-              <div class="flex items-center justify-between font-bold text-ink-900">
-                <span>Bán kính nhận việc</span>
-                <span class="font-num text-brand-700 text-base">{{ locationRadiusKm }} km</span>
-              </div>
-
-              <input
-                type="range"
-                min="1"
-                max="40"
-                step="1"
-                v-model.number="locationRadiusKm"
-                class="w-full accent-brand-600 cursor-pointer"
-              />
-
-              <div class="flex justify-between text-[11px] text-ink-500">
-                <span>1 km (Gần)</span>
-                <span>25 km</span>
-                <span>50 km (Rộng)</span>
-              </div>
-              <p class="text-[11px] text-ink-500">
-                Khách hàng nằm ngoài bán kính {{ locationRadiusKm }} km sẽ không thể thấy bạn khi tìm thợ.
-              </p>
-            </div>
-          </div>
-
-          <!-- Embedded MapTiler Interactive Map -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between text-xs text-ink-600">
-              <span class="font-semibold">Vị trí ghim trên bản đồ (Bạn có thể kéo thả ghim đến đúng toạ độ):</span>
-              <span v-if="locationLat && locationLng" class="font-num text-ink-400">
-                Toạ độ: {{ Number(locationLat).toFixed(4) }}, {{ Number(locationLng).toFixed(4) }}
-              </span>
-            </div>
-
-            <div class="rounded-2xl overflow-hidden border border-ink-200 shadow-inner">
-              <MapTilerMap
-                ref="mapRef"
-                :center="mapCenter"
-                :markers="locationMarkers"
-                click-to-move="picker"
-                height-class="h-80 sm:h-96"
-                @marker-move="onLocationMarkerMove"
-              />
-            </div>
-          </div>
-        </div>
+              <button
+                type="button"
+                class="shrink-0 w-10 h-10 flex items-center justify-center text-ink-500 hover:text-danger-600 hover:bg-danger-50 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-danger-600"
+                aria-label="Xoá ngày nghỉ"
+                title="Xoá ngày nghỉ"
+                @click="confirmDeleteTimeOff = t"
+              >
+                <Trash2 :size="16" />
+              </button>
+            </li>
+          </ul>
+        </section>
       </div>
 
-      <!-- TAB 5: ĐÁNH GIÁ & UY TÍN TỪ KHÁCH HÀNG -->
-      <div v-else-if="activeTab === 'reviews'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Left: Thống kê & Biểu đồ sao (1 col) -->
-        <div class="space-y-6">
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-6">
-            <div class="border-b border-ink-100 pb-4">
-              <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-                <Star :size="18" class="text-warning-500 fill-warning-400" />
-                Tổng quan Uy tín &amp; Đánh giá
-              </h2>
-              <p class="text-xs text-ink-500 mt-0.5">Điểm số và mức độ hài lòng từ các khách hàng bạn đã phục vụ.</p>
-            </div>
+      <!-- TAB: Khu vực nhận việc -->
+      <section v-if="activeTab === 'location'" class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
+        <h2 class="text-lg font-semibold text-ink-900">Khu vực nhận việc</h2>
 
-            <!-- Big Rating Score Box -->
-            <div class="p-6 rounded-2xl bg-warning-50 border border-warning-200/80 text-center space-y-2 shadow-xs">
-              <div class="text-xs font-bold text-warning-700">Điểm trung bình</div>
-              <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
-                <div class="text-5xl font-bold font-num text-ink-900 flex items-center justify-center gap-1.5">
-                  <span>{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</span>
-                  <span class="text-2xl font-semibold text-ink-400">/ 5.0</span>
-                </div>
-                <div class="flex items-center justify-center gap-1 py-1">
-                  <Star
-                    v-for="s in 5"
-                    :key="s"
-                    :size="22"
-                    :class="s <= Math.round(Number(technicianProfile.averageRating)) ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
-                  />
-                </div>
-                <p class="text-xs font-semibold text-ink-600">
-                  Dựa trên {{ technicianProfile.ratingCount }} lượt đánh giá thực tế
-                </p>
-              </template>
-              <p v-else class="text-lg font-semibold text-ink-500">Chưa có đánh giá</p>
-            </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2 space-y-1.5">
+            <label for="tp-location" class="block text-sm font-medium text-ink-700">Địa chỉ xuất phát *</label>
+            <div class="relative">
+              <input
+                id="tp-location"
+                v-model="locationLine1"
+                type="text"
+                autocomplete="off"
+                placeholder="VD: 25 Ngõ 12 Đội Cấn"
+                class="w-full h-11 pl-10 pr-4 bg-white border border-ink-200 rounded-xl text-[15px] focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
+                @input="onLocationSearchInput"
+              />
+              <MapPin :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
 
-            <!-- Star Distribution Progress Bars -->
-            <div class="space-y-2.5 pt-2">
-              <div class="text-xs font-bold text-ink-700">Phân bổ số sao:</div>
-              <div
-                v-for="star in [5, 4, 3, 2, 1]"
-                :key="star"
-                class="flex items-center gap-2.5 text-xs"
+              <ul
+                v-if="locationSuggestions.length"
+                class="absolute z-20 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-56 overflow-auto divide-y divide-ink-100 text-sm"
               >
-                <span class="w-10 font-bold font-num text-ink-700 flex items-center gap-0.5">
-                  {{ star }} <Star :size="12" class="fill-warning-400 text-warning-400" />
-                </span>
-                <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
-                  <div
-                    class="h-full rounded-full transition-all duration-500"
-                    :class="star >= 4 ? 'bg-warning-400' : star === 3 ? 'bg-warning-400' : 'bg-danger-400'"
-                    :style="{ width: `${starDistribution.percentages[star]}%` }"
-                  ></div>
-                </div>
-                <span class="w-14 text-right font-num text-ink-500 text-[11px]">
-                  {{ starDistribution.counts[star] }} ({{ starDistribution.percentages[star] }}%)
-                </span>
-              </div>
+                <li v-for="s in locationSuggestions" :key="s.placeId">
+                  <button
+                    type="button"
+                    class="w-full text-left px-4 py-2.5 hover:bg-brand-50 hover:text-brand-700 flex items-center gap-2.5 focus:outline-none focus-visible:bg-brand-50"
+                    @click="selectLocationSuggestion(s)"
+                  >
+                    <MapPin :size="14" class="text-ink-400 shrink-0" />
+                    <span>{{ s.description }}</span>
+                  </button>
+                </li>
+              </ul>
             </div>
+            <p v-if="locationWard || locationDistrict || locationProvince" class="text-sm text-ink-500">
+              {{ [locationWard, locationDistrict, locationProvince].filter(Boolean).join(', ') }}
+            </p>
+          </div>
 
-            <!-- Trust Badge Card -->
-            <div class="p-3.5 rounded-xl bg-success-50/70 border border-success-200 text-xs space-y-1">
-              <div class="font-bold text-success-900 flex items-center gap-1.5">
-                <ShieldCheck :size="15" class="text-success-600" />
-                Chính sách tăng độ uy tín
-              </div>
-              <p class="text-[11px] text-success-800 leading-relaxed">
-                Đánh giá cao từ khách hàng sẽ giúp bạn được hệ thống ưu tiên đề xuất cho khách khi tìm thợ và tăng tỷ lệ nhận đơn mới.
-              </p>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <label for="tp-radius" class="text-sm font-medium text-ink-700">Bán kính nhận việc</label>
+              <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ locationRadiusKm }} km</span>
+            </div>
+            <input
+              id="tp-radius"
+              v-model.number="locationRadiusKm"
+              type="range"
+              min="1"
+              max="40"
+              step="1"
+              class="w-full h-10 accent-brand-600 cursor-pointer"
+            />
+            <div class="flex justify-between text-xs text-ink-400">
+              <span>1 km</span>
+              <span>40 km</span>
             </div>
           </div>
         </div>
 
-        <!-- Right: Danh sách đánh giá chi tiết (2 cols) -->
-        <div class="lg:col-span-2 space-y-4">
-          <div class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-6 space-y-5">
-            <div class="flex items-center justify-between border-b border-ink-100 pb-4">
-              <div>
-                <h3 class="text-base font-bold text-ink-900">Chi tiết phản hồi từ khách hàng</h3>
-                <p class="text-xs text-ink-500 mt-0.5">Những nhận xét và thẻ đánh giá khách đã để lại sau khi bạn hoàn thành ca sửa chữa.</p>
+        <div class="space-y-1.5">
+          <p class="text-sm text-ink-500">Kéo ghim để chỉnh đúng vị trí.</p>
+          <div class="rounded-2xl overflow-hidden border border-ink-200">
+            <MapTilerMap
+              ref="mapRef"
+              :center="mapCenter"
+              :markers="locationMarkers"
+              click-to-move="picker"
+              height-class="h-80 sm:h-96"
+              @marker-move="onLocationMarkerMove"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-4 border-t border-ink-100">
+          <FhButton variant="primary" size="md" :loading="savingLocation" @click="handleSaveLocation">
+            Lưu khu vực
+          </FhButton>
+        </div>
+      </section>
+
+      <!-- TAB: Đánh giá -->
+      <div v-else-if="activeTab === 'reviews'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
+          <div class="text-center space-y-1">
+            <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
+              <div class="flex items-baseline justify-center gap-1">
+                <span class="text-5xl font-bold font-num text-ink-900">{{ ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount) }}</span>
+                <span class="text-xl font-semibold text-ink-400 font-num">/5</span>
               </div>
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold font-num bg-ink-100 text-ink-700">
-                {{ reviewsList.length }} nhận xét
+              <div class="flex items-center justify-center gap-1" :aria-label="`${ratingLabel(technicianProfile.averageRating, technicianProfile.ratingCount)} trên 5 sao`">
+                <Star
+                  v-for="s in 5"
+                  :key="s"
+                  :size="20"
+                  :class="s <= Math.round(Number(technicianProfile.averageRating)) ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
+                />
+              </div>
+              <p class="text-sm text-ink-500">{{ technicianProfile.ratingCount }} lượt đánh giá</p>
+            </template>
+            <p v-else class="text-base font-semibold text-ink-500 py-4">Chưa có đánh giá</p>
+          </div>
+
+          <div class="space-y-2">
+            <div v-for="star in [5, 4, 3, 2, 1]" :key="star" class="flex items-center gap-2.5 text-sm">
+              <span class="w-8 font-num text-ink-700 flex items-center gap-0.5 whitespace-nowrap">
+                {{ star }} <Star :size="12" class="fill-warning-400 text-warning-400" />
+              </span>
+              <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
+                <div
+                  class="h-full rounded-full"
+                  :class="star >= 3 ? 'bg-warning-400' : 'bg-danger-400'"
+                  :style="{ width: `${starDistribution.percentages[star]}%` }"
+                ></div>
+              </div>
+              <span class="w-16 text-right font-num text-ink-500 text-xs whitespace-nowrap">
+                {{ starDistribution.counts[star] }} ({{ starDistribution.percentages[star] }}%)
               </span>
             </div>
-
-            <!-- Loading Spinner -->
-            <div v-if="loadingReviews" class="py-12 text-center text-xs text-ink-400 space-y-2">
-              <RefreshCw :size="24" class="animate-spin text-brand-600 mx-auto" />
-              <p>Đang tải danh sách đánh giá...</p>
-            </div>
-
-            <!-- Empty Reviews -->
-            <div
-              v-else-if="reviewsList.length === 0"
-              class="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-ink-200 space-y-3"
-            >
-              <div class="w-12 h-12 rounded-full bg-warning-50 text-warning-500 flex items-center justify-center mx-auto border border-warning-200">
-                <Star :size="24" />
-              </div>
-              <div class="space-y-1">
-                <h4 class="text-sm font-bold text-ink-900">Chưa có đánh giá nào</h4>
-                <p class="text-xs text-ink-500 max-w-sm mx-auto">
-                  Hãy tiếp tục nhận việc và phục vụ khách hàng thật chu đáo để nhận được những đánh giá 5 sao đầu tiên!
-                </p>
-              </div>
-            </div>
-
-            <!-- Reviews List -->
-            <div v-else class="space-y-4 divide-y divide-ink-100">
-              <div
-                v-for="r in reviewsList"
-                :key="r.id"
-                class="pt-4 first:pt-0 space-y-2.5"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-full bg-brand-100 text-brand-800 font-bold text-xs flex items-center justify-center shrink-0">
-                      {{ (r.customerName || 'K').charAt(0) }}
-                    </div>
-                    <div>
-                      <div class="font-bold text-ink-900 text-xs">{{ r.customerName || 'Khách hàng FixHome' }}</div>
-                      <div class="flex items-center gap-1 mt-0.5">
-                        <Star
-                          v-for="s in 5"
-                          :key="s"
-                          :size="13"
-                          :class="s <= r.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
-                        />
-                        <span class="text-[11px] font-bold font-num text-ink-700 ml-1">{{ r.rating }}/5 sao</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <span class="text-[11px] font-num text-ink-400">
-                    {{ vnDateString(r.createdAt) }}
-                  </span>
-                </div>
-
-                <!-- Chips / Tags -->
-                <div
-                  v-if="parseReviewComment(r.comment).tags.length > 0"
-                  class="flex flex-wrap gap-1.5 pt-0.5"
-                >
-                  <span
-                    v-for="tag in parseReviewComment(r.comment).tags"
-                    :key="tag"
-                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200"
-                  >
-                    <Check :size="10" class="text-brand-600 stroke-[3]" />
-                    {{ tag }}
-                  </span>
-                </div>
-
-                <!-- Text Comment -->
-                <p
-                  v-if="parseReviewComment(r.comment).text"
-                  class="text-xs text-ink-800 bg-ink-50/70 p-3 rounded-xl border border-ink-150 leading-relaxed"
-                >
-                  "{{ parseReviewComment(r.comment).text }}"
-                </p>
-              </div>
-            </div>
           </div>
-        </div>
+        </section>
+
+        <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
+          <h3 class="text-base font-semibold text-ink-900">
+            Nhận xét <span class="font-num text-ink-500 font-normal">({{ reviewsList.length }})</span>
+          </h3>
+
+          <div v-if="loadingReviews" aria-busy="true"><FhSkeleton height="72px" :count="3" /></div>
+
+          <p v-else-if="reviewsList.length === 0" class="py-8 text-center text-sm text-ink-500">Chưa có nhận xét nào.</p>
+
+          <ul v-else class="divide-y divide-ink-100">
+            <li v-for="r in reviewsList" :key="r.id" class="py-4 first:pt-0 last:pb-0 space-y-2">
+              <div class="flex items-start gap-3">
+                <div class="w-9 h-9 rounded-full bg-ink-100 text-ink-600 font-semibold text-sm flex items-center justify-center shrink-0">
+                  {{ (r.customerName || 'K').charAt(0) }}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-baseline justify-between gap-3">
+                    <span class="min-w-0 truncate font-semibold text-ink-900 text-sm">{{ r.customerName || 'Khách hàng FixHome' }}</span>
+                    <span class="shrink-0 text-xs font-num text-ink-400 whitespace-nowrap">{{ vnDateString(r.createdAt) }}</span>
+                  </div>
+                  <div class="flex items-center gap-0.5 mt-0.5" :aria-label="`${r.rating} trên 5 sao`">
+                    <Star
+                      v-for="s in 5"
+                      :key="s"
+                      :size="13"
+                      :class="s <= r.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="parseReviewComment(r.comment).tags.length > 0" class="flex flex-wrap gap-1.5 pl-12">
+                <span
+                  v-for="tag in parseReviewComment(r.comment).tags"
+                  :key="tag"
+                  class="whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+
+              <p v-if="parseReviewComment(r.comment).text" class="pl-12 text-sm text-ink-800 leading-relaxed text-pretty">
+                {{ parseReviewComment(r.comment).text }}
+              </p>
+            </li>
+          </ul>
+        </section>
       </div>
     </template>
 
     <!-- Confirm Delete Time Off Dialog -->
     <FhConfirmDialog
       :open="!!confirmDeleteTimeOff"
-      title="Xoá khoảng ngày nghỉ"
-      consequence="Sau khi xoá, hệ thống có thể phân bổ các đơn sửa chữa trong khoảng thời gian này cho bạn."
+      title="Xoá ngày nghỉ?"
+      consequence="Sau khi xoá, bạn có thể được giao việc trong những ngày này."
       :loading="deletingTimeOff"
       @confirm="handleDeleteTimeOff"
       @cancel="confirmDeleteTimeOff = null"
@@ -2007,46 +1496,47 @@ const handleSaveAvatar = async () => {
         v-if="showAvatarModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
         @click.self="showAvatarModal = false"
+        @keydown.esc="!savingAvatar && (showAvatarModal = false)"
       >
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-bold text-ink-900">Cập nhật ảnh đại diện kỹ thuật viên</h3>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tp-avatar-title"
+          class="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <h3 id="tp-avatar-title" class="text-lg font-bold text-ink-900">Ảnh đại diện</h3>
             <button
               type="button"
-              class="p-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 cursor-pointer"
+              class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              aria-label="Đóng"
               @click="showAvatarModal = false"
             >
               <X :size="18" />
             </button>
           </div>
 
-          <div class="space-y-4 text-xs">
-            <!-- Preview -->
-            <div class="flex items-center justify-center py-2">
-              <div class="w-24 h-24 rounded-2xl overflow-hidden border-2 border-brand-500 shadow-md bg-ink-100 flex items-center justify-center">
-                <img v-if="newAvatarUrl" :src="newAvatarUrl" class="w-full h-full object-cover" alt="Preview" />
-                <span v-else class="text-3xl font-bold font-num text-ink-400">
-                  {{ authStore.user?.fullName?.charAt(0) ?? 'T' }}
-                </span>
-              </div>
+          <div class="flex items-center gap-4">
+            <div class="w-20 h-20 shrink-0 rounded-2xl overflow-hidden border border-ink-200 bg-ink-100 flex items-center justify-center">
+              <img v-if="newAvatarUrl" :src="newAvatarUrl" class="w-full h-full object-cover" alt="Xem trước ảnh đại diện" />
+              <span v-else class="text-2xl font-bold text-ink-400">{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
             </div>
-
-            <div>
-              <label class="block font-semibold text-ink-700 mb-1.5">Đường dẫn ảnh đại diện (URL)</label>
+            <div class="min-w-0 flex-1">
+              <label for="tp-avatar-url" class="block text-sm font-medium text-ink-700 mb-1.5">Liên kết ảnh</label>
               <input
+                id="tp-avatar-url"
                 v-model="newAvatarUrl"
-                type="text"
-                placeholder="https://images.unsplash.com/... hoặc ảnh trực tuyến"
-                class="w-full h-10 px-3.5 bg-ink-25 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-600"
+                type="url"
+                placeholder="https://…"
+                class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
               />
-              <p class="text-[11px] text-ink-500 mt-1">Dán liên kết ảnh chân dung rõ mặt, lịch sự để khách hàng an tâm lựa chọn.</p>
             </div>
           </div>
 
-          <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
-            <FhButton variant="ghost" size="sm" @click="showAvatarModal = false">Huỷ bỏ</FhButton>
-            <FhButton variant="primary" size="sm" :loading="savingAvatar" @click="handleSaveAvatar">
-              Lưu ảnh mới
+          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+            <FhButton variant="secondary" size="md" @click="showAvatarModal = false">Huỷ</FhButton>
+            <FhButton variant="primary" size="md" :loading="savingAvatar" @click="handleSaveAvatar">
+              Lưu ảnh
             </FhButton>
           </div>
         </div>
