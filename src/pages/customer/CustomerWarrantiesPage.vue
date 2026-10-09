@@ -160,7 +160,7 @@ onMounted(() => {
       </div>
       <h3 class="text-base font-semibold text-ink-900">Chưa có đơn nào đang được bảo hành</h3>
       <p class="text-sm text-ink-500 max-w-md mx-auto text-pretty">
-        Khi đơn sửa chữa hoàn tất nghiệm thu và thanh toán, các gói bảo hành dịch vụ cùng linh kiện thay thế sẽ tự động kích hoạt tại đây.
+        Khi đơn sửa chữa hoàn tất và đã thanh toán, các gói bảo hành dịch vụ cùng linh kiện thay thế sẽ tự động kích hoạt tại đây.
       </p>
       <div class="pt-2">
         <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">

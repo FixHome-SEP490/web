@@ -35,8 +35,8 @@ const steps = [
   },
   {
     step: 'Bước 4',
-    title: 'Nghiệm thu & Nhận bảo hành điện tử',
-    desc: 'Sau khi sửa xong, thợ chụp ảnh hoàn thành (AFTER evidence) và kiểm tra vận hành trước sự chứng kiến của bạn. Hệ thống lập hoá đơn và kích hoạt phiếu bảo hành điện tử theo thời hạn bảo hành của đơn.',
+    title: 'Hoàn tất & Nhận bảo hành điện tử',
+    desc: 'Sau khi sửa xong, thợ kiểm tra vận hành trước sự chứng kiến của bạn, chụp ảnh sau sửa và bấm hoàn thành. Hệ thống lập hoá đơn; bạn thanh toán là đơn hoàn tất và phiếu bảo hành điện tử được kích hoạt. Chưa hài lòng thì mở khiếu nại.',
     icon: ShieldCheck,
   },
 ];

@@ -608,11 +608,11 @@ const shortcuts = [
                 </li>
                 <li
                   class="h-10 px-3 rounded-lg flex items-center gap-2 whitespace-nowrap"
-                  :class="stepClass(job.customerConfirmed || isOneOf(job, ['COMPLETED']), false)"
+                  :class="stepClass(isOneOf(job, ['COMPLETED']), !!job.completionRequestedAt)"
                 >
-                  <CheckCircle2 v-if="job.customerConfirmed || isOneOf(job, ['COMPLETED'])" :size="16" class="shrink-0" />
+                  <CheckCircle2 v-if="isOneOf(job, ['COMPLETED'])" :size="16" class="shrink-0" />
                   <Clock v-else :size="16" class="shrink-0" />
-                  <span class="truncate">4. Nghiệm thu</span>
+                  <span class="truncate">4. Thanh toán</span>
                 </li>
               </ol>
 
