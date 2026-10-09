@@ -130,6 +130,8 @@ const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
 // Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
+// Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
+const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
 
 // Additional cost (chi phí phát sinh)
@@ -835,10 +837,28 @@ const handleUploadAfter = async () => {
   if (!hadAfter && afterEvidences.value.length > 0 && !completionRequested.value) await handleCompleteOrder();
 };
 
+watch(
+  () => job.value?.laborWarrantyDays,
+  (days) => { if (quoteLaborWarranty.value === '' && days != null) quoteLaborWarranty.value = days; },
+  { immediate: true },
+);
+const quoteLaborWarrantyValid = computed(() => {
+  const days = quoteLaborWarranty.value;
+  return days === '' || (Number.isInteger(days) && days >= 0 && days <= 365);
+});
+
 const handleSubmitQuotation = async () => {
+  if (!quoteLaborWarrantyValid.value) {
+    actionMessage.value = { type: 'error', text: 'Bảo hành công từ 0 đến 365 ngày.' };
+    return;
+  }
   actionLoading.value = true;
   try {
-    await ordersApi.submitQuotation(jobId, quotationItems.value);
+    const days = quoteLaborWarranty.value;
+    await ordersApi.submitQuotation(
+      jobId,
+      quotationItems.value.map((item) => (item.type === 'LABOR' && days !== '' ? { ...item, warrantyDays: days } : item)),
+    );
     quotationSubmitted.value = true;
     editingQuotation.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi báo giá, chờ khách duyệt.' };
@@ -1400,6 +1420,24 @@ const toggleMore = async () => {
               <Plus :size="16" /> Thêm linh kiện
             </button>
           </div>
+          <label class="flex items-center justify-between gap-3 text-sm" data-testid="quote-labor-warranty">
+            <span class="font-medium text-ink-700">Bảo hành công</span>
+            <span class="relative w-32 shrink-0">
+              <input
+                v-model.number="quoteLaborWarranty"
+                type="number"
+                min="0"
+                max="365"
+                step="1"
+                inputmode="numeric"
+                placeholder="30"
+                aria-label="Số ngày bảo hành công"
+                class="w-full h-10 pl-3 pr-12 bg-white border border-ink-200 rounded-xl text-sm font-num text-right"
+                :class="{ 'border-danger-500': !quoteLaborWarrantyValid }"
+              />
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-500 pointer-events-none">ngày</span>
+            </span>
+          </label>
           <dl class="pt-3 border-t border-ink-100 space-y-1 text-sm">
             <div class="flex justify-between gap-3 text-ink-600"><dt>Tiền công</dt><dd class="font-num whitespace-nowrap"><FhMoney :amount="laborTotal()" /></dd></div>
             <div class="flex justify-between gap-3 text-ink-600"><dt>Linh kiện</dt><dd class="font-num whitespace-nowrap"><FhMoney :amount="partsTotal()" /></dd></div>
@@ -1561,6 +1599,7 @@ const toggleMore = async () => {
                 <template v-else-if="step.n === 3">
                   <template v-if="isFixedPriceOrder">
                     <p>Giá cố định <span class="font-num font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="fixedPriceTotal ?? 0" /></span>, không cần báo giá.</p>
+                    <p v-if="job.laborWarrantyDays" data-testid="fixed-labor-warranty">Bảo hành công {{ job.laborWarrantyDays }}&nbsp;ngày.</p>
                     <p v-if="reachedAt('under_repair')">Chuyển sang sửa lúc {{ vnDateTimeString(reachedAt('under_repair')!) }}</p>
                   </template>
                   <template v-else-if="job.quotation">

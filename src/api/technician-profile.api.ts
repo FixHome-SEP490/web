@@ -31,6 +31,8 @@ export interface TechnicianProfileView {
   ratingCount: number;
   reliabilityScore: number | null;
   serviceRadiusKm: number;
+  /** Labor warranty given when a service has none of its own; null when never set. */
+  defaultLaborWarrantyDays: number | null;
   skills: TechnicianSkillView[];
   serviceAreas: TechnicianServiceAreaView[];
   schedules: TechnicianScheduleView[];
@@ -173,6 +175,7 @@ function normalizeProfile(payload: unknown): TechnicianProfileView {
     ratingCount: Number(profile.ratingCount ?? 0),
     reliabilityScore: profile.reliabilityScore == null ? null : Number(profile.reliabilityScore),
     serviceRadiusKm: Number(profile.serviceRadiusKm ?? 10),
+    defaultLaborWarrantyDays: profile.defaultLaborWarrantyDays == null ? null : Number(profile.defaultLaborWarrantyDays),
     skills: Array.isArray(profile.skills) ? profile.skills.map(normalizeSkill) : [],
     serviceAreas: Array.isArray(profile.serviceAreas)
       ? profile.serviceAreas.map(normalizeServiceArea)
@@ -202,6 +205,15 @@ export const technicianProfileApi = {
   }): Promise<TechnicianProfileView> {
     const res = await apiClient.patch<{ data: unknown }>('/technicians/me/profile', dto);
     return normalizeProfile(res.data.data);
+  },
+
+  /** Default labor warranty (PO 10/10/2026); applyToAllServices also overwrites every service's own value. */
+  async setDefaultLaborWarranty(days: number, applyToAllServices: boolean): Promise<{ defaultLaborWarrantyDays: number; servicesUpdated: number }> {
+    const res = await apiClient.put<{ data: { defaultLaborWarrantyDays: number; servicesUpdated: number } }>(
+      '/technicians/me/warranty-default',
+      { days, applyToAllServices },
+    );
+    return res.data.data;
   },
 
   /** Last GPS position while the technician app is open; used to offer urgent jobs nearby. */

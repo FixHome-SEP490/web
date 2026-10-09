@@ -1102,7 +1102,10 @@ const parsedReview = computed(() => {
               <li v-for="item in laborItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
                 <span class="min-w-0 text-ink-900">
                   {{ item.description }}
-                  <span class="block text-ink-500 font-num whitespace-nowrap">{{ item.quantity }} × <FhMoney :amount="item.unitPrice" /></span>
+                  <span class="block text-ink-500 font-num whitespace-nowrap">
+                    {{ item.quantity }} × <FhMoney :amount="item.unitPrice" />
+                    <template v-if="item.warrantyDays"> · Bảo hành {{ item.warrantyDays }}&nbsp;ngày</template>
+                  </span>
                 </span>
                 <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
               </li>
@@ -1110,7 +1113,10 @@ const parsedReview = computed(() => {
             <li v-else class="flex items-start justify-between gap-3 py-2.5">
               <span class="min-w-0 text-ink-900">
                 {{ order.serviceName }}
-                <span class="block text-ink-500 font-num whitespace-nowrap">{{ order.quantity || 1 }} × <FhMoney :amount="order.laborTotal" /></span>
+                <span class="block text-ink-500 font-num whitespace-nowrap">
+                  {{ order.quantity || 1 }} × <FhMoney :amount="order.laborTotal" />
+                  <template v-if="order.laborWarrantyDays"> · Bảo hành {{ order.laborWarrantyDays }}&nbsp;ngày</template>
+                </span>
               </span>
               <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="order.laborTotal" /></span>
             </li>

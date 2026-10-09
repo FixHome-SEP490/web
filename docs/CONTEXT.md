@@ -248,6 +248,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 9. Nhật ký cập nhật context
 
 - 2026-10-10 01:42 (UTC+7) | ToanAltF4 | feat/avatar-upload | Ảnh đại diện chọn từ máy rồi tải lên (POST /media/upload, Cloudinary), bỏ ô dán link: hộp AvatarDialog dùng chung cho hồ sơ khách, hồ sơ thợ và menu tài khoản của quản lý/admin trên thanh bên; ảnh cắt vuông 512 px, xoay đúng chiều (squareAvatar trong utils/image-for-ai.ts); lỗi chỉ báo thử lại
+- 2026-10-10 01:27 (UTC+7) | ToanAltF4 | feat/technician-default-warranty | Hồ sơ thợ có khối Bảo hành công mặc định (lưu qua PUT /technicians/me/warranty-default, tuỳ chọn áp cho mọi dịch vụ); ô bảo hành của từng dịch vụ để trống thì theo mặc định thay vì tự điền 30; form báo giá có ô Bảo hành công điền sẵn theo đơn, gửi warrantyDays cho mọi dòng công; khách thấy Bảo hành N ngày ở dòng tiền công (cả đơn giá cố định); bước báo giá của đơn giá cố định hiện bảo hành công
 - 2026-10-10 01:09 (UTC+7) | ToanAltF4 | feat/tech-step-details-ai-summary | Thợ: chi tiết từng bước, tóm tắt AI; sửa chuyển giữa hai form đặt lịch
 - 2026-10-10 00:58 (UTC+7) | ToanAltF4 | feat/console-ui-redesign | Làm lại giao diện console: tiêu đề, menu, bảng, lỗi tải thống nhất, bỏ mã thô
 - 2026-10-10 00:44 (UTC+7) | ToanAltF4 | feat/customer-ui-redesign | Khu khách hàng: mỗi hành động một lần, menu ⋯ cho huỷ, khung xám khi tải, gom thông tin vào một khối
