@@ -25,6 +25,7 @@ import {
   ChevronRight,
   MapPinned,
   Gauge,
+  UserSearch,
 } from 'lucide-vue-next';
 
 
@@ -60,6 +61,7 @@ const navigation = computed(() => [
           group: 'Quản trị & governance',
           items: [
             { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
+            { label: 'Tra cứu kỹ thuật viên', path: '/console/admin/technician-directory', icon: UserSearch },
             { label: 'Duyệt kỹ năng thợ', path: '/console/admin/skill-verifications', icon: Award },
             { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
             { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
