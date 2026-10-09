@@ -144,10 +144,7 @@ onUnmounted(() => {
   <section v-if="media.length" data-testid="booking-media-viewer" class="space-y-3 border-t border-ink-100 pt-4">
     <div class="flex items-center gap-2">
       <ImageIcon :size="16" class="text-brand-600" aria-hidden="true" />
-      <div>
-        <h2 class="text-sm font-bold text-ink-900">Ảnh hiện trường</h2>
-        <p class="text-[11px] text-ink-500">Ảnh riêng tư chỉ hiển thị sau khi Backend xác thực quyền truy cập.</p>
-      </div>
+      <h2 class="text-sm font-bold text-ink-900">Ảnh hiện trường</h2>
     </div>
 
     <div v-if="currentSource" class="overflow-hidden rounded-xl border border-ink-200 bg-ink-50">
