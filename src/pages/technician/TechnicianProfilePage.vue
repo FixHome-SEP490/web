@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
+import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted, computed } from 'vue';
 import {
   MapPin,
@@ -1256,6 +1257,7 @@ const handleSaveAvatar = async () => {
               </div>
             </div>
           </div>
+          <ReputationCard role="technician" />
           <ChangePasswordCard />
         </div>
       </div>
