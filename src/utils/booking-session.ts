@@ -1,4 +1,4 @@
-import { vnDateString, vnTimeString } from './vn-time';
+import { addDaysToKey, vnDateString, vnDayKey, vnKeyAndClockToDate, vnTimeString, weekdayOfKey } from './vn-time';
 
 /**
  * Booking sessions (PO 08/10/2026): a scheduled booking takes the morning
@@ -21,6 +21,39 @@ export function sessionLabel(input: { bookingMode?: string | null; slot?: string
   if (input.slot === 'morning' || input.slot === 'afternoon') return day ? `${SLOT_LABELS[input.slot]}, ${day}` : SLOT_LABELS[input.slot];
   if (!start || !Number.isFinite(start.getTime())) return 'Chưa có lịch hẹn';
   return `${vnTimeString(start)} ${day}`;
+}
+
+/** One session a customer can pick, and whether the technician is free for it. */
+export interface SessionOption {
+  date: string;
+  slot: BookingSlot;
+  available: boolean;
+  reason: string | null;
+}
+
+export const SLOT_SHORT: Record<BookingSlot, string> = { morning: 'Sáng 8:00 - 12:00', afternoon: 'Chiều 13:00 - 18:00' };
+const SLOT_START_HOUR: Record<BookingSlot, number> = { morning: 8, afternoon: 13 };
+
+/** Sessions of the next days that have not started yet, Vietnam time; nobody's availability is known here. */
+export function upcomingSessions(days = 14, now: Date = new Date()): SessionOption[] {
+  const today = vnDayKey(now);
+  const sessions: SessionOption[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = addDaysToKey(today, i);
+    for (const slot of ['morning', 'afternoon'] as BookingSlot[]) {
+      if (vnKeyAndClockToDate(date, SLOT_START_HOUR[slot], 0).getTime() <= now.getTime()) continue;
+      sessions.push({ date, slot, available: true, reason: null });
+    }
+  }
+  return sessions;
+}
+
+const WEEKDAYS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+
+/** "Thứ 2, 13/10" for a Vietnam day key. */
+export function sessionDayLabel(date: string): string {
+  const [, m, d] = date.split('-');
+  return `${WEEKDAYS[weekdayOfKey(date)]}, ${d}/${m}`;
 }
 
 /** True once the technician may set out (the server opens it one hour before the appointment). */

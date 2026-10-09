@@ -41,6 +41,7 @@ import {
 } from '../../components';
 import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
+import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -53,6 +54,7 @@ import { toTimelineSteps } from '../../utils/order-timeline';
 import { formatRating } from '../../utils/formatters';
 
 const route = useRoute();
+const showRebook = ref(false);
 const router = useRouter();
 const chatStore = useChatStore();
 const orderId = route.params.id as string;
@@ -611,6 +613,16 @@ const confirmWork = async () => {
           @click="router.push(`/app/bookings/${order!.bookingId}`)"
         >
           Đổi lịch / thông tin
+        </FhButton>
+
+        <FhButton
+          v-if="order && (order.status === 'COMPLETED' || order.status === 'CANCELLED')"
+          variant="secondary"
+          size="sm"
+          data-testid="order-rebook"
+          @click="showRebook = true"
+        >
+          Đặt lại thợ
         </FhButton>
 
         <FhButton
@@ -1734,5 +1746,12 @@ const confirmWork = async () => {
         </div>
       </div>
     </div>
+    <RebookDialog
+      v-if="order && showRebook"
+      :open="showRebook"
+      :booking-id="order.bookingId"
+      :service-name="order.serviceName"
+      @close="showRebook = false"
+    />
   </div>
 </template>

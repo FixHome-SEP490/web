@@ -40,6 +40,7 @@ import {
 } from '../../components';
 import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
+import { sessionLabel } from '../../utils/booking-session';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
@@ -410,7 +411,7 @@ const shortcuts = [
             </span>
             <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Clock :size="15" class="text-ink-400" />
-              Lịch hẹn: <strong class="font-semibold text-ink-900 font-num">{{ formatScheduledTime(topInvitation.booking?.preferredStartAt || topInvitation.booking?.preferredEndAt || undefined) }}</strong>
+              Lịch hẹn: <strong class="font-semibold text-ink-900 font-num">{{ sessionLabel({ bookingMode: topInvitation.booking?.bookingMode, slot: topInvitation.booking?.slot, start: topInvitation.booking?.preferredStartAt }) }}</strong>
             </span>
           </div>
         </div>

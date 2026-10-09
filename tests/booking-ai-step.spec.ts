@@ -148,6 +148,7 @@ describe('AI booking form', () => {
     await wrapper.get('[data-testid="ai-continue"]').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Địa chỉ');
+    await wrapper.find('button[data-testid^="session-2"]').trigger('click');
     await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="ai-summary-note"]').exists()).toBe(true);
@@ -190,6 +191,7 @@ describe('AI booking form', () => {
     expect(wrapper.find('[data-testid="ai-pick-service-hint"]').exists()).toBe(false);
     await wrapper.get('[data-testid="ai-continue"]').trigger('click');
     await flushPromises();
+    await wrapper.find('button[data-testid^="session-2"]').trigger('click');
     await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
     await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
@@ -223,6 +225,7 @@ describe('Plain booking form', () => {
     await wrapper.find('textarea').setValue('Máy lạnh không mát');
     await wrapper.get('[data-testid="step1-next"]').trigger('click');
     await flushPromises();
+    await wrapper.find('button[data-testid^="session-2"]').trigger('click');
     await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="ai-thread"]').exists()).toBe(false);

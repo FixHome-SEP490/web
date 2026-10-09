@@ -1,4 +1,5 @@
 // src/api/bookings.api.ts
+import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
 import apiClient from './client';
 
 export interface BookingItem {
@@ -16,6 +17,11 @@ export interface BookingItem {
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   status: 'SUBMITTED' | 'MATCHING' | 'MATCHED' | 'CANCELLED' | 'CLOSED';
   createdAt: string;
+  /** scheduled = one session of a day; urgent = come now (PO 08/10/2026). */
+  bookingMode?: BookingMode;
+  slot?: BookingSlot | null;
+  /** What the customer wants the technician to know, apart from the problem. */
+  customerNote?: string | null;
   mediaUrls?: string[];
   media?: BookingMedia[];
   invitations?: BookingInvitation[];
@@ -53,8 +59,11 @@ export interface CreateBookingDto {
   serviceId: string;
   addressId: string;
   description: string;
-  preferredStartAt: string;
-  preferredEndAt: string;
+  /** A session of a day (date + slot) or "come now"; the server turns it into the arrival window. */
+  mode: BookingMode;
+  date?: string;
+  slot?: BookingSlot;
+  customerNote?: string;
   quantity?: number;
   urgency: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   mediaUrls?: string[];
@@ -108,6 +117,9 @@ export interface InvitationBookingPreview {
   urgency: string;
   preferredStartAt: string | null;
   preferredEndAt: string | null;
+  /** Session the technician commits to by accepting (PO 08/10/2026). */
+  bookingMode?: BookingMode;
+  slot?: BookingSlot | null;
 }
 
 export interface InvitationItem {
@@ -136,6 +148,8 @@ interface BackendInvitationPreview {
     urgency: string;
     preferredStartAt: string | null;
     preferredEndAt: string | null;
+    bookingMode?: BookingMode;
+    slot?: BookingSlot | null;
   };
 }
 
@@ -159,6 +173,8 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
       urgency: booking.urgency,
       preferredStartAt: booking.preferredStartAt,
       preferredEndAt: booking.preferredEndAt,
+      bookingMode: booking.bookingMode,
+      slot: booking.slot ?? null,
     },
   };
 }
@@ -274,9 +290,32 @@ export const bookingsApi = {
     };
   },
 
-  async updateBooking(id: string, dto: { description?: string; preferredStartAt: string; preferredEndAt: string }): Promise<BookingItem> {
-    const res = await apiClient.patch<{ data: BookingItem }>(`/bookings/${id}/schedule`, dto);
+  /** Moves a booking to another session; with a technician already on it, only a session they are free for. */
+  async updateBooking(id: string, dto: { description?: string; date: string; slot: BookingSlot }): Promise<BookingItem> {
+    const res = await apiClient.patch<{ data: BookingItem }>(`/bookings/${id}/schedule`, { mode: 'scheduled', ...dto });
     return normalizeBooking(res.data.data);
+  },
+
+  /**
+   * Sessions of the next days and whether the technician is free for each: the
+   * one holding the order, or with previous the one of a finished booking.
+   */
+  async availableSessions(bookingId: string, previous = false): Promise<{ technicianId: string | null; sessions: SessionOption[] }> {
+    const res = await apiClient.get<{ data: { technicianId: string | null; sessions: SessionOption[] } }>(
+      `/bookings/${bookingId}/available-slots`,
+      { params: { days: 14, ...(previous ? { previous: 1 } : {}) } },
+    );
+    return { technicianId: res.data.data?.technicianId ?? null, sessions: res.data.data?.sessions ?? [] };
+  },
+
+  /** New booking with the same service and address; the same technician is invited when free. */
+  async rebook(bookingId: string, dto: { date: string; slot: BookingSlot; customerNote?: string }): Promise<{ booking: BookingItem; previousTechnicianInvited: boolean }> {
+    const res = await apiClient.post<{ data: BookingItem & { previousTechnicianInvited?: boolean } }>(
+      `/bookings/${bookingId}/rebook`,
+      { mode: 'scheduled', ...dto },
+    );
+    const { previousTechnicianInvited, ...booking } = res.data.data;
+    return { booking: normalizeBooking(booking), previousTechnicianInvited: previousTechnicianInvited === true };
   },
 
   async cancelBooking(id: string, reason: string): Promise<BookingItem> {
