@@ -260,4 +260,35 @@ describe('SupportQueuePage', () => {
     expect(text).toContain('Đang giữ đơn');
     expect(text).toContain('Hư hại hoặc mất tài sản');
   });
+
+  it('opens already filtered from a link and offers the "Cần thay đổi thợ" type', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/console/support', component: SupportQueuePage }],
+    });
+    apiClientMock.get.mockResolvedValue(envelope([], { page: 1, limit: 10, total: 0, totalPages: 0 }));
+    await router.push('/console/support?caseType=technician_replacement&status=open');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await router.isReady();
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases', {
+      params: expect.objectContaining({ caseType: 'technician_replacement', status: 'open' }),
+    });
+    expect(wrapper.text()).toContain('Cần thay đổi thợ (ngoài kỹ năng)');
+  });
+
+  it('ignores an unknown filter in the link', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/console/support', component: SupportQueuePage }],
+    });
+    apiClientMock.get.mockResolvedValue(envelope([], { page: 1, limit: 10, total: 0, totalPages: 0 }));
+    await router.push('/console/support?caseType=drop_table&status=x');
+    mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await router.isReady();
+    await flushPromises();
+    const params = apiClientMock.get.mock.calls.at(-1)?.[1]?.params ?? {};
+    expect(params.caseType).toBeUndefined();
+    expect(params.status).toBeUndefined();
+  });
 });

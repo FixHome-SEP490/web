@@ -23,9 +23,10 @@ import {
   supportCaseStatusLabels,
   supportCaseTypeLabels,
 } from './support-cases.utils';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const router = useRouter();
+const route = useRoute();
 const columns: TableColumn[] = [
   { key: 'type', label: 'Loại case', width: '180px' },
   { key: 'status', label: 'Trạng thái', width: '140px' },
@@ -49,12 +50,16 @@ const caseTypes: SupportCaseType[] = [
   'pricing_dispute',
   'conduct',
   'other',
+  'technician_replacement',
 ];
 const statuses: SupportCaseStatus[] = ['open', 'in_review', 'resolved', 'rejected'];
 const cases = ref<SupportCaseSummary[]>([]);
 const searchQuery = ref('');
-const caseTypeFilter = ref<SupportCaseType | ''>('');
-const statusFilter = ref<SupportCaseStatus | ''>('');
+// A link may open the queue already filtered, e.g. the overview's "Cần thay đổi thợ" count.
+const queryValue = <T extends string>(value: unknown, allowed: readonly T[]): T | '' =>
+  typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : '';
+const caseTypeFilter = ref<SupportCaseType | ''>(queryValue(route?.query?.caseType, caseTypes));
+const statusFilter = ref<SupportCaseStatus | ''>(queryValue(route?.query?.status, statuses));
 const page = ref(1);
 const pageSize = 10;
 const total = ref(0);

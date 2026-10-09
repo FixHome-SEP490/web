@@ -172,6 +172,33 @@ onMounted(loadDashboard);
         </div>
       </div>
 
+      <!-- Needs the manager (PO 09/10/2026) -->
+      <div class="grid gap-3 sm:grid-cols-2" data-testid="ops-attention">
+        <router-link
+          to="/console/support?caseType=technician_replacement&status=open"
+          class="flex items-center justify-between gap-3 rounded-2xl border bg-white p-4 hover:bg-ink-50 transition-colors"
+          :class="(ops.openReplacementCases ?? 0) > 0 ? 'border-warning-300' : 'border-ink-200'"
+          data-testid="ops-replacements"
+        >
+          <span class="min-w-0">
+            <span class="block text-sm font-bold text-ink-900">Cần thay đổi thợ</span>
+            <span class="block text-xs text-ink-500">Thợ đã tới nơi báo việc ngoài kỹ năng, đang chờ quản lý xử lý</span>
+          </span>
+          <span class="shrink-0 text-2xl font-black font-num" :class="(ops.openReplacementCases ?? 0) > 0 ? 'text-warning-700' : 'text-ink-900'">{{ ops.openReplacementCases ?? 0 }}</span>
+        </router-link>
+        <router-link
+          to="/console/cancellations"
+          class="flex items-center justify-between gap-3 rounded-2xl border border-ink-200 bg-white p-4 hover:bg-ink-50 transition-colors"
+          data-testid="ops-no-departure"
+        >
+          <span class="min-w-0">
+            <span class="block text-sm font-bold text-ink-900">Đơn tự huỷ vì thợ không xuất phát</span>
+            <span class="block text-xs text-ink-500">Trong 7 ngày gần nhất, hệ thống huỷ sau khi đã nhắc thợ</span>
+          </span>
+          <span class="shrink-0 text-2xl font-black font-num text-ink-900">{{ ops.noDepartureCancellations7d ?? 0 }}</span>
+        </router-link>
+      </div>
+
       <!-- Alert / Escalation Notice -->
       <div v-if="ops.matchingBookings > 0" class="relative overflow-hidden bg-gradient-to-r from-amber-50 to-white border border-amber-300 border-l-4 border-l-amber-500 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-start gap-4 z-10">
