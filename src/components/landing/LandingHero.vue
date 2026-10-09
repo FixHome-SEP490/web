@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { ArrowRight, Check, Sparkles, ShieldCheck, CalendarCheck, ReceiptText } from 'lucide-vue-next';
+import { ArrowRight, Sparkles, ShieldCheck, CalendarCheck, ReceiptText } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
 const router = useRouter();
@@ -24,8 +24,7 @@ const router = useRouter();
         </h1>
 
         <p class="hero-description hero-desc-anim mt-6 text-base sm:text-lg leading-relaxed text-ink-600">
-          Kết nối với kỹ thuật viên đã được xác minh để sửa chữa tại nhà. Có AI hỗ trợ phân tích sự cố sơ bộ,
-          có báo giá minh bạch trước khi bắt đầu.
+          Kỹ thuật viên đã xác minh sửa tận nhà. Bạn duyệt báo giá trước khi sửa.
         </p>
 
         <div class="hero-cta-anim mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -40,21 +39,8 @@ const router = useRouter();
         </div>
 
         <p class="hero-cta-anim mt-4 text-xs leading-5 text-ink-500">
-          Chưa rõ lỗi thiết bị? Bắt đầu từ mô tả triệu chứng hoặc hình ảnh.
+          Chưa rõ lỗi? Mô tả hoặc chụp ảnh để AI gợi ý.
         </p>
-
-        <div
-          class="hero-cta-anim mt-8 flex flex-wrap items-center gap-x-6 gap-y-2.5 border-t border-ink-200/80 pt-6 text-xs sm:text-[13px] font-medium text-ink-700"
-        >
-          <span class="flex items-center gap-2">
-            <Check :size="16" class="text-brand-600 shrink-0" aria-hidden="true" />
-            Kỹ thuật viên xác minh KYC
-          </span>
-          <span class="flex items-center gap-2">
-            <Check :size="16" class="text-brand-600 shrink-0" aria-hidden="true" />
-            Khách hàng duyệt báo giá
-          </span>
-        </div>
       </div>
 
       <div class="hero-visual relative min-w-0 pb-6 lg:pl-2">
@@ -75,18 +61,15 @@ const router = useRouter();
           class="hero-card-anim relative mx-4 -mt-14 rounded-xl border border-ink-200/80 bg-white/95 p-4.5 shadow-(--shadow-e2) backdrop-blur-sm sm:mx-6 lg:-ml-6 lg:mr-12"
         >
           <div class="flex items-center justify-between gap-3 border-b border-ink-100 pb-2.5">
-            <span class="flex items-center gap-2 text-sm font-semibold text-ink-900">
-              <Sparkles :size="17" class="text-brand-600" aria-hidden="true" />
-              AI hỗ trợ phân tích sự cố
+            <span class="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink-900">
+              <Sparkles :size="17" class="shrink-0 text-brand-600" aria-hidden="true" />
+              AI phân tích sự cố
             </span>
-            <span class="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700">
+            <span class="shrink-0 whitespace-nowrap rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700">
               Minh họa sơ bộ
             </span>
           </div>
           <p class="mt-2.5 text-sm font-medium text-ink-800">“Máy lạnh chạy nhưng không mát, có tiếng kêu rè rè”</p>
-          <p class="mt-1.5 text-xs leading-5 text-ink-600">
-            Gợi ý nguyên nhân sơ bộ giúp kỹ thuật viên nắm rõ vấn đề và chuẩn bị linh kiện trước khi đến.
-          </p>
         </div>
       </div>
     </div>
@@ -100,7 +83,7 @@ const router = useRouter();
           </div>
           <div>
             <span class="block text-sm font-semibold text-ink-900">Kỹ thuật viên xác minh</span>
-            <span class="block text-xs text-ink-600">Được kiểm duyệt danh tính & kỹ năng</span>
+            <span class="block text-xs text-ink-600">Đã duyệt danh tính và kỹ năng</span>
           </div>
         </div>
         <div class="flex items-center gap-3.5">
@@ -109,7 +92,7 @@ const router = useRouter();
           </div>
           <div>
             <span class="block text-sm font-semibold text-ink-900">Chi phí minh bạch</span>
-            <span class="block text-xs text-ink-600">Báo giá rõ ràng, duyệt trước khi làm</span>
+            <span class="block text-xs text-ink-600">Bạn duyệt báo giá trước khi sửa</span>
           </div>
         </div>
         <div class="flex items-center gap-3.5">
@@ -118,7 +101,7 @@ const router = useRouter();
           </div>
           <div>
             <span class="block text-sm font-semibold text-ink-900">Chủ động thời gian</span>
-            <span class="block text-xs text-ink-600">Đặt lịch linh hoạt theo khung giờ của bạn</span>
+            <span class="block text-xs text-ink-600">Hẹn buổi sáng, chiều hoặc tới ngay</span>
           </div>
         </div>
       </div>

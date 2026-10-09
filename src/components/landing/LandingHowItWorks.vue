@@ -8,7 +8,6 @@ import {
   CalendarDays,
   CircleCheck,
   ArrowRight,
-  ShieldCheck,
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
@@ -22,7 +21,7 @@ const steps = [
     icon: Smartphone,
     tag: 'Bước 1',
     title: 'Mở ứng dụng & Chọn dịch vụ',
-    description: 'Duyệt danh mục sửa chữa đa dạng từ điện lạnh, điện nước đến thiết bị gia dụng với bảng giá niêm yết minh bạch.',
+    description: 'Chọn dịch vụ trong danh mục, có giá tham khảo.',
     image: '/images/steps/step-1-select-service.png',
     badge: 'Khám phá dịch vụ & Đặt thợ',
   },
@@ -31,34 +30,34 @@ const steps = [
     icon: Camera,
     tag: 'Bước 2',
     title: 'Gửi ảnh & Nhờ AI chẩn đoán',
-    description: 'Chụp ảnh sự cố trực tiếp hoặc tải ảnh có sẵn, mô tả hiện tượng bất thường và chọn mức độ khẩn cấp.',
+    description: 'Mô tả sự cố, gửi thêm ảnh nếu có.',
     image: '/images/steps/step-2-ai-diagnosis.png',
-    badge: 'Tải tối đa 5 ảnh sự cố',
+    badge: 'Tối đa 3 ảnh',
   },
   {
     stepNum: '03',
     icon: Sparkles,
     tag: 'Bước 3',
     title: 'AI phân tích & Đưa kết quả',
-    description: 'Trợ lý AI nhận diện thiết bị, khoanh vùng triệu chứng hỏng hóc và gợi ý dịch vụ phù hợp. Kết quả chỉ mang tính tham khảo.',
+    description: 'AI gợi ý nguyên nhân và dịch vụ. Kết quả chỉ để tham khảo.',
     image: '/images/steps/step-3-ai-result.png',
-    badge: 'Gợi ý mang tính tham khảo',
+    badge: 'Chỉ để tham khảo',
   },
   {
     stepNum: '04',
     icon: CalendarDays,
     tag: 'Bước 4',
     title: 'Chọn lịch & Tìm kiếm thợ',
-    description: 'Chủ động chọn khung giờ thuận tiện và theo dõi mạng lưới kỹ thuật viên xung quanh vị trí qua bản đồ radar.',
+    description: 'Chọn buổi sáng, chiều hoặc tới ngay, rồi chọn 1 đến 2 kỹ thuật viên.',
     image: '/images/steps/step-4-find-technician.png',
-    badge: 'Radar thợ gần bạn (bán kính 1-2km)',
+    badge: 'Chọn 1 đến 2 thợ',
   },
   {
     stepNum: '05',
     icon: CircleCheck,
     tag: 'Bước 5',
     title: 'Duyệt báo giá & Hoàn tất',
-    description: 'Thợ khảo sát thực tế, bạn duyệt báo giá trước khi làm. Sửa xong thợ chụp ảnh sau sửa, bạn thanh toán và nhận bảo hành.',
+    description: 'Bạn duyệt báo giá rồi thợ mới sửa. Xong thì thanh toán, có bảo hành.',
     image: '/images/steps/step-5-quote-complete.png',
     badge: 'Báo giá trước, thanh toán sau',
   },
@@ -167,11 +166,11 @@ onUnmounted(() => {
         <div class="max-w-2xl mb-4 lg:mb-6">
           <div class="inline-flex items-center gap-2 mb-1.5">
             <span class="h-0.5 w-6 bg-brand-600 rounded-full"></span>
-            <p class="landing-eyebrow mb-0 text-brand-600 font-semibold tracking-wider">TRẢI NGHIỆM ỨNG DỤNG</p>
+            <p class="landing-eyebrow mb-0 text-brand-600 font-semibold tracking-wider">Cách hoạt động</p>
           </div>
           <h2 id="steps-title" class="steps-title">Sửa chữa đơn giản, từng bước rõ ràng</h2>
           <p class="landing-description mt-1 text-ink-600 text-sm sm:text-base max-w-xl">
-            Từ lúc mở ứng dụng đến khi đơn hoàn tất, bạn luôn nắm quyền chủ động trong từng thao tác.
+            Từ lúc chọn dịch vụ đến khi đơn hoàn tất, bạn duyệt từng bước.
           </p>
         </div>
 
@@ -242,12 +241,6 @@ onUnmounted(() => {
                 Bắt đầu đặt lịch ngay
                 <ArrowRight :size="16" aria-hidden="true" class="ml-1" />
               </FhButton>
-              <router-link
-                to="/pricing-policy"
-                class="landing-text-link justify-center sm:justify-start text-xs sm:text-sm py-1"
-              >
-                Tìm hiểu chính sách minh bạch
-              </router-link>
             </div>
           </div>
 
@@ -255,40 +248,6 @@ onUnmounted(() => {
           <div class="relative flex flex-col items-center justify-center">
             <!-- Phone Wrapper with badges attached tightly around the phone frame -->
             <div class="relative w-full max-w-[225px] sm:max-w-[245px] lg:max-w-[255px] mx-auto select-none transition-transform duration-300 hover:scale-[1.01]">
-              <!-- Floating Badge 1 (Top-Right): Verified Technicians -->
-              <div
-                class="hidden sm:flex absolute -top-2 -right-8 lg:-right-12 z-20 items-center gap-2 rounded-2xl bg-white/95 backdrop-blur-md px-3 py-2 shadow-lg border border-slate-100/90 select-none transition-all duration-300 hover:scale-105"
-              >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100/80">
-                  <ShieldCheck :size="18" />
-                </div>
-                <div class="text-left">
-                  <p class="text-xs font-bold text-ink-900 leading-tight">100% Thợ xác minh</p>
-                  <p class="text-[10px] text-ink-500 font-medium">Hồ sơ & tay nghề chuẩn</p>
-                </div>
-              </div>
-
-              <!-- Floating Badge 2 (Mid-Left): Fast Diagnosis / AI -->
-              <div
-                class="hidden sm:flex absolute top-[36%] -left-8 lg:-left-12 z-20 items-center gap-2 rounded-2xl bg-white/95 backdrop-blur-md px-3 py-2 shadow-lg border border-slate-100/90 select-none transition-all duration-300 hover:scale-105"
-              >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-brand-600 border border-blue-100/80">
-                  <Sparkles :size="18" />
-                </div>
-                <div class="text-left">
-                  <p class="text-xs font-bold text-ink-900 leading-tight">Gợi ý chẩn đoán bằng AI</p>
-                  <p class="text-[10px] text-ink-500 font-medium">Chỉ mang tính tham khảo</p>
-                </div>
-              </div>
-
-              <!-- Floating Badge 3 (Bottom-Right): Radar Nearby Tech -->
-              <div
-                class="hidden sm:flex absolute bottom-8 -right-6 lg:-right-8 z-20 items-center gap-2 rounded-xl bg-white/95 backdrop-blur-md px-3 py-1.5 shadow-md border border-slate-100/90 select-none"
-              >
-                <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span class="text-[11px] font-semibold text-ink-800">Thợ sẵn sàng nhận việc</span>
-              </div>
-
               <!-- Centered Phone Frame Showcase -->
               <div class="relative aspect-[512/1040] w-full max-h-[440px]">
                 <img

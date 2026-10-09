@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import {
   Sparkles,
   ArrowRight,
-  CheckCircle2,
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
@@ -15,26 +14,22 @@ const stages = [
   {
     id: 0,
     title: 'Gửi ảnh hoặc mô tả triệu chứng',
-    subtitle: 'Không cần kiến thức kỹ thuật',
-    desc: 'Chỉ cần chụp lại thiết bị hoặc gõ vài dòng ngắn về hiện tượng bất thường bạn quan sát được.',
+    desc: 'Chụp thiết bị hoặc viết vài dòng về hiện tượng bạn thấy.',
   },
   {
     id: 1,
     title: 'AI nhận diện thiết bị & phân tích',
-    subtitle: 'Xử lý sơ bộ tức thì',
-    desc: 'Hệ thống đối chiếu cơ sở dữ liệu triệu chứng phổ biến để nhận diện loại thiết bị và bất thường.',
+    desc: 'AI nhận ra loại thiết bị và dấu hiệu bất thường.',
   },
   {
     id: 2,
     title: 'Khoanh vùng nguyên nhân có thể gặp',
-    subtitle: 'Tránh suy đoán mơ hồ',
-    desc: 'Gợi ý các nguyên nhân tiềm ẩn giúp bạn có thêm thông tin tham khảo trước khi trao đổi với thợ.',
+    desc: 'Gợi ý vài nguyên nhân để bạn tham khảo trước khi gặp thợ.',
   },
   {
     id: 3,
-    title: 'Gợi ý dịch vụ & kỹ thuật viên',
-    subtitle: 'Đúng việc, đúng chuyên môn',
-    desc: 'Tự động gợi ý gói dịch vụ và kỹ thuật viên chuyên trách, kèm khoảng giá tham khảo rõ ràng.',
+    title: 'Gợi ý dịch vụ phù hợp',
+    desc: 'Bạn vẫn đổi được dịch vụ trước khi đặt thợ.',
   },
 ];
 </script>
@@ -55,8 +50,7 @@ const stages = [
           Để AI hỗ trợ phân tích bước đầu.
         </h2>
         <p class="landing-description">
-          Chỉ cần ảnh chụp thiết bị hoặc vài dòng mô tả, FixHome sẽ hỗ trợ nhận biết sơ bộ nguyên nhân
-          và gợi ý dịch vụ phù hợp nhất.
+          Gửi ảnh hoặc vài dòng mô tả. Kết quả chỉ để tham khảo.
         </p>
       </div>
 
@@ -82,32 +76,6 @@ const stages = [
               class="w-full h-auto object-cover"
             />
           </figure>
-
-          <!-- Floating Badge (Top Left) -->
-          <div
-            class="hidden sm:flex absolute -top-3 -left-3 z-20 items-center gap-2 rounded-xl border border-brand-200 bg-white/95 px-3 py-2 shadow-(--shadow-e1) backdrop-blur-md"
-          >
-            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-              <Sparkles :size="16" aria-hidden="true" />
-            </div>
-            <div>
-              <span class="block text-xs font-bold text-ink-900">AI FixHome Smart</span>
-              <span class="block text-[10px] text-brand-700 font-medium">Nhận diện & Gợi ý tức thì</span>
-            </div>
-          </div>
-
-          <!-- Floating Badge (Bottom Right) -->
-          <div
-            class="hidden sm:flex absolute -bottom-3 -right-3 z-20 items-center gap-2 rounded-xl border border-ink-200/90 bg-white/95 px-3 py-2 shadow-(--shadow-e1) backdrop-blur-md"
-          >
-            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 :size="16" aria-hidden="true" />
-            </div>
-            <div>
-              <span class="block text-xs font-bold text-ink-900">Độ chính xác cao</span>
-              <span class="block text-[10px] text-ink-500">Đa dạng thiết bị gia đình</span>
-            </div>
-          </div>
         </div>
 
         <!-- RIGHT: Interactive Story Steps / Checkpoints -->
@@ -123,15 +91,12 @@ const stages = [
             ]"
             @click="activeStage = idx"
           >
-            <div class="flex items-center justify-between">
-              <span
-                class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors"
-                :class="activeStage === idx ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700'"
-              >
-                0{{ idx + 1 }}
-              </span>
-              <span class="text-xs font-medium text-ink-500">{{ stage.subtitle }}</span>
-            </div>
+            <span
+              class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors"
+              :class="activeStage === idx ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700'"
+            >
+              0{{ idx + 1 }}
+            </span>
 
             <h3
               class="mt-2.5 text-base sm:text-[17px] font-semibold transition-colors"

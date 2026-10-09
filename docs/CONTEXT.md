@@ -97,8 +97,15 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Hai form đặt lịch trên cùng trang `NewBookingWizardPage.vue`: `/app/bookings/new` khách tự chọn dịch vụ, không có AI; `/app/bookings/ai` khách mô tả và gửi tối đa 3 ảnh, trò chuyện với AI, AI gợi ý dịch vụ và khách được đổi. AI lỗi không chặn đặt lịch.
 - Chọn 1 đến 2 kỹ thuật viên ở trang ứng viên, theo dõi booking, huỷ, đổi lịch, gia hạn tìm thợ.
 - Đơn sửa chữa: duyệt hoặc từ chối báo giá và chi phí phát sinh, xem hoá đơn, thanh toán VNPay hoặc tiền mặt, xác nhận hoàn tất, xem bằng chứng, bảo hành và yêu cầu bảo hành, đánh giá kỹ thuật viên, khiếu nại.
-- Lịch sử sửa chữa, hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
+- Lịch sử sửa chữa (trong menu avatar), hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
 - Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
+
+### Header thống nhất và landing (PO 09/10/2026, nhánh `feat/unified-header-landing`)
+
+- Menu tài khoản (avatar) dùng chung `components/account/AccountMenu.vue` cho trang công khai (`PublicLayout`) và khu khách (`CustomerLayout`); mục theo vai trò lấy từ `utils/account-menu.ts`. Menu chỉ có mục tài khoản, không còn danh sách dịch vụ hay mục "Tài khoản" dẫn về trang tổng quan đầy dịch vụ.
+- Khu khách: "Lịch sử sửa chữa" rời thanh trên vào menu avatar (thanh trên còn Tổng quan, Đơn sửa chữa, Bảo hành, Tin nhắn). Mục "Sổ địa chỉ" trùng link với "Hồ sơ cá nhân" nên gộp vào đó.
+- Trang công khai: mỗi vai trò chỉ khác một nút ở header: khách "Đặt thợ ngay", kỹ thuật viên "Vào trang thợ", quản lý dịch vụ và admin "Vào trang quản lý"; trên điện thoại nút này nằm đầu menu avatar. Menu ba gạch chỉ còn điều hướng trang. Cột "Tài khoản" ở footer dẫn khách tới "Đơn của tôi".
+- Landing xếp lại theo thứ tự: hero, dịch vụ, AI, cách hoạt động, vì sao tin, ứng dụng, câu hỏi, lời kêu gọi cuối; nav header cùng thứ tự. Rút gọn chữ, bỏ dòng lặp và các nhãn nổi có số liệu chưa kiểm chứng ("Độ chính xác cao", "100% thợ xác minh", "bán kính 1-2km", "tối đa 5 ảnh"). Không đổi màu, font hay style.
 
 ### Kỹ thuật viên (`/tech`)
 
@@ -224,6 +231,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-10 00:00 (UTC+7) | ToanAltF4 | feat/faster-photo-handling | Ảnh: chuẩn hoá trước khi tải, nhận nhiều định dạng, song song
 - 2026-10-09 23:38 (UTC+7) | ToanAltF4 | feat/no-customer-acceptance | Bỏ bước khách nghiệm thu trên web
+- 2026-10-09 23:54 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Header thống nhất: menu tài khoản dùng chung, lịch sử sửa chữa vào menu avatar, landing xếp lại và rút gọn chữ
 - 2026-10-09 21:54 (UTC+7) | ToanAltF4 | feat/admin-reviews | Admin xem đánh giá của khách
 - 2026-10-09 21:47 (UTC+7) | ToanAltF4 | feat/admin-warranty-view | Admin xem yêu cầu bảo hành (chỉ đọc)
 - 2026-10-09 21:30 (UTC+7) | ToanAltF4 | feat/admin-payments | Admin xem danh sách thanh toán
