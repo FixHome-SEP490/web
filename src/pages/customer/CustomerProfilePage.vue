@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
+import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted } from 'vue';
 import { User, MapPin, Plus, Trash2, Check, Star, Pencil, Phone, Mail, Camera, X } from 'lucide-vue-next';
 import {
@@ -509,6 +510,7 @@ const confirmDelete = async () => {
             </div>
           </div>
         </div>
+        <ReputationCard role="customer" />
         <ChangePasswordCard />
       </div>
 

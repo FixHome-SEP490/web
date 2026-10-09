@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-09 00:14 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-certificates
+> Cập nhật lần cuối: 2026-10-09 10:31 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/reputation-web
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,8 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Trang Vi phạm (`ConsoleStrikesPage.vue`) bắt quản lý ghi lý do (tối thiểu 5 ký tự) trước khi miễn, lý do được lưu trên vi phạm và audit; trước đây gửi câu cố định. Câu báo hậu quả nay đúng với backend: miễn vi phạm không gỡ lệnh tạm khoá đang có.
 
+Điểm uy tín (PO 08/10/2026, backend `reputation`): hồ sơ khách (`/app/profile`) và thợ (`/tech/profile`) có `components/account/ReputationCard.vue` gọi `GET /reputation/me`, hiện điểm trên 100, hạn tạm khoá đặt lịch hoặc nhận đơn nếu đang bị khoá, khoá tài khoản khi hết điểm, quy tắc trừ điểm, ngày điểm làm mới và lịch sử. SM có trang `/console/reputation` (`ConsoleReputationPage.vue`, menu "Điểm uy tín"): lọc vai trò, tìm theo tên/email/SĐT, điểm thấp trước, phân trang theo `meta`, xem lịch sử, cộng hoặc trừ điểm kèm lý do (xem trước điểm mới). API ở `api/reputation.api.ts`.
+
 ### Trang đơn: tổng tiền, nút huỷ, câu chữ (07/10/2026, nhánh `fix/order-pages-wording-and-totals`)
 
 - Trang đơn của khách: khi báo giá chờ duyệt (chưa có hoá đơn) "Tổng công" và "Tổng phụ tùng" lấy tổng các dòng báo giá thay vì 0; có hoá đơn thì lấy số của đơn (đã gồm phát sinh). Nút Huỷ đơn chỉ hiện ở ACCEPTED và EN_ROUTE vì backend không cho khách huỷ khi đang sửa.
@@ -210,6 +212,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 10:31 (UTC+7) | ToanAltF4 | feat/reputation-web | Điểm uy tín: thẻ điểm ở hồ sơ khách và thợ, trang SM xem lịch sử và điều chỉnh điểm
 - 2026-10-09 00:14 (UTC+7) | ToanAltF4 | feat/technician-certificates | Đăng ký thợ: chứng chỉ không bắt buộc (bản công chứng), câu nhắc đến trụ sở sau khi gửi hồ sơ.
 - 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
 - 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.

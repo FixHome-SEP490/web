@@ -320,6 +320,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Vi phạm & Đình chỉ', roles: ['SERVICE_MANAGER'] },
       },
       {
+        path: 'reputation',
+        name: 'console-reputation',
+        component: () => import('../pages/console/ConsoleReputationPage.vue'),
+        meta: { title: 'Điểm uy tín', roles: ['SERVICE_MANAGER'] },
+      },
+      {
         path: 'support',
         name: 'support-queue',
         component: () => import('../pages/console/SupportQueuePage.vue'),

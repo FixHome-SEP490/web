@@ -25,6 +25,7 @@ import {
   Home,
   ChevronRight,
   MapPinned,
+  Gauge,
 } from 'lucide-vue-next';
 
 
@@ -50,6 +51,7 @@ const navigation = computed(() => [
             { label: 'Yêu cầu bảo hành', path: '/console/warranty', icon: ShieldCheck },
             { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
             { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
+            { label: 'Điểm uy tín', path: '/console/reputation', icon: Gauge },
           ]
         : []),
     ],
