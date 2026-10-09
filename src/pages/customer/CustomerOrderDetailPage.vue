@@ -580,16 +580,6 @@ const parsedReview = computed(() => {
   }
   return { tags: [] as string[], text: raw };
 });
-const confirmWork = async () => {
-  actionLoading.value = true;
-  try {
-    await ordersApi.confirmCompletion(orderId);
-    await loadOrder();
-    actionMessage.value = { type: 'success', text: 'Đã xác nhận nghiệm thu. Đơn hoàn tất khi thanh toán được xác nhận.' };
-  } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa thể xác nhận nghiệm thu. Vui lòng thử lại.' };
-  } finally { actionLoading.value = false; }
-};
 </script>
 
 <template>
@@ -851,58 +841,22 @@ const confirmWork = async () => {
         </div>
       </FhCard>
 
-      <!-- Step 1: Khách hàng Nghiệm thu dịch vụ (Khi thợ đã gửi yêu cầu nghiệm thu) -->
+      <!-- No customer acceptance (PO 09/10/2026): once the technician completed with photos, the customer pays. -->
       <FhCard
-        v-if="order?.completionRequestedAt && !order.customerConfirmed && order.status === 'UNDER_REPAIR'"
-        class="border-2 border-brand-500 bg-brand-50/50 shadow-sm"
-      >
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 text-brand-900 font-bold text-sm">
-              <ShieldCheck :size="20" class="text-brand-600 shrink-0" />
-              <span>Kỹ thuật viên đã hoàn thành công việc & Đề nghị Nghiệm thu</span>
-            </div>
-            <span class="text-[11px] font-semibold text-brand-700 bg-brand-100 px-2.5 py-0.5 rounded-full">
-              Bước 1: Nghiệm thu
-            </span>
-          </div>
-
-          <p class="text-xs text-ink-700 leading-relaxed">
-            Kỹ thuật viên đã xử lý xong và tải ảnh bằng chứng hoàn tất. Vui lòng trực tiếp kiểm tra vận hành của thiết bị / hiện trường. Khi bạn đã hài lòng với chất lượng công việc, hãy bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> để chuyển sang bước thanh toán.
-          </p>
-
-          <div class="pt-1 flex items-center justify-end">
-            <FhButton
-              variant="primary"
-              size="md"
-              :disabled="actionLoading"
-              @click="confirmWork"
-            >
-              <CheckCircle2 :size="16" class="mr-1.5" />
-              Xác nhận nghiệm thu dịch vụ (Nghiệm thu OK)
-            </FhButton>
-          </div>
-        </div>
-      </FhCard>
-
-      <!-- Step 2: Khách hàng Thanh toán sau khi đã nghiệm thu -->
-      <FhCard
-        v-if="order?.customerConfirmed && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && order.status === 'UNDER_REPAIR'"
+        v-if="order?.completionRequestedAt && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && order.status === 'UNDER_REPAIR'"
+        data-testid="pay-after-completion"
         class="border-2 border-success-500 bg-success-50/50 shadow-sm"
       >
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-success-900 font-bold text-sm">
               <CheckCircle2 :size="20" class="text-success-600 shrink-0" />
-              <span>Nghiệm thu dịch vụ Đã đạt! Vui lòng tiến hành thanh toán</span>
+              <span>Kỹ thuật viên đã hoàn thành, mời bạn thanh toán</span>
             </div>
-            <span class="text-[11px] font-semibold text-success-700 bg-success-100 px-2.5 py-0.5 rounded-full">
-              Bước 2: Thanh toán
-            </span>
           </div>
 
           <p class="text-xs text-ink-700 leading-relaxed">
-            Bạn đã xác nhận nghiệm thu dịch vụ thành công. Tổng số tiền cần thanh toán là <strong class="text-ink-900 font-num"><FhMoney :amount="order.grandTotal" /></strong>. Bạn có thể thanh toán trực tuyến qua VNPAY / Ví điện tử hoặc trả tiền mặt trực tiếp cho thợ.
+            Kỹ thuật viên đã sửa xong và gửi ảnh sau sửa (xem ở mục ảnh bên dưới). Tổng số tiền cần thanh toán là <strong class="text-ink-900 font-num"><FhMoney :amount="order.grandTotal" /></strong>. Bạn có thể thanh toán trực tuyến qua VNPAY / ví hoặc trả tiền mặt trực tiếp cho thợ. Thanh toán xong là đơn hoàn tất. Chưa hài lòng với kết quả thì bạn mở khiếu nại để FixHome xử lý.
           </p>
 
           <div class="pt-1 flex items-center justify-end gap-3">
@@ -1048,7 +1002,7 @@ const confirmWork = async () => {
                 Kỹ thuật viên sẽ chụp và tải ảnh hiện trường ban đầu ngay khi có mặt tại địa chỉ của bạn.
               </template>
               <template v-else-if="order.status === 'UNDER_REPAIR'">
-                Kỹ thuật viên đang trong quá trình xử lý và sẽ chụp ảnh nghiệm thu hoàn tất khi xong việc.
+                Kỹ thuật viên đang trong quá trình xử lý và sẽ chụp ảnh sau sửa khi xong việc.
               </template>
               <template v-else>
                 Đơn hàng không có ảnh lưu trữ cho giai đoạn này.
@@ -1401,13 +1355,7 @@ const confirmWork = async () => {
               </template>
 
               <span
-                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && !order.customerConfirmed"
-                class="text-xs text-warning-700 bg-warning-50 px-2.5 py-1 rounded border border-warning-200 font-medium"
-              >
-                Cần xác nhận nghiệm thu trước khi thanh toán
-              </span>
-              <span
-                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid') && order.customerConfirmed"
+                v-else-if="invoice?.id && (order.paymentStatus === 'UNPAID' || order.paymentStatus === 'unpaid')"
                 class="text-xs text-success-700 bg-success-50 px-2.5 py-1 rounded border border-success-200 font-medium"
               >
                 Xem nút "Thanh toán Online" ở bước Thanh toán bên trên

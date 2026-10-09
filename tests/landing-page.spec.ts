@@ -252,7 +252,7 @@ describe('Public landing page', () => {
     expect(wrapper.text()).toContain('Gửi ảnh & Nhờ AI chẩn đoán');
     expect(wrapper.text()).toContain('AI phân tích & Đưa kết quả');
     expect(wrapper.text()).toContain('Chọn lịch & Tìm kiếm thợ');
-    expect(wrapper.text()).toContain('Duyệt báo giá & Nghiệm thu hoàn tất');
+    expect(wrapper.text()).toContain('Duyệt báo giá & Hoàn tất');
 
     // Click step 3 card to switch screen
     const stepCards = wrapper.findAll('.cursor-pointer');

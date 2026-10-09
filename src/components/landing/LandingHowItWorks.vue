@@ -57,10 +57,10 @@ const steps = [
     stepNum: '05',
     icon: CircleCheck,
     tag: 'Bước 5',
-    title: 'Duyệt báo giá & Nghiệm thu hoàn tất',
-    description: 'Thợ khảo sát thực tế, bạn duyệt báo giá trước khi làm. Sau khi sửa xong, nghiệm thu hài lòng kèm bảo hành.',
+    title: 'Duyệt báo giá & Hoàn tất',
+    description: 'Thợ khảo sát thực tế, bạn duyệt báo giá trước khi làm. Sửa xong thợ chụp ảnh sau sửa, bạn thanh toán và nhận bảo hành.',
     image: '/images/steps/step-5-quote-complete.png',
-    badge: 'Báo giá trước, nghiệm thu sau',
+    badge: 'Báo giá trước, thanh toán sau',
   },
 ];
 
@@ -171,7 +171,7 @@ onUnmounted(() => {
           </div>
           <h2 id="steps-title" class="steps-title">Sửa chữa đơn giản, từng bước rõ ràng</h2>
           <p class="landing-description mt-1 text-ink-600 text-sm sm:text-base max-w-xl">
-            Từ lúc mở ứng dụng đến khi nghiệm thu hoàn tất, bạn luôn nắm quyền chủ động trong từng thao tác.
+            Từ lúc mở ứng dụng đến khi đơn hoàn tất, bạn luôn nắm quyền chủ động trong từng thao tác.
           </p>
         </div>
 

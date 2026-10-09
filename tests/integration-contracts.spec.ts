@@ -50,12 +50,12 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     expect(form.get('file')).toBeInstanceOf(File);
     expect(form.has('mediaUrl')).toBe(false);
   });
-  it('requests completion separately from customer confirmation', async () => {
+  it('completes with the technician alone: no customer acceptance call (PO 09/10/2026)', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({data:{data:{}}});
     await ordersApi.completeRepair('o');
-    await ordersApi.confirmCompletion('o');
     expect(apiClient.post).toHaveBeenCalledWith('/service-orders/o/request-completion',{});
-    expect(apiClient.post).toHaveBeenCalledWith('/service-orders/o/confirm-completion',{});
+    expect(vi.mocked(apiClient.post).mock.calls.some(([url]) => String(url).includes('confirm-completion'))).toBe(false);
+    expect('confirmCompletion' in ordersApi).toBe(false);
   });
   it('rejects a past appointment and preserves the selected future window', () => {
     // 16/09 at 15:00 in Vietnam; days and hours are Vietnam ones whatever the machine zone.

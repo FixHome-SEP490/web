@@ -243,7 +243,7 @@ const heroAction = computed(() => {
   if (s === 'COMPLETED' || isCompleted.value) {
     return {
       title: 'Đơn hàng đã hoàn tất thành công!',
-      subtitle: 'Khách hàng đã nghiệm thu và hoàn tất thanh toán. Tiền công đã được ghi nhận vào tài khoản ví của bạn.',
+      subtitle: 'Khách đã thanh toán. Tiền công đã được ghi nhận vào tài khoản ví của bạn.',
       badge: 'Hoàn tất',
       badgeClass: 'bg-success-100 text-success-800 border-success-300',
       btnText: 'Xem danh sách việc',
@@ -255,49 +255,36 @@ const heroAction = computed(() => {
     };
   }
 
+  // No customer acceptance (PO 09/10/2026): once completed with the after photo, only the payment is left.
   if (completionRequested.value) {
-    if (job.value.customerConfirmed) {
-      if (job.value.paymentStatus?.toUpperCase() === 'PAID') {
-        return {
-          title: 'Khách đã nghiệm thu và thanh toán Online thành công!',
-          subtitle: 'Hệ thống đang cập nhật trạng thái hoàn tất đơn hàng. Tiền công đã được ghi nhận.',
-          badge: 'Đã thanh toán',
-          badgeClass: 'bg-success-100 text-success-800 border-success-300',
-          btnText: 'Làm mới & Hoàn tất ca',
-          btnAction: refreshJobStatus,
-          btnIcon: 'refresh',
-          btnVariant: 'primary' as const,
-          btnDisabled: false,
-          btnLoading: refreshingStatus.value,
-        };
-      }
+    if (job.value.paymentStatus?.toUpperCase() === 'PAID') {
       return {
-        title: 'Khách đã nghiệm thu! Chuyển sang thu tiền / đối soát',
-        subtitle:
-          hasCashPayment.value === 'YES'
-            ? 'Khai báo số tiền mặt đã thu từ khách để khách xác nhận đối soát trên ứng dụng.'
-            : 'Nhắc khách hàng thực hiện thanh toán trực tuyến qua ứng dụng FixHome (VNPAY / Ví).',
-        badge: 'Chờ thanh toán',
-        badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
-        btnText: hasCashPayment.value === 'YES' ? 'Khai báo thu tiền mặt' : 'Kiểm tra thanh toán Online',
-        btnAction: hasCashPayment.value === 'YES' ? handleDeclareCash : refreshJobStatus,
-        btnIcon: hasCashPayment.value === 'YES' ? 'dollar' : 'refresh',
+        title: 'Khách đã thanh toán thành công!',
+        subtitle: 'Hệ thống đang cập nhật trạng thái hoàn tất đơn hàng. Tiền công đã được ghi nhận.',
+        badge: 'Đã thanh toán',
+        badgeClass: 'bg-success-100 text-success-800 border-success-300',
+        btnText: 'Làm mới & Hoàn tất ca',
+        btnAction: refreshJobStatus,
+        btnIcon: 'refresh',
         btnVariant: 'primary' as const,
-        btnDisabled: actionLoading.value,
-        btnLoading: actionLoading.value || refreshingStatus.value,
+        btnDisabled: false,
+        btnLoading: refreshingStatus.value,
       };
     }
     return {
-      title: 'Đã gửi yêu cầu nghiệm thu — Chờ khách hàng kiểm tra',
-      subtitle: 'Mời khách kiểm tra thiết bị và bấm "Xác nhận nghiệm thu dịch vụ" trên ứng dụng FixHome.',
-      badge: 'Chờ nghiệm thu',
-      badgeClass: 'bg-warning-100 text-warning-800 border-warning-300',
-      btnText: 'Kiểm tra khách đã duyệt chưa',
-      btnAction: refreshJobStatus,
-      btnIcon: 'refresh',
+      title: 'Đã hoàn thành! Chuyển sang thu tiền',
+      subtitle:
+        hasCashPayment.value === 'YES'
+          ? 'Khai báo số tiền mặt đã thu từ khách để khách xác nhận đối soát trên ứng dụng.'
+          : 'Nhắc khách hàng thanh toán trực tuyến qua ứng dụng FixHome (VNPAY / ví).',
+      badge: 'Chờ thanh toán',
+      badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
+      btnText: hasCashPayment.value === 'YES' ? 'Khai báo thu tiền mặt' : 'Kiểm tra thanh toán Online',
+      btnAction: hasCashPayment.value === 'YES' ? handleDeclareCash : refreshJobStatus,
+      btnIcon: hasCashPayment.value === 'YES' ? 'dollar' : 'refresh',
       btnVariant: 'primary' as const,
-      btnDisabled: false,
-      btnLoading: refreshingStatus.value,
+      btnDisabled: actionLoading.value,
+      btnLoading: actionLoading.value || refreshingStatus.value,
     };
   }
 
@@ -306,7 +293,7 @@ const heroAction = computed(() => {
     if (!hasAfter) {
       return {
         title: 'Đang tiến hành sửa chữa',
-        subtitle: 'Sửa xong bấm Hoàn thành và chụp ảnh sản phẩm sau khi sửa; hệ thống gửi yêu cầu nghiệm thu cho khách.',
+        subtitle: 'Sửa xong bấm Hoàn thành và chụp ảnh sản phẩm sau khi sửa; khách thanh toán là đơn hoàn tất.',
         badge: 'ĐANG SỬA CHỮA',
         badgeClass: 'bg-brand-100 text-brand-800 border-brand-300',
         btnText: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh...' : 'Hoàn thành (chụp ảnh sau sửa)',
@@ -318,11 +305,11 @@ const heroAction = computed(() => {
       };
     }
     return {
-      title: 'Đã có ảnh sau sửa — Sẵn sàng gửi yêu cầu nghiệm thu',
-      subtitle: 'Kiểm tra lại linh kiện/chi phí phát sinh, sau đó gửi yêu cầu nghiệm thu tới khách.',
-      badge: 'Sẵn sàng nghiệm thu',
+      title: 'Đã có ảnh sau sửa — Sẵn sàng hoàn thành',
+      subtitle: 'Kiểm tra lại linh kiện/chi phí phát sinh, sau đó bấm Hoàn thành; khách chỉ còn thanh toán.',
+      badge: 'Sẵn sàng hoàn thành',
       badgeClass: 'bg-success-100 text-success-800 border-success-300',
-      btnText: 'Gửi yêu cầu nghiệm thu ngay',
+      btnText: 'Hoàn thành ngay',
       btnAction: handleCompleteOrder,
       btnIcon: 'shield',
       btnVariant: 'primary' as const,
@@ -1053,11 +1040,11 @@ const sendReplacement = async () => {
 const handleCompleteOrder = async () => {
   actionLoading.value = true;
   try {
-    await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất công việc, đề nghị nghiệm thu' });
+    await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất công việc' });
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: 'Đã yêu cầu nghiệm thu. Chờ khách xác nhận dịch vụ và thanh toán.' };
+    actionMessage.value = { type: 'success', text: 'Đã hoàn thành. Chờ khách thanh toán để hoàn tất đơn.' };
   } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa thể yêu cầu nghiệm thu. Kiểm tra ảnh sau sửa và chi phí chờ duyệt.' };
+    actionMessage.value = { type: 'error', text: 'Chưa thể hoàn thành. Kiểm tra ảnh sau sửa và chi phí chờ duyệt.' };
   } finally {
     actionLoading.value = false;
   }
@@ -1519,7 +1506,7 @@ const refreshJobStatus = async () => {
               <CheckCircle2 v-if="isCompleted" :size="13" class="text-success-600" />
               <ShieldCheck v-else :size="13" :class="currentStepNumber === 5 ? 'text-brand-600' : 'text-ink-400'" />
             </div>
-            <div class="text-xs font-bold truncate">Nghiệm thu</div>
+            <div class="text-xs font-bold truncate">Hoàn thành</div>
           </button>
         </div>
 
@@ -2124,11 +2111,11 @@ const refreshJobStatus = async () => {
 
         <!-- STEP 5: Evidence AFTER & Complete Repair -->
         <div id="step-completion">
-          <FhCard title="5. Ảnh sau sửa chữa & Yêu cầu nghiệm thu">
+          <FhCard title="5. Ảnh sau sửa chữa & Hoàn thành">
             <div class="space-y-4 text-xs">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-ink-600">
-                  Quy chuẩn FixHome: Cần ít nhất 1 ảnh hoàn tất sau sửa chữa trước khi gửi yêu cầu nghiệm thu cho khách.
+                  Quy chuẩn FixHome: Cần ít nhất 1 ảnh sau sửa chữa trước khi bấm Hoàn thành. Hoàn thành xong khách chỉ còn thanh toán, không phải nghiệm thu.
                 </p>
                 <span
                   v-if="afterEvidences.length > 0"
@@ -2223,10 +2210,10 @@ const refreshJobStatus = async () => {
                     v-if="completionRequested"
                     class="inline-flex items-center gap-1.5 text-success-700 font-semibold bg-success-50 px-2.5 py-1 rounded border border-success-200"
                   >
-                    <CheckCircle2 :size="14" /> Đã gửi yêu cầu nghiệm thu (chờ khách hàng kiểm tra & nghiệm thu)
+                    <CheckCircle2 :size="14" /> Đã hoàn thành (chờ khách thanh toán)
                   </span>
                   <span v-else class="text-ink-500">
-                    Sau khi chụp và tải ảnh hoàn tất, bấm nút bên phải để gửi yêu cầu nghiệm thu tới khách hàng.
+                    Sau khi chụp và tải ảnh sau sửa, bấm nút bên phải để hoàn thành.
                   </span>
                 </div>
                 <FhButton
@@ -2236,7 +2223,7 @@ const refreshJobStatus = async () => {
                   @click="handleCompleteOrder"
                 >
                   <ShieldCheck :size="16" class="mr-1.5" />
-                  {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã gửi yêu cầu nghiệm thu' : 'Gửi yêu cầu nghiệm thu' }}
+                  {{ isCompleted ? 'Đơn hàng đã hoàn tất' : completionRequested ? 'Đã hoàn thành' : 'Hoàn thành' }}
                 </FhButton>
               </div>
             </div>
@@ -2244,10 +2231,10 @@ const refreshJobStatus = async () => {
 
           <!-- Customer Acceptance & Payment Resolution Card -->
           <div class="mt-5">
-            <FhCard title="6. Khách hàng Nghiệm thu & Thanh toán ">
+            <FhCard title="6. Thanh toán">
               <div class="space-y-4 text-xs">
                 <p class="text-ink-600 leading-relaxed">
-                  Quy chuẩn thực thi: <strong>1. Khách nghiệm thu dịch vụ đạt chuẩn → 2. Tiến hành thanh toán (Tiền mặt hoặc Online) → 3. Hệ thống hoàn tất ca.</strong>
+                  Quy chuẩn thực thi: <strong>1. Thợ hoàn thành, có ảnh sau sửa → 2. Khách thanh toán (tiền mặt hoặc online) → 3. Hệ thống hoàn tất ca.</strong> Khách không phải bấm nghiệm thu.
                 </p>
 
                 <!-- Case: COMPLETED -->
@@ -2266,7 +2253,7 @@ const refreshJobStatus = async () => {
                   </div>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-success-800">
                     <div class="flex items-center gap-1.5">
-                      <CheckCircle2 :size="14" class="text-success-600" /> Nghiệm thu dịch vụ: Khách đã xác nhận
+                      <CheckCircle2 :size="14" class="text-success-600" /> Công việc: Đã hoàn thành, có ảnh sau sửa
                     </div>
                     <div class="flex items-center gap-1.5">
                       <CheckCircle2 :size="14" class="text-success-600" /> Thanh toán: Đã thanh toán (PAID)
@@ -2288,51 +2275,12 @@ const refreshJobStatus = async () => {
 
                 <!-- Case: In Progress Resolution -->
                 <template v-else>
-                  <!-- Giai đoạn 1: Nghiệm thu dịch vụ -->
-                  <div
-                    class="border rounded-2xl p-4 space-y-2.5"
-                    :class="job?.customerConfirmed ? 'border-success-200 bg-success-50/50' : 'border-warning-200 bg-warning-50/60'"
-                  >
-                    <div class="flex items-center justify-between">
-                      <div
-                        class="flex items-center gap-2 font-bold text-xs"
-                        :class="job?.customerConfirmed ? 'text-success-900' : 'text-warning-900'"
-                      >
-                        <CheckCircle2 v-if="job?.customerConfirmed" :size="16" class="text-success-600 shrink-0" />
-                        <AlertCircle v-else :size="16" class="text-warning-600 shrink-0" />
-                        <span>Giai đoạn 1: Khách hàng Nghiệm thu dịch vụ</span>
-                      </div>
-                      <span
-                        class="whitespace-nowrap text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                        :class="job?.customerConfirmed ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800'"
-                      >
-                        {{ job?.customerConfirmed ? 'Đã nghiệm thu đạt' : 'Chờ khách bấm nghiệm thu' }}
-                      </span>
-                    </div>
-
-                    <div v-if="!job?.customerConfirmed" class="space-y-2">
-                      <p class="text-ink-600 text-[11px] leading-relaxed">
-                        <strong>Hướng dẫn thợ:</strong> Mời khách hàng kiểm tra thực tế hoạt động của thiết bị/công việc vừa hoàn thành và mở ứng dụng FixHome bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong>. Khách hàng nghiệm thu OK rồi mới tiến hành thanh toán.
-                      </p>
-                      <div class="flex items-center gap-2">
-                        <FhButton variant="secondary" size="sm" :disabled="refreshingStatus" @click="refreshJobStatus">
-                          <RefreshCw :size="13" class="mr-1.5" :class="{ 'animate-spin': refreshingStatus }" />
-                          Kiểm tra khách đã bấm nghiệm thu chưa
-                        </FhButton>
-                      </div>
-                    </div>
-
-                    <div v-else class="text-[11px] text-success-800 font-medium">
-                      Khách hàng đã kiểm tra và bấm xác nhận nghiệm thu dịch vụ đạt chuẩn! Hãy chuyển sang bước thanh toán bên dưới.
-                    </div>
-                  </div>
-
-                  <!-- Giai đoạn 2: Thanh toán dịch vụ -->
+                  <!-- Payment: no customer acceptance step since PO 09/10/2026 -->
                   <div class="border border-ink-200 rounded-2xl p-4 space-y-3 bg-white">
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-2 font-bold text-ink-900 text-xs">
                         <CreditCard :size="16" class="text-brand-600 shrink-0" />
-                        <span>Giai đoạn 2: Hình thức Thanh toán dịch vụ</span>
+                        <span>Hình thức thanh toán</span>
                       </div>
                       <span
                         v-if="job?.paymentStatus?.toUpperCase() === 'PAID'"
@@ -2428,24 +2376,13 @@ const refreshJobStatus = async () => {
                           </div>
                         </div>
 
-                        <!-- 3-step timeline -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                        <!-- 2-step timeline: no customer acceptance (PO 09/10/2026) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
                           <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
                             <CheckCircle2 :size="15" class="text-success-600 shrink-0 mt-0.5" />
                             <div>
                               <div class="font-bold text-ink-800">1. Việc của thợ</div>
-                              <div class="text-[10px] text-success-700 font-medium">Đã gửi yêu cầu nghiệm thu</div>
-                            </div>
-                          </div>
-
-                          <div class="p-2.5 rounded-xl bg-white border border-ink-100 flex items-start gap-2">
-                            <CheckCircle2 v-if="job?.customerConfirmed" :size="15" class="text-success-600 shrink-0 mt-0.5" />
-                            <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
-                            <div>
-                              <div class="font-bold text-ink-800">2. Khách nghiệm thu</div>
-                              <div class="whitespace-nowrap text-[10px]" :class="job?.customerConfirmed ? 'text-success-700 font-medium' : 'text-warning-700'">
-                                {{ job?.customerConfirmed ? 'Đã xác nhận dịch vụ' : 'Chờ khách bấm xác nhận' }}
-                              </div>
+                              <div class="text-[10px] text-success-700 font-medium">Đã hoàn thành</div>
                             </div>
                           </div>
 
@@ -2453,7 +2390,7 @@ const refreshJobStatus = async () => {
                             <CheckCircle2 v-if="job?.paymentStatus?.toUpperCase() === 'PAID'" :size="15" class="text-success-600 shrink-0 mt-0.5" />
                             <Loader2 v-else :size="15" class="text-warning-500 animate-spin shrink-0 mt-0.5" />
                             <div>
-                              <div class="font-bold text-ink-800">3. Thanh toán Online</div>
+                              <div class="font-bold text-ink-800">2. Thanh toán Online</div>
                               <div class="text-[10px]" :class="job?.paymentStatus?.toUpperCase() === 'PAID' ? 'text-success-700 font-medium' : 'text-warning-700'">
                                 {{ job?.paymentStatus?.toUpperCase() === 'PAID' ? 'Đã thanh toán (PAID)' : 'Chờ khách trả VNPAY/Ví' }}
                               </div>
@@ -2462,7 +2399,7 @@ const refreshJobStatus = async () => {
                         </div>
 
                         <p class="text-ink-600 text-[11px] leading-relaxed">
-                          <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để bấm <strong>"Xác nhận nghiệm thu dịch vụ"</strong> và thực hiện <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
+                          <strong>Thợ cần làm gì:</strong> Thợ đã hoàn thành toàn bộ công việc hiện trường và không thu tiền mặt tại chỗ. Vui lòng nhắc khách hàng mở app FixHome để <strong>thanh toán online</strong>. Khi khách thanh toán xong, hệ thống sẽ tự động hoàn tất ca và ghi nhận tiền công vào ví thợ.
                         </p>
 
                         <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-brand-100">

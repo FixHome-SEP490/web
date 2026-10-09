@@ -24,7 +24,7 @@ const trustPillars = [
     icon: History,
     title: 'Cam kết bảo hành sau sửa chữa',
     description:
-      'Bảo hành công việc rõ ràng sau khi nghiệm thu. Hỗ trợ kiểm tra lại nếu vấn đề tương tự phát sinh.',
+      'Bảo hành công việc rõ ràng sau khi đơn hoàn tất. Hỗ trợ kiểm tra lại nếu vấn đề tương tự phát sinh.',
   },
 ];
 </script>

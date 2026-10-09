@@ -146,7 +146,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
           <span>Đơn Nhận Việc & Thực Thi</span>
         </h1>
         <p class="text-xs text-ink-500 mt-1">
-          Quản lý tiến trình xử lý đơn hàng: di chuyển, xác nhận đến nơi, lập báo giá và hoàn tất nghiệm thu.
+          Quản lý tiến trình xử lý đơn hàng: di chuyển, xác nhận đến nơi, lập báo giá và hoàn thành.
         </p>
       </div>
 

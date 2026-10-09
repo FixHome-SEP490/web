@@ -413,11 +413,6 @@ export const ordersApi = {
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async confirmCompletion(orderId: string) {
-    const res = await apiClient.post<{data: {order: ServiceOrderItem}}>(`/service-orders/${orderId}/confirm-completion`, {});
-    return res.data.data;
-  },
-
   async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cancel`, { reason });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;

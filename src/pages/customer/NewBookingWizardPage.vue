@@ -1064,7 +1064,7 @@ const createAndFindTech = async () => {
             <!-- Transparency Reassurance -->
             <div class="pt-2 border-t border-brand-200/60 flex items-center gap-2 text-[11px] text-brand-900 font-medium">
               <CheckCircle2 :size="15" class="text-success-600 shrink-0" />
-              <span>Chỉ thanh toán khi kỹ thuật viên hoàn thành và bạn nghiệm thu hài lòng. Không phát sinh phụ phí ẩn.</span>
+              <span>Chỉ thanh toán khi kỹ thuật viên hoàn thành và gửi ảnh sau sửa. Không phát sinh phụ phí ẩn.</span>
             </div>
           </div>
 
@@ -1529,7 +1529,7 @@ const createAndFindTech = async () => {
           >
             <CheckCircle2 :size="18" class="text-success-600 shrink-0 mt-0.5" />
             <p class="text-xs leading-relaxed">
-              <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi nghiệm thu hài lòng, không phát sinh chi phí khảo sát.
+              <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi kỹ thuật viên hoàn thành, không phát sinh chi phí khảo sát.
             </p>
           </div>
           <div
