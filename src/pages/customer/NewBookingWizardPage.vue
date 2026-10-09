@@ -37,7 +37,7 @@ import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
 import { DESCRIBE_BEFORE_SEND, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
-import { prepareForAi } from '../../utils/image-for-ai';
+import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { SLOT_SHORT, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
@@ -73,6 +73,9 @@ const searchQuery = ref('');
 const serviceFilter = ref<'ALL' | 'FIXED' | 'INSPECTION'>('ALL');
 const userModifiedDescription = ref(false);
 const isDraggingPhoto = ref(false);
+
+/** Originals above this are refused; anything under it is shrunk before upload. */
+const MAX_ORIGINAL_PHOTO_BYTES = 30 * 1024 * 1024;
 
 interface BookingPhotoDraft {
   localId: number;
@@ -582,36 +585,53 @@ const handlePhotoFiles = async (files: File[]) => {
 
   uploadingPhoto.value = true;
   try {
-    for (const file of toUpload) {
-      if (isPhotoFlowDisposed.value) return;
-      if (!ALLOWED_MEDIA_MIME_TYPES.includes(file.type)) {
-        window.alert(`Ảnh "${file.name}" không đúng định dạng (chỉ nhận JPG, PNG, WebP).`);
+    // A phone photo is redrawn as a JPEG of at most 2048 px before it goes up (EXIF rotation applied):
+    // a 10 MB original becomes a few hundred KB, so it no longer times out on a weak connection and
+    // its type always matches what the server checks. All photos are prepared and sent at once.
+    const usable: { original: File; file: File }[] = [];
+    for (const original of toUpload) {
+      if (!looksLikeImage(original)) {
+        window.alert(`"${original.name}" không phải ảnh. Vui lòng chọn ảnh chụp thiết bị.`);
         continue;
       }
-      if (file.size > MAX_MEDIA_SIZE_BYTES) {
-        window.alert(`Ảnh "${file.name}" vượt quá 10 MB.`);
+      if (original.size > MAX_ORIGINAL_PHOTO_BYTES) {
+        window.alert(`Ảnh "${original.name}" quá lớn (trên 30 MB).`);
         continue;
       }
-      const photo: BookingPhotoDraft = {
-        localId: nextPhotoLocalId++,
-        previewUrl: createPhotoPreviewUrl(file),
-        uploadId: null,
-        file,
-      };
-      uploadedPhotos.value.push(photo);
+      usable.push({ original, file: original });
+    }
+    const normalized = await Promise.all(usable.map(({ original }) => normalizeForUpload(original)));
+    const ready: File[] = [];
+    usable.forEach(({ original }, i) => {
+      const file = normalized[i]
+        // Not readable here (e.g. HEIC outside Safari): send it as it is only if the server takes it.
+        ?? (ALLOWED_MEDIA_MIME_TYPES.includes(original.type) && original.size <= MAX_MEDIA_SIZE_BYTES ? original : null);
+      if (file) ready.push(file);
+      else window.alert(`Chưa đọc được ảnh "${original.name}". Vui lòng chọn ảnh JPG hoặc PNG.`);
+    });
+    if (isPhotoFlowDisposed.value) return;
+
+    const drafts: BookingPhotoDraft[] = ready.map((file) => ({
+      localId: nextPhotoLocalId++,
+      previewUrl: createPhotoPreviewUrl(file),
+      uploadId: null,
+      file,
+    }));
+    uploadedPhotos.value.push(...drafts);
+    await Promise.all(drafts.map(async (photo) => {
       try {
-        const uploaded = await mediaApi.uploadBookingPhoto(file);
-        if (isPhotoFlowDisposed.value) continue;
+        const uploaded = await mediaApi.uploadBookingPhoto(photo.file);
+        if (isPhotoFlowDisposed.value) return;
         const currentPhoto = uploadedPhotos.value.find((item) => item.localId === photo.localId);
         if (currentPhoto) currentPhoto.uploadId = uploaded.uploadId;
       } catch (err) {
-        console.error(`[NewBookingWizardPage] Upload booking photo failed for "${file.name}":`, err);
+        console.error(`[NewBookingWizardPage] Upload booking photo failed for "${photo.file.name}":`, err);
         const photoStillSelected = removePhotoByLocalId(photo.localId);
         if (!isPhotoFlowDisposed.value && photoStillSelected) {
-          window.alert(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
+          window.alert(`Không thể tải ảnh "${photo.file.name}" lên. Vui lòng thử lại.`);
         }
       }
-    }
+    }));
   } finally {
     if (!isPhotoFlowDisposed.value) uploadingPhoto.value = false;
   }
@@ -1085,7 +1105,7 @@ const createAndFindTech = async () => {
             <input
               ref="photoInput"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               multiple
               class="hidden"
               @change="handlePhotoSelected"

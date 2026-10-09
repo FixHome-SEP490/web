@@ -142,7 +142,7 @@ defineExpose({ scrollToEnd });
 
     <!-- Composer -->
     <div class="flex items-end gap-2 px-3 py-2.5 border-t border-ink-100 bg-white">
-      <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="onFiles" />
+      <input ref="fileInput" type="file" accept="image/*,.heic,.heif" multiple class="hidden" @change="onFiles" />
       <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh thiết bị" aria-label="Gửi ảnh thiết bị" @click="fileInput?.click()">
         <ImageIcon :size="19" />
       </button>
