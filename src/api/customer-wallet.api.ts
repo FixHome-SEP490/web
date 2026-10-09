@@ -1,14 +1,27 @@
 import apiClient from './client';
 
-/** One change of the customer's wallet: money in (top-up, refund) or out (an invoice). */
+export type CustomerWalletTransactionType = 'top_up' | 'invoice_payment' | 'refund' | 'adjustment_credit' | 'adjustment_debit';
+
+/** One change of the customer's wallet: money in (top-up, refund, admin credit) or out (an invoice, admin debit). */
 export interface CustomerWalletTransaction {
   id: string;
-  type: 'top_up' | 'invoice_payment' | 'refund';
+  type: CustomerWalletTransactionType;
   amount: number;
   balanceAfter: number;
   description: string | null;
   createdAt: string;
 }
+
+export const customerWalletTypeLabels: Record<CustomerWalletTransactionType, string> = {
+  top_up: 'Nạp ví',
+  invoice_payment: 'Thanh toán đơn',
+  refund: 'Hoàn tiền',
+  adjustment_credit: 'FixHome cộng tiền',
+  adjustment_debit: 'FixHome trừ tiền',
+};
+
+export const isIncomingWalletTransaction = (t: Pick<CustomerWalletTransaction, 'type'>) =>
+  t.type !== 'invoice_payment' && t.type !== 'adjustment_debit';
 
 export interface CustomerWalletSummary {
   balance: number;

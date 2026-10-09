@@ -6,7 +6,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Wallet } from 'lucide-vue-next';
 import { FhButton, FhMoney } from '../../components';
-import { customerWalletApi, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
+import { customerWalletApi, customerWalletTypeLabels, isIncomingWalletTransaction, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -35,12 +35,8 @@ const paymentResult = computed(() => {
   return { ok: status === 'success', amount: Number.isFinite(amount) ? amount : null };
 });
 
-const LABELS: Record<CustomerWalletTransaction['type'], string> = {
-  top_up: 'Nạp ví',
-  invoice_payment: 'Thanh toán đơn',
-  refund: 'Hoàn tiền',
-};
-const isIncoming = (t: CustomerWalletTransaction) => t.type !== 'invoice_payment';
+const LABELS = customerWalletTypeLabels;
+const isIncoming = isIncomingWalletTransaction;
 
 async function load(next = 1) {
   if (next === 1) loading.value = true;

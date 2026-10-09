@@ -379,6 +379,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Tra cứu kỹ thuật viên', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/customer-wallets',
+        name: 'admin-customer-wallets',
+        component: () => import('../pages/console/admin/AdminCustomerWalletsPage.vue'),
+        meta: { title: 'Ví khách hàng', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
