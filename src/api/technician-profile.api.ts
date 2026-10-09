@@ -33,6 +33,8 @@ export interface TechnicianProfileView {
   serviceRadiusKm: number;
   /** Labor warranty given when a service has none of its own; null when never set. */
   defaultLaborWarrantyDays: number | null;
+  /** "Tự nhận việc": invitations are accepted for the technician (PO 10/10/2026). */
+  autoAcceptInvitations: boolean;
   skills: TechnicianSkillView[];
   serviceAreas: TechnicianServiceAreaView[];
   schedules: TechnicianScheduleView[];
@@ -176,6 +178,7 @@ function normalizeProfile(payload: unknown): TechnicianProfileView {
     reliabilityScore: profile.reliabilityScore == null ? null : Number(profile.reliabilityScore),
     serviceRadiusKm: Number(profile.serviceRadiusKm ?? 10),
     defaultLaborWarrantyDays: profile.defaultLaborWarrantyDays == null ? null : Number(profile.defaultLaborWarrantyDays),
+    autoAcceptInvitations: profile.autoAcceptInvitations === true,
     skills: Array.isArray(profile.skills) ? profile.skills.map(normalizeSkill) : [],
     serviceAreas: Array.isArray(profile.serviceAreas)
       ? profile.serviceAreas.map(normalizeServiceArea)
@@ -202,6 +205,7 @@ export const technicianProfileApi = {
     isAvailable?: boolean;
     yearsExperience?: number;
     serviceRadiusKm?: number;
+    autoAcceptInvitations?: boolean;
   }): Promise<TechnicianProfileView> {
     const res = await apiClient.patch<{ data: unknown }>('/technicians/me/profile', dto);
     return normalizeProfile(res.data.data);
