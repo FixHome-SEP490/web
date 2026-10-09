@@ -340,7 +340,8 @@ const routes: RouteRecordRaw[] = [
         path: 'warranty',
         name: 'console-warranty',
         component: () => import('../pages/console/ConsoleWarrantyPage.vue'),
-        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER'] },
+        // The admin reads the queue and the rates; only a service manager decides (PO 09/10/2026).
+        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'support/cash/:id',

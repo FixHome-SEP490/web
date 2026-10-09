@@ -232,6 +232,7 @@ describe('ConsoleWarrantyPage', () => {
     expect(text).toContain('Đóng yêu cầu');
     // a closed claim offers no decision
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Duyệt kết luận')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="warranty-read-only"]').exists()).toBe(false);
   });
 
   it('hides every decision button for an administrator (read only)', async () => {
@@ -241,6 +242,7 @@ describe('ConsoleWarrantyPage', () => {
     await flushPromises();
     expect(wrapper.text()).not.toContain('Duyệt kết luận');
     expect(wrapper.text()).toContain('Vòi sen');
+    expect(wrapper.get('[data-testid="warranty-read-only"]').text()).toContain('chỉ đọc');
   });
 
   it('loads the rates only when the tab is opened and marks small samples', async () => {
