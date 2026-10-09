@@ -33,6 +33,7 @@ export const resolutionCodeLabels: Record<string, string> = {
   order_cancelled_no_fee: 'Hủy đơn không thu phí',
   price_adjusted: 'Điều chỉnh chi phí',
   refund_recorded: 'Ghi nhận hoàn tiền',
+  refund_to_wallet: 'Hoàn tiền vào ví khách',
   escalate_admin: 'Chuyển quản trị viên',
   warranty_upheld: 'Giữ nguyên kết luận bảo hành',
   warranty_overturned: 'Đảo kết luận bảo hành',
