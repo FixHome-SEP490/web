@@ -80,7 +80,7 @@ onMounted(loadCategories);
           <p class="landing-eyebrow">Bắt đầu từ điều bạn cần</p>
           <h2 id="services-title" class="services-title">Dịch vụ cho ngôi nhà của bạn</h2>
           <p class="landing-description">
-            Chọn nhóm thiết bị để xem chi tiết các hạng mục sửa chữa, bảo trì và khoảng giá tham khảo.
+            Chọn nhóm thiết bị để xem dịch vụ và giá tham khảo.
           </p>
         </div>
         <router-link to="/services" class="landing-text-link shrink-0">
@@ -146,9 +146,6 @@ onMounted(loadCategories);
                   aria-hidden="true"
                 />
               </span>
-              <span class="rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-600 group-hover:bg-brand-50 group-hover:text-brand-700 transition-colors">
-                Chính hãng & bảo hành
-              </span>
             </div>
 
             <div class="mt-4 min-w-0">
@@ -166,7 +163,6 @@ onMounted(loadCategories);
               Xem dịch vụ
               <ArrowRight :size="15" class="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
             </span>
-            <span class="text-xs text-ink-500 font-num">Xem bảng giá</span>
           </div>
         </router-link>
       </div>

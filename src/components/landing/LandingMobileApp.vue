@@ -5,29 +5,28 @@ import {
   MessageSquare,
   ShieldCheck,
   Smartphone,
-  CheckCircle2,
 } from 'lucide-vue-next';
 
 const appFeatures = [
   {
     icon: Bell,
     title: 'Thông báo theo tiến độ đơn',
-    desc: 'Nhận thông báo khi kỹ thuật viên nhận đơn, xuất phát và gửi báo giá.',
+    desc: 'Biết khi thợ nhận đơn, xuất phát và gửi báo giá.',
   },
   {
     icon: MapPin,
     title: 'Theo dõi lộ trình theo thời gian thực',
-    desc: 'Xem vị trí di chuyển của thợ trên bản đồ, chủ động khung giờ mở cửa đón tiếp.',
+    desc: 'Xem thợ đang ở đâu để chủ động đón.',
   },
   {
     icon: MessageSquare,
     title: 'Nhắn tin & gửi ảnh trực tiếp',
-    desc: 'Trao đổi triệu chứng thiết bị và gửi thêm hình ảnh sự cố cho kỹ thuật viên.',
+    desc: 'Trao đổi và gửi ảnh cho kỹ thuật viên.',
   },
   {
     icon: ShieldCheck,
     title: 'Bảo hành & hóa đơn điện tử',
-    desc: 'Tự động lưu trữ lịch sử sửa chữa, hóa đơn minh bạch và tra cứu bảo hành chỉ với một chạm.',
+    desc: 'Lưu lịch sử sửa chữa, hoá đơn và bảo hành.',
   },
 ];
 </script>
@@ -54,8 +53,7 @@ const appFeatures = [
           </h2>
 
           <p class="landing-description mt-3">
-            Dù bạn đang làm việc tại văn phòng hay đang di chuyển, ứng dụng FixHome giúp bạn quản lý toàn bộ
-            quá trình sửa chữa trong nhà chỉ với chiếc điện thoại.
+            Theo dõi đơn, nhắn tin với thợ và xem bảo hành ngay trên điện thoại.
           </p>
 
           <!-- 4 Features List -->
@@ -97,31 +95,6 @@ const appFeatures = [
             />
           </figure>
 
-          <!-- Floating Badge 1 (Top Left) -->
-          <div
-            class="hidden sm:flex absolute -top-4 -left-4 z-20 items-center gap-2.5 rounded-xl border border-ink-200/90 bg-white/95 px-3.5 py-2.5 shadow-(--shadow-e2) backdrop-blur-md"
-          >
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 :size="18" aria-hidden="true" />
-            </div>
-            <div>
-              <span class="block text-xs font-bold text-ink-900">Đồng bộ đa nền tảng</span>
-              <span class="block text-[11px] text-ink-500">Web Client & Mobile App</span>
-            </div>
-          </div>
-
-          <!-- Floating Badge 2 (Bottom Right) -->
-          <div
-            class="hidden sm:flex absolute -bottom-4 right-2 z-20 items-center gap-2.5 rounded-xl border border-brand-200 bg-white/95 px-3.5 py-2.5 shadow-(--shadow-e2) backdrop-blur-md"
-          >
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-              <Smartphone :size="18" aria-hidden="true" />
-            </div>
-            <div>
-              <span class="block text-xs font-bold text-ink-900">Thông báo & Định vị GPS</span>
-              <span class="block text-[11px] text-brand-700 font-semibold">Theo dõi thợ trực tiếp</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
