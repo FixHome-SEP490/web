@@ -6,7 +6,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
+  Camera,
 } from 'lucide-vue-next';
+import AvatarDialog from './account/AvatarDialog.vue';
 
 import type { Component } from 'vue';
 
@@ -37,6 +39,12 @@ const isCollapsed = ref(typeof window !== 'undefined' && typeof window.matchMedi
 const route = useRoute();
 const authStore = useAuthStore();
 const showProfileDropdown = ref(false);
+// Staff have no profile page; the avatar is changed from this menu (PO 10/10/2026).
+const showAvatarDialog = ref(false);
+const openAvatarDialog = () => {
+  showProfileDropdown.value = false;
+  showAvatarDialog.value = true;
+};
 const profileMenu = ref<HTMLElement | null>(null);
 const profileTrigger = ref<HTMLButtonElement | null>(null);
 const profileMenuId = useId();
@@ -229,6 +237,15 @@ const isActive = (path: string) => {
           >
             <button
               type="button"
+              class="group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-slate-700 transition-all duration-200 hover:bg-slate-50 focus-visible:outline-2"
+              data-testid="change-avatar"
+              @click="openAvatarDialog"
+            >
+              <Camera :size="18" aria-hidden="true" class="shrink-0 text-slate-500" />
+              <span>Đổi ảnh đại diện</span>
+            </button>
+            <button
+              type="button"
               class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-600 transition-all duration-200 hover:bg-rose-50 hover:text-rose-700 active:bg-rose-100 focus-visible:outline-2"
               @click="handleLogout"
             >
@@ -239,6 +256,10 @@ const isActive = (path: string) => {
         </Transition>
       </div>
     </div>
+
+    <Teleport to="body">
+      <AvatarDialog :open="showAvatarDialog" @close="showAvatarDialog = false" />
+    </Teleport>
 
     <!-- Global Tooltip Teleport -->
     <Teleport to="body">

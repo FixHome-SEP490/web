@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted, computed } from 'vue';
@@ -12,7 +13,6 @@ import {
   ShieldQuestion,
   Plus,
   Trash2,
-  X,
   Search,
   UploadCloud,
   AlertCircle,
@@ -144,8 +144,6 @@ const isSavingInfo = ref(false);
 
 const avatarUrl = ref('');
 const showAvatarModal = ref(false);
-const newAvatarUrl = ref('');
-const savingAvatar = ref(false);
 
 // ----------------- Lịch làm việc -----------------
 const DAY_NAMES = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -663,32 +661,7 @@ const handleSaveProfileInfo = async () => {
 };
 
 const openAvatarModal = () => {
-  newAvatarUrl.value = avatarUrl.value;
   showAvatarModal.value = true;
-};
-
-const handleSaveAvatar = async () => {
-  savingAvatar.value = true;
-  try {
-    const updated = await profileApi.updateMe({
-      avatarUrl: newAvatarUrl.value.trim() || undefined,
-    });
-    if (authStore.user && authStore.token) {
-      authStore.setAuth(authStore.token, {
-        ...authStore.user,
-        ...updated,
-        role: authStore.user.role,
-      });
-      avatarUrl.value = newAvatarUrl.value.trim();
-    }
-    await authStore.fetchProfile();
-    showAvatarModal.value = false;
-    showFeedback('Đã cập nhật ảnh đại diện.');
-  } catch (err) {
-    showFeedback(userFacingError(err, 'Không thể cập nhật ảnh đại diện. Vui lòng thử lại.'), 'error');
-  } finally {
-    savingAvatar.value = false;
-  }
 };
 </script>
 
@@ -1483,64 +1456,6 @@ const handleSaveAvatar = async () => {
       @cancel="confirmDeleteTimeOff = null"
     />
 
-    <!-- Avatar Modal -->
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0 scale-95"
-      enter-to-class="opacity-100 scale-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100 scale-100"
-      leave-to-class="opacity-0 scale-95"
-    >
-      <div
-        v-if="showAvatarModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-        @click.self="showAvatarModal = false"
-        @keydown.esc="!savingAvatar && (showAvatarModal = false)"
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="tp-avatar-title"
-          class="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <h3 id="tp-avatar-title" class="text-lg font-bold text-ink-900">Ảnh đại diện</h3>
-            <button
-              type="button"
-              class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-              aria-label="Đóng"
-              @click="showAvatarModal = false"
-            >
-              <X :size="18" />
-            </button>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <div class="w-20 h-20 shrink-0 rounded-2xl overflow-hidden border border-ink-200 bg-ink-100 flex items-center justify-center">
-              <img v-if="newAvatarUrl" :src="newAvatarUrl" class="w-full h-full object-cover" alt="Xem trước ảnh đại diện" />
-              <span v-else class="text-2xl font-bold text-ink-400">{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
-            </div>
-            <div class="min-w-0 flex-1">
-              <label for="tp-avatar-url" class="block text-sm font-medium text-ink-700 mb-1.5">Liên kết ảnh</label>
-              <input
-                id="tp-avatar-url"
-                v-model="newAvatarUrl"
-                type="url"
-                placeholder="https://…"
-                class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
-              />
-            </div>
-          </div>
-
-          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-            <FhButton variant="secondary" size="md" @click="showAvatarModal = false">Huỷ</FhButton>
-            <FhButton variant="primary" size="md" :loading="savingAvatar" @click="handleSaveAvatar">
-              Lưu ảnh
-            </FhButton>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <AvatarDialog :open="showAvatarModal" @close="showAvatarModal = false" @saved="(url) => (avatarUrl = url)" />
   </div>
 </template>
