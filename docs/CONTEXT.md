@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-09 18:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/customer-wallet-web
+> Cập nhật lần cuối: 2026-10-09 19:10 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/sm-replace-technician
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -126,6 +126,8 @@ Form xử lý case tiền mặt (`SupportDetailPage.vue`) không còn ô gõ tay
 
 Bỏ vi phạm thủ công (PO 09/10/2026): huỷ đơn tự trừ điểm uy tín nên trang Huỷ đơn (`ConsoleCancellationsPage.vue`) không còn nút "Xác nhận vi phạm" hay "Miễn Strike", chỉ hiện cột "Điểm uy tín" (`reputationDelta` từ backend: "Trừ 10 điểm uy tín" hoặc "Không trừ điểm") và nút Cấp Boost. Trang Vi phạm (`ConsoleStrikesPage.vue`) đã xoá, mục menu bỏ, `/console/strikes` chuyển sang `/console/reputation`; `ordersApi.getStrikes/waiveStrike` đã bỏ.
 
+Yêu cầu đổi thợ (PO 08/10/2026, backend #91): trang chi tiết khiếu nại của SM, với case `technician_replacement` còn mở, có khung `components/console/TechnicianReplacementPanel.vue`: danh sách thợ phù hợp của booking (bỏ thợ đã báo; case mở chỉ với đơn thì lấy booking từ đơn), chọn thợ + lý do -> `POST /service-orders/:id/replace-technician`; hoặc "Huỷ đơn, không trừ điểm" (huỷ đơn bằng quyền SM rồi đóng case `order_cancelled_no_fee`). Báo giá đã duyệt thì backend từ chối đổi, câu lỗi hiện nguyên văn.
+
 Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPage.vue`, mục "Ví của tôi" trong menu tài khoản) hiện số dư, nạp qua VNPay (10.000 - 50.000.000 ₫, trang trả về `?payment=success|failed&amount=`), lịch sử nạp/thanh toán/hoàn tiền; ghi rõ không rút được. Hộp thanh toán ở chi tiết đơn có "Trả bằng ví" (đọc số dư khi mở, thiếu thì gợi ý nạp thêm) bên cạnh VNPay; trả xong báo ngay rồi tải lại đơn ngầm (`loadOrder(true)`). Trang khiếu nại của SM có kết quả "Hoàn tiền vào ví khách" (`refund_to_wallet`), bắt nhập số tiền và chỉ dùng khi Đã giải quyết. API ở `api/customer-wallet.api.ts`.
 
 Đặt lịch theo buổi phía khách (PO 08/10/2026): form đặt lịch (`NewBookingWizardPage.vue`) chọn "Đặt trước theo buổi" (chip ngày 14 ngày tới + Sáng 8-12 / Chiều 13-18, giờ VN, `components/customer/BookingSessionPicker.vue`) hoặc "Tới ngay", kèm ô "Ghi chú cho thợ"; gửi `mode/date/slot/customerNote`, không còn `preferredStartAt`. Chi tiết booking (`BookingDetailPage.vue`) hiện lịch hẹn theo buổi và ghi chú; nút "Đổi buổi hẹn" mới tải `GET /bookings/:id/available-slots` (buổi thợ bận bị khoá kèm lý do), đổi được trước khi có thợ nhận (lượt mời cũ huỷ) và sau khi thợ nhận nhưng chưa xuất phát (thợ được báo). "Đặt lại thợ" (`components/customer/RebookDialog.vue`) ở đơn hoàn tất/đã huỷ (danh sách đơn, chi tiết đơn) và booking đã huỷ: chọn ngày + buổi (xem buổi thợ cũ bận), `POST /bookings/:id/rebook`; mời được thợ cũ thì mở booking mới, không thì sang trang chọn thợ với câu báo. Lời mời phía thợ (trang lời mời, tổng quan) hiện buổi hẹn.
@@ -216,6 +218,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-09 19:10 (UTC+7) | ToanAltF4 | feat/sm-replace-technician | SM xử lý yêu cầu đổi thợ: giao thợ khác hoặc huỷ không trừ điểm
 - 2026-10-09 18:33 (UTC+7) | ToanAltF4 | feat/customer-wallet-web | Ví khách: trang ví, nạp VNPay, trả hoá đơn bằng ví, SM hoàn tiền vào ví
 - 2026-10-09 17:41 (UTC+7) | ToanAltF4 | feat/customer-sessions-web | Khách đặt lịch theo buổi hoặc tới ngay kèm ghi chú, đổi lịch theo buổi thợ còn trống, đặt lại thợ cũ; lời mời phía thợ hiện buổi
 - 2026-10-09 15:35 (UTC+7) | ToanAltF4 | feat/auto-reputation-web | Bỏ xác nhận/miễn vi phạm thủ công, trang huỷ đơn hiện số điểm đã trừ, gộp trang Vi phạm vào Điểm uy tín
