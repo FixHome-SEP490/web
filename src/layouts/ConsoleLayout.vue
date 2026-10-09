@@ -26,6 +26,7 @@ import {
   MapPinned,
   Gauge,
   UserSearch,
+  WalletCards,
 } from 'lucide-vue-next';
 
 
@@ -68,6 +69,7 @@ const navigation = computed(() => [
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
             { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
+            { label: 'Ví khách hàng', path: '/console/admin/customer-wallets', icon: WalletCards },
             { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },

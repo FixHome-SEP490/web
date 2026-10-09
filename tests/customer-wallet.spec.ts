@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 
 // Customer wallet (PO 08/10/2026): balance, VNPay top-up, history; no withdrawal.
 const { summary, topUp, route } = vi.hoisted(() => ({ summary: vi.fn(), topUp: vi.fn(), route: { query: {} as Record<string, string> } }));
-vi.mock('../src/api/customer-wallet.api', () => ({ customerWalletApi: { summary, topUp } }));
+vi.mock('../src/api/customer-wallet.api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../src/api/customer-wallet.api')>()), customerWalletApi: { summary, topUp } }));
 vi.mock('vue-router', () => ({ useRoute: () => route }));
 import CustomerWalletPage from '../src/pages/customer/CustomerWalletPage.vue';
 
