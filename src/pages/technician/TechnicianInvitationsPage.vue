@@ -8,6 +8,7 @@ import {
   FhSkeleton,
 } from '../../components';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
+import { technicianProfileApi } from '../../api/technician-profile.api';
 import { sessionLabel } from '../../utils/booking-session';
 
 const invitationSession = (inv: InvitationItem) => sessionLabel({
@@ -35,7 +36,37 @@ const loadInvitations = async () => {
   }
 };
 
-onMounted(loadInvitations);
+// "Tự nhận việc" (PO 10/10/2026): new invitations are accepted for the technician. Switching it on
+// also takes the ones waiting now, so the list is reloaded.
+const autoAccept = ref<boolean | null>(null);
+const savingAutoAccept = ref(false);
+const autoAcceptError = ref('');
+const loadAutoAccept = async () => {
+  try {
+    autoAccept.value = (await technicianProfileApi.getMyProfile()).autoAcceptInvitations;
+  } catch {
+    autoAccept.value = null;
+  }
+};
+const toggleAutoAccept = async () => {
+  if (autoAccept.value === null || savingAutoAccept.value) return;
+  const next = !autoAccept.value;
+  savingAutoAccept.value = true;
+  autoAcceptError.value = '';
+  try {
+    autoAccept.value = (await technicianProfileApi.updateMyProfile({ autoAcceptInvitations: next })).autoAcceptInvitations;
+    if (next) await loadInvitations();
+  } catch {
+    autoAcceptError.value = 'Chưa đổi được chế độ tự nhận việc. Vui lòng thử lại.';
+  } finally {
+    savingAutoAccept.value = false;
+  }
+};
+
+onMounted(() => {
+  void loadInvitations();
+  void loadAutoAccept();
+});
 
 const detailInvitation = ref<InvitationItem | null>(null);
 
@@ -84,15 +115,40 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
 <template>
   <div class="max-w-4xl mx-auto space-y-5">
-    <div class="flex items-center justify-between gap-4">
-      <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
-      <span
-        v-if="!loading && !loadError && invitations.length > 0"
-        class="whitespace-nowrap text-sm font-medium font-num h-7 px-3 rounded-full bg-brand-50 text-brand-700 inline-flex items-center"
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
+        <span
+          v-if="!loading && !loadError && invitations.length > 0"
+          class="whitespace-nowrap text-sm font-medium font-num h-7 px-3 rounded-full bg-brand-50 text-brand-700 inline-flex items-center"
+        >
+          {{ invitations.length }} đang chờ
+        </span>
+      </div>
+      <button
+        v-if="autoAccept !== null"
+        type="button"
+        role="switch"
+        :aria-checked="autoAccept"
+        :disabled="savingAutoAccept"
+        class="inline-flex items-center gap-3 h-11 pl-4 pr-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-800 hover:bg-ink-50 disabled:opacity-60 whitespace-nowrap"
+        data-testid="auto-accept-toggle"
+        @click="toggleAutoAccept"
       >
-        {{ invitations.length }} đang chờ
-      </span>
+        Tự nhận việc
+        <span
+          class="relative w-11 h-6 rounded-full transition-colors"
+          :class="autoAccept ? 'bg-brand-600' : 'bg-ink-200'"
+          aria-hidden="true"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white border transition-transform"
+            :class="autoAccept ? 'translate-x-5 border-white' : 'border-ink-300'"
+          />
+        </span>
+      </button>
     </div>
+    <p v-if="autoAcceptError" class="text-sm text-danger-700" role="alert">{{ autoAcceptError }}</p>
 
     <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải lời mời">
       <div v-for="i in 2" :key="i" class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200 space-y-3">
@@ -119,7 +175,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         <Mail :size="24" />
       </div>
       <h3 class="text-base font-semibold text-ink-900">Không có lời mời nào đang chờ</h3>
-      <p class="text-sm text-ink-500">Lời mời mới sẽ hiện ở đây.</p>
+      <p class="text-sm text-ink-500">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang Công việc.' : 'Lời mời mới sẽ hiện ở đây.' }}</p>
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->
