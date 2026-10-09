@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 00:00 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/faster-photo-handling
+> Cập nhật lần cuối: 2026-10-10 00:14 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/unified-header-landing
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -229,9 +229,10 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 00:14 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Gộp header thống nhất lên dev mới (giữ luật bỏ nghiệm thu ở landing)
 - 2026-10-10 00:00 (UTC+7) | ToanAltF4 | feat/faster-photo-handling | Ảnh: chuẩn hoá trước khi tải, nhận nhiều định dạng, song song
-- 2026-10-09 23:38 (UTC+7) | ToanAltF4 | feat/no-customer-acceptance | Bỏ bước khách nghiệm thu trên web
 - 2026-10-09 23:54 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Header thống nhất: menu tài khoản dùng chung, lịch sử sửa chữa vào menu avatar, landing xếp lại và rút gọn chữ
+- 2026-10-09 23:38 (UTC+7) | ToanAltF4 | feat/no-customer-acceptance | Bỏ bước khách nghiệm thu trên web
 - 2026-10-09 21:54 (UTC+7) | ToanAltF4 | feat/admin-reviews | Admin xem đánh giá của khách
 - 2026-10-09 21:47 (UTC+7) | ToanAltF4 | feat/admin-warranty-view | Admin xem yêu cầu bảo hành (chỉ đọc)
 - 2026-10-09 21:30 (UTC+7) | ToanAltF4 | feat/admin-payments | Admin xem danh sách thanh toán
