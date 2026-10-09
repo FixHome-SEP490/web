@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { bookingFormKey } from '../utils/booking-form-key';
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -160,7 +161,9 @@ const handleLogout = async () => {
     </div>
 
     <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 lg:pb-10">
-      <router-view />
+      <router-view v-slot="{ Component, route: current }">
+        <component :is="Component" :key="bookingFormKey(current)" />
+      </router-view>
     </main>
 
     <!-- Bottom tabs on narrow screens, the way the mobile app navigates. -->

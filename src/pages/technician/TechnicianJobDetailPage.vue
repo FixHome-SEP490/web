@@ -10,6 +10,7 @@ import {
   Camera,
   CheckCircle2,
   Circle,
+  Sparkles,
   Phone,
   Plus,
   Trash2,
@@ -57,6 +58,7 @@ import { mediaApi } from '../../api/media.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
+import AiSummaryDialog from '../../components/technician/AiSummaryDialog.vue';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -87,6 +89,11 @@ const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(nu
 const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
 const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
 const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
+/** What the customer wrote when booking; was not shown to the technician before 10/10/2026. */
+const bookingDescription = computed(() => bookingForMedia.value?.description?.trim() ?? '');
+/** Only bookings made through the AI flow carry it (PO 10/10/2026). */
+const aiSummary = computed(() => bookingForMedia.value?.aiSummary ?? null);
+const showAiSummary = ref(false);
 
 // Work steps state
 const isEnRoute = ref(false);
@@ -267,6 +274,15 @@ const steps = computed(() =>
   }),
 );
 const stepsExpanded = ref(false);
+/** Each step opens to what happened in it (PO 10/10/2026). */
+const openStep = ref<number | null>(null);
+const toggleStep = (n: number) => { openStep.value = openStep.value === n ? null : n; };
+/** When the order entered a status, from its history. */
+const reachedAt = (status: string) =>
+  job.value?.timeline?.find((t) => String(t.status).toLowerCase() === status)?.timestamp ?? null;
+const QUOTATION_STATUS: Record<string, string> = {
+  draft: 'Nháp', pending: 'Chờ khách duyệt', sent: 'Chờ khách duyệt', approved: 'Khách đã duyệt', accepted: 'Khách đã duyệt', rejected: 'Khách từ chối',
+};
 
 /** Show the quotation form while there is none, it was refused, or the technician reopens it. */
 const showQuotationForm = computed(
@@ -1509,17 +1525,71 @@ const toggleMore = async () => {
             </button>
           </div>
           <ol v-if="stepsExpanded" id="job-steps" class="mt-2 space-y-1" data-testid="job-steps">
-            <li v-for="step in steps" :key="step.n" class="flex items-center gap-3 py-1.5 text-sm">
-              <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 text-success-600" />
-              <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] rounded-full border-[5px] border-brand-600" />
-              <Circle v-else :size="18" class="shrink-0 text-ink-300" />
-              <span
-                class="flex-1 min-w-0"
-                :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'text-ink-600' : 'text-ink-500'"
+            <li v-for="step in steps" :key="step.n" class="text-sm">
+              <button
+                type="button"
+                class="w-full flex items-center gap-3 py-1.5 text-left rounded-lg disabled:cursor-default"
+                :disabled="step.state === 'todo'"
+                :aria-expanded="openStep === step.n"
+                :data-testid="`step-row-${step.n}`"
+                @click="toggleStep(step.n)"
               >
-                {{ step.label }}
-              </span>
-              <span v-if="step.state === 'current'" class="shrink-0 text-xs font-medium text-brand-700 whitespace-nowrap">Đang làm</span>
+                <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 text-success-600" />
+                <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] rounded-full border-[5px] border-brand-600" />
+                <Circle v-else :size="18" class="shrink-0 text-ink-300" />
+                <span
+                  class="flex-1 min-w-0"
+                  :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'text-ink-600' : 'text-ink-500'"
+                >
+                  {{ step.label }}
+                </span>
+                <span v-if="step.state === 'current'" class="shrink-0 text-xs font-medium text-brand-700 whitespace-nowrap">Đang làm</span>
+                <ChevronDown v-if="step.state !== 'todo'" :size="16" class="shrink-0 text-ink-400 transition-transform" :class="{ 'rotate-180': openStep === step.n }" />
+              </button>
+              <div v-if="openStep === step.n" class="ml-[30px] mb-2 space-y-2 text-ink-700" :data-testid="`step-detail-${step.n}`">
+                <template v-if="step.n === 1">
+                  <p>{{ reachedAt('en_route') ? `Xuất phát lúc ${vnDateTimeString(reachedAt('en_route')!)}` : 'Chưa xuất phát.' }}</p>
+                </template>
+                <template v-else-if="step.n === 2">
+                  <p>{{ gpsCheckedIn ? 'Đã check-in đúng địa chỉ.' : 'Chưa check-in.' }}</p>
+                  <div v-if="beforeEvidences.length" class="flex flex-wrap gap-2">
+                    <button v-for="e in beforeEvidences" :key="e.id" type="button" class="w-16 h-16 rounded-lg overflow-hidden border border-ink-200" aria-label="Xem ảnh trước khi sửa" @click="previewImage(e.mediaUrl)">
+                      <img :src="e.mediaUrl" alt="" class="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  </div>
+                </template>
+                <template v-else-if="step.n === 3">
+                  <template v-if="isFixedPriceOrder">
+                    <p>Giá cố định <span class="font-num font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="fixedPriceTotal ?? 0" /></span>, không cần báo giá.</p>
+                    <p v-if="reachedAt('under_repair')">Chuyển sang sửa lúc {{ vnDateTimeString(reachedAt('under_repair')!) }}</p>
+                  </template>
+                  <template v-else-if="job.quotation">
+                    <p>{{ QUOTATION_STATUS[String(job.quotation.status).toLowerCase()] ?? 'Đã gửi báo giá' }}</p>
+                    <ul class="space-y-0.5">
+                      <li v-for="(item, i) in job.quotation.items" :key="i" class="flex justify-between gap-3">
+                        <span class="min-w-0">{{ item.description }}<template v-if="item.quantity > 1"> × {{ item.quantity }}</template></span>
+                        <span class="font-num whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
+                      </li>
+                    </ul>
+                    <p class="flex justify-between gap-3 font-semibold text-ink-900"><span>Tổng</span><span class="font-num whitespace-nowrap"><FhMoney :amount="Number(job.quotation.laborTotal) + Number(job.quotation.partsTotal)" /></span></p>
+                  </template>
+                  <p v-else>Chưa gửi báo giá.</p>
+                </template>
+                <template v-else-if="step.n === 4">
+                  <p>{{ job.completionRequestedAt ? `Hoàn thành lúc ${vnDateTimeString(job.completionRequestedAt)}` : 'Chưa hoàn thành.' }}</p>
+                  <div v-if="afterEvidences.length" class="flex flex-wrap gap-2">
+                    <button v-for="e in afterEvidences" :key="e.id" type="button" class="w-16 h-16 rounded-lg overflow-hidden border border-ink-200" aria-label="Xem ảnh sau khi sửa" @click="previewImage(e.mediaUrl)">
+                      <img :src="e.mediaUrl" alt="" class="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <p class="flex justify-between gap-3"><span>Tổng tiền</span><span class="font-num font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="job.grandTotal ?? 0" /></span></p>
+                  <p>
+                    {{ isPaid || isCompleted ? 'Khách đã thanh toán.' : cashSettlementStatus === 'pending_confirmation' ? 'Đã khai tiền mặt, chờ khách xác nhận.' : cashSettlementStatus === 'disputed' ? 'Khách chưa đồng ý số tiền mặt, quản lý đang xử lý.' : 'Chờ khách thanh toán.' }}
+                  </p>
+                </template>
+              </div>
             </li>
           </ol>
         </div>
@@ -1546,6 +1616,18 @@ const toggleMore = async () => {
               <span class="min-w-0 text-pretty">{{ job.addressSummary }}</span>
             </li>
           </ul>
+          <p v-if="bookingDescription" class="text-sm text-ink-700 whitespace-pre-line text-pretty" data-testid="booking-description">
+            <span class="text-ink-500">Khách mô tả:</span> {{ bookingDescription }}
+          </p>
+          <button
+            v-if="aiSummary"
+            type="button"
+            class="h-10 px-3.5 rounded-xl border border-brand-200 bg-brand-50 text-sm font-medium text-brand-700 hover:bg-brand-100 inline-flex items-center gap-2 whitespace-nowrap"
+            data-testid="ai-summary-button"
+            @click="showAiSummary = true"
+          >
+            <Sparkles :size="16" class="shrink-0" /> Xem tóm tắt vấn đề từ AI
+          </button>
           <p
             v-if="job.customerNote"
             class="text-sm text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-3 py-2 text-pretty"
@@ -2001,6 +2083,16 @@ const toggleMore = async () => {
         {{ nowStep.action.label }}
       </FhButton>
     </div>
+
+    <AiSummaryDialog
+      v-if="aiSummary"
+      :open="showAiSummary"
+      :summary="aiSummary"
+      :description="bookingDescription"
+      :booking-id="bookingMediaBookingId"
+      :media="bookingMedia"
+      @close="showAiSummary = false"
+    />
 
     <!-- Dialog: cancel the order -->
     <div
