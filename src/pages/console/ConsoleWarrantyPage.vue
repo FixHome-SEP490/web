@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhCard, FhEmptyState } from '../../components';
+import { X } from 'lucide-vue-next';
+import { FhButton } from '../../components';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
+import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField } from '../../components/console/console-ui';
 import WarrantyDecisionModal, { type WarrantyDecisionMode } from '../../components/console/WarrantyDecisionModal.vue';
 import {
   warrantyManagerApi,
@@ -29,7 +37,9 @@ const tab = ref<'queue' | 'rates'>('queue');
 const claims = ref<StaffWarrantyClaim[]>([]);
 const loading = ref(true);
 const error = ref('');
+const actionError = ref('');
 const notice = ref('');
+const detailClaim = ref<StaffWarrantyClaim | null>(null);
 const page = ref(1);
 const limit = 10;
 const total = ref(0);
@@ -66,7 +76,7 @@ async function loadQueue() {
     if (requestId !== latestRequest) return;
     claims.value = [];
     total.value = 0;
-    error.value = getSupportErrorMessage(reason, 'Không thể tải hàng đợi bảo hành. Vui lòng thử lại.');
+    error.value = getSupportErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -78,7 +88,7 @@ async function loadStats() {
   try {
     stats.value = await warrantyManagerApi.technicianStats(windowDays.value);
   } catch (reason) {
-    statsError.value = getSupportErrorMessage(reason, 'Không thể tải tỷ lệ bảo hành. Vui lòng thử lại.');
+    statsError.value = getSupportErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     statsLoading.value = false;
   }
@@ -86,11 +96,12 @@ async function loadStats() {
 
 async function openModal(claim: StaffWarrantyClaim, mode: WarrantyDecisionMode) {
   notice.value = '';
+  actionError.value = '';
   if (mode === 'assign' && !technicians.value.length) {
     try {
       technicians.value = await warrantyManagerApi.eligibleTechnicians();
     } catch (reason) {
-      error.value = getSupportErrorMessage(reason, 'Không thể tải danh sách kỹ thuật viên.');
+      actionError.value = getSupportErrorMessage(reason, 'Chưa tải được danh sách kỹ thuật viên, vui lòng thử lại.');
       return;
     }
   }
@@ -110,6 +121,28 @@ function onDone(updated: StaffWarrantyClaim) {
 const pct = (value: number | null) => (value === null ? '—' : `${Math.round(value * 100)}%`);
 const meta = (claim: StaffWarrantyClaim) => claimDisplayMeta(claim);
 const closed = (claim: StaffWarrantyClaim) => ['resolved', 'rejected'].includes(claim.status);
+const tabs = [
+  { key: 'queue' as const, label: 'Hàng đợi' },
+  { key: 'rates' as const, label: 'Tỷ lệ theo kỹ thuật viên' },
+];
+const queueColumns: ConsoleColumn[] = [
+  { key: 'item', label: 'Hạng mục' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'technician', label: 'Kỹ thuật viên', hideBelow: 'xl' },
+  { key: 'customer', label: 'Khách hàng', hideBelow: 'xl' },
+  { key: 'submittedAt', label: 'Gửi lúc', hideBelow: 'lg' },
+  { key: 'actions', label: '', align: 'right' },
+];
+const rateColumns: ConsoleColumn[] = [
+  { key: 'fullName', label: 'Kỹ thuật viên' },
+  { key: 'ordersWithWarranty', label: 'Đơn có bảo hành', align: 'right', hideBelow: 'xl' },
+  { key: 'claims', label: 'Yêu cầu', align: 'right' },
+  { key: 'claimRate', label: 'Tỷ lệ bảo hành', align: 'right' },
+  { key: 'notCoveredRate', label: 'Không bảo hành', align: 'right', hideBelow: 'lg' },
+  { key: 'overriddenRate', label: 'Quản lý đổi kết luận', align: 'right', hideBelow: 'xl' },
+  { key: 'disputedRate', label: 'Khách phản đối', align: 'right', hideBelow: 'xl' },
+  { key: 'declineRate', label: 'Từ chối nhận', align: 'right', hideBelow: 'lg' },
+];
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
 watch([statusFilter, unassignedOnly], () => {
@@ -125,180 +158,193 @@ onMounted(() => void loadQueue());
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight text-ink-900">Yêu cầu bảo hành</h1>
-        <p class="mt-1 text-xs text-ink-500">
-          Kỹ thuật viên phụ trách kiểm tra và đề xuất kết luận; kết luận chỉ có hiệu lực sau khi quản lý dịch vụ duyệt.
-        </p>
-        <p v-if="!canDecide" class="mt-1 text-xs text-warning-800" data-testid="warranty-read-only">
-          Bạn đang xem ở chế độ chỉ đọc. Phân công, duyệt, từ chối và đóng yêu cầu do quản lý dịch vụ thực hiện.
-        </p>
-      </div>
-      <div class="flex gap-2" role="tablist" aria-label="Chế độ xem">
-        <FhButton :variant="tab === 'queue' ? 'primary' : 'secondary'" size="sm" role="tab" :aria-selected="tab === 'queue'" @click="tab = 'queue'">
-          Hàng đợi
-        </FhButton>
-        <FhButton :variant="tab === 'rates' ? 'primary' : 'secondary'" size="sm" role="tab" :aria-selected="tab === 'rates'" @click="tab = 'rates'">
-          Tỷ lệ theo kỹ thuật viên
-        </FhButton>
-      </div>
-    </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Yêu cầu bảo hành" :count="tab === 'queue' && !loading && !error ? total : null">
+      <template #badges>
+        <span
+          v-if="!canDecide"
+          class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600"
+          title="Phân công, duyệt, từ chối và đóng yêu cầu do quản lý dịch vụ thực hiện."
+          data-testid="warranty-read-only"
+        >Chế độ chỉ đọc</span>
+      </template>
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading || statsLoading" @click="tab === 'queue' ? loadQueue() : loadStats()">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
+
+    <ConsoleTabs v-model="tab" :tabs="tabs" />
 
     <p v-if="notice" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">
       {{ notice }}
     </p>
+    <p v-if="actionError" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+      {{ actionError }}
+    </p>
 
     <template v-if="tab === 'queue'">
-      <div class="flex flex-wrap items-end gap-3 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-3.5">
-        <label class="flex min-w-[200px] flex-col gap-1 text-[11px] font-semibold text-ink-500">
-          Trạng thái
-          <select v-model="statusFilter" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-xs font-normal text-ink-700">
-            <option value="">Tất cả trạng thái</option>
-            <option v-for="[value, item] in statusOptions" :key="value" :value="value">{{ item.label }}</option>
-          </select>
+      <div class="flex flex-wrap items-center gap-3">
+        <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
+          <option value="">Tất cả trạng thái</option>
+          <option v-for="[value, item] in statusOptions" :key="value" :value="value">{{ item.label }}</option>
+        </select>
+        <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+          <input v-model="unassignedOnly" type="checkbox" class="h-4 w-4" /> Chưa có kỹ thuật viên
         </label>
-        <label class="flex items-center gap-2 pb-2 text-xs text-ink-700">
-          <input v-model="unassignedOnly" type="checkbox" /> Chưa có kỹ thuật viên
-        </label>
-        <FhButton variant="ghost" size="sm" :disabled="loading" @click="loadQueue">
-          <RefreshCw :size="14" class="mr-1.5" /> Tải lại
-        </FhButton>
       </div>
 
-      <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
-        {{ error }}
-      </p>
-      <p v-if="loading" class="text-sm text-ink-500">Đang tải…</p>
-      <FhEmptyState
-        v-else-if="!claims.length && !error"
-        title="Không có yêu cầu bảo hành"
-        description="Không có yêu cầu nào phù hợp với bộ lọc hiện tại."
-      />
-
-      <div v-else class="space-y-3">
-        <FhCard v-for="claim in claims" :key="claim.id">
-          <div class="space-y-3 text-sm">
-            <div class="flex flex-wrap items-center gap-2">
-              <router-link :to="`/console/orders/${claim.order.id}`" class="font-mono text-xs font-bold text-brand-700 hover:text-brand-900">
-                {{ claim.order.code }}
-              </router-link>
-              <span class="font-semibold text-ink-900">{{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</span>
-              <span
-                class="inline-flex h-[24px] items-center rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
-                :class="warrantyClaimToneClasses[meta(claim).tone]"
-              >
-                {{ meta(claim).label }}
-              </span>
-              <span v-if="!claim.technician && !closed(claim)" class="rounded bg-danger-50 px-2 py-0.5 text-[11px] font-semibold text-danger-700">Chưa có kỹ thuật viên</span>
-              <span v-if="claim.submittedAfterExpiry" class="rounded bg-warning-50 px-2 py-0.5 text-[11px] font-semibold text-warning-700">Gửi sau khi hết hạn</span>
-            </div>
-
-            <p class="text-xs text-ink-600">
-              {{ claim.order.serviceName }} · Khách hàng: {{ claim.order.customerName }} {{ claim.order.customerPhone }} ·
-              Kỹ thuật viên: {{ claim.technician?.fullName || '—' }} · Gửi lúc {{ formatDateTimeVN(claim.submittedAt) }}
-            </p>
-            <p class="whitespace-pre-line text-ink-800">{{ claim.description }}</p>
-            <div v-if="claim.evidenceRefs?.length" class="flex flex-wrap gap-2">
-              <a v-for="url in claim.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
-                <img :src="url" alt="Ảnh khách hàng gửi kèm" class="h-14 w-14 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
-              </a>
-            </div>
-
-            <div v-if="claim.visit?.proposedResult" class="space-y-1 rounded-[var(--radius-sm)] bg-ink-50 p-2.5 text-xs">
-              <p class="font-semibold text-ink-800">Đề xuất của kỹ thuật viên</p>
-              <p>{{ inspectionResultLabels[claim.visit.proposedResult as InspectionResult] }}</p>
-              <p v-if="claim.visit.notCoveredReasonCode">
-                Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || claim.visit.notCoveredReasonCode }}
-              </p>
-              <p class="whitespace-pre-line text-ink-700">{{ claim.visit.findings }}</p>
-            </div>
-            <p v-if="claim.resolutionNotes" class="rounded-[var(--radius-sm)] bg-ink-50 p-2.5 text-xs text-ink-800">
-              <span class="font-semibold">Nội dung đã gửi khách hàng:</span> {{ claim.resolutionNotes }}
-            </p>
-
-            <div v-if="canDecide && !closed(claim)" class="flex flex-wrap gap-2 border-t border-ink-100 pt-2">
-              <FhButton v-if="['submitted', 'accepted', 'inspected'].includes(claim.status)" variant="secondary" size="sm" @click="openModal(claim, 'assign')">
-                {{ claim.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}
-              </FhButton>
-              <FhButton v-if="claim.status === 'inspected'" variant="primary" size="sm" @click="openModal(claim, 'approve')">
-                Duyệt kết luận
-              </FhButton>
-              <FhButton v-if="['submitted', 'accepted', 'inspected'].includes(claim.status)" variant="ghost" size="sm" @click="openModal(claim, 'reject')">
-                Từ chối
-              </FhButton>
-              <FhButton v-if="['in_progress', 'awaiting_customer', 'disputed'].includes(claim.status)" variant="primary" size="sm" @click="openModal(claim, 'close')">
-                Đóng yêu cầu
-              </FhButton>
-            </div>
+      <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue" />
+      <ConsoleTable
+        v-else
+        :columns="queueColumns"
+        :rows="claims"
+        :loading="loading"
+        empty-text="Không có yêu cầu bảo hành."
+      >
+        <template #cell-item="{ row }">
+          <button
+            type="button"
+            class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            @click="detailClaim = row"
+          >{{ row.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</button>
+          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ row.order.code }}</div>
+        </template>
+        <template #cell-status="{ row }">
+          <div class="flex flex-wrap gap-1">
+            <span
+              class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
+              :class="warrantyClaimToneClasses[meta(row).tone]"
+            >{{ meta(row).label }}</span>
+            <span v-if="!row.technician && !closed(row)" class="whitespace-nowrap rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Chưa có kỹ thuật viên</span>
+            <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">Gửi sau khi hết hạn</span>
           </div>
-        </FhCard>
-
-        <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-          <span>Trang {{ page }} / {{ totalPages }} · {{ total }} yêu cầu</span>
-          <div class="flex items-center gap-2">
-            <button class="rounded border border-ink-200 p-2 hover:bg-ink-100 disabled:opacity-40" type="button" aria-label="Trang trước" :disabled="page <= 1 || loading" @click="page--">
-              <ChevronLeft :size="16" />
-            </button>
-            <button class="rounded border border-ink-200 p-2 hover:bg-ink-100 disabled:opacity-40" type="button" aria-label="Trang sau" :disabled="page >= totalPages || loading" @click="page++">
-              <ChevronRight :size="16" />
-            </button>
+        </template>
+        <template #cell-technician="{ row }">
+          <span class="whitespace-nowrap">{{ row.technician?.fullName || '—' }}</span>
+        </template>
+        <template #cell-customer="{ row }">
+          <span class="whitespace-nowrap">{{ row.order.customerName }}</span>
+        </template>
+        <template #cell-submittedAt="{ row }">
+          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.submittedAt) }}</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <div v-if="canDecide && !closed(row)" class="flex items-center justify-end gap-2">
+            <FhButton
+              v-if="row.status === 'inspected'"
+              variant="primary"
+              size="sm"
+              @click="openModal(row, 'approve')"
+            >Duyệt kết luận</FhButton>
+            <FhButton
+              v-else-if="['submitted', 'accepted'].includes(row.status)"
+              variant="secondary"
+              size="sm"
+              @click="openModal(row, 'assign')"
+            >{{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}</FhButton>
+            <FhButton
+              v-else-if="['in_progress', 'awaiting_customer', 'disputed'].includes(row.status)"
+              variant="primary"
+              size="sm"
+              @click="openModal(row, 'close')"
+            >Đóng yêu cầu</FhButton>
+            <ConsoleMoreMenu v-if="['submitted', 'accepted', 'inspected'].includes(row.status)" label="Thao tác khác với yêu cầu">
+              <ConsoleMenuItem v-if="row.status === 'inspected'" @click="openModal(row, 'assign')">Phân công lại</ConsoleMenuItem>
+              <ConsoleMenuItem danger @click="openModal(row, 'reject')">Từ chối</ConsoleMenuItem>
+            </ConsoleMoreMenu>
           </div>
-        </div>
-      </div>
+        </template>
+      </ConsoleTable>
+      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
     </template>
 
     <template v-else>
-      <div class="flex flex-wrap items-center gap-3 text-xs text-ink-600">
-        <label class="flex items-center gap-2">
-          Khoảng thời gian
-          <select v-model.number="windowDays" class="h-9 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-xs">
-            <option :value="30">30 ngày</option>
-            <option :value="90">90 ngày</option>
-            <option :value="180">180 ngày</option>
-            <option :value="365">365 ngày</option>
-          </select>
-        </label>
-        <span>Tỷ lệ chỉ để tham khảo. Kỹ thuật viên có dưới 10 đơn có bảo hành được đánh dấu "Ít dữ liệu" vì tỷ lệ chưa đáng tin.</span>
+      <div class="flex flex-wrap items-center gap-3">
+        <select v-model.number="windowDays" :class="consoleField" aria-label="Khoảng thời gian">
+          <option :value="30">30 ngày</option>
+          <option :value="90">90 ngày</option>
+          <option :value="180">180 ngày</option>
+          <option :value="365">365 ngày</option>
+        </select>
+        <span class="text-sm text-ink-500" title="Kỹ thuật viên có dưới 10 đơn có bảo hành được đánh dấu Ít dữ liệu.">Dưới 10 đơn: ít dữ liệu, chỉ để tham khảo.</span>
       </div>
-      <p v-if="statsError" role="alert" class="text-sm text-danger-700">{{ statsError }}</p>
-      <p v-if="statsLoading" class="text-sm text-ink-500">Đang tải…</p>
-      <FhEmptyState v-else-if="!stats.length && !statsError" title="Chưa có dữ liệu" description="Chưa có đơn có bảo hành hoặc yêu cầu bảo hành trong khoảng thời gian này." />
-      <FhCard v-else-if="stats.length" padding="none">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="border-b border-ink-100 bg-ink-50 text-ink-600">
-              <tr>
-                <th class="p-3">Kỹ thuật viên</th>
-                <th class="p-3 text-right">Đơn có bảo hành</th>
-                <th class="p-3 text-right">Yêu cầu</th>
-                <th class="p-3 text-right">Tỷ lệ bảo hành</th>
-                <th class="p-3 text-right">Không bảo hành</th>
-                <th class="p-3 text-right">Quản lý đổi kết luận</th>
-                <th class="p-3 text-right">Khách phản đối</th>
-                <th class="p-3 text-right">Từ chối nhận</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-ink-100">
-              <tr v-for="row in stats" :key="row.technicianId">
-                <td class="p-3 font-medium text-ink-900">
-                  {{ row.fullName }}
-                  <span v-if="row.lowSample" class="ml-1 rounded bg-ink-100 px-1.5 py-0.5 text-[10px] text-ink-600">Ít dữ liệu</span>
-                </td>
-                <td class="p-3 text-right font-num">{{ row.ordersWithWarranty }}</td>
-                <td class="p-3 text-right font-num">{{ row.claims }}</td>
-                <td class="p-3 text-right font-num font-semibold">{{ pct(row.claimRate) }}</td>
-                <td class="p-3 text-right font-num">{{ pct(row.notCoveredRate) }}</td>
-                <td class="p-3 text-right font-num">{{ pct(row.overriddenRate) }}</td>
-                <td class="p-3 text-right font-num">{{ pct(row.disputedRate) }}</td>
-                <td class="p-3 text-right font-num">{{ pct(row.declineRate) }} ({{ row.declines }})</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </FhCard>
+      <ConsoleLoadError v-if="statsError" :message="statsError" @retry="loadStats" />
+      <ConsoleTable
+        v-else
+        :columns="rateColumns"
+        :rows="stats"
+        :row-key="(row) => row.technicianId"
+        :loading="statsLoading"
+        empty-text="Chưa có dữ liệu trong khoảng thời gian này."
+      >
+        <template #cell-fullName="{ row }">
+          <span class="whitespace-nowrap font-medium text-ink-900">{{ row.fullName }}</span>
+          <span v-if="row.lowSample" class="ml-1.5 whitespace-nowrap rounded bg-ink-100 px-1.5 py-0.5 text-xs text-ink-600">Ít dữ liệu</span>
+        </template>
+        <template #cell-ordersWithWarranty="{ row }"><span class="font-num">{{ row.ordersWithWarranty }}</span></template>
+        <template #cell-claims="{ row }"><span class="font-num">{{ row.claims }}</span></template>
+        <template #cell-claimRate="{ row }"><span class="font-num font-semibold">{{ pct(row.claimRate) }}</span></template>
+        <template #cell-notCoveredRate="{ row }"><span class="font-num">{{ pct(row.notCoveredRate) }}</span></template>
+        <template #cell-overriddenRate="{ row }"><span class="font-num">{{ pct(row.overriddenRate) }}</span></template>
+        <template #cell-disputedRate="{ row }"><span class="font-num">{{ pct(row.disputedRate) }}</span></template>
+        <template #cell-declineRate="{ row }"><span class="whitespace-nowrap font-num">{{ pct(row.declineRate) }} ({{ row.declines }})</span></template>
+      </ConsoleTable>
     </template>
+
+    <!-- Side panel with the full claim -->
+    <div v-if="detailClaim" class="fixed inset-0 z-50 flex justify-end bg-ink-950/40" @click.self="detailClaim = null" @keydown.esc="detailClaim = null">
+      <aside
+        class="flex h-full w-full max-w-md flex-col bg-white shadow-[var(--shadow-e3)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="warranty-detail-title"
+      >
+        <div class="flex items-start justify-between gap-3 border-b border-ink-100 px-5 py-4">
+          <div class="min-w-0">
+            <h2 id="warranty-detail-title" class="text-lg font-semibold text-ink-900">{{ detailClaim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</h2>
+            <router-link :to="`/console/orders/${detailClaim.order.id}`" class="font-num text-sm text-brand-700 hover:underline">{{ detailClaim.order.code }}</router-link>
+          </div>
+          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailClaim = null">
+            <X :size="18" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
+          <span
+            class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
+            :class="warrantyClaimToneClasses[meta(detailClaim).tone]"
+          >{{ meta(detailClaim).label }}</span>
+          <dl class="space-y-2.5">
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Dịch vụ</dt><dd class="text-right text-ink-900">{{ detailClaim.order.serviceName }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Khách hàng</dt><dd class="text-right text-ink-900">{{ detailClaim.order.customerName }} <span class="whitespace-nowrap font-num text-ink-600">{{ detailClaim.order.customerPhone }}</span></dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Kỹ thuật viên</dt><dd class="text-right text-ink-900">{{ detailClaim.technician?.fullName || '—' }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Gửi lúc</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ formatDateTimeVN(detailClaim.submittedAt) }}</dd></div>
+          </dl>
+          <div>
+            <div class="mb-1 text-ink-500">Khách mô tả</div>
+            <p class="whitespace-pre-line text-ink-900">{{ detailClaim.description }}</p>
+          </div>
+          <div v-if="detailClaim.evidenceRefs?.length" class="flex flex-wrap gap-2">
+            <a v-for="url in detailClaim.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
+              <img :src="url" alt="Ảnh khách hàng gửi kèm" class="h-16 w-16 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
+            </a>
+          </div>
+          <div v-if="detailClaim.visit?.proposedResult" class="space-y-1 border-t border-ink-100 pt-4">
+            <div class="text-ink-500">Đề xuất của kỹ thuật viên</div>
+            <p class="font-medium text-ink-900">{{ inspectionResultLabels[detailClaim.visit.proposedResult as InspectionResult] }}</p>
+            <p v-if="detailClaim.visit.notCoveredReasonCode" class="text-ink-700">
+              Lý do: {{ notCoveredReasonLabels[detailClaim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
+            </p>
+            <p class="whitespace-pre-line text-ink-700">{{ detailClaim.visit.findings }}</p>
+          </div>
+          <div v-if="detailClaim.resolutionNotes" class="border-t border-ink-100 pt-4">
+            <div class="mb-1 text-ink-500">Đã gửi khách hàng</div>
+            <p class="text-ink-900">{{ detailClaim.resolutionNotes }}</p>
+          </div>
+        </div>
+      </aside>
+    </div>
 
     <WarrantyDecisionModal
       :claim="modalClaim"

@@ -107,7 +107,7 @@ const isActive = (path: string) => {
     <div class="flex-1 min-h-0 flex flex-col pt-6">
       <!-- Header Area (Logo & Trigger) -->
       <div 
-        class="relative mb-8 flex items-center h-12 transition-all duration-200"
+        class="relative mb-6 flex items-center h-12 transition-all duration-200"
         :class="isCollapsed ? 'justify-center px-0' : 'px-5'"
       >
         <!-- Expanded Mode: Logo & Brand on left -->
@@ -123,7 +123,8 @@ const isActive = (path: string) => {
           <button
             type="button"
             class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600 transition-all duration-200 focus:outline-none flex items-center justify-center p-2 rounded-lg hover:bg-brand-50 cursor-pointer"
-            title="Thu gọn Sidebar"
+            title="Thu gọn menu"
+            aria-label="Thu gọn menu"
             @click="isCollapsed = true"
           >
             <PanelLeftClose :size="20" />
@@ -135,9 +136,10 @@ const isActive = (path: string) => {
           v-else
           type="button"
           class="group/logo relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 hover:bg-brand-50 cursor-pointer focus:outline-none"
-          title="Mở rộng Sidebar"
+          title="Mở rộng menu"
+          aria-label="Mở rộng menu"
           @click="isCollapsed = false"
-          @mouseenter="(e) => showTooltip(e, 'Mở rộng Sidebar')"
+          @mouseenter="(e) => showTooltip(e, 'Mở rộng menu')"
           @mouseleave="hideTooltip"
         >
           <!-- Default: Logo -->
@@ -156,16 +158,16 @@ const isActive = (path: string) => {
 
       <!-- Navigation -->
       <div class="nav-container flex-1 overflow-y-auto">
-        <div v-for="(group, idx) in navigation" :key="idx" class="mb-4">
+        <div v-for="(group, idx) in navigation" :key="idx" class="mb-5">
           <div
             v-if="group.group"
-            class="px-8 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
+            class="px-6 text-xs font-semibold text-slate-400 mb-1.5 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
             :class="isCollapsed ? 'opacity-0 h-0 invisible' : 'opacity-100 h-auto'"
           >
             {{ group.group }}
           </div>
           
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-0.5">
             <router-link
               v-for="item in group.items"
               :key="item.path"
@@ -231,7 +233,7 @@ const isActive = (path: string) => {
               @click="handleLogout"
             >
               <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-500 transition-colors group-hover:text-rose-600" />
-              <span>Logout</span>
+              <span>Đăng xuất</span>
             </button>
           </div>
         </Transition>
@@ -286,7 +288,7 @@ const isActive = (path: string) => {
 
 /* --- Expanded State --- */
 .sidebar-expanded .nav-item {
-  padding: 0.875rem 1.5rem;
+  padding: 0.625rem 1.5rem;
   border-radius: 24px 0 0 24px;
   width: calc(100% + 1px);
 }
@@ -329,7 +331,7 @@ const isActive = (path: string) => {
 
 /* --- Collapsed State --- */
 .sidebar-collapsed .nav-item {
-  padding: 16px;
+  padding: 12px;
   margin: 0 8px;
   border-radius: 16px;
   justify-content: center;

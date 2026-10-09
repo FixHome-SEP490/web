@@ -3,7 +3,7 @@ import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
 export const supportCaseTypeLabels: Record<SupportCaseType, string> = {
-  matching_exhausted: 'Cạn ứng viên matching',
+  matching_exhausted: 'Không ghép được thợ',
   arrival_abnormal: 'Bất thường khi đến nơi',
   cash_non_response: 'Không phản hồi tiền mặt',
   cash_mismatch: 'Lệch đối soát tiền mặt',

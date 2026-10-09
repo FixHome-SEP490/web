@@ -3,8 +3,12 @@
 // only: stars, comment, who rated whom on which order, the average and the
 // spread of stars for the same filter.
 import { onMounted, ref } from 'vue';
-import { Search, Star } from 'lucide-vue-next';
-import { FhButton, FhCard, FhEmptyState, FhSkeleton } from '../../../components';
+import { Search } from 'lucide-vue-next';
+import { FhButton } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleSearchField } from '../../../components/console/console-ui';
 import { adminReviewsApi, type AdminReviewRow, type AdminReviewSummary } from '../../../api/admin-reviews.api';
 import { userFacingError } from '../../../utils/user-facing-error';
 import { vnDateTimeString } from '../../../utils/vn-time';
@@ -22,6 +26,13 @@ const totalPages = ref(0);
 const loading = ref(true);
 const error = ref('');
 const STAR_KEYS = [5, 4, 3, 2, 1] as const;
+const columns: ConsoleColumn[] = [
+  { key: 'rating', label: 'Số sao' },
+  { key: 'comment', label: 'Nhận xét' },
+  { key: 'people', label: 'Thợ và khách', hideBelow: 'lg' },
+  { key: 'order', label: 'Đơn', hideBelow: 'xl' },
+  { key: 'createdAt', label: 'Thời gian', hideBelow: 'xl' },
+];
 
 async function load(next = 1) {
   if (from.value && to.value && from.value > to.value) {
@@ -46,7 +57,7 @@ async function load(next = 1) {
     page.value = result.meta.page;
     totalPages.value = result.meta.totalPages;
   } catch (err) {
-    error.value = userFacingError(err, 'Chưa tải được đánh giá, thử lại sau.');
+    error.value = userFacingError(err, CONSOLE_LOAD_ERROR);
   } finally {
     loading.value = false;
   }
@@ -56,63 +67,70 @@ onMounted(() => load(1));
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2"><Star :size="24" class="text-ink-600" /> Đánh giá của khách</h1>
-      <p class="text-xs text-ink-500 mt-1">Khách đánh giá thợ sau mỗi đơn hoàn tất. Chỉ để xem.</p>
-    </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Đánh giá của khách" />
 
-    <form class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" data-testid="reviews-filters" @submit.prevent="load(1)">
-      <input
-        v-model="search"
-        type="search"
-        maxlength="100"
-        placeholder="Tên thợ hoặc khách, email, mã đơn, nội dung"
-        aria-label="Tìm đánh giá"
-        data-testid="reviews-search"
-        class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm lg:col-span-2"
-      />
-      <select v-model="starsFilter" aria-label="Số sao" data-testid="reviews-stars" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm">
+    <form class="flex flex-wrap items-center gap-2" data-testid="reviews-filters" @submit.prevent="load(1)">
+      <div class="relative w-full min-w-0 sm:w-72">
+        <Search :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
+        <input
+          v-model="search"
+          type="search"
+          maxlength="100"
+          placeholder="Tên thợ, khách, mã đơn, nội dung"
+          aria-label="Tìm đánh giá"
+          data-testid="reviews-search"
+          :class="consoleSearchField"
+        />
+      </div>
+      <select v-model="starsFilter" aria-label="Số sao" data-testid="reviews-stars" :class="consoleField">
         <option value="">Mọi số sao</option>
         <option value="low">Từ 2 sao trở xuống</option>
         <option v-for="n in STAR_KEYS" :key="n" :value="String(n)">{{ n }} sao</option>
       </select>
-      <label class="flex items-center gap-2 text-xs text-ink-600">Từ <input v-model="from" type="date" data-testid="reviews-from" class="flex-1 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 py-1.5 text-sm" /></label>
-      <label class="flex items-center gap-2 text-xs text-ink-600">Đến <input v-model="to" type="date" data-testid="reviews-to" class="flex-1 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 py-1.5 text-sm" /></label>
-      <div class="lg:col-span-5">
-        <FhButton type="submit" :loading="loading" data-testid="reviews-submit"><Search :size="15" class="mr-1" /> Lọc</FhButton>
-      </div>
+      <input v-model="from" type="date" aria-label="Từ ngày" data-testid="reviews-from" :class="consoleField" />
+      <input v-model="to" type="date" aria-label="Đến ngày" data-testid="reviews-to" :class="consoleField" />
+      <FhButton type="submit" variant="secondary" size="sm" :loading="loading" data-testid="reviews-submit">Lọc</FhButton>
     </form>
-    <p v-if="error" class="text-xs text-danger-700" role="alert">{{ error }}</p>
+    <p v-if="error" class="text-sm text-danger-700" role="alert">{{ error }}</p>
 
-    <p class="text-sm text-ink-700" data-testid="reviews-summary">
-      {{ total }} đánh giá<template v-if="summary.average !== null"> · Trung bình <strong class="text-ink-900">{{ summary.average.toFixed(1) }}/5</strong></template>
-      <span class="text-ink-500"><template v-for="n in STAR_KEYS" :key="n"> · {{ n }} sao: {{ summary.stars[n] }}</template></span>
-    </p>
+    <dl class="flex flex-wrap divide-x divide-ink-100 rounded-[var(--radius-md)] border border-ink-200 bg-white text-sm" data-testid="reviews-summary">
+      <div class="px-4 py-3"><dt class="sr-only">Số đánh giá</dt><dd class="whitespace-nowrap"><span class="font-num font-semibold text-ink-900">{{ total }}</span> đánh giá</dd></div>
+      <div v-if="summary.average !== null" class="px-4 py-3">
+        <dt class="inline text-ink-500">Trung bình </dt><dd class="inline font-num font-semibold text-ink-900">{{ summary.average.toFixed(1) }}/5</dd>
+      </div>
+      <div class="px-4 py-3 text-ink-500">
+        <template v-for="(n, i) in STAR_KEYS" :key="n"><span v-if="i > 0"> · </span><span class="whitespace-nowrap">{{ n }} sao: <span class="font-num text-ink-800">{{ summary.stars[n] }}</span></span></template>
+      </div>
+    </dl>
 
-    <FhCard>
-      <div v-if="loading" class="p-4"><FhSkeleton height="40px" :count="5" /></div>
-      <FhEmptyState v-else-if="rows.length === 0" title="Chưa có đánh giá nào" description="Không có đánh giá nào khớp bộ lọc." />
-      <template v-else>
-        <ul class="divide-y divide-ink-100" data-testid="reviews-rows">
-          <li v-for="r in rows" :key="r.id" class="py-3 text-xs" :data-testid="`review-${r.id}`">
-            <div class="flex items-start justify-between gap-3">
-              <p class="text-sm font-semibold" :class="r.rating <= 2 ? 'text-danger-700' : 'text-ink-900'">{{ r.rating }}/5 sao</p>
-              <span class="shrink-0 text-ink-400">{{ vnDateTimeString(r.createdAt) }}</span>
-            </div>
-            <p v-if="r.comment" class="mt-1 text-sm text-ink-800 break-words">{{ r.comment }}</p>
-            <p class="mt-1 text-ink-500 break-all">
-              Thợ <span class="text-ink-800">{{ r.technicianName }}</span> · Khách <span class="text-ink-800">{{ r.customerName }}</span>
-              <template v-if="r.orderCode"> · <router-link :to="`/console/orders/${r.orderId}`" class="font-mono text-brand-700 hover:underline">{{ r.orderCode }}</router-link></template>
-            </p>
-          </li>
-        </ul>
-        <div v-if="totalPages > 1" class="flex items-center justify-between pt-3 text-xs text-ink-500">
-          <FhButton variant="secondary" size="sm" :disabled="page <= 1" @click="load(page - 1)">Trước</FhButton>
-          <span>Trang {{ page }}/{{ totalPages }}</span>
-          <FhButton variant="secondary" size="sm" :disabled="page >= totalPages" @click="load(page + 1)">Sau</FhButton>
-        </div>
+    <ConsoleTable
+      :columns="columns"
+      :rows="rows"
+      :loading="loading"
+      :row-test-id="(r) => `review-${r.id}`"
+    >
+      <template #empty>Chưa có đánh giá nào khớp bộ lọc.</template>
+      <template #cell-rating="{ row: r }">
+        <p class="whitespace-nowrap font-semibold" :class="r.rating <= 2 ? 'text-danger-700' : 'text-ink-900'">{{ r.rating }}/5 sao</p>
       </template>
-    </FhCard>
+      <template #cell-comment="{ row: r }">
+        <span v-if="r.comment" class="line-clamp-3 max-w-96 text-ink-800" :title="r.comment">{{ r.comment }}</span>
+        <span v-else class="text-ink-400">—</span>
+      </template>
+      <template #cell-people="{ row: r }">
+        <div class="whitespace-nowrap text-ink-800">Thợ {{ r.technicianName }}</div>
+        <div class="whitespace-nowrap text-xs text-ink-500">Khách {{ r.customerName }}</div>
+      </template>
+      <template #cell-order="{ row: r }">
+        <router-link v-if="r.orderCode" :to="`/console/orders/${r.orderId}`" class="whitespace-nowrap font-num text-brand-700 hover:underline">{{ r.orderCode }}</router-link>
+        <span v-else class="text-ink-400">—</span>
+      </template>
+      <template #cell-createdAt="{ row: r }">
+        <span class="whitespace-nowrap font-num text-ink-600">{{ vnDateTimeString(r.createdAt) }}</span>
+      </template>
+    </ConsoleTable>
+
+    <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="load" />
   </div>
 </template>

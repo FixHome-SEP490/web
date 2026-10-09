@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Sliders, Edit2, RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhTable, FhSkeleton, type TableColumn } from '../../../components';
+import { FhButton } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
+import ConsoleSearch from '../../../components/console/ConsoleSearch.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../../components/console/console-ui';
 import {
   adminConfigApi,
   type AdminConfigItem,
@@ -28,43 +34,64 @@ interface ConfigRow extends ConfigDefinition {
 }
 
 const configDefinitions: ConfigDefinition[] = [
-  { key: 'matching.max_shortlist', valueType: 'int', effectStatus: 'NOT_IMPLEMENTED', min: 1, max: 2, description: 'Cố định 1 đến 2 kỹ thuật viên theo quyết định PO; chỉ để tham khảo' },
-  { key: 'matching.mode', valueType: 'enum', effectStatus: 'STALE_REVIEW', enumValues: ['SEQUENTIAL'], description: 'Chế độ mời Technician; v1.4 yêu cầu tuần tự.' },
-  { key: 'matching.invitation_ttl_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 1440, description: 'Thời gian hết hạn lời mời (phút).' },
-  { key: 'geofence.radius_meters', valueType: 'int', effectStatus: 'TO_WIRE', min: 10, max: 5000, description: 'Bán kính geofence cho check-in.' },
-  { key: 'geofence.min_gps_accuracy_meters', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 500, description: 'Ngưỡng độ chính xác GPS tối thiểu.' },
-  { key: 'evidence.before.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh BEFORE tối thiểu.' },
-  { key: 'evidence.after.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh AFTER tối thiểu.' },
-  { key: 'evidence.max_file_mb', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 50, description: 'Dung lượng tối đa cho evidence (MB).' },
-  { key: 'strike.window.days', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 365, description: 'Cửa sổ hiệu lực của strike (ngày).' },
-  { key: 'strike.customer.threshold', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 20, description: 'Ngưỡng strike Customer trước suspension.' },
-  { key: 'strike.technician.threshold', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 20, description: 'Ngưỡng strike Technician trước suspension.' },
-  { key: 'customer.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian suspension Customer (giờ).' },
-  { key: 'technician.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian suspension Technician (giờ).' },
-  { key: 'cancel.grace_minutes_after_accept', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 120, description: 'Thời gian grace sau Accept (phút).' },
-  { key: 'order.departure_grace_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 240, description: 'Số phút sau giờ hẹn mà kỹ thuật viên chưa xuất phát thì gửi cảnh báo' },
-  { key: 'order.departure_cancel_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 240, description: 'Số phút sau cảnh báo mà kỹ thuật viên vẫn chưa xuất phát thì tự huỷ đơn và booking' },
-  { key: 'compensation.arrival.amount', valueType: 'bigint', effectStatus: 'STALE_REVIEW', min: 0, max: 0, description: 'Semantics compensation arrival đã bị loại khỏi v1.4.' },
-  { key: 'commission.base', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['LABOR'], description: 'Cơ sở tính commission; v1.4 chỉ tính LABOR.' },
-  { key: 'commission.rate_bps', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 5000, description: 'Commission theo basis points (1000 = 10%).' },
-  { key: 'additional_cost.approval_ttl_minutes', valueType: 'int', effectStatus: 'STALE_REVIEW', min: 5, max: 1440, description: 'Thời gian chờ duyệt Additional Cost (phút).' },
-  { key: 'warranty.default_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Warranty mặc định (ngày).' },
-  { key: 'warranty.max_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Warranty tối đa (ngày).' },
-  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'fixhome'], description: 'Provider AI hiện tại (AI tự host, không dùng dịch vụ bên ngoài).' },
-  { key: 'ai.timeout_ms', valueType: 'int', effectStatus: 'TO_WIRE', min: 1000, max: 60000, description: 'Timeout cho AI (milliseconds).' },
-  { key: 'ai.rate_limit_per_user_per_hour', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 1000, description: 'Số request AI tối đa mỗi user mỗi giờ.' },
-  { key: 'payment.mode', valueType: 'enum', effectStatus: 'NOT_IMPLEMENTED', enumValues: ['DEMO', 'LIVE'], description: 'Chế độ thanh toán; provider verification thuộc Wave 3.' },
+  { key: 'matching.max_shortlist', valueType: 'int', effectStatus: 'NOT_IMPLEMENTED', min: 1, max: 2, description: 'Số kỹ thuật viên khách được chọn (cố định 1 đến 2, chỉ để tham khảo).' },
+  { key: 'matching.mode', valueType: 'enum', effectStatus: 'STALE_REVIEW', enumValues: ['SEQUENTIAL'], description: 'Cách mời kỹ thuật viên.' },
+  { key: 'matching.invitation_ttl_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 1440, description: 'Thời gian lời mời còn hiệu lực (phút).' },
+  { key: 'geofence.radius_meters', valueType: 'int', effectStatus: 'TO_WIRE', min: 10, max: 5000, description: 'Bán kính xác nhận đã đến nơi (mét).' },
+  { key: 'geofence.min_gps_accuracy_meters', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 500, description: 'Sai số GPS tối đa khi xác nhận đến nơi (mét).' },
+  { key: 'evidence.before.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh trước sửa chữa tối thiểu.' },
+  { key: 'evidence.after.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh sau sửa chữa tối thiểu.' },
+  { key: 'evidence.max_file_mb', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 50, description: 'Dung lượng tối đa mỗi ảnh bằng chứng (MB).' },
+  { key: 'strike.window.days', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 365, description: 'Số ngày một lần vi phạm còn được tính.' },
+  { key: 'strike.customer.threshold', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 20, description: 'Số lần vi phạm của khách trước khi bị tạm khoá.' },
+  { key: 'strike.technician.threshold', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 20, description: 'Số lần vi phạm của kỹ thuật viên trước khi bị tạm khoá.' },
+  { key: 'customer.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian tạm khoá khách (giờ).' },
+  { key: 'technician.suspension.hours', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 8760, description: 'Thời gian tạm khoá kỹ thuật viên (giờ).' },
+  { key: 'cancel.grace_minutes_after_accept', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 120, description: 'Số phút sau khi thợ nhận đơn mà huỷ vẫn không bị tính vi phạm.' },
+  { key: 'order.departure_grace_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 240, description: 'Số phút sau giờ hẹn mà kỹ thuật viên chưa xuất phát thì gửi cảnh báo.' },
+  { key: 'order.departure_cancel_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 1, max: 240, description: 'Số phút sau cảnh báo mà kỹ thuật viên vẫn chưa xuất phát thì tự huỷ đơn.' },
+  { key: 'compensation.arrival.amount', valueType: 'bigint', effectStatus: 'STALE_REVIEW', min: 0, max: 0, description: 'Tiền bù khi thợ đã đến nơi (không còn dùng).' },
+  { key: 'commission.base', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['LABOR'], description: 'Hoa hồng tính trên phần nào của đơn (chỉ tiền công).' },
+  { key: 'commission.rate_bps', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 5000, description: 'Tỷ lệ hoa hồng, tính theo phần vạn (1000 = 10%).' },
+  { key: 'additional_cost.approval_ttl_minutes', valueType: 'int', effectStatus: 'STALE_REVIEW', min: 5, max: 1440, description: 'Thời gian chờ khách duyệt chi phí phát sinh (phút).' },
+  { key: 'warranty.default_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Thời hạn bảo hành mặc định (ngày).' },
+  { key: 'warranty.max_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Thời hạn bảo hành tối đa (ngày).' },
+  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'fixhome'], description: 'Nguồn chẩn đoán AI đang dùng.' },
+  { key: 'ai.timeout_ms', valueType: 'int', effectStatus: 'TO_WIRE', min: 1000, max: 60000, description: 'Thời gian chờ AI trả lời tối đa (mili giây).' },
+  { key: 'ai.rate_limit_per_user_per_hour', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 1000, description: 'Số lần hỏi AI tối đa của mỗi người trong một giờ.' },
+  { key: 'payment.mode', valueType: 'enum', effectStatus: 'NOT_IMPLEMENTED', enumValues: ['DEMO', 'LIVE'], description: 'Chế độ thanh toán.' },
 ];
 
-const columns: TableColumn[] = [
-  { key: 'key', label: 'Config key', width: '220px' },
-  { key: 'value', label: 'Giá trị', width: '120px' },
-  { key: 'description', label: 'Ý nghĩa nghiệp vụ' },
-  { key: 'effectStatus', label: 'Hiệu lực', width: '120px' },
-  { key: 'actions', label: 'Thao tác', width: '80px' },
+const columns: ConsoleColumn[] = [
+  { key: 'description', label: 'Tham số' },
+  { key: 'value', label: 'Giá trị', align: 'right' },
+  { key: 'effectStatus', label: 'Hiệu lực', hideBelow: 'lg' },
+  { key: 'actions', label: '', align: 'right' },
 ];
+
+const STATUS_LABELS: Record<ConfigEffectStatus, string> = {
+  ACTIVE: 'Đang áp dụng',
+  TO_WIRE: 'Chưa nối vào hệ thống',
+  NOT_IMPLEMENTED: 'Chưa dùng',
+  STALE_REVIEW: 'Cần xem lại',
+};
+// Words for the enum values a parameter can take.
+const VALUE_LABELS: Record<string, string> = {
+  SEQUENTIAL: 'Mời lần lượt',
+  SIMULTANEOUS: 'Mời cùng lúc',
+  LABOR: 'Tiền công',
+  stub: 'Không gọi AI',
+  fixhome: 'AI của FixHome',
+  DEMO: 'Thử nghiệm',
+  LIVE: 'Thật',
+  true: 'Bật',
+  false: 'Tắt',
+};
+const valueLabel = (value: string) => VALUE_LABELS[value] ?? value;
 
 const searchQuery = ref('');
+const statusFilter = ref<ConfigEffectStatus | ''>('');
+const loadFailed = ref(false);
 const remoteConfigs = ref<AdminConfigItem[]>([]);
 const loading = ref(true);
 const error = ref('');
@@ -79,7 +106,8 @@ const configRows = computed<ConfigRow[]>(() => {
       ...definition,
       ...(remote ?? {}),
       value: remote?.value ?? null,
-      description: remote?.description || definition.description,
+      // The Vietnamese wording here wins over the server's internal description.
+      description: definition.description || remote?.description || '',
       effectStatus: remote?.effectStatus ?? definition.effectStatus,
       consumerEvidence: remote?.consumerEvidence ?? definition.consumerEvidence ?? null,
       updatedAt: remote?.updatedAt ?? '',
@@ -93,45 +121,28 @@ const configRows = computed<ConfigRow[]>(() => {
       value: config.value,
       valueType: config.valueType,
       effectStatus: config.effectStatus ?? 'NOT_IMPLEMENTED',
-      description: config.description || 'Config chưa có trong registry của Web.',
+      description: config.description || 'Tham số khác',
       consumerEvidence: config.consumerEvidence,
       updatedAt: config.updatedAt,
       available: true,
     }));
   const query = searchQuery.value.trim().toLowerCase();
   return [...knownRows, ...unknownRows].filter((row) =>
-    !query || `${row.key} ${row.description} ${row.effectStatus}`.toLowerCase().includes(query),
+    (!statusFilter.value || row.effectStatus === statusFilter.value)
+    && (!query || `${row.key} ${row.description} ${STATUS_LABELS[row.effectStatus] ?? ''}`.toLowerCase().includes(query)),
   );
-});
-
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredConfigRows = computed<(ConfigRow & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: 8 }).map((_, i) => ({
-      key: `skeleton-${i}`,
-      _isSkeleton: true,
-      description: '',
-      valueType: 'string',
-      effectStatus: 'ACTIVE',
-      value: null,
-      updatedAt: '',
-      available: false,
-    } as unknown as ConfigRow & { _isSkeleton: boolean }));
-  }
-  return configRows.value;
 });
 
 const loadConfigs = async () => {
   loading.value = true;
   error.value = '';
+  loadFailed.value = false;
   try {
     remoteConfigs.value = await adminConfigApi.getConfigs();
   } catch (reason) {
     remoteConfigs.value = [];
-    error.value = reason instanceof Error
-      ? reason.message
-      : 'Không thể tải cấu hình từ Backend.';
+    loadFailed.value = true;
+    error.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
   } finally {
     loading.value = false;
   }
@@ -165,10 +176,10 @@ const validateValue = (config: ConfigRow, value: string): string => {
     return 'Giá trị phải là số nguyên.';
   }
   if (config.valueType === 'boolean' && trimmed !== 'true' && trimmed !== 'false') {
-    return 'Giá trị boolean chỉ nhận true hoặc false.';
+    return 'Chỉ nhận Bật hoặc Tắt.';
   }
   if (config.valueType === 'enum' && config.enumValues && !config.enumValues.includes(trimmed)) {
-    return `Giá trị phải là một trong: ${config.enumValues.join(', ')}.`;
+    return `Chọn một trong: ${config.enumValues.map(valueLabel).join(', ')}.`;
   }
   if (config.valueType === 'int' || config.valueType === 'bigint') {
     const numericValue = Number(trimmed);
@@ -191,24 +202,17 @@ const saveConfig = async () => {
     const index = remoteConfigs.value.findIndex((config) => config.key === updated.key);
     if (index >= 0) remoteConfigs.value[index] = updated;
     else remoteConfigs.value.push(updated);
-    successMessage.value = `Đã cập nhật ${updated.key} từ Backend.`;
+    successMessage.value = `Đã lưu "${configToEdit.value.description}".`;
     showEditModal.value = false;
     configToEdit.value = null;
   } catch (reason) {
-    error.value = userFacingError(reason, 'Không thể cập nhật cấu hình.');
+    validationError.value = userFacingError(reason, 'Chưa lưu được tham số, vui lòng thử lại.');
   } finally {
     saveLoading.value = false;
   }
 };
 
-const statusLabel = (status: ConfigEffectStatus) => {
-  switch (status) {
-    case 'ACTIVE': return 'ACTIVE';
-    case 'TO_WIRE': return 'TO_WIRE';
-    case 'NOT_IMPLEMENTED': return 'NOT IMPLEMENTED';
-    case 'STALE_REVIEW': return 'STALE / REVIEW';
-  }
-};
+const statusLabel = (status: ConfigEffectStatus) => STATUS_LABELS[status] ?? 'Chưa rõ';
 
 const statusClass = (status: ConfigEffectStatus) => ({
   'bg-success-50 text-success-700': status === 'ACTIVE',
@@ -219,107 +223,78 @@ const statusClass = (status: ConfigEffectStatus) => ({
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Sliders class="text-brand-600" :size="24" />
-          Cấu hình Hệ thống (24)
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Giá trị được đọc từ Backend; trạng thái cho biết config đã có hiệu lực hay còn chờ wiring.
-        </p>
-      </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadConfigs">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
-    </div>
-
-    <div
-      v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-      role="alert"
-    >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadConfigs">Thử lại</button>
-    </div>
-    <div v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-      {{ successMessage }}
-    </div>
-
-    <FhTable
-      :columns="columns"
-      :rows="filteredConfigRows"
-      :loading="loading"
-      searchable
-      v-model:searchQuery="searchQuery"
-      search-placeholder="Tìm theo key, mô tả hoặc trạng thái..."
-      :empty-text="error ? 'Không thể hiển thị cấu hình.' : 'Không có config phù hợp.'"
-    >
-      <template #toolbar>
-        <div class="flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
-          <span class="px-2 py-1 rounded bg-success-50 text-success-700 font-semibold">ACTIVE</span>
-          <span class="px-2 py-1 rounded bg-warning-50 text-warning-700 font-semibold">TO_WIRE</span>
-          <span class="px-2 py-1 rounded bg-ink-100 text-ink-600 font-semibold">NOT IMPLEMENTED</span>
-          <span class="px-2 py-1 rounded bg-danger-50 text-danger-700 font-semibold">STALE / REVIEW</span>
-        </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Cấu hình hệ thống" :count="loading || error ? null : configRows.length">
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading" @click="loadConfigs">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
       </template>
+    </ConsolePageHeader>
 
-      <template #cell-key="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="180px" height="16px" class="mb-1" />
-          <FhSkeleton width="60px" height="12px" />
-        </div>
-        <div v-else>
-          <code class="text-xs font-mono font-bold text-brand-800">{{ row.key }}</code>
-          <span class="text-[10px] text-ink-400 block font-mono">Kiểu: {{ row.valueType }}</span>
-        </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <ConsoleSearch v-model="searchQuery" placeholder="Tìm tham số" label="Tìm tham số cấu hình" />
+      <select v-model="statusFilter" :class="consoleField" aria-label="Lọc theo hiệu lực">
+        <option value="">Mọi trạng thái</option>
+        <option v-for="(label, key) in STATUS_LABELS" :key="key" :value="key">{{ label }}</option>
+      </select>
+    </div>
+
+    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
+      {{ successMessage }}
+    </p>
+    <p v-if="error && !loadFailed" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+
+    <ConsoleLoadError v-if="loadFailed" :message="error" @retry="loadConfigs" />
+    <ConsoleTable
+      v-else
+      :columns="columns"
+      :rows="configRows"
+      :loading="loading"
+      :row-key="(row) => row.key"
+      empty-text="Không có tham số phù hợp."
+    >
+      <template #cell-description="{ row }">
+        <div class="max-w-xl text-ink-900 text-pretty">{{ row.description }}</div>
       </template>
       <template #cell-value="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="60px" height="20px" class="rounded" />
-        <span v-else-if="row.value !== null" class="font-mono text-xs font-bold text-ink-900 bg-ink-100 px-2 py-0.5 rounded">{{ row.value }}</span>
-        <span v-else class="text-xs italic text-ink-400">Chưa tải từ Backend</span>
-      </template>
-      <template #cell-description="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="260px" height="16px" />
-        <div v-else class="max-w-[320px] whitespace-normal">
-          <span class="text-xs text-ink-600 leading-relaxed">{{ row.description }}</span>
-          <span v-if="row.consumerEvidence" class="block mt-1 text-[10px] text-ink-400">{{ row.consumerEvidence }}</span>
-        </div>
+        <span v-if="row.value !== null" class="whitespace-nowrap font-num font-medium text-ink-900">{{ valueLabel(row.value) }}</span>
+        <span v-else class="whitespace-nowrap text-ink-400">Chưa có</span>
       </template>
       <template #cell-effectStatus="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="20px" class="rounded" />
-        <span v-else class="px-2 py-1 rounded text-[10px] font-semibold whitespace-nowrap" :class="statusClass(row.effectStatus)">{{ statusLabel(row.effectStatus) }}</span>
+        <span class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium" :class="statusClass(row.effectStatus)">{{ statusLabel(row.effectStatus) }}</span>
       </template>
       <template #cell-actions="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="32px" height="32px" class="rounded" />
-        <button v-else class="p-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-ink-500 hover:text-brand-600 hover:bg-ink-100" type="button" title="Chỉnh sửa cấu hình" :disabled="!canEdit(row)" @click="openEdit(row)">
-          <Edit2 :size="15" />
-        </button>
+        <FhButton v-if="canEdit(row)" variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
       </template>
-    </FhTable>
+    </ConsoleTable>
 
-    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4">
-      <div class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-4 text-xs">
-        <h3 class="text-base font-bold text-ink-900">Chỉnh sửa Config</h3>
-        <div>
-          <label class="block font-semibold text-ink-700 mb-1" for="config-key">Config key</label>
-          <input id="config-key" :value="configToEdit?.key" disabled class="w-full h-9 px-3 bg-ink-100 border border-ink-200 rounded font-mono text-ink-600 cursor-not-allowed" />
-        </div>
-        <div>
-          <label class="block font-semibold text-ink-700 mb-1" for="config-value">Giá trị mới *</label>
-          <select v-if="configToEdit?.enumValues?.length" id="config-value" v-model="editValue" class="w-full h-9 px-3 bg-white border border-ink-200 rounded font-mono focus:outline-none focus:border-brand-600">
-            <option v-for="option in configToEdit.enumValues" :key="option" :value="option">{{ option }}</option>
+    <div
+      v-if="showEditModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="config-edit-title"
+      @keydown.esc="showEditModal = false"
+    >
+      <form class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-4" @submit.prevent="saveConfig">
+        <h3 id="config-edit-title" class="text-base font-semibold text-ink-900 text-pretty">{{ configToEdit?.description }}</h3>
+        <label :class="consoleLabel" for="config-value">
+          Giá trị mới
+          <select v-if="configToEdit?.enumValues?.length" id="config-value" v-model="editValue" :class="consoleField">
+            <option v-for="option in configToEdit.enumValues" :key="option" :value="option">{{ valueLabel(option) }}</option>
           </select>
-          <input v-else id="config-value" v-model="editValue" type="text" class="w-full h-9 px-3 bg-white border border-ink-200 rounded font-mono focus:outline-none focus:border-brand-600" />
-          <p v-if="validationError" class="mt-1 text-danger-600" role="alert">{{ validationError }}</p>
+          <input v-else id="config-value" v-model="editValue" type="text" :class="consoleField" class="font-num" />
+        </label>
+        <p v-if="configToEdit && (configToEdit.min !== undefined || configToEdit.max !== undefined)" class="text-xs text-ink-500">
+          Từ <span class="font-num">{{ configToEdit.min ?? '—' }}</span> đến <span class="font-num">{{ configToEdit.max ?? '—' }}</span>
+        </p>
+        <p v-if="validationError" class="text-sm text-danger-600" role="alert">{{ validationError }}</p>
+        <div class="flex justify-end gap-2">
+          <FhButton variant="secondary" size="sm" :disabled="saveLoading" @click="showEditModal = false">Huỷ</FhButton>
+          <FhButton type="submit" variant="primary" size="sm" :loading="saveLoading">Lưu</FhButton>
         </div>
-        <p class="text-[11px] text-ink-500 leading-relaxed">{{ configToEdit?.description }}</p>
-        <div class="flex justify-end gap-2 pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" :disabled="saveLoading" @click="showEditModal = false">Huỷ</FhButton>
-          <FhButton variant="primary" size="sm" :loading="saveLoading" @click="saveConfig">Lưu tham số</FhButton>
-        </div>
-      </div>
+      </form>
     </div>
   </div>
 </template>

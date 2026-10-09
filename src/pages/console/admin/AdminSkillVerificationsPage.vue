@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { CheckCircle2, XCircle, FileText, Award, RefreshCw, UploadCloud } from 'lucide-vue-next';
-import { FhButton, FhTable, FhStatusPill, FhConfirmDialog, FhSkeleton, type TableColumn } from '../../../components';
+import { FileText, UploadCloud } from 'lucide-vue-next';
+import { FhButton, FhStatusPill, FhConfirmDialog } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleTextarea } from '../../../components/console/console-ui';
+import { userFacingError } from '../../../utils/user-facing-error';
 import {
   adminSkillVerificationsApi,
   type SkillVerification,
@@ -9,14 +17,17 @@ import {
 } from '../../../api/admin-skill-verifications.api';
 import { vnDateString } from '../../../utils/vn-time';
 
-const columns: TableColumn[] = [
+const columns: ConsoleColumn[] = [
   { key: 'technician', label: 'Kỹ thuật viên' },
   { key: 'service', label: 'Kỹ năng' },
-  { key: 'submittedAt', label: 'Ngày gửi', width: '120px' },
-  { key: 'documents', label: 'Tín chỉ / Chứng chỉ' },
-  { key: 'status', label: 'Trạng thái', width: '140px' },
-  { key: 'actions', label: 'Thao tác', width: '220px' },
+  { key: 'submittedAt', label: 'Ngày gửi', hideBelow: 'xl' },
+  { key: 'documents', label: 'Chứng chỉ', hideBelow: 'xl' },
+  { key: 'status', label: 'Trạng thái', hideBelow: 'lg' },
+  { key: 'actions', label: '', align: 'right' },
 ];
+
+const STATUS_LABELS: Record<string, string> = { PENDING: 'Đang chờ duyệt', VERIFIED: 'Đã duyệt', REJECTED: 'Đã từ chối' };
+const statusLabel = (status: unknown) => STATUS_LABELS[String(status ?? '').toUpperCase()] ?? 'Trạng thái chưa xác định';
 
 const statusFilter = ref<SkillVerificationStatus | 'ALL'>('PENDING');
 const page = ref(1);
@@ -25,43 +36,20 @@ const total = ref(0);
 const verifications = ref<SkillVerification[]>([]);
 const loading = ref(true);
 const error = ref('');
+const loadError = ref('');
 const successMessage = ref('');
 const actionLoadingId = ref<string | null>(null);
 let latestRequest = 0;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredVerifications = computed<(SkillVerification & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: pageSize }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      technicianId: '',
-      serviceId: '',
-      status: 'PENDING',
-      documents: [],
-    } as unknown as SkillVerification & { _isSkeleton: boolean }));
-  }
-  return verifications.value;
-});
-
-function getErrorMessage(reason: unknown, fallback: string): string {
-  if (reason instanceof Error && reason.message) return reason.message;
-  if (typeof reason === 'object' && reason !== null && 'response' in reason) {
-    const response = (reason as { response?: { data?: { message?: unknown; error?: { message?: unknown } } } })
-      .response;
-    if (typeof response?.data?.message === 'string') return response.data.message;
-    if (typeof response?.data?.error?.message === 'string') return response.data.error.message;
-  }
-  return fallback;
-}
+// Plain Vietnamese reasons from the server are kept; codes and English never show.
+const getErrorMessage = (reason: unknown, fallback: string) => userFacingError(reason, fallback);
 
 const loadVerifications = async () => {
   const requestId = ++latestRequest;
   loading.value = true;
-  error.value = '';
+  loadError.value = '';
   try {
     const res = await adminSkillVerificationsApi.list({
       page: page.value,
@@ -75,7 +63,7 @@ const loadVerifications = async () => {
     if (requestId !== latestRequest) return;
     verifications.value = [];
     total.value = 0;
-    error.value = getErrorMessage(reason, 'Không thể tải danh sách kỹ năng chờ duyệt.');
+    loadError.value = getErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -97,7 +85,7 @@ const openDocument = async (verification: SkillVerification, documentId: string)
     const { signedUrl } = await adminSkillVerificationsApi.getDocumentAccess(verification.id, documentId);
     window.open(signedUrl, '_blank', 'noopener,noreferrer');
   } catch {
-    error.value = 'Không thể mở tài liệu này.';
+    error.value = 'Chưa mở được tài liệu, vui lòng thử lại.';
   }
 };
 
@@ -123,7 +111,7 @@ const confirmApprove = async () => {
   const file = certificateFile.value;
   if (!verification || actionLoadingId.value) return;
   if (!file) {
-    approveError.value = 'Vui lòng chọn file chứng chỉ FixHome cấp cho thợ.';
+    approveError.value = 'Chọn tệp chứng chỉ FixHome cấp cho thợ.';
     return;
   }
 
@@ -146,7 +134,7 @@ const confirmApprove = async () => {
     showApproveModal.value = false;
     await loadVerifications();
   } catch (reason) {
-    approveError.value = getErrorMessage(reason, 'Không thể duyệt kỹ năng này.');
+    approveError.value = getErrorMessage(reason, 'Chưa duyệt được kỹ năng, vui lòng thử lại.');
   } finally {
     actionLoadingId.value = null;
   }
@@ -180,7 +168,7 @@ const confirmReject = async () => {
     showRejectModal.value = false;
     await loadVerifications();
   } catch (reason) {
-    error.value = getErrorMessage(reason, 'Không thể từ chối yêu cầu này.');
+    error.value = getErrorMessage(reason, 'Chưa từ chối được yêu cầu, vui lòng thử lại.');
   } finally {
     actionLoadingId.value = null;
   }
@@ -189,134 +177,108 @@ const confirmReject = async () => {
 const formatDate = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : vnDateString(date);
+  return Number.isNaN(date.getTime()) ? '—' : vnDateString(date);
 };
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Award class="text-brand-600" :size="24" />
-          Duyệt kỹ năng thợ
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Thợ khai kỹ năng → hẹn review trực tiếp với FixHome → duyệt và cấp chứng chỉ tại đây.
-        </p>
-      </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadVerifications">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
-    </div>
-
-    <div v-if="error" class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadVerifications">Thử lại</button>
-    </div>
-    <div v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-      {{ successMessage }}
-    </div>
-
-    <FhTable :columns="columns" :rows="filteredVerifications" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có yêu cầu phù hợp.'">
-      <template #toolbar>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-ink-500">Trạng thái:</span>
-          <select v-model="statusFilter" class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600">
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">Đang chờ duyệt</option>
-            <option value="VERIFIED">Đã duyệt</option>
-            <option value="REJECTED">Đã từ chối</option>
-          </select>
-        </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Duyệt kỹ năng" :count="loading || loadError ? null : total">
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading" @click="loadVerifications">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
       </template>
+    </ConsolePageHeader>
 
+    <div class="flex flex-wrap items-center gap-2">
+      <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
+        <option value="ALL">Tất cả trạng thái</option>
+        <option value="PENDING">Đang chờ duyệt</option>
+        <option value="VERIFIED">Đã duyệt</option>
+        <option value="REJECTED">Đã từ chối</option>
+      </select>
+    </div>
+
+    <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+
+    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadVerifications" />
+    <ConsoleTable
+      v-else
+      :columns="columns"
+      :rows="verifications"
+      :loading="loading"
+      empty-text="Không có yêu cầu phù hợp."
+    >
       <template #cell-technician="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="120px" height="16px" class="mb-1" />
-          <FhSkeleton width="160px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="font-semibold text-xs text-ink-900">{{ row.technician?.fullName || row.technicianId }}</div>
-          <div class="text-[11px] text-ink-500">{{ row.technician?.email || '—' }}</div>
-        </div>
+        <div class="font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
+        <div class="truncate text-xs text-ink-500">{{ row.technician?.email || '—' }}</div>
       </template>
       <template #cell-service="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="16px" />
-        <span v-else class="text-xs text-ink-800">{{ row.serviceName || row.serviceId }}</span>
+        <span class="text-ink-800">{{ row.serviceName || 'Dịch vụ' }}</span>
       </template>
       <template #cell-submittedAt="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
-        <span v-else class="text-xs text-ink-500 font-num">{{ formatDate(String(row.submittedAt)) }}</span>
+        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.submittedAt)) }}</span>
       </template>
       <template #cell-documents="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="140px" height="16px" />
-        </div>
-        <div v-else class="space-y-1 text-[11px]">
-          <button
-            v-for="document in row.documents"
-            :key="document.id"
-            class="flex items-center gap-1 text-left text-brand-600 hover:underline"
-            type="button"
-            @click="openDocument(row, document.id)"
-          >
-            <FileText :size="12" />
-            <span>{{ document.issuedById ? 'FixHome cấp' : 'Tín chỉ của thợ' }} · {{ document.fileName }}</span>
-          </button>
-          <span v-if="row.documents.length === 0" class="text-ink-400">Chưa có tài liệu</span>
-        </div>
+        <ul class="space-y-1">
+          <li v-for="document in row.documents" :key="document.id">
+            <button
+              type="button"
+              class="flex max-w-64 items-center gap-1 text-left text-sm text-brand-700 hover:underline"
+              :title="document.fileName"
+              @click="openDocument(row, document.id)"
+            >
+              <FileText :size="13" class="shrink-0" aria-hidden="true" />
+              <span class="truncate">{{ document.issuedById ? 'FixHome cấp' : 'Của thợ' }}: {{ document.fileName }}</span>
+            </button>
+          </li>
+          <li v-if="row.documents.length === 0" class="text-ink-400">Chưa có tài liệu</li>
+        </ul>
       </template>
       <template #cell-status="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
-        <FhStatusPill v-else :status="row.status" />
+        <FhStatusPill :status="row.status" :label="statusLabel(row.status)" />
       </template>
       <template #cell-actions="{ row }">
-        <div v-if="isSkeleton(row)" class="flex gap-2">
-          <FhSkeleton width="120px" height="28px" class="rounded-[var(--radius-sm)]" />
-          <FhSkeleton width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
-        </div>
-        <div v-else-if="row.status === 'PENDING'" class="flex items-center gap-2">
+        <div v-if="row.status === 'PENDING'" class="flex items-center justify-end gap-2">
           <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="openApprove(row)">
-            <CheckCircle2 :size="14" /> Duyệt & cấp chứng chỉ
-          </FhButton>
-          <FhButton variant="danger" size="sm" :disabled="Boolean(actionLoadingId)" @click="openReject(row)">
-            <XCircle :size="14" /> Từ chối
-          </FhButton>
-        </div>
-        <span v-else class="text-xs text-ink-400">Đã xử lý</span>
-      </template>
-    </FhTable>
-
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} yêu cầu</span>
-      <div class="flex items-center gap-2">
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" @click="page--">‹</button>
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" @click="page++">›</button>
-      </div>
-    </div>
-
-    <!-- Approve modal: upload the FixHome-issued certificate -->
-    <div v-if="showApproveModal" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4">
-      <div class="bg-white rounded-md max-w-sm w-full p-6 shadow-xl space-y-4">
-        <h3 class="text-lg font-bold text-ink-900">Duyệt & cấp chứng chỉ</h3>
-        <p class="text-sm text-ink-600">
-          Kỹ năng "<strong>{{ verificationToApprove?.serviceName }}</strong>" của
-          <strong>{{ verificationToApprove?.technician?.fullName }}</strong>. Upload file chứng chỉ FixHome cấp cho thợ này.
-        </p>
-        <div>
-          <label class="flex items-center justify-center gap-2 h-24 border-2 border-dashed border-ink-200 rounded-sm cursor-pointer hover:border-brand-400 text-sm text-ink-500">
-            <UploadCloud :size="18" />
-            <span>{{ certificateFile?.name || 'Chọn file chứng chỉ (ảnh hoặc PDF)' }}</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" @change="onCertificateFileChange" />
-          </label>
-          <p v-if="approveError" class="mt-1.5 text-xs text-danger-600">{{ approveError }}</p>
-        </div>
-        <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showApproveModal = false">Huỷ bỏ</FhButton>
-          <FhButton variant="primary" size="sm" :loading="actionLoadingId === verificationToApprove?.id" @click="confirmApprove">
             Duyệt
           </FhButton>
+          <ConsoleMoreMenu label="Thao tác khác với yêu cầu">
+            <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
+          </ConsoleMoreMenu>
+        </div>
+      </template>
+    </ConsoleTable>
+
+    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+
+    <!-- Approve: upload the certificate FixHome issues -->
+    <div
+      v-if="showApproveModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="skill-approve-title"
+      @keydown.esc="showApproveModal = false"
+    >
+      <div class="bg-white rounded-md max-w-sm w-full p-6 shadow-xl space-y-4">
+        <h3 id="skill-approve-title" class="text-lg font-semibold text-ink-900">Duyệt và cấp chứng chỉ</h3>
+        <p class="text-sm text-ink-600 text-pretty">
+          {{ verificationToApprove?.serviceName }} của <strong>{{ verificationToApprove?.technician?.fullName }}</strong>.
+        </p>
+        <div>
+          <label class="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-sm border-2 border-dashed border-ink-200 px-3 text-sm text-ink-500 hover:border-brand-400">
+            <UploadCloud :size="18" aria-hidden="true" />
+            <span class="truncate">{{ certificateFile?.name || 'Chọn tệp chứng chỉ (ảnh hoặc PDF)' }}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" @change="onCertificateFileChange" />
+          </label>
+          <p v-if="approveError" class="mt-1.5 text-sm text-danger-600" role="alert">{{ approveError }}</p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <FhButton variant="secondary" size="sm" @click="showApproveModal = false">Huỷ</FhButton>
+          <FhButton variant="primary" size="sm" :loading="actionLoadingId === verificationToApprove?.id" @click="confirmApprove">Duyệt</FhButton>
         </div>
       </div>
     </div>
@@ -324,24 +286,23 @@ const formatDate = (value: string) => {
     <FhConfirmDialog
       :open="showRejectModal"
       :loading="actionLoadingId === verificationToReject?.id"
-      title="Từ chối yêu cầu duyệt kỹ năng"
-      consequence="Kỹ năng này sẽ không được đưa vào matching. Thợ có thể hẹn review lại sau."
-      confirm-text="Xác nhận từ chối"
+      title="Từ chối kỹ năng"
+      consequence="Kỹ năng này không được dùng để ghép việc. Thợ có thể hẹn kiểm tra lại sau."
+      confirm-text="Từ chối"
       cancel-text="Quay lại"
       @confirm="confirmReject"
       @cancel="showRejectModal = false"
     >
-      <div>
-        <label class="block text-sm font-semibold text-ink-700 mb-1" for="skill-reject-reason">Lý do từ chối *</label>
-        <textarea
-          id="skill-reject-reason"
-          v-model="rejectReason"
-          rows="3"
-          class="w-full p-3 text-sm bg-white border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600"
-          placeholder="Ví dụ: chưa đạt bài test thực hành..."
-        ></textarea>
-        <p v-if="rejectReasonError" class="mt-1 text-xs text-danger-600" role="alert">{{ rejectReasonError }}</p>
-      </div>
+      <label class="block text-sm font-medium text-ink-700" for="skill-reject-reason">Lý do từ chối</label>
+      <textarea
+        id="skill-reject-reason"
+        v-model="rejectReason"
+        rows="3"
+        class="mt-1.5"
+        :class="consoleTextarea"
+        placeholder="Ví dụ: chưa đạt bài kiểm tra thực hành"
+      ></textarea>
+      <p v-if="rejectReasonError" class="mt-1 text-sm text-danger-600" role="alert">{{ rejectReasonError }}</p>
     </FhConfirmDialog>
   </div>
 </template>

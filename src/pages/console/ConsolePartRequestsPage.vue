@@ -2,24 +2,16 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
-import {
-  Boxes,
-  QrCode,
-  CheckCircle,
-  Truck,
-  XCircle,
-  Eye,
-  Copy,
-  Check,
-  Package,
-  Layers,
-} from 'lucide-vue-next';
-import {
-  FhTable,
-  FhMoney,
-  FhButton,
-  FhSkeleton,
-} from '../../components';
+import { Copy, Check, X } from 'lucide-vue-next';
+import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
+import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import { consoleField } from '../../components/console/console-ui';
 import {
   partRequestsApi,
   type PartRequest,
@@ -28,18 +20,20 @@ import {
   type FulfillmentMethod,
 } from '../../api/part-requests.api';
 import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeString } from '../../utils/vn-time';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
 const page = ref(1);
 const pageSize = 20;
-const loadError = ref('');
+const loadError = ref(false);
 let loadVersion = 0;
 const qrImage = ref('');
 const loading = ref(true);
 const actionLoading = ref(false);
 const requests = ref<PartRequest[]>([]);
 const totalCount = ref(0);
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize)));
 const searchQuery = ref('');
 const statusFilter = ref('ALL');
 const typeFilter = ref('ALL');
@@ -48,6 +42,7 @@ const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 
 const qrModalRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
+const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
 watch(qrModalRequest, async (request) => {
   qrImage.value = '';
@@ -55,7 +50,7 @@ watch(qrModalRequest, async (request) => {
   try {
     const data = await QRCode.toDataURL(request.qrToken, { width: 220 });
     if (qrModalRequest.value?.qrToken === request.qrToken) qrImage.value = data;
-  } catch { showToast('error', 'Không thể tạo mã QR. Vui lòng dùng mã bàn giao.'); }
+  } catch { showToast('error', 'Chưa tạo được mã QR. Hãy dùng mã bàn giao bên dưới.'); }
 });
 const toastMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -68,10 +63,19 @@ const showToast = (type: 'success' | 'error', text: string) => {
   }, 4000);
 };
 
+const columns: ConsoleColumn[] = [
+  { key: 'code', label: 'Yêu cầu' },
+  { key: 'items', label: 'Linh kiện' },
+  { key: 'type', label: 'Loại', hideBelow: 'xl' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'time', label: 'Tạo lúc', hideBelow: 'xl' },
+  { key: 'actions', label: '', align: 'right' },
+];
+
 const loadData = async () => {
   const version = ++loadVersion;
   loading.value = true;
-  loadError.value = '';
+  loadError.value = false;
   try {
     const res = await partRequestsApi.getAll({
       status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() as PartRequestStatus : undefined,
@@ -88,7 +92,7 @@ const loadData = async () => {
   } catch {
     if (version !== loadVersion) return;
     requests.value = [];
-    loadError.value = 'Không thể tải danh sách yêu cầu linh kiện. Vui lòng thử lại.';
+    loadError.value = true;
   } finally {
     if (version === loadVersion) loading.value = false;
   }
@@ -98,54 +102,40 @@ onMounted(() => {
   void loadData();
 });
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredRequests = computed<(PartRequest & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: pageSize }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      serviceOrderId: '',
-      technicianId: '',
-      requestType: 'pre_repair',
-      fulfillmentMethod: 'pickup',
-      items: [],
-      shippingFee: 0,
-      status: 'requested',
-      createdAt: '',
-    } as unknown as PartRequest & { _isSkeleton: boolean }));
-  }
-  return requests.value;
-});
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
   page.value = 1;
   const timer = setTimeout(() => { void loadData(); }, 250);
   onCleanup(() => clearTimeout(timer));
 });
-const changePage = (delta: number) => { page.value += delta; void loadData(); };
+const setPage = (next: number) => { page.value = next; void loadData(); };
 
 const stats = computed(() => {
   const reqs = requests.value;
-  return {
-    requested: reqs.filter((r) => r.status.toLowerCase() === 'requested').length,
-    ready: reqs.filter((r) => r.status.toLowerCase() === 'ready').length,
-    delivering: reqs.filter((r) => r.status.toLowerCase() === 'delivering').length,
-    received: reqs.filter((r) => r.status.toLowerCase() === 'received').length,
-    completed: reqs.filter((r) => r.status.toLowerCase() === 'completed').length,
-  };
+  const count = (status: string) => reqs.filter((r) => r.status.toLowerCase() === status).length;
+  return [
+    { key: 'requested', label: 'Chờ chuẩn bị', value: count('requested') },
+    { key: 'ready', label: 'Sẵn sàng', value: count('ready') },
+    { key: 'delivering', label: 'Đang giao', value: count('delivering') },
+    { key: 'received', label: 'Đã bàn giao', value: count('received') },
+    { key: 'completed', label: 'Hoàn tất', value: count('completed') },
+  ];
 });
+
+const replaceRow = (updated: PartRequest) => {
+  const idx = requests.value.findIndex((r) => r.id === updated.id);
+  if (idx !== -1) requests.value[idx] = updated;
+};
 
 const handleMarkReady = async (req: PartRequest) => {
   if (!canOperate.value || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const updated = await partRequestsApi.markReady(req.id);
-    const idx = requests.value.findIndex((r) => r.id === req.id);
-    if (idx !== -1) requests.value[idx] = updated;
+    replaceRow(updated);
     qrModalRequest.value = updated;
-    showToast('success', 'Đã chuyển sang READY và tạo mã QR bàn giao thành công!');
+    showToast('success', 'Đã chuẩn bị xong, mã bàn giao đã sẵn sàng.');
   } catch (err: unknown) {
-    showToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Không thể cập nhật trạng thái.');
+    showToast('error', userFacingError(err, 'Chưa cập nhật được trạng thái, vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -156,29 +146,28 @@ const handleMarkDelivering = async (req: PartRequest) => {
   actionLoading.value = true;
   try {
     const updated = await partRequestsApi.markDelivering(req.id);
-    const idx = requests.value.findIndex((r) => r.id === req.id);
-    if (idx !== -1) requests.value[idx] = updated;
-    showToast('success', 'Đã chuyển sang DELIVERING (Đang giao hàng).');
+    replaceRow(updated);
+    showToast('success', 'Đã chuyển sang đang giao.');
   } catch (err: unknown) {
-    showToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Không thể cập nhật trạng thái giao hàng.');
+    showToast('error', userFacingError(err, 'Chưa cập nhật được trạng thái giao hàng, vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
 };
 
-const handleCancelRequest = async (req: PartRequest) => {
-  if (!canOperate.value || actionLoading.value) return;
-  if (!confirm(`Bạn có chắc chắn muốn hủy yêu cầu linh kiện ${req.id}?`)) return;
+const handleCancelRequest = async () => {
+  const req = cancelTarget.value;
+  if (!req || !canOperate.value || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const updated = await partRequestsApi.cancel(req.id, 'Quản lý dịch vụ hủy');
-    const idx = requests.value.findIndex((r) => r.id === req.id);
-    if (idx !== -1) requests.value[idx] = updated;
-    showToast('success', 'Đã hủy yêu cầu linh kiện.');
+    replaceRow(updated);
+    showToast('success', 'Đã huỷ yêu cầu linh kiện.');
   } catch (err: unknown) {
-    showToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Không thể hủy yêu cầu.');
+    showToast('error', userFacingError(err, 'Chưa huỷ được yêu cầu, vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
+    cancelTarget.value = null;
   }
 };
 
@@ -188,7 +177,7 @@ const copyToken = async (token: string) => {
     copiedToken.value = true;
     setTimeout(() => { copiedToken.value = false; }, 2000);
   } catch {
-    // fallback
+    // The code stays selectable when the clipboard is unavailable.
   }
 };
 
@@ -198,12 +187,19 @@ const regenerateQr = async () => {
   try {
     const updated = await partRequestsApi.regenerateQr(qrModalRequest.value.id);
     qrModalRequest.value = updated;
-    const index = requests.value.findIndex(r => r.id === updated.id);
-    if (index !== -1) requests.value[index] = updated;
+    replaceRow(updated);
     showToast('success', 'Đã tạo mã bàn giao mới. Mã cũ không còn hiệu lực.');
-  } catch { showToast('error', 'Không thể tạo lại mã bàn giao. Vui lòng tải lại yêu cầu.'); }
+  } catch { showToast('error', 'Chưa tạo lại được mã bàn giao. Vui lòng tải lại trang.'); }
   finally { actionLoading.value = false; }
 };
+
+/** Short reference shown to staff and technicians ("PR-1A2B3C4D"). */
+const requestCode = (req: PartRequest) => `PR-${req.id.substring(0, 8).toUpperCase()}`;
+const isOpen = (req: PartRequest) => ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
+const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.toLowerCase()) && !!req.qrToken;
+const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
+const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh');
+const methodLabel = (method: string) => (method === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho');
 
 const getStatusLabel = (status: PartRequestStatus | string) => {
   switch (status?.toLowerCase()) {
@@ -213,7 +209,7 @@ const getStatusLabel = (status: PartRequestStatus | string) => {
     case 'received': return 'Đã nhận / Đang dùng';
     case 'completed': return 'Hoàn tất';
     case 'cancelled': return 'Đã hủy';
-    default: return status;
+    default: return 'Trạng thái chưa xác định';
   }
 };
 
@@ -229,12 +225,21 @@ const getStatusBadgeClass = (status: PartRequestStatus | string) => {
   }
 };
 
+const getUsageShortLabel = (status: string) => {
+  switch (status?.toLowerCase()) {
+    case 'pending': return 'Đang giữ';
+    case 'used': return 'Đã dùng';
+    case 'returned': return 'Đã trả lại';
+    default: return 'Chưa rõ';
+  }
+};
+
 const getUsageStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
-    case 'pending': return 'Đang giữ (Chưa chốt)';
+    case 'pending': return 'Đang giữ (chưa chốt)';
     case 'used': return 'Đã dùng (chỉ tính phí đã duyệt)';
-    case 'returned': return 'Đã trả lại (Miễn phí)';
-    default: return status;
+    case 'returned': return 'Đã trả lại (miễn phí)';
+    default: return 'Chưa rõ';
   }
 };
 
@@ -249,445 +254,280 @@ const getUsageBadgeClass = (status: string) => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Boxes class="text-brand-600" :size="24" />
-          {{ canOperate ? 'Quản lý Yêu cầu Linh kiện' : 'Lịch sử Yêu cầu Linh kiện (chỉ đọc)' }}
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          {{ canOperate ? 'Chuẩn bị linh kiện và xác nhận bàn giao cho kỹ thuật viên.' : 'Xem trạng thái bàn giao và lịch sử USED / RETURNED.' }}
-        </p>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Yêu cầu linh kiện" :count="loading || loadError ? null : totalCount">
+      <template #badges>
+        <span v-if="!canOperate" class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">Chế độ chỉ đọc</span>
+      </template>
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading" @click="loadData">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
+
+    <section class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" aria-label="Số yêu cầu theo trạng thái trên trang này" title="Tính trên trang đang xem">
+      <div v-for="stat in stats" :key="stat.key" class="rounded-[var(--radius-md)] border border-ink-200 bg-white px-4 py-3">
+        <div class="whitespace-nowrap text-sm text-ink-500">{{ stat.label }}</div>
+        <div class="mt-0.5 font-num text-xl font-semibold text-ink-900">{{ stat.value }}</div>
       </div>
+    </section>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <ConsoleSearch v-model="searchQuery" placeholder="Tìm mã yêu cầu, mã đơn, linh kiện" label="Tìm yêu cầu linh kiện" />
+      <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
+        <option value="ALL">Tất cả trạng thái</option>
+        <option value="REQUESTED">Chờ chuẩn bị</option>
+        <option value="READY">Sẵn sàng giao</option>
+        <option value="DELIVERING">Đang giao hàng</option>
+        <option value="RECEIVED">Đã nhận</option>
+        <option value="COMPLETED">Hoàn tất</option>
+        <option value="CANCELLED">Đã huỷ</option>
+      </select>
+      <select v-model="typeFilter" :class="consoleField" aria-label="Loại yêu cầu">
+        <option value="ALL">Tất cả loại</option>
+        <option value="PRE_REPAIR">Trước sửa chữa</option>
+        <option value="ADDITIONAL">Phát sinh</option>
+      </select>
+      <select v-model="fulfillmentFilter" :class="consoleField" aria-label="Hình thức nhận">
+        <option value="ALL">Mọi hình thức</option>
+        <option value="PICKUP">Lấy tại kho</option>
+        <option value="DELIVERY">Giao tận nơi</option>
+      </select>
+      <select v-model="dateFilter" :class="consoleField" aria-label="Thời gian">
+        <option value="ALL">Mọi thời gian</option>
+        <option value="today">Hôm nay</option>
+        <option value="7days">7 ngày qua</option>
+        <option value="30days">30 ngày qua</option>
+      </select>
     </div>
 
-    <!-- Scope disclaimer banner -->
-    <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-[var(--radius-sm)] text-xs text-blue-900 flex items-start gap-2">
-      <Package :size="16" class="text-blue-600 mt-0.5 shrink-0" />
-      <div>
-        <span class="font-bold">Phạm vi Quản lý Yêu cầu Linh kiện:</span> Theo dõi và điều phối yêu cầu linh kiện thực tế từ kỹ thuật viên (Parts Request & Handover Tracking). Hệ thống không quản lý kho bãi / tồn kho (không quản lý nhập/xuất kho, supplier, purchase order hay kiểm kê tồn).
-      </div>
-    </div>
-
-    <!-- Alert toast -->
     <div
       v-if="toastMessage"
-      class="p-3 rounded text-xs flex items-center justify-between border"
+      class="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
       :class="toastMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-800 border-danger-200'"
+      :role="toastMessage.type === 'success' ? 'status' : 'alert'"
     >
       <span>{{ toastMessage.text }}</span>
-      <button @click="toastMessage = null" class="font-bold ml-2">×</button>
+      <button type="button" class="shrink-0 rounded p-1 hover:bg-white/60" aria-label="Đóng thông báo" @click="toastMessage = null">
+        <X :size="16" aria-hidden="true" />
+      </button>
     </div>
 
-    <p class="text-xs text-ink-500">Thống kê trên trang hiện tại</p>
-    <!-- Stats Timeline -->
-    <div class="flex items-center justify-between w-full bg-white px-8 py-6 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
-      <!-- Background Connecting Line -->
-      <div class="absolute top-12 left-16 right-16 h-1 bg-gray-100 rounded-full z-0"></div>
-      
-      <!-- Step 1 -->
-      <div class="flex-1 flex flex-col items-center relative z-10 group">
-        <div class="w-12 h-12 rounded-full bg-amber-50 border-2 border-amber-200 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
-          <Package :size="24" />
-        </div>
-        <div class="text-[11px] font-bold text-amber-700 uppercase tracking-wider text-center">Chờ chuẩn bị</div>
-        <div class="text-xl font-extrabold text-amber-900 font-num mt-1">{{ stats.requested }} <span class="text-[10px] font-medium text-amber-500">đơn</span></div>
-      </div>
-      
-      <!-- Step 2 -->
-      <div class="flex-1 flex flex-col items-center relative z-10 group">
-        <div class="w-12 h-12 rounded-full bg-blue-50 border-2 border-blue-200 text-blue-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
-          <CheckCircle :size="24" />
-        </div>
-        <div class="text-[11px] font-bold text-blue-700 uppercase tracking-wider text-center">Sẵn sàng</div>
-        <div class="text-xl font-extrabold text-blue-900 font-num mt-1">{{ stats.ready }} <span class="text-[10px] font-medium text-blue-500">đơn</span></div>
-      </div>
-      
-      <!-- Step 3 -->
-      <div class="flex-1 flex flex-col items-center relative z-10 group">
-        <div class="w-12 h-12 rounded-full bg-purple-50 border-2 border-purple-200 text-purple-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
-          <Truck :size="24" />
-        </div>
-        <div class="text-[11px] font-bold text-purple-700 uppercase tracking-wider text-center">Đang giao</div>
-        <div class="text-xl font-extrabold text-purple-900 font-num mt-1">{{ stats.delivering }} <span class="text-[10px] font-medium text-purple-500">đơn</span></div>
-      </div>
-      
-      <!-- Step 4 -->
-      <div class="flex-1 flex flex-col items-center relative z-10 group">
-        <div class="w-12 h-12 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
-          <Layers :size="24" />
-        </div>
-        <div class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider text-center">Đã bàn giao</div>
-        <div class="text-xl font-extrabold text-emerald-900 font-num mt-1">{{ stats.received }} <span class="text-[10px] font-medium text-emerald-500">đơn</span></div>
-      </div>
-      
-      <!-- Step 5 -->
-      <div class="flex-1 flex flex-col items-center relative z-10 group">
-        <div class="w-12 h-12 rounded-full bg-gray-50 border-2 border-gray-200 text-gray-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
-          <Check :size="24" />
-        </div>
-        <div class="text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center">Hoàn tất</div>
-        <div class="text-xl font-extrabold text-gray-800 font-num mt-1">{{ stats.completed }} <span class="text-[10px] font-medium text-gray-400">đơn</span></div>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <div v-if="loadError" class="p-8 text-center text-danger-700 bg-white rounded-[var(--radius-sm)] border border-danger-200" role="alert">{{ loadError }}</div>
-    <FhTable
+    <ConsoleLoadError v-if="loadError" @retry="loadData" />
+    <ConsoleTable
       v-else
-      :columns="[
-        { key: 'code', label: 'Mã yêu cầu & Đơn hàng' },
-        { key: 'type', label: 'Loại & Hình thức' },
-        { key: 'items', label: 'Danh sách linh kiện' },
-        { key: 'status', label: 'Trạng thái', width: '150px' },
-        { key: 'time', label: 'Thời gian', width: '130px' },
-        { key: 'actions', label: 'Thao tác', width: '190px' },
-      ]"
-      :rows="filteredRequests"
+      :columns="columns"
+      :rows="requests"
       :loading="loading"
-      searchable
-      v-model:searchQuery="searchQuery"
-      search-placeholder="Tìm theo mã yêu cầu, mã đơn, tên linh kiện..."
-      refreshable
-      @refresh="loadData"
+      empty-text="Không có yêu cầu linh kiện nào phù hợp."
     >
-      <template #toolbar>
-        <div class="flex flex-wrap items-center gap-2 text-xs">
-          <select
-            v-model="statusFilter"
-            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="REQUESTED">Chờ chuẩn bị (REQUESTED)</option>
-            <option value="READY">Sẵn sàng nhận (READY)</option>
-            <option value="DELIVERING">Đang giao hàng (DELIVERING)</option>
-            <option value="RECEIVED">Đã nhận hàng (RECEIVED)</option>
-            <option value="COMPLETED">Đã hoàn tất (COMPLETED)</option>
-            <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-          </select>
-
-          <select
-            v-model="typeFilter"
-            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Tất cả loại yêu cầu</option>
-            <option value="PRE_REPAIR">Trước sửa chữa (PRE_REPAIR)</option>
-            <option value="ADDITIONAL">Phát sinh (ADDITIONAL)</option>
-          </select>
-
-          <select
-            v-model="fulfillmentFilter"
-            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Tất cả phương thức</option>
-            <option value="PICKUP">Lấy tại kho (PICKUP)</option>
-            <option value="DELIVERY">Giao tận nơi (DELIVERY)</option>
-          </select>
-
-          <select
-            v-model="dateFilter"
-            class="h-9 px-3 bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Mọi thời gian</option>
-            <option value="today">Hôm nay</option>
-            <option value="7days">7 ngày qua</option>
-            <option value="30days">30 ngày qua</option>
-          </select>
-        </div>
-      </template>
-
       <template #cell-code="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="100px" height="16px" class="mb-1" />
-          <FhSkeleton width="120px" height="12px" class="mb-1" />
-          <FhSkeleton width="80px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="font-mono text-xs font-bold text-ink-900">
-            PR-{{ row.id.substring(0, 8).toUpperCase() }}
-          </div>
-          <div class="text-[11px] text-ink-500 font-mono mt-0.5">
-            Đơn: <router-link :to="`/console/orders/${row.serviceOrderId}`" class="text-brand-600 hover:underline">
-              {{ row.serviceOrderId.substring(0, 8).toUpperCase() }}
-            </router-link>
-          </div>
-          <div class="text-[10px] text-ink-400 font-mono">
-            Thợ: {{ row.technicianId.substring(0, 8) }}
-          </div>
-        </div>
-      </template>
-
-      <template #cell-type="{ row }">
-        <div v-if="isSkeleton(row)" class="flex flex-col gap-1 items-start">
-          <FhSkeleton width="80px" height="20px" class="rounded" />
-          <FhSkeleton width="90px" height="20px" class="rounded" />
-        </div>
-        <div v-else class="flex flex-col gap-1 items-start">
-          <span
-            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase"
-            :class="row.requestType === 'pre_repair' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'"
-          >
-            {{ row.requestType === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh' }}
-          </span>
-          <span
-            class="text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1"
-            :class="row.fulfillmentMethod === 'delivery' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-700'"
-          >
-            <Truck v-if="row.fulfillmentMethod === 'delivery'" :size="11" />
-            <Package v-else :size="11" />
-            {{ row.fulfillmentMethod === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho' }}
-          </span>
-          <span v-if="row.fulfillmentMethod === 'delivery' && Number(row.shippingFee) > 0" class="text-[10px] text-ink-500 font-num">
-            Ship: <FhMoney :amount="row.shippingFee" />
-          </span>
+        <button
+          type="button"
+          class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          @click="detailModalRequest = row"
+        >{{ requestCode(row) }}</button>
+        <div>
+          <router-link :to="`/console/orders/${row.serviceOrderId}`" class="whitespace-nowrap text-xs text-ink-500 hover:text-brand-700 hover:underline">Xem đơn</router-link>
         </div>
       </template>
 
       <template #cell-items="{ row }">
-        <div v-if="isSkeleton(row)" class="space-y-1 max-w-sm">
-          <FhSkeleton width="100%" height="16px" />
-          <FhSkeleton width="80%" height="16px" />
-        </div>
-        <div v-else class="space-y-1 max-w-sm">
-          <div
-            v-for="item in (row.items || []).slice(0, 3)"
-            :key="item.id"
-            class="text-xs flex items-center justify-between gap-2"
-          >
-            <span class="font-medium text-ink-800 line-clamp-1">
-              • {{ item.partNameSnapshot }}
+        <ul class="max-w-72 min-w-40 space-y-0.5">
+          <li v-for="item in (row.items || []).slice(0, 3)" :key="item.id" class="flex items-center justify-between gap-2">
+            <span class="truncate text-ink-800" :title="item.partNameSnapshot">{{ item.partNameSnapshot }}</span>
+            <span class="flex shrink-0 items-center gap-1.5">
+              <span class="font-num text-xs text-ink-500">×{{ item.quantity }}</span>
+              <span class="whitespace-nowrap rounded border px-1 text-[11px] font-medium" :class="getUsageBadgeClass(item.usageStatus)">{{ getUsageShortLabel(item.usageStatus) }}</span>
             </span>
-            <div class="flex items-center gap-1 shrink-0">
-              <span class="text-ink-500 font-num text-[11px]">x{{ item.quantity }}</span>
-              <span
-                class="text-[9px] px-1 py-0.2 rounded border uppercase font-medium"
-                :class="getUsageBadgeClass(item.usageStatus)"
-              >
-                {{ item.usageStatus }}
-              </span>
-            </div>
-          </div>
-          <div v-if="(row.items || []).length > 3" class="text-[10px] text-brand-600 font-semibold cursor-pointer hover:underline" @click="detailModalRequest = row">
-            + Xem thêm {{ (row.items || []).length - 3 }} linh kiện khác...
-          </div>
+          </li>
+        </ul>
+        <button
+          v-if="(row.items || []).length > 3"
+          type="button"
+          class="mt-0.5 whitespace-nowrap text-xs font-medium text-brand-700 hover:underline"
+          @click="detailModalRequest = row"
+        >Thêm {{ (row.items || []).length - 3 }} linh kiện</button>
+      </template>
+
+      <template #cell-type="{ row }">
+        <div class="whitespace-nowrap text-ink-800">{{ typeLabel(row.requestType) }}</div>
+        <div class="whitespace-nowrap text-xs text-ink-500">
+          {{ methodLabel(row.fulfillmentMethod) }}<template v-if="row.fulfillmentMethod === 'delivery' && Number(row.shippingFee) > 0">, phí <span class="font-num">{{ Number(row.shippingFee).toLocaleString('vi-VN') }}&nbsp;₫</span></template>
         </div>
       </template>
 
       <template #cell-status="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="100px" height="20px" class="rounded" />
-        </div>
-        <div v-else class="flex flex-col gap-1">
-          <span
-            class="text-[11px] font-bold px-2 py-0.5 rounded border inline-block text-center"
-            :class="getStatusBadgeClass(row.status)"
-          >
-            {{ getStatusLabel(row.status) }}
-          </span>
-          <div v-if="row.qrToken && (row.status === 'ready' || row.status === 'delivering')" class="text-[10px] text-blue-700 font-mono flex items-center gap-1 cursor-pointer hover:underline" @click="qrModalRequest = row">
-            <QrCode :size="12" /> Mã: {{ row.qrToken.substring(0, 10) }}...
-          </div>
-        </div>
+        <span class="inline-block whitespace-nowrap rounded border px-2 py-0.5 text-xs font-medium" :class="getStatusBadgeClass(row.status)">
+          {{ getStatusLabel(row.status) }}
+        </span>
       </template>
 
       <template #cell-time="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="80px" height="16px" class="mb-1" />
-          <FhSkeleton width="60px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="text-[11px] text-ink-700 font-num">
-            {{ vnDateString(row.createdAt) }}
-          </div>
-          <div class="text-[10px] text-ink-400 font-num">
-            {{ vnTimeString(row.createdAt, { hour: '2-digit', minute: '2-digit' }) }}
-          </div>
-        </div>
+        <div class="whitespace-nowrap font-num text-ink-700">{{ vnDateString(row.createdAt) }}</div>
+        <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnTimeString(row.createdAt, { hour: '2-digit', minute: '2-digit' }) }}</div>
       </template>
 
       <template #cell-actions="{ row }">
-        <div v-if="isSkeleton(row)" class="flex gap-2">
-          <FhSkeleton width="80px" height="28px" class="rounded" />
-          <FhSkeleton width="32px" height="28px" class="rounded" />
-        </div>
-        <div v-else class="flex items-center gap-1.5 flex-wrap">
-          <!-- Mark Ready (When REQUESTED) -->
-          <button
+        <div class="flex items-center justify-end gap-2">
+          <FhButton
             v-if="canOperate && row.status.toLowerCase() === 'requested'"
-            class="px-2 py-1 text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 rounded transition-colors flex items-center gap-1 shadow-xs"
+            variant="primary"
+            size="sm"
             :disabled="actionLoading"
             @click="handleMarkReady(row)"
-          >
-            <CheckCircle :size="12" /> Chuẩn bị xong
-          </button>
-
-          <!-- View QR Handover (When READY or DELIVERING) -->
-          <button
-            v-if="['ready', 'delivering'].includes(row.status.toLowerCase()) && row.qrToken"
-            class="px-2 py-1 text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded transition-colors flex items-center gap-1"
-            @click="qrModalRequest = row"
-          >
-            <QrCode :size="12" /> Mã QR
-          </button>
-
-          <!-- Mark Delivering (When READY and delivery) -->
-          <button
-            v-if="canOperate && row.status.toLowerCase() === 'ready' && row.fulfillmentMethod === 'delivery'"
-            class="px-2 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded transition-colors flex items-center gap-1"
+          >Chuẩn bị xong</FhButton>
+          <FhButton
+            v-else-if="canOperate && canDeliver(row)"
+            variant="primary"
+            size="sm"
             :disabled="actionLoading"
             @click="handleMarkDelivering(row)"
+          >Giao hàng</FhButton>
+          <FhButton
+            v-else-if="hasQr(row)"
+            variant="secondary"
+            size="sm"
+            @click="qrModalRequest = row"
+          >Mã QR</FhButton>
+          <ConsoleMoreMenu
+            v-if="(hasQr(row) && canOperate && canDeliver(row)) || (canOperate && isOpen(row))"
+            label="Thao tác khác với yêu cầu"
           >
-            <Truck :size="12" /> Giao hàng
-          </button>
-
-          <!-- Detail modal button -->
-          <button
-            class="p-1 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
-            title="Xem chi tiết linh kiện & sử dụng"
-            @click="detailModalRequest = row"
-          >
-            <Eye :size="15" />
-          </button>
-
-          <!-- Cancel button -->
-          <button
-            v-if="canOperate && ['requested', 'ready', 'delivering'].includes(row.status.toLowerCase())"
-            class="p-1 text-ink-400 hover:text-danger-600 rounded hover:bg-danger-50 transition-colors"
-            title="Hủy yêu cầu"
-            :disabled="actionLoading"
-            @click="handleCancelRequest(row)"
-          >
-            <XCircle :size="15" />
-          </button>
+            <ConsoleMenuItem v-if="hasQr(row) && canOperate && canDeliver(row)" @click="qrModalRequest = row">Mã QR</ConsoleMenuItem>
+            <ConsoleMenuItem
+              v-if="canOperate && isOpen(row)"
+              danger
+              :disabled="actionLoading"
+              @click="cancelTarget = row"
+            >Huỷ yêu cầu</ConsoleMenuItem>
+          </ConsoleMoreMenu>
         </div>
       </template>
-    </FhTable>
+    </ConsoleTable>
 
-    <div class="flex items-center justify-between text-xs">
-      <span>Trang {{ page }} • {{ totalCount }} yêu cầu</span>
-      <div class="flex gap-2">
-        <FhButton size="sm" :disabled="loading || page <= 1" @click="changePage(-1)">Trước</FhButton>
-        <FhButton size="sm" :disabled="loading || page * pageSize >= totalCount" @click="changePage(1)">Sau</FhButton>
-      </div>
-    </div>
+    <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="setPage" />
 
-    <!-- QR Handover Modal -->
+    <FhConfirmDialog
+      :open="!!cancelTarget"
+      :loading="actionLoading"
+      danger
+      :title="`Huỷ yêu cầu ${cancelTarget ? requestCode(cancelTarget) : ''}?`"
+      consequence="Kỹ thuật viên sẽ không nhận được linh kiện của yêu cầu này."
+      confirm-text="Huỷ yêu cầu"
+      cancel-text="Giữ lại"
+      @confirm="handleCancelRequest"
+      @cancel="cancelTarget = null"
+    />
+
+    <!-- Handover QR -->
     <div
       v-if="qrModalRequest"
       class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="qr-title"
       @click.self="qrModalRequest = null"
+      @keydown.esc="qrModalRequest = null"
     >
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
-        <div class="flex items-center justify-between border-b pb-3">
-          <div class="flex items-center gap-2">
-            <QrCode class="text-brand-600" :size="20" />
-            <h3 class="font-bold text-ink-900 text-base">Mã QR Bàn giao Linh kiện</h3>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 id="qr-title" class="text-base font-semibold text-ink-900">Mã bàn giao linh kiện</h3>
+            <p class="font-num text-sm text-ink-500">{{ requestCode(qrModalRequest) }}</p>
           </div>
-          <button class="text-ink-400 hover:text-ink-700 text-lg font-bold" @click="qrModalRequest = null">✕</button>
+          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="qrModalRequest = null">
+            <X :size="18" aria-hidden="true" />
+          </button>
         </div>
 
-        <div class="text-xs text-ink-600">
-          Yêu cầu: <strong class="text-ink-900 font-mono">PR-{{ qrModalRequest.id.substring(0, 8).toUpperCase() }}</strong>
-          • Đơn: <strong class="text-ink-900 font-mono">{{ qrModalRequest.serviceOrderId.substring(0, 8).toUpperCase() }}</strong>
-        </div>
-
-        <!-- QR Code display -->
-        <div class="flex flex-col items-center justify-center p-4 bg-ink-50 border border-ink-200 rounded-lg space-y-3">
+        <div class="flex flex-col items-center gap-3 rounded-lg border border-ink-200 bg-ink-50 p-4">
           <img
             v-if="qrImage"
             :src="qrImage"
-            alt="QR Token"
-            class="w-48 h-48 bg-white p-2 rounded shadow-sm border border-ink-200"
+            alt="Mã QR bàn giao"
+            class="h-48 w-48 rounded border border-ink-200 bg-white p-2"
           />
-          <div class="w-full flex items-center justify-between gap-2 p-2 bg-white rounded border border-ink-200">
-            <span class="font-mono text-xs font-bold text-blue-700 truncate select-all">
-              {{ qrModalRequest.qrToken }}
-            </span>
+          <div class="flex w-full items-center justify-between gap-2 rounded border border-ink-200 bg-white p-2">
+            <span class="truncate select-all font-num text-sm font-semibold text-ink-900">{{ qrModalRequest.qrToken }}</span>
             <button
-              class="px-2 py-1 text-[11px] font-semibold bg-ink-100 hover:bg-ink-200 text-ink-800 rounded flex items-center gap-1 shrink-0"
+              type="button"
+              class="flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-ink-100 px-2 py-1 text-xs font-medium text-ink-800 hover:bg-ink-200"
               @click="qrModalRequest.qrToken && copyToken(qrModalRequest.qrToken)"
             >
-              <Check v-if="copiedToken" :size="12" class="text-success-600" />
-              <Copy v-else :size="12" />
+              <Check v-if="copiedToken" :size="12" class="text-success-600" aria-hidden="true" />
+              <Copy v-else :size="12" aria-hidden="true" />
               {{ copiedToken ? 'Đã chép' : 'Sao chép' }}
             </button>
           </div>
         </div>
 
-        <div class="text-[11px] text-ink-500 bg-blue-50 p-2.5 rounded border border-blue-200">
-          💡 <strong>Hướng dẫn bàn giao:</strong> Kỹ thuật viên dùng camera điện thoại hoặc nút "Nhận linh kiện (Quét QR)" trên giao diện đơn hàng để quét hoặc nhập mã token trên. Sau khi quét, trạng thái sẽ tự động chuyển thành <strong>RECEIVED</strong>.
-        </div>
+        <p class="text-sm text-ink-600 text-pretty">Kỹ thuật viên quét mã hoặc nhập mã này ở đơn sửa chữa để nhận linh kiện.</p>
 
-        <div class="flex justify-end gap-2 pt-2">
-          <FhButton v-if="canOperate" variant="secondary" size="sm" :disabled="actionLoading" @click="regenerateQr">Tạo lại QR</FhButton>
-          <FhButton variant="primary" size="sm" @click="qrModalRequest = null">
-            Đóng
-          </FhButton>
+        <div class="flex justify-end gap-2">
+          <FhButton v-if="canOperate" variant="secondary" size="sm" :disabled="actionLoading" @click="regenerateQr">Tạo lại mã</FhButton>
+          <FhButton variant="primary" size="sm" @click="qrModalRequest = null">Đóng</FhButton>
         </div>
       </div>
     </div>
 
-    <!-- Detail Modal -->
+    <!-- Request detail -->
     <div
       v-if="detailModalRequest"
       class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pr-detail-title"
       @click.self="detailModalRequest = null"
+      @keydown.esc="detailModalRequest = null"
     >
       <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between border-b pb-3">
-          <div class="flex items-center gap-2">
-            <Layers class="text-brand-600" :size="20" />
-            <h3 class="font-bold text-ink-900 text-base">Chi tiết Yêu cầu Linh kiện</h3>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 id="pr-detail-title" class="text-base font-semibold text-ink-900">{{ requestCode(detailModalRequest) }}</h3>
+            <router-link :to="`/console/orders/${detailModalRequest.serviceOrderId}`" class="text-sm text-brand-700 hover:underline">Xem đơn sửa chữa</router-link>
           </div>
-          <button class="text-ink-400 hover:text-ink-700 text-lg font-bold" @click="detailModalRequest = null">✕</button>
+          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailModalRequest = null">
+            <X :size="18" aria-hidden="true" />
+          </button>
         </div>
 
-        <div class="grid grid-cols-2 gap-2 text-xs text-ink-600 bg-ink-50 p-3 rounded border border-ink-200">
-          <div>Mã yêu cầu: <strong class="text-ink-900 font-mono">{{ detailModalRequest.id }}</strong></div>
-          <div>Mã đơn hàng: <strong class="text-ink-900 font-mono">{{ detailModalRequest.serviceOrderId }}</strong></div>
-          <div>Loại: <strong class="text-ink-900 uppercase">{{ detailModalRequest.requestType }}</strong></div>
-          <div>Hình thức: <strong class="text-ink-900 uppercase">{{ detailModalRequest.fulfillmentMethod }}</strong></div>
-          <div>Trạng thái: <strong class="text-ink-900 uppercase">{{ detailModalRequest.status }}</strong></div>
-          <div>Phí giao hàng: <strong class="text-ink-900 font-num"><FhMoney :amount="detailModalRequest.shippingFee || 0" /></strong></div>
-        </div>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Loại</dt><dd class="text-ink-900">{{ typeLabel(detailModalRequest.requestType) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(detailModalRequest.status) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Phí giao hàng</dt><dd><FhMoney :amount="detailModalRequest.shippingFee || 0" /></dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Hoàn tất</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</dd></div>
+        </dl>
 
-        <p class="text-xs text-ink-600">Đã nhận: {{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }} • Hoàn tất: {{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</p>
-        <div class="space-y-2">
-          <h4 class="text-xs font-bold text-ink-800 uppercase tracking-wider">Danh sách linh kiện & Trạng thái sử dụng:</h4>
-          <div class="border border-ink-200 rounded divide-y divide-ink-100">
-            <div
+        <div>
+          <h4 class="mb-2 text-sm font-semibold text-ink-900">Linh kiện</h4>
+          <ul class="divide-y divide-ink-100 rounded border border-ink-200">
+            <li
               v-for="item in detailModalRequest.items || []"
               :key="item.id"
-              class="p-2.5 text-xs flex items-center justify-between gap-2"
+              class="flex items-center justify-between gap-3 p-2.5 text-sm"
             >
-              <div>
-                <div class="font-semibold text-ink-900">{{ item.partNameSnapshot }}</div>
-                <div class="text-[11px] text-ink-400 font-num">
-                  Đơn giá: <FhMoney :amount="item.unitPriceSnapshot" /> • SL: {{ item.quantity }}
+              <div class="min-w-0">
+                <div class="font-medium text-ink-900">{{ item.partNameSnapshot }}</div>
+                <div class="text-xs text-ink-500">
+                  <span class="font-num">{{ Number(item.unitPriceSnapshot).toLocaleString('vi-VN') }}&nbsp;₫</span> × <span class="font-num">{{ item.quantity }}</span>
                 </div>
               </div>
-
-              <div class="text-right">
-                <span
-                  class="text-[10px] px-2 py-0.5 rounded border uppercase"
-                  :class="getUsageBadgeClass(item.usageStatus)"
-                >
+              <div class="shrink-0 text-right">
+                <span class="whitespace-nowrap rounded border px-2 py-0.5 text-xs" :class="getUsageBadgeClass(item.usageStatus)">
                   {{ getUsageStatusLabel(item.usageStatus) }}
                 </span>
-                <div class="text-[10px] text-ink-400 mt-0.5">
-                  Thành tiền: <strong class="font-num text-ink-800"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></strong>
-                </div>
+                <div class="mt-0.5"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></div>
               </div>
-            </div>
-          </div>
+            </li>
+          </ul>
         </div>
 
-        <div class="flex justify-end pt-2">
-          <FhButton variant="secondary" size="sm" @click="detailModalRequest = null">
-            Đóng
-          </FhButton>
+        <div class="flex justify-end">
+          <FhButton variant="secondary" size="sm" @click="detailModalRequest = null">Đóng</FhButton>
         </div>
       </div>
     </div>
