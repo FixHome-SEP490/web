@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   Check,
   X,
-  Sparkles,
   CreditCard,
   FileCheck2,
   LogOut,
@@ -23,11 +22,10 @@ import {
   Search,
   Building2,
   Zap,
-  Crosshair,
   Wallet,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
-import { FhButton } from '../../components';
+import { FhButton, FhSkeleton } from '../../components';
 import RoleChatDock from '../../components/chat/RoleChatDock.vue';
 import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 import {
@@ -1161,7 +1159,7 @@ const handleLogout = async () => {
             <span class="text-base font-bold tracking-tight">
               <span class="text-brand-600">Fix</span><span class="text-success-600">Home</span>
             </span>
-            <span class="text-[9px] font-bold text-ink-500">Đối tác thợ</span>
+            <span class="text-xs font-medium text-ink-500">Kỹ thuật viên</span>
           </div>
         </router-link>
 
@@ -1172,7 +1170,7 @@ const handleLogout = async () => {
           <button
             type="button"
             @click="handleLogout"
-            class="text-xs text-ink-600 hover:text-danger-600 font-semibold flex items-center gap-1.5 py-1.5 px-3 rounded-lg hover:bg-danger-50 transition-colors"
+            class="h-10 text-sm text-ink-600 hover:text-danger-600 font-semibold whitespace-nowrap flex items-center gap-1.5 px-3 rounded-xl hover:bg-danger-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           >
             <LogOut :size="14" />
             <span>Đăng xuất</span>
@@ -1184,9 +1182,15 @@ const handleLogout = async () => {
     <!-- Main Container -->
     <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
       <!-- Loading Skeleton -->
-      <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-ink-400 gap-3">
-        <RefreshCw :size="32" class="animate-spin text-brand-600" />
-        <span class="text-sm font-medium">Đang tải hồ sơ kỹ thuật viên...</span>
+      <div v-if="loading" class="space-y-8" aria-busy="true" aria-label="Đang tải hồ sơ kỹ thuật viên">
+        <div class="flex justify-center"><FhSkeleton width="min(420px, 100%)" height="32px" rounded="md" /></div>
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-ink-200 grid grid-cols-5 gap-2 sm:gap-4">
+          <div v-for="i in 5" :key="i" class="flex justify-center"><FhSkeleton width="44px" height="44px" rounded="lg" /></div>
+        </div>
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 space-y-5">
+          <FhSkeleton width="260px" height="22px" />
+          <FhSkeleton height="44px" :count="4" rounded="md" />
+        </div>
       </div>
 
       <!-- Approved State Screen -->
@@ -1224,28 +1228,20 @@ const handleLogout = async () => {
                 {{ wallet?.eligibleForJobs ? 'Ví tài khoản đã sẵn sàng nhận việc' : 'Thông báo số dư ví ban đầu & Điều kiện nhận đơn' }}
               </h4>
               <p
-                class="text-xs leading-relaxed"
+                class="text-sm leading-relaxed text-pretty"
                 :class="wallet?.eligibleForJobs ? 'text-success-900' : 'text-warning-900'"
               >
                 <span v-if="wallet?.eligibleForJobs">
-                  Ví ký quỹ của bạn đã đạt mức tối thiểu và đủ điều kiện nhận đơn sửa chữa mới từ khách hàng.
+                  Ví ký quỹ đã đạt mức tối thiểu, bạn có thể nhận việc.
                 </span>
                 <span v-else-if="wallet">
-                  Tài khoản mới tạo có số dư ví là <strong class="font-num">{{ wallet.balance.toLocaleString('vi-VN') }} ₫</strong>. Theo quy định hệ thống, bạn cần nạp tối thiểu <strong class="font-num">{{ wallet.minimumBalance.toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để kích hoạt quyền nhận việc và nhận lời mời đơn sửa chữa mới.
+                  Số dư ví hiện là <strong class="font-num whitespace-nowrap">{{ wallet.balance.toLocaleString('vi-VN') }} ₫</strong>. Cần nạp tối thiểu <strong class="font-num whitespace-nowrap">{{ wallet.minimumBalance.toLocaleString('vi-VN') }} ₫</strong> vào ví ký quỹ để bắt đầu nhận việc.
                 </span>
                 <span v-else>
-                  Chưa tải được thông tin ví. Mở trang Ví để xem số dư và mức ký quỹ tối thiểu cần nạp trước khi nhận việc.
+                  Chưa tải được thông tin ví. Mở trang Ví để xem số dư và mức ký quỹ cần nạp.
                 </span>
               </p>
             </div>
-          </div>
-          <div
-            v-if="wallet"
-            class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2.5 border-t text-xs gap-1.5 font-medium"
-            :class="wallet.eligibleForJobs ? 'border-success-200/60 text-success-900' : 'border-warning-200/60 text-warning-900'"
-          >
-            <span>Số dư ví hiện tại: <strong class="text-ink-900 font-num">{{ wallet.balance.toLocaleString('vi-VN') }} ₫</strong></span>
-            <span>Mức ký quỹ tối thiểu: <strong class="text-brand-600 font-num font-bold">{{ wallet.minimumBalance.toLocaleString('vi-VN') }} ₫</strong></span>
           </div>
         </div>
 
@@ -1266,7 +1262,7 @@ const handleLogout = async () => {
         v-else-if="isSubmitted && !isReviewing"
         class="bg-white rounded-3xl p-8 sm:p-12 border border-warning-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
-        <div class="w-20 h-20 rounded-full bg-warning-100 text-warning-600 flex items-center justify-center mx-auto shadow-inner animate-pulse">
+        <div class="w-20 h-20 rounded-full bg-warning-100 text-warning-600 flex items-center justify-center mx-auto shadow-inner">
           <Clock :size="42" />
         </div>
         <div class="space-y-2">
@@ -1339,7 +1335,7 @@ const handleLogout = async () => {
           class="rounded-2xl p-4 border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs"
           :class="isRejected ? 'bg-danger-50 border-danger-200 text-danger-900' : 'bg-warning-50 border-warning-200 text-warning-900'"
         >
-          <div class="flex items-center gap-2.5 text-xs">
+          <div class="flex items-center gap-2.5 text-sm">
             <AlertCircle v-if="isRejected" :size="18" class="text-danger-600 shrink-0" />
             <Clock v-else :size="18" class="text-warning-600 shrink-0" />
             <div>
@@ -1354,7 +1350,7 @@ const handleLogout = async () => {
           <button
             type="button"
             @click="handleReturnToStatus"
-            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0"
+            class="h-10 px-3.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             :class="isRejected ? 'bg-danger-600 hover:bg-danger-700 text-white' : 'bg-warning-600 hover:bg-warning-700 text-white'"
           >
             Quay lại màn hình trạng thái
@@ -1362,17 +1358,9 @@ const handleLogout = async () => {
         </div>
 
         <!-- Wizard Title & Subtitle -->
-        <div class="text-center space-y-2">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold">
-            <Sparkles :size="13" /> Đăng ký trở thành đối tác FixHome
-          </div>
-          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">
-            Xác minh & Hoàn tất Hồ sơ Kỹ thuật viên
-          </h1>
-          <p class="text-sm text-ink-500 max-w-xl mx-auto">
-            Vui lòng điền đầy đủ thông tin định danh, kỹ năng chuyên môn và địa chỉ hoạt động để bắt đầu tiếp nhận các đơn sửa chữa tại nhà từ khách hàng.
-          </p>
-        </div>
+        <h1 class="text-center text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">
+          Xác minh & Hoàn tất Hồ sơ Kỹ thuật viên
+        </h1>
 
         <!-- 5-Step Stepper Progress Bar -->
         <div class="bg-white rounded-2xl p-4 sm:p-5 border border-ink-200 shadow-2xs">
@@ -1397,13 +1385,10 @@ const handleLogout = async () => {
                 <component v-else :is="step.icon" :size="18" />
               </div>
               <span
-                class="text-[10px] sm:text-xs font-bold transition-colors line-clamp-1"
+                class="hidden sm:block text-xs font-bold transition-colors line-clamp-1"
                 :class="currentStep === step.id ? 'text-brand-700' : 'text-ink-600'"
               >
                 {{ step.title }}
-              </span>
-              <span class="hidden md:inline text-[9px] text-ink-400 font-medium">
-                {{ step.desc }}
               </span>
             </div>
           </div>
@@ -1416,9 +1401,6 @@ const handleLogout = async () => {
               <User :size="20" class="text-brand-600" />
               Bước 1: Thông tin cá nhân & Số CCCD
             </h3>
-            <p class="text-xs text-ink-500 mt-1">
-              Thông tin này dùng để đối soát danh tính người thật theo quy định pháp luật.
-            </p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -1510,9 +1492,6 @@ const handleLogout = async () => {
               <ShieldCheck :size="20" class="text-brand-600" />
               Bước 2: Xác thực CCCD & Video khuôn mặt (eKYC)
             </h3>
-            <p class="text-xs text-ink-500 mt-1">
-              Vui lòng chụp ảnh 2 mặt CCCD và ảnh chân dung; quản trị viên FixHome sẽ đối chiếu để xác minh chính chủ.
-            </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1545,7 +1524,7 @@ const handleLogout = async () => {
                   <CreditCard :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">CCCD – Mặt trước</strong>
-                <p class="text-[11px] text-ink-400 mt-1 px-2 leading-tight">Bấm để chọn ảnh có sẵn hoặc chụp mới</p>
+                <p class="text-xs text-ink-500 mt-1 px-2">Chọn hoặc chụp ảnh</p>
               </div>
             </div>
 
@@ -1578,7 +1557,7 @@ const handleLogout = async () => {
                   <CreditCard :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">CCCD – Mặt sau</strong>
-                <p class="text-[11px] text-ink-400 mt-1 px-2 leading-tight">Bấm để chọn ảnh có sẵn hoặc chụp mới</p>
+                <p class="text-xs text-ink-500 mt-1 px-2">Chọn hoặc chụp ảnh</p>
               </div>
             </div>
 
@@ -1616,9 +1595,7 @@ const handleLogout = async () => {
                   <Camera :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">Ảnh chân dung khuôn mặt</strong>
-                <p class="text-[11px] text-ink-400 mt-1 px-2 mb-3 leading-tight">
-                  Chụp ảnh chân dung rõ nét, nhìn thẳng, không đeo khẩu trang
-                </p>
+                <p class="text-xs text-ink-500 mt-1 px-2 mb-3">Nhìn thẳng, không đeo khẩu trang</p>
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
@@ -1650,7 +1627,7 @@ const handleLogout = async () => {
               <div v-for="(cert, index) in certificates" :key="index" class="relative rounded-xl border border-ink-200 overflow-hidden">
                 <img v-if="cert.previewUrl" :src="cert.previewUrl" alt="Chứng chỉ" class="h-28 w-full object-cover" />
                 <div v-else class="h-28 flex items-center justify-center text-xs text-ink-400">Đã tải lên</div>
-                <button v-if="cert.file" type="button" class="absolute top-1 right-1 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-danger-700" @click="removeCertificate(index)">Bỏ</button>
+                <button v-if="cert.file" type="button" class="absolute top-1 right-1 rounded-lg bg-white/90 px-2.5 py-1 text-xs font-semibold text-danger-700" aria-label="Bỏ ảnh chứng chỉ này" @click="removeCertificate(index)">Bỏ</button>
               </div>
               <button v-if="certificates.length < MAX_CERTIFICATES" type="button" class="h-28 rounded-xl border-2 border-dashed border-ink-200 text-xs font-semibold text-ink-600 hover:border-brand-400" @click="certificateInput?.click()">
                 + Thêm ảnh chứng chỉ
@@ -1677,9 +1654,7 @@ const handleLogout = async () => {
               <Wrench :size="20" class="text-brand-600" />
               Bước 3: Chọn kỹ năng chuyên môn & Kinh nghiệm
             </h3>
-            <p class="text-xs text-ink-500 mt-1">
-              Khách hàng đặt dịch vụ sẽ được kết nối với các thợ có kỹ năng tương ứng. Chọn ít nhất 1 dịch vụ.
-            </p>
+            <p class="text-sm text-ink-500 mt-1">Chọn ít nhất 1 dịch vụ.</p>
           </div>
 
           <!-- Search & Experience -->
@@ -1726,7 +1701,7 @@ const handleLogout = async () => {
                 >
                   <div>
                     <span class="block font-semibold">{{ svc.name }}</span>
-                    <span class="text-[10px] text-ink-400 mt-0.5 block font-normal">
+                    <span class="text-xs text-ink-500 mt-0.5 block font-normal">
                       {{ svc.estimatedMinutes ? `~${svc.estimatedMinutes} phút` : 'Theo thực tế' }}
                     </span>
                   </div>
@@ -1778,16 +1753,13 @@ const handleLogout = async () => {
               <MapPin :size="20" class="text-brand-600" />
               Bước 4: Địa chỉ cụ thể & Khu vực nhận việc
             </h3>
-            <p class="text-xs text-ink-500 mt-1">
-              Nhập địa chỉ nhà của bạn để hệ thống tự động xác định Tỉnh/Thành, Quận/Huyện, tính cự ly di chuyển và gợi ý các khu vực nhận việc tối ưu nhất.
-            </p>
           </div>
 
           <!-- Section 1: Address Input (Dual-mode: Smart Search & Cascading Dropdown) -->
           <div class="space-y-3">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <label class="block text-xs font-bold text-ink-800">
-                Địa chỉ cụ thể của bạn (Số nhà, Đường, Phường, Quận, Thành phố) <span class="text-danger-500">*</span>
+                Địa chỉ nhà <span class="text-danger-500">*</span>
               </label>
 
               <!-- Mode Switcher Tabs -->
@@ -1837,6 +1809,7 @@ const handleLogout = async () => {
                   type="button"
                   @click="fullAddress = ''; addressSuggestions = []; selectedLat = undefined; selectedLng = undefined;"
                   class="absolute right-3 top-3 text-ink-400 hover:text-ink-600"
+                  aria-label="Xoá địa chỉ"
                 >
                   <X :size="16" />
                 </button>
@@ -1856,7 +1829,7 @@ const handleLogout = async () => {
                   <MapPin :size="15" class="text-brand-600 shrink-0 mt-0.5" />
                   <div class="flex-1">
                     <span class="font-medium text-ink-800">{{ s.description }}</span>
-                    <span v-if="s.district || s.province" class="block text-[10px] text-ink-400 mt-0.5">
+                    <span v-if="s.district || s.province" class="block text-xs text-ink-500 mt-0.5">
                       {{ [s.ward, s.district, s.province].filter(Boolean).join(' • ') }}
                     </span>
                   </div>
@@ -1869,7 +1842,7 @@ const handleLogout = async () => {
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <!-- Tỉnh / Thành phố -->
                 <div>
-                  <label class="block text-[11px] font-bold text-ink-600 mb-1">Tỉnh / Thành phố</label>
+                  <label class="block text-xs font-bold text-ink-600 mb-1">Tỉnh / Thành phố</label>
                   <select
                     v-model.number="structuredProvinceCode"
                     @change="onStructuredProvinceChange"
@@ -1883,7 +1856,7 @@ const handleLogout = async () => {
 
                 <!-- Quận / Huyện -->
                 <div>
-                  <label class="block text-[11px] font-bold text-ink-600 mb-1">Quận / Huyện</label>
+                  <label class="block text-xs font-bold text-ink-600 mb-1">Quận / Huyện</label>
                   <select
                     v-model.number="structuredDistrictCode"
                     @change="onStructuredDistrictChange"
@@ -1898,9 +1871,9 @@ const handleLogout = async () => {
 
                 <!-- Phường / Xã -->
                 <div>
-                  <label class="block text-[11px] font-bold text-ink-600 mb-1 flex items-center justify-between">
+                  <label class="text-xs font-bold text-ink-600 mb-1 flex items-center justify-between">
                     <span>Phường / Xã</span>
-                    <span v-if="loadingWards" class="text-[10px] text-brand-600 font-normal">Đang tải...</span>
+                    <span v-if="loadingWards" class="text-xs text-brand-600 font-normal">Đang tải…</span>
                   </label>
                   <select
                     v-model.number="structuredWardCode"
@@ -1917,7 +1890,7 @@ const handleLogout = async () => {
 
                 <!-- Số nhà, tên đường -->
                 <div>
-                  <label class="block text-[11px] font-bold text-ink-600 mb-1">Số nhà, tên đường</label>
+                  <label class="block text-xs font-bold text-ink-600 mb-1">Số nhà, tên đường</label>
                   <input
                     v-model="structuredStreet"
                     @input="syncAddressFromStructured"
@@ -1929,8 +1902,8 @@ const handleLogout = async () => {
               </div>
 
               <!-- Generated address preview -->
-              <div v-if="fullAddress" class="text-[11px] text-ink-500 pt-1 flex items-center gap-1.5">
-                <span class="font-medium text-ink-600">Địa chỉ hợp nhất:</span>
+              <div v-if="fullAddress" class="text-sm text-ink-500 pt-1 flex items-center gap-1.5">
+                <span class="font-medium text-ink-600">Địa chỉ:</span>
                 <span class="font-semibold text-ink-800">{{ fullAddress }}</span>
               </div>
             </div>
@@ -1942,8 +1915,8 @@ const handleLogout = async () => {
             >
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="inline-flex items-center gap-1 text-[11px] font-bold text-success-700 bg-success-100/70 px-2 py-0.5 rounded-md">
-                    <CheckCircle2 :size="12" /> Đã xác định vị trí nhà thợ
+                  <span class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-100/70 px-2 py-0.5 rounded-md">
+                    <CheckCircle2 :size="12" /> Đã xác định vị trí
                   </span>
                   <span v-if="detectedProvinceName" class="font-semibold text-brand-900">
                     {{ detectedProvinceName }}
@@ -1952,28 +1925,18 @@ const handleLogout = async () => {
                     · {{ detectedDistrictName }}
                   </span>
                 </div>
-                <p class="text-[11px] text-ink-600 truncate max-w-xl">
+                <p class="text-sm text-ink-600 truncate max-w-xl">
                   {{ fullAddress || 'Chưa có thông tin địa chỉ cụ thể' }}
                 </p>
               </div>
 
-              <!-- GPS coordinates chip -->
-              <div v-if="selectedLat && selectedLng" class="shrink-0 flex items-center gap-1 text-[11px] font-mono text-ink-600 bg-white px-2.5 py-1 rounded-lg border border-ink-200 shadow-2xs">
-                <Crosshair :size="12" class="text-brand-600" />
-                <span>{{ selectedLat.toFixed(4) }}, {{ selectedLng.toFixed(4) }}</span>
-              </div>
             </div>
           </div>
 
           <!-- Section 2: Service Radius Slider & Presets -->
           <div class="space-y-3 bg-ink-50/80 rounded-2xl p-4 sm:p-5 border border-ink-200">
             <div class="flex items-center justify-between">
-              <div>
-                <span class="font-bold text-xs sm:text-sm text-ink-800">Bán kính nhận việc tối đa:</span>
-                <p class="text-[11px] text-ink-500 mt-0.5">
-                  Phạm vi di chuyển tối đa từ vị trí nhà bạn để tiếp nhận các đơn sửa chữa.
-                </p>
-              </div>
+              <span class="font-bold text-sm text-ink-800">Bán kính nhận việc</span>
               <div class="text-right">
                 <span class="inline-block font-bold text-brand-700 font-num text-base sm:text-lg bg-brand-50 px-3 py-1 rounded-xl border border-brand-200">
                   {{ serviceRadiusKm }} km
@@ -1994,19 +1957,19 @@ const handleLogout = async () => {
             <div class="flex items-center justify-between gap-1 pt-1">
               <button
                 v-for="preset in [
-                  { km: 5, label: '5 km (Gần)' },
+                  { km: 5, label: '5 km' },
                   { km: 10, label: '10 km' },
-                  { km: 15, label: '15 km (Khuyên dùng)' },
-                  { km: 25, label: '25 km (Rộng)' },
-                  { km: 40, label: '40 km (Toàn thành)' },
+                  { km: 15, label: '15 km' },
+                  { km: 25, label: '25 km' },
+                  { km: 40, label: '40 km' },
                 ]"
                 :key="preset.km"
                 type="button"
                 @click="serviceRadiusKm = preset.km"
                 :class="[
-                  'px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold transition-all',
+                  'h-9 px-2.5 sm:px-3 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors',
                   serviceRadiusKm === preset.km
-                    ? 'bg-brand-600 text-white shadow-2xs scale-105'
+                    ? 'bg-brand-600 text-white shadow-2xs'
                     : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-100'
                 ]"
               >
@@ -2025,13 +1988,10 @@ const handleLogout = async () => {
                 <Zap :size="18" />
               </div>
               <div>
-                <h4 class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
-                  Gợi ý tự động theo bán kính {{ serviceRadiusKm }} km
-                </h4>
-                <p class="text-[11px] text-ink-600 mt-0.5">
-                  Phát hiện <strong class="text-brand-700 font-num">{{ inRadiusDistricts.length }}</strong> quận/huyện tại
-                  <span class="font-semibold text-ink-800">{{ activeProvince?.name }}</span>
-                  cách vị trí nhà bạn ≤ {{ serviceRadiusKm }} km.
+                <p class="text-sm text-ink-800 text-pretty">
+                  Có <strong class="font-num">{{ inRadiusDistricts.length }}</strong> quận/huyện tại
+                  <span class="font-semibold">{{ activeProvince?.name }}</span>
+                  trong bán kính <span class="whitespace-nowrap">{{ serviceRadiusKm }} km</span>.
                 </p>
               </div>
             </div>
@@ -2039,10 +1999,10 @@ const handleLogout = async () => {
             <button
               type="button"
               @click="autoSelectDistrictsWithinRadius(true)"
-              class="px-4 py-2 rounded-xl bg-warning-500 hover:bg-warning-600 text-white text-xs font-bold shadow-xs transition-colors shrink-0 flex items-center justify-center gap-1.5 self-start sm:self-auto"
+              class="h-10 px-4 rounded-xl bg-warning-500 hover:bg-warning-600 text-white text-sm font-bold whitespace-nowrap shadow-xs transition-colors shrink-0 flex items-center justify-center gap-1.5 self-start sm:self-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <Zap :size="14" />
-              <span>Chọn tất cả {{ inRadiusDistricts.length }} quận trong bán kính</span>
+              <span>Chọn cả {{ inRadiusDistricts.length }} quận</span>
             </button>
           </div>
 
@@ -2054,14 +2014,11 @@ const handleLogout = async () => {
                   <label class="text-xs font-bold text-ink-800">
                     Khu vực quận / huyện tiếp nhận đơn <span class="text-danger-500">*</span>
                   </label>
-                  <span class="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-0.5 rounded-full">
+                  <span class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-0.5 rounded-full">
                     <MapPin :size="12" class="text-brand-600" />
                     {{ activeProvince?.name || 'Khu vực của bạn' }}
                   </span>
                 </div>
-                <p class="text-[11px] text-ink-500 mt-1">
-                  Chỉ hiển thị các khu vực thuộc <strong>{{ activeProvince?.name || 'Tỉnh/TP đã chọn' }}</strong> trong bán kính di chuyển tính từ địa chỉ nhà bạn.
-                </p>
               </div>
 
               <!-- Quick selected counter -->
@@ -2164,7 +2121,7 @@ const handleLogout = async () => {
                       <span
                         v-if="dist.distanceKm !== null"
                         :class="[
-                          'inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[10px] font-medium font-num',
+                          'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-xs font-medium font-num whitespace-nowrap',
                           dist.isWithinRadius
                             ? 'bg-success-100/80 text-success-800 font-bold'
                             : 'bg-ink-100 text-ink-500'
@@ -2172,9 +2129,8 @@ const handleLogout = async () => {
                       >
                         <Zap v-if="dist.isWithinRadius" :size="9" class="text-warning-500" />
                         <span>~{{ dist.distanceKm }} km</span>
-                        <span v-if="dist.isWithinRadius" class="hidden xl:inline text-[9px] font-normal ml-0.5">(phù hợp)</span>
                       </span>
-                      <span v-else class="text-[10px] text-ink-400">
+                      <span v-else class="text-xs text-ink-400">
                         Chưa đo cự ly
                       </span>
                     </div>
@@ -2207,15 +2163,6 @@ const handleLogout = async () => {
               </div>
             </div>
 
-            <!-- Footer Counter & Selected summary -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-ink-500 pt-1">
-              <div>
-                Đã chọn: <strong class="text-brand-700 font-num text-sm font-bold">{{ countSelectedInProvince(activeProvince?.code || 0) }}</strong> / {{ activeProvince?.districts?.length || 0 }} quận/huyện tiếp nhận việc tại {{ activeProvince?.name }}
-              </div>
-              <div v-if="inRadiusDistricts.length > 0" class="text-[11px] text-success-700 font-medium">
-                Có {{ inRadiusDistricts.length }} quận/huyện nằm trong bán kính {{ serviceRadiusKm }} km
-              </div>
-            </div>
           </div>
 
           <div class="flex justify-between items-center pt-4 border-t border-ink-100">
@@ -2237,9 +2184,6 @@ const handleLogout = async () => {
               <FileCheck2 :size="20" class="text-brand-600" />
               Bước 5: Xem lại & Gửi hồ sơ phê duyệt
             </h3>
-            <p class="text-xs text-ink-500 mt-1">
-              Kiểm tra kỹ các thông tin trước khi nộp để ban quản lý phê duyệt nhanh nhất.
-            </p>
           </div>
 
           <!-- Bento Grid Preview -->
@@ -2262,7 +2206,7 @@ const handleLogout = async () => {
             <!-- Box 2: KYC -->
             <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2">
               <div class="flex items-center justify-between text-xs font-bold text-ink-700 border-b border-ink-200/60 pb-2">
-                <span class="flex items-center gap-1.5"><ShieldCheck :size="14" class="text-brand-600" /> Hồ sơ eKYC</span>
+                <span class="flex items-center gap-1.5"><ShieldCheck :size="14" class="text-brand-600" /> Giấy tờ xác minh</span>
                 <button type="button" @click="currentStep = 2" class="text-brand-600 hover:underline">Sửa</button>
               </div>
               <div class="text-xs space-y-1 text-success-600 font-semibold">
@@ -2281,7 +2225,7 @@ const handleLogout = async () => {
               <div class="text-xs space-y-1 text-ink-600">
                 <p>Kinh nghiệm: <strong class="text-ink-900">{{ yearsExperience }} năm</strong></p>
                 <p>Số kỹ năng đã đăng ký: <strong class="text-brand-700 font-bold">{{ selectedServiceIds.length }} dịch vụ</strong></p>
-                <p v-if="bio" class="italic text-[11px] text-ink-500 line-clamp-2">"{{ bio }}"</p>
+                <p v-if="bio" class="text-xs text-ink-500 line-clamp-2">{{ bio }}</p>
               </div>
             </div>
 
@@ -2299,7 +2243,7 @@ const handleLogout = async () => {
                   <span
                     v-for="(area, idx) in selectedAreaLabels"
                     :key="idx"
-                    class="px-2 py-0.5 rounded-md bg-white border border-ink-200 text-[10px] text-ink-700 font-medium"
+                    class="whitespace-nowrap px-2 py-0.5 rounded-md bg-white border border-ink-200 text-xs text-ink-700 font-medium"
                   >
                     {{ area.districtName }}
                   </span>
@@ -2309,15 +2253,9 @@ const handleLogout = async () => {
           </div>
 
           <!-- Commitment notice -->
-          <div class="p-4 rounded-2xl bg-brand-50/60 border border-brand-200 text-brand-950 text-xs flex items-start gap-3">
-            <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
-            <div class="leading-relaxed">
-              <strong>Cam kết dịch vụ FixHome:</strong>
-              <p class="text-[11px] text-brand-800 mt-0.5">
-                Tôi cam kết thông tin và tài liệu cung cấp là chính xác, tuân thủ đúng quy chế bảo hành, bảng giá niêm yết và quy tắc ứng xử văn minh với khách hàng.
-              </p>
-            </div>
-          </div>
+          <p class="p-4 rounded-2xl bg-ink-50 border border-ink-200 text-sm text-ink-700 leading-relaxed text-pretty">
+            Khi gửi hồ sơ, tôi cam kết thông tin và tài liệu cung cấp là chính xác, tuân thủ quy chế bảo hành, bảng giá niêm yết và quy tắc ứng xử với khách hàng.
+          </p>
 
           <div class="flex justify-between items-center pt-4 border-t border-ink-100">
             <FhButton variant="secondary" size="md" @click="currentStep = 4">
@@ -2356,7 +2294,7 @@ const handleLogout = async () => {
       <div class="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl space-y-4 p-5 text-center">
         <div class="flex items-center justify-between border-b border-ink-100 pb-3">
           <h3 class="text-sm font-bold text-ink-900">Chụp ảnh chân dung khuôn mặt</h3>
-          <button type="button" @click="closeCamera" class="text-ink-400 hover:text-ink-600">
+          <button type="button" aria-label="Đóng" @click="closeCamera" class="w-10 h-10 -mr-2 rounded-xl flex items-center justify-center text-ink-400 hover:text-ink-600 hover:bg-ink-100">
             <X :size="18" />
           </button>
         </div>
@@ -2365,14 +2303,14 @@ const handleLogout = async () => {
           <video ref="cameraVideoEl" class="w-full h-full object-cover" autoplay playsinline muted></video>
           <!-- Face Guide Oval -->
           <div class="absolute inset-8 border-2 border-dashed border-white/60 rounded-full pointer-events-none flex items-center justify-center">
-            <span class="text-[11px] text-white/80 font-bold bg-black/40 px-2 py-0.5 rounded-full">
+            <span class="text-xs text-white/80 font-bold bg-black/40 px-2 py-0.5 rounded-full">
               Đặt khuôn mặt vào đây
             </span>
           </div>
         </div>
 
         <p class="text-xs text-ink-500 leading-tight">
-          Giữ camera nhìn thẳng, đảm bảo đủ ánh sáng và không che mặt, sau đó nhấn "Chụp ảnh ngay".
+          Nhìn thẳng, đủ sáng, không che mặt rồi bấm Chụp ảnh ngay.
         </p>
 
         <div class="flex items-center justify-center gap-3 pt-2">
@@ -2384,7 +2322,7 @@ const handleLogout = async () => {
             @click="takeFacePhoto"
           >
             <Camera :size="16" class="mr-1.5" />
-            <span>{{ isCapturing ? 'Đang chụp...' : 'Chụp ảnh ngay' }}</span>
+            <span>{{ isCapturing ? 'Đang chụp…' : 'Chụp ảnh ngay' }}</span>
           </FhButton>
         </div>
       </div>

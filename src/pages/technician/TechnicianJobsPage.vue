@@ -1,25 +1,23 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import {
-  Wrench,
   MapPin,
   Calendar,
-  User,
   ChevronRight,
   Navigation,
   MessageSquare,
   Phone,
   Briefcase,
-  Sparkles,
-  Inbox,
 } from 'lucide-vue-next';
 import {
   FhButton,
-  FhCostBreakdown,
   FhMoney,
+  FhSkeleton,
+  FhStatusPill,
 } from '../../components';
-import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem, type CanonicalOrderStatus } from '../../api/orders.api';
+import { ordersApi, isHistoricalOrder, type HistoricalOrderItem, type ServiceOrderItem } from '../../api/orders.api';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
@@ -31,45 +29,34 @@ type JobTab = 'all' | 'pending' | 'in_progress' | 'completed';
 
 const activeTab = ref<JobTab>('all');
 const loading = ref(true);
+const loadError = ref('');
 const actionLoading = ref<string | null>(null);
 const jobs = ref<ServiceOrderItem[]>([]);
 const historicalJobs = ref<HistoricalOrderItem[]>([]);
 
 const loadJobs = async () => {
+  loadError.value = '';
   try {
     const list = await ordersApi.getTechnicianJobs();
     jobs.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
     historicalJobs.value = list.filter(isHistoricalOrder);
-  } catch {
+  } catch (err) {
     jobs.value = [];
     historicalJobs.value = [];
+    loadError.value = userFacingError(err, 'Không thể tải danh sách công việc. Vui lòng thử lại.');
   } finally {
     loading.value = false;
   }
 };
 
+const retry = async () => {
+  loading.value = true;
+  await loadJobs();
+};
+
 onMounted(() => {
   loadJobs();
 });
-
-const getStatusBadge = (status: CanonicalOrderStatus) => {
-  const s = String(status).toUpperCase();
-  switch (s) {
-    case 'ACCEPTED':
-      return { label: 'Chờ di chuyển', bg: 'bg-warning-100 text-warning-800 border-warning-200' };
-    case 'EN_ROUTE':
-      return { label: 'Đang trên đường', bg: 'bg-success-100 text-success-800 border-success-200' };
-    case 'UNDER_REPAIR':
-    case 'IN_PROGRESS':
-      return { label: 'Đang sửa chữa', bg: 'bg-brand-100 text-brand-800 border-brand-200' };
-    case 'COMPLETED':
-      return { label: 'Hoàn thành', bg: 'bg-ink-100 text-ink-700 border-ink-200' };
-    case 'CANCELLED':
-      return { label: 'Đã huỷ', bg: 'bg-danger-100 text-danger-700 border-danger-200' };
-    default:
-      return { label: s, bg: 'bg-ink-100 text-ink-700 border-ink-200' };
-  }
-};
 
 const filteredJobs = computed(() => {
   return jobs.value.filter((job) => {
@@ -104,16 +91,22 @@ const completedCount = computed(() => {
   return jobs.value.filter((j) => String(j.status).toUpperCase() === 'COMPLETED').length;
 });
 
+const tabs = computed(() => [
+  { key: 'all' as const, label: 'Tất cả', count: jobs.value.length + historicalJobs.value.length },
+  { key: 'pending' as const, label: 'Cần di chuyển', count: pendingCount.value },
+  { key: 'in_progress' as const, label: 'Đang sửa chữa', count: inProgressCount.value },
+  { key: 'completed' as const, label: 'Hoàn thành', count: completedCount.value },
+]);
+
 // Quick action: start moving to customer's home
 const handleEnRoute = async (job: ServiceOrderItem) => {
   actionLoading.value = job.id;
   try {
     await ordersApi.enRoute(job.id);
-    window.alert('Đã cập nhật: Bạn đang trên đường di chuyển tới nhà khách hàng.');
+    toast.success('Đã cập nhật: bạn đang trên đường tới nhà khách hàng.');
     await loadJobs();
   } catch (err: unknown) {
-    const message = userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.');
-    window.alert(message);
+    toast.error(userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.'));
   } finally {
     actionLoading.value = null;
   }
@@ -134,237 +127,198 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
   }
   return null;
 };
+
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
+const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors ${focusRing}`;
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Wrench class="text-brand-600" :size="24" />
-          <span>Đơn Nhận Việc & Thực Thi</span>
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Quản lý tiến trình xử lý đơn hàng: di chuyển, xác nhận đến nơi, lập báo giá và hoàn thành.
-        </p>
+  <div class="max-w-4xl mx-auto space-y-5">
+    <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
+
+    <!-- Filter tabs -->
+    <div
+      class="flex items-center gap-1 p-1 bg-ink-100/80 rounded-2xl overflow-x-auto no-scrollbar text-sm font-semibold select-none"
+      role="tablist"
+      aria-label="Lọc công việc"
+    >
+      <button
+        v-for="tab in tabs"
+        :key="tab.key"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === tab.key"
+        class="h-10 px-4 rounded-xl transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+        :class="[
+          focusRing,
+          activeTab === tab.key ? 'bg-white text-brand-700 shadow-xs' : 'text-ink-600 hover:text-ink-900',
+        ]"
+        @click="activeTab = tab.key"
+      >
+        {{ tab.label }}
+        <span
+          v-if="tab.key === 'all' || tab.count > 0"
+          class="min-w-5 h-5 px-1.5 rounded-full text-xs font-num inline-flex items-center justify-center"
+          :class="activeTab === tab.key ? 'bg-brand-50 text-brand-700' : 'bg-ink-200/60 text-ink-600'"
+        >
+          {{ tab.count }}
+        </span>
+      </button>
+    </div>
+
+    <!-- Loading: rows shaped like the list -->
+    <div v-if="loading" class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải công việc">
+      <div v-for="i in 3" :key="i" class="p-5 sm:p-6 space-y-3">
+        <FhSkeleton width="35%" height="16px" />
+        <FhSkeleton width="65%" height="22px" />
+        <FhSkeleton width="85%" height="16px" />
+        <FhSkeleton width="50%" height="40px" rounded="md" />
       </div>
-
-      <FhButton variant="secondary" size="sm" @click="router.push('/tech/invitations')">
-        <Inbox :size="15" class="mr-1.5" /> Hộp thư mời nhận đơn
-      </FhButton>
     </div>
 
-    <!-- Filter Tabs (Matching Mobile Style) -->
-    <div class="flex items-center gap-2 p-1 bg-ink-100/80 rounded-2xl overflow-x-auto no-scrollbar text-xs font-bold select-none">
-      <button
-        type="button"
-        class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
-        :class="
-          activeTab === 'all'
-            ? 'bg-white text-brand-700 shadow-xs font-bold'
-            : 'text-ink-600 hover:text-ink-900'
-        "
-        @click="activeTab = 'all'"
-      >
-        <span>Tất cả</span>
-        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-num" :class="activeTab === 'all' ? 'bg-brand-50 text-brand-700' : 'bg-ink-200/60 text-ink-500'">
-          {{ jobs.length + historicalJobs.length }}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
-        :class="
-          activeTab === 'pending'
-            ? 'bg-white text-warning-700 shadow-xs font-bold'
-            : 'text-ink-600 hover:text-ink-900'
-        "
-        @click="activeTab = 'pending'"
-      >
-        <span>Cần di chuyển</span>
-        <span v-if="pendingCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-warning-100 text-warning-800">
-          {{ pendingCount }}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
-        :class="
-          activeTab === 'in_progress'
-            ? 'bg-white text-brand-700 shadow-xs font-bold'
-            : 'text-ink-600 hover:text-ink-900'
-        "
-        @click="activeTab = 'in_progress'"
-      >
-        <span>Đang sửa chữa</span>
-        <span v-if="inProgressCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-brand-100 text-brand-800">
-          {{ inProgressCount }}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        class="px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0"
-        :class="
-          activeTab === 'completed'
-            ? 'bg-white text-ink-900 shadow-xs font-bold'
-            : 'text-ink-600 hover:text-ink-900'
-        "
-        @click="activeTab = 'completed'"
-      >
-        <span>Hoàn thành</span>
-        <span v-if="completedCount > 0" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-ink-200 text-ink-700">
-          {{ completedCount }}
-        </span>
-      </button>
+    <div
+      v-else-if="loadError"
+      role="alert"
+      class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3"
+    >
+      <span>{{ loadError }}</span>
+      <FhButton variant="secondary" size="sm" class="h-10" @click="retry">Thử lại</FhButton>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="text-center py-16 text-xs text-ink-500 font-medium">
-      <Sparkles class="animate-spin text-brand-600 mx-auto mb-2" :size="28" />
-      Đang tải danh sách công việc...
-    </div>
-
-    <!-- Empty State (Matching Mobile Style) -->
     <div
       v-else-if="filteredJobs.length === 0 && visibleHistoricalJobs.length === 0"
-      class="text-center py-16 px-6 bg-white rounded-3xl border border-ink-200/80 shadow-xs space-y-3"
+      class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3"
     >
-      <div class="w-16 h-16 rounded-2xl bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
-        <Briefcase :size="32" />
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
+        <Briefcase :size="24" />
       </div>
-      <h3 class="text-base font-bold text-ink-900">Chưa có công việc nào</h3>
-      <p class="text-xs text-ink-500 max-w-sm mx-auto">
-        Các đơn sửa chữa mới từ khách hàng hoặc lời mời phù hợp sẽ hiển thị ở đây khi bạn sẵn sàng nhận việc.
-      </p>
+      <h3 class="text-base font-semibold text-ink-900">
+        {{ activeTab === 'all' ? 'Chưa có công việc nào' : 'Không có công việc ở mục này' }}
+      </h3>
+      <p v-if="activeTab === 'all'" class="text-sm text-ink-500">Đơn bạn nhận sẽ hiện ở đây.</p>
     </div>
 
-    <!-- Jobs List (Mobile Card Style) -->
-    <div v-else class="space-y-4">
-      <div
+    <!-- One surface, one row per job -->
+    <ul v-else class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+      <li
         v-for="job in filteredJobs"
         :key="job.id"
-        class="bg-white rounded-3xl border border-ink-200/80 p-5 sm:p-6 shadow-xs hover:border-brand-400 hover:shadow-md transition-all space-y-4 cursor-pointer group"
+        class="p-5 sm:p-6 flex gap-3 hover:bg-ink-25 transition-colors cursor-pointer"
+        :data-testid="`technician-job-${job.id}`"
         @click="router.push(`/tech/jobs/${job.id}`)"
       >
-        <!-- Card Top Bar: Code + Badge + Schedule -->
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3.5">
-          <div class="flex items-center gap-2">
-            <span class="font-num text-sm text-ink-600 whitespace-nowrap">#{{ job.code }}</span>
-            <span class="text-ink-300 text-xs">•</span>
-            <span class="text-xs text-ink-500 flex items-center gap-1 font-medium">
-              <Calendar :size="13" class="text-brand-600" />
-              {{ vnDateString(job.scheduledAt) }}
-            </span>
-          </div>
-
-          <span
-            class="px-2.5 py-1 rounded-full text-xs font-bold border"
-            :class="getStatusBadge(job.status).bg"
-          >
-            {{ getStatusBadge(job.status).label }}
-          </span>
-        </div>
-
-        <!-- Service Info & Customer Info Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
-              {{ job.serviceName }}
-            </h3>
-            <p class="text-xs text-ink-600 flex items-start gap-1.5 leading-relaxed">
-              <MapPin :size="14" class="text-brand-600 shrink-0 mt-0.5" />
-              <span>{{ job.addressSummary }}</span>
+        <div class="flex-1 min-w-0 space-y-3">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+              <span class="font-num text-ink-500 whitespace-nowrap">#{{ job.code }}</span>
+              <FhStatusPill :status="job.status" />
+              <span class="inline-flex items-center gap-1 text-ink-600 whitespace-nowrap">
+                <Calendar :size="14" class="text-ink-400" />
+                {{ vnDateString(job.scheduledAt) }}
+              </span>
+            </div>
+            <h3 class="font-semibold text-base sm:text-lg text-ink-900 text-balance">{{ job.serviceName }}</h3>
+            <p class="text-sm text-ink-900">
+              {{ job.customerName }}
+              <span v-if="job.customerPhone" class="ml-1 font-num text-ink-500 whitespace-nowrap">{{ job.customerPhone }}</span>
+            </p>
+            <p class="text-sm text-ink-600 flex items-start gap-1.5">
+              <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+              <span class="text-pretty">{{ job.addressSummary }}</span>
             </p>
           </div>
 
-          <div class="space-y-1.5 sm:text-right bg-ink-50/70 sm:bg-transparent p-3 sm:p-0 rounded-2xl">
-            <div class="text-xs font-bold text-ink-900 flex items-center gap-1.5 sm:justify-end">
-              <User :size="14" class="text-ink-400" />
-              <span>Khách: {{ job.customerName }}</span>
+          <dl class="grid grid-cols-3 gap-3 max-w-md text-sm">
+            <div class="min-w-0">
+              <dt class="text-ink-500 whitespace-nowrap">Tiền công</dt>
+              <dd class="font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="job.laborTotal" /></dd>
             </div>
-            <a
-              :href="`tel:${job.customerPhone}`"
-              class="inline-flex items-center gap-1 text-xs font-mono font-bold text-brand-600 hover:underline"
-              @click.stop
-            >
-              <Phone :size="12" /> {{ job.customerPhone }}
-            </a>
-          </div>
-        </div>
-
-        <!-- Cost Breakdown Bar & Action Buttons -->
-        <div class="pt-4 border-t border-ink-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-          <div class="flex-1 max-w-sm">
-            <FhCostBreakdown :labor-total="job.laborTotal" :parts-total="job.partsTotal" />
-          </div>
-
-          <div class="flex items-center justify-between xl:justify-end gap-2.5 flex-wrap">
-            <div class="text-right mr-1">
-              <span class="text-[11px] text-ink-400 block font-medium">Dự kiến thu:</span>
-              <span class="text-sm sm:text-base font-bold font-num text-brand-700">
-                <FhMoney :amount="job.grandTotal" />
-              </span>
+            <div class="min-w-0">
+              <dt class="text-ink-500 whitespace-nowrap">Vật tư</dt>
+              <dd class="font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="job.partsTotal" /></dd>
             </div>
+            <div class="min-w-0">
+              <dt class="text-ink-500 whitespace-nowrap">Dự kiến thu</dt>
+              <dd class="font-num font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="job.grandTotal" /></dd>
+            </div>
+          </dl>
 
-            <!-- Quick Action: En Route Button if ACCEPTED -->
-            <button
+          <div class="flex flex-wrap items-center gap-2">
+            <FhButton
               v-if="String(job.status).toUpperCase() === 'ACCEPTED'"
-              type="button"
-              :disabled="actionLoading === job.id"
-              class="px-3.5 py-2 rounded-xl bg-warning-500 hover:bg-warning-600 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+              variant="primary"
+              size="sm"
+              class="h-10"
+              :loading="actionLoading === job.id"
               @click.stop="handleEnRoute(job)"
             >
-              <Navigation :size="14" />
-              <span>Bắt đầu di chuyển</span>
-            </button>
-
-            <!-- Google Maps Directions Link -->
+              <Navigation :size="16" />
+              Bắt đầu di chuyển
+            </FhButton>
             <a
               v-if="getGoogleMapsUrl(job)"
               :href="getGoogleMapsUrl(job)!"
               target="_blank"
               rel="noopener noreferrer"
-              class="px-2.5 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 active:scale-95 text-ink-700 text-xs font-bold flex items-center gap-1.5 transition-all"
-              title="Mở chỉ đường trên Google Maps"
+              :class="secondaryAction"
               @click.stop
             >
-              <Navigation :size="13" class="text-brand-600" />
-              <span>Chỉ đường</span>
+              <Navigation :size="16" class="text-ink-500" />
+              Chỉ đường
             </a>
-
-            <!-- Quick Chat with Customer Button -->
             <button
               type="button"
-              class="px-3 py-2 rounded-xl bg-ink-100 hover:bg-ink-200 active:scale-95 text-ink-700 text-xs font-bold flex items-center gap-1.5 transition-all"
-              title="Nhắn tin với khách hàng"
+              :class="secondaryAction"
               @click.stop="handleChatWithCustomer(job)"
             >
-              <MessageSquare :size="14" class="text-brand-600" />
-              <span>Nhắn tin</span>
+              <MessageSquare :size="16" class="text-ink-500" />
+              Nhắn tin
             </button>
-
-            <!-- Primary Open Workspace Button -->
-            <FhButton variant="primary" size="sm" @click.stop="router.push(`/tech/jobs/${job.id}`)">
-              Mở công việc <ChevronRight :size="14" class="ml-0.5" />
-            </FhButton>
+            <a
+              v-if="job.customerPhone"
+              :href="`tel:${job.customerPhone}`"
+              :class="secondaryAction"
+              @click.stop
+            >
+              <Phone :size="16" class="text-ink-500" />
+              Gọi điện
+            </a>
           </div>
         </div>
-      </div>
-      <div v-for="entry in visibleHistoricalJobs" :key="entry.id"
+        <router-link
+          :to="`/tech/jobs/${job.id}`"
+          class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700 hidden sm:flex items-center justify-center shrink-0 self-center"
+          :class="focusRing"
+          aria-label="Mở chi tiết công việc"
+          @click.stop
+        >
+          <ChevronRight :size="20" aria-hidden="true" />
+        </router-link>
+      </li>
+
+      <!-- Old orders: a short summary only, no customer details -->
+      <li
+        v-for="entry in visibleHistoricalJobs"
+        :key="entry.id"
         data-testid="technician-historical-order"
-        class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
-        @click="router.push(`/tech/jobs/${entry.id}`)">
-        <p class="text-xs font-bold text-ink-900">Mã đơn: {{ entry.code }}</p>
-        <p class="text-xs text-ink-600">Trạng thái: {{ getStatusBadge(entry.status).label }}</p>
-        <p class="text-xs text-ink-500">Ngày ghi nhận: {{ vnDateString(entry.createdAt) }}</p>
-        <p class="text-xs text-ink-500">Lịch sử công việc rút gọn. Không còn quyền xem thông tin riêng tư của khách.</p>
-        <button type="button" class="text-xs font-semibold text-brand-700 underline group-hover:text-brand-800"
-          @click.stop="router.push(`/tech/jobs/${entry.id}`)">Xem lịch sử đơn</button>
-      </div>
-    </div>
+      >
+        <button
+          type="button"
+          class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+          :class="focusRing"
+          @click="router.push(`/tech/jobs/${entry.id}`)"
+        >
+          <span class="flex-1 min-w-0 space-y-1">
+            <span class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+              <span class="font-num text-ink-700 whitespace-nowrap">#{{ entry.code }}</span>
+              <FhStatusPill :status="entry.status" />
+              <span class="text-ink-500 whitespace-nowrap">{{ vnDateString(entry.createdAt) }}</span>
+            </span>
+            <span class="block text-sm text-ink-500">Đơn cũ, chỉ xem tóm tắt.</span>
+          </span>
+          <ChevronRight :size="18" class="text-ink-400 shrink-0" aria-hidden="true" />
+        </button>
+      </li>
+    </ul>
   </div>
 </template>

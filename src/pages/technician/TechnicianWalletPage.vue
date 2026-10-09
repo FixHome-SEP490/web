@@ -5,18 +5,13 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
-  PlusCircle,
   AlertCircle,
-  Clock,
   CheckCircle2,
   XCircle,
   CreditCard,
   RefreshCw,
-  Info,
-  Filter,
-  ArrowRight,
+  ChevronRight,
   Landmark,
-  Pencil,
   X,
 } from 'lucide-vue-next';
 import {
@@ -29,6 +24,7 @@ import {
 } from '../../api/wallet.api';
 import {
   FhButton,
+  FhSkeleton,
   FhStatusPill,
 } from '../../components';
 import {
@@ -55,10 +51,22 @@ const txFilterType = ref<string>('ALL');
 const txPage = ref(1);
 const txTotalPages = ref(1);
 const txTotal = ref(0);
+const txError = ref<string | null>(null);
+
+const txFilters = [
+  { id: 'ALL', label: 'Tất cả' },
+  { id: 'ONLINE_EARNING', label: 'Thu nhập online' },
+  { id: 'PLATFORM_FEE', label: 'Phí nền tảng' },
+  { id: 'TOP_UP', label: 'Nạp tiền' },
+  { id: 'WITHDRAW', label: 'Rút tiền' },
+  { id: 'WITHDRAW_REFUND', label: 'Hoàn tiền rút' },
+  { id: 'ADJUSTMENT', label: 'Điều chỉnh' },
+];
 
 // Withdrawals State
 const withdrawals = ref<WithdrawalRequest[]>([]);
 const wdLoading = ref(false);
+const wdError = ref<string | null>(null);
 const wdPage = ref(1);
 const wdTotalPages = ref(1);
 const wdTotal = ref(0);
@@ -118,6 +126,20 @@ const maskedAccountNumber = computed(() => {
   return number.length > 4 ? `•••• ${number.slice(-4)}` : number;
 });
 
+/** Money already on its way to the bank (waiting or being paid out). */
+const inFlightWithdrawal = computed(
+  () => (wallet.value?.pendingWithdrawal ?? 0) + (wallet.value?.processingWithdrawal ?? 0),
+);
+
+/** A ledger line that belongs to a repair job opens that job. */
+const txJobId = (tx: WalletTransaction): string | null =>
+  tx.referenceType === 'SERVICE_ORDER' && tx.referenceId ? tx.referenceId : null;
+
+const openTxJob = (tx: WalletTransaction) => {
+  const id = txJobId(tx);
+  if (id) void router.push(`/tech/jobs/${id}`);
+};
+
 const loadWallet = async () => {
   try {
     error.value = null;
@@ -130,6 +152,7 @@ const loadWallet = async () => {
 const loadTransactions = async () => {
   if (!wallet.value) return;
   txLoading.value = true;
+  txError.value = null;
   try {
     const res = await walletApi.getMyTransactions({
       page: txPage.value,
@@ -141,6 +164,7 @@ const loadTransactions = async () => {
     txTotalPages.value = res.meta.totalPages || 1;
   } catch (err) {
     console.error('Failed to load transactions:', err);
+    txError.value = userFacingError(err, 'Không thể tải biến động số dư. Vui lòng thử lại.');
   } finally {
     txLoading.value = false;
   }
@@ -165,6 +189,7 @@ const loadBanks = async () => {
 
 const loadWithdrawals = async () => {
   wdLoading.value = true;
+  wdError.value = null;
   try {
     const res = await walletApi.getMyWithdrawals({
       page: wdPage.value,
@@ -175,6 +200,7 @@ const loadWithdrawals = async () => {
     wdTotalPages.value = res.meta.totalPages || 1;
   } catch (err) {
     console.error('Failed to load withdrawals:', err);
+    wdError.value = userFacingError(err, 'Không thể tải lịch sử rút tiền. Vui lòng thử lại.');
   } finally {
     wdLoading.value = false;
   }
@@ -217,7 +243,7 @@ onMounted(async () => {
   if (route.query.payment === 'success') {
     returnBanner.value = {
       type: 'success',
-      message: 'Giao dịch nạp tiền qua cổng VNPay thành công! Số dư ví của bạn đã được cập nhật.',
+      message: 'Nạp tiền thành công. Số dư đã được cập nhật.',
     };
     await loadWallet();
     await loadTransactions();
@@ -225,7 +251,7 @@ onMounted(async () => {
   } else if (route.query.payment === 'failed') {
     returnBanner.value = {
       type: 'error',
-      message: 'Giao dịch nạp tiền qua VNPay không thành công hoặc đã bị hủy. Vui lòng thử lại.',
+      message: 'Nạp tiền chưa thành công hoặc đã bị huỷ. Vui lòng thử lại.',
     };
     router.replace({ query: {} });
   }
@@ -248,7 +274,7 @@ const handleTopUp = async () => {
     // The wallet is credited only after VNPay confirms; topUp throws when no
     // payment page was opened, so there is no "instant credit" branch here.
     const res = await walletApi.topUp(topUpAmount.value);
-    topUpSuccessMsg.value = 'Đang chuyển hướng tới cổng thanh toán VNPay...';
+    topUpSuccessMsg.value = 'Đang chuyển tới VNPay…';
     setTimeout(() => {
       window.location.href = res.paymentUrl;
     }, 500);
@@ -364,533 +390,378 @@ const handleWithdraw = async () => {
 
 <template>
   <div class="max-w-5xl mx-auto space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Wallet class="text-brand-600" :size="24" />
-          <span>Ví Kỹ thuật viên</span>
-        </h1>
-        <p class="text-xs sm:text-sm text-ink-500 mt-1">
-          Quản lý số dư ký quỹ, nhận thu nhập đơn thanh toán online, khấu trừ phí nền tảng và rút tiền về ngân hàng
-        </p>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <FhButton variant="secondary" size="sm" :loading="refreshing" @click="refreshAll">
-          <RefreshCw :size="14" class="mr-1.5" />
-          Làm mới
-        </FhButton>
-      </div>
-    </div>
-
-    <!-- VNPay Return Alert Banner -->
-    <div
-      v-if="returnBanner"
-      :class="[
-        'p-4 sm:p-5 rounded-2xl border flex items-center justify-between gap-3 shadow-xs transition-all',
-        returnBanner.type === 'success'
-          ? 'bg-success-50 border-success-300 text-success-900'
-          : 'bg-danger-50 border-danger-300 text-danger-900',
-      ]"
-    >
-      <div class="flex items-center gap-3">
-        <CheckCircle2 v-if="returnBanner.type === 'success'" :size="22" class="text-success-600 shrink-0" />
-        <XCircle v-else :size="22" class="text-danger-600 shrink-0" />
-        <span class="text-xs sm:text-sm font-semibold">{{ returnBanner.message }}</span>
-      </div>
+    <!-- Header: title + quiet refresh -->
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
+        Ví của tôi
+      </h1>
       <button
         type="button"
-        class="text-xs font-bold text-ink-500 hover:text-ink-800 p-1.5 cursor-pointer"
-        @click="returnBanner = null"
+        class="shrink-0 w-10 h-10 rounded-xl text-ink-500 hover:text-ink-800 hover:bg-ink-100 flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50"
+        aria-label="Làm mới"
+        title="Làm mới"
+        :disabled="refreshing"
+        @click="refreshAll"
       >
-        Đóng
+        <RefreshCw :size="18" :class="refreshing ? 'animate-spin' : ''" />
       </button>
     </div>
 
-    <!-- Loading Skeleton -->
-    <div v-if="loading" class="p-8 text-center text-ink-500">
-      <RefreshCw class="animate-spin inline-block mr-2" :size="20" />
-      Đang tải thông tin ví...
+    <!-- VNPay return -->
+    <div
+      v-if="returnBanner"
+      role="status"
+      :class="[
+        'px-4 py-3 rounded-2xl border flex items-center gap-3',
+        returnBanner.type === 'success'
+          ? 'bg-success-50 border-success-200 text-success-800'
+          : 'bg-danger-50 border-danger-200 text-danger-700',
+      ]"
+    >
+      <CheckCircle2 v-if="returnBanner.type === 'success'" :size="18" class="text-success-600 shrink-0" />
+      <XCircle v-else :size="18" class="text-danger-600 shrink-0" />
+      <span class="min-w-0 flex-1 text-sm font-medium text-pretty">{{ returnBanner.message }}</span>
+      <button
+        type="button"
+        class="shrink-0 w-10 h-10 -my-2 -mr-2 rounded-xl flex items-center justify-center opacity-70 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+        aria-label="Đóng thông báo"
+        @click="returnBanner = null"
+      >
+        <X :size="16" />
+      </button>
     </div>
 
-    <!-- Error State -->
-    <div v-else-if="error" class="p-6 rounded-2xl bg-danger-50 border border-danger-200 text-danger-800">
-      <p class="font-bold flex items-center gap-2">
-        <AlertCircle :size="18" /> {{ error }}
-      </p>
-      <FhButton variant="secondary" size="sm" class="mt-3" @click="refreshAll">
+    <!-- Loading: same shape as the page -->
+    <div v-if="loading" class="space-y-6" aria-busy="true" aria-label="Đang tải ví">
+      <div class="p-6 rounded-3xl bg-white border border-ink-200/80 space-y-4">
+        <FhSkeleton width="120px" height="14px" />
+        <FhSkeleton width="220px" height="40px" rounded="md" />
+        <div class="grid grid-cols-3 gap-4 pt-2">
+          <FhSkeleton height="32px" />
+          <FhSkeleton height="32px" />
+          <FhSkeleton height="32px" />
+        </div>
+      </div>
+      <FhSkeleton height="64px" rounded="lg" />
+      <div class="p-6 rounded-3xl bg-white border border-ink-200/80 space-y-5">
+        <FhSkeleton width="260px" height="20px" />
+        <FhSkeleton height="48px" :count="5" />
+      </div>
+    </div>
+
+    <!-- Wallet failed to load -->
+    <div
+      v-else-if="error"
+      class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 flex items-center gap-3"
+    >
+      <AlertCircle :size="18" class="shrink-0 text-danger-600" />
+      <span class="min-w-0 flex-1 text-sm font-medium">{{ error }}</span>
+      <FhButton variant="secondary" size="sm" :loading="refreshing" @click="refreshAll">
         Thử lại
       </FhButton>
     </div>
 
     <template v-else-if="wallet">
-      <!-- Ineligible / Low Balance Banner -->
-      <div
-        v-if="!wallet.eligibleForJobs"
-        class="p-4 sm:p-5 rounded-2xl bg-warning-50 border border-warning-300 text-warning-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-warning-100/70 hover:border-warning-400 transition-all group"
-        @click="showTopUpModal = true"
-        title="Bấm để mở nạp tiền nhanh"
-      >
-        <div class="flex items-start gap-3">
-          <AlertCircle :size="22" class="text-warning-600 shrink-0 mt-0.5" />
-          <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-bold text-warning-900 group-hover:text-warning-900 transition-colors">
-              Số dư ví dưới mức tối thiểu quy định ({{ formatCurrencyVND(wallet.minimumBalance) }})
-            </div>
-            <p class="text-warning-800">
-              Tài khoản của bạn tạm dừng nhận các lời mời sửa chữa mới. Vui lòng nạp thêm tiền để kích hoạt lại điều kiện nhận việc.
-            </p>
-          </div>
-        </div>
-        <FhButton size="sm" class="shrink-0" @click.stop="showTopUpModal = true">
-          <PlusCircle :size="15" class="mr-1.5" />
-          Nạp tiền ngay
-        </FhButton>
-      </div>
-
-      <!-- Negative Balance Critical Banner -->
+      <!-- One alert at most: a negative balance is the stronger case -->
       <div
         v-if="wallet.balance < 0"
-        class="p-4 sm:p-5 rounded-2xl bg-danger-50 border border-danger-300 text-danger-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs cursor-pointer hover:bg-danger-100/70 hover:border-danger-400 transition-all group"
-        @click="showTopUpModal = true"
-        title="Bấm để mở thanh toán công nợ"
+        role="alert"
+        class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 flex items-start gap-3"
       >
-        <div class="flex items-start gap-3">
-          <AlertCircle :size="22" class="text-danger-600 shrink-0 mt-0.5" />
-          <div class="text-xs sm:text-sm space-y-0.5">
-            <div class="font-bold text-danger-900 group-hover:text-danger-900 transition-colors">
-              Ví của bạn đang có số dư âm do khấu trừ phí đơn tiền mặt
+        <AlertCircle :size="18" class="shrink-0 mt-0.5 text-danger-600" />
+        <p class="text-sm text-pretty">
+          Số dư đang âm <strong class="font-num whitespace-nowrap">{{ formatCurrencyVND(wallet.balance) }}</strong>
+          do khấu trừ phí đơn tiền mặt. Nạp tiền để trả công nợ.
+        </p>
+      </div>
+      <div
+        v-else-if="!wallet.eligibleForJobs"
+        class="px-4 py-3 rounded-2xl bg-warning-50 border border-warning-200 text-warning-800 flex items-start gap-3"
+      >
+        <AlertCircle :size="18" class="shrink-0 mt-0.5 text-warning-600" />
+        <p class="text-sm text-pretty">
+          Số dư dưới mức ký quỹ
+          <strong class="font-num whitespace-nowrap">{{ formatCurrencyVND(wallet.minimumBalance) }}</strong>,
+          bạn tạm không nhận lời mời mới. Nạp thêm để nhận việc lại.
+        </p>
+      </div>
+
+      <!-- Balance: the page's one accent block, holding both money actions -->
+      <section class="p-5 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md space-y-6">
+        <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+          <div class="min-w-0 space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm text-brand-100 whitespace-nowrap">Số dư</span>
+              <span
+                v-if="wallet.eligibleForJobs"
+                class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-400/20 text-success-200 border border-success-300/30"
+              >
+                <CheckCircle2 :size="12" /> Đủ điều kiện nhận việc
+              </span>
+              <span
+                v-else
+                class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-danger-400/20 text-danger-200 border border-danger-300/30"
+              >
+                <XCircle :size="12" /> Dưới mức ký quỹ
+              </span>
             </div>
-            <p class="text-danger-800">
-              Số dư hiện tại là <span class="font-bold text-danger-900">{{ formatCurrencyVND(wallet.balance) }}</span>. Vui lòng nạp tiền để hoàn tất công nợ với nền tảng.
-            </p>
+            <div class="text-3xl sm:text-5xl font-bold font-num tracking-tight whitespace-nowrap">
+              {{ formatCurrencyVND(wallet.balance) }}
+            </div>
           </div>
-        </div>
-        <FhButton size="sm" variant="danger" class="shrink-0" @click.stop="showTopUpModal = true">
-          <PlusCircle :size="15" class="mr-1.5" />
-          Thanh toán công nợ
-        </FhButton>
-      </div>
 
-      <!-- Hero Wallet Balance Card -->
-      <div class="p-6 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-        <div class="space-y-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="whitespace-nowrap text-xs font-bold text-brand-200 bg-white/10 px-2.5 py-0.5 rounded-full">
-              Ví FixHome Kỹ thuật viên
-            </span>
-            <span
-              v-if="wallet.eligibleForJobs"
-              class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-400/20 text-success-200 border border-success-300/30"
+          <div class="flex flex-col sm:flex-row gap-3 shrink-0">
+            <button
+              type="button"
+              class="h-11 px-5 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-sm font-semibold whitespace-nowrap transition-colors shadow-sm flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              @click="showTopUpModal = true"
             >
-              <CheckCircle2 :size="12" /> Đủ điều kiện nhận việc
-            </span>
-            <span
-              v-else
-              class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-danger-400/20 text-danger-200 border border-danger-300/30"
+              <ArrowDownLeft :size="16" />
+              <span>Nạp tiền vào ví</span>
+            </button>
+            <button
+              type="button"
+              class="h-11 px-5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              :disabled="!!withdrawBlockedReason"
+              :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
+              @click="openWithdraw"
             >
-              <XCircle :size="12" /> Dưới mức ký quỹ
-            </span>
-          </div>
-
-          <div class="text-xs text-brand-100 font-medium">Tổng số dư thực tế</div>
-          <div class="text-3xl sm:text-5xl font-bold font-num tracking-tight">
-            {{ formatCurrencyVND(wallet.balance) }}
-          </div>
-
-          <div class="text-xs text-brand-100/90 flex flex-wrap items-center gap-3 pt-1">
-            <span>Ký quỹ tối thiểu: <strong class="text-white">{{ formatCurrencyVND(wallet.minimumBalance) }}</strong></span>
-            <span>•</span>
-            <span>Khả dụng để rút: <strong class="text-white">{{ formatCurrencyVND(wallet.withdrawableBalance) }}</strong></span>
+              <ArrowUpRight :size="16" />
+              <span>Rút tiền về ngân hàng</span>
+            </button>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white text-brand-700 hover:bg-brand-50 active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2"
-            @click="showTopUpModal = true"
-          >
-            <ArrowDownLeft :size="16" />
-            <span>Nạp tiền vào ví</span>
-          </button>
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 pt-5 border-t border-white/20 text-sm">
+          <div class="flex sm:block items-baseline justify-between gap-3">
+            <dt class="text-brand-100 whitespace-nowrap">Có thể rút</dt>
+            <dd class="font-semibold font-num whitespace-nowrap sm:text-lg">{{ formatCurrencyVND(wallet.withdrawableBalance) }}</dd>
+          </div>
+          <div class="flex sm:block items-baseline justify-between gap-3">
+            <dt class="text-brand-100 whitespace-nowrap">Ký quỹ tối thiểu</dt>
+            <dd class="font-semibold font-num whitespace-nowrap sm:text-lg">{{ formatCurrencyVND(wallet.minimumBalance) }}</dd>
+          </div>
+          <div class="flex sm:block items-baseline justify-between gap-3">
+            <dt class="text-brand-100 whitespace-nowrap">Đang chuyển về ngân hàng</dt>
+            <dd class="font-semibold font-num whitespace-nowrap sm:text-lg">{{ formatCurrencyVND(inFlightWithdrawal) }}</dd>
+          </div>
+        </dl>
 
-          <button
-            type="button"
-            class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="!!withdrawBlockedReason"
-            :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
-            @click="openWithdraw"
-          >
-            <ArrowUpRight :size="16" />
-            <span>Rút tiền về ngân hàng</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Stat Cards Breakdown -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <!-- Card 1: Withdrawable Balance -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
-          @click="openWithdraw"
-          :title="withdrawBlockedReason ?? 'Bấm để yêu cầu rút tiền'"
+        <p
+          v-if="withdrawBlockedReason && withdrawBlockedReason !== 'Đang tải ví'"
+          class="-mt-2 text-sm text-brand-100 text-pretty"
         >
-          <div class="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>Số dư có thể rút</span>
-            <CreditCard :size="16" class="text-brand-600" />
-          </div>
-          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
-            {{ formatCurrencyVND(wallet.withdrawableBalance) }}
-          </div>
-          <p class="text-[11px] text-ink-500">
-            Đã trừ ký quỹ tối thiểu và các lệnh rút đang xử lý
-          </p>
-        </div>
-
-        <!-- Card 2: Minimum Required -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-warning-400 hover:shadow-sm transition-all group"
-          @click="showTopUpModal = true"
-          title="Bấm để nạp thêm tiền vào ví"
-        >
-          <div class="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>Mức ký quỹ duy trì</span>
-            <Info :size="16" class="text-warning-500" />
-          </div>
-          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-warning-700 transition-colors">
-            {{ formatCurrencyVND(wallet.minimumBalance) }}
-          </div>
-          <p class="text-[11px] text-ink-500">
-            Duy trì để đảm bảo quyền nhận lời mời việc mới
-          </p>
-        </div>
-
-        <!-- Card 3: Pending Withdrawal -->
-        <div
-          class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition-all group"
-          @click="activeTab = 'withdrawals'"
-          title="Bấm để xem danh sách lệnh rút tiền"
-        >
-          <div class="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>Đang chuyển về ngân hàng</span>
-            <Clock :size="16" class="text-brand-600" />
-          </div>
-          <div class="text-2xl font-bold font-num text-ink-900 group-hover:text-brand-700 transition-colors">
-            {{ formatCurrencyVND(wallet.pendingWithdrawal + (wallet.processingWithdrawal ?? 0)) }}
-          </div>
-          <p class="text-[11px] text-ink-500">
-            {{
-              (wallet.processingWithdrawal ?? 0) > 0
-                ? 'Ngân hàng đang xử lý lệnh chuyển, bạn sẽ nhận thông báo khi tiền về'
-                : 'Rút tiền được chuyển ngay, không cần chờ duyệt'
-            }}
-          </p>
-        </div>
-      </div>
+          {{ withdrawBlockedReason }}.
+        </p>
+      </section>
 
       <!-- Receiving bank account -->
-      <div class="p-5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div class="flex items-center gap-3 min-w-0">
-          <div class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-            <Landmark :size="20" />
+      <section class="px-4 sm:px-5 py-3.5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-3">
+        <Landmark :size="20" class="text-ink-500 shrink-0" />
+        <div v-if="bankAccount" class="min-w-0 flex-1">
+          <div class="text-sm font-semibold text-ink-900 truncate">
+            {{ bankAccount.bankName }} · <span class="font-num whitespace-nowrap">{{ maskedAccountNumber }}</span>
           </div>
-          <div v-if="bankAccount" class="min-w-0">
-            <div class="text-xs font-bold text-ink-500">Tài khoản nhận tiền rút</div>
-            <div class="text-sm font-bold text-ink-900 truncate">
-              {{ bankAccount.bankName }} · <span class="font-num">{{ maskedAccountNumber }}</span>
-            </div>
-            <div class="text-[11px] text-ink-500 truncate">{{ bankAccount.accountName }}</div>
-          </div>
-          <div v-else class="min-w-0">
-            <div class="text-sm font-bold text-ink-900">Chưa khai báo tài khoản nhận tiền</div>
-            <p class="text-[11px] text-ink-500">
-              Khai một lần, tên chủ tài khoản phải trùng tên đã xác minh danh tính
-            </p>
-          </div>
+          <div class="text-sm text-ink-500 truncate">{{ bankAccount.accountName }}</div>
         </div>
-        <FhButton
-          :variant="bankAccount ? 'secondary' : 'primary'"
-          size="md"
-          @click="openBankModal(false)"
-        >
-          <Pencil v-if="bankAccount" :size="14" />
-          <span>{{ bankAccount ? 'Đổi tài khoản' : 'Khai báo tài khoản' }}</span>
+        <div v-else class="min-w-0 flex-1 text-sm font-semibold text-ink-900">
+          Chưa có tài khoản nhận tiền
+        </div>
+        <FhButton variant="secondary" size="md" @click="openBankModal(false)">
+          {{ bankAccount ? 'Đổi tài khoản' : 'Khai báo tài khoản' }}
         </FhButton>
-      </div>
+      </section>
 
-      <!-- Main Navigation Tabs -->
-      <div class="bg-white rounded-3xl border border-ink-200/80 shadow-xs overflow-hidden">
-        <!-- Tab Headers -->
-        <div class="flex items-center border-b border-ink-200 px-6 pt-4 gap-6">
+      <!-- History -->
+      <section class="bg-white rounded-3xl border border-ink-200/80 shadow-xs overflow-hidden">
+        <div role="tablist" class="flex items-center border-b border-ink-200 px-4 sm:px-6 pt-2 gap-6 overflow-x-auto">
           <button
             type="button"
-            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
-            :class="[
-              activeTab === 'transactions'
-                ? 'border-brand-600 text-brand-600'
-                : 'border-transparent text-ink-500 hover:text-ink-800'
-            ]"
+            role="tab"
+            :aria-selected="activeTab === 'transactions'"
+            class="h-11 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 rounded-t"
+            :class="activeTab === 'transactions' ? 'border-brand-600 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'transactions'"
           >
             <span>Biến động số dư</span>
-            <span class="px-2 py-0.5 rounded-full text-xs font-num font-bold bg-ink-100 text-ink-700">
-              {{ txTotal }}
-            </span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-num font-semibold bg-ink-100 text-ink-700">{{ txTotal }}</span>
           </button>
-
           <button
             type="button"
-            class="pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2"
-            :class="[
-              activeTab === 'withdrawals'
-                ? 'border-brand-600 text-brand-600'
-                : 'border-transparent text-ink-500 hover:text-ink-800'
-            ]"
+            role="tab"
+            :aria-selected="activeTab === 'withdrawals'"
+            class="h-11 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 rounded-t"
+            :class="activeTab === 'withdrawals' ? 'border-brand-600 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'withdrawals'"
           >
             <span>Lịch sử rút tiền</span>
-            <span
-              v-if="wallet.pendingWithdrawal > 0"
-              class="w-2 h-2 rounded-full bg-warning-500"
-            />
+            <span v-if="wallet.pendingWithdrawal > 0" class="w-2 h-2 rounded-full bg-warning-500" aria-label="Có lệnh đang chờ" />
           </button>
         </div>
 
-        <!-- TAB 1: TRANSACTIONS LEDGER -->
-        <div v-if="activeTab === 'transactions'" class="p-6 space-y-4">
-          <!-- Filter Bar -->
-          <div class="flex flex-wrap items-center justify-between gap-3 pb-2">
-            <div class="flex flex-wrap items-center gap-1.5 text-xs font-bold">
-              <span class="text-ink-400 mr-1 flex items-center gap-1">
-                <Filter :size="13" /> Lọc:
-              </span>
-              <button
-                v-for="f in [
-                  { id: 'ALL', label: 'Tất cả' },
-                  { id: 'ONLINE_EARNING', label: 'Thu nhập online' },
-                  { id: 'PLATFORM_FEE', label: 'Phí nền tảng' },
-                  { id: 'TOP_UP', label: 'Nạp tiền' },
-                  { id: 'WITHDRAW', label: 'Rút tiền' },
-                  { id: 'WITHDRAW_REFUND', label: 'Hoàn tiền rút' },
-                  { id: 'ADJUSTMENT', label: 'Điều chỉnh' },
-                ]"
-                :key="f.id"
-                type="button"
-                class="px-2.5 py-1 rounded-lg text-xs transition-all"
-                :class="[
-                  txFilterType === f.id
-                    ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200'
-                    : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
-                ]"
-                @click="txFilterType = f.id"
-              >
-                {{ f.label }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Loading state -->
-          <div v-if="txLoading" class="py-12 text-center text-ink-400 text-xs">
-            <RefreshCw class="animate-spin inline-block mr-2" :size="16" />
-            Đang tải dữ liệu giao dịch...
-          </div>
-
-          <!-- Empty state -->
-          <div
-            v-else-if="transactions.length === 0"
-            class="py-12 text-center text-ink-400 text-xs space-y-2"
-          >
-            <Wallet :size="32" class="mx-auto text-ink-300 stroke-1" />
-            <p>Chưa có giao dịch biến động số dư nào</p>
-          </div>
-
-          <!-- Transaction List -->
-          <div v-else class="divide-y divide-ink-100">
-            <div
-              v-for="tx in transactions"
-              :key="tx.id"
-              class="py-3.5 flex items-center justify-between gap-4 px-2 rounded-xl transition-all"
-              :class="[
-                tx.referenceType === 'SERVICE_ORDER' && tx.referenceId
-                  ? 'cursor-pointer hover:bg-brand-50/50 hover:shadow-2xs group'
-                  : 'hover:bg-ink-50/50'
-              ]"
-              @click="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId ? router.push(`/tech/jobs/${tx.referenceId}`) : null"
-              :title="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId ? 'Bấm để mở chi tiết đơn hàng liên quan' : undefined"
+        <!-- Balance changes -->
+        <div v-if="activeTab === 'transactions'" class="p-4 sm:p-6 space-y-4">
+          <div class="flex items-center gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
+            <button
+              v-for="f in txFilters"
+              :key="f.id"
+              type="button"
+              class="h-10 px-3.5 rounded-full text-sm whitespace-nowrap shrink-0 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              :class="txFilterType === f.id
+                ? 'bg-brand-50 text-brand-700 font-semibold border-brand-200'
+                : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'"
+              :aria-pressed="txFilterType === f.id"
+              @click="txFilterType = f.id"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <!-- Icon badge -->
-                <div
-                  class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
-                  :class="[
-                    formatWalletTxType(tx.type, tx).isCredit
-                      ? 'bg-success-50 text-success-600'
-                      : 'bg-danger-50 text-danger-600'
-                  ]"
-                >
-                  <ArrowDownLeft v-if="formatWalletTxType(tx.type, tx).isCredit" :size="18" />
-                  <ArrowUpRight v-else :size="18" />
-                </div>
+              {{ f.label }}
+            </button>
+          </div>
 
-                <!-- Info -->
-                <div class="min-w-0 space-y-0.5">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs sm:text-sm font-bold text-ink-900 truncate group-hover:text-brand-700 transition-colors">
+          <div v-if="txLoading" aria-busy="true">
+            <FhSkeleton height="52px" :count="5" />
+          </div>
+
+          <div v-else-if="txError" class="py-8 flex flex-col items-center gap-3 text-center">
+            <p class="text-sm text-ink-600">{{ txError }}</p>
+            <FhButton variant="secondary" size="sm" @click="loadTransactions">Thử lại</FhButton>
+          </div>
+
+          <div v-else-if="transactions.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
+            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
+              <Wallet :size="22" class="text-ink-400" />
+            </span>
+            <p class="text-sm text-ink-500">Chưa có biến động số dư.</p>
+          </div>
+
+          <ul v-else class="divide-y divide-ink-100 -mx-2">
+            <li v-for="tx in transactions" :key="tx.id">
+              <component
+                :is="txJobId(tx) ? 'button' : 'div'"
+                :type="txJobId(tx) ? 'button' : undefined"
+                class="w-full text-left px-2 py-3 flex items-center gap-3 rounded-xl"
+                :class="txJobId(tx) ? 'cursor-pointer hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600' : ''"
+                :title="txJobId(tx) ? 'Mở đơn sửa chữa liên quan' : undefined"
+                @click="openTxJob(tx)"
+              >
+                <div class="min-w-0 flex-1 space-y-0.5">
+                  <div class="flex items-baseline gap-3">
+                    <span class="min-w-0 flex-1 text-sm font-semibold text-ink-900 truncate">
                       {{ formatWalletTxType(tx.type, tx).label }}
                     </span>
                     <span
-                      v-if="tx.referenceType === 'SERVICE_ORDER' && tx.referenceId"
-                      class="text-[11px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 group-hover:bg-brand-600 group-hover:text-white transition-colors flex items-center gap-1"
+                      class="shrink-0 text-sm sm:text-base font-semibold font-num whitespace-nowrap"
+                      :class="formatWalletTxType(tx.type, tx).isCredit ? 'text-success-600' : 'text-danger-600'"
                     >
-                      <span>Đơn hàng</span>
-                      <ArrowRight :size="10" />
+                      {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
                     </span>
                   </div>
-                  <p class="text-xs text-ink-500 truncate">
-                    {{ withoutCodes(tx.description) || 'Giao dịch ví FixHome' }}
-                  </p>
-                  <div class="text-[11px] text-ink-400 flex items-center gap-2">
-                    <span>{{ formatDateTimeVN(tx.createdAt) }}</span>
-                    <span>•</span>
-                    <span>Số dư sau: <strong class="font-num text-ink-600">{{ formatCurrencyVND(tx.balanceAfter) }}</strong></span>
+                  <div class="flex items-baseline gap-3">
+                    <span
+                      class="min-w-0 flex-1 text-sm text-ink-500 truncate"
+                      :title="withoutCodes(tx.description) || undefined"
+                    >
+                      <span class="whitespace-nowrap">{{ formatDateTimeVN(tx.createdAt) }}</span>
+                      · {{ withoutCodes(tx.description) || 'Giao dịch ví FixHome' }}
+                    </span>
+                    <span class="shrink-0 text-xs text-ink-400 whitespace-nowrap">
+                      Số dư sau <span class="font-num">{{ formatCurrencyVND(tx.balanceAfter) }}</span>
+                    </span>
                   </div>
                 </div>
-              </div>
+                <ChevronRight v-if="txJobId(tx)" :size="16" class="text-ink-400 shrink-0" />
+              </component>
+            </li>
+          </ul>
 
-              <!-- Amount -->
-              <div class="text-right shrink-0">
-                <div
-                  class="text-sm sm:text-base font-bold font-num"
-                  :class="[
-                    formatWalletTxType(tx.type, tx).isCredit ? 'text-success-600' : 'text-danger-600'
-                  ]"
-                >
-                  {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Pagination -->
           <div
-            v-if="txTotalPages > 1"
-            class="flex items-center justify-between pt-4 border-t border-ink-100 text-xs text-ink-500"
+            v-if="!txLoading && !txError && txTotalPages > 1"
+            class="flex items-center justify-between gap-3 pt-4 border-t border-ink-100"
           >
-            <span>Trang {{ txPage }} / {{ txTotalPages }} (Tổng {{ txTotal }} giao dịch)</span>
+            <span class="text-sm text-ink-500 whitespace-nowrap">Trang {{ txPage }}/{{ txTotalPages }}</span>
             <div class="flex items-center gap-2">
-              <FhButton
-                variant="secondary"
-                size="sm"
-                :disabled="txPage <= 1"
-                @click="txPage--; loadTransactions()"
-              >
+              <FhButton variant="secondary" size="sm" :disabled="txPage <= 1" @click="txPage--; loadTransactions()">
                 Trước
               </FhButton>
-              <FhButton
-                variant="secondary"
-                size="sm"
-                :disabled="txPage >= txTotalPages"
-                @click="txPage++; loadTransactions()"
-              >
+              <FhButton variant="secondary" size="sm" :disabled="txPage >= txTotalPages" @click="txPage++; loadTransactions()">
                 Sau
               </FhButton>
             </div>
           </div>
         </div>
 
-        <!-- TAB 2: WITHDRAWALS HISTORY -->
-        <div v-else-if="activeTab === 'withdrawals'" class="p-6 space-y-4">
-          <!-- Loading -->
-          <div v-if="wdLoading" class="py-12 text-center text-ink-400 text-xs">
-            <RefreshCw class="animate-spin inline-block mr-2" :size="16" />
-            Đang tải lịch sử rút tiền...
+        <!-- Withdrawals -->
+        <div v-else-if="activeTab === 'withdrawals'" class="p-4 sm:p-6">
+          <div v-if="wdLoading" aria-busy="true">
+            <FhSkeleton height="60px" :count="4" />
           </div>
 
-          <!-- Empty -->
-          <div
-            v-else-if="withdrawals.length === 0"
-            class="py-12 text-center text-ink-400 text-xs space-y-2"
-          >
-            <CreditCard :size="32" class="mx-auto text-ink-300 stroke-1" />
-            <p>Chưa có yêu cầu rút tiền nào</p>
+          <div v-else-if="wdError" class="py-8 flex flex-col items-center gap-3 text-center">
+            <p class="text-sm text-ink-600">{{ wdError }}</p>
+            <FhButton variant="secondary" size="sm" @click="loadWithdrawals">Thử lại</FhButton>
           </div>
 
-          <!-- Table -->
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-ink-50 text-ink-600 font-bold text-[10px] border-b border-ink-100">
-                <tr>
-                  <th class="py-3 px-3">Thời gian</th>
-                  <th class="py-3 px-3">Số tiền</th>
-                  <th class="py-3 px-3">Tài khoản ngân hàng</th>
-                  <th class="py-3 px-3">Trạng thái</th>
-                  <th class="py-3 px-3">Ghi chú / Lý do</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-ink-100">
-                <tr v-for="w in withdrawals" :key="w.id" class="hover:bg-ink-50/50">
-                  <td class="py-3.5 px-3 text-ink-600 whitespace-nowrap">
-                    {{ formatDateTimeVN(w.requestedAt) }}
-                  </td>
-                  <td class="py-3.5 px-3 font-bold font-num text-ink-900 whitespace-nowrap">
+          <div v-else-if="withdrawals.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
+            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
+              <CreditCard :size="22" class="text-ink-400" />
+            </span>
+            <p class="text-sm text-ink-500">Chưa có lệnh rút tiền.</p>
+          </div>
+
+          <ul v-else class="divide-y divide-ink-100">
+            <li v-for="w in withdrawals" :key="w.id" class="py-3 first:pt-0 last:pb-0 space-y-1">
+              <div class="flex items-start gap-3">
+                <div class="min-w-0 flex-1 space-y-0.5">
+                  <div class="text-sm sm:text-base font-semibold font-num text-ink-900 whitespace-nowrap">
                     {{ formatCurrencyVND(w.amount) }}
-                  </td>
-                  <td class="py-3.5 px-3">
-                    <div class="font-bold text-ink-900">{{ w.bankName }}</div>
-                    <div class="text-[11px] text-ink-500 font-num">{{ w.bankAccountNumber }} — {{ w.bankAccountName }}</div>
-                  </td>
-                  <td class="py-3.5 px-3 whitespace-nowrap">
-                    <FhStatusPill :status="w.status" :label="formatWithdrawalStatus(w.status).label" />
-                  </td>
-                  <td class="py-3.5 px-3 text-ink-500 max-w-xs">
-                    <span v-if="w.status === 'REJECTED' && w.rejectReason" class="text-danger-600 font-medium">
-                      Lý do: {{ withoutCodes(w.rejectReason) }}
-                    </span>
-                    <span v-else-if="w.status === 'FAILED'" class="text-danger-600 font-medium">
-                      Không chuyển được<template v-if="w.failureReason">: {{ withoutCodes(w.failureReason) }}</template>.
-                      Tiền đã được hoàn lại vào ví.
-                    </span>
-                    <span v-else-if="w.status === 'SUCCESS'">
-                      <template v-if="w.payoutBankReference">
-                        Mã giao dịch ngân hàng: <strong class="font-num text-ink-700">{{ w.payoutBankReference }}</strong>
-                      </template>
-                      <template v-else-if="w.processedAt">
-                        Đã chuyển lúc {{ formatDateTimeVN(w.processedAt) }}
-                      </template>
-                    </span>
-                    <span v-else-if="w.status === 'PROCESSING'">
-                      Ngân hàng đang xử lý lệnh chuyển
-                    </span>
-                    <span v-else-if="w.status === 'PENDING'">
-                      Đang chờ xử lý
-                    </span>
-                    <span v-else>—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </div>
+                  <div class="text-sm text-ink-500 truncate">
+                    {{ w.bankName }} · <span class="font-num">{{ w.bankAccountNumber }}</span> · {{ w.bankAccountName }}
+                  </div>
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-1">
+                  <FhStatusPill :status="w.status" :label="formatWithdrawalStatus(w.status).label" />
+                  <span class="text-xs text-ink-400 whitespace-nowrap">{{ formatDateTimeVN(w.requestedAt) }}</span>
+                </div>
+              </div>
+              <p
+                v-if="w.status === 'REJECTED' && w.rejectReason"
+                class="text-sm text-danger-600 text-pretty"
+              >
+                Lý do: {{ withoutCodes(w.rejectReason) }}
+              </p>
+              <p v-else-if="w.status === 'FAILED'" class="text-sm text-danger-600 text-pretty">
+                Không chuyển được<template v-if="w.failureReason">: {{ withoutCodes(w.failureReason) }}</template>.
+                Tiền đã được hoàn lại vào ví.
+              </p>
+              <p v-else-if="w.status === 'SUCCESS' && w.payoutBankReference" class="text-sm text-ink-500">
+                Mã giao dịch ngân hàng: <span class="font-num text-ink-700 break-all">{{ w.payoutBankReference }}</span>
+              </p>
+              <p v-else-if="w.status === 'SUCCESS' && w.processedAt" class="text-sm text-ink-500">
+                Đã chuyển lúc <span class="whitespace-nowrap">{{ formatDateTimeVN(w.processedAt) }}</span>
+              </p>
+            </li>
+          </ul>
         </div>
-      </div>
+      </section>
     </template>
 
-    <!-- MODAL 1: NẠP TIỀN VÀO VÍ -->
+    <!-- Nạp tiền -->
     <div
       v-if="showTopUpModal"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+      @keydown.esc="!topUpSubmitting && (showTopUpModal = false)"
     >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
-            <ArrowDownLeft class="text-brand-600" :size="20" />
-            <span>Nạp tiền vào ví kỹ thuật viên</span>
-          </h3>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="topup-title"
+        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h3 id="topup-title" class="text-lg font-bold text-ink-900">Nạp tiền vào ví</h3>
           <button
             type="button"
-            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             aria-label="Đóng"
             @click="showTopUpModal = false"
           >
@@ -898,85 +769,68 @@ const handleWithdraw = async () => {
           </button>
         </div>
 
-        <div v-if="topUpSuccessMsg" class="p-4 rounded-2xl bg-success-50 border border-success-200 text-success-800 text-sm font-bold flex items-center gap-2">
-          <CheckCircle2 :size="18" /> {{ topUpSuccessMsg }}
+        <div v-if="topUpSuccessMsg" role="status" class="px-4 py-3 rounded-2xl bg-success-50 border border-success-200 text-success-800 text-sm font-semibold flex items-center gap-2">
+          <CheckCircle2 :size="18" class="shrink-0" /> {{ topUpSuccessMsg }}
         </div>
 
-        <div v-if="topUpError" class="p-3.5 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-start gap-2">
+        <div v-if="topUpError" role="alert" class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 text-sm font-medium flex items-start gap-2">
           <AlertCircle :size="16" class="shrink-0 mt-0.5" />
           <span>{{ topUpError }}</span>
         </div>
 
-        <div v-else class="space-y-4">
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Chọn nhanh mức nạp:</label>
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="amt in topUpPresets"
-                :key="amt"
-                type="button"
-                class="py-2.5 px-3 rounded-xl border text-xs font-bold font-num transition-all"
-                :class="[
-                  topUpAmount === amt
-                    ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
-                    : 'border-ink-200 bg-white text-ink-700 hover:border-brand-300'
-                ]"
-                @click="topUpAmount = amt"
-              >
-                {{ formatCurrencyVND(amt) }}
-              </button>
-            </div>
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-2" role="group" aria-label="Chọn nhanh số tiền">
+            <button
+              v-for="amt in topUpPresets"
+              :key="amt"
+              type="button"
+              class="h-11 px-3 rounded-xl border text-sm font-semibold font-num whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              :class="topUpAmount === amt
+                ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
+                : 'border-ink-200 bg-white text-ink-700 hover:border-brand-300'"
+              :aria-pressed="topUpAmount === amt"
+              @click="topUpAmount = amt"
+            >
+              {{ formatCurrencyVND(amt) }}
+            </button>
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Hoặc nhập số tiền khác (₫):</label>
+            <label for="topup-amount" class="block text-sm font-medium text-ink-700">Số tiền khác</label>
             <div class="relative">
               <input
+                id="topup-amount"
                 v-model.number="topUpAmount"
                 type="number"
+                inputmode="numeric"
                 min="10000"
                 step="10000"
                 placeholder="200000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full h-12 pl-4 pr-12 rounded-xl border border-ink-200 font-num font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
-              <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-ink-400">₫</span>
             </div>
-            <p class="text-[11px] text-ink-500">Mức nạp tối thiểu là 10.000 ₫</p>
+            <p class="text-sm text-ink-500">Tối thiểu 10.000 ₫.</p>
           </div>
 
-          <div class="p-3.5 rounded-xl bg-ink-50 text-xs space-y-1 border border-ink-100">
-            <div class="flex items-center justify-between text-ink-600">
-              <span>Số dư hiện tại:</span>
-              <span class="font-bold font-num">{{ formatCurrencyVND(wallet?.balance) }}</span>
+          <dl class="text-sm divide-y divide-ink-100 border-y border-ink-100">
+            <div class="flex items-center justify-between gap-3 py-2.5">
+              <dt class="text-ink-500">Số dư hiện tại</dt>
+              <dd class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ formatCurrencyVND(wallet?.balance) }}</dd>
             </div>
-            <div class="flex items-center justify-between text-ink-900 font-bold">
-              <span>Số dư dự kiến sau nạp:</span>
-              <span class="font-bold font-num text-success-600">
+            <div class="flex items-center justify-between gap-3 py-2.5">
+              <dt class="text-ink-700 font-medium">Sau khi nạp</dt>
+              <dd class="font-num font-semibold text-success-600 whitespace-nowrap">
                 {{ formatCurrencyVND((wallet?.balance ?? 0) + (topUpAmount || 0)) }}
-              </span>
+              </dd>
             </div>
-          </div>
+          </dl>
 
-          <div class="p-3 rounded-xl bg-brand-50 border border-brand-100 flex items-start gap-2.5 text-brand-900 text-xs">
-            <Info :size="16" class="text-brand-600 shrink-0 mt-0.5" />
-            <div>
-              <span class="font-bold">Cổng thanh toán điện tử VNPay:</span>
-              <p class="text-brand-700 text-[11px] mt-0.5">
-                Hỗ trợ ứng dụng ngân hàng quét mã VNPAY-QR, thẻ ATM nội địa & Mobile Banking. Giao dịch bảo mật và số dư ví được ghi nhận tức thì.
-              </p>
-            </div>
-          </div>
+          <p class="text-sm text-ink-500">Thanh toán qua VNPay: QR ngân hàng, thẻ ATM hoặc Mobile Banking.</p>
 
-          <div class="flex items-center justify-end gap-3 pt-2">
-            <FhButton variant="secondary" size="md" @click="showTopUpModal = false">
-              Huỷ bỏ
-            </FhButton>
-            <FhButton
-              variant="primary"
-              size="md"
-              :loading="topUpSubmitting"
-              @click="handleTopUp"
-            >
+          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-1">
+            <FhButton variant="secondary" size="md" @click="showTopUpModal = false">Huỷ</FhButton>
+            <FhButton variant="primary" size="md" :loading="topUpSubmitting" @click="handleTopUp">
               Nạp tiền qua VNPay
             </FhButton>
           </div>
@@ -984,20 +838,23 @@ const handleWithdraw = async () => {
       </div>
     </div>
 
-    <!-- MODAL 2: YÊU CẦU RÚT TIỀN -->
+    <!-- Rút tiền -->
     <div
       v-if="showWithdrawModal"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+      @keydown.esc="!withdrawSubmitting && (showWithdrawModal = false)"
     >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
-            <ArrowUpRight class="text-brand-600" :size="20" />
-            <span>Rút tiền về ngân hàng</span>
-          </h3>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="withdraw-title"
+        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h3 id="withdraw-title" class="text-lg font-bold text-ink-900">Rút tiền về ngân hàng</h3>
           <button
             type="button"
-            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             aria-label="Đóng"
             @click="showWithdrawModal = false"
           >
@@ -1005,73 +862,64 @@ const handleWithdraw = async () => {
           </button>
         </div>
 
-        <div v-if="withdrawError" class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-800 text-xs font-bold flex items-center gap-2">
-          <AlertCircle :size="16" /> {{ withdrawError }}
+        <div v-if="withdrawError" role="alert" class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 text-sm font-medium flex items-start gap-2">
+          <AlertCircle :size="16" class="shrink-0 mt-0.5" />
+          <span>{{ withdrawError }}</span>
         </div>
 
         <div class="space-y-4">
-          <div class="p-3.5 rounded-xl bg-brand-50 text-xs space-y-1 border border-brand-100">
-            <div class="flex items-center justify-between text-brand-900 font-bold">
-              <span>Khả dụng để rút:</span>
-              <span class="font-bold font-num text-brand-700 text-sm">
-                {{ formatCurrencyVND(wallet?.withdrawableBalance) }}
-              </span>
-            </div>
-            <p class="text-[11px] text-brand-700">
-              Đã giữ lại mức ký quỹ duy trì tối thiểu {{ formatCurrencyVND(wallet?.minimumBalance) }}
-            </p>
+          <div class="flex items-baseline justify-between gap-3">
+            <span class="text-sm text-ink-500">Có thể rút</span>
+            <span class="text-right">
+              <span class="block font-num font-semibold text-ink-900 whitespace-nowrap">{{ formatCurrencyVND(wallet?.withdrawableBalance) }}</span>
+              <span class="block text-xs text-ink-400 whitespace-nowrap">Đã trừ ký quỹ {{ formatCurrencyVND(wallet?.minimumBalance) }}</span>
+            </span>
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-ink-700">Số tiền muốn rút (₫):</label>
+            <label for="withdraw-amount" class="block text-sm font-medium text-ink-700">Số tiền rút</label>
             <div class="relative">
               <input
+                id="withdraw-amount"
                 v-model.number="withdrawAmount"
                 type="number"
+                inputmode="numeric"
                 :min="minimumWithdrawal"
                 :max="wallet?.withdrawableBalance ?? 0"
                 step="10000"
                 placeholder="100000"
-                class="w-full px-4 py-3 rounded-xl border border-ink-200 font-num font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
+                class="w-full h-12 pl-4 pr-12 rounded-xl border border-ink-200 font-num font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
-              <span class="absolute right-4 top-3.5 text-xs font-bold text-ink-400">VNĐ</span>
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-ink-400">₫</span>
             </div>
-            <p class="text-[11px] text-ink-500">Rút tối thiểu {{ formatCurrencyVND(minimumWithdrawal) }}</p>
+            <p class="text-sm text-ink-500">Tối thiểu {{ formatCurrencyVND(minimumWithdrawal) }}.</p>
           </div>
 
           <!-- Where the money goes: always the saved, KYC-checked account -->
-          <div v-if="bankAccount" class="p-3.5 rounded-xl border border-ink-200 text-xs space-y-1">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-ink-700">Chuyển về tài khoản</span>
-              <button
-                type="button"
-                class="text-brand-600 hover:text-brand-700 font-bold"
-                @click="showWithdrawModal = false; openBankModal(false)"
-              >
-                Đổi
-              </button>
+          <div v-if="bankAccount" class="flex items-center gap-3 py-3 border-y border-ink-100">
+            <div class="min-w-0 flex-1 text-sm">
+              <div class="text-ink-500">Chuyển về tài khoản</div>
+              <div class="font-semibold text-ink-900 truncate">
+                {{ bankAccount.bankName }} · <span class="font-num">{{ bankAccount.accountNumber }}</span>
+              </div>
+              <div class="text-ink-500 truncate">{{ bankAccount.accountName }}</div>
             </div>
-            <div class="font-bold text-ink-900">
-              {{ bankAccount.bankName }} · <span class="font-num">{{ bankAccount.accountNumber }}</span>
-            </div>
-            <div class="text-ink-500">{{ bankAccount.accountName }}</div>
+            <button
+              type="button"
+              class="shrink-0 h-10 px-3 rounded-xl text-sm font-semibold text-brand-600 hover:bg-brand-50 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              @click="showWithdrawModal = false; openBankModal(false)"
+            >
+              Đổi
+            </button>
           </div>
 
-          <p class="text-[11px] text-ink-500 flex items-start gap-1.5">
-            <Info :size="13" class="shrink-0 mt-0.5 text-brand-600" />
-            <span>Tiền được chuyển ngay về tài khoản trên qua payOS, không cần chờ duyệt. Nếu chuyển không thành công, tiền được hoàn lại vào ví.</span>
+          <p class="text-sm text-ink-500 text-pretty">
+            Chuyển ngay, không cần chờ duyệt. Nếu không thành công, tiền được hoàn lại vào ví.
           </p>
 
-          <div class="flex items-center justify-end gap-3 pt-2">
-            <FhButton variant="secondary" size="md" @click="showWithdrawModal = false">
-              Huỷ bỏ
-            </FhButton>
-            <FhButton
-              variant="primary"
-              size="md"
-              :loading="withdrawSubmitting"
-              @click="handleWithdraw"
-            >
+          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-1">
+            <FhButton variant="secondary" size="md" @click="showWithdrawModal = false">Huỷ</FhButton>
+            <FhButton variant="primary" size="md" :loading="withdrawSubmitting" @click="handleWithdraw">
               Rút tiền ngay
             </FhButton>
           </div>
@@ -1079,20 +927,23 @@ const handleWithdraw = async () => {
       </div>
     </div>
 
-    <!-- MODAL 3: TÀI KHOẢN NHẬN TIỀN -->
+    <!-- Tài khoản nhận tiền -->
     <div
       v-if="showBankModal"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+      @keydown.esc="!bankSaving && (showBankModal = false)"
     >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
-            <Landmark class="text-brand-600" :size="20" />
-            <span>Tài khoản nhận tiền rút</span>
-          </h3>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bank-title"
+        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h3 id="bank-title" class="text-lg font-bold text-ink-900">Tài khoản nhận tiền</h3>
           <button
             type="button"
-            class="w-9 h-9 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center"
+            class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             aria-label="Đóng"
             @click="showBankModal = false"
           >
@@ -1102,30 +953,30 @@ const handleWithdraw = async () => {
 
         <p
           v-if="bankNeededForWithdraw"
-          class="p-3 rounded-xl bg-brand-50 border border-brand-100 text-xs text-brand-900"
+          class="px-4 py-3 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-800"
         >
-          Bạn cần khai báo tài khoản nhận tiền trước khi rút. Khai một lần, lần sau hệ thống điền sẵn.
+          Bạn cần khai báo tài khoản nhận tiền trước khi rút.
         </p>
 
-        <div v-if="bankError" class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-800 text-xs font-bold flex items-start gap-2">
+        <div v-if="bankError" role="alert" class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 text-sm font-medium flex items-start gap-2">
           <AlertCircle :size="16" class="shrink-0 mt-0.5" /> <span>{{ bankError }}</span>
         </div>
 
         <div class="space-y-4">
           <div class="space-y-1.5">
-            <label for="bank-bin" class="block text-xs font-bold text-ink-700">Ngân hàng</label>
+            <label for="bank-bin" class="block text-sm font-medium text-ink-700">Ngân hàng</label>
             <select
               id="bank-bin"
               v-model="bankForm.bankBin"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              class="w-full h-11 px-3.5 rounded-xl border border-ink-200 bg-white text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             >
-              <option value="" disabled>{{ banks.length ? 'Chọn ngân hàng' : 'Đang tải danh sách ngân hàng...' }}</option>
+              <option value="" disabled>{{ banks.length ? 'Chọn ngân hàng' : 'Đang tải danh sách ngân hàng…' }}</option>
               <option v-for="b in banks" :key="b.bin" :value="b.bin">{{ b.shortName }} — {{ b.name }}</option>
             </select>
           </div>
 
           <div class="space-y-1.5">
-            <label for="bank-account-number" class="block text-xs font-bold text-ink-700">Số tài khoản</label>
+            <label for="bank-account-number" class="block text-sm font-medium text-ink-700">Số tài khoản</label>
             <input
               id="bank-account-number"
               v-model="bankForm.accountNumber"
@@ -1134,12 +985,12 @@ const handleWithdraw = async () => {
               maxlength="19"
               autocomplete="off"
               placeholder="VD: 1012345678"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 font-num text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              class="w-full h-11 px-3.5 rounded-xl border border-ink-200 font-num text-sm font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             />
           </div>
 
           <div class="space-y-1.5">
-            <label for="bank-account-name" class="block text-xs font-bold text-ink-700">Tên chủ tài khoản</label>
+            <label for="bank-account-name" class="block text-sm font-medium text-ink-700">Tên chủ tài khoản</label>
             <input
               id="bank-account-name"
               v-model="bankForm.accountName"
@@ -1147,23 +998,14 @@ const handleWithdraw = async () => {
               maxlength="128"
               autocomplete="off"
               placeholder="VD: NGUYEN VAN A"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-xs font-bold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              class="w-full h-11 px-3.5 rounded-xl border border-ink-200 text-sm font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             />
-            <p class="text-[11px] text-ink-500">
-              Phải trùng họ tên đã xác minh danh tính. Gõ có dấu hay không dấu đều được.
-            </p>
+            <p class="text-sm text-ink-500">Phải trùng họ tên đã xác minh danh tính.</p>
           </div>
 
-          <div class="flex items-center justify-end gap-3 pt-2">
-            <FhButton variant="secondary" size="md" @click="showBankModal = false">
-              Huỷ bỏ
-            </FhButton>
-            <FhButton
-              variant="primary"
-              size="md"
-              :loading="bankSaving"
-              @click="handleSaveBank"
-            >
+          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-1">
+            <FhButton variant="secondary" size="md" @click="showBankModal = false">Huỷ</FhButton>
+            <FhButton variant="primary" size="md" :loading="bankSaving" @click="handleSaveBank">
               Lưu tài khoản
             </FhButton>
           </div>

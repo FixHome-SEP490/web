@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { Camera, CheckCircle2, AlertCircle, ShieldCheck, X } from 'lucide-vue-next';
-import { FhButton, FhCard, FhConfirmDialog, FhStatusPill } from '../../components';
+import { Camera, CheckCircle2, AlertCircle, ShieldCheck, ShieldQuestion, X } from 'lucide-vue-next';
+import { FhButton, FhCard, FhConfirmDialog, FhSkeleton } from '../../components';
+import { userFacingError } from '../../utils/user-facing-error';
 import {
   technicianVerificationApi,
   type KycDocumentType,
@@ -54,8 +55,8 @@ const slots = ref<KycSlot[]>([
   {
     key: 'front',
     documentType: 'citizen_id_front',
-    label: 'CCCD/CMND – Mặt trước',
-    hint: 'Chọn ảnh có sẵn hoặc chụp mới',
+    label: 'CCCD mặt trước',
+    hint: 'Chọn hoặc chụp ảnh',
     kind: 'image',
     file: null,
     previewUrl: null,
@@ -63,8 +64,8 @@ const slots = ref<KycSlot[]>([
   {
     key: 'back',
     documentType: 'citizen_id_back',
-    label: 'CCCD/CMND – Mặt sau',
-    hint: 'Chọn ảnh có sẵn hoặc chụp mới',
+    label: 'CCCD mặt sau',
+    hint: 'Chọn hoặc chụp ảnh',
     kind: 'image',
     file: null,
     previewUrl: null,
@@ -72,8 +73,8 @@ const slots = ref<KycSlot[]>([
   {
     key: 'face',
     documentType: 'face_video',
-    label: 'Video xác minh khuôn mặt',
-    hint: 'Bấm để quay video (nhìn thẳng, quay trái, quay phải)',
+    label: 'Video khuôn mặt',
+    hint: 'Bấm để quay video',
     kind: 'video',
     file: null,
     previewUrl: null,
@@ -87,6 +88,7 @@ const pickInputs = { front: frontInput, back: backInput } as const;
 const loading = ref(true);
 const submitting = ref(false);
 const verification = ref<MyVerification | null>(null);
+const loadError = ref<string | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 const showWithdrawConfirm = ref(false);
@@ -119,15 +121,20 @@ const showUploadForm = computed(
 const canSubmit = computed(() => slots.value.every((slot) => slot.file !== null));
 const hasAnySelection = computed(() => slots.value.some((slot) => slot.file !== null));
 
+/** What was submitted, in words rather than storage file names. */
+const submittedDocuments = computed(() =>
+  (verification.value?.documents ?? []).map(
+    (doc) => slots.value.find((slot) => slot.documentType === doc.documentType)?.label ?? doc.fileName,
+  ),
+);
+
 const loadVerification = async () => {
   loading.value = true;
+  loadError.value = null;
   try {
     verification.value = await technicianVerificationApi.getMyVerification();
-  } catch {
-    actionMessage.value = {
-      type: 'error',
-      text: 'Không thể tải trạng thái xác minh. Vui lòng tải lại trang.',
-    };
+  } catch (err) {
+    loadError.value = userFacingError(err, 'Không thể tải trạng thái xác minh. Vui lòng thử lại.');
   } finally {
     loading.value = false;
   }
@@ -218,7 +225,7 @@ const openCamera = async () => {
   } catch {
     actionMessage.value = {
       type: 'error',
-      text: 'Không thể mở camera. Vui lòng cấp quyền truy cập camera cho trình duyệt và thử lại.',
+      text: 'Không mở được camera. Hãy cho phép trình duyệt dùng camera rồi thử lại.',
     };
     stopCameraStream();
   } finally {
@@ -240,7 +247,7 @@ const startRecording = () => {
   if (!mimeType) {
     actionMessage.value = {
       type: 'error',
-      text: 'Trình duyệt này không hỗ trợ quay video. Vui lòng dùng Chrome hoặc Edge bản mới nhất.',
+      text: 'Trình duyệt này không quay được video. Vui lòng dùng Chrome hoặc Edge mới nhất.',
     };
     closeCamera();
     return;
@@ -309,7 +316,7 @@ const handleSubmit = async () => {
   } catch (err) {
     actionMessage.value = {
       type: 'error',
-      text: (err as Error)?.message || 'Không thể nộp hồ sơ xác minh. Vui lòng thử lại.',
+      text: userFacingError(err, 'Không thể nộp hồ sơ xác minh. Vui lòng thử lại.'),
     };
   } finally {
     submitting.value = false;
@@ -325,12 +332,12 @@ const confirmWithdraw = async () => {
     resetSlots();
     actionMessage.value = {
       type: 'success',
-      text: 'Đã rút hồ sơ. Vui lòng nộp lại ảnh/video mới.',
+      text: 'Đã rút hồ sơ. Vui lòng nộp lại ảnh và video mới.',
     };
   } catch (err) {
     actionMessage.value = {
       type: 'error',
-      text: (err as Error)?.message || 'Không thể rút hồ sơ. Vui lòng thử lại.',
+      text: userFacingError(err, 'Không thể rút hồ sơ. Vui lòng thử lại.'),
     };
   } finally {
     withdrawing.value = false;
@@ -356,82 +363,94 @@ const confirmWithdraw = async () => {
       @change="onFileSelected('back', $event)"
     />
 
-    <div>
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Xác minh danh tính (KYC)</h1>
-      <p class="text-xs text-ink-500 mt-1">
-        Nộp ảnh CCCD/CMND và một video ngắn xác minh khuôn mặt để hệ thống và quản trị viên xác minh danh tính trước khi nhận việc.
-      </p>
-    </div>
+    <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">Xác minh danh tính</h1>
 
     <div
       v-if="actionMessage"
-      class="p-3.5 rounded-lg text-xs font-medium flex items-center gap-2"
-      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border border-success-200' : 'bg-danger-50 text-danger-800 border border-danger-200'"
+      :role="actionMessage.type === 'error' ? 'alert' : 'status'"
+      class="px-4 py-3 rounded-2xl text-sm font-medium flex items-start gap-2"
+      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border border-success-200' : 'bg-danger-50 text-danger-700 border border-danger-200'"
     >
-      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
-      <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
-      <span>{{ actionMessage.text }}</span>
+      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0" />
+      <AlertCircle v-else :size="18" class="text-danger-600 shrink-0" />
+      <span class="min-w-0 text-pretty">{{ actionMessage.text }}</span>
     </div>
 
-    <div v-if="loading" class="text-center py-16 text-ink-400 text-xs">Đang tải trạng thái xác minh...</div>
+    <!-- Loading: shaped like the status card -->
+    <FhCard v-if="loading" aria-busy="true" aria-label="Đang tải trạng thái xác minh">
+      <div class="flex items-start gap-3">
+        <FhSkeleton width="24px" height="24px" rounded="full" />
+        <div class="flex-1 space-y-2">
+          <FhSkeleton width="200px" height="20px" />
+          <FhSkeleton width="70%" height="14px" />
+        </div>
+      </div>
+    </FhCard>
+
+    <!-- Status failed to load -->
+    <div
+      v-else-if="loadError"
+      class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 flex items-center gap-3"
+    >
+      <AlertCircle :size="18" class="shrink-0 text-danger-600" />
+      <p class="min-w-0 flex-1 text-sm font-medium">{{ loadError }}</p>
+      <FhButton variant="secondary" size="sm" @click="loadVerification">Thử lại</FhButton>
+    </div>
 
     <template v-else>
       <!-- Pending: already submitted, waiting for review -->
-      <FhCard v-if="verification?.status === 'PENDING'" title="Hồ sơ đang chờ duyệt">
+      <FhCard v-if="verification?.status === 'PENDING'">
         <div class="flex items-start gap-3">
-          <ShieldCheck :size="20" class="text-warning-600 shrink-0 mt-0.5" />
-          <div class="space-y-2 text-xs text-ink-600">
-            <FhStatusPill status="PENDING" />
-            <p>
-              Hồ sơ của bạn đã được nộp và đang chờ quản trị viên xác minh. Vui lòng quay lại sau.
+          <ShieldQuestion :size="22" class="text-warning-600 shrink-0 mt-0.5" />
+          <div class="min-w-0 flex-1 space-y-1">
+            <h2 class="text-lg font-semibold text-ink-900">Hồ sơ đang chờ duyệt</h2>
+            <p class="text-sm text-ink-600 text-pretty">Quản trị viên đang xác minh hồ sơ của bạn. Vui lòng quay lại sau.</p>
+            <p v-if="verification.fptDecision === 'pass'" class="text-sm text-success-700">
+              Kiểm tra tự động không phát hiện bất thường.
             </p>
-            <p v-if="verification.fptDecision === 'pass'" class="text-success-700">
-              Hệ thống đã kiểm tra tự động và không phát hiện bất thường.
+            <p v-if="submittedDocuments.length" class="text-sm text-ink-500">
+              Đã nộp: {{ submittedDocuments.join(', ') }}
             </p>
-            <ul class="list-disc list-inside text-ink-500">
-              <li v-for="doc in verification.documents" :key="doc.documentType">
-                {{ doc.fileName }}
-              </li>
-            </ul>
           </div>
         </div>
-        <div class="mt-4 flex justify-end">
-          <FhButton variant="secondary" @click="showWithdrawConfirm = true">
-            Nộp lại
-          </FhButton>
+        <div class="mt-5 pt-4 border-t border-ink-100 flex justify-end">
+          <FhButton variant="secondary" @click="showWithdrawConfirm = true">Nộp lại</FhButton>
         </div>
       </FhCard>
 
       <!-- Verified -->
-      <FhCard v-else-if="verification?.status === 'VERIFIED'" title="Đã xác minh danh tính">
+      <FhCard v-else-if="verification?.status === 'VERIFIED'">
         <div class="flex items-start gap-3">
-          <ShieldCheck :size="20" class="text-success-600 shrink-0 mt-0.5" />
-          <div class="space-y-2 text-xs text-ink-600">
-            <FhStatusPill status="VERIFIED" />
-            <p>Danh tính của bạn đã được xác minh. Bạn có thể nhận việc bình thường.</p>
+          <ShieldCheck :size="22" class="text-success-600 shrink-0 mt-0.5" />
+          <div class="min-w-0 flex-1 space-y-1">
+            <h2 class="text-lg font-semibold text-ink-900">Đã xác minh danh tính</h2>
+            <p class="text-sm text-ink-600">Bạn có thể nhận việc bình thường.</p>
           </div>
         </div>
       </FhCard>
 
-      <!-- Rejected: show reason above the (re-openable) form -->
-      <FhCard v-if="verification?.status === 'REJECTED'" title="Hồ sơ bị từ chối">
-        <div class="flex items-start gap-3">
-          <AlertCircle :size="20" class="text-danger-600 shrink-0 mt-0.5" />
-          <div class="space-y-1 text-xs text-ink-600">
-            <FhStatusPill status="REJECTED" />
-            <p>{{ verification.rejectionReason || 'Ảnh không hợp lệ. Vui lòng nộp lại.' }}</p>
-          </div>
+      <!-- Rejected: the reason sits above the form to resubmit -->
+      <div
+        v-if="verification?.status === 'REJECTED'"
+        role="alert"
+        class="px-4 py-3 rounded-2xl bg-danger-50 border border-danger-200 text-danger-700 flex items-start gap-3"
+      >
+        <AlertCircle :size="18" class="text-danger-600 shrink-0 mt-0.5" />
+        <div class="min-w-0 text-sm space-y-0.5">
+          <p class="font-semibold">Hồ sơ bị từ chối</p>
+          <p class="text-pretty">{{ verification.rejectionReason || 'Ảnh không hợp lệ. Vui lòng nộp lại.' }}</p>
         </div>
-      </FhCard>
+      </div>
 
       <!-- Upload form: no verification yet, or rejected (resubmit) -->
-      <FhCard v-if="showUploadForm" title="Nộp ảnh xác minh">
+      <FhCard v-if="showUploadForm" title="Nộp hồ sơ xác minh">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div v-for="slot in slots" :key="slot.key" class="space-y-2 text-center">
             <button
               type="button"
-              class="w-full aspect-[4/3] rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors overflow-hidden"
+              class="w-full aspect-[4/3] rounded-[var(--radius-sm)] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
               :class="slot.file ? 'border-success-500 bg-success-50/50' : 'border-ink-300 hover:border-brand-500 text-ink-500'"
+              :aria-label="slot.file ? `Đổi ${slot.label}` : slot.label"
               @click="slot.key === 'face' ? openCamera() : triggerPick(slot.key)"
             >
               <video
@@ -451,20 +470,20 @@ const confirmWithdraw = async () => {
               />
               <template v-else>
                 <Camera :size="24" />
-                <span class="text-[10px] font-semibold px-2">
-                  {{ slot.key === 'face' && cameraBusy ? 'Đang mở camera...' : slot.hint }}
+                <span class="text-sm font-medium px-2">
+                  {{ slot.key === 'face' && cameraBusy ? 'Đang mở camera…' : slot.hint }}
                 </span>
               </template>
             </button>
-            <p class="text-xs font-semibold text-ink-800">{{ slot.label }}</p>
+            <p class="text-sm font-semibold text-ink-800 whitespace-nowrap">{{ slot.label }}</p>
           </div>
         </div>
 
-        <p class="text-[11px] text-ink-400 mt-4">
-          Ảnh JPEG, PNG hoặc WebP tối đa 10MB mỗi ảnh; video xác minh khuôn mặt dài {{ RECORDING_TOTAL_SECONDS }} giây, tối đa 10MB.
+        <p class="text-sm text-ink-500 mt-4 text-pretty">
+          Ảnh JPEG, PNG hoặc WebP, tối đa 10 MB. Video dài {{ RECORDING_TOTAL_SECONDS }} giây.
         </p>
 
-        <div class="mt-5 flex justify-end gap-3">
+        <div class="mt-5 pt-4 border-t border-ink-100 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <FhButton
             v-if="hasAnySelection"
             variant="secondary"
@@ -484,11 +503,22 @@ const confirmWithdraw = async () => {
     <div
       v-if="showCamera"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-4"
+      @keydown.esc="!recording && closeCamera()"
     >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-4 shadow-xl space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-ink-900">Quay video xác minh khuôn mặt</h3>
-          <button type="button" class="text-ink-400 hover:text-ink-700" @click="closeCamera">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kyc-camera-title"
+        class="bg-white rounded-[var(--radius-md)] max-w-sm w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 shadow-xl space-y-3"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h3 id="kyc-camera-title" class="text-base font-bold text-ink-900">Quay video khuôn mặt</h3>
+          <button
+            type="button"
+            class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            aria-label="Đóng"
+            @click="closeCamera"
+          >
             <X :size="18" />
           </button>
         </div>
@@ -503,23 +533,23 @@ const confirmWithdraw = async () => {
           />
           <div
             v-if="recording"
-            class="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-danger-600/90 px-2.5 py-1 text-[11px] font-semibold text-white"
+            class="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-danger-600/90 px-2.5 py-1 text-xs font-semibold text-white"
           >
-            <span class="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+            <span class="h-1.5 w-1.5 rounded-full bg-white" />
             {{ recordingSecondsLeft }}s
           </div>
         </div>
 
         <!-- Always-visible step guide, so the technician sees the sequence
              before recording starts, not only mid-recording. -->
-        <div class="flex items-start justify-center gap-2">
-          <div
+        <ol class="flex items-start justify-center gap-2">
+          <li
             v-for="(phase, index) in RECORDING_PHASES"
             :key="phase.label"
             class="flex-1 flex flex-col items-center gap-1 text-center"
           >
-            <div
-              class="h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-colors"
+            <span
+              class="h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors"
               :class="
                 recording && index < recordingPhaseIndex
                   ? 'border-success-500 bg-success-500 text-white'
@@ -530,25 +560,22 @@ const confirmWithdraw = async () => {
             >
               <CheckCircle2 v-if="recording && index < recordingPhaseIndex" :size="14" />
               <span v-else>{{ index + 1 }}</span>
-            </div>
+            </span>
             <span
-              class="text-[10px] font-medium leading-tight"
-              :class="recording && index === recordingPhaseIndex ? 'text-brand-700 font-bold' : 'text-ink-500'"
+              class="text-xs leading-tight text-balance"
+              :class="recording && index === recordingPhaseIndex ? 'text-brand-700 font-bold' : 'text-ink-500 font-medium'"
             >
               {{ phase.label }}
             </span>
-          </div>
-        </div>
+          </li>
+        </ol>
 
-        <p class="text-[11px] text-ink-500 text-center">
-          <template v-if="recording">Giữ khuôn mặt trong khung hình, làm theo hướng dẫn phía trên.</template>
-          <template v-else>
-            Video {{ RECORDING_TOTAL_SECONDS }} giây, tự động chuyển hướng theo thứ tự trên. Đủ ánh sáng rồi bấm bắt đầu.
-          </template>
+        <p class="text-sm text-ink-500 text-center">
+          {{ recording ? 'Giữ khuôn mặt trong khung hình.' : 'Đứng chỗ đủ sáng rồi bấm Bắt đầu quay.' }}
         </p>
 
         <FhButton block :disabled="recording" @click="startRecording">
-          {{ recording ? 'Đang quay...' : 'Bắt đầu quay' }}
+          {{ recording ? 'Đang quay…' : 'Bắt đầu quay' }}
         </FhButton>
       </div>
     </div>
