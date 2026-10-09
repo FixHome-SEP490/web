@@ -24,6 +24,8 @@ import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const route = useRoute();
+// Set by "Đặt lại thợ" when the former technician is not free for the chosen session.
+const rebookedChoose = route.query?.rebooked === 'choose';
 const router = useRouter();
 const bookingId = route.params.id as string | undefined;
 
@@ -124,6 +126,9 @@ const successMessage = computed(() => selectedCount.value === 1
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-24">
+    <p v-if="rebookedChoose" role="status" data-testid="rebook-choose-notice" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-xs text-warning-800">
+      Thợ cũ không rảnh buổi bạn chọn. Vui lòng chọn thợ khác cho yêu cầu mới.
+    </p>
     <!-- Header -->
     <div class="space-y-4">
       <button

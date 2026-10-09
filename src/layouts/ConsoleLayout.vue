@@ -12,7 +12,6 @@ import {
   UserCheck,
   Award,
   Ban,
-  ShieldAlert,
   ShieldCheck,
   FolderKanban,
   Package,
@@ -26,6 +25,10 @@ import {
   ChevronRight,
   MapPinned,
   Gauge,
+  UserSearch,
+  WalletCards,
+  CreditCard,
+  Star,
 } from 'lucide-vue-next';
 
 
@@ -50,7 +53,6 @@ const navigation = computed(() => [
             { label: 'Hàng đợi hỗ trợ', path: '/console/support', icon: LifeBuoy },
             { label: 'Yêu cầu bảo hành', path: '/console/warranty', icon: ShieldCheck },
             { label: 'Huỷ đơn & Khiếu nại', path: '/console/cancellations', icon: Ban },
-            { label: 'Vi phạm & Khoá tài khoản', path: '/console/strikes', icon: ShieldAlert },
             { label: 'Điểm uy tín', path: '/console/reputation', icon: Gauge },
           ]
         : []),
@@ -62,12 +64,17 @@ const navigation = computed(() => [
           group: 'Quản trị & governance',
           items: [
             { label: 'Kỹ thuật viên & Duyệt KYC', path: '/console/technicians', icon: UserCheck },
+            { label: 'Tra cứu kỹ thuật viên', path: '/console/admin/technician-directory', icon: UserSearch },
             { label: 'Duyệt kỹ năng thợ', path: '/console/admin/skill-verifications', icon: Award },
             { label: 'Danh mục & Bảng giá', path: '/console/catalog', icon: FolderKanban },
             { label: 'Danh mục linh kiện', path: '/console/admin/parts', icon: Package },
             { label: 'Quản lý người dùng', path: '/console/admin/users', icon: Users },
             { label: 'Cấu hình hệ thống (24)', path: '/console/admin/config', icon: Sliders },
             { label: 'Công nợ Platform', path: '/console/admin/platform-dues', icon: Receipt },
+            { label: 'Ví khách hàng', path: '/console/admin/customer-wallets', icon: WalletCards },
+            { label: 'Thanh toán', path: '/console/admin/payments', icon: CreditCard },
+            { label: 'Yêu cầu bảo hành', path: '/console/warranty', icon: ShieldCheck },
+            { label: 'Đánh giá của khách', path: '/console/admin/reviews', icon: Star },
             { label: 'Nhật ký kiểm toán', path: '/console/admin/audit-logs', icon: ScrollText },
           ],
         },

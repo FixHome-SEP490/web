@@ -1,4 +1,5 @@
 // src/api/technician-profile.api.ts
+import type { TechnicianAvailability } from '../utils/availability';
 import apiClient from './client';
 
 export interface TechnicianSkillView {
@@ -181,6 +182,12 @@ function normalizeProfile(payload: unknown): TechnicianProfileView {
 }
 
 export const technicianProfileApi = {
+  /** Receiving jobs now: weekly schedule, manual pause, time off (PO 08/10/2026). */
+  async getMyAvailability(): Promise<TechnicianAvailability> {
+    const res = await apiClient.get<{ data: TechnicianAvailability }>('/technicians/me/availability');
+    return res.data.data;
+  },
+
   // ---- Info ----
   async getMyProfile(): Promise<TechnicianProfileView> {
     const res = await apiClient.get<{ data: unknown }>('/technicians/me/profile');

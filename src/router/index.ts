@@ -145,6 +145,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết tiến độ đơn' },
       },
       {
+        path: 'wallet',
+        name: 'customer-wallet',
+        component: () => import('../pages/customer/CustomerWalletPage.vue'),
+        meta: { title: 'Ví của tôi' },
+      },
+      {
         path: 'warranties',
         name: 'customer-warranties',
         component: () => import('../pages/customer/CustomerWarrantiesPage.vue'),
@@ -315,9 +321,8 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'strikes',
-        name: 'console-strikes',
-        component: () => import('../pages/console/ConsoleStrikesPage.vue'),
-        meta: { title: 'Vi phạm & Đình chỉ', roles: ['SERVICE_MANAGER'] },
+        // Strikes gave way to reputation points (PO 08-09/10/2026).
+        redirect: '/console/reputation',
       },
       {
         path: 'reputation',
@@ -335,7 +340,8 @@ const routes: RouteRecordRaw[] = [
         path: 'warranty',
         name: 'console-warranty',
         component: () => import('../pages/console/ConsoleWarrantyPage.vue'),
-        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER'] },
+        // The admin reads the queue and the rates; only a service manager decides (PO 09/10/2026).
+        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'support/cash/:id',
@@ -366,6 +372,30 @@ const routes: RouteRecordRaw[] = [
         name: 'admin-skill-verifications',
         component: () => import('../pages/console/admin/AdminSkillVerificationsPage.vue'),
         meta: { title: 'Duyệt kỹ năng thợ', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/technician-directory',
+        name: 'admin-technician-directory',
+        component: () => import('../pages/console/admin/AdminTechnicianDirectoryPage.vue'),
+        meta: { title: 'Tra cứu kỹ thuật viên', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/customer-wallets',
+        name: 'admin-customer-wallets',
+        component: () => import('../pages/console/admin/AdminCustomerWalletsPage.vue'),
+        meta: { title: 'Ví khách hàng', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/payments',
+        name: 'admin-payments',
+        component: () => import('../pages/console/admin/AdminPaymentsPage.vue'),
+        meta: { title: 'Thanh toán', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/reviews',
+        name: 'admin-reviews',
+        component: () => import('../pages/console/admin/AdminReviewsPage.vue'),
+        meta: { title: 'Đánh giá của khách', roles: ['ADMIN'] },
       },
       {
         path: 'admin/users',

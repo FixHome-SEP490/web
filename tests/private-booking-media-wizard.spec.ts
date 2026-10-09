@@ -87,6 +87,9 @@ function deferred<T>() {
 
 async function submitFixedPriceBooking(wrapper: Awaited<ReturnType<typeof renderWizard>>) {
   await wrapper.findAll('button').find((button) => button.text().includes('Tiếp tục'))?.trigger('click');
+  // A booking takes a session of a day (PO 08/10/2026); the picker is only on the schedule step.
+  const session = wrapper.find('button[data-testid^="session-2"]');
+  if (session.exists()) await session.trigger('click');
   await wrapper.findAll('button').find((button) => button.text().includes('Xác nhận'))?.trigger('click');
   await wrapper.findAll('button').find((button) => button.text().includes('Tìm kỹ thuật viên'))?.trigger('click');
   await flushPromises();

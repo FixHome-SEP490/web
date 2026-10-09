@@ -33,6 +33,7 @@ export const resolutionCodeLabels: Record<string, string> = {
   order_cancelled_no_fee: 'Hủy đơn không thu phí',
   price_adjusted: 'Điều chỉnh chi phí',
   refund_recorded: 'Ghi nhận hoàn tiền',
+  refund_to_wallet: 'Hoàn tiền vào ví khách',
   escalate_admin: 'Chuyển quản trị viên',
   warranty_upheld: 'Giữ nguyên kết luận bảo hành',
   warranty_overturned: 'Đảo kết luận bảo hành',
@@ -50,6 +51,9 @@ export const cashResolutionCodeLabels: Record<string, string> = {
   [CASH_CONFIRMED_BY_MANAGER]: 'Xác nhận khách đã trả đủ tiền mặt theo hoá đơn',
   no_action: 'Đóng case, không chốt tiền mặt',
 };
+
+// Money goes back into the customer's wallet only for a faulty part or a warranty failure (PO 09/10/2026).
+export const REFUND_CASE_TYPES: readonly SupportCaseType[] = ['parts_dispute', 'warranty_dispute'];
 
 export const liablePartyLabels: Record<string, string> = {
   technician: 'Kỹ thuật viên',

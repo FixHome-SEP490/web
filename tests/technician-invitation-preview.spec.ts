@@ -12,6 +12,7 @@ const preview = {
   id: 'booking-synthetic', province: 'Synthetic Province', district: 'Synthetic District',
   serviceName: 'Synthetic repair', quantity: 2, urgency: 'high',
   preferredStartAt: '2030-01-01T09:00:00.000Z', preferredEndAt: '2030-01-01T10:00:00.000Z',
+  bookingMode: 'scheduled', slot: 'morning', customerNote: 'PRIVATE_NOTE',
   customerId: 'PRIVATE_CUSTOMER_ID', addressTextSnapshot: 'PRIVATE_HOUSE_NUMBER',
   description: 'PRIVATE_FREE_TEXT', media: [{ url: 'PRIVATE_IMAGE_URL' }],
   latitudeSnapshot: 10.123, longitudeSnapshot: 106.123, diagnosis: { rawResponse: 'PRIVATE_AI' },
@@ -37,6 +38,7 @@ describe('WEB technician invitation safe preview integration', () => {
       addressSummary: 'Synthetic District, Synthetic Province',
       quantity: 2, urgency: 'high',
       preferredStartAt: preview.preferredStartAt, preferredEndAt: preview.preferredEndAt,
+      bookingMode: 'scheduled', slot: 'morning',
     });
     expect(JSON.stringify(result)).not.toContain('PRIVATE_');
   });
@@ -48,6 +50,8 @@ describe('WEB technician invitation safe preview integration', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('Synthetic repair');
     expect(wrapper.text()).toContain('Synthetic District, Synthetic Province');
+    // The session the technician commits to by accepting (PO 08/10/2026).
+    expect(wrapper.get('[data-testid="invitation-session"]').text()).toContain('Buổi sáng (8:00 - 12:00)');
     expect(wrapper.text()).not.toContain('PRIVATE_');
     const details = wrapper.find('button.w-full');
     expect(details.exists()).toBe(true);

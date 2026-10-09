@@ -22,6 +22,7 @@ import {
   FhMoney,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString } from '../../utils/vn-time';
@@ -56,6 +57,9 @@ const fetchingMoreBookings = ref(false);
 
 // ── UI state ──
 const activeTab = ref<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
+// "Đặt lại thợ" from a completed or cancelled order, or a booking cancelled before any technician accepted.
+const rebookFor = ref<{ bookingId: string; serviceName?: string } | null>(null);
+const canRebookOrder = (order: ServiceOrderItem) => ['COMPLETED', 'CANCELLED'].includes(String(order.status).toUpperCase());
 const searchQuery = ref('');
 
 // ── Computed ──
@@ -443,6 +447,9 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           <MapPin :size="15" class="shrink-0 text-ink-400 mt-0.5" />
           <span class="truncate">{{ booking.addressSummary }}</span>
         </p>
+        <div v-if="booking.status === 'CANCELLED'" class="flex justify-end">
+          <FhButton variant="secondary" size="sm" :data-testid="`rebook-booking-${booking.id}`" @click.stop="rebookFor = { bookingId: booking.id, serviceName: booking.serviceName }">Đặt lại</FhButton>
+        </div>
       </div>
 
       <!-- Load-more bookings button -->
@@ -552,6 +559,15 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               </span>
             </div>
 
+            <FhButton
+              v-if="canRebookOrder(order)"
+              variant="secondary"
+              size="sm"
+              :data-testid="`rebook-order-${order.id}`"
+              @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
+            >
+              Đặt lại thợ
+            </FhButton>
             <button
               type="button"
               class="h-10 px-4 rounded-xl bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 text-sm font-medium transition-colors flex items-center gap-1 whitespace-nowrap"
@@ -577,5 +593,12 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         </button>
       </div>
     </div>
+    <RebookDialog
+      v-if="rebookFor"
+      :open="!!rebookFor"
+      :booking-id="rebookFor.bookingId"
+      :service-name="rebookFor.serviceName"
+      @close="rebookFor = null"
+    />
   </div>
 </template>

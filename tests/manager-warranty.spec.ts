@@ -232,6 +232,7 @@ describe('ConsoleWarrantyPage', () => {
     expect(text).toContain('Đóng yêu cầu');
     // a closed claim offers no decision
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Duyệt kết luận')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="warranty-read-only"]').exists()).toBe(false);
   });
 
   it('hides every decision button for an administrator (read only)', async () => {
@@ -241,6 +242,7 @@ describe('ConsoleWarrantyPage', () => {
     await flushPromises();
     expect(wrapper.text()).not.toContain('Duyệt kết luận');
     expect(wrapper.text()).toContain('Vòi sen');
+    expect(wrapper.get('[data-testid="warranty-read-only"]').text()).toContain('chỉ đọc');
   });
 
   it('loads the rates only when the tab is opened and marks small samples', async () => {
@@ -285,7 +287,9 @@ describe('ConsoleWarrantyPage', () => {
 
 describe('support helpers for the manager console', () => {
   it('offers one Vietnamese label per standard outcome', () => {
-    expect(RESOLUTION_CODES).toHaveLength(9);
+    // Mirrors the backend COMPLAINT_RESOLUTION_CODES, refund_to_wallet included (PO 08/10/2026).
+    expect(RESOLUTION_CODES).toHaveLength(10);
+    expect(resolutionCodeLabels.refund_to_wallet).toBe('Hoàn tiền vào ví khách');
     for (const code of RESOLUTION_CODES) expect(resolutionCodeLabels[code]).toBeTruthy();
   });
 

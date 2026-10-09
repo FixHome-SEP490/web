@@ -41,6 +41,9 @@ import {
 } from '../../components';
 import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
+import RebookDialog from '../../components/customer/RebookDialog.vue';
+import { customerWalletApi } from '../../api/customer-wallet.api';
+import { userFacingError } from '../../utils/user-facing-error';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -53,6 +56,7 @@ import { toTimelineSteps } from '../../utils/order-timeline';
 import { formatRating } from '../../utils/formatters';
 
 const route = useRoute();
+const showRebook = ref(false);
 const router = useRouter();
 const chatStore = useChatStore();
 const orderId = route.params.id as string;
@@ -281,9 +285,10 @@ onMounted(async () => {
   }
 });
 
-const loadOrder = async () => {
+/** silent keeps the page on screen while it is read again (after paying from the wallet). */
+const loadOrder = async (silent = false) => {
   try {
-    loading.value = true;
+    if (!silent) loading.value = true;
     const data = await ordersApi.getOrder(orderId);
     order.value = data;
 
@@ -468,8 +473,30 @@ const handleChatWithTech = async () => {
   }
 };
 
+// Paying from the customer wallet (PO 08/10/2026): the balance is read when the payment opens.
+const walletBalance = ref<number | null>(null);
+const walletPaying = ref(false);
+const walletCovers = computed(() => walletBalance.value !== null && !!order.value && walletBalance.value >= Number(order.value.grandTotal ?? 0));
+
 const handlePay = () => {
   showPaymentModal.value = true;
+  walletBalance.value = null;
+  customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
+};
+
+const payWithWallet = async () => {
+  if (!invoice.value?.id || walletPaying.value) return;
+  walletPaying.value = true;
+  try {
+    const result = await customerWalletApi.payInvoice(String(invoice.value.id));
+    showPaymentModal.value = false;
+    actionMessage.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví. Số dư còn ${result.balance.toLocaleString('vi-VN')} ₫.` };
+    await loadOrder(true);
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa thanh toán được bằng ví.') };
+  } finally {
+    walletPaying.value = false;
+  }
 };
 
 const confirmPayment = async () => {
@@ -611,6 +638,16 @@ const confirmWork = async () => {
           @click="router.push(`/app/bookings/${order!.bookingId}`)"
         >
           Đổi lịch / thông tin
+        </FhButton>
+
+        <FhButton
+          v-if="order && (order.status === 'COMPLETED' || order.status === 'CANCELLED')"
+          variant="secondary"
+          size="sm"
+          data-testid="order-rebook"
+          @click="showRebook = true"
+        >
+          Đặt lại thợ
         </FhButton>
 
         <FhButton
@@ -1634,7 +1671,7 @@ const confirmWork = async () => {
           <ShieldCheck :size="40" class="text-brand-600 mx-auto" />
           <h3 class="text-lg font-bold text-ink-900">Thanh toán Đơn hàng</h3>
           <p class="text-xs text-ink-500">
-            Cổng thanh toán điện tử FixHome (VNPay / Thẻ ngân hàng).
+            Trả bằng ví FixHome hoặc qua VNPay (thẻ ngân hàng, ví điện tử).
           </p>
         </div>
 
@@ -1645,18 +1682,39 @@ const confirmWork = async () => {
           </div>
         </div>
 
+        <div class="rounded-xl border border-ink-200 p-3 space-y-2" data-testid="wallet-pay-option">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-ink-800">Ví FixHome</span>
+            <span class="text-ink-500">Số dư: <strong v-if="walletBalance !== null" class="text-ink-900"><FhMoney :amount="walletBalance" /></strong><span v-else>...</span></span>
+          </div>
+          <FhButton
+            variant="primary"
+            size="md"
+            class="w-full"
+            :disabled="!walletCovers || walletPaying || actionLoading"
+            :loading="walletPaying"
+            data-testid="pay-with-wallet"
+            @click="payWithWallet"
+          >
+            Trả bằng ví
+          </FhButton>
+          <p v-if="walletBalance !== null && !walletCovers" class="text-xs text-warning-800">
+            Số dư không đủ. <router-link to="/app/wallet" class="font-semibold underline">Nạp thêm vào ví</router-link>
+          </p>
+        </div>
+
         <div class="flex gap-2 pt-2">
           <FhButton variant="ghost" size="md" class="flex-1" @click="showPaymentModal = false">
             Đóng
           </FhButton>
           <FhButton
-            variant="primary"
+            variant="secondary"
             size="md"
             class="flex-1"
-            :disabled="actionLoading"
+            :disabled="actionLoading || walletPaying"
             @click="confirmPayment"
           >
-            Xác nhận thanh toán
+            Qua VNPay
           </FhButton>
         </div>
       </div>
@@ -1734,5 +1792,12 @@ const confirmWork = async () => {
         </div>
       </div>
     </div>
+    <RebookDialog
+      v-if="order && showRebook"
+      :open="showRebook"
+      :booking-id="order.bookingId"
+      :service-name="order.serviceName"
+      @close="showRebook = false"
+    />
   </div>
 </template>

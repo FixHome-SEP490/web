@@ -213,6 +213,23 @@ describe('SupportDetailPage for a complaint', () => {
     expect((wrapper.findAll('select')[1].element as HTMLSelectElement).value).toBe('');
     wrapper.unmount();
   });
+
+  it('offers a wallet refund only for a faulty part or a warranty, borne by FixHome', async () => {
+    const quality = await mountPage(baseCase({ caseType: 'quality' }));
+    expect(quality.findAll('select')[1].findAll('option').map((o) => o.attributes('value'))).not.toContain('refund_to_wallet');
+    quality.unmount();
+
+    for (const caseType of ['parts_dispute', 'warranty_dispute']) {
+      const wrapper = await mountPage(baseCase({ caseType }));
+      const selects = wrapper.findAll('select');
+      expect(selects[1].findAll('option').map((o) => o.attributes('value'))).toContain('refund_to_wallet');
+      await selects[1].setValue('refund_to_wallet');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="refund-wallet-hint"]').text()).toContain('FixHome chịu khoản hoàn');
+      expect((wrapper.findAll('select')[2].element as HTMLSelectElement).value).toBe('platform');
+      wrapper.unmount();
+    }
+  });
 });
 
 describe('SupportQueuePage', () => {
@@ -242,5 +259,36 @@ describe('SupportQueuePage', () => {
     expect(text).toContain('Quá hạn phản hồi');
     expect(text).toContain('Đang giữ đơn');
     expect(text).toContain('Hư hại hoặc mất tài sản');
+  });
+
+  it('opens already filtered from a link and offers the "Cần thay đổi thợ" type', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/console/support', component: SupportQueuePage }],
+    });
+    apiClientMock.get.mockResolvedValue(envelope([], { page: 1, limit: 10, total: 0, totalPages: 0 }));
+    await router.push('/console/support?caseType=technician_replacement&status=open');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await router.isReady();
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases', {
+      params: expect.objectContaining({ caseType: 'technician_replacement', status: 'open' }),
+    });
+    expect(wrapper.text()).toContain('Cần thay đổi thợ (ngoài kỹ năng)');
+  });
+
+  it('ignores an unknown filter in the link', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/console/support', component: SupportQueuePage }],
+    });
+    apiClientMock.get.mockResolvedValue(envelope([], { page: 1, limit: 10, total: 0, totalPages: 0 }));
+    await router.push('/console/support?caseType=drop_table&status=x');
+    mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await router.isReady();
+    await flushPromises();
+    const params = apiClientMock.get.mock.calls.at(-1)?.[1]?.params ?? {};
+    expect(params.caseType).toBeUndefined();
+    expect(params.status).toBeUndefined();
   });
 });
