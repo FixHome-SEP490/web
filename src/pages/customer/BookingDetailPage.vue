@@ -2,15 +2,21 @@
 // src/pages/customer/BookingDetailPage.vue
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, Clock, CheckCircle2 } from 'lucide-vue-next';
-import { BookingMediaViewer, FhButton, FhConfirmDialog, FhDatePicker } from '../../components';
+import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-vue-next';
+import { BookingMediaViewer, FhButton, FhConfirmDialog } from '../../components';
+import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
+import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
+import { ordersApi } from '../../api/orders.api';
 import { userFacingError } from '../../utils/user-facing-error';
-import { vnDateTimeString } from '../../utils/vn-time';
-import { scheduleFieldsOf } from '../../utils/booking-schedule';
-import { vnKeyAndClockToDate } from '../../utils/vn-time';
+import { vnDateTimeString, vnDayKey } from '../../utils/vn-time';
+import { SLOT_SHORT, sessionDayLabel, sessionLabel, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 
 const route = useRoute();
+const showRebook = ref(false);
+// Set by "Đặt lại thợ" when the same technician was invited.
+const rebookedNotice = computed(() => route.query?.rebooked === 'invited'
+  ? 'Đã gửi lời mời cho thợ cũ cho buổi bạn chọn, đang chờ thợ xác nhận.' : '');
 const router = useRouter();
 let bookingId = String(route.params.id ?? '');
 let detailGeneration = 0;
@@ -233,11 +239,57 @@ const refreshOrderLink = async () => {
 };
 
 const description = ref('');
-const preferredDate = ref('');
-const preferredTime = ref('');
 
+/** Description and the whole booking stay editable until a technician accepts. */
 const editable = computed(() => !!booking.value && !serviceOrderId.value &&
   ['SUBMITTED', 'MATCHING'].includes(booking.value.status));
+
+// Rescheduling (PO 08/10/2026): by session, also once a technician holds the
+// order and has not set out yet; then only sessions that technician is free for.
+const orderStatus = ref('');
+const canReschedule = computed(() => !!booking.value && (editable.value ||
+  (booking.value.status === 'MATCHED' && !!serviceOrderId.value && orderStatus.value === 'ACCEPTED')));
+const sessions = ref<SessionOption[]>([]);
+const sessionsLoading = ref(false);
+const sessionsError = ref('');
+const selectedSession = ref<{ date: string; slot: BookingSlot } | null>(null);
+const scheduleNotice = ref('');
+// The sessions are checked against the technician only when the customer asks to move.
+const showReschedule = ref(false);
+const currentSchedule = computed(() => booking.value
+  ? sessionLabel({ bookingMode: booking.value.bookingMode, slot: booking.value.slot, start: booking.value.preferredAt })
+  : '');
+
+const loadSessions = async () => {
+  if (!canReschedule.value) return;
+  sessionsLoading.value = true;
+  sessionsError.value = '';
+  try {
+    sessions.value = (await bookingsApi.availableSessions(bookingId)).sessions;
+  } catch (err) {
+    sessionsError.value = userFacingError(err, 'Chưa tải được các buổi còn trống.');
+  } finally {
+    sessionsLoading.value = false;
+  }
+};
+
+// Keeps the last known status while it is read again, so the page does not flicker to "cannot reschedule".
+const loadOrderStatus = async () => {
+  if (!serviceOrderId.value) {
+    orderStatus.value = '';
+    return;
+  }
+  try {
+    orderStatus.value = String((await ordersApi.getOrder(serviceOrderId.value)).status).toUpperCase();
+  } catch {
+    orderStatus.value = '';
+  }
+};
+
+const openReschedule = () => {
+  showReschedule.value = true;
+  void loadSessions();
+};
 
 const needsShortlist = (item: BookingItem) => !item.serviceOrderId?.trim()
   && ['SUBMITTED', 'CLOSED'].includes(item.status)
@@ -253,39 +305,11 @@ const chooseTechnicians = () => {
   router.push(`/app/bookings/${bookingId}/candidates`);
 };
 
-const scheduleSelection = (timestamp: string) => {
-  const start = new Date(timestamp);
-  if (!Number.isFinite(start.getTime())) return { day: '', time: '' };
-  // The form edits Vietnam days and clock times, whatever the browser zone.
-  return scheduleFieldsOf(start);
-};
-
-const scheduleForSave = (item: BookingItem) => {
-  const start = Date.parse(item.preferredAt);
-  const end = Date.parse(item.preferredEndAt ?? '');
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-    throw new Error('Khung giờ gốc thiếu hoặc không hợp lệ. Vui lòng tải lại yêu cầu trước khi lưu.');
-  }
-  const original = scheduleSelection(item.preferredAt);
-  if (preferredDate.value === original.day && preferredTime.value === original.time) {
-    if (start <= Date.now()) throw new Error('Khung giờ đã qua. Vui lòng chọn giờ hoặc ngày khác.');
-    // Preserve server precision/offset and duration on a description-only edit.
-    return { preferredStartAt: item.preferredAt, preferredEndAt: item.preferredEndAt! };
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value) || !/^\d{2}:\d{2}$/.test(preferredTime.value)) {
-    throw new Error('Vui lòng chọn ngày và giờ bắt đầu hợp lệ cho khung giờ đến.');
-  }
-  const [hour, minute] = preferredTime.value.split(':').map(Number);
-  const nextStart = vnKeyAndClockToDate(preferredDate.value, hour, minute);
-  const selected = scheduleSelection(nextStart.toISOString());
-  if (!Number.isFinite(nextStart.getTime()) || selected.day !== preferredDate.value ||
-      selected.time !== preferredTime.value || nextStart.getTime() <= Date.now()) {
-    throw new Error('Khung giờ đã qua hoặc không hợp lệ. Vui lòng chọn giờ hoặc ngày khác.');
-  }
-  return {
-    preferredStartAt: nextStart.toISOString(),
-    preferredEndAt: new Date(nextStart.getTime() + end - start).toISOString(),
-  };
+/** The session to save: the one picked, else the booking's own when only the description changed. */
+const sessionForSave = (item: BookingItem): { date: string; slot: BookingSlot } => {
+  if (selectedSession.value) return selectedSession.value;
+  if (item.slot === 'morning' || item.slot === 'afternoon') return { date: vnDayKey(item.preferredAt), slot: item.slot };
+  throw new Error('Vui lòng chọn ngày và buổi (sáng hoặc chiều).');
 };
 
 const statusLabel = (status?: string) => {
@@ -303,9 +327,10 @@ const applyBookingDetail = (nextBooking: BookingItem) => {
   applyBookingState(nextBooking);
   startMatchingPoll();
   description.value = nextBooking.description;
-  const selection = scheduleSelection(nextBooking.preferredAt);
-  preferredDate.value = selection.day;
-  preferredTime.value = selection.time;
+  selectedSession.value = null;
+  sessions.value = [];
+  showReschedule.value = false;
+  void loadOrderStatus();
 };
 
 const loadBooking = async (requestedBookingId = bookingId) => {
@@ -345,23 +370,30 @@ watch(() => String(route.params.id ?? ''), (nextBookingId, previousBookingId) =>
 });
 
 const handleSave = async () => {
-  if (!booking.value || !editable.value || loading.value || checkingOrderLink.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
+  if (!booking.value || !canReschedule.value || loading.value || checkingOrderLink.value || saving.value || cancelling.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
   saveError.value = '';
+  scheduleNotice.value = '';
   saving.value = true;
+  const preAccept = editable.value;
   try {
-    const schedule = scheduleForSave(booking.value);
+    const chosen = sessionForSave(booking.value);
     const updated = await bookingsApi.updateBooking(bookingId, {
-      description: description.value,
-      ...schedule,
+      ...(preAccept ? { description: description.value } : {}),
+      ...chosen,
     });
-    if (updated.id === bookingId && updated.status === 'SUBMITTED' && needsShortlist(updated)) {
+    if (preAccept && updated.id === bookingId && updated.status === 'SUBMITTED' && needsShortlist(updated)) {
       // The Backend cancelled the old round; the customer must explicitly choose a new shortlist.
       router.push(`/app/bookings/${bookingId}/candidates`);
-    } else {
+    } else if (preAccept) {
       router.push('/app/orders');
+    } else {
+      // The technician keeps the order; only the session moved.
+      await loadBooking();
+      scheduleNotice.value = `Đã đổi lịch sang ${sessionDayLabel(chosen.date)}, ${SLOT_SHORT[chosen.slot]}. Kỹ thuật viên đã được báo.`;
     }
   } catch (err) {
     saveError.value = userFacingError(err, 'Không thể lưu thay đổi. Vui lòng thử lại.');
+    if (!preAccept) void loadSessions();
   } finally {
     saving.value = false;
   }
@@ -554,8 +586,19 @@ const confirmMatchingExtension = async () => {
         <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs text-danger-700">{{ orderLinkError }}</p>
       </div>
 
-      <template v-if="editable">
-        <div class="space-y-1.5">
+      <div class="text-xs text-ink-700 flex items-center gap-1.5" data-testid="booking-current-session">
+        <CalendarIcon :size="13" class="shrink-0 text-brand-600" />
+        <span>Lịch hẹn: <strong>{{ currentSchedule }}</strong></span>
+      </div>
+      <p v-if="booking.customerNote" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">Ghi chú cho thợ: {{ booking.customerNote }}</p>
+      <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ scheduleNotice }}</p>
+      <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ rebookedNotice }}</p>
+      <div v-if="booking.status === 'CANCELLED'" class="flex justify-end">
+        <FhButton variant="secondary" size="sm" data-testid="booking-rebook" @click="showRebook = true">Đặt lại</FhButton>
+      </div>
+
+      <template v-if="canReschedule">
+        <div v-if="editable" class="space-y-1.5">
           <label class="block font-bold text-ink-800 text-xs sm:text-sm">Mô tả yêu cầu</label>
           <textarea
             v-model="description"
@@ -564,29 +607,21 @@ const confirmMatchingExtension = async () => {
           ></textarea>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div class="space-y-1.5">
-            <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-              <CalendarIcon :size="15" class="text-brand-600" />
-              <span>Ngày hẹn dịch vụ</span>
-            </label>
-            <FhDatePicker v-model="preferredDate" />
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="booking-start-time" class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-              <Clock :size="15" class="text-brand-600" />
-              <span>Giờ bắt đầu khoảng đến</span>
-            </label>
-            <input id="booking-start-time" v-model="preferredTime" type="time"
-              class="w-full p-3.5 bg-ink-50 border border-ink-200 rounded-xl text-sm text-ink-900 focus:outline-none focus:border-brand-600" />
-          </div>
+        <FhButton v-if="!showReschedule" variant="secondary" size="sm" data-testid="booking-open-reschedule" @click="openReschedule">
+          <CalendarIcon :size="14" class="mr-1.5" /> Đổi buổi hẹn
+        </FhButton>
+        <div v-else class="space-y-2">
+          <p class="font-bold text-ink-800 text-xs sm:text-sm">Đổi sang buổi khác</p>
+          <p class="text-xs text-ink-500">
+            <template v-if="editable">Đổi buổi trước khi có thợ nhận thì lượt mời cũ bị huỷ, bạn chọn lại thợ cho buổi mới.</template>
+            <template v-else>Chỉ chọn được buổi mà kỹ thuật viên của đơn còn trống.</template>
+          </p>
+          <p v-if="sessionsLoading" class="text-xs text-ink-400">Đang tải các buổi...</p>
+          <p v-else-if="sessionsError" class="text-xs text-danger-700">{{ sessionsError }}
+            <button type="button" class="font-semibold underline" @click="loadSessions">Thử lại</button>
+          </p>
+          <BookingSessionPicker v-else v-model="selectedSession" :sessions="sessions" />
         </div>
-
-        <p class="text-xs text-ink-500 leading-relaxed">
-          Khoảng đến đã lưu: {{ formatServerDate(booking.preferredAt) }} – {{ formatServerDate(booking.preferredEndAt) || 'Thiếu giờ kết thúc' }}.
-          Khi đổi giờ bắt đầu, độ dài khoảng đến đã lưu được giữ nguyên. Chỉ sửa mô tả sẽ giữ nguyên cả hai mốc giờ.
-        </p>
 
         <div
           v-if="saveError"
@@ -597,13 +632,13 @@ const confirmMatchingExtension = async () => {
           {{ saveError }}
         </div>
 
-        <FhButton variant="primary" size="md" :loading="saving" :disabled="showCancelModal || showExtensionModal || cancelling || extending" @click="handleSave">
-          <CheckCircle2 :size="15" class="mr-1.5" /> Lưu thay đổi
+        <FhButton v-if="editable || showReschedule" variant="primary" size="md" :loading="saving" :disabled="showCancelModal || showExtensionModal || cancelling || extending || (!editable && !selectedSession)" data-testid="booking-save" @click="handleSave">
+          <CheckCircle2 :size="15" class="mr-1.5" /> {{ editable ? 'Lưu thay đổi' : 'Đổi lịch' }}
         </FhButton>
       </template>
 
-      <p v-else class="text-xs text-ink-500">
-        Đơn ở trạng thái này không thể chỉnh sửa.
+      <p v-else-if="!['CANCELLED', 'CLOSED'].includes(booking.status)" class="text-xs text-ink-500">
+        Đơn ở trạng thái này không thể đổi lịch.
       </p>
       <div v-if="canCancelBooking" class="pt-3 border-t border-ink-100 space-y-2">
         <p class="text-xs text-ink-500">Bạn chỉ có thể huỷ yêu cầu chưa có đơn dịch vụ. Nếu kỹ thuật viên đã nhận, hãy mở đơn dịch vụ để xem quy trình huỷ tương ứng.</p>
@@ -651,6 +686,13 @@ const confirmMatchingExtension = async () => {
       cancel-text="Giữ nguyên"
       @confirm="confirmMatchingExtension"
       @cancel="closeMatchingExtension"
+    />
+    <RebookDialog
+      v-if="booking && showRebook"
+      :open="showRebook"
+      :booking-id="booking.id"
+      :service-name="booking.serviceName"
+      @close="showRebook = false"
     />
   </div>
 </template>

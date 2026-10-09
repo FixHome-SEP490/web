@@ -8,6 +8,13 @@ import {
   FhCountdown,
 } from '../../components';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
+import { sessionLabel } from '../../utils/booking-session';
+
+const invitationSession = (inv: InvitationItem) => sessionLabel({
+  bookingMode: inv.booking?.bookingMode,
+  slot: inv.booking?.slot,
+  start: inv.booking?.preferredStartAt,
+});
 
 const router = useRouter();
 
@@ -141,6 +148,10 @@ const handleDecline = async (inv: InvitationItem) => {
             <MapPin :size="14" class="text-brand-600 shrink-0" />
             {{ inv.booking?.addressSummary }}
           </div>
+          <div class="text-xs text-ink-600 flex items-center gap-1.5" data-testid="invitation-session">
+            <Clock :size="14" class="text-brand-600 shrink-0" />
+            Lịch hẹn: <strong class="font-semibold text-ink-900">{{ invitationSession(inv) }}</strong>
+          </div>
         </button>
 
         <!-- Actions -->
@@ -201,8 +212,9 @@ const handleDecline = async (inv: InvitationItem) => {
           </span>
         </div>
 
+        <p class="text-sm text-ink-800" data-testid="invitation-detail-session">Lịch hẹn: <strong>{{ invitationSession(detailInvitation) }}</strong></p>
         <p class="text-xs text-ink-600 p-3 rounded bg-ink-50 border border-ink-200 leading-relaxed">
-          Trước khi nhận đơn, bạn chỉ xem được dịch vụ và khu vực dự kiến.
+          Trước khi nhận đơn, bạn chỉ xem được dịch vụ, khu vực và buổi hẹn dự kiến.
           Mô tả chi tiết, hình ảnh và địa chỉ chính xác chỉ được cung cấp khi bạn nhận đơn thành công.
         </p>
         <div class="flex gap-2 pt-2 border-t border-ink-100">

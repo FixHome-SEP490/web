@@ -30,9 +30,8 @@ import {
 import {
   FhButton,
   FhMoney,
-  FhDatePicker,
-  FhTimeScrollPicker,
 } from '../../components';
+import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
@@ -41,9 +40,9 @@ import { DESCRIBE_BEFORE_SEND, useAiConversation, useSharedAiConversation } from
 import { prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
-import { bookingSchedule } from '../../utils/booking-schedule';
+import { SLOT_SHORT, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
-import { vnDayKey, weekdayOfKey } from '../../utils/vn-time';
+import { vnKeyAndClockToDate } from '../../utils/vn-time';
 
 
 const route = useRoute();
@@ -111,43 +110,30 @@ const removePhotoByLocalId = (localId: number) => {
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
-const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-
-// Today in Vietnam, whatever zone the browser is in.
-const todayIso = vnDayKey();
-
-const preferredDate = ref(todayIso);
-const preferredTime = ref('EARLIEST');
+// Sessions (PO 08/10/2026): morning 8-12 or afternoon 13-18 of one day, Vietnam
+// time, at most one booking per technician per session; or "come now".
+const bookingMode = ref<BookingMode>('scheduled');
+const selectedSession = ref<{ date: string; slot: BookingSlot } | null>(null);
+const customerNote = ref('');
+const sessions = ref(upcomingSessions(14));
 
 const formattedScheduleDisplay = computed(() => {
-  let dateText = preferredDate.value;
-  if (preferredDate.value === 'TODAY' || preferredDate.value === todayIso) {
-    dateText = 'Hôm nay';
-  } else if (preferredDate.value === 'TOMORROW') {
-    dateText = 'Ngày mai';
-  } else if (/^\d{4}-\d{2}-\d{2}$/.test(preferredDate.value)) {
-    const [y, m, d] = preferredDate.value.split('-').map(Number);
-    const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
-    dateText = `${dayNames[weekdayOfKey(preferredDate.value)]}, ${pad(d)}/${pad(m)}/${y}`;
-  }
-
-  let timeText = preferredTime.value;
-  if (preferredTime.value === 'EARLIEST') {
-    timeText = 'Sớm nhất (Thợ có mặt ngay)';
-  } else if (preferredTime.value === 'MORNING') {
-    timeText = 'Buổi sáng (08:00 – 12:00)';
-  } else if (preferredTime.value === 'AFTERNOON') {
-    timeText = 'Buổi chiều (13:30 – 17:30)';
-  } else if (preferredTime.value === 'EVENING') {
-    timeText = 'Buổi tối (18:00 – 20:30)';
-  } else if (/^\d{1,2}:\d{2}$/.test(preferredTime.value)) {
-    const [h, min] = preferredTime.value.split(':').map(Number);
-    const endH = h + 2 < 10 ? `0${h + 2}` : `${h + 2}`;
-    timeText = `${preferredTime.value} (${preferredTime.value} – ${endH}:${pad(min)})`;
-  }
-
-  return `${dateText} • ${timeText}`;
+  if (bookingMode.value === 'urgent') return 'Tới ngay (thợ gần bạn nhất đang rảnh)';
+  if (!selectedSession.value) return 'Chưa chọn buổi';
+  return `${sessionDayLabel(selectedSession.value.date)} • ${SLOT_SHORT[selectedSession.value.slot]}`;
 });
+
+/** The chosen schedule as the server takes it, or the reason it cannot be sent yet. */
+function scheduleForBooking(): { mode: BookingMode; date?: string; slot?: BookingSlot } | { error: string } {
+  if (bookingMode.value === 'urgent') return { mode: 'urgent' };
+  const chosen = selectedSession.value;
+  if (!chosen) return { error: 'Vui lòng chọn ngày và buổi (sáng hoặc chiều).' };
+  const startHour = chosen.slot === 'morning' ? 8 : 13;
+  if (vnKeyAndClockToDate(chosen.date, startHour, 0).getTime() <= Date.now()) {
+    return { error: 'Buổi bạn chọn đã bắt đầu. Vui lòng chọn buổi khác.' };
+  }
+  return { mode: 'scheduled', date: chosen.date, slot: chosen.slot };
+}
 
 /**
  * The assistant conversation this booking continues, when the customer came
@@ -672,17 +658,14 @@ const goToNextStepFrom2 = async () => {
     window.alert('Vui lòng chọn địa chỉ sửa chữa.');
     return;
   }
-  try {
-    const schedule = bookingSchedule(preferredDate.value, preferredTime.value);
-    if (preferredTime.value !== 'EARLIEST') {
-      const startMs = new Date(schedule.preferredStartAt).getTime();
-      if (startMs <= Date.now()) {
-        window.alert('Khung giờ bạn chọn đã qua. Vui lòng chọn giờ sau thời điểm hiện tại hoặc chọn ngày khác.');
-        return;
-      }
-    }
-  } catch (err) {
-    window.alert(userFacingError(err, 'Khung giờ hoặc ngày hẹn không hợp lệ.'));
+  sessions.value = upcomingSessions(14);
+  const schedule = scheduleForBooking();
+  if ('error' in schedule) {
+    window.alert(schedule.error);
+    return;
+  }
+  if (customerNote.value.trim().length > 1000) {
+    window.alert('Ghi chú cho thợ tối đa 1000 ký tự.');
     return;
   }
 
@@ -700,17 +683,11 @@ const createAndFindTech = async () => {
     return;
   }
 
-  // Pre-validate schedule before API call to prevent 422 if time expired while on confirmation screen
-  let schedule;
-  try {
-    schedule = bookingSchedule(preferredDate.value, preferredTime.value);
-    if (new Date(schedule.preferredStartAt).getTime() <= Date.now()) {
-      window.alert('Khung giờ hẹn đã trôi qua trong lúc bạn xem lại thông tin. Vui lòng chọn lại thời gian hẹn.');
-      step.value = 2;
-      return;
-    }
-  } catch (err) {
-    window.alert(userFacingError(err, 'Khung giờ hoặc ngày hẹn không hợp lệ. Vui lòng chọn lại.'));
+  // The session may have started while the customer was reading the summary.
+  const schedule = scheduleForBooking();
+  if ('error' in schedule) {
+    window.alert(schedule.error);
+    sessions.value = upcomingSessions(14);
     step.value = 2;
     return;
   }
@@ -723,6 +700,7 @@ const createAndFindTech = async () => {
       addressId: selectedAddressId.value,
       description: isAiFlow ? (aiConversation.customerWords() || description.value) : description.value,
       ...schedule,
+      ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       quantity: isFixedPrice.value ? quantity.value : 1,
       urgency: urgency.value,
       photoUploadIds,
@@ -1336,25 +1314,53 @@ const createAndFindTech = async () => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-4 border-t border-ink-100">
-            <div class="space-y-1.5">
-              <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <CalendarIcon :size="15" class="text-brand-600" />
-                <span>Ngày hẹn dịch vụ</span>
-              </label>
-              <FhDatePicker v-model="preferredDate" />
+          <div class="space-y-3 pt-4 border-t border-ink-100">
+            <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
+              <CalendarIcon :size="15" class="text-brand-600" />
+              <span>Thời gian thợ tới</span>
+            </label>
+            <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Kiểu đặt lịch">
+              <button
+                type="button"
+                class="rounded-xl border px-3 py-2.5 text-left text-xs"
+                :class="bookingMode === 'scheduled' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
+                role="radio"
+                :aria-checked="bookingMode === 'scheduled'"
+                data-testid="mode-scheduled"
+                @click="bookingMode = 'scheduled'"
+              >
+                <span class="block font-bold text-ink-900">Đặt trước theo buổi</span>
+                <span class="block text-ink-500">Chọn ngày và buổi sáng hoặc chiều</span>
+              </button>
+              <button
+                type="button"
+                class="rounded-xl border px-3 py-2.5 text-left text-xs"
+                :class="bookingMode === 'urgent' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
+                role="radio"
+                :aria-checked="bookingMode === 'urgent'"
+                data-testid="mode-urgent"
+                @click="bookingMode = 'urgent'"
+              >
+                <span class="block font-bold text-ink-900 flex items-center gap-1"><Clock :size="13" /> Tới ngay</span>
+                <span class="block text-ink-500">Thợ gần bạn đang rảnh tới trong khoảng 2 giờ</span>
+              </button>
             </div>
+            <BookingSessionPicker v-if="bookingMode === 'scheduled'" v-model="selectedSession" :sessions="sessions" />
+          </div>
 
-            <div class="space-y-1.5">
-              <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <Clock :size="15" class="text-brand-600" />
-                <span>Khung giờ mong muốn</span>
-              </label>
-              <FhTimeScrollPicker
-                v-model="preferredTime"
-                :selected-date="preferredDate"
-              />
-            </div>
+          <div class="space-y-1.5 pt-4 border-t border-ink-100">
+            <label for="customer-note" class="block font-bold text-ink-800 text-xs sm:text-sm">
+              Ghi chú cho thợ <span class="font-normal text-ink-400">(không bắt buộc)</span>
+            </label>
+            <textarea
+              id="customer-note"
+              v-model="customerNote"
+              rows="2"
+              maxlength="1000"
+              placeholder="Ví dụ: gọi trước khi tới, nhà trong hẻm, gửi xe ở đâu..."
+              class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+              data-testid="customer-note"
+            />
           </div>
 
         </div>
