@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { userFacingError } from '../utils/user-facing-error';
 import { useAuthStore } from '../stores/auth';
 import { useChatStore } from '../stores/chat.store';
 import {
@@ -31,6 +33,10 @@ import { walletApi, type WalletSummary } from '../api/wallet.api';
 import { toast } from 'vue-sonner';
 
 const authStore = useAuthStore();
+const route = useRoute();
+const router = useRouter();
+// Pages with a sticky action bar on phones (route meta actionBar) lift the floating chat above it.
+const hasActionBar = computed(() => route?.meta?.actionBar === true);
 const chatStore = useChatStore();
 const callStore = useCallStore();
 const isAvailable = ref(true);
@@ -137,12 +143,20 @@ const toggleAvailability = async () => {
   if (togglingAvailability.value) return;
   togglingAvailability.value = true;
   const next = !isAvailable.value;
+  // The only availability switch of the technician area: below the deposit floor it points to the wallet.
+  if (next && walletSummary.value && !walletSummary.value.eligibleForJobs) {
+    toast.error('Ví chưa đủ mức ký quỹ để nhận việc', {
+      description: `Cần tối thiểu ${formatVnd(walletSummary.value.minimumBalance)}.`,
+      action: { label: 'Nạp tiền', onClick: () => void router.push('/tech/wallet') },
+    });
+    return;
+  }
   try {
     await technicianProfileApi.updateMyProfile({ isAvailable: next });
     isAvailable.value = next;
     toast.success(next ? 'Đã bật trạng thái nhận việc' : 'Đã chuyển sang trạng thái tạm nghỉ');
-  } catch {
-    toast.error('Không thể cập nhật trạng thái nhận việc');
+  } catch (err) {
+    toast.error(userFacingError(err, 'Chưa đổi được trạng thái nhận việc. Vui lòng thử lại.'));
   } finally {
     togglingAvailability.value = false;
   }
@@ -236,7 +250,10 @@ const tabItems: NavItem[] = [
 
 <template>
   <!-- --fh-dock lifts floating buttons above the bottom tab bar on narrow screens. -->
-  <div class="min-h-screen bg-ink-50 text-ink-900 [--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]">
+  <div
+    class="min-h-screen bg-ink-50 text-ink-900"
+    :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
+  >
     <!-- Sidebar, wide screens -->
     <aside class="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 flex-col bg-white border-r border-ink-200">
       <router-link to="/" class="h-16 px-5 flex items-center gap-2.5 border-b border-ink-100 shrink-0" aria-label="FixHome - Trang chủ">
@@ -271,17 +288,6 @@ const tabItems: NavItem[] = [
           </div>
         </div>
       </nav>
-
-      <div class="p-3 border-t border-ink-100 shrink-0">
-        <button
-          type="button"
-          class="w-full h-10 px-3 rounded-xl flex items-center gap-3 text-sm font-medium text-danger-600 hover:bg-danger-50 transition-colors whitespace-nowrap"
-          @click="handleLogout"
-        >
-          <LogOut :size="18" :stroke-width="1.75" />
-          Đăng xuất
-        </button>
-      </div>
     </aside>
 
     <div class="lg:pl-64 min-h-screen flex flex-col">
@@ -322,7 +328,7 @@ const tabItems: NavItem[] = [
                   : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
               "
               :disabled="togglingAvailability"
-              :title="isAvailable ? 'Đang sẵn sàng nhận đơn mới (Nhấn để tạm nghỉ)' : 'Đang tạm nghỉ (Nhấn để nhận việc)'"
+              :title="isAvailable ? 'Bấm để tạm nghỉ' : 'Bấm để nhận việc'"
               @click="toggleAvailability"
             >
               <Loader2 v-if="togglingAvailability" :size="14" class="animate-spin" />
@@ -330,7 +336,7 @@ const tabItems: NavItem[] = [
               <span class="hidden min-[360px]:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
             </button>
 
-            <div class="relative">
+            <div class="relative" @keydown.esc="avatarMenuOpen = false">
               <button
                 type="button"
                 class="flex items-center gap-2 p-1 sm:pr-2 rounded-full hover:bg-ink-100 transition-colors"
@@ -358,26 +364,19 @@ const tabItems: NavItem[] = [
                   <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
                 </div>
 
-                <div class="py-1 text-ink-700">
+                <!-- Only what the bottom tab bar lacks below lg; the sidebar has everything on wide screens. -->
+                <div class="py-1 text-ink-700 lg:hidden">
                   <router-link to="/tech/wallet" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
                     <Wallet :size="16" class="text-ink-500" />
-                    Ví & Rút tiền
+                    Ví của tôi
                   </router-link>
-                  <router-link to="/tech/profile" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <User :size="16" class="text-ink-500" />
-                    Hồ sơ & Kỹ năng
+                  <router-link to="/tech/warranty" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
+                    <ShieldCheck :size="16" class="text-ink-500" />
+                    Bảo hành
                   </router-link>
                   <router-link to="/tech/kyc" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
                     <BadgeCheck :size="16" class="text-ink-500" />
                     Xác minh danh tính
-                  </router-link>
-                  <router-link to="/tech/warranty" class="flex lg:hidden items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <ShieldCheck :size="16" class="text-ink-500" />
-                    Bảo hành
-                  </router-link>
-                  <router-link to="/tech/messages" class="flex lg:hidden items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <MessageSquare :size="16" class="text-ink-500" />
-                    Tin nhắn
                   </router-link>
                 </div>
 
@@ -411,9 +410,9 @@ const tabItems: NavItem[] = [
           >
             <ShieldAlert :size="18" class="shrink-0 mt-0.5" :class="onboardingBanner.tone === 'alert' ? 'text-danger-600' : 'text-warning-600'" />
             <span>
-              Hồ sơ kỹ thuật viên của bạn đang ở trạng thái
+              Hồ sơ của bạn:
               <strong class="font-semibold whitespace-nowrap">{{ onboardingBanner.state }}</strong>.
-              Vui lòng hoàn tất thông tin, CCCD và kỹ năng để nhận đơn sửa chữa.
+              Hoàn tất hồ sơ để nhận đơn.
             </span>
           </p>
           <router-link
@@ -437,18 +436,18 @@ const tabItems: NavItem[] = [
           <p class="flex items-start gap-2.5 text-danger-700 text-pretty">
             <Wallet :size="18" class="shrink-0 mt-0.5 text-danger-600" />
             <span>
-              Hồ sơ thợ đã được duyệt! Số dư ví hiện tại là
-              <strong class="font-semibold whitespace-nowrap">{{ formatVnd(walletSummary.balance) }}</strong>.
-              Vui lòng nạp tối thiểu
+              Ví còn
+              <strong class="font-semibold whitespace-nowrap">{{ formatVnd(walletSummary.balance) }}</strong>,
+              cần tối thiểu
               <strong class="font-semibold whitespace-nowrap">{{ formatVnd(walletSummary.minimumBalance) }}</strong>
-              vào ví ký quỹ để đủ điều kiện tiếp nhận đơn sửa chữa mới.
+              để nhận đơn mới.
             </span>
           </p>
           <router-link
             to="/tech/wallet"
             class="shrink-0 h-9 px-4 inline-flex items-center gap-1 rounded-xl bg-white border border-danger-200 text-sm font-semibold text-danger-700 hover:bg-danger-100 whitespace-nowrap transition-colors"
           >
-            Nạp tiền vào ví ngay
+            Nạp tiền
             <ChevronRight :size="16" />
           </router-link>
         </div>

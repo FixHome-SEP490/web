@@ -62,6 +62,15 @@ const stubs = {
   TechnicianPartsSection: { template: '<div data-testid="parts-section">Parts</div>' },
 };
 
+/** Opens the "Thêm" overflow menu, where the rare actions of the job page live. */
+async function openMoreMenu(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('[data-testid="job-more-button"]').trigger('click');
+  await flushPromises();
+}
+
+const menuItems = (wrapper: ReturnType<typeof mount>) =>
+  wrapper.findAll('[role="menuitem"]').map((item) => item.text());
+
 describe('Technician Order Receiving & Execution Workspace', () => {
   beforeEach(() => {
     mockGet.mockReset();
@@ -80,17 +89,21 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
 
-    // Hero title shows pending en-route
-    expect(wrapper.text()).toContain('Đơn đã tiếp nhận — Hãy khởi hành đến nhà khách');
+    // The current step and its one primary action
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Xuất phát đến nhà khách');
     expect(wrapper.text()).toContain('Bắt đầu di chuyển');
 
-    // Google Maps navigation link is present and correctly targets the destination
+    // Call, message and directions appear exactly once, next to the customer
     const mapLinks = wrapper.findAll('a[href*="google.com/maps"]');
-    expect(mapLinks.length).toBeGreaterThanOrEqual(1);
+    expect(mapLinks).toHaveLength(1);
     expect(mapLinks[0].attributes('href')).toContain('destination=10.7769,106.7009');
+    expect(wrapper.findAll('a[href^="tel:"]')).toHaveLength(1);
+    expect(wrapper.findAll('button').filter((b) => b.text().trim() === 'Nhắn tin')).toHaveLength(1);
 
-    // Emergency withdrawal button is available before check-in
-    expect(wrapper.text()).toContain('Rút khỏi đơn');
+    // Cancelling is available before check-in, from the overflow menu, under its new name
+    expect(wrapper.text()).not.toContain('Rút khỏi đơn');
+    await openMoreMenu(wrapper);
+    expect(menuItems(wrapper)).toContain('Huỷ đơn');
 
     wrapper.unmount();
   });
@@ -108,7 +121,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Bạn đang trên đường di chuyển tới nhà khách hàng');
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Đang đến nhà khách');
     expect(wrapper.text()).toContain('Check-in và chụp ảnh sản phẩm');
 
     wrapper.unmount();
@@ -125,6 +138,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     });
     const before = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
+    await openMoreMenu(before);
+    expect(menuItems(before)).not.toContain('Cần thay đổi thợ');
     expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
     before.unmount();
 
@@ -136,13 +151,20 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     } } });
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
+    expect(wrapper.find('[data-testid="replacement-card"]').exists()).toBe(false);
+    await openMoreMenu(wrapper);
+    // After check-in the order can no longer be cancelled by the technician.
+    expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
+    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Cần thay đổi thợ'))!.trigger('click');
     const card = wrapper.get('[data-testid="replacement-card"]');
-    await card.findAll('button').find((b) => b.text().includes('Cần thay đổi thợ'))!.trigger('click');
     await card.get('textarea').setValue('Máy là loại công nghiệp, ngoài kỹ năng');
     await card.findAll('button').find((b) => b.text().includes('Gửi cho quản lý'))!.trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledWith('/support/cases', expect.objectContaining({ caseType: 'technician_replacement', serviceOrderId: 'job-test-101', isUrgent: true }));
     expect(wrapper.text()).toContain('Đã báo quản lý dịch vụ');
+    expect(wrapper.find('[data-testid="replacement-card"]').exists()).toBe(false);
+    await openMoreMenu(wrapper);
+    expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
     wrapper.unmount();
   });
 
@@ -159,7 +181,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Đã xác nhận đến nơi — Chụp ảnh hiện trạng trước sửa chữa');
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Chụp ảnh máy trước khi sửa');
+    expect(wrapper.text()).toContain('Chụp ảnh máy');
 
     wrapper.unmount();
   });
@@ -176,17 +199,19 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
 
-    // Click 'Rút khỏi đơn' button
-    const withdrawBtn = wrapper.findAll('button').find((b) => b.text().includes('Rút khỏi đơn'));
+    // "Huỷ đơn" in the overflow menu opens the confirmation
+    await openMoreMenu(wrapper);
+    const withdrawBtn = wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Huỷ đơn'));
     expect(withdrawBtn).toBeDefined();
     await withdrawBtn!.trigger('click');
 
-    // Modal opens
-    expect(wrapper.text()).toContain('Rút khỏi đơn nhận việc');
-    expect(wrapper.text()).toContain('Xác nhận rút đơn');
+    const dialog = wrapper.get('[data-testid="cancel-order-dialog"]');
+    expect(dialog.text()).toContain('Huỷ đơn sửa chữa?');
+    expect(dialog.text()).toContain('Giữ lại đơn');
+    expect(dialog.text()).not.toContain('Rút');
 
-    // Confirm withdrawal
-    const confirmBtn = wrapper.findAll('button').find((b) => b.text().includes('Xác nhận rút đơn'));
+    // Confirm the cancellation
+    const confirmBtn = dialog.findAll('button').find((b) => b.text().includes('Huỷ đơn sửa chữa'));
     expect(confirmBtn).toBeDefined();
     await confirmBtn!.trigger('click');
     await flushPromises();
@@ -195,6 +220,94 @@ describe('Technician Order Receiving & Execution Workspace', () => {
       reason: expect.any(String),
     }));
 
+    wrapper.unmount();
+  });
+
+  it('shows only the current step until "Xem thêm" lists all five, then folds back', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') {
+        return { data: { data: { ...activeOrder, status: 'EN_ROUTE', arrivalVerified: false } } };
+      }
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="job-steps"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Bước 2/5');
+    const toggle = wrapper.get('[data-testid="steps-toggle"]');
+    expect(toggle.text()).toContain('Xem thêm');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    const list = wrapper.get('[data-testid="job-steps"]');
+    expect(list.findAll('li')).toHaveLength(5);
+    expect(list.text()).toContain('Xuất phát');
+    expect(list.text()).toContain('Thu tiền');
+    expect(list.text()).toContain('Đang làm');
+    expect(toggle.text()).toContain('Thu gọn');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+
+    await toggle.trigger('click');
+    expect(wrapper.find('[data-testid="job-steps"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps one primary action: the same button in the card and in the phone action bar', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+
+    const bar = wrapper.get('[data-testid="job-action-bar"]');
+    expect(bar.classes()).toContain('sm:hidden');
+    expect(bar.text()).toContain('Bắt đầu di chuyển');
+    const inCard = wrapper.get('[data-testid="job-now"]').findAll('button').filter((b) => b.text().includes('Bắt đầu di chuyển'));
+    expect(inCard).toHaveLength(1);
+    expect(inCard[0].element.parentElement?.className).toContain('hidden sm:flex');
+    // No long rule paragraphs on the page any more
+    expect(wrapper.text()).not.toMatch(/Quy chuẩn/);
+    wrapper.unmount();
+  });
+
+  it('asks how the customer pays after completion and declares the cash amount', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') {
+        return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
+      }
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValueOnce({ data: { data: { status: 'pending_confirmation' } } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+
+    const now = wrapper.get('[data-testid="job-now"]');
+    expect(now.text()).toContain('Thu tiền');
+    expect(wrapper.find('[data-testid="job-action-bar"]').exists()).toBe(false);
+    await now.findAll('button').find((b) => b.text().includes('Có thu tiền mặt'))!.trigger('click');
+    const declare = wrapper.get('[data-testid="job-now"]').findAll('button').find((b) => b.text().includes('Khai báo đã thu tiền mặt'));
+    expect(declare).toBeDefined();
+    await declare!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledWith(expect.stringContaining('/service-orders/job-test-101/cash'), expect.objectContaining({ declaredAmount: 150000 }));
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Chờ khách xác nhận tiền mặt');
+    wrapper.unmount();
+  });
+
+  it('shows a friendly retry when the job cannot be loaded, never a raw error', async () => {
+    mockGet.mockRejectedValue({ response: { status: 500, data: { error: { code: 'INTERNAL_ERROR', message: 'QueryFailedError: relation does not exist' } } } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Chưa tải được công việc. Vui lòng thử lại.');
+    expect(wrapper.text()).not.toMatch(/INTERNAL_ERROR|QueryFailedError|500/);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('Thử lại'))).toBe(true);
     wrapper.unmount();
   });
 
