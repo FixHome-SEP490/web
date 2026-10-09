@@ -2,10 +2,11 @@
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import { ref, onMounted } from 'vue';
-import { User, MapPin, Plus, Trash2, Check, Star, Pencil, Phone, Mail, Camera, X } from 'lucide-vue-next';
+import { MapPin, Plus, Trash2, Check, Pencil, Camera, X } from 'lucide-vue-next';
 import {
   FhButton,
   FhConfirmDialog,
+  FhSkeleton,
   MapTilerMap,
   type MapMarker,
 } from '../../components';
@@ -22,6 +23,7 @@ const isSaving = ref(false);
 const saveSuccess = ref(false);
 
 const addresses = ref<UserAddress[]>([]);
+const addressesFailed = ref(false);
 const loadingAddresses = ref(false);
 
 // Modals
@@ -250,11 +252,14 @@ onMounted(async () => {
 
 const loadAddresses = async () => {
   loadingAddresses.value = true;
+  addressesFailed.value = false;
   try {
     const data = await profileApi.getAddresses();
     addresses.value = data;
   } catch {
-    // Keep the last verified address list when a refresh temporarily fails.
+    // Keep the last verified address list when a refresh temporarily fails;
+    // with nothing on screen yet, offer a retry instead.
+    if (addresses.value.length === 0) addressesFailed.value = true;
   } finally {
     loadingAddresses.value = false;
   }
@@ -440,129 +445,121 @@ const confirmDelete = async () => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto pb-10">
-    
-    <!-- Profile Header (Facebook Style) -->
-    <div class="bg-white shadow-(--shadow-e1) rounded-b-lg px-6 pt-10 pb-2 mb-6">
-      <div class="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 border-b border-ink-200 pb-6">
-        <!-- Avatar & Name -->
-        <div class="flex flex-col sm:flex-row items-center gap-6">
-          <!-- Avatar with Camera Button -->
-          <div class="relative w-32 h-32 -mt-5 shrink-0">
-            <div class="w-full h-full rounded-full border-4 border-white shadow-md bg-brand-100 text-brand-700 font-bold text-5xl overflow-hidden flex items-center justify-center">
-               <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" />
-               <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
-            </div>
-            
-            <button 
-              @click="openAvatarModal"
-              class="absolute bottom-1 right-1 w-9 h-9 bg-ink-100 hover:bg-ink-200 text-ink-700 rounded-full flex items-center justify-center border-2 border-white shadow-sm transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
-              title="Đổi ảnh đại diện"
-            >
-              <Camera :size="18" />
-            </button>
-          </div>
-          
-          <!-- Name -->
-          <div class="text-center sm:text-left mt-2 sm:mt-0">
-            <h1 class="text-3xl font-bold text-ink-900 tracking-tight">{{ authStore.user?.fullName || 'Người dùng' }}</h1>
-          </div>
+  <div class="max-w-5xl mx-auto pb-10 space-y-6">
+    <!-- Who you are -->
+    <section class="flex items-center gap-4">
+      <div class="relative w-16 h-16 shrink-0">
+        <div class="w-full h-full rounded-full bg-brand-100 text-brand-700 font-bold text-2xl overflow-hidden flex items-center justify-center">
+          <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover" />
+          <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
         </div>
-
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-3">
-          <FhButton variant="primary" size="md" data-testid="add-saved-address" @click="openAddAddress">
-            <Plus :size="16" class="mr-1.5" /> Thêm địa chỉ mới
-          </FhButton>
-        </div>
+        <button
+          type="button"
+          class="absolute -bottom-1 -right-1 w-8 h-8 bg-white hover:bg-ink-100 text-ink-700 rounded-full flex items-center justify-center border border-ink-200 shadow-sm transition-colors"
+          title="Đổi ảnh đại diện"
+          aria-label="Đổi ảnh đại diện"
+          @click="openAvatarModal"
+        >
+          <Camera :size="16" />
+        </button>
       </div>
-    </div>
+      <div class="min-w-0">
+        <h1 class="text-2xl font-bold text-ink-900 tracking-tight text-balance">{{ authStore.user?.fullName || 'Người dùng' }}</h1>
+        <p class="text-sm text-ink-500 truncate">{{ authStore.user?.email }}</p>
+      </div>
+    </section>
 
-    <!-- Main Content (2 Columns) -->
-    <div class="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 px-4 sm:px-0">
-      
-      <!-- Left Column (Thông tin cá nhân - Readonly List) -->
+    <div class="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 items-start">
       <div class="space-y-6">
-        <div class="bg-white shadow-(--shadow-e1) rounded-md p-5 border border-ink-100">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-ink-900">Thông tin cá nhân</h2>
-            <button 
-              @click="openEditProfileModal"
-              class="p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900 rounded-full transition-all duration-300 hover:rotate-12"
-              title="Chỉnh sửa thông tin"
-            >
-              <Pencil :size="18" />
-            </button>
+        <!-- Personal details -->
+        <section class="bg-white rounded-2xl border border-ink-200 p-5">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h2 class="text-lg font-semibold text-ink-900">Thông tin cá nhân</h2>
+            <FhButton variant="secondary" size="sm" @click="openEditProfileModal">
+              <Pencil :size="14" /> Sửa
+            </FhButton>
           </div>
-          
-          <div class="space-y-4 text-sm">
-            <div class="flex items-center gap-3 text-ink-800 font-medium">
-              <User :size="20" class="text-ink-400 shrink-0" />
-              <span>{{ authStore.user?.fullName }}</span>
+          <dl class="divide-y divide-ink-100 text-sm">
+            <div class="flex items-center justify-between gap-3 py-2.5">
+              <dt class="text-ink-500">Họ và tên</dt>
+              <dd class="font-medium text-ink-900 text-right">{{ authStore.user?.fullName }}</dd>
             </div>
-            <div class="flex items-center gap-3 text-ink-800 font-medium">
-              <Phone :size="20" class="text-ink-400 shrink-0" />
-              <span>{{ authStore.user?.phoneNumber || 'Chưa cập nhật SĐT' }}</span>
+            <div class="flex items-center justify-between gap-3 py-2.5">
+              <dt class="text-ink-500">Số điện thoại</dt>
+              <dd class="font-medium text-ink-900 font-num whitespace-nowrap">{{ authStore.user?.phoneNumber || 'Chưa có' }}</dd>
             </div>
-            <div class="flex items-center gap-3 text-ink-800 font-medium">
-              <Mail :size="20" class="text-ink-400 shrink-0" />
-              <span class="break-all">{{ authStore.user?.email }}</span>
+            <div class="flex items-center justify-between gap-3 py-2.5">
+              <dt class="text-ink-500 shrink-0">Email</dt>
+              <dd class="font-medium text-ink-900 text-right break-all">{{ authStore.user?.email }}</dd>
             </div>
-          </div>
-        </div>
+          </dl>
+        </section>
         <ReputationCard role="customer" />
         <ChangePasswordCard />
       </div>
 
-      <!-- Right Column (Sổ địa chỉ) -->
-      <div class="space-y-6">
-        <div class="bg-white shadow(--shadow-e1) rounded-md p-5 border border-ink-100">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-ink-900">Sổ địa chỉ</h2>
-          </div>
-          
-          <div v-if="addresses.length === 0" class="text-center py-10 bg-ink-50 rounded-sm border border-ink-200 border-dashed">
-            <MapPin :size="32" class="mx-auto text-ink-400 mb-2" />
-            <h4 class="text-sm font-bold text-ink-800">Chưa có địa chỉ nào</h4>
-            <p class="text-xs text-ink-500 max-w-xs mx-auto mt-1 mb-4">
-              Thêm địa chỉ nhà riêng hoặc văn phòng để gọi thợ tiện lợi hơn.
-            </p>
-            <FhButton variant="secondary" size="sm" @click="openAddAddress" class="bg-ink-100">
-              <Plus :size="15" class="mr-1" /> Thêm địa chỉ mới
-            </FhButton>
-          </div>
-          
-          <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div
-              v-for="addr in addresses"
-              :key="addr.id"
-              class="p-4 rounded-sm bg-white border border-ink-200 hover:border-brand-400 hover:-translate-y-1 hover:shadow-md transition-all duration-300 flex flex-col justify-between space-y-3 relative group"
-            >
-              <div class="space-y-1.5">
-                <div class="flex items-center justify-between">
-                  <span class="font-bold text-sm text-ink-900 flex items-center gap-1.5">
-                    <MapPin :size="16" class="text-brand-600" /> {{ addr.label || 'Địa chỉ' }}
-                  </span>
-                  <span v-if="addr.isDefault" class="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
-                    <Star :size="11" class="fill-brand-600" /> Mặc định
-                  </span>
-                </div>
-                <p class="text-sm text-ink-800 font-medium">{{ addr.line1 }}</p>
-                <p class="text-xs text-ink-500">{{ addr.ward ? addr.ward + ', ' : '' }}{{ addr.district }}, {{ addr.province }}</p>
-              </div>
-              <div class="pt-2 border-t border-ink-100 flex items-center justify-end">
-                <button type="button" :data-testid="`edit-saved-address-${addr.id}`" class="p-1.5 text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded" title="Sửa địa chỉ" @click="openEditAddress(addr)">
-                  <Pencil :size="16" />
-                </button>
-                <button class="p-1.5 text-ink-400 hover:text-danger-500 hover:bg-danger-50 rounded transition-all duration-300 hover:scale-110 active:scale-95" title="Xoá địa chỉ" @click="triggerDeleteAddress(addr.id)">
-                  <Trash2 :size="16" />
-                </button>
-              </div>
-            </div>
+      <!-- Address book -->
+      <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+          <h2 class="text-lg font-semibold text-ink-900">Sổ địa chỉ</h2>
+          <FhButton variant="secondary" size="sm" data-testid="add-saved-address" @click="openAddAddress">
+            <Plus :size="16" /> Thêm địa chỉ
+          </FhButton>
+        </div>
+
+        <div v-if="loadingAddresses && addresses.length === 0" class="px-5 pb-5 space-y-4" aria-busy="true" aria-label="Đang tải địa chỉ">
+          <div v-for="i in 2" :key="i" class="space-y-2">
+            <FhSkeleton width="30%" height="16px" />
+            <FhSkeleton width="70%" height="14px" />
           </div>
         </div>
-      </div>
 
+        <div v-else-if="addressesFailed" class="px-5 pb-5 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-ink-700">Chưa tải được sổ địa chỉ, vui lòng thử lại.</p>
+          <FhButton variant="secondary" size="sm" @click="loadAddresses">Thử lại</FhButton>
+        </div>
+
+        <p v-else-if="addresses.length === 0" class="px-5 pb-6 text-sm text-ink-500 text-pretty">
+          Chưa có địa chỉ nào. Thêm nhà riêng hoặc văn phòng để đặt thợ nhanh hơn.
+        </p>
+
+        <ul v-else class="divide-y divide-ink-100 border-t border-ink-100">
+          <li v-for="addr in addresses" :key="addr.id" class="px-5 py-4 flex items-start gap-3">
+            <MapPin :size="18" class="text-ink-500 shrink-0 mt-0.5" />
+            <div class="min-w-0 flex-1 space-y-0.5">
+              <p class="flex items-center gap-2">
+                <span class="font-semibold text-sm text-ink-900">{{ addr.label || 'Địa chỉ' }}</span>
+                <span v-if="addr.isDefault" class="inline-flex items-center h-5 px-1.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 whitespace-nowrap">
+                  Mặc định
+                </span>
+              </p>
+              <p class="text-sm text-ink-800 text-pretty">{{ addr.line1 }}</p>
+              <p class="text-sm text-ink-500 text-pretty">{{ addr.ward ? addr.ward + ', ' : '' }}{{ addr.district }}, {{ addr.province }}</p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                :data-testid="`edit-saved-address-${addr.id}`"
+                class="w-9 h-9 flex items-center justify-center text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-xl"
+                title="Sửa địa chỉ"
+                aria-label="Sửa địa chỉ"
+                @click="openEditAddress(addr)"
+              >
+                <Pencil :size="16" />
+              </button>
+              <button
+                type="button"
+                class="w-9 h-9 flex items-center justify-center text-ink-500 hover:text-danger-600 hover:bg-danger-50 rounded-xl"
+                title="Xoá địa chỉ"
+                aria-label="Xoá địa chỉ"
+                @click="triggerDeleteAddress(addr.id)"
+              >
+                <Trash2 :size="16" />
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
     </div>
 
     <!-- Modals -->
@@ -628,7 +625,7 @@ const confirmDelete = async () => {
       >
       <div class="bg-white rounded-md max-w-sm w-full p-6 shadow-xl space-y-5">
         <h3 class="text-lg font-bold text-ink-900">
-          Cập nhật Ảnh đại diện
+          Đổi ảnh đại diện
         </h3>
 
         <div class="space-y-4 text-sm">
@@ -668,7 +665,7 @@ const confirmDelete = async () => {
       <div class="bg-white rounded-md max-w-md w-full shadow-xl flex flex-col max-h-[90vh]">
         <div class="flex items-center justify-between px-6 pt-6 shrink-0">
           <h3 class="text-lg font-bold text-ink-900">
-            {{ editingAddressId ? 'Sửa địa chỉ đã lưu' : 'Thêm Địa chỉ Mới' }}
+            {{ editingAddressId ? 'Sửa địa chỉ đã lưu' : 'Thêm địa chỉ' }}
           </h3>
           <button
             type="button"
@@ -715,7 +712,7 @@ const confirmDelete = async () => {
                 </li>
               </ul>
             </div>
-            <p v-if="addressForm.ward || addressForm.province" class="text-[11px] text-ink-500 flex items-center gap-1">
+            <p v-if="addressForm.ward || addressForm.province" class="text-xs text-ink-500 flex items-center gap-1">
               <MapPin :size="12" class="shrink-0" />
               <span>{{ [addressForm.ward, addressForm.province].filter(Boolean).join(', ') }}</span>
             </p>

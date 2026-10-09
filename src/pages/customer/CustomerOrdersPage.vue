@@ -3,23 +3,18 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  ClipboardList,
   MapPin,
-  Calendar,
   ChevronRight,
-  User,
-  Plus,
   Search,
   MessageSquare,
-  Star,
   Receipt,
   AlertCircle,
   RefreshCw,
 } from 'lucide-vue-next';
 import {
   FhButton,
-  FhCostBreakdown,
   FhMoney,
+  FhSkeleton,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
@@ -110,9 +105,9 @@ const isOverdue = (booking: BookingItem) =>
 const pendingLabel = (booking: BookingItem) => {
   if (booking.status === 'CANCELLED') return 'Đã huỷ trước khi có thợ';
   if (booking.status === 'MATCHED') return 'Đang chờ liên kết đơn thợ';
-  if (isOverdue(booking)) return 'Đã quá hạn, đang chờ điều phối viên hỗ trợ';
+  if (isOverdue(booking)) return 'Quá hạn, đang chờ hỗ trợ';
   if (booking.status === 'MATCHING') return 'Đang chờ thợ xác nhận';
-  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, đang chờ điều phối viên hỗ trợ';
+  if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, chờ hỗ trợ';
   return 'Đang tìm thợ phù hợp';
 };
 
@@ -298,37 +293,22 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 </script>
 
 <template>
-  <div class="space-y-6 max-w-4xl mx-auto pb-12">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <ClipboardList class="text-brand-600" :size="24" />
-          Đơn của tôi
-        </h1>
-        <p class="text-sm text-ink-500 mt-1 text-pretty">
-          Theo dõi tiến độ di chuyển, phê duyệt báo giá và trao đổi trực tiếp với thợ.
-        </p>
-      </div>
+  <div class="space-y-5 max-w-4xl mx-auto pb-12">
+    <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Đơn của tôi</h1>
 
-      <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
-        <Plus :size="16" /> Đặt thợ mới
-      </FhButton>
-    </div>
-
-    <!-- Search Input (Style Mobile) -->
+    <!-- Search -->
     <div class="relative">
       <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Tìm theo mã đơn, dịch vụ, thợ…"
+        placeholder="Tìm theo mã đơn, dịch vụ, kỹ thuật viên…"
         aria-label="Tìm đơn"
         class="w-full h-11 pl-10 pr-4 rounded-xl bg-white border border-ink-200 text-base sm:text-sm text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
       />
     </div>
 
-    <!-- Segment Tabs (Style Mobile) -->
+    <!-- Segment tabs -->
     <div class="grid grid-cols-4 gap-1 p-1 bg-white rounded-2xl border border-ink-200 text-sm font-medium" role="tablist">
       <button
         v-for="tab in [
@@ -350,25 +330,25 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </button>
     </div>
 
-    <!-- Partial-failure error banners (one per source, with retry) -->
+    <!-- Partial-failure banners (one per source, with retry) -->
     <div v-if="!loading && hasError" class="space-y-2">
       <div
         v-if="ordersError"
         data-testid="orders-error-banner"
         class="flex items-center justify-between gap-3 p-3 rounded-xl bg-danger-50 border border-danger-200 text-sm text-danger-700"
       >
-        <span class="flex items-center gap-1.5">
-          <AlertCircle :size="14" />
+        <span class="flex items-center gap-1.5 min-w-0">
+          <AlertCircle :size="16" class="shrink-0" />
           {{ ordersError }}
         </span>
         <button
           type="button"
-          class="flex items-center gap-1 font-semibold hover:underline shrink-0"
+          class="flex items-center gap-1 font-semibold hover:underline shrink-0 whitespace-nowrap"
           data-testid="retry-orders"
           :disabled="loadingOrders || fetchingMoreOrders"
           @click="retryOrders"
         >
-          <RefreshCw :size="12" /> Thử lại
+          <RefreshCw :size="14" /> Thử lại
         </button>
       </div>
       <div
@@ -376,222 +356,190 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         data-testid="bookings-error-banner"
         class="flex items-center justify-between gap-3 p-3 rounded-xl bg-danger-50 border border-danger-200 text-sm text-danger-700"
       >
-        <span class="flex items-center gap-1.5">
-          <AlertCircle :size="14" />
+        <span class="flex items-center gap-1.5 min-w-0">
+          <AlertCircle :size="16" class="shrink-0" />
           {{ bookingsError }}
         </span>
         <button
           type="button"
-          class="flex items-center gap-1 font-semibold hover:underline shrink-0"
+          class="flex items-center gap-1 font-semibold hover:underline shrink-0 whitespace-nowrap"
           data-testid="retry-bookings"
           :disabled="loadingBookings || fetchingMoreBookings"
           @click="retryBookings"
         >
-          <RefreshCw :size="12" /> Thử lại
+          <RefreshCw :size="14" /> Thử lại
         </button>
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="text-center py-16 text-ink-400 space-y-2">
-      <div class="w-8 h-8 rounded-full border-2 border-brand-600 border-t-transparent animate-spin mx-auto"></div>
-      <p class="text-sm">Đang tải danh sách đơn dịch vụ…</p>
+    <!-- Loading: rows like the list -->
+    <div v-if="loading" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
+      <div v-for="i in 4" :key="i" class="px-5 py-4 space-y-2">
+        <FhSkeleton width="55%" height="18px" />
+        <FhSkeleton width="35%" height="14px" />
+      </div>
     </div>
 
-    <!-- Empty State (only when no error AND no data) -->
+    <!-- Empty (only when no error AND no data) -->
     <div
       v-else-if="!hasError && !loadingOrders && !loadingBookings && !hasMoreOrders && !hasMoreBookings && filteredOrders.length === 0 && visiblePending.length === 0"
       data-testid="history-empty-state"
-      class="text-center py-16 bg-white rounded-2xl border border-ink-200 space-y-3 p-8"
+      class="text-center bg-white rounded-2xl border border-ink-200 px-6 py-12 space-y-2"
     >
-      <div class="w-14 h-14 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-2">
-        <Receipt :size="28" />
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-3">
+        <Receipt :size="24" />
       </div>
-      <h3 class="text-sm font-bold text-ink-800">Chưa có đơn dịch vụ nào</h3>
-      <p class="text-xs text-ink-500 max-w-sm mx-auto">
-        {{ searchQuery ? 'Không tìm thấy đơn nào phù hợp với từ khóa.' : 'Đặt lịch để kỹ thuật viên FixHome kiểm tra tại nhà bạn.' }}
+      <h2 class="text-base font-semibold text-ink-900">
+        {{ searchQuery ? 'Không có đơn phù hợp' : 'Bạn chưa có đơn sửa chữa' }}
+      </h2>
+      <p class="text-sm text-ink-500 max-w-sm mx-auto text-pretty">
+        {{ searchQuery ? 'Thử từ khoá khác.' : 'Đặt thợ để kỹ thuật viên FixHome tới kiểm tra tại nhà bạn.' }}
       </p>
-      <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
-        Đặt thợ ngay
-      </FhButton>
     </div>
 
-    <!-- Orders Feed -->
-    <div v-else class="space-y-4">
-      <p v-if="loadingOrders || loadingBookings" role="status" class="text-center text-sm text-ink-500">Đang tải dữ liệu…</p>
-      <p v-if="!hasError && !loadingOrders && !loadingBookings && filteredOrders.length === 0 && visiblePending.length === 0" data-testid="loaded-page-empty" class="text-center text-xs text-ink-500 py-3">Chưa có kết quả trong các trang đã tải. Chọn Xem thêm để tìm tiếp.</p>
-      <!-- Pending bookings: no technician has accepted yet, so there is no ServiceOrder -->
-      <div
-        v-for="booking in visiblePending"
-        :key="booking.id"
-        :data-testid="`booking-card-${booking.id}`"
-        class="p-5 rounded-2xl bg-white border space-y-2.5 cursor-pointer transition-colors"
-        :class="isOverdue(booking) && booking.status !== 'CANCELLED' ? 'border-danger-200 hover:border-danger-300' : 'border-ink-200 hover:border-ink-300'"
-        @click="router.push(`/app/bookings/${booking.id}`)"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="text-sm text-ink-500 flex items-center gap-1.5 whitespace-nowrap">
-            <Calendar :size="14" />
-            <span>{{ vnDateString(booking.createdAt) }}</span>
-          </span>
-          <div
-            class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap"
-            :class="booking.status === 'CANCELLED' ? 'bg-ink-100 text-ink-600' : isOverdue(booking) ? 'bg-danger-50 text-danger-700' : 'bg-warning-50 text-warning-800'"
-          >
-            <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-ink-400' : isOverdue(booking) ? 'bg-danger-500' : 'bg-warning-500'"></span>
-            <span>{{ pendingLabel(booking) }}</span>
-          </div>
-        </div>
-        <h3 class="font-semibold text-base text-ink-900">{{ booking.serviceName }}</h3>
-        <p class="text-sm text-ink-600 flex items-start gap-1.5 min-w-0">
-          <MapPin :size="15" class="shrink-0 text-ink-400 mt-0.5" />
-          <span class="truncate">{{ booking.addressSummary }}</span>
-        </p>
-        <div v-if="booking.status === 'CANCELLED'" class="flex justify-end">
-          <FhButton variant="secondary" size="sm" :data-testid="`rebook-booking-${booking.id}`" @click.stop="rebookFor = { bookingId: booking.id, serviceName: booking.serviceName }">Đặt lại</FhButton>
-        </div>
+    <div v-else class="space-y-5">
+      <div v-if="loadingOrders || loadingBookings" role="status" aria-label="Đang tải thêm" class="rounded-2xl bg-white border border-ink-200 px-5 py-4 space-y-2">
+        <FhSkeleton width="50%" height="18px" />
+        <FhSkeleton width="30%" height="14px" />
       </div>
+      <p v-if="!hasError && !loadingOrders && !loadingBookings && filteredOrders.length === 0 && visiblePending.length === 0" data-testid="loaded-page-empty" class="text-center text-sm text-ink-500 py-3">Chưa có kết quả. Bấm Xem thêm để tìm tiếp.</p>
 
-      <!-- Load-more bookings button -->
-      <div v-if="hasMoreBookings" class="flex justify-center">
-        <button
-          type="button"
-          class="h-10 px-4 rounded-xl border border-ink-200 bg-white text-ink-700 text-sm font-medium hover:bg-ink-50 transition-colors flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50"
-          :disabled="fetchingMoreBookings || loadingBookings"
-          data-testid="load-more-bookings"
-          @click="loadMoreBookings"
-        >
-          <RefreshCw :size="13" :class="fetchingMoreBookings ? 'animate-spin' : ''" />
-          {{ fetchingMoreBookings ? 'Đang tải…' : 'Xem thêm yêu cầu' }}
-        </button>
-      </div>
-
-      <div
-        v-for="order in filteredOrders"
-        :key="order.id"
-        :data-testid="`order-card-${order.id}`"
-        class="p-5 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors cursor-pointer space-y-4"
-        @click="router.push(`/app/orders/${order.id}`)"
-      >
-        <!-- Card Top: Code, Date & Mobile-like Pastel Status Badge -->
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
-          <div class="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm">
-            <span class="font-num text-ink-600 whitespace-nowrap">{{ order.code }}</span>
-            <span class="text-ink-500 flex items-center gap-1.5 whitespace-nowrap">
-              <Calendar :size="14" />
-              <span>{{ vnDateString(order.createdAt) }}</span>
-            </span>
-          </div>
-
-          <!-- Pastel Badge matching Mobile getStatusBadge -->
-          <div
-            class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap"
-            :class="[getStatusBadge(order.status).bg, getStatusBadge(order.status).text]"
+      <!-- Bookings with no technician yet, so no service order -->
+      <section v-if="visiblePending.length > 0 || hasMoreBookings" class="space-y-2">
+        <h2 class="text-sm font-medium text-ink-500">Yêu cầu đặt lịch</h2>
+        <ul v-if="visiblePending.length > 0" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+          <li
+            v-for="booking in visiblePending"
+            :key="booking.id"
+            :data-testid="`booking-card-${booking.id}`"
+            role="link"
+            tabindex="0"
+            class="px-5 py-4 flex items-center gap-3 cursor-pointer hover:bg-ink-50 transition-colors focus-visible:outline-none focus-visible:bg-ink-50"
+            @click="router.push(`/app/bookings/${booking.id}`)"
+            @keydown.enter="router.push(`/app/bookings/${booking.id}`)"
           >
-            <span class="w-1.5 h-1.5 rounded-full" :class="getStatusBadge(order.status).dot"></span>
-            <span>{{ getStatusBadge(order.status).label }}</span>
-          </div>
-        </div>
-
-        <!-- Card Middle: Service & Tech Info -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-          <div class="space-y-1">
-            <h3 class="font-semibold text-base text-ink-900">
-              {{ order.serviceName }}
-            </h3>
-            <p class="text-sm text-ink-600 flex items-start gap-1.5 min-w-0">
-              <MapPin :size="15" class="shrink-0 text-ink-400 mt-0.5" />
-              <span class="truncate">{{ order.addressSummary }}</span>
-            </p>
-          </div>
-
-          <!-- Technician Mini Card -->
-          <div v-if="order.technician" class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-ink-50">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-9 h-9 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-sm shrink-0">
-                {{ order.technician.fullName.charAt(0) }}
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
+                <h3 class="font-semibold text-ink-900 text-pretty">{{ booking.serviceName }}</h3>
+                <span
+                  class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0"
+                  :class="booking.status === 'CANCELLED' ? 'bg-ink-100 text-ink-600' : isOverdue(booking) ? 'bg-danger-50 text-danger-700' : 'bg-warning-50 text-warning-800'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-ink-400' : isOverdue(booking) ? 'bg-danger-500' : 'bg-warning-500'"></span>
+                  {{ pendingLabel(booking) }}
+                </span>
               </div>
-              <div class="text-sm min-w-0">
-                <div class="font-semibold text-ink-900 truncate">{{ order.technician.fullName }}</div>
-                <div class="text-xs text-ink-600 flex items-center gap-1 whitespace-nowrap">
-                  <template v-if="formatRating(order.technician.averageRating)">
-                    <Star :size="12" class="fill-warning-500 text-warning-500" />
-                    <span>{{ formatRating(order.technician.averageRating) }}</span>
-                  </template>
-                  <span v-else>Chưa có đánh giá</span>
-                  <span class="text-ink-500">· Thợ chính</span>
+              <p class="text-sm text-ink-500 flex items-center gap-1.5 min-w-0">
+                <span class="font-num whitespace-nowrap">{{ vnDateString(booking.createdAt) }}</span>
+                <span aria-hidden="true">·</span>
+                <MapPin :size="14" class="shrink-0 text-ink-400" />
+                <span class="truncate" :title="booking.addressSummary">{{ booking.addressSummary }}</span>
+              </p>
+              <div v-if="booking.status === 'CANCELLED'" class="flex justify-end pt-1">
+                <FhButton variant="secondary" size="sm" :data-testid="`rebook-booking-${booking.id}`" @click.stop="rebookFor = { bookingId: booking.id, serviceName: booking.serviceName }">Đặt lại</FhButton>
+              </div>
+            </div>
+            <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+          </li>
+        </ul>
+
+        <div v-if="hasMoreBookings" class="flex justify-center">
+          <button
+            type="button"
+            class="h-10 px-4 rounded-xl border border-ink-200 bg-white text-ink-700 text-sm font-medium hover:bg-ink-50 transition-colors flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50"
+            :disabled="fetchingMoreBookings || loadingBookings"
+            data-testid="load-more-bookings"
+            @click="loadMoreBookings"
+          >
+            <RefreshCw :size="14" :class="fetchingMoreBookings ? 'animate-spin' : ''" />
+            {{ fetchingMoreBookings ? 'Đang tải…' : 'Xem thêm yêu cầu' }}
+          </button>
+        </div>
+      </section>
+
+      <!-- Service orders -->
+      <section v-if="filteredOrders.length > 0 || hasMoreOrders" class="space-y-2">
+        <h2 class="text-sm font-medium text-ink-500">Đơn sửa chữa</h2>
+        <ul v-if="filteredOrders.length > 0" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+          <li
+            v-for="order in filteredOrders"
+            :key="order.id"
+            :data-testid="`order-card-${order.id}`"
+            role="link"
+            tabindex="0"
+            class="px-5 py-4 flex items-center gap-3 cursor-pointer hover:bg-ink-50 transition-colors focus-visible:outline-none focus-visible:bg-ink-50"
+            @click="router.push(`/app/orders/${order.id}`)"
+            @keydown.enter="router.push(`/app/orders/${order.id}`)"
+          >
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
+                <h3 class="font-semibold text-ink-900 text-pretty">{{ order.serviceName }}</h3>
+                <span
+                  class="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0"
+                  :class="[getStatusBadge(order.status).bg, getStatusBadge(order.status).text]"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="getStatusBadge(order.status).dot"></span>
+                  {{ getStatusBadge(order.status).label }}
+                </span>
+              </div>
+              <p class="text-sm text-ink-500 font-num truncate">{{ order.code }} · {{ vnDateString(order.createdAt) }}</p>
+              <p class="text-sm text-ink-600 flex items-center gap-1.5 min-w-0">
+                <template v-if="order.technician">
+                  <span class="truncate">{{ order.technician.fullName }}</span>
+                  <span class="shrink-0 whitespace-nowrap text-ink-500">
+                    <template v-if="formatRating(order.technician.averageRating)">· <span class="text-warning-500">★</span>&nbsp;{{ formatRating(order.technician.averageRating) }}</template>
+                    <template v-else>· Chưa có đánh giá</template>
+                  </span>
+                </template>
+                <span v-else class="text-ink-500">Đang tìm kỹ thuật viên phù hợp…</span>
+              </p>
+              <div
+                v-if="Number(order.grandTotal) > 0 || order.technician || canRebookOrder(order)"
+                class="flex items-center justify-between gap-3 pt-1"
+              >
+                <span class="text-base font-semibold font-num text-ink-900 whitespace-nowrap">
+                  <FhMoney v-if="Number(order.grandTotal) > 0" :amount="order.grandTotal" />
+                </span>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    v-if="order.technician"
+                    type="button"
+                    class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-ink-700 text-sm font-medium hover:bg-ink-100 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                    aria-label="Nhắn tin với kỹ thuật viên"
+                    @click="(e) => handleChat(order, e)"
+                  >
+                    <MessageSquare :size="16" class="text-ink-500" />
+                    <span>Nhắn tin</span>
+                  </button>
+                  <FhButton
+                    v-if="canRebookOrder(order)"
+                    variant="secondary"
+                    size="sm"
+                    :data-testid="`rebook-order-${order.id}`"
+                    @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
+                  >
+                    Đặt lại thợ
+                  </FhButton>
                 </div>
               </div>
             </div>
+            <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+          </li>
+        </ul>
 
-            <button
-              type="button"
-              class="h-9 px-3 rounded-lg bg-white border border-ink-200 text-ink-700 text-sm font-medium hover:bg-ink-100 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              @click="(e) => handleChat(order, e)"
-              title="Nhắn tin với thợ"
-              aria-label="Nhắn tin với thợ"
-            >
-              <MessageSquare :size="16" class="text-ink-500" />
-              <span>Nhắn tin</span>
-            </button>
-          </div>
-
-          <div v-else class="text-sm text-warning-800 flex items-center gap-2 bg-warning-50 p-3 rounded-xl border border-warning-200">
-            <User :size="16" class="text-warning-600 shrink-0" />
-            <span>Đang tự động điều phối thợ phù hợp…</span>
-          </div>
+        <div v-if="hasMoreOrders" class="flex justify-center">
+          <button
+            type="button"
+            class="h-10 px-4 rounded-xl border border-ink-200 bg-white text-ink-700 text-sm font-medium hover:bg-ink-50 transition-colors flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50"
+            :disabled="fetchingMoreOrders || loadingOrders"
+            data-testid="load-more-orders"
+            @click="loadMoreOrders"
+          >
+            <RefreshCw :size="14" :class="fetchingMoreOrders ? 'animate-spin' : ''" />
+            {{ fetchingMoreOrders ? 'Đang tải…' : 'Xem thêm đơn' }}
+          </button>
         </div>
-
-        <!-- Card Bottom: Cost Breakdown & Action CTA -->
-        <div class="pt-3 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex-1 max-w-sm">
-            <FhCostBreakdown
-              :labor-total="order.laborTotal"
-              :parts-total="order.partsTotal"
-            />
-          </div>
-
-          <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0">
-            <div class="text-right">
-              <span class="text-xs text-ink-500 block">Tổng chi phí</span>
-              <span class="text-lg font-semibold font-num text-ink-900 whitespace-nowrap">
-                <FhMoney :amount="order.grandTotal" />
-              </span>
-            </div>
-
-            <FhButton
-              v-if="canRebookOrder(order)"
-              variant="secondary"
-              size="sm"
-              :data-testid="`rebook-order-${order.id}`"
-              @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
-            >
-              Đặt lại thợ
-            </FhButton>
-            <button
-              type="button"
-              class="h-10 px-4 rounded-xl bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 text-sm font-medium transition-colors flex items-center gap-1 whitespace-nowrap"
-            >
-              <span>Xem chi tiết</span>
-              <ChevronRight :size="16" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Load-more orders button -->
-      <div v-if="hasMoreOrders" class="flex justify-center">
-        <button
-          type="button"
-          class="h-10 px-4 rounded-xl border border-ink-200 bg-white text-ink-700 text-sm font-medium hover:bg-ink-50 transition-colors flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50"
-          :disabled="fetchingMoreOrders || loadingOrders"
-          data-testid="load-more-orders"
-          @click="loadMoreOrders"
-        >
-          <RefreshCw :size="13" :class="fetchingMoreOrders ? 'animate-spin' : ''" />
-          {{ fetchingMoreOrders ? 'Đang tải…' : 'Xem thêm đơn dịch vụ' }}
-        </button>
-      </div>
+      </section>
     </div>
     <RebookDialog
       v-if="rebookFor"

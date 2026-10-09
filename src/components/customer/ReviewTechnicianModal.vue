@@ -298,7 +298,7 @@ const handleSubmit = async () => {
               <Sparkles :size="13" class="text-brand-600" />
               Gợi ý nhận xét nhanh:
             </span>
-            <span class="text-[11px] text-ink-400">Chọn nhiều thẻ</span>
+            <span class="text-xs text-ink-400">Chọn nhiều thẻ</span>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -334,7 +334,7 @@ const handleSubmit = async () => {
             placeholder="Chia sẻ thêm cảm nhận của bạn về sự tận tâm, chuyên nghiệp, thời gian và chất lượng dịch vụ..."
             class="w-full p-3 bg-white border border-ink-200 rounded-xl text-xs text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20 transition-all placeholder:text-ink-400"
           ></textarea>
-          <div class="flex justify-end text-[11px] text-ink-400">
+          <div class="flex justify-end text-xs text-ink-400">
             {{ comment.length }}/500
           </div>
         </div>
