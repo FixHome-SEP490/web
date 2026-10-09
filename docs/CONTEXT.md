@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 00:58 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/console-ui-redesign
+> Cập nhật lần cuối: 2026-10-10 01:09 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/tech-step-details-ai-summary
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,8 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
 ### Khách hàng (`/app`)
 
@@ -245,6 +247,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 01:09 (UTC+7) | ToanAltF4 | feat/tech-step-details-ai-summary | Thợ: chi tiết từng bước, tóm tắt AI; sửa chuyển giữa hai form đặt lịch
 - 2026-10-10 00:58 (UTC+7) | ToanAltF4 | feat/console-ui-redesign | Làm lại giao diện console: tiêu đề, menu, bảng, lỗi tải thống nhất, bỏ mã thô
 - 2026-10-10 00:44 (UTC+7) | ToanAltF4 | feat/customer-ui-redesign | Khu khách hàng: mỗi hành động một lần, menu ⋯ cho huỷ, khung xám khi tải, gom thông tin vào một khối
 - 2026-10-10 00:40 (UTC+7) | ToanAltF4 | feat/technician-ui-redesign | Khu kỹ thuật viên gọn lại: trang công việc chỉ hiện việc cần làm, các bước sau Xem thêm, Huỷ đơn thay Rút khỏi đơn, bỏ nút trùng ở layout và các trang
