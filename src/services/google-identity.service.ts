@@ -129,7 +129,7 @@ export async function renderGoogleButton(
     theme: 'outline',
     size: 'large',
     shape: 'rectangular',
-    logo_alignment: 'left',
+    logo_alignment: 'center',
     text: options.text ?? 'signin_with',
     width: options.width,
     locale: 'vi',

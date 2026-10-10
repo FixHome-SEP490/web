@@ -1,91 +1,120 @@
 <script setup lang="ts">
-import { ShieldCheck } from 'lucide-vue-next';
+import { ShieldCheck, Star } from 'lucide-vue-next';
+import technicianImage from '../assets/auth-technician.png';
 </script>
 
-
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-brand-500 p-4 sm:p-8">
-    <div class="w-full max-w-6xl bg-white border border-slate-100 rounded-4xl sm:rounded-[2.5rem] flex flex-col lg:flex-row overflow-hidden shadow-2xl shadow-slate-200/50 min-h-150">
+  <div class="min-h-screen lg:h-screen lg:overflow-hidden flex bg-slate-50 font-sans">
+    <!-- Left Column (Visual/Brand) -->
+    <section class="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-100" aria-label="Giới thiệu FixHome">
+      <img
+        :src="technicianImage"
+        alt="Kỹ thuật viên FixHome đang làm việc tại nhà khách hàng"
+        class="absolute inset-0 h-full w-full object-cover object-[58%_center]"
+      />
+      <div class="absolute inset-0 bg-white/5"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-white/35 via-transparent to-transparent"></div>
       
-      <!-- Left Column (Light Side) -->
-      <div class="hidden lg:flex w-1/2 relative bg-slate-50 text-slate-900 p-12 xl:p-14 flex-col justify-between border-r border-slate-100">
-        <!-- Faint Grid Background -->
-        <div 
-          class="absolute inset-0 opacity-[0.03] pointer-events-none" 
-          style="background-image: linear-gradient(rgba(0, 0, 0, 1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 1) 1px, transparent 1px); background-size: 40px 40px;"
-        ></div>
-
-        <!-- Top: Logo & Label -->
-        <div class="relative z-10 flex items-center justify-between">
-          <router-link to="/" class="inline-flex items-center gap-3 group">
-            <img :src="'/logo.png'" alt="FixHome" class="w-11 h-11 object-contain rounded-xl shadow-xs group-hover:scale-105 transition-transform" />
-            <div>
-              <span class="text-xl font-extrabold tracking-tight"><span class="text-brand-600">Fix</span><span class="text-green-600">Home</span></span>
-              <span class="block text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none mt-0.5">Dịch vụ sửa nhà</span>
+      <!-- Content -->
+      <div class="relative z-10 w-full h-full p-10 xl:p-14 2xl:p-16 flex flex-col">
+        <!-- Logo -->
+        <router-link to="/" class="inline-flex items-center gap-3 self-start group rounded-2xl bg-white/95 p-2 pr-4 shadow-lg shadow-slate-950/10 backdrop-blur-sm">
+            <div class="bg-white p-1 rounded-xl">
+              <img :src="'/logo.png'" alt="FixHome" class="w-8 h-8 object-contain rounded-lg" />
             </div>
-          </router-link>
-          <div class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400">
-            Kỹ thuật gia đình
-          </div>
-        </div>
+            <span class="text-2xl font-black tracking-tight text-slate-900">Fix<span class="text-green-600">Home</span></span>
+        </router-link>
 
-        <!-- Middle: Headline -->
-        <div class="relative z-10 space-y-6 mt-16">
-          <div class="text-xs uppercase tracking-[0.15em] font-bold text-brand-600">
-            Dịch vụ kỹ thuật tại nhà
+        <!-- Message -->
+        <div class="mt-auto max-w-xl space-y-4 xl:space-y-5">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/75 border border-white/80 shadow-sm backdrop-blur-md">
+            <Star :size="14" class="text-amber-500 fill-amber-500" />
+            <span class="text-xs font-bold text-slate-700 tracking-wide uppercase">Dịch vụ tận tâm, đúng chuẩn</span>
           </div>
-          <h1 class="text-4xl xl:text-5xl font-extrabold tracking-tight leading-[1.15] text-slate-900">
-            Mọi thiết bị,<br/>được xử lý đúng<br/>chuẩn kỹ thuật.
+
+          <h1 class="max-w-lg text-4xl xl:text-5xl 2xl:text-[3.5rem] font-black tracking-tight leading-[1.08] text-slate-900">
+            An tâm sửa chữa,<br />vững lòng tổ ấm.
           </h1>
-          <p class="text-slate-600 text-sm xl:text-base leading-relaxed max-w-[90%] font-medium">
-            Kỹ thuật viên được duyệt hồ sơ, báo giá minh bạch và bảo hành rõ ràng cho từng hạng mục.
+          <p class="text-slate-700 text-base xl:text-lg max-w-lg font-medium leading-relaxed">
+            Kết nối cùng kỹ thuật viên đã xác thực, báo giá minh bạch và bảo hành rõ ràng cho mọi dịch vụ tại nhà.
           </p>
-        </div>
 
-        <!-- Bottom: Footer note -->
-        <div class="relative z-10 mt-16">
-          <div class="flex items-center gap-3 text-xs text-slate-500 font-bold">
-            <ShieldCheck :size="16" class="text-brand-600" />
-            <span>Báo giá trước khi sửa, bảo hành điện tử cho từng đơn</span>
+          <!-- Trust Badges -->
+          <div class="flex flex-wrap items-center gap-x-7 gap-y-3 pt-3 text-sm font-semibold text-slate-700">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-emerald-50/90 border border-emerald-200 flex items-center justify-center backdrop-blur-sm">
+                <ShieldCheck :size="17" class="text-emerald-600" />
+              </div>
+              <span>Bảo hành điện tử</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-blue-50/90 border border-blue-200 flex items-center justify-center backdrop-blur-sm">
+                <ShieldCheck :size="17" class="text-blue-600" />
+              </div>
+              <span>Thợ đã xác thực</span>
+            </div>
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- Right Column (Form Side) -->
-      <div class="w-full lg:w-1/2 bg-white p-6 sm:p-12 xl:p-16 flex flex-col">
-        <!-- Mobile Brand (shown on small screens) -->
-        <div class="lg:hidden flex justify-center mb-6">
-          <router-link to="/" class="inline-flex items-center gap-2.5">
-            <img :src="'/logo.png'" alt="FixHome" class="w-10 h-10 object-contain rounded-xl shadow-xs" />
-            <span class="text-2xl font-black tracking-tight"><span class="text-brand-600">Fix</span><span class="text-green-600">Home</span></span>
+    <!-- Right Column (Form) -->
+    <main class="w-full lg:w-1/2 flex flex-col bg-white lg:h-screen lg:overflow-hidden">
+      <div class="flex-1 min-h-0 flex flex-col px-6 sm:px-12 xl:px-20 2xl:px-24 py-6 lg:py-7 2xl:py-9 relative">
+
+        <!-- Mobile Logo -->
+        <div class="lg:hidden flex justify-center mb-8">
+          <router-link to="/" class="inline-flex items-center gap-2 group">
+            <div class="bg-slate-50 p-2 rounded-2xl shadow-sm group-hover:scale-105 transition-transform">
+              <img :src="'/logo.png'" alt="FixHome" class="w-8 h-8 object-contain rounded-lg" />
+            </div>
+            <span class="text-2xl font-black tracking-tight text-slate-900">Fix<span class="text-green-600">Home</span></span>
           </router-link>
         </div>
 
-        <!-- Top Auth Toggle -->
-        <div class="flex justify-center lg:justify-end mb-12">
-          <div class="inline-flex bg-slate-100 rounded-full p-1 w-full lg:w-auto">
+        <!-- Auth Toggle -->
+        <div class="flex justify-center lg:justify-end mb-5 2xl:mb-7 shrink-0">
+          <div class="inline-flex bg-slate-100/80 backdrop-blur-md rounded-full p-1.5 w-full sm:w-auto border border-slate-200/50 gap-1">
             <router-link 
               to="/login"
-              class="flex-1 lg:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-lg transition-colors"
-              :class="$route.path === '/login' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-900'"
+              class="flex-1 sm:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-full transition-all duration-200"
+              :class="$route.path === '/login' ? 'bg-white text-slate-900 shadow-sm shadow-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'"
             >
               Đăng nhập
             </router-link>
             <router-link 
               to="/register"
-              class="flex-1 lg:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-lg transition-colors"
-              :class="$route.path === '/register' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-900'"
+              class="flex-1 sm:w-32 py-2.5 px-4 text-center text-sm font-bold rounded-full transition-all duration-200"
+              :class="$route.path === '/register' ? 'bg-white text-slate-900 shadow-sm shadow-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'"
             >
               Đăng ký
             </router-link>
           </div>
         </div>
 
-        <!-- Dynamic Form Slot -->
-        <div class="flex-1 flex flex-col justify-center max-w-105 w-full mx-auto">
-          <router-view />
+        <!-- Dynamic Form -->
+        <div class="w-full max-w-[400px] mx-auto flex-1 min-h-0 flex flex-col justify-center">
+          <router-view v-slot="{ Component }">
+            <Transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </Transition>
+          </router-view>
         </div>
       </div>
-    </div>
+    </main>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+</style>

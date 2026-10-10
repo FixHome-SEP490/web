@@ -79,7 +79,10 @@ const passwordError = computed(() => {
   return '';
 });
 
+const isCooldown = ref(false);
+
 const handleRegister = async () => {
+  if (isCooldown.value || authStore.loading) return;
   touchedEmail.value = true;
   touchedFullName.value = true;
   touchedPhone.value = true;
@@ -100,6 +103,7 @@ const handleRegister = async () => {
     return toast.error('Mật khẩu xác nhận không khớp');
   }
 
+  isCooldown.value = true;
   errorMessage.value = '';
   try {
     const res = await authStore.register({
@@ -124,251 +128,191 @@ const handleRegister = async () => {
       'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.',
     );
   }
+  finally {
+    setTimeout(() => {
+      isCooldown.value = false;
+    }, 2000);
+  }
 };
 </script>
 
 <template>
-  <div class="w-full flex flex-col space-y-6">
-    <!-- Breadcrumb -->
-    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-      Trang chủ / Đăng ký
-    </div>
-
-    <!-- Role Selection Tabs -->
-    <div class="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
-      <button
-        type="button"
-        @click="selectedRole = 'customer'"
-        :class="[
-          'flex flex-col items-center justify-center py-2.5 px-3 rounded-xl transition-all text-center',
-          selectedRole === 'customer'
-            ? 'bg-white text-brand-700 shadow-xs border border-brand-200/80 font-bold'
-            : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-white/40'
-        ]"
-      >
-        <div class="flex items-center gap-1.5 mb-0.5">
-          <User :size="16" :class="selectedRole === 'customer' ? 'text-brand-600' : 'text-slate-400'" />
-          <span class="text-xs sm:text-sm">Khách hàng</span>
-        </div>
-        <span class="text-[10px] sm:text-[11px] text-slate-500 font-normal">Đặt thợ sửa chữa</span>
-      </button>
-
-      <button
-        type="button"
-        @click="selectedRole = 'technician'"
-        :class="[
-          'flex flex-col items-center justify-center py-2.5 px-3 rounded-xl transition-all text-center',
-          selectedRole === 'technician'
-            ? 'bg-white text-brand-700 shadow-xs border border-brand-200/80 font-bold'
-            : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-white/40'
-        ]"
-      >
-        <div class="flex items-center gap-1.5 mb-0.5">
-          <Wrench :size="16" :class="selectedRole === 'technician' ? 'text-brand-600' : 'text-slate-400'" />
-          <span class="text-xs sm:text-sm">Thợ sửa chữa</span>
-        </div>
-        <span class="text-[10px] sm:text-[11px] text-slate-500 font-normal">Gia nhập FixHome</span>
-      </button>
-    </div>
-
+  <div class="w-full flex flex-col">
     <!-- Header -->
-    <div class="space-y-1 text-left mb-2">
-      <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-        {{ selectedRole === 'technician' ? 'Đăng ký Tài khoản Thợ' : 'Tạo tài khoản khách hàng' }}
+    <div class="text-left mb-3 space-y-1">
+      <h2 class="text-[1.75rem] font-black text-slate-900 tracking-tight leading-tight">
+        Tạo tài khoản mới
       </h2>
-      <p class="text-sm text-slate-500 font-medium">
-        {{
-          selectedRole === 'technician'
-            ? 'Gia nhập đội ngũ thợ lành nghề FixHome, chủ động nhận việc và phát triển thu nhập.'
-            : 'Đặt lịch sửa chữa nhanh chóng và quản lý bảo hành dễ dàng.'
-        }}
+      <p class="h-5 flex items-center gap-1.5 text-[12px] text-slate-500 font-medium">
+        <ShieldCheck v-if="selectedRole === 'technician'" :size="14" class="shrink-0 text-blue-500" />
+        <span class="truncate">
+          {{ selectedRole === 'technician' ? 'Sau khi đăng ký, bổ sung hồ sơ chuyên môn và CCCD để xác thực.' : 'Đặt lịch sửa chữa nhanh chóng.' }}
+        </span>
       </p>
     </div>
 
-    <!-- Technician Onboarding Notice -->
-    <div
-      v-if="selectedRole === 'technician'"
-      class="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5 leading-relaxed"
-    >
-      <ShieldCheck :size="18" class="text-blue-600 shrink-0 mt-0.5" />
-      <div>
-        <strong class="font-bold">Quy trình đăng ký thợ gồm 2 giai đoạn:</strong>
-        <p class="text-blue-700 text-[11px] mt-0.5">
-          1. Đăng ký & xác thực email bằng OTP.
-          <br />
-          2. Điền thông tin cá nhân, chụp ảnh CCCD & khuôn mặt, chọn chuyên môn và địa chỉ hoạt động để được ban quản trị xét duyệt.
-        </p>
-      </div>
+    <!-- Role Selection (Pills) -->
+    <div class="flex items-center gap-3 mb-2.5">
+      <button
+        type="button"
+        @click="selectedRole = 'customer'"
+        class="flex-1 flex items-center justify-center gap-2 py-2 border rounded-xl text-[13px] font-bold transition-all duration-200"
+        :class="selectedRole === 'customer' ? 'bg-brand-50 border-brand-200 text-brand-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'"
+      >
+        <User :size="16" :class="selectedRole === 'customer' ? 'text-brand-600' : 'text-slate-400'" />
+        Khách hàng
+      </button>
+      <button
+        type="button"
+        @click="selectedRole = 'technician'"
+        class="flex-1 flex items-center justify-center gap-2 py-2 border rounded-xl text-[13px] font-bold transition-all duration-200"
+        :class="selectedRole === 'technician' ? 'bg-brand-50 border-brand-200 text-brand-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'"
+      >
+        <Wrench :size="16" :class="selectedRole === 'technician' ? 'text-brand-600' : 'text-slate-400'" />
+        Thợ sửa chữa
+      </button>
     </div>
 
-    <form class="space-y-5" @submit.prevent="handleRegister">
+    <form class="space-y-2.5" @submit.prevent="handleRegister">
       <!-- Full Name -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
-          Họ và tên <span class="text-red-500">*</span>
-        </label>
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Họ và tên <span class="text-red-500">*</span></label>
         <input
           v-model="fullName"
           @blur="touchedFullName = true"
           type="text"
           placeholder="Nguyễn Văn A"
-          class="w-full h-12 px-4 text-sm bg-white border rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+          class="w-full h-10 px-3.5 text-[13px] bg-slate-50/50 border rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
           :class="fullNameError ? 'border-red-500' : 'border-slate-200'"
         />
-        <p v-if="fullNameError" class="text-xs text-red-500 font-medium mt-1.5">{{ fullNameError }}</p>
-      </div>
-
-      <!-- Email -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
-          Email <span class="text-red-500">*</span>
-        </label>
-        <input
-          v-model="email"
-          @blur="touchedEmail = true"
-          type="email"
-          placeholder="customer@example.com"
-          class="w-full h-12 px-4 text-sm bg-white border rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
-          :class="emailError ? 'border-red-500' : 'border-slate-200'"
-        />
-        <p v-if="emailError" class="text-xs text-red-500 font-medium mt-1.5">{{ emailError }}</p>
+        <p v-if="fullNameError" class="text-[10px] leading-tight text-red-500 font-medium">{{ fullNameError }}</p>
       </div>
 
       <!-- Phone -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
-          Số điện thoại
-        </label>
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Số điện thoại</label>
         <input
           v-model="phoneNumber"
           @blur="touchedPhone = true"
           type="tel"
           placeholder="091 234 5678"
-          class="w-full h-12 px-4 text-sm bg-white border rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+          class="w-full h-10 px-3.5 text-[13px] bg-slate-50/50 border rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
           :class="phoneError ? 'border-red-500' : 'border-slate-200'"
         />
-        <p v-if="phoneError" class="text-xs text-red-500 font-medium mt-1.5">{{ phoneError }}</p>
+        <p v-if="phoneError" class="text-[10px] leading-tight text-red-500 font-medium">{{ phoneError }}</p>
+      </div>
+
+      <!-- Email -->
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Email <span class="text-red-500">*</span></label>
+        <input
+          v-model="email"
+          @blur="touchedEmail = true"
+          type="email"
+          placeholder="customer@example.com"
+          class="w-full h-10 px-3.5 text-[13px] bg-slate-50/50 border rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+          :class="emailError ? 'border-red-500' : 'border-slate-200'"
+        />
+        <p v-if="emailError" class="text-[10px] leading-tight text-red-500 font-medium">{{ emailError }}</p>
       </div>
 
       <!-- Password -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
-          Mật khẩu <span class="text-red-500">*</span>
-        </label>
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Mật khẩu <span class="text-red-500">*</span></label>
         <div class="relative">
           <input
             v-model="password"
             :type="showPassword ? 'text' : 'password'"
             @focus="isPasswordFocused = true"
             @blur="isPasswordFocused = false; touchedPassword = true"
-            placeholder="••••••••"
-            class="w-full h-12 pl-4 pr-11 text-sm bg-white border rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+            placeholder="Tạo mật khẩu"
+            class="w-full h-10 pl-3.5 pr-10 text-[13px] bg-slate-50/50 border rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             :class="passwordError ? 'border-red-500' : 'border-slate-200'"
           />
           <button
             type="button"
-            class="absolute right-4 top-[0.85rem] text-slate-400 hover:text-slate-600 transition-colors"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
             @click="showPassword = !showPassword"
           >
-            <component :is="showPassword ? EyeOff : Eye" :size="18" />
+            <component :is="showPassword ? EyeOff : Eye" :size="16" />
           </button>
 
-          <!-- Password Strength Tracker Popover -->
+          <!-- Password Strength Popover -->
           <Transition
             enter-active-class="transition ease-out duration-200"
-            enter-from-class="opacity-0 translate-y-2"
+            enter-from-class="opacity-0 translate-y-1"
             enter-to-class="opacity-100 translate-y-0"
             leave-active-class="transition ease-in duration-150"
             leave-from-class="opacity-100 translate-y-0"
-            leave-to-class="opacity-0 translate-y-2"
+            leave-to-class="opacity-0 translate-y-1"
           >
             <div 
               v-if="isPasswordFocused" 
-              class="absolute z-20 left-0 top-[calc(100%+0.5rem)] w-full bg-white border border-slate-200 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] p-4 pointer-events-none"
+              class="absolute z-20 left-0 top-[calc(100%+0.5rem)] w-[280px] bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 p-3 pointer-events-none"
             >
-              <div class="flex gap-1.5 mb-4">
+              <div class="flex gap-1 mb-2.5">
                 <div 
                   v-for="index in 5" 
                   :key="index"
-                  class="h-1.5 flex-1 rounded-full transition-colors"
-                  :style="{ backgroundColor: strengthScore >= index ? barColors[strengthScore - 1] : '#E5E7EB' }"
+                  class="h-1 flex-1 rounded-full transition-colors duration-300"
+                  :style="{ backgroundColor: strengthScore >= index ? barColors[strengthScore - 1] : '#E2E8F0' }"
                 ></div>
               </div>
-              <div class="flex flex-col gap-2.5">
-                <div class="flex items-center gap-2 text-xs">
-                  <component :is="passwordRules.minLength ? CheckCircle2 : Circle" :size="14" :class="passwordRules.minLength ? 'text-green-500' : 'text-slate-300'" />
-                  <span :class="passwordRules.minLength ? 'text-green-600 font-bold' : 'text-slate-500 font-medium'">Ít nhất 8 ký tự</span>
+              <div class="flex flex-col gap-1.5">
+                <div class="flex items-center gap-2 text-[11px]">
+                  <component :is="passwordRules.minLength ? CheckCircle2 : Circle" :size="12" :class="passwordRules.minLength ? 'text-green-600' : 'text-slate-400'" />
+                  <span :class="passwordRules.minLength ? 'text-slate-700 font-medium' : 'text-slate-500'">8+ ký tự</span>
                 </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <component :is="passwordRules.hasLower ? CheckCircle2 : Circle" :size="14" :class="passwordRules.hasLower ? 'text-green-500' : 'text-slate-300'" />
-                  <span :class="passwordRules.hasLower ? 'text-green-600 font-bold' : 'text-slate-500 font-medium'">1 chữ viết thường</span>
+                <div class="flex items-center gap-2 text-[11px]">
+                  <component :is="passwordRules.hasUpper && passwordRules.hasLower ? CheckCircle2 : Circle" :size="12" :class="passwordRules.hasUpper && passwordRules.hasLower ? 'text-green-600' : 'text-slate-400'" />
+                  <span :class="passwordRules.hasUpper && passwordRules.hasLower ? 'text-slate-700 font-medium' : 'text-slate-500'">Chữ hoa & chữ thường</span>
                 </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <component :is="passwordRules.hasUpper ? CheckCircle2 : Circle" :size="14" :class="passwordRules.hasUpper ? 'text-green-500' : 'text-slate-300'" />
-                  <span :class="passwordRules.hasUpper ? 'text-green-600 font-bold' : 'text-slate-500 font-medium'">1 chữ viết hoa</span>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <component :is="passwordRules.hasNumber ? CheckCircle2 : Circle" :size="14" :class="passwordRules.hasNumber ? 'text-green-500' : 'text-slate-300'" />
-                  <span :class="passwordRules.hasNumber ? 'text-green-600 font-bold' : 'text-slate-500 font-medium'">1 chữ số</span>
-                </div>
-                <div class="flex items-center gap-2 text-xs">
-                  <component :is="passwordRules.hasSpecial ? CheckCircle2 : Circle" :size="14" :class="passwordRules.hasSpecial ? 'text-green-500' : 'text-slate-300'" />
-                  <span :class="passwordRules.hasSpecial ? 'text-green-600 font-bold' : 'text-slate-500 font-medium'">1 ký tự đặc biệt</span>
+                <div class="flex items-center gap-2 text-[11px]">
+                  <component :is="passwordRules.hasNumber && passwordRules.hasSpecial ? CheckCircle2 : Circle" :size="12" :class="passwordRules.hasNumber && passwordRules.hasSpecial ? 'text-green-600' : 'text-slate-400'" />
+                  <span :class="passwordRules.hasNumber && passwordRules.hasSpecial ? 'text-slate-700 font-medium' : 'text-slate-500'">Số & ký tự đặc biệt (@, #...)</span>
                 </div>
               </div>
             </div>
           </Transition>
         </div>
-        <p v-if="passwordError" class="text-xs text-red-500 font-medium mt-1.5">{{ passwordError }}</p>
+        <p v-if="passwordError" class="text-[10px] leading-tight text-red-500 font-medium">{{ passwordError }}</p>
       </div>
 
       <!-- Confirm Password -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
-          Xác nhận mật khẩu <span class="text-red-500">*</span>
-        </label>
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Xác nhận mật khẩu <span class="text-red-500">*</span></label>
         <div class="relative">
           <input
             v-model="confirmPassword"
             :type="showPassword ? 'text' : 'password'"
-            placeholder="••••••••"
-            class="w-full h-12 pl-4 pr-11 text-sm bg-white border rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+            placeholder="Nhập lại mật khẩu"
+            class="w-full h-10 pl-3.5 pr-10 text-[13px] bg-slate-50/50 border rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             :class="(confirmPassword.length > 0 && confirmPassword !== password) ? 'border-red-500' : 'border-slate-200'"
           />
-          <button
-            type="button"
-            class="absolute right-4 top-[0.85rem] text-slate-400 hover:text-slate-600 transition-colors"
-            @click="showPassword = !showPassword"
-          >
-            <component :is="showPassword ? EyeOff : Eye" :size="18" />
-          </button>
         </div>
-        <p v-if="confirmPassword.length > 0 && confirmPassword !== password" class="text-xs text-red-500 font-medium mt-1.5">
+        <p v-if="confirmPassword.length > 0 && confirmPassword !== password" class="text-[10px] leading-tight text-red-500 font-medium">
           Mật khẩu xác nhận không khớp
         </p>
       </div>
 
       <button
         type="submit"
-        class="w-full h-12 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl transition-colors mt-2 shadow-md shadow-brand-500/20"
-        :disabled="authStore.loading"
+        class="w-full h-10 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-bold border border-slate-300 rounded-xl transition-all mt-3 flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
+        :disabled="authStore.loading || isCooldown"
+        :class="(authStore.loading || isCooldown) ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'"
       >
-        <span v-if="authStore.loading">Đang xử lý...</span>
-        <span v-else>Đăng ký tài khoản</span>
+        <span v-if="authStore.loading" class="w-4 h-4 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin"></span>
+        <span>{{ authStore.loading ? 'Đang xử lý...' : 'Đăng ký tài khoản' }}</span>
       </button>
     </form>
 
-    <GoogleSignInButton
-      text="signup_with"
-      @credential="handleGoogleCredential"
-      @error="(message: string) => (errorMessage = message)"
-    />
-
-    <div class="text-center text-xs text-slate-500 font-medium pt-4">
-      Đã có tài khoản?
-      <router-link to="/login" class="text-slate-900 hover:underline font-bold ml-1">
-        Đăng nhập
-      </router-link>
+    <div class="mt-4">
+      <GoogleSignInButton
+        text="signup_with"
+        @credential="handleGoogleCredential"
+        @error="(message: string) => (errorMessage = message)"
+        class="w-full"
+      />
     </div>
   </div>
 </template>
