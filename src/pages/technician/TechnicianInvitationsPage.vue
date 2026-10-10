@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Mail, Clock, MapPin, CheckCircle2, XCircle, ChevronRight, X } from 'lucide-vue-next';
+import { Mail, Clock, MapPin, Check, ChevronRight, X } from 'lucide-vue-next';
 import {
   FhButton,
-  FhCard,
   FhCountdown,
+  FhSkeleton,
 } from '../../components';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
+import { technicianProfileApi } from '../../api/technician-profile.api';
 import { sessionLabel } from '../../utils/booking-session';
 
 const invitationSession = (inv: InvitationItem) => sessionLabel({
@@ -35,9 +36,48 @@ const loadInvitations = async () => {
   }
 };
 
-onMounted(loadInvitations);
+// "Tự nhận việc" (PO 10/10/2026): new invitations are accepted for the technician. Switching it on
+// also takes the ones waiting now, so the list is reloaded.
+const autoAccept = ref<boolean | null>(null);
+const savingAutoAccept = ref(false);
+const autoAcceptError = ref('');
+const loadAutoAccept = async () => {
+  try {
+    autoAccept.value = (await technicianProfileApi.getMyProfile()).autoAcceptInvitations;
+  } catch {
+    autoAccept.value = null;
+  }
+};
+const toggleAutoAccept = async () => {
+  if (autoAccept.value === null || savingAutoAccept.value) return;
+  const next = !autoAccept.value;
+  savingAutoAccept.value = true;
+  autoAcceptError.value = '';
+  try {
+    autoAccept.value = (await technicianProfileApi.updateMyProfile({ autoAcceptInvitations: next })).autoAcceptInvitations;
+    if (next) await loadInvitations();
+  } catch {
+    autoAcceptError.value = 'Chưa đổi được chế độ tự nhận việc. Vui lòng thử lại.';
+  } finally {
+    savingAutoAccept.value = false;
+  }
+};
+
+onMounted(() => {
+  void loadInvitations();
+  void loadAutoAccept();
+});
 
 const detailInvitation = ref<InvitationItem | null>(null);
+
+const onKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && detailInvitation.value && !responding.value) detailInvitation.value = null;
+};
+watch(detailInvitation, (open) => {
+  if (open) window.addEventListener('keydown', onKeydown);
+  else window.removeEventListener('keydown', onKeydown);
+});
+onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 
 const urgencyLabel = (urgency?: string) => {
   switch (String(urgency).toLowerCase()) {
@@ -69,160 +109,184 @@ const handleDecline = async (inv: InvitationItem) => {
     alert('Chưa thể từ chối lời mời. Vui lòng thử lại.');
   }
 };
+
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Mail class="text-brand-600" :size="24" />
-          Hộp thư mời nhận việc
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Khách hàng đã chọn bạn vào danh sách đề xuất. Hãy phản hồi trước khi lời mời hết hạn.
-        </p>
+  <div class="max-w-4xl mx-auto space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
+        <span
+          v-if="!loading && !loadError && invitations.length > 0"
+          class="whitespace-nowrap text-sm font-medium font-num h-7 px-3 rounded-full bg-brand-50 text-brand-700 inline-flex items-center"
+        >
+          {{ invitations.length }} đang chờ
+        </span>
       </div>
-
-      <span class="whitespace-nowrap text-xs font-bold font-num px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
-        {{ invitations.length }} lời mời đang chờ
-      </span>
+      <button
+        v-if="autoAccept !== null"
+        type="button"
+        role="switch"
+        :aria-checked="autoAccept"
+        :disabled="savingAutoAccept"
+        class="inline-flex items-center gap-3 h-11 pl-4 pr-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-800 hover:bg-ink-50 disabled:opacity-60 whitespace-nowrap"
+        data-testid="auto-accept-toggle"
+        @click="toggleAutoAccept"
+      >
+        Tự nhận việc
+        <span
+          class="relative w-11 h-6 rounded-full transition-colors"
+          :class="autoAccept ? 'bg-brand-600' : 'bg-ink-200'"
+          aria-hidden="true"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white border transition-transform"
+            :class="autoAccept ? 'translate-x-5 border-white' : 'border-ink-300'"
+          />
+        </span>
+      </button>
     </div>
+    <p v-if="autoAcceptError" class="text-sm text-danger-700" role="alert">{{ autoAcceptError }}</p>
 
-    <div v-if="loading" class="text-center py-16 text-ink-400">
-      Đang kiểm tra thư mời...
+    <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải lời mời">
+      <div v-for="i in 2" :key="i" class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200 space-y-3">
+        <FhSkeleton width="30%" height="16px" />
+        <FhSkeleton width="60%" height="22px" />
+        <FhSkeleton width="80%" height="16px" />
+        <div class="flex justify-end gap-3 pt-1">
+          <FhSkeleton width="96px" height="44px" rounded="md" />
+        </div>
+      </div>
     </div>
 
     <div
       v-else-if="loadError"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3"
       role="alert"
     >
-      <span class="flex-1">{{ loadError }}</span>
-      <button class="font-semibold underline" type="button" @click="loadInvitations">Thử lại</button>
+      <span>{{ loadError }}</span>
+      <FhButton variant="secondary" size="sm" class="h-10" @click="loadInvitations">Thử lại</FhButton>
     </div>
 
-    <div v-else-if="invitations.length === 0" class="text-center py-16 bg-white rounded-[var(--radius-md)] border border-ink-200 space-y-2">
-      <Mail :size="40" class="mx-auto text-ink-300" />
-      <h3 class="text-sm font-bold text-ink-800">Không có lời mời nào đang chờ</h3>
-      <p class="text-xs text-ink-500">Khi có khách hàng ở khu vực của bạn cần thợ, thông báo sẽ hiển thị tại đây.</p>
+    <div v-else-if="invitations.length === 0" class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3">
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
+        <Mail :size="24" />
+      </div>
+      <h3 class="text-base font-semibold text-ink-900">Không có lời mời nào đang chờ</h3>
+      <p class="text-sm text-ink-500">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang Công việc.' : 'Lời mời mới sẽ hiện ở đây.' }}</p>
     </div>
 
+    <!-- Each invitation is its own decision, so its own card -->
     <div v-else class="space-y-4">
-      <FhCard
+      <article
         v-for="inv in invitations"
         :key="inv.id"
-        class="border-l-4 border-l-brand-600 space-y-4 cursor-pointer hover:border-brand-500 hover:shadow-md transition-all group"
-        @click="detailInvitation = inv"
+        class="rounded-2xl bg-white border border-ink-200 overflow-hidden"
+        :data-testid="`invitation-${inv.id}`"
       >
-        <!-- Top: TTL Countdown & Priority -->
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
-          <div class="flex items-center gap-2 text-xs">
-            <span class="font-bold text-brand-700">Ưu tiên số #{{ inv.priorityOrder }}</span>
-          </div>
-
-          <!-- Countdown Timer Component (P7.7) -->
-          <div class="flex items-center gap-2 text-xs">
-            <Clock :size="14" class="text-danger-500" />
-            <FhCountdown :expires-at="inv.expiresAt" />
-          </div>
-        </div>
-
-        <!-- Summary: service & address (always visible); click opens full-detail modal -->
+        <!-- Summary (service, area, session); opens the full detail -->
         <button
           type="button"
-          class="w-full space-y-2 text-left text-xs sm:text-sm"
+          class="w-full p-5 sm:p-6 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+          :class="focusRing"
           @click="detailInvitation = inv"
         >
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-600 transition-colors">
-              {{ inv.booking?.serviceName }}
-            </h3>
-            <span class="text-xs font-semibold text-brand-600 flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
-              Xem chi tiết <ChevronRight :size="14" />
+          <span class="flex-1 min-w-0 space-y-1.5">
+            <span class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span class="font-semibold text-brand-700 whitespace-nowrap">Ưu tiên số {{ inv.priorityOrder }}</span>
+              <FhCountdown :expires-at="inv.expiresAt" />
             </span>
-          </div>
-
-          <div class="text-xs text-ink-600 flex items-center gap-1.5">
-            <MapPin :size="14" class="text-brand-600 shrink-0" />
-            {{ inv.booking?.addressSummary }}
-          </div>
-          <div class="text-xs text-ink-600 flex items-center gap-1.5" data-testid="invitation-session">
-            <Clock :size="14" class="text-brand-600 shrink-0" />
-            Lịch hẹn: <strong class="font-semibold text-ink-900">{{ invitationSession(inv) }}</strong>
-          </div>
+            <span class="block font-semibold text-lg text-ink-900 text-balance">
+              {{ inv.booking?.serviceName }}
+            </span>
+            <span class="text-sm text-ink-600 flex items-start gap-1.5">
+              <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+              <span class="text-pretty">{{ inv.booking?.addressSummary }}</span>
+            </span>
+            <span class="text-sm text-ink-600 flex items-center gap-1.5" data-testid="invitation-session">
+              <Clock :size="15" class="text-ink-400 shrink-0" />
+              <strong class="font-semibold text-ink-900">{{ invitationSession(inv) }}</strong>
+            </span>
+          </span>
+          <ChevronRight :size="20" class="text-ink-400 shrink-0" aria-hidden="true" />
         </button>
 
-        <!-- Actions -->
-        <div class="pt-3 border-t border-ink-100 flex items-center justify-end gap-3">
-          <FhButton
-            variant="ghost"
-            size="md"
-            @click.stop="handleDecline(inv)"
-          >
-            <XCircle :size="16" class="mr-1.5 text-ink-400" /> Bỏ qua
+        <div class="px-5 sm:px-6 py-3 border-t border-ink-100 grid grid-cols-2 sm:flex sm:justify-end gap-2.5">
+          <FhButton variant="secondary" size="md" @click.stop="handleDecline(inv)">
+            Từ chối
           </FhButton>
-
-          <FhButton
-            variant="primary"
-            size="md"
-            :loading="responding"
-            @click.stop="handleAccept(inv)"
-          >
-            <CheckCircle2 :size="16" class="mr-1.5" /> Chấp nhận đơn này
+          <FhButton variant="primary" size="md" :loading="responding" @click.stop="handleAccept(inv)">
+            <Check :size="16" /> Chấp nhận đơn này
           </FhButton>
         </div>
-      </FhCard>
+      </article>
     </div>
 
-    <!-- Full-detail modal -->
+    <!-- Full detail -->
     <div
       v-if="detailInvitation"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4 overscroll-contain"
       @click.self="detailInvitation = null"
     >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl">
+      <div
+        class="bg-white rounded-[var(--radius-lg)] max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="invitation-detail-title"
+      >
         <div class="flex items-start justify-between gap-3">
-          <h3 class="text-base font-bold text-ink-900">{{ detailInvitation.booking?.serviceName }}</h3>
-          <button type="button" class="text-ink-400 hover:text-ink-700 shrink-0" @click="detailInvitation = null">
+          <h3 id="invitation-detail-title" class="text-lg font-semibold text-ink-900 text-balance">{{ detailInvitation.booking?.serviceName }}</h3>
+          <button
+            type="button"
+            class="w-10 h-10 -mr-2 -mt-2 rounded-xl text-ink-500 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center shrink-0"
+            :class="focusRing"
+            aria-label="Đóng"
+            @click="detailInvitation = null"
+          >
             <X :size="18" />
           </button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2 text-xs">
-          <span class="font-bold text-brand-700">Ưu tiên số #{{ detailInvitation.priorityOrder }}</span>
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="font-semibold text-brand-700 whitespace-nowrap">Ưu tiên số {{ detailInvitation.priorityOrder }}</span>
           <FhCountdown :expires-at="detailInvitation.expiresAt" />
-        </div>
-
-        <div class="text-xs text-ink-600 flex items-center gap-1.5">
-          <MapPin :size="14" class="text-brand-600 shrink-0" />
-          {{ detailInvitation.booking?.addressSummary }}
-        </div>
-
-        <div v-if="urgencyLabel(detailInvitation.booking?.urgency) || (detailInvitation.booking?.quantity ?? 0) > 1" class="flex flex-wrap items-center gap-2">
           <span
             v-if="urgencyLabel(detailInvitation.booking?.urgency)"
-            class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-danger-50 text-danger-700 border border-danger-200"
+            class="h-6 px-2 rounded-lg text-xs font-medium bg-danger-50 text-danger-700 inline-flex items-center whitespace-nowrap"
           >
             {{ urgencyLabel(detailInvitation.booking?.urgency) }}
           </span>
-          <span v-if="detailInvitation.booking?.quantity && detailInvitation.booking.quantity > 1" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ink-100 text-ink-600">
-            SL: {{ detailInvitation.booking.quantity }}
+          <span
+            v-if="detailInvitation.booking?.quantity && detailInvitation.booking.quantity > 1"
+            class="h-6 px-2 rounded-lg text-xs font-medium bg-ink-100 text-ink-600 inline-flex items-center whitespace-nowrap"
+          >
+            Số lượng: {{ detailInvitation.booking.quantity }}
           </span>
         </div>
 
-        <p class="text-sm text-ink-800" data-testid="invitation-detail-session">Lịch hẹn: <strong>{{ invitationSession(detailInvitation) }}</strong></p>
-        <p class="text-xs text-ink-600 p-3 rounded bg-ink-50 border border-ink-200 leading-relaxed">
-          Trước khi nhận đơn, bạn chỉ xem được dịch vụ, khu vực và buổi hẹn dự kiến.
-          Mô tả chi tiết, hình ảnh và địa chỉ chính xác chỉ được cung cấp khi bạn nhận đơn thành công.
+        <div class="space-y-1.5 text-sm">
+          <p class="text-ink-700 flex items-start gap-1.5">
+            <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+            <span class="text-pretty">{{ detailInvitation.booking?.addressSummary }}</span>
+          </p>
+          <p class="text-ink-700 flex items-center gap-1.5" data-testid="invitation-detail-session">
+            <Clock :size="15" class="text-ink-400 shrink-0" />
+            <strong class="font-semibold text-ink-900">{{ invitationSession(detailInvitation) }}</strong>
+          </p>
+        </div>
+
+        <p class="text-sm text-ink-600 text-pretty">
+          Mô tả, ảnh và địa chỉ chính xác hiện sau khi bạn nhận đơn.
         </p>
-        <div class="flex gap-2 pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" class="flex-1" @click="handleDecline(detailInvitation)">
-            <XCircle :size="16" class="mr-1.5 text-ink-400" /> Bỏ qua
+
+        <div class="grid grid-cols-2 gap-2.5 pt-4 border-t border-ink-100">
+          <FhButton variant="secondary" size="md" @click="handleDecline(detailInvitation)">
+            Từ chối
           </FhButton>
-          <FhButton variant="primary" size="md" class="flex-1" :loading="responding" @click="handleAccept(detailInvitation)">
-            <CheckCircle2 :size="16" class="mr-1.5" /> Chấp nhận đơn này
+          <FhButton variant="primary" size="md" :loading="responding" @click="handleAccept(detailInvitation)">
+            <Check :size="16" /> Chấp nhận đơn này
           </FhButton>
         </div>
       </div>

@@ -108,7 +108,7 @@ async function respond(decision: 'agree' | 'dispute') {
     <p v-if="claim.resolutionNotes" class="p-2 bg-ink-50 rounded-[var(--radius-sm)] text-ink-800">
       <span class="font-semibold">Phản hồi:</span> {{ claim.resolutionNotes }}
     </p>
-    <p class="text-[11px] text-ink-500">
+    <p class="text-xs text-ink-500">
       Gửi lúc {{ formatDateTimeVN(claim.submittedAt) }}
       <template v-if="claim.technician"> · Kỹ thuật viên: {{ claim.technician.fullName }}</template>
     </p>

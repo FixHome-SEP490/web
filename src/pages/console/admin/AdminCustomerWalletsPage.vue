@@ -3,8 +3,11 @@
 // with a reason (PO 09/10/2026). FixHome bears refunds; this is the tool to
 // fix a mistake, the customer is notified and the change is audited.
 import { computed, onMounted, ref } from 'vue';
-import { Search, WalletCards } from 'lucide-vue-next';
-import { FhButton, FhCard, FhConfirmDialog, FhEmptyState, FhMoney, FhSkeleton } from '../../../components';
+import { Search } from 'lucide-vue-next';
+import { FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleSearchField, consoleTextarea } from '../../../components/console/console-ui';
 import {
   adminCustomerWalletsApi,
   type AdminCustomerWalletDetail,
@@ -52,7 +55,7 @@ async function load(next = 1) {
     page.value = result.meta.page;
     totalPages.value = result.meta.totalPages;
   } catch (err) {
-    error.value = userFacingError(err, 'Chưa tải được danh sách ví, thử lại sau.');
+    error.value = userFacingError(err, CONSOLE_LOAD_ERROR);
   } finally {
     loading.value = false;
   }
@@ -66,7 +69,7 @@ async function open(userId: string) {
     detail.value = await adminCustomerWalletsApi.detail(userId);
   } catch (err) {
     detail.value = null;
-    detailError.value = userFacingError(err, 'Chưa tải được ví của khách.');
+    detailError.value = userFacingError(err, CONSOLE_LOAD_ERROR);
   } finally {
     detailLoading.value = false;
   }
@@ -113,75 +116,83 @@ onMounted(() => load(1));
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2"><WalletCards :size="24" class="text-ink-600" /> Ví khách hàng</h1>
-      <p class="text-xs text-ink-500 mt-1">Số dư khách nạp hoặc được hoàn, dùng để trả đơn và không rút ra được. Tổng số dư đang giữ: <strong class="text-ink-900" data-testid="wallets-total"><FhMoney :amount="totalBalance" /></strong></p>
-    </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Ví khách hàng">
+      <template #badges>
+        <span class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-sm text-ink-600" title="Tổng số dư khách đang có trong ví FixHome">
+          Đang giữ <strong class="text-ink-900" data-testid="wallets-total"><FhMoney :amount="totalBalance" /></strong>
+        </span>
+      </template>
+    </ConsolePageHeader>
 
     <form class="flex flex-wrap items-center gap-2" @submit.prevent="load(1)">
-      <input
-        v-model="search"
-        type="search"
-        maxlength="100"
-        placeholder="Tên, email hoặc số điện thoại"
-        aria-label="Tìm khách hàng"
-        data-testid="wallet-search"
-        class="flex-1 min-w-[200px] rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm"
-      />
-      <label class="flex items-center gap-1.5 text-xs text-ink-700">
-        <input v-model="withBalance" type="checkbox" data-testid="wallet-with-balance" @change="load(1)" /> Chỉ ví còn tiền
+      <div class="relative w-full min-w-0 sm:w-72">
+        <Search :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
+        <input
+          v-model="search"
+          type="search"
+          maxlength="100"
+          placeholder="Tên, email, số điện thoại"
+          aria-label="Tìm khách hàng"
+          data-testid="wallet-search"
+          :class="consoleSearchField"
+        />
+      </div>
+      <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+        <input v-model="withBalance" type="checkbox" class="h-4 w-4" data-testid="wallet-with-balance" @change="load(1)" /> Chỉ ví còn tiền
       </label>
-      <FhButton type="submit" :loading="loading"><Search :size="15" class="mr-1" /> Tìm</FhButton>
+      <FhButton type="submit" variant="secondary" size="sm" :loading="loading">Tìm</FhButton>
     </form>
-    <p v-if="error" class="text-xs text-danger-700" role="alert">{{ error }}</p>
+    <p v-if="error" class="text-sm text-danger-700" role="alert">{{ error }}</p>
 
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <FhCard>
-        <div v-if="loading" class="p-4"><FhSkeleton height="36px" :count="4" /></div>
-        <FhEmptyState v-else-if="rows.length === 0" title="Không có khách nào" description="Không có ví khách nào khớp." />
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white" aria-label="Danh sách ví khách">
+        <div v-if="loading" class="space-y-3 p-4"><FhSkeleton height="36px" :count="5" /></div>
+        <p v-else-if="rows.length === 0" class="px-5 py-10 text-center text-sm text-ink-500">Không có khách nào khớp.</p>
         <template v-else>
-          <p class="px-1 pb-2 text-xs text-ink-500">{{ total }} khách</p>
+          <div class="flex items-center justify-between border-b border-ink-100 bg-ink-25 px-4 py-2.5 text-xs font-medium text-ink-500">
+            <span><span class="font-num">{{ total }}</span> khách</span>
+            <span>Số dư</span>
+          </div>
           <ul class="divide-y divide-ink-100" data-testid="wallet-rows">
             <li v-for="r in rows" :key="r.userId">
               <button
                 type="button"
-                class="w-full text-left px-2 py-2.5 rounded-lg hover:bg-ink-50 flex justify-between gap-3"
+                class="flex w-full justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50 focus:outline-none focus-visible:bg-ink-50"
                 :class="detail?.customer.id === r.userId ? 'bg-brand-50' : ''"
+                :aria-current="detail?.customer.id === r.userId ? 'true' : undefined"
                 :data-testid="`wallet-row-${r.userId}`"
                 @click="open(r.userId)"
               >
                 <span class="min-w-0">
-                  <span class="block text-sm font-semibold text-ink-900">{{ r.fullName }}</span>
-                  <span class="block text-xs text-ink-500 break-all">{{ r.email }}<template v-if="r.phoneNumber"> · {{ r.phoneNumber }}</template></span>
+                  <span class="block truncate text-sm font-medium text-ink-900">{{ r.fullName }}</span>
+                  <span class="block truncate text-xs text-ink-500">{{ r.email }}<template v-if="r.phoneNumber"> · <span class="font-num">{{ r.phoneNumber }}</span></template></span>
                 </span>
-                <span class="shrink-0 text-sm font-bold font-num text-ink-900"><FhMoney :amount="r.balance" /></span>
+                <span class="shrink-0"><FhMoney :amount="r.balance" /></span>
               </button>
             </li>
           </ul>
-          <div v-if="totalPages > 1" class="flex items-center justify-between pt-3 text-xs text-ink-500">
-            <FhButton variant="secondary" size="sm" :disabled="page <= 1" @click="load(page - 1)">Trước</FhButton>
-            <span>Trang {{ page }}/{{ totalPages }}</span>
-            <FhButton variant="secondary" size="sm" :disabled="page >= totalPages" @click="load(page + 1)">Sau</FhButton>
+          <div class="border-t border-ink-100 px-4 py-2">
+            <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="load" />
           </div>
         </template>
-      </FhCard>
+      </section>
 
-      <FhCard>
-        <div v-if="detailLoading && !detail" class="p-4"><FhSkeleton height="28px" :count="6" /></div>
-        <p v-else-if="detailError" class="text-xs text-danger-700">{{ detailError }}</p>
-        <FhEmptyState v-else-if="!detail" title="Chọn một khách" description="Số dư, lịch sử và điều chỉnh sẽ hiện ở đây." />
-        <div v-else class="space-y-5 text-sm" data-testid="wallet-detail">
-          <section>
-            <h2 class="text-lg font-bold text-ink-900">{{ detail.customer.fullName }}</h2>
-            <p class="text-xs text-ink-500 break-all">{{ detail.customer.email }}<template v-if="detail.customer.phoneNumber"> · {{ detail.customer.phoneNumber }}</template></p>
-            <p class="mt-2 text-2xl font-bold font-num text-ink-900" data-testid="wallet-balance"><FhMoney :amount="detail.balance" /></p>
-          </section>
+      <section class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-5" aria-label="Chi tiết ví">
+        <div v-if="detailLoading && !detail" class="space-y-3"><FhSkeleton height="28px" :count="6" /></div>
+        <p v-else-if="detailError" class="text-sm text-danger-700">{{ detailError }}</p>
+        <p v-else-if="!detail" class="py-10 text-center text-sm text-ink-500">Chọn một khách để xem số dư, lịch sử và điều chỉnh.</p>
+        <div v-else class="space-y-6 text-sm" data-testid="wallet-detail">
+          <div>
+            <h2 class="text-lg font-semibold text-ink-900">{{ detail.customer.fullName }}</h2>
+            <p class="truncate text-sm text-ink-500">{{ detail.customer.email }}<template v-if="detail.customer.phoneNumber"> · <span class="font-num">{{ detail.customer.phoneNumber }}</span></template></p>
+            <p class="mt-2" data-testid="wallet-balance"><FhMoney :amount="detail.balance" emphasis /></p>
+          </div>
 
-          <section>
-            <h3 class="font-bold text-ink-900">Điều chỉnh số dư</h3>
-            <form class="mt-2 space-y-3" data-testid="adjust-form" @submit.prevent="askAdjust">
-              <div class="flex gap-4 text-xs text-ink-700">
+          <div class="border-t border-ink-100 pt-5">
+            <h3 class="font-semibold text-ink-900">Điều chỉnh số dư</h3>
+            <form class="mt-3 space-y-3" data-testid="adjust-form" @submit.prevent="askAdjust">
+              <div class="flex gap-4 text-sm text-ink-700">
                 <label class="flex items-center gap-1.5"><input v-model="adjustType" type="radio" value="CREDIT" data-testid="adjust-credit" /> Cộng tiền</label>
                 <label class="flex items-center gap-1.5"><input v-model="adjustType" type="radio" value="DEBIT" data-testid="adjust-debit" /> Trừ tiền</label>
               </div>
@@ -191,10 +202,12 @@ onMounted(() => load(1));
                 min="1"
                 max="100000000"
                 step="1"
+                inputmode="numeric"
                 placeholder="Số tiền (₫)"
                 aria-label="Số tiền điều chỉnh"
                 data-testid="adjust-amount"
-                class="w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm"
+                :class="consoleField"
+                class="w-full font-num"
               />
               <textarea
                 v-model="reason"
@@ -203,33 +216,33 @@ onMounted(() => load(1));
                 placeholder="Lý do, khách sẽ đọc được (tối thiểu 10 ký tự)"
                 aria-label="Lý do điều chỉnh"
                 data-testid="adjust-reason"
-                class="w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm"
+                :class="consoleTextarea"
               />
-              <p v-if="formError" class="text-xs text-danger-700" role="alert">{{ formError }}</p>
-              <p v-if="saved" class="text-xs text-success-700" data-testid="adjust-saved">{{ saved }}</p>
+              <p v-if="formError" class="text-sm text-danger-700" role="alert">{{ formError }}</p>
+              <p v-if="saved" class="text-sm text-success-700" data-testid="adjust-saved">{{ saved }}</p>
               <FhButton type="submit" size="sm" data-testid="adjust-submit">Điều chỉnh</FhButton>
             </form>
-          </section>
+          </div>
 
-          <section>
-            <h3 class="font-bold text-ink-900">Lịch sử</h3>
-            <p v-if="!detail.transactions.length" class="text-xs text-ink-500">Chưa có giao dịch.</p>
-            <ul v-else class="mt-1 text-xs divide-y divide-ink-100" data-testid="wallet-history">
-              <li v-for="t in detail.transactions" :key="t.id" class="flex justify-between gap-3 py-1.5">
+          <div class="border-t border-ink-100 pt-5">
+            <h3 class="font-semibold text-ink-900">Lịch sử</h3>
+            <p v-if="!detail.transactions.length" class="mt-1 text-sm text-ink-500">Chưa có giao dịch.</p>
+            <ul v-else class="mt-1 divide-y divide-ink-100" data-testid="wallet-history">
+              <li v-for="t in detail.transactions" :key="t.id" class="flex justify-between gap-3 py-2.5">
                 <span class="min-w-0">
-                  <span class="block font-semibold text-ink-800">{{ customerWalletTypeLabels[t.type] ?? t.type }}</span>
-                  <span v-if="t.description" class="block text-ink-500 break-words">{{ t.description }}</span>
-                  <span class="block text-ink-400">{{ vnDateTimeString(t.createdAt) }}</span>
+                  <span class="block font-medium text-ink-800">{{ customerWalletTypeLabels[t.type] ?? 'Giao dịch ví' }}</span>
+                  <span v-if="t.description" class="block break-words text-xs text-ink-500">{{ t.description }}</span>
+                  <span class="block whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateTimeString(t.createdAt) }}</span>
                 </span>
                 <span class="shrink-0 text-right font-num">
-                  <span class="block font-bold" :class="isIncomingWalletTransaction(t) ? 'text-success-700' : 'text-ink-900'">{{ isIncomingWalletTransaction(t) ? '+' : '−' }}<FhMoney :amount="t.amount" /></span>
-                  <span class="block text-ink-400">Còn <FhMoney :amount="t.balanceAfter" /></span>
+                  <span class="block whitespace-nowrap font-semibold" :class="isIncomingWalletTransaction(t) ? 'text-success-700' : 'text-ink-900'">{{ isIncomingWalletTransaction(t) ? '+' : '−' }}<FhMoney :amount="t.amount" /></span>
+                  <span class="block whitespace-nowrap text-xs text-ink-500">Còn <FhMoney :amount="t.balanceAfter" /></span>
                 </span>
               </li>
             </ul>
-          </section>
+          </div>
         </div>
-      </FhCard>
+      </section>
     </div>
 
     <FhConfirmDialog

@@ -22,6 +22,8 @@ export interface BookingItem {
   slot?: BookingSlot | null;
   /** What the customer wants the technician to know, apart from the problem. */
   customerNote?: string | null;
+  /** Set only when the customer booked through the AI flow. */
+  aiSummary?: AiBookingSummary | null;
   mediaUrls?: string[];
   media?: BookingMedia[];
   invitations?: BookingInvitation[];
@@ -44,6 +46,24 @@ export interface BookingInvitation {
   status: BookingInvitationStatus;
   invitedAt: string;
   expiresAt: string | null;
+}
+
+/**
+ * What the assistant concluded before the customer booked (frozen on the booking when it is created
+ * from the AI flow). Shown to the assigned technician; null when the booking did not come from the AI.
+ */
+export interface AiBookingSummary {
+  deviceName?: string | null;
+  customerText?: string | null;
+  suspectedFaults?: string[];
+  suggestedActions?: string[];
+  conclusion?: string | null;
+  priceMin?: number | null;
+  priceMax?: number | null;
+  requiresAssessment?: boolean | null;
+  recommendedServiceName?: string | null;
+  photoCount?: number;
+  recordedAt?: string;
 }
 
 export interface BookingMedia {

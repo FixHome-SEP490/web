@@ -11,7 +11,9 @@ const {
   push,
   route,
   alert,
+  normalizeForUpload,
 } = vi.hoisted(() => ({
+  normalizeForUpload: vi.fn(),
   uploadBookingPhoto: vi.fn(),
   legacyUpload: vi.fn(),
   createBooking: vi.fn(),
@@ -22,6 +24,12 @@ const {
   alert: vi.fn(),
 }));
 
+// jsdom cannot decode pictures: the shrink step is mocked; by default it cannot read the file,
+// so the wizard falls back to sending a JPG/PNG/WebP under 10 MB as it is.
+vi.mock('../src/utils/image-for-ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/utils/image-for-ai')>()),
+  normalizeForUpload,
+}));
 vi.mock('../src/api/media.api', () => ({
   ALLOWED_MEDIA_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
   MAX_MEDIA_SIZE_BYTES: 10 * 1024 * 1024,
@@ -110,6 +118,7 @@ beforeEach(() => {
   createBooking.mockResolvedValue({ id: 'booking-id' });
   push.mockReset();
   alert.mockReset();
+  normalizeForUpload.mockReset().mockResolvedValue(null);
   vi.stubGlobal('alert', alert);
   createObjectURL.mockReset().mockReturnValue('blob:booking-photo');
   revokeObjectURL.mockReset();
@@ -237,6 +246,34 @@ describe('customer New Booking private photo flow', () => {
     await flushPromises();
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('uploads the shrunk JPEG instead of the camera original, a HEIC with no type included', async () => {
+    const big = new File(['heic-bytes'], 'IMG_0001.HEIC', { type: '' });
+    const small = new File(['jpeg'], 'IMG_0001.jpg', { type: 'image/jpeg' });
+    normalizeForUpload.mockResolvedValue(small);
+    uploadBookingPhoto.mockResolvedValue({ uploadId: 'shrunk', mimeType: 'image/jpeg', sizeBytes: 4 });
+    const wrapper = await renderWizard();
+    await selectPhoto(wrapper, big);
+    await flushPromises();
+    expect(normalizeForUpload).toHaveBeenCalledWith(big);
+    expect(uploadBookingPhoto).toHaveBeenCalledWith(small);
+    expect(alert).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('refuses a photo over 30 MB and one the browser cannot read and the server would not take', async () => {
+    const huge = new File([new Uint8Array(30 * 1024 * 1024 + 1)], 'huge.jpg', { type: 'image/jpeg' });
+    const heic = new File(['x'], 'IMG_0002.heic', { type: 'image/heic' });
+    const wrapper = await renderWizard();
+    await selectPhoto(wrapper, huge);
+    await selectPhoto(wrapper, heic);
+    expect(uploadBookingPhoto).not.toHaveBeenCalled();
+    expect(alert.mock.calls.map((c) => c[0])).toEqual([
+      'Ảnh "huge.jpg" quá lớn (trên 30 MB).',
+      'Chưa đọc được ảnh "IMG_0002.heic". Vui lòng chọn ảnh JPG hoặc PNG.',
+    ]);
+    wrapper.unmount();
   });
 
   it('validates MIME and size and caps a multiple selection at five photos', async () => {

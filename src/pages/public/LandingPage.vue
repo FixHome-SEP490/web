@@ -21,22 +21,22 @@ const questions = [
   {
     question: 'Chưa biết thiết bị gặp lỗi gì, tôi có đặt lịch được không?',
     answer:
-      'Có. Bạn có thể mô tả biểu hiện của thiết bị và gửi ảnh để AI hỗ trợ phân tích sơ bộ trong quá trình đặt lịch. Nếu AI chưa đưa ra gợi ý phù hợp, bạn vẫn có thể chủ động tự chọn dịch vụ.',
+      'Có. Mô tả biểu hiện và gửi ảnh để AI gợi ý sơ bộ. Nếu AI chưa gợi ý được, bạn tự chọn dịch vụ.',
   },
   {
     question: 'Chi phí sửa chữa được xác nhận khi nào?',
     answer:
-      'Bạn có thể xem giá tham khảo trong danh mục dịch vụ. Với dịch vụ cần khảo sát thực tế, kỹ thuật viên sẽ kiểm tra trực tiếp và gửi báo giá chi tiết để bạn duyệt trước khi làm. Mọi chi phí phát sinh cũng cần có sự xác nhận của bạn.',
+      'Kỹ thuật viên kiểm tra tại nhà rồi gửi báo giá, bạn duyệt xong mới bắt đầu sửa. Chi phí phát sinh cũng phải được bạn duyệt.',
   },
   {
     question: 'Tôi có cần đăng nhập để xem thông tin dịch vụ không?',
     answer:
-      'Bạn có thể tra cứu danh mục dịch vụ và tìm hiểu quy trình mà không cần đăng nhập. Khi gửi yêu cầu đặt lịch, bạn chỉ cần đăng nhập nhanh để hệ thống lưu hồ sơ và tiện theo dõi tiến độ đơn sửa chữa.',
+      'Không. Bạn xem dịch vụ và quy trình tự do; chỉ cần đăng nhập khi đặt lịch để theo dõi đơn.',
   },
   {
     question: 'Gợi ý của AI có thay thế việc kiểm tra trực tiếp không?',
     answer:
-      'Không. AI chỉ hỗ trợ nhận biết sơ bộ và định hướng ban đầu từ hình ảnh hoặc mô tả của bạn. Nguyên nhân chính xác và phương án xử lý cuối cùng luôn được kỹ thuật viên kiểm tra và xác nhận tại nhà.',
+      'Không. AI chỉ gợi ý sơ bộ. Nguyên nhân và cách sửa do kỹ thuật viên kiểm tra và xác nhận tại nhà.',
   },
 ];
 
@@ -71,35 +71,35 @@ onUnmounted(() => {
 
 <template>
   <div ref="pageRoot" class="landing-page bg-white">
-    <!-- 1. HERO SECTION (White background) -->
+    <!--
+      Reading order (PO 09/10/2026), the same for every role:
+      1 hero, 2-3 the two ways to start (pick a service / let the AI help),
+      4 what happens next, 5 why trust it, 6 the app, 7 questions, 8 last call.
+      The header navigation follows the same order.
+    -->
     <LandingHero />
 
-    <!-- 2. SERVICES SECTION (White background) -->
     <div id="services" class="story-section-reveal">
       <LandingServices />
     </div>
 
-    <!-- 3. HOW IT WORKS (Very light neutral background bg-ink-25) -->
-    <div class="story-section-reveal">
-      <LandingHowItWorks />
-    </div>
-
-    <!-- 4. AI-ASSISTED PRELIMINARY ANALYSIS (White background) -->
     <div class="story-section-reveal">
       <LandingDiagnosis />
     </div>
 
-    <!-- 5. TECHNICIAN TRUST (Warm light neutral background bg-ink-50) -->
+    <div class="story-section-reveal">
+      <LandingHowItWorks />
+    </div>
+
     <div class="story-section-reveal">
       <LandingTrust />
     </div>
 
-    <!-- 6. MOBILE APP & MULTI-DEVICE SHOWCASE -->
     <div class="story-section-reveal">
       <LandingMobileApp />
     </div>
 
-    <!-- 7. FAQ (White background) -->
+
     <section id="questions" class="landing-section bg-white story-section-reveal" aria-labelledby="questions-title">
       <div class="landing-container grid gap-8 lg:grid-cols-[1fr_1.4fr] lg:gap-16">
         <div>
@@ -109,9 +109,6 @@ onUnmounted(() => {
             <br class="hidden lg:block" />
             có thể muốn biết
           </h2>
-          <p class="mt-3 text-sm sm:text-base text-ink-600 leading-relaxed max-w-sm">
-            Giải đáp thấu đáo những băn khoăn phổ biến về quy trình đặt thợ, báo giá và tính năng AI.
-          </p>
           <router-link to="/pricing-policy" class="landing-text-link mt-6">
             Tìm hiểu chính sách giá minh bạch
             <ArrowRight :size="18" aria-hidden="true" />
@@ -138,18 +135,16 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- 7. FINAL CTA (Light FixHome blue bg-brand-50) -->
     <section class="py-16 sm:py-20 bg-brand-50/50 border-t border-brand-100/80 story-section-reveal" aria-labelledby="final-title">
       <div class="landing-container">
         <div class="rounded-2xl border border-brand-100 bg-white p-8 sm:p-12 lg:p-16 text-center shadow-xs">
-          <p class="landing-eyebrow">Để ngôi nhà luôn là nơi an tâm</p>
           <h2 id="final-title" class="final-title">
             Nhà có việc cần sửa?
             <br />
             Bắt đầu cùng FixHome.
           </h2>
-          <p class="mx-auto mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-ink-600">
-            Mô tả sự cố, chọn lịch phù hợp. Chúng tôi giúp bạn kết nối với kỹ thuật viên đã được xác minh.
+          <p class="mx-auto mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-ink-600 text-balance">
+            Mô tả sự cố, chọn lịch, kỹ thuật viên đã xác minh sẽ tới tận nhà.
           </p>
 
           <div class="mt-8 flex flex-col justify-center gap-3.5 sm:flex-row sm:items-center">

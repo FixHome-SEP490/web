@@ -9,13 +9,16 @@ import apiClient from './client';
 /** The service refuses a fourth image. */
 export const AI_MAX_IMAGES = 3;
 
-/** Comfortably above the 640px the detector sees, far below what a camera takes. */
-export const AI_IMAGE_WIDTH = 1280;
-export const AI_IMAGE_QUALITY = 0.7;
+/**
+ * Longest edge sent to the AI: the service shrinks every photo to 1024px anyway (IMAGE_MAX_EDGE),
+ * so anything larger is bytes on the wire for nothing. Still well above the 640px the detector sees.
+ */
+export const AI_IMAGE_EDGE = 1024;
+export const AI_IMAGE_QUALITY = 0.8;
 
 /** What to try when the connection will not carry the first attempt. */
-export const AI_RETRY_WIDTH = 640;
-export const AI_RETRY_QUALITY = 0.45;
+export const AI_RETRY_EDGE = 640;
+export const AI_RETRY_QUALITY = 0.5;
 
 /**
  * The model's budget is eight seconds and measured round trips are 0.3 to 3.3

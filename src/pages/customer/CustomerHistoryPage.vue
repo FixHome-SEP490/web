@@ -3,8 +3,8 @@
 // cancelled orders, newest first, with what each one cost.
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { History, MapPin, Wrench, ChevronRight, RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhCostBreakdown, FhMoney, FhStatusPill } from '../../components';
+import { History, ChevronRight, RefreshCw } from 'lucide-vue-next';
+import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
@@ -59,16 +59,8 @@ onMounted(() => load(1));
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-        <History class="text-brand-600" :size="24" />
-        Lịch sử sửa chữa
-      </h1>
-      <p class="text-sm text-ink-500 mt-1 text-pretty">
-        Các đơn sửa chữa đã hoàn thành hoặc đã hủy của bạn, kèm chi phí từng đơn.
-      </p>
-    </div>
+  <div class="max-w-4xl mx-auto space-y-5 pb-12">
+    <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Lịch sử sửa chữa</h1>
 
     <div class="grid grid-cols-3 gap-1 p-1 bg-white rounded-2xl border border-ink-200 text-sm font-medium" role="tablist">
       <button
@@ -91,65 +83,58 @@ onMounted(() => load(1));
       <FhButton variant="secondary" size="sm" @click="load(1)">Thử lại</FhButton>
     </div>
 
-    <p v-if="loading" role="status" class="py-16 text-center text-sm text-ink-500">Đang tải lịch sử sửa chữa…</p>
+    <div v-if="loading" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải lịch sử sửa chữa">
+      <div v-for="i in 4" :key="i" class="px-5 py-4 space-y-2">
+        <FhSkeleton width="55%" height="18px" />
+        <FhSkeleton width="35%" height="14px" />
+      </div>
+    </div>
 
     <div
       v-else-if="!error && items.length === 0"
       data-testid="history-empty"
-      class="py-14 px-6 bg-white rounded-2xl border border-ink-200 text-center space-y-3"
+      class="py-12 px-6 bg-white rounded-2xl border border-ink-200 text-center space-y-2"
     >
-      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto">
+      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-3">
         <History :size="24" />
       </div>
       <p class="text-base font-semibold text-ink-900">
         {{ filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
       </p>
-      <p class="text-sm text-ink-500">Đơn sửa chữa sẽ xuất hiện ở đây khi hoàn thành hoặc bị hủy.</p>
-      <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">Đặt lịch sửa chữa</FhButton>
+      <p class="text-sm text-ink-500">Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.</p>
     </div>
 
-    <ul v-else class="space-y-4">
-      <li v-for="item in items" :key="item.orderId">
-        <article
-          class="p-5 rounded-2xl bg-white border border-ink-200 hover:border-ink-300 transition-colors cursor-pointer space-y-4"
-          :data-testid="`history-item-${item.orderId}`"
-          @click="router.push(`/app/orders/${item.orderId}`)"
-        >
-          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-ink-100">
-            <span class="flex items-center gap-3 text-sm">
-              <span class="font-num text-ink-600 whitespace-nowrap">{{ item.code }}</span>
-              <span class="text-ink-500 whitespace-nowrap">
-                {{ isCancelled(item) ? 'Hủy' : 'Hoàn thành' }} {{ finishedAt(item) ? vnDateString(finishedAt(item)!) : '—' }}
-              </span>
-            </span>
+    <ul v-else-if="items.length > 0" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+      <li
+        v-for="item in items"
+        :key="item.orderId"
+        :data-testid="`history-item-${item.orderId}`"
+        role="link"
+        tabindex="0"
+        class="px-5 py-4 flex items-center gap-3 cursor-pointer hover:bg-ink-50 transition-colors focus-visible:outline-none focus-visible:bg-ink-50"
+        @click="router.push(`/app/orders/${item.orderId}`)"
+        @keydown.enter="router.push(`/app/orders/${item.orderId}`)"
+      >
+        <div class="min-w-0 flex-1 space-y-1">
+          <div class="flex items-start justify-between gap-3">
+            <h2 class="text-base font-semibold text-ink-900 text-pretty">{{ item.serviceName || 'Dịch vụ sửa chữa' }}</h2>
             <FhStatusPill :status="isCancelled(item) ? 'CANCELLED' : 'COMPLETED'" />
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="space-y-1.5 min-w-0">
-              <h3 class="text-base font-semibold text-ink-900">{{ item.serviceName || 'Dịch vụ sửa chữa' }}</h3>
-              <p v-if="item.addressSummary" class="text-sm text-ink-600 flex items-start gap-1.5">
-                <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
-                <span class="text-pretty">{{ item.addressSummary }}</span>
-              </p>
-              <p v-if="item.technicianName" class="text-sm text-ink-600 flex items-center gap-1.5">
-                <Wrench :size="15" class="text-ink-400 shrink-0" />
-                Kỹ thuật viên: <span class="font-medium text-ink-900">{{ item.technicianName }}</span>
-              </p>
-            </div>
-            <FhCostBreakdown v-if="!isCancelled(item)" :labor-total="item.laborTotal" :parts-total="item.partsTotal" />
-          </div>
-
-          <div class="pt-3 border-t border-ink-100 flex items-center justify-between gap-3">
-            <span class="text-sm text-ink-500">
-              Tổng thanh toán:
-              <span class="ml-1 text-base font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="item.grandTotal" /></span>
-            </span>
-            <span class="text-sm font-medium text-brand-600 inline-flex items-center gap-1 whitespace-nowrap">
-              Xem chi tiết <ChevronRight :size="16" />
-            </span>
-          </div>
-        </article>
+          <p class="text-sm text-ink-500 truncate">
+            <span class="font-num">{{ item.code }}</span>
+            · {{ isCancelled(item) ? 'Hủy' : 'Hoàn thành' }} <span class="font-num whitespace-nowrap">{{ finishedAt(item) ? vnDateString(finishedAt(item)!) : '—' }}</span>
+            <template v-if="item.technicianName"> · {{ item.technicianName }}</template>
+          </p>
+          <p v-if="item.addressSummary" class="text-sm text-ink-500 truncate" :title="item.addressSummary">{{ item.addressSummary }}</p>
+          <p v-if="!isCancelled(item) || Number(item.grandTotal) > 0" class="text-sm text-ink-600 flex flex-wrap items-baseline gap-x-3 pt-0.5">
+            <span class="text-base font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="item.grandTotal" /></span>
+            <template v-if="!isCancelled(item)">
+              <span class="whitespace-nowrap">Công <FhMoney :amount="item.laborTotal" /></span>
+              <span class="whitespace-nowrap">Linh kiện <FhMoney :amount="item.partsTotal" /></span>
+            </template>
+          </p>
+        </div>
+        <ChevronRight :size="18" class="text-ink-400 shrink-0" />
       </li>
     </ul>
 

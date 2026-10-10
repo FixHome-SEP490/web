@@ -6,25 +6,25 @@ const trustPillars = [
     icon: ShieldCheck,
     title: 'Xác minh danh tính & chứng chỉ (KYC)',
     description:
-      'Hồ sơ căn cước, lý lịch và chứng chỉ kỹ thuật được đội ngũ FixHome kiểm duyệt nghiêm ngặt trước khi kích hoạt.',
+      'FixHome duyệt giấy tờ tuỳ thân và chứng chỉ trước khi thợ được nhận việc.',
   },
   {
     icon: Award,
     title: 'Đúng chuyên môn theo từng loại thiết bị',
     description:
-      'Hệ thống điều phối chính xác kỹ thuật viên có kinh nghiệm chuyên sâu về hãng máy và sự cố của bạn.',
+      'Thợ chỉ nhận việc thuộc kỹ năng đã được duyệt.',
   },
   {
     icon: Star,
     title: 'Đánh giá thực tế từ khách hàng',
     description:
-      'Chỉ khách hàng có đơn sửa chữa đã hoàn tất mới được đánh giá, giúp bạn an tâm về thái độ và tay nghề.',
+      'Chỉ khách có đơn đã hoàn tất mới được đánh giá.',
   },
   {
     icon: History,
     title: 'Cam kết bảo hành sau sửa chữa',
     description:
-      'Bảo hành công việc rõ ràng sau khi nghiệm thu. Hỗ trợ kiểm tra lại nếu vấn đề tương tự phát sinh.',
+      'Có bảo hành sau khi đơn hoàn tất; lỗi lặp lại thì yêu cầu kiểm tra lại.',
   },
 ];
 </script>
@@ -40,9 +40,6 @@ const trustPillars = [
           <br />
           Đúng chuẩn tay nghề.
         </h2>
-        <p class="landing-description mt-3">
-          Tại FixHome, an toàn và sự an tâm của gia đình bạn luôn được đặt lên hàng đầu trong mỗi lượt phục vụ.
-        </p>
 
         <ul class="mt-8 space-y-6">
           <li v-for="item in trustPillars" :key="item.title" class="flex items-start gap-4">
@@ -58,7 +55,7 @@ const trustPillars = [
 
         <div class="mt-8 pt-4 border-t border-ink-200/60">
           <router-link to="/for-technicians" class="landing-text-link">
-            Bạn là kỹ thuật viên? Tìm hiểu cách gia nhập FixHome
+            Bạn là kỹ thuật viên? Gia nhập FixHome
             <ArrowRight :size="18" aria-hidden="true" />
           </router-link>
         </div>
@@ -89,9 +86,7 @@ const trustPillars = [
           </div>
           <div>
             <p class="text-sm font-semibold text-ink-900">Kỹ thuật viên đã xác minh</p>
-            <p class="mt-0.5 text-xs text-ink-600">
-              Công nghệ kết nối người phù hợp. Con người mang đến sự an tâm và tay nghề chuẩn mực.
-            </p>
+            <p class="mt-0.5 text-xs text-ink-600">Hồ sơ và tay nghề được duyệt trước khi nhận việc.</p>
           </div>
         </div>
       </div>

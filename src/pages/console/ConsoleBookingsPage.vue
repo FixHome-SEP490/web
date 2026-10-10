@@ -1,27 +1,36 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { UserPlus, Star, MapPin, Clock, AlertTriangle, RefreshCw } from 'lucide-vue-next';
-import { FhStatusPill, FhButton, FhSkeleton, FhTable, type TableColumn, FhMoney } from '../../components';
+import { Star } from 'lucide-vue-next';
+import { FhStatusPill, FhButton, FhSkeleton, FhEmptyState, FhMoney } from '../../components';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
+import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import { consoleTextarea } from '../../components/console/console-ui';
+import { bookingStatusLabel } from '../../components/console/console-labels';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const activeTab = ref<'actionable' | 'expired'>('actionable');
 
-const columns: TableColumn[] = [
-  { key: 'service', label: 'Dịch vụ & Địa chỉ' },
-  { key: 'time', label: 'Thời gian hẹn', width: '250px' },
-  { key: 'status', label: 'Trạng thái', width: '150px' },
-  { key: 'actions', label: 'Thao tác', width: '120px', align: 'right' },
+const columns: ConsoleColumn[] = [
+  { key: 'service', label: 'Dịch vụ' },
+  { key: 'time', label: 'Giờ hẹn' },
+  { key: 'status', label: 'Trạng thái', hideBelow: 'xl' },
+  { key: 'actions', label: '', align: 'right' },
 ];
 
 const loading = ref(true);
-const loadError = ref('');
+const loadError = ref(false);
 const bookings = ref<BookingItem[]>([]);
 
 async function loadBookings() {
   loading.value = true;
-  loadError.value = '';
+  loadError.value = false;
   try {
     const [submitted, matching, closed] = await Promise.all([
       bookingsApi.getAllForStaff('SUBMITTED'),
@@ -33,7 +42,7 @@ async function loadBookings() {
     // buckets by time regardless of status, so this just restores overdue visibility.
     bookings.value = [...submitted, ...matching, ...closed];
   } catch {
-    loadError.value = 'Không thể tải danh sách booking chờ ghép thợ. Vui lòng thử lại.';
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -65,6 +74,10 @@ const expiredPage = ref(1);
 function paginate<T>(list: T[], page: number) {
   return list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 }
+const tabs = computed(() => [
+  { key: 'actionable' as const, label: 'Cần gán thợ', count: loading.value ? null : actionableBookings.value.length },
+  { key: 'expired' as const, label: 'Đã quá hạn', count: loading.value ? null : expiredBookings.value.length },
+]);
 const actionableTotalPages = computed(() => Math.max(1, Math.ceil(actionableBookings.value.length / PAGE_SIZE)));
 const expiredTotalPages = computed(() => Math.max(1, Math.ceil(expiredBookings.value.length / PAGE_SIZE)));
 const actionablePageItems = computed(() => paginate(actionableBookings.value, actionablePage.value));
@@ -97,7 +110,7 @@ async function openAssign(booking: BookingItem) {
   showAssignModal.value = true;
 
   if (isExpired(booking)) {
-    candidatesError.value = `Khung giờ hẹn của booking này (${vnDateTimeString(booking.preferredEndAt || booking.preferredAt)}) đã qua nên không thợ nào còn đủ điều kiện. Không thể gán thợ cho khung giờ đã trôi qua — liên hệ khách để họ đặt lại lịch mới (rebook).`;
+    candidatesError.value = `Giờ hẹn ${vnDateTimeString(booking.preferredEndAt || booking.preferredAt)} đã qua, không gán thợ được nữa. Liên hệ khách để đặt lịch mới.`;
     return;
   }
 
@@ -105,7 +118,7 @@ async function openAssign(booking: BookingItem) {
   try {
     candidates.value = await bookingsApi.getCandidates(booking.id);
   } catch {
-    candidatesError.value = 'Không tải được danh sách thợ phù hợp cho booking này.';
+    candidatesError.value = 'Chưa tải được danh sách thợ, vui lòng thử lại.';
   } finally {
     candidatesLoading.value = false;
   }
@@ -125,7 +138,7 @@ async function confirmAssign(candidate: TechnicianCandidate) {
     showAssignModal.value = false;
     bookings.value = bookings.value.filter((b) => b.id !== assignBooking.value?.id);
   } catch {
-    candidatesError.value = 'Không thể gán thợ này. Có thể thợ đã hết điều kiện nhận việc, hãy thử lại hoặc chọn thợ khác.';
+    candidatesError.value = 'Không gán được thợ này. Thợ có thể đã hết điều kiện nhận việc, hãy chọn thợ khác.';
   } finally {
     assigningId.value = '';
   }
@@ -135,200 +148,129 @@ onMounted(loadBookings);
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight flex items-center gap-2">
-          <UserPlus class="text-brand-600" :size="24" />
-          <span>Gán thợ thủ công</span>
-        </h1>
-        <p class="text-xs sm:text-sm text-ink-500 mt-1">
-          Booking chưa có thợ nhận việc (hết lượt mời tuần tự hoặc chưa gửi shortlist). SM/Admin có thể gán thợ trực tiếp.
-        </p>
-      </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Gán thợ">
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem @click="loadBookings">Làm mới danh sách</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
 
-      <div class="flex items-center gap-2">
-        <FhButton variant="secondary" size="sm" @click="loadBookings">
-          <RefreshCw :size="14" class="mr-1.5" />
-          Làm mới
-        </FhButton>
-      </div>
-    </div>
+    <ConsoleTabs v-model="activeTab" :tabs="tabs" />
 
-    <!-- Tab Headers -->
-    <div class="flex items-center border-b border-ink-200 gap-6 text-sm font-extrabold">
-      <button
-        type="button"
-        class="pb-3 border-b-2 transition-all flex items-center gap-2"
-        :class="[
-          activeTab === 'actionable'
-            ? 'border-brand-600 text-brand-600'
-            : 'border-transparent text-ink-500 hover:text-ink-800'
-        ]"
-        @click="activeTab = 'actionable'"
-      >
-        <span>Cần gán thợ</span>
-        <span class="px-2 py-0.5 rounded-full text-xs font-num font-bold bg-ink-100 text-ink-700">
-          {{ actionableBookings.length }}
-        </span>
-      </button>
+    <ConsoleLoadError v-if="loadError" @retry="loadBookings" />
 
-      <button
-        type="button"
-        class="pb-3 border-b-2 transition-all flex items-center gap-2"
-        :class="[
-          activeTab === 'expired'
-            ? 'border-brand-600 text-brand-600'
-            : 'border-transparent text-ink-500 hover:text-ink-800'
-        ]"
-        @click="activeTab = 'expired'"
-      >
-        <span>Đã quá hạn</span>
-        <span class="px-2 py-0.5 rounded-full text-xs font-num font-bold bg-ink-100 text-ink-700">
-          {{ expiredBookings.length }}
-        </span>
-      </button>
-    </div>
-
-    <div
-      v-if="loadError"
-      class="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800 flex items-center gap-2 font-bold"
-    >
-      <AlertTriangle :size="16" /> {{ loadError }}
-    </div>
-    <!-- TAB 1: ACTIONABLE -->
-    <div v-if="activeTab === 'actionable'" class="space-y-4">
-      <FhTable
+    <template v-else-if="activeTab === 'actionable'">
+      <ConsoleTable
         :columns="columns"
         :rows="actionablePageItems"
         :loading="loading"
-        empty-text="Mọi booking hiện đều đã được ghép thợ hoặc đang trong hàng đợi mời tuần tự."
+        empty-text="Không có yêu cầu nào cần gán thợ."
       >
         <template #cell-service="{ row }">
-          <div class="font-extrabold text-sm text-ink-900">{{ row.serviceName }}</div>
-          <div class="text-[11px] text-ink-500 flex items-start gap-1 mt-1">
-            <MapPin :size="12" class="shrink-0 mt-0.5 text-brand-500" />
-            <span class="line-clamp-2">{{ row.addressSummary }}</span>
+          <div class="max-w-80 min-w-40">
+            <div class="font-medium text-ink-900">{{ row.serviceName }}</div>
+            <div class="truncate text-xs text-ink-500" :title="row.addressSummary">{{ row.addressSummary }}</div>
           </div>
         </template>
         <template #cell-time="{ row }">
-          <div class="text-xs font-bold text-ink-900 flex items-center gap-1.5">
-            <Clock :size="13" class="text-brand-600 shrink-0" />
-            <span>{{ vnDateTimeString(row.preferredAt) }}</span>
-          </div>
-          <div class="text-[11px] text-brand-600 font-semibold mt-0.5 ml-5">
-            {{ relativeTime(row.preferredAt) }}
-          </div>
+          <div class="whitespace-nowrap font-num text-ink-900">{{ vnDateTimeString(row.preferredAt) }}</div>
+          <div class="whitespace-nowrap text-xs text-ink-500">{{ relativeTime(row.preferredAt) }}</div>
         </template>
         <template #cell-status="{ row }">
-          <FhStatusPill :status="row.status" />
+          <FhStatusPill :status="row.status" :label="bookingStatusLabel(row.status)" />
         </template>
         <template #cell-actions="{ row }">
-          <FhButton variant="primary" size="sm" @click="openAssign(row)">
-            <UserPlus :size="13" class="mr-1" /> Gán thợ
-          </FhButton>
+          <FhButton variant="primary" size="sm" @click="openAssign(row)">Gán thợ</FhButton>
         </template>
-      </FhTable>
+      </ConsoleTable>
+      <ConsolePagination v-model:page="actionablePage" :total-pages="actionableTotalPages" />
+    </template>
 
-      <div v-if="actionableTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
-        <span>Trang {{ actionablePage }} / {{ actionableTotalPages }}</span>
-        <div class="flex items-center gap-2">
-          <FhButton variant="secondary" size="sm" :disabled="actionablePage <= 1" @click="actionablePage--">Trước</FhButton>
-          <FhButton variant="secondary" size="sm" :disabled="actionablePage >= actionableTotalPages" @click="actionablePage++">Sau</FhButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 2: EXPIRED -->
-    <div v-if="activeTab === 'expired'" class="space-y-4 opacity-75 hover:opacity-100 transition-opacity">
-      <FhTable
+    <template v-else>
+      <ConsoleTable
         :columns="columns"
         :rows="expiredPageItems"
         :loading="loading"
-        empty-text="Không có booking nào quá hạn."
+        empty-text="Không có yêu cầu nào quá hạn."
       >
         <template #cell-service="{ row }">
-          <div class="font-extrabold text-sm text-ink-900">{{ row.serviceName }}</div>
-          <div class="text-[11px] text-ink-500 flex items-start gap-1 mt-1">
-            <MapPin :size="12" class="shrink-0 mt-0.5 text-ink-400" />
-            <span class="line-clamp-2">{{ row.addressSummary }}</span>
+          <div class="max-w-80 min-w-40">
+            <div class="font-medium text-ink-700">{{ row.serviceName }}</div>
+            <div class="truncate text-xs text-ink-500" :title="row.addressSummary">{{ row.addressSummary }}</div>
           </div>
         </template>
         <template #cell-time="{ row }">
-          <div class="text-xs font-bold text-ink-600 flex items-center gap-1.5 line-through decoration-ink-300">
-            <Clock :size="13" class="shrink-0" />
-            <span>{{ vnDateTimeString(row.preferredAt) }}</span>
-          </div>
-          <div class="text-[11px] text-rose-600 font-bold mt-0.5 flex items-center gap-1">
-            <AlertTriangle :size="11" />
-            {{ relativeTime(row.preferredAt) }}
-          </div>
+          <div class="whitespace-nowrap font-num text-ink-500 line-through decoration-ink-300">{{ vnDateTimeString(row.preferredAt) }}</div>
+          <div class="whitespace-nowrap text-xs text-danger-600">{{ relativeTime(row.preferredAt) }}</div>
         </template>
         <template #cell-status="{ row }">
-          <FhStatusPill :status="row.status" />
+          <FhStatusPill :status="row.status" :label="bookingStatusLabel(row.status)" />
         </template>
         <template #cell-actions>
-          <span class="text-[10px] text-ink-400 font-semibold italic">Chờ khách đặt lại</span>
+          <span class="whitespace-nowrap text-sm text-ink-500">Chờ khách đặt lại</span>
         </template>
-      </FhTable>
+      </ConsoleTable>
+      <ConsolePagination v-model:page="expiredPage" :total-pages="expiredTotalPages" />
+    </template>
 
-      <div v-if="expiredTotalPages > 1" class="flex items-center justify-between text-xs text-ink-500 pt-1">
-        <span>Trang {{ expiredPage }} / {{ expiredTotalPages }}</span>
-        <div class="flex items-center gap-2">
-          <FhButton variant="secondary" size="sm" :disabled="expiredPage <= 1" @click="expiredPage--">Trước</FhButton>
-          <FhButton variant="secondary" size="sm" :disabled="expiredPage >= expiredTotalPages" @click="expiredPage++">Sau</FhButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- Assign Modal -->
+    <!-- Assign dialog -->
     <div
       v-if="showAssignModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="assign-title"
+      @keydown.esc="showAssignModal = false"
     >
       <div class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[85vh] overflow-y-auto">
-        <h3 class="text-base font-bold text-ink-900">Gán thợ cho: {{ assignBooking?.serviceName || assignBooking?.description }}</h3>
+        <h3 id="assign-title" class="text-base font-semibold text-ink-900">Gán thợ: {{ assignBooking?.serviceName || assignBooking?.description }}</h3>
 
-        <textarea
-          v-model="assignReason"
-          rows="2"
-          placeholder="Lý do gán thợ thủ công (bắt buộc, phục vụ audit log)..."
-          class="w-full p-2.5 bg-white border border-ink-200 rounded text-xs"
-        ></textarea>
+        <label class="block text-sm font-medium text-ink-700">
+          Lý do gán thủ công
+          <textarea
+            v-model="assignReason"
+            rows="2"
+            placeholder="Bắt buộc"
+            class="mt-1.5"
+            :class="consoleTextarea"
+          ></textarea>
+        </label>
 
-        <p v-if="candidatesError" class="text-xs text-danger-600 font-semibold">{{ candidatesError }}</p>
+        <p v-if="candidatesError" class="text-sm text-danger-600" role="alert">{{ candidatesError }}</p>
 
         <div v-if="candidatesLoading" class="space-y-2">
           <FhSkeleton height="56px" :count="3" />
         </div>
         <FhEmptyState
           v-else-if="candidates.length === 0"
-          title="Không có thợ nào đủ điều kiện"
-          description="Không tìm thấy kỹ thuật viên phù hợp khu vực/kỹ năng/khung giờ cho booking này."
+          title="Không có thợ phù hợp"
+          description="Chưa có kỹ thuật viên phù hợp khu vực, kỹ năng và giờ hẹn."
         />
-        <div v-else class="space-y-2">
-          <div
+        <ul v-else class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200">
+          <li
             v-for="c in candidates"
             :key="c.id"
-            class="p-3 rounded-[var(--radius-sm)] bg-ink-50 border border-ink-200 flex items-center justify-between gap-3"
+            class="flex items-center justify-between gap-3 px-3 py-2.5"
           >
-            <div>
-              <div class="text-xs font-bold text-ink-900">{{ c.fullName }}</div>
-              <div class="flex items-center gap-2 text-[11px] text-ink-500 mt-0.5">
-                <span v-if="hasRating(c.averageRating, c.ratingCount)" class="flex items-center gap-0.5"><Star :size="11" class="fill-amber-400 text-amber-400" /> {{ ratingLabel(c.averageRating, c.ratingCount) }} ({{ c.ratingCount }})</span>
-                <span v-else>Chưa có đánh giá</span>
-                <span v-if="c.distanceKm != null">~{{ c.distanceKm.toFixed(1) }} km</span>
-                <span v-if="c.listedLaborPrice"><FhMoney :amount="c.listedLaborPrice" /></span>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-medium text-ink-900">{{ c.fullName }}</div>
+              <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
+                <span v-if="hasRating(c.averageRating, c.ratingCount)" class="inline-flex items-center gap-0.5 whitespace-nowrap"><Star :size="11" class="fill-amber-400 text-amber-400" /> {{ ratingLabel(c.averageRating, c.ratingCount) }} ({{ c.ratingCount }})</span>
+                <span v-else class="whitespace-nowrap">Chưa có đánh giá</span>
+                <span v-if="c.distanceKm != null" class="whitespace-nowrap">~{{ c.distanceKm.toFixed(1) }}&nbsp;km</span>
+                <span v-if="c.listedLaborPrice" class="whitespace-nowrap"><FhMoney :amount="c.listedLaborPrice" /></span>
               </div>
             </div>
             <FhButton variant="primary" size="sm" :disabled="assigningId === c.id" @click="confirmAssign(c)">
               Chọn thợ này
             </FhButton>
-          </div>
-        </div>
+          </li>
+        </ul>
 
-        <div class="flex justify-end pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showAssignModal = false">Đóng</FhButton>
+        <div class="flex justify-end pt-2">
+          <FhButton variant="secondary" size="sm" @click="showAssignModal = false">Đóng</FhButton>
         </div>
       </div>
     </div>

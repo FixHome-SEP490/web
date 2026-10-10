@@ -1,27 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  Package,
-  Plus,
-  Pencil,
-  PowerOff,
-  Power,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Eye,
-  History,
-} from 'lucide-vue-next';
-import {
-  FhButton,
-  FhTable,
-  FhStatusPill,
-  FhConfirmDialog,
-  FhSkeleton,
-  type TableColumn,
-} from '../../../components';
+import { Plus, X } from 'lucide-vue-next';
+import { FhButton, FhMoney, FhStatusPill, FhConfirmDialog } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
+import ConsoleSearch from '../../../components/console/ConsoleSearch.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel, consoleTextarea } from '../../../components/console/console-ui';
+import { userFacingError } from '../../../utils/user-facing-error';
 import {
   adminPartsApi,
   type FixHomePart,
@@ -31,19 +21,20 @@ import {
 import { vnDateString } from '../../../utils/vn-time';
 
 // ── Table columns ──────────────────────────────────────────────────────────
-const columns: TableColumn[] = [
-  { key: 'sku', label: 'SKU', width: '110px' },
-  { key: 'name', label: 'Tên linh kiện' },
-  { key: 'sellingPrice', label: 'Giá bán (VNĐ)', width: '140px' },
-  { key: 'warranty', label: 'Bảo hành', width: '120px' },
-  { key: 'status', label: 'Trạng thái', width: '120px' },
-  { key: 'actions', label: 'Thao tác', width: '120px' },
+const columns: ConsoleColumn[] = [
+  { key: 'name', label: 'Linh kiện' },
+  { key: 'sku', label: 'Mã SKU', hideBelow: 'xl' },
+  { key: 'sellingPrice', label: 'Giá bán', align: 'right' },
+  { key: 'warranty', label: 'Bảo hành', hideBelow: 'xl' },
+  { key: 'status', label: 'Trạng thái', hideBelow: 'lg' },
+  { key: 'actions', label: '', align: 'right' },
 ];
 
 // ── List state ─────────────────────────────────────────────────────────────
 const parts = ref<FixHomePart[]>([]);
 const loading = ref(true);
 const error = ref('');
+const loadError = ref('');
 const successMessage = ref('');
 const searchQuery = ref('');
 const activeFilter = ref<'ALL' | 'true' | 'false'>('ALL');
@@ -53,45 +44,19 @@ const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 let latestRequest = 0;
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredParts = computed<(FixHomePart & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: pageSize }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      name: '',
-      sku: '',
-      sellingPrice: 0,
-      isActive: true,
-      createdAt: '',
-      updatedAt: '',
-    } as unknown as FixHomePart & { _isSkeleton: boolean }));
-  }
-  return parts.value;
-});
-
 const router = useRouter();
 const detailPart = ref<FixHomePart | null>(null);
 const openDetail = (part: FixHomePart) => {
   detailPart.value = part;
 };
 
-function getErrorMessage(reason: unknown, fallback: string): string {
-  if (typeof reason === 'object' && reason !== null && 'response' in reason) {
-    const res = (reason as {
-      response?: { data?: { message?: unknown; error?: { message?: unknown } } };
-    }).response;
-    if (typeof res?.data?.error?.message === 'string') return res.data.error.message;
-    if (typeof res?.data?.message === 'string') return res.data.message;
-  }
-  return fallback;
-}
+// Plain Vietnamese reasons from the server are kept; codes and English never show.
+const getErrorMessage = (reason: unknown, fallback: string) => userFacingError(reason, fallback);
 
 const loadParts = async () => {
   const requestId = ++latestRequest;
   loading.value = true;
-  error.value = '';
+  loadError.value = '';
   try {
     const response = await adminPartsApi.getParts({
       page: page.value,
@@ -106,7 +71,7 @@ const loadParts = async () => {
     if (requestId !== latestRequest) return;
     parts.value = [];
     total.value = 0;
-    error.value = getErrorMessage(reason, 'Không thể tải danh sách linh kiện từ Backend.');
+    loadError.value = getErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -128,10 +93,6 @@ watch([searchQuery, activeFilter], () => {
 watch(page, (next, prev) => {
   if (next !== prev) void loadParts();
 });
-
-// ── Format helpers ─────────────────────────────────────────────────────────
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat('vi-VN').format(value);
 
 
 // ── Activate / Deactivate ──────────────────────────────────────────────────
@@ -157,12 +118,12 @@ const confirmToggle = async () => {
     );
     const idx = parts.value.findIndex((p) => p.id === updated.id);
     if (idx >= 0) parts.value[idx] = updated;
-    successMessage.value = `Đã ${updated.isActive ? 'kích hoạt' : 'vô hiệu hoá'} linh kiện "${updated.name}".`;
+    successMessage.value = `Đã ${updated.isActive ? 'dùng lại' : 'ngừng dùng'} "${updated.name}".`;
     showStatusModal.value = false;
     partToToggle.value = null;
     await loadParts();
   } catch (reason) {
-    error.value = getErrorMessage(reason, 'Không thể cập nhật trạng thái linh kiện.');
+    error.value = getErrorMessage(reason, 'Chưa đổi được trạng thái linh kiện, vui lòng thử lại.');
   } finally {
     mutationLoading.value = false;
   }
@@ -225,14 +186,14 @@ function closeForm() {
 }
 
 const formTitle = computed(() =>
-  formMode.value === 'create' ? 'Thêm linh kiện mới' : 'Chỉnh sửa linh kiện',
+  formMode.value === 'create' ? 'Thêm linh kiện' : 'Sửa linh kiện',
 );
 
 async function submitForm() {
   formError.value = '';
   const name = formData.value.name.trim();
   if (!name) {
-    formError.value = 'Tên linh kiện là bắt buộc.';
+    formError.value = 'Nhập tên linh kiện.';
     return;
   }
   const priceText = formData.value.sellingPrice.trim();
@@ -292,7 +253,7 @@ async function submitForm() {
       void loadParts();
     }
   } catch (reason) {
-    formError.value = getErrorMessage(reason, 'Không thể lưu linh kiện. Vui lòng thử lại.');
+    formError.value = getErrorMessage(reason, 'Chưa lưu được linh kiện, vui lòng thử lại.');
   } finally {
     formLoading.value = false;
   }
@@ -300,350 +261,138 @@ async function submitForm() {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Page header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Package class="text-brand-600" :size="24" />
-          Danh mục Linh kiện FixHome
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Quản lý catalog linh kiện do FixHome cung cấp: giá bán, bảo hành và trạng thái hoạt động.
-        </p>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <FhButton variant="secondary" size="sm" @click="router.push('/console/part-requests')">
-          <History :size="15" /> Lịch sử Parts Request (Audit)
-        </FhButton>
-        <FhButton variant="secondary" size="sm" :loading="loading" @click="loadParts">
-          <RefreshCw :size="15" /> Làm mới
-        </FhButton>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Danh mục linh kiện" :count="loading || loadError ? null : total">
+      <template #actions>
         <FhButton variant="primary" size="sm" @click="openCreate">
-          <Plus :size="15" /> Thêm linh kiện
+          <Plus :size="16" aria-hidden="true" /> Thêm linh kiện
         </FhButton>
-      </div>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem @click="router.push('/console/part-requests')">Xem yêu cầu linh kiện</ConsoleMenuItem>
+          <ConsoleMenuItem :disabled="loading" @click="loadParts">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, mã SKU, mô tả" label="Tìm linh kiện" />
+      <select v-model="activeFilter" :class="consoleField" aria-label="Trạng thái">
+        <option value="ALL">Tất cả trạng thái</option>
+        <option value="true">Đang dùng</option>
+        <option value="false">Ngừng dùng</option>
+      </select>
     </div>
 
-    <!-- Scope disclaimer banner -->
-    <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-[var(--radius-sm)] text-xs text-blue-900 flex items-start gap-2">
-      <Package :size="16" class="text-blue-600 mt-0.5 shrink-0" />
-      <div>
-        <span class="font-bold">Phạm vi Catalog FixHome:</span> Quản lý bảng giá niêm yết, chính sách bảo hành và trạng thái hoạt động của từng linh kiện. Hệ thống vận hành theo cơ chế <em>Parts Request & Handover Tracking</em>, không triển khai quản lý kho bãi / tồn kho (không quản lý nhập/xuất kho hay nhà cung cấp).
-      </div>
-    </div>
+    <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
 
-    <!-- Error banner -->
-    <div
-      v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-      role="alert"
-    >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadParts">Thử lại</button>
-    </div>
-
-    <!-- Success banner -->
-    <div
-      v-if="successMessage"
-      class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800"
-      role="status"
-    >
-      {{ successMessage }}
-    </div>
-
-    <!-- Table -->
-    <FhTable
+    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadParts" />
+    <ConsoleTable
+      v-else
       :columns="columns"
-      :rows="filteredParts"
+      :rows="parts"
       :loading="loading"
-      searchable
-      v-model:searchQuery="searchQuery"
-      search-placeholder="Tìm theo tên, SKU hoặc mô tả..."
-      :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có linh kiện phù hợp.'"
+      empty-text="Không có linh kiện phù hợp."
     >
-      <template #toolbar>
-        <div class="flex items-center gap-2 text-xs font-bold">
-          <span class="text-ink-500">Trạng thái:</span>
-          <select
-            v-model="activeFilter"
-            class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Tất cả</option>
-            <option value="true">Đang hoạt động</option>
-            <option value="false">Đã vô hiệu</option>
-          </select>
-        </div>
-      </template>
-
-      <template #cell-sku="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="16px" />
-        <span v-else class="text-xs font-mono text-ink-500">{{ row.sku ?? '—' }}</span>
-      </template>
-
       <template #cell-name="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="160px" height="16px" class="mb-1" />
-          <FhSkeleton width="220px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="font-semibold text-xs text-ink-900">{{ row.name }}</div>
-          <div v-if="row.description" class="text-[11px] text-ink-400 truncate max-w-[260px]">
-            {{ row.description }}
-          </div>
-        </div>
+        <button
+          type="button"
+          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          @click="openDetail(row)"
+        >{{ row.name }}</button>
+        <div v-if="row.description" class="max-w-72 truncate text-xs text-ink-500" :title="row.description">{{ row.description }}</div>
       </template>
-
+      <template #cell-sku="{ row }">
+        <span class="whitespace-nowrap font-num text-ink-600">{{ row.sku ?? '—' }}</span>
+      </template>
       <template #cell-sellingPrice="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="90px" height="16px" />
-        <span v-else class="text-xs font-num text-ink-800">
-          {{ formatPrice(Number(row.sellingPrice)) }} đ
-        </span>
+        <FhMoney :amount="Number(row.sellingPrice)" />
       </template>
-
       <template #cell-warranty="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="70px" height="16px" />
-        <span v-else-if="row.warrantyDays != null" class="text-xs text-ink-700">
-          {{ row.warrantyDays }} ngày
-        </span>
-        <span v-else class="text-[11px] text-ink-400 italic">Không bảo hành</span>
+        <span v-if="row.warrantyDays != null" class="whitespace-nowrap text-ink-700">{{ row.warrantyDays }}&nbsp;ngày</span>
+        <span v-else class="whitespace-nowrap text-ink-400">Không bảo hành</span>
       </template>
-
       <template #cell-status="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="24px" class="rounded-full" />
-        <FhStatusPill
-          v-else
-          :status="row.isActive ? 'active' : 'inactive'"
-          :label="row.isActive ? 'Hoạt động' : 'Vô hiệu'"
-        />
+        <FhStatusPill :status="row.isActive ? 'active' : 'inactive'" :label="row.isActive ? 'Đang dùng' : 'Ngừng dùng'" />
       </template>
-
       <template #cell-actions="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="80px" height="28px" class="rounded-[var(--radius-sm)]" />
-        <div v-else class="flex items-center gap-1">
-          <button
-            class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
-            title="Xem chi tiết"
-            type="button"
-            @click="openDetail(row)"
-          >
-            <Eye :size="14" />
-          </button>
-          <button
-            class="p-2 rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800 transition-colors"
-            title="Chỉnh sửa"
-            type="button"
-            @click="openEdit(row)"
-          >
-            <Pencil :size="14" />
-          </button>
-          <button
-            class="p-2 rounded transition-colors"
-            :class="
-              row.isActive
-                ? 'text-danger-500 hover:bg-danger-50'
-                : 'text-success-600 hover:bg-success-50'
-            "
-            :title="row.isActive ? 'Vô hiệu hoá' : 'Kích hoạt lại'"
-            type="button"
-            @click="triggerToggle(row)"
-          >
-            <PowerOff v-if="row.isActive" :size="14" />
-            <Power v-else :size="14" />
-          </button>
+        <div class="flex items-center justify-end gap-2">
+          <FhButton variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
+          <ConsoleMoreMenu label="Thao tác khác với linh kiện">
+            <ConsoleMenuItem :danger="row.isActive" @click="triggerToggle(row)">
+              {{ row.isActive ? 'Ngừng dùng' : 'Dùng lại' }}
+            </ConsoleMenuItem>
+          </ConsoleMoreMenu>
         </div>
       </template>
-    </FhTable>
+    </ConsoleTable>
 
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} linh kiện</span>
-      <div class="flex items-center gap-2">
-        <button
-          class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40"
-          type="button"
-          :disabled="page <= 1 || loading"
-          aria-label="Trang trước"
-          @click="page--"
-        >
-          <ChevronLeft :size="16" />
-        </button>
-        <button
-          class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40"
-          type="button"
-          :disabled="page >= totalPages || loading"
-          aria-label="Trang sau"
-          @click="page++"
-        >
-          <ChevronRight :size="16" />
-        </button>
-      </div>
-    </div>
+    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
 
-    <!-- Activate / Deactivate confirmation dialog -->
     <FhConfirmDialog
       :open="showStatusModal"
       :loading="mutationLoading"
-      :title="
-        partToToggle?.isActive ? 'Vô hiệu hoá linh kiện' : 'Kích hoạt linh kiện'
-      "
-      :consequence="
-        partToToggle?.isActive
-          ? 'Linh kiện sẽ không xuất hiện trong báo giá mới sau khi Backend xác nhận.'
-          : 'Backend sẽ kích hoạt lại linh kiện sau khi xác nhận thay đổi.'
-      "
-      :confirm-text="partToToggle?.isActive ? 'Vô hiệu hoá' : 'Kích hoạt'"
+      :title="partToToggle?.isActive ? 'Ngừng dùng linh kiện' : 'Dùng lại linh kiện'"
+      :consequence="partToToggle?.isActive ? 'Linh kiện không còn xuất hiện trong báo giá mới.' : 'Linh kiện được dùng lại trong báo giá mới.'"
+      :confirm-text="partToToggle?.isActive ? 'Ngừng dùng' : 'Dùng lại'"
       cancel-text="Quay lại"
+      :danger="!!partToToggle?.isActive"
       @confirm="confirmToggle"
       @cancel="showStatusModal = false"
     />
 
-    <!-- Create / Edit side panel (inline modal) -->
+    <!-- Create / edit side panel -->
     <Teleport to="body">
       <div
         v-if="showForm"
         class="fixed inset-0 z-50 flex items-start justify-end bg-ink-900/40"
         @click.self="closeForm"
+        @keydown.esc="closeForm"
       >
         <div
-          class="relative h-full w-full max-w-lg bg-white shadow-xl flex flex-col overflow-y-auto"
+          class="relative flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="part-form-title"
         >
-          <!-- Panel header -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-ink-200">
-            <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-              <Package :size="18" class="text-brand-600" />
-              {{ formTitle }}
-            </h2>
-            <button
-              class="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100"
-              type="button"
-              aria-label="Đóng"
-              @click="closeForm"
-            >
-              <X :size="18" />
+          <div class="flex items-center justify-between border-b border-ink-200 px-6 py-4">
+            <h2 id="part-form-title" class="text-base font-semibold text-ink-900">{{ formTitle }}</h2>
+            <button class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" type="button" aria-label="Đóng" @click="closeForm">
+              <X :size="18" aria-hidden="true" />
             </button>
           </div>
 
-          <!-- Form body -->
-          <form class="flex-1 px-6 py-5 space-y-5" @submit.prevent="submitForm">
-            <!-- Form error -->
-            <div
-              v-if="formError"
-              class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-              role="alert"
-            >
-              {{ formError }}
-            </div>
-
-            <!-- Name (required) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-name">
-                Tên linh kiện <span class="text-danger-500">*</span>
-              </label>
-              <input
-                id="part-name"
-                v-model="formData.name"
-                type="text"
-                required
-                maxlength="200"
-                placeholder="Ví dụ: Quạt tản nhiệt laptop 5V"
-                class="w-full h-9 px-3 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white"
-              />
-            </div>
-
-            <!-- SKU (optional) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-sku">
-                SKU <span class="text-ink-400 font-normal">(tuỳ chọn)</span>
-              </label>
-              <input
-                id="part-sku"
-                v-model="formData.sku"
-                type="text"
-                maxlength="100"
-                placeholder="Ví dụ: FH-FAN-5V-001"
-                class="w-full h-9 px-3 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white font-mono"
-              />
-            </div>
-
-            <!-- Description (optional) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-description">
-                Mô tả <span class="text-ink-400 font-normal">(tuỳ chọn)</span>
-              </label>
-              <textarea
-                id="part-description"
-                v-model="formData.description"
-                rows="3"
-                maxlength="5000"
-                placeholder="Thông tin thêm về linh kiện..."
-                class="w-full px-3 py-2 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white resize-none"
-              />
-            </div>
-
-            <!-- Selling price (required) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-price">
-                Giá bán (VNĐ) <span class="text-danger-500">*</span>
-              </label>
-              <input
-                id="part-price"
-                v-model="formData.sellingPrice"
-                type="number"
-                min="0"
-                step="0.01"
-                max="9999999999.99"
-                required
-                placeholder="0"
-                class="w-full h-9 px-3 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white font-num"
-              />
-            </div>
-
-            <!-- Warranty days (optional) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-warranty-days">
-                Số ngày bảo hành <span class="text-ink-400 font-normal">(tuỳ chọn)</span>
-              </label>
-              <input
-                id="part-warranty-days"
-                v-model="formData.warrantyDays"
-                type="number"
-                min="0"
-                max="3650"
-                step="1"
-                placeholder="Ví dụ: 365"
-                class="w-full h-9 px-3 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white font-num"
-              />
-              <p class="text-[11px] text-ink-400">Để trống nếu linh kiện không có bảo hành.</p>
-            </div>
-
-            <!-- Warranty policy (optional) -->
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-ink-700" for="part-warranty-policy">
-                Chính sách bảo hành <span class="text-ink-400 font-normal">(tuỳ chọn)</span>
-              </label>
-              <textarea
-                id="part-warranty-policy"
-                v-model="formData.warrantyPolicy"
-                rows="3"
-                maxlength="5000"
-                placeholder="Mô tả điều kiện, phạm vi và ngoại lệ bảo hành..."
-                class="w-full px-3 py-2 text-xs border border-ink-200 rounded-[var(--radius-sm)] focus:outline-none focus:border-brand-600 bg-white resize-none"
-              />
-            </div>
+          <form id="part-form" class="flex-1 space-y-5 px-6 py-5" @submit.prevent="submitForm">
+            <p v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ formError }}</p>
+            <label :class="consoleLabel" for="part-name">
+              Tên linh kiện
+              <input id="part-name" v-model="formData.name" type="text" required maxlength="200" placeholder="Ví dụ: Quạt tản nhiệt 5V" :class="consoleField" class="h-10" />
+            </label>
+            <label :class="consoleLabel" for="part-sku">
+              Mã SKU (không bắt buộc)
+              <input id="part-sku" v-model="formData.sku" type="text" maxlength="100" placeholder="Ví dụ: FH-FAN-5V-001" :class="consoleField" class="h-10 font-num" />
+            </label>
+            <label :class="consoleLabel" for="part-description">
+              Mô tả (không bắt buộc)
+              <textarea id="part-description" v-model="formData.description" rows="3" maxlength="5000" :class="consoleTextarea" class="resize-none" />
+            </label>
+            <label :class="consoleLabel" for="part-price">
+              Giá bán (₫)
+              <input id="part-price" v-model="formData.sellingPrice" type="number" min="0" step="0.01" max="9999999999.99" required inputmode="decimal" placeholder="0" :class="consoleField" class="h-10 font-num" />
+            </label>
+            <label :class="consoleLabel" for="part-warranty-days">
+              Số ngày bảo hành (để trống nếu không bảo hành)
+              <input id="part-warranty-days" v-model="formData.warrantyDays" type="number" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ví dụ: 365" :class="consoleField" class="h-10 font-num" />
+            </label>
+            <label :class="consoleLabel" for="part-warranty-policy">
+              Chính sách bảo hành (không bắt buộc)
+              <textarea id="part-warranty-policy" v-model="formData.warrantyPolicy" rows="3" maxlength="5000" placeholder="Điều kiện, phạm vi và ngoại lệ bảo hành" :class="consoleTextarea" class="resize-none" />
+            </label>
           </form>
 
-          <!-- Panel footer -->
-          <div class="px-6 py-4 border-t border-ink-200 flex items-center justify-end gap-3">
-            <FhButton variant="secondary" size="sm" :disabled="formLoading" @click="closeForm">
-              Huỷ
-            </FhButton>
-            <FhButton
-              variant="primary"
-              size="sm"
-              :loading="formLoading"
-              @click="submitForm"
-            >
+          <div class="flex items-center justify-end gap-2 border-t border-ink-200 px-6 py-4">
+            <FhButton variant="secondary" size="sm" :disabled="formLoading" @click="closeForm">Huỷ</FhButton>
+            <FhButton variant="primary" size="sm" :loading="formLoading" @click="submitForm">
               {{ formMode === 'create' ? 'Thêm linh kiện' : 'Lưu thay đổi' }}
             </FhButton>
           </div>
@@ -651,86 +400,47 @@ async function submitForm() {
       </div>
     </Teleport>
 
-    <!-- Part Detail Modal -->
+    <!-- Part detail -->
     <div
       v-if="detailPart"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="part-detail-title"
       @click.self="detailPart = null"
+      @keydown.esc="detailPart = null"
     >
       <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-        <div class="flex items-center justify-between border-b pb-3">
-          <div class="flex items-center gap-2">
-            <Package class="text-brand-600" :size="20" />
-            <h3 class="font-bold text-ink-900 text-base">Chi tiết Linh kiện Catalog</h3>
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 id="part-detail-title" class="text-base font-semibold text-ink-900">{{ detailPart.name }}</h3>
+            <p class="font-num text-sm text-ink-500">{{ detailPart.sku || 'Chưa đặt mã SKU' }}</p>
           </div>
-          <button class="text-ink-400 hover:text-ink-700 text-lg font-bold" @click="detailPart = null">✕</button>
-        </div>
-
-        <div class="space-y-3 text-xs">
-          <div class="grid grid-cols-2 gap-2 p-3 bg-ink-50 rounded border border-ink-200">
-            <div>
-              <span class="text-ink-400 block text-[11px]">Mã SKU:</span>
-              <span class="font-mono font-bold text-ink-900">{{ detailPart.sku || 'Chưa đặt SKU' }}</span>
-            </div>
-            <div>
-              <span class="text-ink-400 block text-[11px]">Trạng thái:</span>
-              <FhStatusPill
-                :status="detailPart.isActive ? 'active' : 'inactive'"
-                :label="detailPart.isActive ? 'Đang hoạt động' : 'Đã vô hiệu'"
-              />
-            </div>
-            <div class="col-span-2">
-              <span class="text-ink-400 block text-[11px]">Tên linh kiện:</span>
-              <span class="font-semibold text-sm text-ink-900">{{ detailPart.name }}</span>
-            </div>
-            <div>
-              <span class="text-ink-400 block text-[11px]">Giá bán niêm yết:</span>
-              <span class="font-bold text-brand-700 text-sm font-num">{{ formatPrice(Number(detailPart.sellingPrice)) }} đ</span>
-            </div>
-            <div>
-              <span class="text-ink-400 block text-[11px]">Thời gian bảo hành:</span>
-              <span class="font-semibold text-ink-800">{{ detailPart.warrantyDays != null ? `${detailPart.warrantyDays} ngày` : 'Không bảo hành' }}</span>
-            </div>
-          </div>
-
-          <div v-if="detailPart.description" class="space-y-1">
-            <span class="text-ink-500 font-medium block">Mô tả linh kiện:</span>
-            <div class="p-2.5 bg-white border border-ink-200 rounded text-ink-700 whitespace-pre-line leading-relaxed">
-              {{ detailPart.description }}
-            </div>
-          </div>
-
-          <div v-if="detailPart.warrantyPolicy" class="space-y-1">
-            <span class="text-ink-500 font-medium block">Chính sách bảo hành:</span>
-            <div class="p-2.5 bg-ink-50 border border-ink-200 rounded text-ink-700 whitespace-pre-line leading-relaxed">
-              {{ detailPart.warrantyPolicy }}
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between text-[11px] text-ink-400 pt-1 border-t border-ink-100">
-            <span>Ngày tạo: {{ vnDateString(detailPart.createdAt) }}</span>
-            <span>Cập nhật: {{ vnDateString(detailPart.updatedAt) }}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-2 border-t border-ink-100">
-          <button
-            type="button"
-            class="text-xs text-brand-600 hover:underline flex items-center gap-1 font-semibold"
-            @click="detailPart = null; router.push('/console/part-requests')"
-          >
-            <History :size="13" /> Xem lịch sử yêu cầu của linh kiện này
+          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailPart = null">
+            <X :size="18" aria-hidden="true" />
           </button>
-          <div class="flex gap-2">
-            <FhButton variant="secondary" size="sm" @click="detailPart = null">Đóng</FhButton>
-            <FhButton
-              variant="primary"
-              size="sm"
-              @click="const p = detailPart; detailPart = null; if (p) openEdit(p)"
-            >
-              <Pencil :size="13" /> Chỉnh sửa
-            </FhButton>
-          </div>
+        </div>
+
+        <dl class="space-y-2.5 text-sm">
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd><FhStatusPill :status="detailPart.isActive ? 'active' : 'inactive'" :label="detailPart.isActive ? 'Đang dùng' : 'Ngừng dùng'" /></dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Giá bán</dt><dd><FhMoney :amount="Number(detailPart.sellingPrice)" /></dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Bảo hành</dt><dd class="text-ink-900">{{ detailPart.warrantyDays != null ? `${detailPart.warrantyDays} ngày` : 'Không bảo hành' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Ngày tạo</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.createdAt) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.updatedAt) }}</dd></div>
+        </dl>
+
+        <div v-if="detailPart.description" class="border-t border-ink-100 pt-3 text-sm">
+          <div class="mb-1 text-ink-500">Mô tả</div>
+          <p class="whitespace-pre-line text-ink-800">{{ detailPart.description }}</p>
+        </div>
+        <div v-if="detailPart.warrantyPolicy" class="border-t border-ink-100 pt-3 text-sm">
+          <div class="mb-1 text-ink-500">Chính sách bảo hành</div>
+          <p class="whitespace-pre-line text-ink-800">{{ detailPart.warrantyPolicy }}</p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <FhButton variant="secondary" size="sm" @click="detailPart = null">Đóng</FhButton>
+          <FhButton variant="primary" size="sm" @click="const p = detailPart; detailPart = null; if (p) openEdit(p)">Sửa</FhButton>
         </div>
       </div>
     </div>

@@ -24,7 +24,7 @@ describe('private Booking media API contract', () => {
     expect(path).toBe('/media/booking-photo-upload');
     expect(body).toBeInstanceOf(FormData);
     expect((body as FormData).get('file')).toBe(file);
-    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
     expect(apiClient.post).not.toHaveBeenCalledWith('/media/upload', expect.anything(), expect.anything());
   });
 

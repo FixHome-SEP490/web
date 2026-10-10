@@ -5,7 +5,7 @@
 // chooses another technician.
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { FhConfirmDialog } from '..';
+import { FhConfirmDialog, FhSkeleton } from '..';
 import BookingSessionPicker from './BookingSessionPicker.vue';
 import { bookingsApi } from '../../api/bookings.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -80,8 +80,8 @@ async function confirm() {
     @confirm="confirm"
     @cancel="emit('close')"
   >
-    <div class="space-y-3 text-xs" data-testid="rebook-dialog">
-      <p v-if="loading" class="text-ink-400">Đang tải các buổi...</p>
+    <div class="space-y-3 text-sm" data-testid="rebook-dialog">
+      <div v-if="loading" aria-busy="true" aria-label="Đang tải các buổi" class="grid grid-cols-4 gap-2"><FhSkeleton v-for="i in 4" :key="i" height="56px" rounded="md" /></div>
       <template v-else>
         <p v-if="!hasPreviousTechnician" class="text-ink-500">Yêu cầu cũ chưa có thợ nhận, bạn sẽ chọn thợ sau khi đặt.</p>
         <div class="max-h-72 overflow-y-auto pr-1">

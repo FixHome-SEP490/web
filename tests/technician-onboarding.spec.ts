@@ -275,6 +275,19 @@ describe('TechnicianOnboardingPage', () => {
     expect(wrapper.text()).toContain('200.000 ₫');
     expect(wrapper.text()).toContain('Nạp tiền vào ví ngay');
     expect(wrapper.text()).toContain('Vào Bàn làm việc Kỹ thuật viên');
+    // Said once, in one sentence (PO 10/10/2026: no repeated figures).
+    expect(wrapper.text().split('200.000 ₫').length - 1).toBe(1);
+    expect(wrapper.text()).toContain('Cần nạp tối thiểu 200.000 ₫ vào ví ký quỹ để bắt đầu nhận việc.');
+  });
+
+  it('shows a skeleton, not a spinner line, while the status loads', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockReturnValueOnce(new Promise(() => {}));
+
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+
+    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Đang tải hồ sơ kỹ thuật viên');
   });
 });
 

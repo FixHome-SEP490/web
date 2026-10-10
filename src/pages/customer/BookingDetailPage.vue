@@ -2,8 +2,8 @@
 // src/pages/customer/BookingDetailPage.vue
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ClipboardList, ArrowLeft, MapPin, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-vue-next';
-import { BookingMediaViewer, FhButton, FhConfirmDialog } from '../../components';
+import { ArrowLeft, Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
+import { BookingMediaViewer, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
@@ -312,6 +312,9 @@ const sessionForSave = (item: BookingItem): { date: string; slot: BookingSlot } 
   throw new Error('Vui lòng chọn ngày và buổi (sáng hoặc chiều).');
 };
 
+// Rare and destructive actions sit in the "⋯" menu (PO 10/10/2026).
+const moreOpen = ref(false);
+
 const statusLabel = (status?: string) => {
   switch (status) {
     case 'SUBMITTED': return 'Đang tìm thợ phù hợp';
@@ -319,7 +322,7 @@ const statusLabel = (status?: string) => {
     case 'MATCHED': return 'Đã có thợ nhận đơn';
     case 'CANCELLED': return 'Đã huỷ';
     case 'CLOSED': return 'Thợ đã từ chối / hết hạn';
-    default: return status || '';
+    default: return 'Trạng thái chưa xác định';
   }
 };
 
@@ -490,136 +493,175 @@ const confirmMatchingExtension = async () => {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto space-y-6 pb-12">
-    <div class="flex items-center justify-between">
+  <div class="max-w-2xl mx-auto space-y-5 pb-12">
+    <!-- Back, and the destructive action tucked in the "⋯" menu -->
+    <div class="flex items-center justify-between gap-3">
       <button
-        class="whitespace-nowrap inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
+        type="button"
+        class="whitespace-nowrap inline-flex items-center gap-1.5 h-9 text-sm font-medium text-ink-600 hover:text-ink-900 transition-colors"
         @click="router.push('/app/orders')"
       >
-        <ArrowLeft :size="14" /> Quay lại danh sách đơn
+        <ArrowLeft :size="16" /> Đơn của tôi
       </button>
+
+      <div v-if="booking && canCancelBooking" class="relative">
+        <button
+          type="button"
+          class="w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-600 hover:bg-ink-50 transition-colors flex items-center justify-center"
+          aria-label="Thao tác khác"
+          :aria-expanded="moreOpen"
+          data-testid="booking-more"
+          @click="moreOpen = !moreOpen"
+        >
+          <MoreHorizontal :size="18" />
+        </button>
+        <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
+        <div
+          v-show="moreOpen"
+          role="menu"
+          class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+          @keydown.esc="moreOpen = false"
+        >
+          <button
+            data-testid="booking-start-cancel"
+            type="button"
+            role="menuitem"
+            class="w-full text-left px-4 py-2.5 text-danger-600 hover:bg-danger-50 whitespace-nowrap disabled:opacity-50"
+            :disabled="saving || checkingOrderLink || cancelling || showExtensionModal || extending"
+            @click="moreOpen = false; openBookingCancel()"
+          >Huỷ yêu cầu đặt lịch</button>
+        </div>
+      </div>
     </div>
 
-    <div v-if="loading" class="text-center py-16 text-ink-400">
-      Đang tải thông tin đơn...
-    </div>
+    <!-- Loading: the shape of the page -->
+    <section v-if="loading" class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-4" aria-busy="true" aria-label="Đang tải yêu cầu">
+      <FhSkeleton width="60%" height="24px" />
+      <FhSkeleton width="35%" height="16px" />
+      <FhSkeleton height="16px" :count="3" />
+    </section>
 
     <div
       v-else-if="loadError"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+      class="bg-white rounded-2xl border border-ink-200 p-6 flex flex-col items-center text-center gap-3"
       role="alert"
     >
-      <span class="flex-1">{{ loadError }}</span>
-      <button class="font-semibold underline" type="button" @click="() => loadBooking()">Thử lại</button>
+      <p class="text-sm text-ink-700">{{ loadError }}</p>
+      <FhButton variant="secondary" size="sm" @click="() => loadBooking()">Thử lại</FhButton>
     </div>
 
-    <div v-else-if="booking" class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-5">
-      <div class="flex items-center gap-2">
-        <ClipboardList class="text-brand-600" :size="20" />
-        <h1 class="text-lg font-bold text-ink-900">{{ booking.serviceName }}</h1>
-      </div>
-
-      <div class="text-xs text-ink-500 flex items-center gap-1.5">
-        <MapPin :size="13" class="shrink-0 text-brand-600" />
-        <span>{{ booking.addressSummary }}</span>
-      </div>
-
-      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 w-fit">
-        <span class="w-1.5 h-1.5 rounded-full bg-warning-500"></span>
-        <span>{{ statusLabel(booking.status) }}</span>
-      </div>
-
-      <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ cancelNotice }}</p>
-
-      <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">
-        {{ extensionNotice }}
-      </p>
-      <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-xs text-danger-800">
-        {{ extensionError }}
-      </p>
-
-      <div v-if="canExtendMatching" data-testid="matching-extension-card" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-3">
-        <div class="space-y-1">
-          <p class="text-sm font-semibold text-brand-900">Gia hạn thời gian chờ thợ</p>
-          <p class="text-xs text-ink-700">
-            Các lời mời đang chờ hiện hết hạn lúc {{ formatServerDate(currentInvitationExpiry) }}. Bạn có thể xác nhận một lần gia hạn trong phạm vi khung giờ đã chọn.
-          </p>
+    <template v-else-if="booking">
+      <!-- What, where, when -->
+      <section class="bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <h1 class="text-xl font-bold text-ink-900 text-balance min-w-0">{{ booking.serviceName }}</h1>
+          <span
+            class="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-xs font-medium whitespace-nowrap"
+            :class="booking.status === 'CANCELLED' ? 'bg-ink-100 text-ink-600' : booking.status === 'MATCHED' ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-800'"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="booking.status === 'CANCELLED' ? 'bg-ink-400' : booking.status === 'MATCHED' ? 'bg-success-500' : 'bg-warning-500'"></span>
+            {{ statusLabel(booking.status) }}
+          </span>
         </div>
-        <FhButton
-          data-testid="booking-start-matching-extension"
-          variant="primary"
-          size="sm"
-          :disabled="saving || cancelling || checkingOrderLink || showExtensionModal || extending"
-          @click="openMatchingExtension"
-        >
-          {{ extending ? 'Đang gửi yêu cầu...' : 'Xin gia hạn lượt mời đang chờ' }}
-        </FhButton>
-      </div>
+
+        <dl class="grid grid-cols-1 sm:grid-cols-[7rem_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt class="text-ink-500">Lịch hẹn</dt>
+          <dd class="font-medium text-ink-900" data-testid="booking-current-session">{{ currentSchedule }}</dd>
+          <dt class="text-ink-500">Địa chỉ</dt>
+          <dd class="text-ink-900 text-pretty">{{ booking.addressSummary }}</dd>
+        </dl>
+
+        <p v-if="booking.customerNote" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">Ghi chú cho thợ: {{ booking.customerNote }}</p>
+
+        <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-success-200 bg-success-50 p-3 text-sm text-success-800">{{ cancelNotice }}</p>
+        <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-xl border border-success-200 bg-success-50 p-3 text-sm text-success-800">
+          {{ extensionNotice }}
+        </p>
+        <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">
+          {{ extensionError }}
+        </p>
+        <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-xl border border-success-200 bg-success-50 p-3 text-sm text-success-800">{{ scheduleNotice }}</p>
+        <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-xl border border-success-200 bg-success-50 p-3 text-sm text-success-800">{{ rebookedNotice }}</p>
+
+        <!-- The next step for this request: one block, one button -->
+        <div v-if="serviceOrderId" class="pt-4 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-ink-700">Kỹ thuật viên đã nhận, đơn sửa chữa đã được tạo.</p>
+          <FhButton data-testid="booking-open-service-order" variant="primary" size="sm" @click="openServiceOrder">
+            Mở đơn sửa chữa
+          </FhButton>
+        </div>
+        <div v-else-if="canChooseTechnicians" class="pt-4 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-ink-700 text-pretty min-w-0 flex-1">Chọn 2 kỹ thuật viên theo thứ tự ưu tiên để mời lại.</p>
+          <FhButton data-testid="booking-choose-technicians" variant="primary" size="sm"
+            :disabled="saving || cancelling || checkingOrderLink || showCancelModal || showExtensionModal || extending"
+            @click="chooseTechnicians">
+            {{ booking.status === 'CLOSED' ? 'Chọn lại kỹ thuật viên' : 'Chọn kỹ thuật viên' }}
+          </FhButton>
+        </div>
+        <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="pt-4 border-t border-ink-100 space-y-1">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm text-ink-700">Khi kỹ thuật viên nhận, đơn sửa chữa sẽ hiện ở đây.</p>
+            <button
+              type="button"
+              data-testid="booking-refresh-order-link"
+              class="text-sm font-semibold text-brand-700 hover:underline whitespace-nowrap disabled:opacity-50"
+              :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
+              @click="refreshOrderLink"
+            >{{ checkingOrderLink ? 'Đang kiểm tra…' : 'Kiểm tra lại' }}</button>
+          </div>
+          <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-sm text-danger-700">{{ orderLinkError }}</p>
+        </div>
+
+        <div v-if="canExtendMatching" data-testid="matching-extension-card" class="pt-4 border-t border-ink-100 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-ink-700 text-pretty min-w-0 flex-1">
+            Lời mời đang chờ hết hạn lúc <span class="font-num whitespace-nowrap">{{ formatServerDate(currentInvitationExpiry) }}</span>. Bạn được gia hạn một lần.
+          </p>
+          <FhButton
+            data-testid="booking-start-matching-extension"
+            variant="secondary"
+            size="sm"
+            :disabled="saving || cancelling || checkingOrderLink || showExtensionModal || extending"
+            @click="openMatchingExtension"
+          >
+            {{ extending ? 'Đang gửi…' : 'Gia hạn chờ thợ' }}
+          </FhButton>
+        </div>
+
+        <div v-if="booking.status === 'CANCELLED'" class="pt-4 border-t border-ink-100 flex justify-end">
+          <FhButton variant="primary" size="sm" data-testid="booking-rebook" @click="showRebook = true">Đặt lại</FhButton>
+        </div>
+      </section>
 
       <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
 
-      <div v-if="canChooseTechnicians" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
-        <p class="text-xs text-ink-700">Chọn 2 kỹ thuật viên theo thứ tự ưu tiên cho lượt mời mới. Các lời mời cũ không được tự khôi phục.</p>
-        <FhButton data-testid="booking-choose-technicians" variant="primary" size="sm"
-          :disabled="saving || cancelling || checkingOrderLink || showCancelModal || showExtensionModal || extending"
-          @click="chooseTechnicians">
-          {{ booking.status === 'CLOSED' ? 'Chọn lại kỹ thuật viên' : 'Chọn kỹ thuật viên' }}
-        </FhButton>
-      </div>
-
-      <!-- Only owner-checked GET /bookings/:id supplies the exact ServiceOrder ID. -->
-      <div v-if="serviceOrderId" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-2">
-        <p class="text-xs text-ink-700">Yêu cầu này đã có đơn dịch vụ liên kết.</p>
-        <FhButton data-testid="booking-open-service-order" variant="primary" size="sm" @click="openServiceOrder">
-          Mở chi tiết đơn dịch vụ
-        </FhButton>
-      </div>
-      <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="rounded-xl border border-warning-200 bg-warning-50/60 p-4 space-y-2">
-        <p class="text-xs text-ink-700">Chưa nhận được mã đơn dịch vụ từ hệ thống. Bạn có thể kiểm tra lại khi kỹ thuật viên đã nhận đơn.</p>
-        <button
-          type="button"
-          data-testid="booking-refresh-order-link"
-          class="text-xs font-semibold text-brand-700 underline disabled:opacity-50"
-          :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
-          @click="refreshOrderLink"
-        >{{ checkingOrderLink ? 'Đang kiểm tra...' : 'Kiểm tra lại đơn dịch vụ' }}</button>
-        <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs text-danger-700">{{ orderLinkError }}</p>
-      </div>
-
-      <div class="text-xs text-ink-700 flex items-center gap-1.5" data-testid="booking-current-session">
-        <CalendarIcon :size="13" class="shrink-0 text-brand-600" />
-        <span>Lịch hẹn: <strong>{{ currentSchedule }}</strong></span>
-      </div>
-      <p v-if="booking.customerNote" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">Ghi chú cho thợ: {{ booking.customerNote }}</p>
-      <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ scheduleNotice }}</p>
-      <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-900">{{ rebookedNotice }}</p>
-      <div v-if="booking.status === 'CANCELLED'" class="flex justify-end">
-        <FhButton variant="secondary" size="sm" data-testid="booking-rebook" @click="showRebook = true">Đặt lại</FhButton>
-      </div>
-
-      <template v-if="canReschedule">
+      <!-- Change the request -->
+      <section v-if="canReschedule" class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-4">
         <div v-if="editable" class="space-y-1.5">
-          <label class="block font-bold text-ink-800 text-xs sm:text-sm">Mô tả yêu cầu</label>
+          <label for="booking-description" class="block font-semibold text-ink-800 text-sm">Mô tả yêu cầu</label>
           <textarea
+            id="booking-description"
             v-model="description"
             rows="3"
-            class="w-full p-3.5 bg-ink-50 border border-ink-200 rounded-xl text-xs sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:bg-white transition-all leading-relaxed"
+            class="w-full p-3.5 bg-white border border-ink-200 rounded-xl text-base sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 transition-all leading-relaxed"
           ></textarea>
         </div>
 
         <FhButton v-if="!showReschedule" variant="secondary" size="sm" data-testid="booking-open-reschedule" @click="openReschedule">
-          <CalendarIcon :size="14" class="mr-1.5" /> Đổi buổi hẹn
+          <CalendarIcon :size="14" /> Đổi buổi hẹn
         </FhButton>
         <div v-else class="space-y-2">
-          <p class="font-bold text-ink-800 text-xs sm:text-sm">Đổi sang buổi khác</p>
-          <p class="text-xs text-ink-500">
+          <p class="font-semibold text-ink-800 text-sm">Đổi sang buổi khác</p>
+          <p class="text-sm text-ink-500 text-pretty">
             <template v-if="editable">Đổi buổi trước khi có thợ nhận thì lượt mời cũ bị huỷ, bạn chọn lại thợ cho buổi mới.</template>
             <template v-else>Chỉ chọn được buổi mà kỹ thuật viên của đơn còn trống.</template>
           </p>
-          <p v-if="sessionsLoading" class="text-xs text-ink-400">Đang tải các buổi...</p>
-          <p v-else-if="sessionsError" class="text-xs text-danger-700">{{ sessionsError }}
-            <button type="button" class="font-semibold underline" @click="loadSessions">Thử lại</button>
-          </p>
+          <div v-if="sessionsLoading" aria-busy="true" aria-label="Đang tải các buổi" class="grid grid-cols-4 gap-2">
+            <FhSkeleton v-for="i in 4" :key="i" height="56px" rounded="md" />
+          </div>
+          <div v-else-if="sessionsError" class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm text-ink-700">{{ sessionsError }}</p>
+            <FhButton variant="secondary" size="sm" @click="loadSessions">Thử lại</FhButton>
+          </div>
           <BookingSessionPicker v-else v-model="selectedSession" :sessions="sessions" />
         </div>
 
@@ -627,42 +669,35 @@ const confirmMatchingExtension = async () => {
           v-if="saveError"
           data-testid="booking-save-error"
           role="alert"
-          class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
+          class="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
         >
           {{ saveError }}
         </div>
 
-        <FhButton v-if="editable || showReschedule" variant="primary" size="md" :loading="saving" :disabled="showCancelModal || showExtensionModal || cancelling || extending || (!editable && !selectedSession)" data-testid="booking-save" @click="handleSave">
-          <CheckCircle2 :size="15" class="mr-1.5" /> {{ editable ? 'Lưu thay đổi' : 'Đổi lịch' }}
-        </FhButton>
-      </template>
+        <div v-if="editable || showReschedule" class="flex justify-end">
+          <FhButton variant="primary" size="md" :loading="saving" :disabled="showCancelModal || showExtensionModal || cancelling || extending || (!editable && !selectedSession)" data-testid="booking-save" @click="handleSave">
+            <CheckCircle2 :size="16" /> {{ editable ? 'Lưu thay đổi' : 'Đổi lịch' }}
+          </FhButton>
+        </div>
+      </section>
 
-      <p v-else-if="!['CANCELLED', 'CLOSED'].includes(booking.status)" class="text-xs text-ink-500">
+      <p v-else-if="!['CANCELLED', 'CLOSED'].includes(booking.status)" class="text-sm text-ink-500">
         Đơn ở trạng thái này không thể đổi lịch.
       </p>
-      <div v-if="canCancelBooking" class="pt-3 border-t border-ink-100 space-y-2">
-        <p class="text-xs text-ink-500">Bạn chỉ có thể huỷ yêu cầu chưa có đơn dịch vụ. Nếu kỹ thuật viên đã nhận, hãy mở đơn dịch vụ để xem quy trình huỷ tương ứng.</p>
-        <FhButton
-          data-testid="booking-start-cancel"
-          variant="danger"
-          size="sm"
-          :disabled="saving || checkingOrderLink || cancelling || showExtensionModal || extending"
-          @click="openBookingCancel"
-        >Huỷ yêu cầu đặt lịch</FhButton>
-      </div>
-    </div>
+    </template>
+
     <FhConfirmDialog
       :open="showCancelModal"
       :loading="cancelling"
-      title="Xác nhận huỷ yêu cầu đặt lịch"
-      consequence="Yêu cầu chưa có kỹ thuật viên nhận sẽ bị huỷ; các lời mời còn chờ sẽ được hệ thống xử lý. Nếu đã có đơn dịch vụ, bạn cần dùng quy trình huỷ đơn dịch vụ."
-      confirm-text="Xác nhận huỷ yêu cầu"
+      title="Huỷ yêu cầu đặt lịch?"
+      consequence="Lời mời đang chờ sẽ bị huỷ theo. Bạn có thể đặt lại sau."
+      confirm-text="Huỷ yêu cầu"
       cancel-text="Giữ yêu cầu"
       @confirm="confirmBookingCancel"
       @cancel="closeBookingCancel"
     >
       <div class="space-y-1.5">
-        <label for="booking-cancel-reason" class="block text-xs font-semibold text-ink-700">Lý do huỷ *</label>
+        <label for="booking-cancel-reason" class="block text-sm font-semibold text-ink-700">Lý do huỷ *</label>
         <textarea
           id="booking-cancel-reason"
           v-model="cancelReason"
@@ -670,19 +705,19 @@ const confirmMatchingExtension = async () => {
           rows="3"
           maxlength="2000"
           :disabled="cancelling"
-          class="w-full rounded-xl border border-ink-200 p-3 text-sm text-ink-900 focus:outline-none focus:border-brand-600"
-          placeholder="Cho FixHome biết lý do bạn muốn huỷ yêu cầu"
+          class="w-full rounded-xl border border-ink-200 p-3 text-base sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600"
+          placeholder="Cho FixHome biết lý do bạn muốn huỷ"
         ></textarea>
-        <p v-if="cancelError" data-testid="booking-cancel-error" role="alert" class="text-xs text-danger-700">{{ cancelError }}</p>
+        <p v-if="cancelError" data-testid="booking-cancel-error" role="alert" class="text-sm text-danger-700">{{ cancelError }}</p>
       </div>
     </FhConfirmDialog>
     <FhConfirmDialog
       :open="showExtensionModal"
       :loading="extending"
       :danger="false"
-      title="Xác nhận gia hạn thời gian chờ thợ"
-      consequence="Bạn xác nhận gia hạn một lần cho các lời mời đang chờ của yêu cầu này. Thời hạn mới do hệ thống xác định trong khung giờ đến đã chọn; không tạo thêm lời mời mới."
-      confirm-text="Xác nhận gia hạn"
+      title="Gia hạn thời gian chờ thợ?"
+      consequence="Lời mời đang chờ được thêm thời gian trong khung giờ bạn đã chọn. Không có lời mời mới, và chỉ gia hạn được một lần."
+      confirm-text="Gia hạn"
       cancel-text="Giữ nguyên"
       @confirm="confirmMatchingExtension"
       @cancel="closeMatchingExtension"

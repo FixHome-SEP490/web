@@ -5,7 +5,7 @@
 // service FixHome has verified, which is what "Đã xác thực" refers to.
 import { ref, computed, watch } from 'vue';
 import { X, Star, MapPin, Briefcase, ShieldCheck, CheckCircle2, Check, Wrench, ClipboardCheck } from 'lucide-vue-next';
-import { FhButton, FhStatusPill, FhMoney, FhEmptyState } from '../index';
+import { FhButton, FhStatusPill, FhMoney, FhEmptyState, FhSkeleton } from '../index';
 import type { TechnicianCandidate } from '../../api/bookings.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
@@ -238,7 +238,7 @@ const handleClose = () => emit('close');
         </template>
 
         <template v-else>
-          <p v-if="loadingReviews" role="status" class="text-center py-10 text-ink-500">Đang tải đánh giá…</p>
+          <div v-if="loadingReviews" role="status" aria-label="Đang tải đánh giá" class="space-y-3 py-2"><FhSkeleton height="64px" rounded="md" /><FhSkeleton height="16px" :count="3" /></div>
 
           <template v-else-if="reviews.length > 0">
             <div class="flex items-center gap-5 p-4 rounded-xl bg-ink-50">

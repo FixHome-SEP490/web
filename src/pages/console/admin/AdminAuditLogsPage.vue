@@ -1,17 +1,38 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ScrollText, RefreshCw, Search, ChevronLeft, ChevronRight, X } from 'lucide-vue-next';
-import { FhButton, FhTable, FhSkeleton, type TableColumn } from '../../../components';
+import { Search, X } from 'lucide-vue-next';
+import { FhSkeleton } from '../../../components';
+import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
+import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
+import ConsolePagination from '../../../components/console/ConsolePagination.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleSearchField } from '../../../components/console/console-ui';
+import { roleLabel } from '../../../components/console/console-labels';
+import {
+  auditActionLabel,
+  auditActionLabels,
+  auditResourceLabel,
+  auditResourceLabels,
+} from '../../../components/console/audit-labels';
+import { userFacingError } from '../../../utils/user-facing-error';
 import { auditLogsApi, type AuditLogRecord } from '../../../api/admin-audit-logs.api';
 import { vnDateTimeString } from '../../../utils/vn-time';
 
-const columns: TableColumn[] = [
-  { key: 'action', label: 'Hành động / Tài nguyên' },
-  { key: 'actor', label: 'Tác nhân', width: '200px' },
-  { key: 'resource', label: 'Đối tượng', width: '200px' },
-  { key: 'createdAt', label: 'Thời gian', width: '150px' },
-  { key: 'detail', label: 'Chi tiết', width: '90px' },
+const columns: ConsoleColumn[] = [
+  { key: 'action', label: 'Thao tác' },
+  { key: 'actor', label: 'Người thực hiện', hideBelow: 'lg' },
+  { key: 'createdAt', label: 'Thời gian' },
 ];
+
+const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'vi');
+const actionOptions = Object.entries(auditActionLabels).map(([value, label]) => ({ value, label })).sort(byLabel);
+// One option per label: the legacy plural resource name and test rows stay out of the filter.
+const resourceOptions = Object.entries(auditResourceLabels)
+  .filter(([value]) => value !== 'service_orders')
+  .map(([value, label]) => ({ value, label }))
+  .sort(byLabel);
 
 const resourceTypeFilter = ref('');
 const actorUserIdFilter = ref('');
@@ -30,36 +51,8 @@ const detailError = ref('');
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
-
-const filteredLogs = computed<(AuditLogRecord & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: pageSize }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      action: '',
-      resourceType: '',
-      resourceId: null,
-      actorUserId: null,
-      actorRole: null,
-      ip: null,
-      userAgent: null,
-      before: null,
-      after: null,
-      createdAt: '',
-    } as unknown as AuditLogRecord & { _isSkeleton: boolean }));
-  }
-  return logs.value;
-});
-
-function getErrorMessage(reason: unknown, fallback: string): string {
-  if (typeof reason === 'object' && reason !== null && 'response' in reason) {
-    const response = (reason as { response?: { data?: { message?: unknown } } }).response;
-    if (typeof response?.data?.message === 'string') return response.data.message;
-  }
-  if (reason instanceof Error && reason.message) return reason.message;
-  return fallback;
-}
+// Plain Vietnamese reasons from the server are kept; codes and English never show.
+const getErrorMessage = (reason: unknown, fallback: string) => userFacingError(reason, fallback);
 
 const loadLogs = async () => {
   const requestId = ++latestRequest;
@@ -80,7 +73,7 @@ const loadLogs = async () => {
     if (requestId !== latestRequest) return;
     logs.value = [];
     total.value = 0;
-    error.value = getErrorMessage(reason, 'Không thể tải nhật ký kiểm toán từ Backend.');
+    error.value = getErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -109,7 +102,7 @@ const openDetail = async (row: AuditLogRecord) => {
   try {
     selected.value = await auditLogsApi.getLog(row.id);
   } catch (reason) {
-    detailError.value = getErrorMessage(reason, 'Không thể tải chi tiết bản ghi kiểm toán.');
+    detailError.value = getErrorMessage(reason, CONSOLE_LOAD_ERROR);
   } finally {
     detailLoading.value = false;
   }
@@ -123,7 +116,7 @@ const closeDetail = () => {
 const formatDateTime = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : vnDateTimeString(date);
+  return Number.isNaN(date.getTime()) ? '—' : vnDateTimeString(date);
 };
 
 const formatSnapshot = (value: unknown) => {
@@ -138,173 +131,112 @@ const formatSnapshot = (value: unknown) => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <ScrollText class="text-brand-600" :size="24" />
-          Nhật ký Kiểm toán (Append-only)
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Dữ liệu chỉ đọc từ <span class="font-mono">GET /admin/audit-logs</span>.
-          Nhật ký là append-only — không có thao tác sửa/xoá.
-        </p>
-      </div>
-      <FhButton variant="secondary" size="sm" :loading="loading" @click="loadLogs">
-        <RefreshCw :size="15" /> Làm mới
-      </FhButton>
-    </div>
-
-    <div
-      v-if="error"
-      class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800"
-      role="alert"
-    >
-      <span class="flex-1">{{ error }}</span>
-      <button class="font-semibold underline" type="button" @click="loadLogs">Thử lại</button>
-    </div>
-
-    <FhTable :columns="columns" :rows="filteredLogs" :loading="loading" :empty-text="error ? 'Không thể hiển thị dữ liệu.' : 'Không có bản ghi kiểm toán phù hợp.'">
-      <template #toolbar-left>
-        <div class="relative group flex-1 w-full min-w-[180px]">
-          <label class="sr-only" for="audit-resource-type">Lọc theo loại tài nguyên</label>
-          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
-          <input
-            id="audit-resource-type"
-            v-model="resourceTypeFilter"
-            type="search"
-            maxlength="64"
-            placeholder="Tìm resourceType..."
-            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
-          />
-        </div>
-        <div class="relative group flex-1 w-full min-w-[180px]">
-          <label class="sr-only" for="audit-actor">Lọc theo actorUserId (UUID)</label>
-          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
-          <input
-            id="audit-actor"
-            v-model="actorUserIdFilter"
-            type="search"
-            placeholder="Tìm actorUserId..."
-            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
-          />
-        </div>
-        <div class="relative group flex-1 w-full min-w-[180px]">
-          <label class="sr-only" for="audit-action">Lọc theo hành động</label>
-          <Search :size="16" class="absolute left-3.5 top-2.5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
-          <input
-            id="audit-action"
-            v-model="actionFilter"
-            type="search"
-            maxlength="128"
-            placeholder="Tìm action..."
-            class="w-full h-10 pl-10 pr-4 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 focus:bg-white transition-all placeholder:text-gray-400 text-gray-800 font-medium"
-          />
-        </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Nhật ký thao tác" :count="loading || error ? null : total">
+      <template #badges>
+        <span class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600" title="Nhật ký chỉ ghi thêm, không sửa hay xoá được.">Chỉ đọc</span>
       </template>
+      <template #actions>
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem :disabled="loading" @click="loadLogs">Làm mới</ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </template>
+    </ConsolePageHeader>
 
+    <div class="flex flex-wrap items-center gap-2">
+      <select id="audit-action" v-model="actionFilter" :class="consoleField" aria-label="Lọc theo thao tác">
+        <option value="">Mọi thao tác</option>
+        <option v-for="opt in actionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+      <select id="audit-resource-type" v-model="resourceTypeFilter" :class="consoleField" aria-label="Lọc theo đối tượng">
+        <option value="">Mọi đối tượng</option>
+        <option v-for="opt in resourceOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+      <div class="relative w-full min-w-0 sm:w-72">
+        <Search :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
+        <input
+          id="audit-actor"
+          v-model="actorUserIdFilter"
+          type="search"
+          placeholder="Mã người thực hiện"
+          aria-label="Lọc theo mã người thực hiện"
+          :class="consoleSearchField"
+        />
+      </div>
+    </div>
+
+    <ConsoleLoadError v-if="error" :message="error" @retry="loadLogs" />
+    <ConsoleTable
+      v-else
+      :columns="columns"
+      :rows="logs"
+      :loading="loading"
+      empty-text="Không có bản ghi phù hợp."
+    >
       <template #cell-action="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="180px" height="16px" class="mb-1" />
-          <FhSkeleton width="100px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="font-bold text-xs text-ink-900 font-mono">{{ row.action }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">{{ row.resourceType }}</div>
-        </div>
+        <button
+          type="button"
+          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          @click="openDetail(row)"
+        >{{ auditActionLabel(row.action) }}</button>
+        <div class="text-xs text-ink-500">{{ auditResourceLabel(row.resourceType) }}</div>
       </template>
       <template #cell-actor="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="160px" height="16px" class="mb-1" />
-          <FhSkeleton width="80px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="text-xs text-ink-700 font-mono">{{ row.actorUserId || '— (hệ thống)' }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">{{ row.actorRole || '—' }}</div>
-        </div>
-      </template>
-      <template #cell-resource="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="140px" height="16px" class="mb-1" />
-          <FhSkeleton width="100px" height="12px" />
-        </div>
-        <div v-else>
-          <div class="text-xs text-ink-700 font-mono">{{ row.resourceId || '—' }}</div>
-          <div class="text-[11px] text-ink-400 font-mono">{{ row.ip || '—' }}</div>
-        </div>
+        <span class="whitespace-nowrap text-ink-700">{{ row.actorUserId ? roleLabel(row.actorRole) : 'Hệ thống' }}</span>
       </template>
       <template #cell-createdAt="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="120px" height="16px" />
-        <span v-else class="text-xs text-ink-500 font-num">{{ formatDateTime(String(row.createdAt)) }}</span>
+        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTime(String(row.createdAt)) }}</span>
       </template>
-      <template #cell-detail="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="40px" height="16px" />
-        <button v-else class="text-xs font-semibold text-brand-700 hover:text-brand-800 underline" type="button" @click="openDetail(row)">
-          Xem
-        </button>
-      </template>
-    </FhTable>
+    </ConsoleTable>
 
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-xs text-ink-500">
-      <span>Trang {{ page }} / {{ totalPages }} · {{ total }} bản ghi</span>
-      <div class="flex items-center gap-2">
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page <= 1 || loading" aria-label="Trang trước" @click="page--">
-          <ChevronLeft :size="16" />
-        </button>
-        <button class="p-2 rounded border border-ink-200 hover:bg-ink-100 disabled:opacity-40" type="button" :disabled="page >= totalPages || loading" aria-label="Trang sau" @click="page++">
-          <ChevronRight :size="16" />
-        </button>
-      </div>
-    </div>
+    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
 
-    <!-- Detail modal (read-only, escaped snapshots) -->
+    <!-- Detail (read only; snapshots are escaped text) -->
     <div
       v-if="selected"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Chi tiết bản ghi kiểm toán"
+      class="fixed inset-0 z-50 flex justify-end bg-ink-950/40"
+      @click.self="closeDetail"
+      @keydown.esc="closeDetail"
     >
-      <div class="bg-white rounded-[var(--radius-md)] max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-xl space-y-4 text-xs">
-        <div class="flex items-start justify-between gap-3 border-b border-ink-100 pb-3">
-          <div>
-            <h3 class="text-base font-bold text-ink-900 font-mono">{{ selected.action }}</h3>
-            <p class="text-[11px] text-ink-400 font-mono mt-0.5">{{ selected.id }} · {{ formatDateTime(selected.createdAt) }}</p>
+      <aside
+        class="flex h-full w-full max-w-xl flex-col bg-white shadow-[var(--shadow-e3)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="audit-detail-title"
+      >
+        <div class="flex items-start justify-between gap-3 border-b border-ink-100 px-5 py-4">
+          <div class="min-w-0">
+            <h3 id="audit-detail-title" class="text-lg font-semibold text-ink-900">{{ auditActionLabel(selected.action) }}</h3>
+            <p class="whitespace-nowrap font-num text-sm text-ink-500">{{ formatDateTime(selected.createdAt) }}</p>
           </div>
-          <button class="p-1.5 rounded hover:bg-ink-100 text-ink-500" type="button" aria-label="Đóng chi tiết" @click="closeDetail">
-            <X :size="16" />
+          <button class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" type="button" aria-label="Đóng chi tiết" @click="closeDetail">
+            <X :size="18" aria-hidden="true" />
           </button>
         </div>
 
-        <div v-if="detailLoading" class="text-center py-8 text-ink-400">Đang tải chi tiết từ Backend...</div>
-        <div v-else>
-          <div v-if="detailError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
-            {{ detailError }}
-          </div>
-          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><dt class="font-semibold text-ink-500">resourceType</dt><dd class="font-mono text-ink-900">{{ selected.resourceType }}</dd></div>
-            <div><dt class="font-semibold text-ink-500">resourceId</dt><dd class="font-mono text-ink-900">{{ selected.resourceId || '—' }}</dd></div>
-            <div><dt class="font-semibold text-ink-500">actorUserId</dt><dd class="font-mono text-ink-900">{{ selected.actorUserId || '—' }}</dd></div>
-            <div><dt class="font-semibold text-ink-500">actorRole</dt><dd class="font-mono text-ink-900">{{ selected.actorRole || '—' }}</dd></div>
-            <div><dt class="font-semibold text-ink-500">ip</dt><dd class="font-mono text-ink-900">{{ selected.ip || '—' }}</dd></div>
-            <div><dt class="font-semibold text-ink-500">userAgent</dt><dd class="font-mono text-ink-900 break-all">{{ selected.userAgent || '—' }}</dd></div>
-          </dl>
-          <div class="space-y-3 pt-1">
+        <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
+          <FhSkeleton v-if="detailLoading" height="20px" :count="6" />
+          <template v-else>
+            <p v-if="detailError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-danger-800" role="alert">{{ detailError }}</p>
+            <dl class="space-y-2.5">
+              <div class="flex justify-between gap-3"><dt class="text-ink-500">Đối tượng</dt><dd class="text-right text-ink-900">{{ auditResourceLabel(selected.resourceType) }}</dd></div>
+              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Mã đối tượng</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.resourceId || '—' }}</dd></div>
+              <div class="flex justify-between gap-3"><dt class="text-ink-500">Vai trò</dt><dd class="text-right text-ink-900">{{ selected.actorUserId ? roleLabel(selected.actorRole) : 'Hệ thống' }}</dd></div>
+              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Mã người thực hiện</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.actorUserId || '—' }}</dd></div>
+              <div class="flex justify-between gap-3"><dt class="text-ink-500">Địa chỉ IP</dt><dd class="text-right font-num text-ink-900">{{ selected.ip || '—' }}</dd></div>
+              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Trình duyệt</dt><dd class="break-all text-right text-ink-900">{{ selected.userAgent || '—' }}</dd></div>
+            </dl>
             <div>
-              <div class="font-semibold text-ink-700 mb-1">before</div>
-              <pre class="p-3 rounded bg-ink-50 border border-ink-200 font-mono text-[11px] whitespace-pre-wrap break-all text-ink-800">{{ formatSnapshot(selected.before) }}</pre>
+              <div class="mb-1 font-medium text-ink-700">Dữ liệu trước</div>
+              <pre class="whitespace-pre-wrap break-all rounded border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.before) }}</pre>
             </div>
             <div>
-              <div class="font-semibold text-ink-700 mb-1">after</div>
-              <pre class="p-3 rounded bg-ink-50 border border-ink-200 font-mono text-[11px] whitespace-pre-wrap break-all text-ink-800">{{ formatSnapshot(selected.after) }}</pre>
+              <div class="mb-1 font-medium text-ink-700">Dữ liệu sau</div>
+              <pre class="whitespace-pre-wrap break-all rounded border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.after) }}</pre>
             </div>
-          </div>
+          </template>
         </div>
-
-        <div class="flex justify-end pt-2 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="closeDetail">Đóng</FhButton>
-        </div>
-      </div>
+      </aside>
     </div>
   </div>
 </template>

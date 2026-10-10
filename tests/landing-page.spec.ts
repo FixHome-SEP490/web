@@ -11,6 +11,7 @@ import LandingHowItWorks from '../src/components/landing/LandingHowItWorks.vue';
 import LandingTrust from '../src/components/landing/LandingTrust.vue';
 import ServicesPage from '../src/pages/public/ServicesPage.vue';
 import PublicLayout from '../src/layouts/PublicLayout.vue';
+import LandingPage from '../src/pages/public/LandingPage.vue';
 import { authGuard } from '../src/router/guards';
 import { useAuthStore } from '../src/stores/auth';
 import { UserRole } from '../src/types';
@@ -170,11 +171,11 @@ describe('Public landing page', () => {
   });
 
   it.each([
-    [UserRole.CUSTOMER, '/app'],
+    [UserRole.CUSTOMER, '/app/orders'],
     [UserRole.TECHNICIAN, '/tech'],
     [UserRole.ADMIN, '/console'],
     [UserRole.SERVICE_MANAGER, '/console'],
-  ])('keeps the account destination for %s', async (role, destination) => {
+  ])('links %s to its own area from the footer, not to a services dashboard', async (role, destination) => {
     const context = await setup();
     context.auth.setAuth('unit-test-token', {
       id: 'test-user',
@@ -184,8 +185,10 @@ describe('Public landing page', () => {
       status: 'ACTIVE',
     });
     const wrapper = mount(PublicLayout, context);
-    const account = wrapper.findAll('a').find((link) => link.text() === 'Tài khoản')!;
-    expect(account.attributes('href')).toBe(destination);
+    const footerLinks = wrapper.get('footer').findAll('a').map((link) => link.attributes('href'));
+    expect(footerLinks).toContain(destination);
+    // "Tài khoản" used to open the customer dashboard full of services.
+    expect(wrapper.findAll('a').some((link) => link.text() === 'Tài khoản')).toBe(false);
     wrapper.unmount();
   });
 
@@ -231,7 +234,9 @@ describe('Public landing page', () => {
     expect(wrapper.text()).toContain('Gửi ảnh hoặc mô tả triệu chứng');
     expect(wrapper.text()).toContain('AI nhận diện thiết bị & phân tích');
     expect(wrapper.text()).toContain('Khoanh vùng nguyên nhân có thể gặp');
-    expect(wrapper.text()).toContain('Gợi ý dịch vụ & kỹ thuật viên');
+    expect(wrapper.text()).toContain('Gợi ý dịch vụ phù hợp');
+    // No unmeasured accuracy claim on the page.
+    expect(wrapper.text()).not.toContain('Độ chính xác cao');
 
     // Verify CTA
     expect(wrapper.text()).toContain('Phân tích sự cố bằng AI');
@@ -252,7 +257,7 @@ describe('Public landing page', () => {
     expect(wrapper.text()).toContain('Gửi ảnh & Nhờ AI chẩn đoán');
     expect(wrapper.text()).toContain('AI phân tích & Đưa kết quả');
     expect(wrapper.text()).toContain('Chọn lịch & Tìm kiếm thợ');
-    expect(wrapper.text()).toContain('Duyệt báo giá & Nghiệm thu hoàn tất');
+    expect(wrapper.text()).toContain('Duyệt báo giá & Hoàn tất');
 
     // Click step 3 card to switch screen
     const stepCards = wrapper.findAll('.cursor-pointer');
@@ -266,6 +271,25 @@ describe('Public landing page', () => {
 
     // Verify CTA
     expect(wrapper.text()).toContain('Bắt đầu đặt lịch ngay');
+    // Booking takes at most three photos and the customer picks one or two technicians.
+    expect(wrapper.text()).not.toContain('5 ảnh');
+    expect(wrapper.text()).not.toMatch(/1-2km|100% Thợ/);
+    wrapper.unmount();
+  });
+
+  it('orders the landing sections like the header navigation', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingPage, context);
+    await flushPromises();
+    const ids = wrapper.findAll('[id]').map((el) => el.attributes('id'));
+    const order = ['services', 'ai', 'how-it-works', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+
+    const layout = mount(PublicLayout, context);
+    const navTargets = layout.get('nav[aria-label="Điều hướng chính"]').findAll('a').map((a) => a.attributes('href'));
+    expect(navTargets).toEqual(['/services', '/#ai', '/#how-it-works', '/#trust']);
+    layout.unmount();
     wrapper.unmount();
   });
 

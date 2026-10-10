@@ -18,7 +18,7 @@ import {
   Package,
   AlertTriangle,
 } from 'lucide-vue-next';
-import { FhButton } from '../../components';
+import { FhButton, FhSkeleton } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 import { toast } from 'vue-sonner';
@@ -32,6 +32,8 @@ const notifStore = useNotificationsStore();
 const searchQuery = ref('');
 const selectedCategory = ref<Category>('ALL');
 const onlyUnread = ref(false);
+/** Until the first read finishes the page shows rows shaped like notifications, not "no notifications". */
+const firstLoad = ref(true);
 
 const categories: { key: Category; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
@@ -55,7 +57,11 @@ const iconFor = {
 } as const;
 
 onMounted(async () => {
-  await notifStore.fetchNotifications(1, 50);
+  try {
+    await notifStore.fetchNotifications(1, 50);
+  } finally {
+    firstLoad.value = false;
+  }
 });
 
 const hasFilter = computed(() => onlyUnread.value || selectedCategory.value !== 'ALL' || searchQuery.value.trim() !== '');
@@ -95,15 +101,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 <template>
   <div class="space-y-5 max-w-3xl mx-auto">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <Bell class="text-brand-600" :size="24" />
-          Thông báo
-        </h1>
-        <p class="text-sm text-ink-500 mt-1 text-pretty">
-          Cập nhật về đơn sửa chữa từ kỹ thuật viên, quản lý dịch vụ và FixHome.
-        </p>
-      </div>
+      <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Thông báo</h1>
       <FhButton
         v-if="notifStore.unreadCount > 0"
         variant="secondary"
@@ -151,8 +149,23 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       </div>
     </div>
 
+    <ul
+      v-if="firstLoad && notifStore.notifications.length === 0"
+      class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100"
+      aria-busy="true"
+      aria-label="Đang tải thông báo"
+    >
+      <li v-for="i in 4" :key="i" class="px-5 py-4 flex items-start gap-3.5">
+        <span class="w-10 shrink-0"><FhSkeleton height="40px" rounded="md" /></span>
+        <span class="flex-1 space-y-2">
+          <FhSkeleton width="50%" height="16px" />
+          <FhSkeleton width="85%" height="14px" />
+        </span>
+      </li>
+    </ul>
+
     <div
-      v-if="filteredNotifications.length === 0"
+      v-else-if="filteredNotifications.length === 0"
       data-testid="notifications-empty"
       class="py-14 px-6 bg-white rounded-2xl border border-ink-200 text-center space-y-3"
     >

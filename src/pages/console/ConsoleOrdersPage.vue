@@ -1,206 +1,120 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { KanbanSquare, Eye } from 'lucide-vue-next';
-import {
-  FhTable,
-  FhStatusPill,
-  FhCostBreakdown,
-  FhMoney,
-  FhSkeleton,
-} from '../../components';
+import { FhStatusPill, FhMoney } from '../../components';
+import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
+import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import { consoleField } from '../../components/console/console-ui';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { vnDateString } from '../../utils/vn-time';
-import { hasRating, ratingLabel } from '../../utils/formatters';
-
-const router = useRouter();
+import { formatCurrencyVND, hasRating, ratingLabel } from '../../utils/formatters';
 
 const loading = ref(true);
+const loadError = ref(false);
 const orders = ref<ServiceOrderItem[]>([]);
 const searchQuery = ref('');
 const statusFilter = ref('ALL');
 const serviceOrderStates = ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED', 'CANCELLED'] as const;
+const statusOptions: { value: (typeof serviceOrderStates)[number]; label: string }[] = [
+  { value: 'ACCEPTED', label: 'Đã nhận đơn' },
+  { value: 'EN_ROUTE', label: 'Đang di chuyển' },
+  { value: 'UNDER_REPAIR', label: 'Đang sửa chữa' },
+  { value: 'COMPLETED', label: 'Hoàn thành' },
+  { value: 'CANCELLED', label: 'Đã huỷ' },
+];
 
 const isCanonicalServiceOrderState = (status: string) =>
   serviceOrderStates.includes(status.toUpperCase() as (typeof serviceOrderStates)[number]);
 
-onMounted(async () => {
+async function loadOrders() {
+  loading.value = true;
+  loadError.value = false;
   try {
-    const list = await ordersApi.getConsoleOrders();
-    orders.value = list;
+    orders.value = await ordersApi.getConsoleOrders();
+  } catch {
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
-});
+}
+onMounted(loadOrders);
 
-const isSkeleton = (row: unknown): boolean => !!(row as Record<string, unknown>)._isSkeleton;
+const columns: ConsoleColumn[] = [
+  { key: 'code', label: 'Mã đơn' },
+  { key: 'service', label: 'Dịch vụ' },
+  { key: 'people', label: 'Khách và kỹ thuật viên', hideBelow: 'xl' },
+  { key: 'total', label: 'Tổng tiền', align: 'right' },
+  { key: 'status', label: 'Trạng thái' },
+];
 
-const filteredOrders = computed<(ServiceOrderItem & { _isSkeleton?: boolean })[]>(() => {
-  if (loading.value) {
-    return Array.from({ length: 10 }).map((_, i) => ({
-      id: `skeleton-${i}`,
-      _isSkeleton: true,
-      code: '',
-      serviceName: '',
-      addressSummary: '',
-      customerName: '',
-      customerPhone: '',
-      technician: null,
-      laborTotal: 0,
-      partsTotal: 0,
-      grandTotal: 0,
-      status: 'ACCEPTED',
-      createdAt: '',
-    } as unknown as ServiceOrderItem & { _isSkeleton: boolean }));
-  }
-
+const filteredOrders = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
   return orders.value.filter((o) => {
     if (!isCanonicalServiceOrderState(String(o.status))) return false;
     const matchStatus = statusFilter.value === 'ALL' || o.status.toUpperCase() === statusFilter.value;
     const matchSearch =
-      !searchQuery.value ||
-      o.code.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      o.serviceName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      o.customerName.toLowerCase().includes(searchQuery.value.toLowerCase());
+      !q ||
+      o.code.toLowerCase().includes(q) ||
+      o.serviceName.toLowerCase().includes(q) ||
+      o.customerName.toLowerCase().includes(q);
     return matchStatus && matchSearch;
   });
 });
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight flex items-center gap-2">
-          <KanbanSquare class="text-brand-600" :size="24" />
-          Board đơn sửa chữa & hỗ trợ ngoại lệ
-        </h1>
-        <p class="text-xs text-ink-500 mt-1">
-          Giám sát ServiceOrder theo lifecycle chuẩn và chuyển các trường hợp bất thường sang hỗ trợ.
-        </p>
-      </div>
+  <div class="space-y-5">
+    <ConsolePageHeader title="Đơn sửa chữa" :count="loading || loadError ? null : filteredOrders.length" />
 
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-semibold text-ink-600">Tổng số đơn:</span>
-        <span class="text-xs font-bold font-num px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200">
-          {{ filteredOrders.length }} đơn
-        </span>
-      </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <ConsoleSearch v-model="searchQuery" placeholder="Tìm mã đơn, khách hàng, dịch vụ" label="Tìm đơn sửa chữa" />
+      <select v-model="statusFilter" :class="consoleField" aria-label="Lọc theo trạng thái">
+        <option value="ALL">Tất cả trạng thái</option>
+        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
     </div>
 
-    <!-- Table -->
-    <FhTable
-      :columns="[
-        { key: 'code', label: 'Mã đơn', width: '130px' },
-        { key: 'service', label: 'Dịch vụ & Địa chỉ' },
-        { key: 'customer', label: 'Khách hàng', width: '150px' },
-        { key: 'technician', label: 'Thợ phụ trách', width: '150px' },
-        { key: 'costs', label: 'Phân tách Công / Phụ tùng' },
-        { key: 'status', label: 'Trạng thái', width: '130px' },
-        { key: 'actions', label: 'Chi tiết', width: '90px', align: 'right' },
-      ]"
+    <ConsoleLoadError v-if="loadError" @retry="loadOrders" />
+    <ConsoleTable
+      v-else
+      :columns="columns"
       :rows="filteredOrders"
       :loading="loading"
-      searchable
-      v-model:searchQuery="searchQuery"
-      search-placeholder="Tìm theo mã đơn, khách hàng hoặc dịch vụ..."
-      :empty-text="'Không tìm thấy đơn nào phù hợp.'"
+      empty-text="Không có đơn nào phù hợp."
     >
-      <template #toolbar>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-ink-500">Trạng thái:</span>
-          <select
-            v-model="statusFilter"
-            class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-700 focus:outline-none focus:border-brand-600"
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="ACCEPTED">Đã nhận đơn (ACCEPTED)</option>
-            <option value="EN_ROUTE">Đang di chuyển (EN_ROUTE)</option>
-            <option value="UNDER_REPAIR">Đang sửa chữa (UNDER_REPAIR)</option>
-            <option value="COMPLETED">Hoàn tất (COMPLETED)</option>
-            <option value="CANCELLED">Đã huỷ (CANCELLED)</option>
-          </select>
-        </div>
-      </template>
-
       <template #cell-code="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="100px" height="16px" class="mb-1" />
-          <FhSkeleton width="60px" height="12px" />
-        </div>
-        <div v-else>
-          <span class="font-mono text-xs font-bold text-ink-900">{{ row.code }}</span>
-          <div class="text-[10px] text-ink-400 font-num">{{ vnDateString(row.createdAt) }}</div>
-        </div>
+        <router-link :to="`/console/orders/${row.id}`" class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline">
+          {{ row.code }}
+        </router-link>
+        <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateString(row.createdAt) }}</div>
       </template>
 
       <template #cell-service="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="160px" height="16px" class="mb-1" />
-          <FhSkeleton width="120px" height="12px" />
-        </div>
-        <div v-else class="max-w-[260px] whitespace-normal">
-          <div class="font-semibold text-xs text-ink-900 leading-tight">{{ row.serviceName }}</div>
-          <div class="text-[11px] text-ink-400 mt-0.5 leading-relaxed">{{ row.addressSummary }}</div>
+        <div class="min-w-40 max-w-72">
+          <div class="font-medium text-ink-900">{{ row.serviceName }}</div>
+          <div class="line-clamp-1 text-xs text-ink-500" :title="row.addressSummary">{{ row.addressSummary }}</div>
         </div>
       </template>
 
-      <template #cell-customer="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="120px" height="16px" class="mb-1" />
-          <FhSkeleton width="90px" height="12px" />
+      <template #cell-people="{ row }">
+        <div class="whitespace-nowrap text-ink-900">{{ row.customerName }} <span class="font-num text-xs text-ink-500">{{ row.customerPhone }}</span></div>
+        <div v-if="row.technician" class="whitespace-nowrap text-xs text-ink-600">
+          {{ row.technician.fullName }}
+          <span class="text-ink-500"><template v-if="hasRating(row.technician.averageRating)">★ {{ ratingLabel(row.technician.averageRating) }}</template><template v-else>· Chưa có đánh giá</template></span>
         </div>
-        <div v-else>
-          <div class="text-xs font-medium text-ink-900">{{ row.customerName }}</div>
-          <div class="text-[10px] text-ink-500 font-mono">{{ row.customerPhone }}</div>
-        </div>
+        <div v-else class="whitespace-nowrap text-xs text-warning-700">Chưa gán thợ</div>
       </template>
 
-      <template #cell-technician="{ row }">
-        <div v-if="isSkeleton(row)">
-          <FhSkeleton width="130px" height="16px" class="mb-1" />
-          <FhSkeleton width="40px" height="12px" />
-        </div>
-        <div v-else>
-          <div v-if="row.technician" class="text-xs font-medium text-ink-900">
-            {{ row.technician.fullName }}
-            <span v-if="hasRating(row.technician.averageRating)" class="text-[10px] text-amber-600 block">★ {{ ratingLabel(row.technician.averageRating) }}</span>
-            <span v-else class="text-[10px] text-ink-500 block">Chưa có đánh giá</span>
-          </div>
-          <span v-else class="text-[11px] text-amber-600 font-semibold">Chưa gán thợ</span>
-        </div>
-      </template>
-
-      <template #cell-costs="{ row }">
-        <div v-if="isSkeleton(row)" class="w-56">
-          <FhSkeleton width="100%" height="24px" class="mb-1 rounded" />
-          <FhSkeleton width="60px" height="16px" class="ml-auto" />
-        </div>
-        <div v-else class="max-w-[260px] min-w-[220px]">
-          <FhCostBreakdown :labor-total="row.laborTotal" :parts-total="row.partsTotal" />
-          <div class="text-right text-[11px] font-bold text-brand-700 font-num mt-1">
-            <FhMoney :amount="row.grandTotal" />
-          </div>
-        </div>
+      <template #cell-total="{ row }">
+        <FhMoney :amount="row.grandTotal" />
+        <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Công <span class="font-num">{{ formatCurrencyVND(row.laborTotal) }}</span></div>
+        <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Linh kiện <span class="font-num">{{ formatCurrencyVND(row.partsTotal) }}</span></div>
       </template>
 
       <template #cell-status="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="100px" height="24px" class="rounded-full" />
-        <FhStatusPill v-else :status="row.status" />
+        <FhStatusPill :status="row.status" class="whitespace-nowrap" />
       </template>
-
-      <template #cell-actions="{ row }">
-        <FhSkeleton v-if="isSkeleton(row)" width="32px" height="32px" class="rounded-[var(--radius-sm)]" />
-        <button
-          v-else
-          class="p-1.5 text-ink-500 hover:text-brand-600 rounded hover:bg-ink-100 transition-colors"
-          title="Xem chi tiết"
-          @click="router.push(`/console/orders/${row.id}`)"
-        >
-          <Eye :size="16" />
-        </button>
-      </template>
-    </FhTable>
+    </ConsoleTable>
   </div>
 </template>
