@@ -29,6 +29,8 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
   it('uses technician user IDs for invitation shortlist and unwraps address data', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({data:{data:[{technicianId:'profile',userId:'user',fullName:'Tech'}]}});
     expect((await bookingsApi.getCandidates('b'))[0].id).toBe('user');
+    // The technician list may be slow; it waits a minute, not the 15s default (10/10/2026).
+    expect(apiClient.get).toHaveBeenCalledWith('/bookings/b/technician-candidates', { timeout: 60000 });
     vi.mocked(apiClient.get).mockResolvedValueOnce({data:{data:[{id:'address'}]}});
     expect(await profileApi.getAddresses()).toEqual([{id:'address'}]);
   });
