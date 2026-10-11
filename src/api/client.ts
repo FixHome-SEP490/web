@@ -19,6 +19,12 @@ type AuthSessionInvalidator = () => void;
 let authSessionInvalidator: AuthSessionInvalidator | null = null;
 let tokenRefreshed: ((token: string) => void) | null = null;
 let refreshing: Promise<string> | null = null;
+let mutationListener: ((url: string) => void) | null = null;
+
+/** Called with the path of every successful POST, PUT, PATCH or DELETE (the query cache listens). */
+export function registerMutationListener(listener: ((url: string) => void) | null) {
+  mutationListener = listener;
+}
 
 export function registerTokenRefreshed(callback: ((token: string) => void) | null) {
   tokenRefreshed = callback;
@@ -72,7 +78,13 @@ function humanize(error: unknown): unknown {
 
 // Response interceptor – handle errors
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response,
+  (response: AxiosResponse) => {
+    const method = (response.config?.method ?? 'get').toLowerCase();
+    if (mutationListener && method !== 'get' && method !== 'head' && method !== 'options') {
+      mutationListener(response.config?.url ?? '');
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     if (getHttpStatus(error) !== 401) return Promise.reject(humanize(error));
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;

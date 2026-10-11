@@ -9,6 +9,7 @@ import {
   Camera,
 } from 'lucide-vue-next';
 import AvatarDialog from './account/AvatarDialog.vue';
+import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 import type { Component } from 'vue';
 
@@ -38,6 +39,7 @@ const NARROW = '(max-width: 1023px)';
 const isCollapsed = ref(typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches);
 const route = useRoute();
 const authStore = useAuthStore();
+const prefetchRoute = useRoutePrefetch();
 const showProfileDropdown = ref(false);
 // Staff have no profile page; the avatar is changed from this menu (PO 10/10/2026).
 const showAvatarDialog = ref(false);
@@ -182,7 +184,8 @@ const isActive = (path: string) => {
               :to="item.path"
               class="nav-item group"
               :class="{ 'active': isActive(item.path) }"
-              @mouseenter="(e) => showTooltip(e, item.label)"
+              @mouseenter="(e) => { showTooltip(e, item.label); prefetchRoute(item.path); }"
+              @focus="prefetchRoute(item.path)"
               @mouseleave="hideTooltip"
             >
               <div class="icon-wrapper shrink-0">

@@ -2,14 +2,17 @@
 // Earnings for a day, a week (Monday to Sunday), a month or all time, in
 // Vietnam time (PO 12/10/2026). The server totals the whole period and pages
 // the completed orders; the wallet balance stays one tap from the wallet.
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next';
 
 import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { technicianEarningsApi, type EarningsPayout, type EarningsSummary } from '../../api/technician-earnings.api';
-import { walletApi, type WalletSummary } from '../../api/wallet.api';
+import type { PageResult } from '../../api/paging';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCachedQuery } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
+import { sharedQueries } from '../../lib/queries';
 import { useQueryChoice, useQueryState } from '../../composables/useQueryState';
 import {
   PERIOD_KINDS,
@@ -42,44 +45,46 @@ const anchor = useQueryState<string>(
 const period = computed(() => periodContaining(kind.value, anchor.value || undefined));
 const label = computed(() => periodLabel(period.value));
 const atLatest = computed(() => reachesToday(period.value));
-const periodKey = computed(() => `${period.value.from ?? ''}|${period.value.to ?? ''}`);
 
-const summary = ref<EarningsSummary | null>(null);
-const summaryKey = ref('');
-let request = 0;
-
-const { page, items: payouts, total, loading, error: loadError, load, reset } = usePagedList<EarningsPayout>({
+const {
+  items: payouts,
+  page,
+  total,
+  result,
+  loading,
+  refreshing,
+  changingPage,
+  error: loadError,
+  load,
+  prefetch,
+} = usePagedList<EarningsPayout, PageResult<EarningsPayout> & { summary: EarningsSummary }>({
+  // A new period starts again at page 1.
+  key: () => queryKeys.earnings.period({ from: period.value.from ?? null, to: period.value.to ?? null }),
   pageSize: PAGE_SIZE,
   fetch: async (page, pageSize) => {
-    const id = ++request;
-    const key = periodKey.value;
-    const result = await technicianEarningsApi.getMyEarnings({
+    const summary = await technicianEarningsApi.getMyEarnings({
       from: period.value.from,
       to: period.value.to,
       page,
       pageSize,
     });
-    if (id === request) {
-      summary.value = result;
-      summaryKey.value = key;
-    }
-    return { items: result.payouts, total: result.total, page: result.page, pageSize: result.pageSize };
+    return { items: summary.payouts, total: summary.total, page: summary.page, pageSize: summary.pageSize, summary };
   },
 });
+const summary = computed(() => result.value?.summary ?? null);
 
-const wallet = ref<WalletSummary | null>(null);
-const walletLoading = ref(true);
-async function loadWallet() {
-  walletLoading.value = true;
-  wallet.value = await walletApi.getMyWallet().catch(() => null);
-  walletLoading.value = false;
-}
+const {
+  data: walletData,
+  loading: walletLoading,
+  refetch: refetchWallet,
+} = useCachedQuery(sharedQueries.technicianWallet);
+const wallet = computed(() => walletData.value ?? null);
 
 const error = computed(() =>
   loadError.value ? userFacingError(loadError.value, 'Không thể tải thu nhập. Vui lòng thử lại.') : '',
 );
 // Totals wait for their own period; paging inside a period keeps them on screen.
-const totalsLoading = computed(() => loading.value && summaryKey.value !== periodKey.value);
+const totalsLoading = computed(() => loading.value);
 
 function choose(next: PeriodKind) {
   anchor.value = '';
@@ -91,11 +96,8 @@ function step(delta: number) {
 }
 function reload() {
   void load();
-  void loadWallet();
+  void refetchWallet();
 }
-
-watch(periodKey, () => reset());
-onMounted(loadWallet);
 
 const emptyText = computed(() => {
   switch (period.value.kind) {
@@ -119,7 +121,7 @@ const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Thu nhập</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="reload">
-        <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
+        <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
         <span class="hidden sm:inline">Tải lại</span>
       </FhButton>
     </div>
@@ -246,7 +248,12 @@ const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink
           <p class="text-base font-semibold text-ink-900">{{ emptyText }}</p>
         </div>
 
-        <ul v-else class="divide-y divide-ink-100">
+        <ul
+          v-else
+          class="divide-y divide-ink-100 transition-opacity"
+          :class="{ 'opacity-60': changingPage }"
+          :aria-busy="changingPage"
+        >
           <li v-for="payout in payouts" :key="payout.orderId">
             <button
               type="button"
@@ -294,6 +301,7 @@ const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink
             :page-size="PAGE_SIZE"
             :total="total"
             :disabled="loading"
+            @prefetch="prefetch"
           />
         </div>
       </section>

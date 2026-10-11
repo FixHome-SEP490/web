@@ -214,7 +214,7 @@ describe('usePagedList', () => {
       .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
       .mockResolvedValueOnce({ items: ['new'], total: 1, page: 1, pageSize: 10 });
     let list!: ReturnType<typeof usePagedList<string>>;
-    mount(defineComponent({ setup() { list = usePagedList({ pageSize: 10, fetch }); return () => h('i'); } }));
+    mount(defineComponent({ setup() { list = usePagedList({ key: () => ['test-list'], pageSize: 10, fetch }); return () => h('i'); } }));
     await flushPromises();
     void list.load();
     await flushPromises();

@@ -6,6 +6,8 @@ import { Search, Clock } from 'lucide-vue-next';
 
 import { FhButton, FhMoney, FhSkeleton, FhEmptyState } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 
 const router = useRouter();
 const route = useRoute();
@@ -49,11 +51,13 @@ function goToDetail(service: ServiceItem) {
   router.push('/services/' + (service.slug ?? service.id));
 }
 
+const reference = useReferenceData();
+
 async function loadCatalog() {
   loading.value = true;
   loadError.value = '';
   try {
-    categories.value = await catalogApi.getCategories(true);
+    categories.value = await reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true));
   } catch {
     categories.value = [];
     loadError.value = 'Không thể tải danh mục dịch vụ từ hệ thống. Vui lòng thử lại.';

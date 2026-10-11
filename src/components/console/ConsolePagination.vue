@@ -13,7 +13,7 @@ withDefaults(
   }>(),
   { totalPages: null, total: null, pageSize: 20, disabled: false },
 );
-defineEmits<{ (e: 'update:page', value: number): void }>();
+defineEmits<{ (e: 'update:page', value: number): void; (e: 'prefetch', value: number): void }>();
 </script>
 
 <template>
@@ -24,5 +24,6 @@ defineEmits<{ (e: 'update:page', value: number): void }>();
     :page-size="pageSize"
     :disabled="disabled"
     @update:page="$emit('update:page', $event)"
+    @prefetch="$emit('prefetch', $event)"
   />
 </template>

@@ -22,6 +22,8 @@ import { FhButton, FhPagination, FhSkeleton } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { customerNotificationPath, getNotificationCategory, notificationsApi, type NotificationItem } from '../../api/notifications.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { toast } from 'vue-sonner';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -29,6 +31,7 @@ type Category = 'ALL' | 'TECHNICIAN' | 'SERVICE_MANAGER' | 'ADMIN';
 
 const router = useRouter();
 const notifStore = useNotificationsStore();
+const cache = useCacheUpdates();
 
 const searchQuery = ref('');
 const selectedCategory = ref<Category>('ALL');
@@ -42,7 +45,10 @@ const {
   loading,
   error,
   load,
+  changingPage,
+  prefetch,
 } = usePagedList<NotificationItem>({
+  key: () => queryKeys.notifications.list({}),
   pageSize: PAGE_SIZE,
   fetch: async (p, size) => {
     const result = await notificationsApi.getMyNotifications(p, size);
@@ -91,6 +97,7 @@ const handleItemClick = async (item: NotificationItem) => {
   if (!item.isRead) {
     await notifStore.markAsRead(item.id);
     item.isRead = true;
+    cache.markChanged(affectedBy.notificationsRead);
     // The bell keeps its own short list; read the count again so both agree.
     void notifStore.fetchUnreadCount();
   }
@@ -103,6 +110,7 @@ const handleMarkAllRead = async () => {
   notifications.value.forEach((n) => {
     n.isRead = true;
   });
+  cache.markChanged(affectedBy.notificationsRead);
   toast.success('Đã đánh dấu tất cả thông báo là đã đọc');
 };
 
@@ -205,7 +213,12 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       <FhButton v-if="hasFilter" variant="secondary" size="sm" @click="clearFilters">Xóa bộ lọc</FhButton>
     </div>
 
-    <ul v-else class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+    <ul
+      v-else
+      class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
+    >
       <li v-for="item in filteredNotifications" :key="item.id">
         <button
           type="button"
@@ -244,6 +257,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       v-model:page="page"
       :page-size="PAGE_SIZE"
       :total="total"
+      @prefetch="prefetch"
     />
   </div>
 </template>

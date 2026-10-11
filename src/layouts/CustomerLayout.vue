@@ -22,9 +22,11 @@ import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import { toast } from 'vue-sonner';
 import { vnDateString } from '../utils/vn-time';
+import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
 const callStore = useCallStore();
 
@@ -98,6 +100,8 @@ const handleLogout = async () => {
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
+              @mouseenter="prefetchRoute(item.to)"
+              @focus="prefetchRoute(item.to)"
               class="h-9 px-3 rounded-xl inline-flex items-center gap-2 whitespace-nowrap hover:bg-ink-100 hover:text-ink-900 transition-colors"
               :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
               :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
@@ -176,6 +180,7 @@ const handleLogout = async () => {
           v-for="item in tabItems"
           :key="item.to"
           :to="item.to"
+          @touchstart.passive="prefetchRoute(item.to)"
           class="relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-ink-500 whitespace-nowrap"
           :active-class="item.exact ? '' : 'text-brand-600'"
           :exact-active-class="item.exact ? 'text-brand-600' : ''"

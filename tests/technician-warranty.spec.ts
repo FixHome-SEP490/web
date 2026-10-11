@@ -16,6 +16,7 @@ import OrderComplaintPanel from '../src/components/customer/OrderComplaintPanel.
 import TechnicianWarrantyActionModal from '../src/components/technician/TechnicianWarrantyActionModal.vue';
 import TechnicianWarrantyPage from '../src/pages/technician/TechnicianWarrantyPage.vue';
 import { allowedComplaintTypes, complaintTypeLabel } from '../src/utils/order-complaint';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
 
 const claim = (overrides: Partial<StaffWarrantyClaim> = {}): StaffWarrantyClaim => ({
   id: 'claim-1',
@@ -209,6 +210,8 @@ describe('TechnicianWarrantyPage', () => {
     expect(empty.text()).toContain('Chưa có yêu cầu bảo hành');
 
     apiClientMock.get.mockRejectedValueOnce({ response: { data: { message: 'Không có quyền.' } } });
+    // A new session: the cached empty list must not answer for it.
+    installQueryClient(createTestQueryClient());
     const failed = mount(TechnicianWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
     expect(failed.text()).toContain('Không có quyền.');

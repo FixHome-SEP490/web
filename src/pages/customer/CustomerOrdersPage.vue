@@ -3,7 +3,7 @@
 // Two server-paged lists (PO 12/10/2026): booking requests that no technician
 // has taken yet, and repair orders. Each has its own numbered pager; the tab
 // and both pages stay in the address bar (?tab=COMPLETED&page=2).
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   MapPin,
@@ -25,6 +25,7 @@ import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import type { PageResult } from '../../api/paging';
 import { usePagedList } from '../../composables/usePagedList';
+import { queryKeys } from '../../lib/query-keys';
 import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString } from '../../utils/vn-time';
@@ -64,11 +65,13 @@ const BOOKING_STATES: Record<Tab, string[]> = {
 };
 
 const ordersList = usePagedList<ServiceOrderItem>({
+  key: () => queryKeys.orders.customerList({ tab: activeTab.value, search: search.value }),
   pageSize: PAGE_SIZE,
   fetch: (page, size) =>
     ordersApi.getMyOrdersPage(page, size, { statuses: ORDER_STATES[activeTab.value], search: search.value }),
 });
 const bookingsList = usePagedList<BookingItem>({
+  key: () => queryKeys.bookings.customerList({ tab: activeTab.value, search: search.value }),
   pageSize: PAGE_SIZE,
   page: useQueryPage('requestsPage'),
   fetch: (page, size) => {
@@ -85,6 +88,8 @@ const {
   loading: loadingOrders,
   error: ordersFailure,
   load: retryOrders,
+  changingPage: changingOrdersPage,
+  prefetch: prefetchOrders,
 } = ordersList;
 const {
   page: bookingsPage,
@@ -93,12 +98,9 @@ const {
   loading: loadingBookings,
   error: bookingsFailure,
   load: retryBookings,
+  changingPage: changingBookingsPage,
+  prefetch: prefetchBookings,
 } = bookingsList;
-
-watch([activeTab, search], () => {
-  ordersList.reset();
-  bookingsList.reset();
-});
 
 // Short lines only; the server's wording never reaches the customer.
 const ordersError = computed(() => (ordersFailure.value ? 'Chưa tải được đơn sửa chữa, vui lòng thử lại.' : null));
@@ -278,7 +280,12 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             <FhSkeleton width="30%" height="14px" />
           </div>
         </div>
-        <ul v-else class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+        <ul
+          v-else
+          class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+          :class="{ 'opacity-60': changingBookingsPage }"
+          :aria-busy="changingBookingsPage"
+        >
           <li
             v-for="booking in bookings"
             :key="booking.id"
@@ -319,6 +326,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           :page-size="PAGE_SIZE"
           :total="bookingsTotal"
           :disabled="loadingBookings"
+          @prefetch="prefetchBookings"
         />
       </section>
 
@@ -331,7 +339,12 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             <FhSkeleton width="35%" height="14px" />
           </div>
         </div>
-        <ul v-else class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+        <ul
+          v-else
+          class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+          :class="{ 'opacity-60': changingOrdersPage }"
+          :aria-busy="changingOrdersPage"
+        >
           <li
             v-for="order in orders"
             :key="order.id"
@@ -403,6 +416,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           :page-size="PAGE_SIZE"
           :total="ordersTotal"
           :disabled="loadingOrders"
+          @prefetch="prefetchOrders"
         />
       </section>
     </div>

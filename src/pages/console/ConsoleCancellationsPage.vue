@@ -8,6 +8,8 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { orderStatusLabel, roleLabel } from '../../components/console/console-labels';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 
 interface CancellationRow extends CancellationRecord {
   orderCode: string;
@@ -26,6 +28,7 @@ const columns: ConsoleColumn[] = [
 const PAGE_SIZE = 20;
 const boostError = ref('');
 const busyId = ref('');
+const cache = useCacheUpdates();
 
 // The list carries the order code and who cancelled: Service Managers may
 // not read user records, and one request per row was slow besides.
@@ -36,7 +39,10 @@ const {
   loading,
   error: loadError,
   load: loadCancellations,
+  changingPage,
+  prefetch,
 } = usePagedList<CancellationRecord>({
+  key: () => queryKeys.orders.cancellations,
   pageSize: PAGE_SIZE,
   fetch: (p, size) => ordersApi.getCancellationsPage(p, size),
 });
@@ -65,6 +71,7 @@ async function handleGrantBoost(row: CancellationRow) {
     const updated = await ordersApi.reviewCancellation(row.id, { grantPriorityBoost: true });
     const index = items.value.findIndex((item) => item.id === row.id);
     if (index >= 0) items.value[index] = { ...items.value[index], ...updated };
+    cache.markChanged(affectedBy.orderChange);
   } catch {
     boostError.value = 'Chưa cấp được Boost, vui lòng thử lại.';
   } finally {
@@ -83,6 +90,8 @@ async function handleGrantBoost(row: CancellationRow) {
       :columns="columns"
       :rows="rows"
       :loading="loading"
+      class="transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
       empty-text="Chưa có đơn nào bị huỷ."
     >
       <template #cell-orderCode="{ row }">
@@ -125,7 +134,14 @@ async function handleGrantBoost(row: CancellationRow) {
         </FhButton>
       </template>
     </ConsoleTable>
-    <ConsolePagination v-if="!loadError" v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
+    <ConsolePagination
+      v-if="!loadError"
+      v-model:page="page"
+      :total="total"
+      :page-size="PAGE_SIZE"
+      :disabled="loading"
+      @prefetch="prefetch"
+    />
     <p v-if="boostError" class="text-sm text-danger-600" role="alert">{{ boostError }}</p>
   </div>
 </template>
