@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getCashSettlement: vi.fn(),
   getAdditionalCosts: vi.fn(),
   uploadEvidence: vi.fn(),
+  getEvidence: vi.fn(),
   getBooking: vi.fn(),
   getBookingMediaContent: vi.fn(),
   getConsoleOrderContext: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('../src/api/orders.api', () => ({
     getCashSettlement: mocks.getCashSettlement,
     getAdditionalCosts: mocks.getAdditionalCosts,
     uploadEvidence: mocks.uploadEvidence,
+    getEvidence: mocks.getEvidence,
   },
   isHistoricalOrder: (order: { historical?: boolean }) => order.historical === true,
 }));
@@ -133,6 +135,7 @@ beforeEach(() => {
   mocks.getCashSettlement.mockReset().mockResolvedValue(null);
   mocks.getAdditionalCosts.mockReset().mockResolvedValue([]);
   mocks.uploadEvidence.mockReset();
+  mocks.getEvidence.mockReset().mockResolvedValue([]);
   mocks.getBooking.mockReset().mockResolvedValue(fullBooking());
   mocks.getBookingMediaContent.mockReset().mockResolvedValue(new Blob(['private'], { type: 'image/jpeg' }));
   mocks.getConsoleOrderContext.mockReset().mockResolvedValue(consoleOrder());
@@ -166,37 +169,67 @@ describe('technician ServiceOrder private media access', () => {
     wrapper.unmount();
   });
 
-  it('opens BEFORE file picker only after verified check-in; click does not submit an empty upload', async () => {
+  // Before photos come from the camera only (PO 11/10/2026): the tile opens CameraCapture, never a file input.
+  const cameraStubs = {
+    ...pickerStubs,
+    CameraCapture: { name: 'CameraCapture', props: ['mode', 'title'], emits: ['capture', 'close'], template: '<div data-testid="camera-capture" :data-mode="mode" />' },
+  };
+  const closeCamera = async (wrapper: ReturnType<typeof mount>) => {
+    wrapper.findComponent({ name: 'CameraCapture' }).vm.$emit('close');
+    await flushPromises();
+  };
+
+  it('opens the BEFORE camera only after verified check-in with the face photo; no file input, no upload on open', async () => {
     mocks.getTechnicianOrder.mockResolvedValueOnce({
       ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 0,
     });
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
+    mocks.getEvidence.mockResolvedValue([{ id: 'face-1', type: 'checkin_face', mediaUrl: 'https://img.test/face.jpg' }]);
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: cameraStubs } });
     await flushPromises();
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
     const picker = wrapper.get('[data-testid="before-evidence-picker"]');
-    const input = wrapper.get('input[type="file"]');
-    const open = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {});
     expect(picker.attributes('aria-disabled')).toBe('false');
+    expect(wrapper.find('[data-testid="camera-capture"]').exists()).toBe(false);
     await picker.trigger('click');
+    expect(wrapper.get('[data-testid="camera-capture"]').attributes('data-mode')).toBe('product');
+    await closeCamera(wrapper);
+    expect(wrapper.find('[data-testid="camera-capture"]').exists()).toBe(false);
     await picker.trigger('keydown.enter');
-    expect(open).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('[data-testid="camera-capture"]').attributes('data-mode')).toBe('product');
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
     expect(mocks.uploadEvidence).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
-  it('does not open BEFORE picker before verified check-in', async () => {
-    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: pickerStubs } });
+  it('does not open the BEFORE camera before verified check-in', async () => {
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: cameraStubs } });
     await flushPromises();
     const picker = wrapper.get('[data-testid="before-evidence-picker"]');
-    const input = wrapper.get('input[type="file"]');
-    const open = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {});
     expect(picker.attributes('aria-disabled')).toBe('true');
     expect(picker.attributes('tabindex')).toBe('-1');
     await picker.trigger('click');
     await picker.trigger('keydown.enter');
-    expect(open).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="camera-capture"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
     expect(mocks.uploadEvidence).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+
+  it('does not open the BEFORE camera after check-in while the face photo is missing', async () => {
+    mocks.getTechnicianOrder.mockResolvedValueOnce({
+      ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 0,
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: cameraStubs } });
+    await flushPromises();
+    const picker = wrapper.get('[data-testid="before-evidence-picker"]');
+    expect(picker.attributes('aria-disabled')).toBe('true');
+    expect(picker.attributes('tabindex')).toBe('-1');
+    await picker.trigger('click');
+    expect(wrapper.find('[data-testid="camera-capture"]').exists()).toBe(false);
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('renders the persisted fixed-price Booking snapshot instead of a new quotation form', async () => {
     mocks.getTechnicianOrder.mockResolvedValueOnce({
       ...activeJob, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 1,

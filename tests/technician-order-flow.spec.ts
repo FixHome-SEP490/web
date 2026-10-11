@@ -122,7 +122,11 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Đang đến nhà khách');
-    expect(wrapper.text()).toContain('Check-in và chụp ảnh sản phẩm');
+    // Check-in now opens the face camera (PO 11/10/2026): one "Check-in" button, no gallery picker.
+    const checkIn = wrapper.get('[data-testid="job-now"]').findAll('button').filter((b) => b.text().trim() === 'Check-in');
+    expect(checkIn).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('Check-in và chụp ảnh sản phẩm');
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
 
     wrapper.unmount();
   });
@@ -174,7 +178,9 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         return { data: { data: { ...activeOrder, status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 0 } } };
       }
       if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
-      if (path === '/service-orders/job-test-101/evidence') return { data: { data: [] } };
+      if (path === '/service-orders/job-test-101/evidence') {
+        return { data: { data: [{ id: 'face-1', type: 'checkin_face', mediaUrl: 'https://img.test/face.jpg' }] } };
+      }
       return { data: { data: [] } };
     });
 
@@ -183,6 +189,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
 
     expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Chụp ảnh máy trước khi sửa');
     expect(wrapper.text()).toContain('Chụp ảnh máy');
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
 
     wrapper.unmount();
   });

@@ -26,7 +26,7 @@ import {
   type MapMarker,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -145,7 +145,8 @@ const formatFullTimestamp = (val?: string | null) => {
 // Evidence Photos State (Ảnh trước và sau khi làm + Ghi chú của thợ)
 export interface OrderEvidence {
   id: string;
-  type: 'before' | 'after' | 'additional';
+  /** `checkin_face` (the technician's face at check-in) appears only under "Tất cả". */
+  type: EvidenceType;
   mediaUrl: string;
   note?: string | null;
   capturedAt?: string | null;
@@ -593,12 +594,14 @@ const evidenceTypeLabel = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'Trước khi sửa';
   if (t === 'after') return 'Sau khi sửa';
+  if (t === 'checkin_face') return 'Check-in';
   return 'Phát sinh';
 };
 const evidenceTypeClass = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'bg-brand-600';
   if (t === 'after') return 'bg-success-600';
+  if (t === 'checkin_face') return 'bg-ink-700';
   return 'bg-warning-600';
 };
 const openMenuAction = (action: () => void) => {

@@ -33,6 +33,7 @@ import {
   Flag,
   Ban,
   FileText,
+  ScanFace,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -50,6 +51,8 @@ import {
   type ServiceOrderItem,
   type QuotationItemPayload,
   type AdditionalCostRecord,
+  type EvidencePhase,
+  type EvidenceType,
 } from '../../api/orders.api';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
@@ -59,6 +62,8 @@ import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 import AiSummaryDialog from '../../components/technician/AiSummaryDialog.vue';
+import CameraCapture from '../../components/technician/CameraCapture.vue';
+import { getBestPosition } from '../../utils/best-position';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -148,24 +153,47 @@ const acUploading = ref(false);
 const acSubmitting = ref(false);
 
 const completionRequested = ref(false);
-const beforeFile = ref<HTMLInputElement | null>(null);
-const afterFile = ref<HTMLInputElement | null>(null);
 
 export interface EvidenceRecord {
   id: string;
-  type: 'before' | 'after' | 'additional';
+  type: EvidenceType;
   mediaUrl: string;
   createdAt?: string;
 }
 const evidences = ref<EvidenceRecord[]>([]);
-const beforeEvidences = computed(() => (Array.isArray(evidences.value) ? evidences.value : []).filter((e) => e.type?.toLowerCase() === 'before'));
-const afterEvidences = computed(() => (Array.isArray(evidences.value) ? evidences.value : []).filter((e) => e.type?.toLowerCase() === 'after'));
+const evidencesOfType = (type: EvidenceType) =>
+  (Array.isArray(evidences.value) ? evidences.value : []).filter((e) => String(e.type ?? '').toLowerCase() === type);
+const beforeEvidences = computed(() => evidencesOfType('before'));
+const afterEvidences = computed(() => evidencesOfType('after'));
+/** The face photo taken at check-in (PO 11/10/2026); the backend wants it before any "before" photo. */
+const faceEvidences = computed(() => evidencesOfType('checkin_face'));
+const faceUploaded = ref(false);
+const hasFacePhoto = computed(() => faceUploaded.value || faceEvidences.value.length > 0);
 const previewModalUrl = ref<string | null>(null);
 const previewImage = (url: string) => {
   previewModalUrl.value = url;
 };
 const activePreviewEvidence = computed(() => evidences.value.find((e) => e.mediaUrl === previewModalUrl.value));
-const uploadingPhase = ref<'BEFORE' | 'AFTER' | null>(null);
+const uploadingPhase = ref<EvidencePhase | null>(null);
+const checkingIn = ref(false);
+
+// Every job photo is taken with the camera, never chosen from the gallery (PO 11/10/2026).
+type CameraPurpose = 'checkin' | 'face' | 'before' | 'after';
+const cameraPurpose = ref<CameraPurpose | null>(null);
+const CAMERA_TITLES: Record<CameraPurpose, string> = {
+  checkin: 'Check-in',
+  face: 'Chụp khuôn mặt check-in',
+  before: 'Ảnh máy trước khi sửa',
+  after: 'Ảnh máy sau khi sửa',
+};
+const cameraMode = computed<'face' | 'product'>(() =>
+  cameraPurpose.value === 'checkin' || cameraPurpose.value === 'face' ? 'face' : 'product',
+);
+const openCamera = (purpose: CameraPurpose) => {
+  if (actionLoading.value) return;
+  actionMessage.value = null;
+  cameraPurpose.value = purpose;
+};
 
 // Rare actions live in one "Thêm" menu instead of separate cards.
 const moreOpen = ref(false);
@@ -265,7 +293,7 @@ const currentStepNumber = computed<1 | 2 | 3 | 4 | 5>(() => {
 const steps = computed(() =>
   [
     'Xuất phát',
-    'Đến nơi, chụp ảnh máy',
+    'Check-in, chụp ảnh máy',
     isFixedPriceOrder.value ? 'Chuyển sang sửa chữa' : 'Báo giá cho khách',
     'Sửa xong, chụp ảnh',
     'Thu tiền',
@@ -364,7 +392,7 @@ const nowStep = computed<NowStep | null>(() => {
         hint: 'Sửa xong, chụp ảnh máy để hoàn thành.',
         action: {
           label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Hoàn thành (chụp ảnh sau sửa)',
-          run: () => afterFile.value?.click(),
+          run: () => openCamera('after'),
           icon: Camera,
           disabled: actionLoading.value,
           loading: uploadingPhase.value === 'AFTER',
@@ -385,13 +413,26 @@ const nowStep = computed<NowStep | null>(() => {
   }
 
   if (s === 'EN_ROUTE' && gpsCheckedIn.value) {
+    if (!hasBeforePhoto.value && !hasFacePhoto.value) {
+      return {
+        title: 'Chụp khuôn mặt check-in',
+        hint: 'Đã check-in. Chụp khuôn mặt để tiếp tục.',
+        action: {
+          label: uploadingPhase.value === 'CHECKIN_FACE' ? 'Đang tải ảnh…' : 'Chụp khuôn mặt check-in',
+          run: () => openCamera('face'),
+          icon: ScanFace,
+          disabled: actionLoading.value,
+          loading: uploadingPhase.value === 'CHECKIN_FACE',
+        },
+      };
+    }
     if (!hasBeforePhoto.value) {
       return {
         title: 'Chụp ảnh máy trước khi sửa',
         hint: 'Cần ít nhất 1 ảnh.',
         action: {
           label: uploadingPhase.value === 'BEFORE' ? 'Đang tải ảnh…' : 'Chụp ảnh máy',
-          run: openBeforeEvidencePicker,
+          run: openBeforeCamera,
           icon: Camera,
           disabled: actionLoading.value,
           loading: uploadingPhase.value === 'BEFORE',
@@ -440,11 +481,11 @@ const nowStep = computed<NowStep | null>(() => {
   if (s === 'EN_ROUTE') {
     return {
       title: 'Đang đến nhà khách',
-      hint: 'Tới nơi thì check-in và chụp ảnh máy.',
+      hint: 'Tới nơi thì check-in bằng khuôn mặt.',
       action: {
-        label: 'Check-in và chụp ảnh sản phẩm',
-        run: () => beforeFile.value?.click(),
-        icon: MapPin,
+        label: checkingIn.value ? 'Đang check-in…' : 'Check-in',
+        run: () => openCamera('checkin'),
+        icon: Camera,
         disabled: actionLoading.value,
         loading: actionLoading.value,
       },
@@ -499,10 +540,9 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
   }
 }
 
-async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: FileList | File[] | null) {
-  if (!fileList) return;
-  const files = Array.from(fileList);
-  if (files.length === 0) return;
+async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
+  if (files.length === 0) return false;
+  let saved = false;
   actionLoading.value = true;
   uploadingPhase.value = phase;
   actionMessage.value = null;
@@ -513,23 +553,25 @@ async function uploadSelectedEvidence(phase: 'BEFORE' | 'AFTER', fileList?: File
       }
       await ordersApi.uploadEvidence(jobId, { phase, file });
     }
+    saved = true;
+    if (phase === 'CHECKIN_FACE') faceUploaded.value = true;
     await loadJob(jobId, { silent: true });
     actionMessage.value = { type: 'success', text: files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.' };
   } catch (err: unknown) {
     actionMessage.value = {
       type: 'error',
-      text: userFacingError(err, 'Chưa lưu được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB rồi thử lại.'),
+      text: userFacingError(err, 'Chưa lưu được ảnh. Vui lòng chụp lại.'),
     };
   } finally {
     actionLoading.value = false;
     uploadingPhase.value = null;
-    if (phase === 'BEFORE' && beforeFile.value) beforeFile.value.value = '';
-    if (phase === 'AFTER' && afterFile.value) afterFile.value.value = '';
   }
+  return saved;
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.key !== 'Escape') return;
+  if (cameraPurpose.value) return; // the camera closes itself on Escape
   if (previewModalUrl.value) previewModalUrl.value = null;
   else if (moreOpen.value) moreOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
@@ -635,6 +677,8 @@ watch(
     if (!nextId || nextId === previousId) return;
     jobId = nextId;
     bookingForMedia.value = null;
+    faceUploaded.value = false;
+    cameraPurpose.value = null;
     void loadJob(nextId);
   },
 );
@@ -737,104 +781,91 @@ const handleEnRoute = async () => {
   }
 };
 
-const obtainCurrentPosition = async (): Promise<{ lat: number; lng: number; accuracyMeters: number }> => {
-  // 1. Standard accuracy first, then high accuracy.
-  if (typeof navigator !== 'undefined' && navigator.geolocation) {
-    try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 4000,
-          enableHighAccuracy: false,
-          maximumAge: 60000,
-        });
-      });
-      return {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracyMeters: pos.coords.accuracy,
-      };
-    } catch {
-      try {
-        const posHigh = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            timeout: 4000,
-            enableHighAccuracy: true,
-            maximumAge: 30000,
-          });
-        });
-        return {
-          lat: posHigh.coords.latitude,
-          lng: posHigh.coords.longitude,
-          accuracyMeters: posHigh.coords.accuracy,
-        };
-      } catch {
-        // No location sensor, or the permission is blocked.
-      }
-    }
-  }
+const KM_FORMAT = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-  // Check-in uses only the device's real GPS position at the moment of the tap;
-  // never an old position or the customer's address.
-  throw new Error('Không lấy được vị trí. Bật định vị rồi thử lại.');
+/** One plain line for a check-in the server did not accept. */
+const checkInRefusal = (result: Record<string, unknown>): string => {
+  if (result.result === 'out_of_geofence') {
+    const meters = typeof result.distanceMeters === 'number' ? result.distanceMeters : Number.NaN;
+    return Number.isFinite(meters)
+      ? `Bạn đang cách địa chỉ khách khoảng ${KM_FORMAT.format(meters / 1000)} km. Hãy đến đúng địa chỉ rồi check-in lại.`
+      : 'Bạn đang ở xa địa chỉ khách. Hãy đến đúng địa chỉ rồi check-in lại.';
+  }
+  if (result.result === 'low_accuracy') return 'Định vị chưa đủ chính xác. Bật GPS/Wi-Fi rồi thử lại.';
+  return 'Chưa check-in được. Vui lòng thử lại.';
 };
 
-const handleCheckIn = async () => {
+/**
+ * Check-in (PO 11/10/2026): the face photo is taken first, then the GPS position (the server
+ * accepts up to 5 km), then the check-in, and only a valid check-in stores the face photo.
+ */
+const handleCheckInWithFace = async (face: File) => {
   actionLoading.value = true;
+  checkingIn.value = true;
   actionMessage.value = null;
   try {
-    const coords = await obtainCurrentPosition();
-    const result = await ordersApi.checkIn(jobId, {
-      lat: coords.lat,
-      lng: coords.lng,
-      accuracyMeters: coords.accuracyMeters,
-    });
+    let coords: { lat: number; lng: number; accuracyMeters: number };
+    try {
+      coords = await getBestPosition();
+    } catch {
+      actionMessage.value = { type: 'error', text: 'Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.' };
+      return;
+    }
 
+    let result: Record<string, unknown>;
+    try {
+      result = await ordersApi.checkIn(jobId, coords);
+    } catch (err: unknown) {
+      actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa check-in được. Vui lòng thử lại.') };
+      return;
+    }
     if (result.result !== 'valid') {
-      if (result.result === 'out_of_geofence') {
-        const dist = typeof result.distanceMeters === 'number' ? `${Math.round(result.distanceMeters)} m` : 'xa';
-        throw new Error(`Bạn đang cách nhà khách ${dist}. Tới gần hơn rồi thử lại.`);
-      }
-      if (result.result === 'low_accuracy') {
-        throw new Error('Định vị chưa đủ chính xác. Ra chỗ thoáng hoặc bật GPS rồi thử lại.');
-      }
-      throw new Error('Chưa xác nhận được vị trí. Tới đúng địa chỉ rồi thử lại.');
+      actionMessage.value = { type: 'error', text: checkInRefusal(result) };
+      return;
     }
 
     gpsCheckedIn.value = true;
     stopLocationPing();
-    actionMessage.value = { type: 'success', text: 'Đã xác nhận đến nơi.' };
-  } catch (err: unknown) {
-    actionMessage.value = {
-      type: 'error',
-      text: userFacingError(err, 'Chưa xác nhận được vị trí. Kiểm tra quyền định vị rồi thử lại tại địa chỉ sửa chữa.'),
-    };
+    checkingIn.value = false;
+    uploadingPhase.value = 'CHECKIN_FACE';
+    let faceSaved = false;
+    try {
+      await ordersApi.uploadEvidence(jobId, { phase: 'CHECKIN_FACE', file: face });
+      faceUploaded.value = true;
+      faceSaved = true;
+    } catch {
+      // The check-in stands; the next step asks for the face photo again.
+    }
+    await loadJob(jobId, { silent: true });
+    actionMessage.value = faceSaved
+      ? { type: 'success', text: 'Đã check-in. Giờ chụp ảnh máy trước khi sửa.' }
+      : { type: 'error', text: 'Đã check-in nhưng chưa lưu được ảnh khuôn mặt. Bấm "Chụp khuôn mặt check-in" để chụp lại.' };
   } finally {
     actionLoading.value = false;
+    checkingIn.value = false;
+    uploadingPhase.value = null;
   }
 };
 
-const openBeforeEvidencePicker = () => {
-  if (gpsCheckedIn.value && !actionLoading.value) beforeFile.value?.click();
-};
-// Check-in needs a product photo (PO 08/10/2026): the picker opens first, then the
-// GPS check-in runs, then the photo is stored.
-const handleUploadBefore = async () => {
-  const files = beforeFile.value?.files;
-  if (!files || files.length === 0) return;
-  if (!gpsCheckedIn.value) {
-    await handleCheckIn();
-    if (!gpsCheckedIn.value) {
-      if (beforeFile.value) beforeFile.value.value = '';
-      return;
-    }
-  }
-  await uploadSelectedEvidence('BEFORE', files);
+/** More "before" photos: after check-in and once the face photo is stored (the server refuses earlier). */
+const canAddBeforePhoto = computed(() => gpsCheckedIn.value && hasFacePhoto.value && !actionLoading.value);
+const openBeforeCamera = () => {
+  if (canAddBeforePhoto.value) openCamera('before');
 };
 // "Hoàn thành": the after photo, then the completion request.
-const handleUploadAfter = async () => {
+const handleUploadAfter = async (file: File) => {
   const hadAfter = afterEvidences.value.length > 0;
-  await uploadSelectedEvidence('AFTER', afterFile.value?.files);
+  await uploadSelectedEvidence('AFTER', [file]);
   if (!hadAfter && afterEvidences.value.length > 0 && !completionRequested.value) await handleCompleteOrder();
+};
+
+const onCameraCapture = async (file: File) => {
+  const purpose = cameraPurpose.value;
+  cameraPurpose.value = null;
+  if (purpose === 'checkin') await handleCheckInWithFace(file);
+  else if (purpose === 'face') await uploadSelectedEvidence('CHECKIN_FACE', [file]);
+  else if (purpose === 'before') await uploadSelectedEvidence('BEFORE', [file]);
+  else if (purpose === 'after') await handleUploadAfter(file);
 };
 
 watch(
@@ -1227,23 +1258,6 @@ const toggleMore = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
-    <input
-      ref="beforeFile"
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-      multiple
-      class="hidden"
-      @change="handleUploadBefore"
-    />
-    <input
-      ref="afterFile"
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-      multiple
-      class="hidden"
-      @change="handleUploadAfter"
-    />
-
     <a
       href="/tech/jobs"
       class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
@@ -1590,6 +1604,11 @@ const toggleMore = async () => {
                 </template>
                 <template v-else-if="step.n === 2">
                   <p>{{ gpsCheckedIn ? 'Đã check-in đúng địa chỉ.' : 'Chưa check-in.' }}</p>
+                  <div v-if="faceEvidences.length" class="flex flex-wrap gap-2" data-testid="checkin-face-photos">
+                    <button v-for="e in faceEvidences" :key="e.id" type="button" class="w-16 h-16 rounded-lg overflow-hidden border border-ink-200" aria-label="Xem ảnh khuôn mặt check-in" @click="previewImage(e.mediaUrl)">
+                      <img :src="e.mediaUrl" alt="" class="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  </div>
                   <div v-if="beforeEvidences.length" class="flex flex-wrap gap-2">
                     <button v-for="e in beforeEvidences" :key="e.id" type="button" class="w-16 h-16 rounded-lg overflow-hidden border border-ink-200" aria-label="Xem ảnh trước khi sửa" @click="previewImage(e.mediaUrl)">
                       <img :src="e.mediaUrl" alt="" class="w-full h-full object-cover" loading="lazy" />
@@ -1768,15 +1787,15 @@ const toggleMore = async () => {
                   <div
                     v-if="!isCompleted"
                     class="w-20 h-20 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors"
-                    :class="!gpsCheckedIn || actionLoading ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
+                    :class="!canAddBeforePhoto ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
                     data-testid="before-evidence-picker"
                     role="button"
-                    :aria-label="gpsCheckedIn ? 'Thêm ảnh trước khi sửa' : 'Check-in xong mới thêm được ảnh'"
-                    :tabindex="gpsCheckedIn && !actionLoading ? 0 : -1"
-                    :aria-disabled="!gpsCheckedIn || actionLoading"
-                    @click="openBeforeEvidencePicker"
-                    @keydown.enter.prevent="openBeforeEvidencePicker"
-                    @keydown.space.prevent="openBeforeEvidencePicker"
+                    :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : 'Chụp thêm ảnh trước khi sửa'"
+                    :tabindex="canAddBeforePhoto ? 0 : -1"
+                    :aria-disabled="!canAddBeforePhoto"
+                    @click="openBeforeCamera"
+                    @keydown.enter.prevent="openBeforeCamera"
+                    @keydown.space.prevent="openBeforeCamera"
                   >
                     <Loader2 v-if="uploadingPhase === 'BEFORE'" :size="18" class="animate-spin" />
                     <Camera v-else :size="18" />
@@ -1810,9 +1829,10 @@ const toggleMore = async () => {
                     v-if="!isCompleted"
                     type="button"
                     class="w-20 h-20 rounded-xl border border-dashed border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 flex flex-col items-center justify-center gap-1 text-xs font-medium disabled:opacity-50"
-                    aria-label="Thêm ảnh sau khi sửa"
+                    aria-label="Chụp thêm ảnh sau khi sửa"
+                    data-testid="after-evidence-picker"
                     :disabled="actionLoading"
-                    @click="afterFile?.click()"
+                    @click="openCamera('after')"
                   >
                     <Loader2 v-if="uploadingPhase === 'AFTER'" :size="18" class="animate-spin" />
                     <Camera v-else :size="18" />
@@ -2250,6 +2270,15 @@ const toggleMore = async () => {
         </div>
       </div>
     </div>
+
+    <!-- Camera for the check-in face and the job photos; no gallery picker -->
+    <CameraCapture
+      v-if="cameraPurpose"
+      :mode="cameraMode"
+      :title="CAMERA_TITLES[cameraPurpose]"
+      @capture="onCameraCapture"
+      @close="cameraPurpose = null"
+    />
 
     <!-- Picker: a FixHome part for an additional cost -->
     <div
