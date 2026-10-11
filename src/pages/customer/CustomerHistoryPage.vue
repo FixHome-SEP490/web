@@ -1,12 +1,13 @@
 <script setup lang="ts">
 // Repair history from the server's read model: the customer's completed and
 // cancelled orders, newest first, with what each one cost.
-import { computed, watch } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { History, ChevronRight, Search } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { queryKeys } from '../../lib/query-keys';
 import { SEARCH_MAX_LENGTH, useQueryChoice, useQuerySearch } from '../../composables/useQueryState';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
@@ -27,8 +28,10 @@ const {
   loading,
   error: loadError,
   load,
-  reset,
+  changingPage,
+  prefetch,
 } = usePagedList<RepairHistoryItem>({
+  key: () => queryKeys.orders.history({ filter: filter.value, search: search.value }),
   pageSize: PAGE_SIZE,
   fetch: async (p, size) => {
     const result = await ordersApi.getRepairHistory(p, size, filter.value === 'all' ? undefined : filter.value, search.value || undefined);
@@ -38,7 +41,6 @@ const {
 const error = computed(() =>
   loadError.value ? userFacingError(loadError.value, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.') : null,
 );
-watch([filter, search], () => reset());
 
 const tabs: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
@@ -109,7 +111,12 @@ const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancel
       <p class="text-sm text-ink-500">{{ search ? 'Thử từ khoá khác.' : 'Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.' }}</p>
     </div>
 
-    <ul v-else-if="items.length > 0" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+    <ul
+      v-else-if="items.length > 0"
+      class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
+    >
       <li
         v-for="item in items"
         :key="item.orderId"
@@ -149,6 +156,7 @@ const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancel
       :page-size="PAGE_SIZE"
       :total="total"
       :disabled="loading"
+      @prefetch="prefetch"
     />
   </div>
 </template>

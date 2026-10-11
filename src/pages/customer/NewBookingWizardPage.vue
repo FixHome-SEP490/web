@@ -34,6 +34,8 @@ import {
 } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
@@ -460,6 +462,8 @@ const urgencyList = [
 ] as const;
 
 // Services and saved addresses: skeletons until they arrive, a retry line if they do not.
+// The catalog is reference data, cached for the next form.
+const reference = useReferenceData();
 const catalogLoading = ref(true);
 const catalogLoadFailed = ref(false);
 
@@ -468,7 +472,7 @@ async function loadCatalog() {
   catalogLoadFailed.value = false;
   try {
     const [cats, addrs] = await Promise.all([
-      catalogApi.getCategories(true),
+      reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true)),
       profileApi.getAddresses(),
     ]);
     categories.value = cats;

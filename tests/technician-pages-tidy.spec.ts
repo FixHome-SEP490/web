@@ -15,6 +15,7 @@ import TechnicianJobsPage from '../src/pages/technician/TechnicianJobsPage.vue';
 import TechnicianInvitationsPage from '../src/pages/technician/TechnicianInvitationsPage.vue';
 import TechnicianEarningsPage from '../src/pages/technician/TechnicianEarningsPage.vue';
 import TechnicianWarrantyPage from '../src/pages/technician/TechnicianWarrantyPage.vue';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
 
 const Button = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -168,6 +169,8 @@ describe('TechnicianEarningsPage', () => {
 
     mockGet.mockReset();
     mockGet.mockRejectedValue(serverFailure);
+    // A new session: the cached earnings must not answer for it.
+    installQueryClient(createTestQueryClient());
     const failed = mount(TechnicianEarningsPage, { global: { stubs } });
     await flushPromises();
     expect(failed.get('[role="alert"]').text()).toContain('Thử lại');

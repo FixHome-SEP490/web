@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-12 01:09 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/list-pagination
+> Cập nhật lần cuối: 2026-10-12 02:07 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/client-cache
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -93,6 +93,21 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 ## 3. Trạng thái hiện tại
 
 Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
+
+### Bộ nhớ đệm phía trình duyệt (PO 12/10/2026, nhánh `feat/client-cache`)
+
+Dữ liệu server đi qua một bộ đệm TanStack Vue Query (`@tanstack/vue-query` v5, đăng ký trong `main.ts`): trang đã mở hiện ngay bản đã đọc, rồi đọc lại ngầm khi bản đó quá hạn. Quy tắc:
+
+- `lib/query-client.ts`: một `QueryClient` dùng chung; dữ liệu mới trong 30 giây (`STALE_TIME`), giữ 10 phút khi không trang nào dùng (`GC_TIME`), đọc lại khi quay lại tab, thử lại 1 lần với lỗi mạng hoặc 5xx, không thử lại lỗi 4xx.
+- `lib/query-keys.ts` là chỗ duy nhất đặt khoá: phần tử đầu là tài nguyên (`orders`, `bookings`, `invitations`, `wallet`, `earnings`, `notifications`, `technician`, `warranty`, `addresses`, `console-dashboard`, `reference`), sau đó là bộ lọc và trang. `affectedBy` gom khoá theo loại hành động.
+- Sau hành động của chính người dùng (nhận, từ chối lời mời, các bước đơn, báo giá, chi phí phát sinh, thanh toán, tiền mặt, rút tiền, đặt và huỷ yêu cầu, hồ sơ): `refreshAfterChange` đọc lại dữ liệu đang hiện và bỏ dữ liệu không trang nào hiện, nên tiền và trạng thái đơn không bao giờ hiện bản trước hành động. Thêm một lưới an toàn: mọi lệnh ghi thành công qua `api/client.ts` (`registerMutationListener`) gọi `markChanged(keysChangedBy(url))`; đường dẫn không có trong bảng thì coi như đổi mọi dữ liệu của người dùng.
+- Chi tiết đơn của thợ và của khách có `staleTime` 0: hiện bản đệm ngay, mỗi lần mở đều đọc lại vì phía bên kia cũng đổi được đơn.
+- Danh sách phân trang (`usePagedList`): mỗi trang của mỗi bộ lọc là một khoá; đổi trang giữ hàng cũ mờ đi (`aria-busy`) tới khi trang mới về, chỉ lần đầu mới có khung xám; đổi bộ lọc về trang 1; rê chuột hoặc focus vào nút trang thì đọc trước trang đó.
+- Dữ liệu tham chiếu (danh mục, dịch vụ, tỉnh và quận, ngân hàng) mới trong 10 phút (`REFERENCE_STALE_TIME`, `useReferenceData`).
+- Rê chuột lên mục sidebar (thợ, khách, console) đọc trước dữ liệu chính của trang đó (`lib/queries.ts`, cùng khoá và cùng hàm đọc với trang).
+- Đăng xuất, phiên hết hạn (`clearSession`) và đăng nhập tài khoản khác (`setAuth` với id khác) xoá toàn bộ bộ đệm; lưu hồ sơ của cùng tài khoản thì giữ.
+- Trang đã dùng bộ đệm: thợ (tổng quan, công việc, lời mời, thu nhập, ví, chi tiết công việc, bảo hành, header của `TechnicianLayout`), khách (tổng quan, đơn của tôi, lịch sử, chi tiết đơn, thông báo, ví, bảo hành), console (tổng quan, đơn sửa chữa, gán thợ, huỷ đơn). Chuông thông báo vẫn dùng `notifications.store` (danh sách ngắn riêng, không trùng yêu cầu với trang thông báo).
+- Test: `tests/support/query-client.ts` (khai trong `setupFiles` của `vitest.config.ts`) cho mỗi test một `QueryClient` mới, tắt thử lại, `gcTime` 0; `tests/query-cache.spec.ts` kiểm hành vi bộ đệm.
 
 ### Phân trang mọi danh sách (PO 12/10/2026, nhánh `feat/list-pagination`)
 
@@ -215,6 +230,7 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - `src/services/`: `chat-socket.service.ts` (Socket.IO), `webrtc-call.service.ts`, `google-identity.service.ts`.
 - `src/stores/`: Pinia `auth`, `chat`, `call`, `notifications`.
 - `src/utils/`: định dạng tiền và giờ Việt Nam (`vn-time`), kiểm dữ liệu nhập, ảnh gửi AI.
+- `src/lib/`: bộ đệm dữ liệu server (`query-client.ts`, `query-keys.ts`, `queries.ts`); trang đọc qua `composables/useCachedQuery.ts` và `composables/usePagedList.ts`.
 - `tests/`: spec Vitest.
 
 Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết thường của `backend` sang viết hoa.
@@ -254,6 +270,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 8. Việc đang dở và rủi ro đã biết
 
 - Thông báo dùng polling, chưa nhận đẩy realtime.
+- Bộ đệm phía trình duyệt (`feat/client-cache`) đã qua lint, typecheck, test và build nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt. Thêm dependency `@tanstack/vue-query` nên ai chạy Docker phải `docker compose up -d --build`. Các trang chưa chuyển (form đặt lịch, chi tiết yêu cầu đặt lịch, hồ sơ, trang admin, các trang console còn lại) vẫn đọc khi mở; lệnh ghi của chúng vẫn làm cũ bộ đệm qua lưới an toàn.
 - Tổng quan khách, tổng quan thợ và `TechnicianLayout` vẫn gọi `GET /service-orders/my` không tham số nên chỉ thấy 20 đơn mới nhất; tổng quan console gọi `GET /service-orders` như vậy. Phân trang mới CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt.
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
 - Console chưa có trang chi tiết riêng cho bảo hành và nhật ký thao tác; chi tiết mở ở khung bên. Trang Nhật ký thao tác vẫn hiện mã đối tượng, mã người thực hiện, địa chỉ IP và dữ liệu trước/sau dạng JSON trong khung chi tiết vì đó là nội dung kiểm toán.
@@ -263,6 +280,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
 - 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
 - 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.
 - 2026-10-12 00:23 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Gợi ý địa chỉ gửi kèm vị trí để ưu tiên nơi gần (hồ sơ thợ: vị trí ghim; hồ sơ khách: địa chỉ mặc định), server mặc định TP HCM
@@ -302,4 +320,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
 - 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
-- 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.

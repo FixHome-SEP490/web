@@ -12,11 +12,14 @@ import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../../components/customer/WarrantyClaimModal.vue';
 import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString } from '../../utils/vn-time';
 
 const PAGE_SIZE = 10;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const cache = useCacheUpdates();
 
 // Ten completed orders per page; warranties are read for those orders only.
 const {
@@ -26,7 +29,9 @@ const {
   loading,
   error: loadFailed,
   load: loadWarranties,
+  prefetch,
 } = usePagedList<OrderWarrantyGroup>({
+  key: () => queryKeys.warranty.customerOrders({}),
   pageSize: PAGE_SIZE,
   fetch: (p, size) => ordersApi.getOrderWarrantiesPage(p, size),
 });
@@ -69,6 +74,7 @@ const onClaimSubmitted = (claim: WarrantyClaimView) => {
   showClaimModal.value = false;
   if (!order) return;
   order.claims = [claim, ...order.claims];
+  cache.markChanged(affectedBy.warrantyChange);
   actionMessage.value = {
     type: 'success',
     text: `Đã gửi yêu cầu bảo hành cho đơn ${order.orderCode}. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.`,
@@ -77,6 +83,7 @@ const onClaimSubmitted = (claim: WarrantyClaimView) => {
 
 const onClaimUpdated = (order: OrderWarrantyGroup, claim: WarrantyClaimView) => {
   order.claims = order.claims.map((existing) => (existing.id === claim.id ? claim : existing));
+  cache.markChanged(affectedBy.warrantyChange);
 };
 
 </script>
@@ -257,6 +264,7 @@ const onClaimUpdated = (order: OrderWarrantyGroup, claim: WarrantyClaimView) => 
       v-model:page="page"
       :page-size="PAGE_SIZE"
       :total="total"
+      @prefetch="prefetch"
     />
 
     <WarrantyClaimModal

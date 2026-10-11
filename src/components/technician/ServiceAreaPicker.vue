@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { Search, X } from 'lucide-vue-next';
 import FhSkeleton from '../FhSkeleton.vue';
 import { vietnamProvincesApi, type Province } from '../../api/vietnam-provinces.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import type { TechnicianServiceAreaView } from '../../api/technician-profile.api';
 
 /**
@@ -82,11 +84,13 @@ const firstProvince = (list: Province[]): number | null => {
   return list.find((p) => p.code === HCM_CODE)?.code ?? list[0]?.code ?? null;
 };
 
+const reference = useReferenceData();
+
 const loadProvinces = async () => {
   loadingProvinces.value = true;
   provincesFailed.value = false;
   try {
-    const list = await vietnamProvincesApi.getProvincesWithDistricts();
+    const list = await reference(queryKeys.reference.provinces, () => vietnamProvincesApi.getProvincesWithDistricts());
     if (!Array.isArray(list) || list.length === 0) throw new Error('empty');
     provinces.value = list;
     if (provinceCode.value == null) provinceCode.value = firstProvince(list);

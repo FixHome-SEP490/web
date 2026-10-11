@@ -4,6 +4,7 @@ import { ref, computed } from 'vue';
 import type { UserInfo, UserRole, LoginRequest, RegisterRequest } from '../types';
 import { authApi } from '../api/auth.api';
 import { getHttpStatus, registerAuthSessionInvalidator, registerTokenRefreshed } from '../api/client';
+import { clearQueryCache } from '../lib/query-client';
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -17,6 +18,8 @@ export const useAuthStore = defineStore('auth', () => {
   const permissions = computed(() => user.value?.permissions ?? []);
 
   function clearSession() {
+    // Cached pages belong to this session: the next account must not see them.
+    clearQueryCache();
     token.value = null;
     user.value = null;
     localStorage.removeItem('access_token');
@@ -28,6 +31,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Actions
   function setAuth(accessToken: string, userInfo: UserInfo) {
+    // Signing in as another account starts with an empty cache; a profile save keeps it.
+    if (user.value?.id !== userInfo.id) clearQueryCache();
     token.value = accessToken;
     user.value = userInfo;
     localStorage.setItem('access_token', accessToken);

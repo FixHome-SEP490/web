@@ -19,7 +19,11 @@ const props = withDefaults(
   { pageSize: 20, total: null, totalPages: null, disabled: false },
 );
 
-const emit = defineEmits<{ (e: 'update:page', value: number): void }>();
+const emit = defineEmits<{
+  (e: 'update:page', value: number): void;
+  /** The pointer or focus is on a page button: the list may read that page ahead. */
+  (e: 'prefetch', value: number): void;
+}>();
 const root = ref<HTMLElement | null>(null);
 
 const count = computed(() => {
@@ -45,6 +49,11 @@ function go(target: number) {
   }
 }
 
+function intent(target: number) {
+  if (props.disabled || target < 1 || target > count.value || target === current.value) return;
+  emit('prefetch', target);
+}
+
 const button =
   'inline-flex h-9 items-center justify-center rounded-[var(--radius-sm)] border text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40';
 const idle = 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50';
@@ -68,6 +77,8 @@ const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
         :disabled="disabled || current <= 1"
         data-testid="pagination-prev"
         @click="go(current - 1)"
+        @pointerenter="intent(current - 1)"
+        @focus="intent(current - 1)"
       >
         <ChevronLeft :size="16" aria-hidden="true" />
         <span class="hidden sm:inline">Trước</span>
@@ -83,6 +94,8 @@ const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
           :disabled="disabled && item !== current"
           :data-testid="`pagination-page-${item}`"
           @click="go(item)"
+          @pointerenter="intent(item)"
+          @focus="intent(item)"
         >
           {{ item }}
         </button>
@@ -94,6 +107,8 @@ const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
         :disabled="disabled || current >= count"
         data-testid="pagination-next"
         @click="go(current + 1)"
+        @pointerenter="intent(current + 1)"
+        @focus="intent(current + 1)"
       >
         <span class="hidden sm:inline">Sau</span>
         <ChevronRight :size="16" aria-hidden="true" />

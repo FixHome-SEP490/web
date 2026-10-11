@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { computed, ref, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Mail, Clock, MapPin, Check, ChevronRight, X } from 'lucide-vue-next';
 import {
@@ -10,6 +10,9 @@ import {
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi } from '../../api/technician-profile.api';
 import { sessionLabel } from '../../utils/booking-session';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy } from '../../lib/query-keys';
+import { sharedQueries } from '../../lib/queries';
 
 const invitationSession = (inv: InvitationItem) => sessionLabel({
   bookingMode: inv.booking?.bookingMode,
@@ -19,42 +22,35 @@ const invitationSession = (inv: InvitationItem) => sessionLabel({
 
 const router = useRouter();
 
-const loading = ref(true);
-const invitations = ref<InvitationItem[]>([]);
+const cache = useCacheUpdates();
 const responding = ref(false);
-const loadError = ref('');
 
-const loadInvitations = async () => {
-  loading.value = true;
-  loadError.value = '';
-  try {
-    invitations.value = await bookingsApi.getMyInvitations();
-  } catch {
-    loadError.value = 'Không thể tải danh sách lời mời. Vui lòng thử lại.';
-  } finally {
-    loading.value = false;
-  }
-};
+// Cached with the dashboard's copy: a return visit shows the last list at once.
+const invitationsQuery = useCachedQuery(sharedQueries.technicianInvitations);
+const loading = invitationsQuery.loading;
+const invitations = computed<InvitationItem[]>(() => invitationsQuery.data.value ?? []);
+const loadError = computed(() =>
+  invitationsQuery.error.value ? 'Không thể tải danh sách lời mời. Vui lòng thử lại.' : '',
+);
+const loadInvitations = () => invitationsQuery.refetch();
 
 // "Tự nhận việc" (PO 10/10/2026): new invitations are accepted for the technician. Switching it on
 // also takes the ones waiting now, so the list is reloaded.
-const autoAccept = ref<boolean | null>(null);
+const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
+const autoAccept = computed<boolean | null>(() =>
+  profileQuery.error.value || !profileQuery.data.value ? null : profileQuery.data.value.autoAcceptInvitations,
+);
 const savingAutoAccept = ref(false);
 const autoAcceptError = ref('');
-const loadAutoAccept = async () => {
-  try {
-    autoAccept.value = (await technicianProfileApi.getMyProfile()).autoAcceptInvitations;
-  } catch {
-    autoAccept.value = null;
-  }
-};
 const toggleAutoAccept = async () => {
   if (autoAccept.value === null || savingAutoAccept.value) return;
   const next = !autoAccept.value;
   savingAutoAccept.value = true;
   autoAcceptError.value = '';
   try {
-    autoAccept.value = (await technicianProfileApi.updateMyProfile({ autoAcceptInvitations: next })).autoAcceptInvitations;
+    const saved = (await technicianProfileApi.updateMyProfile({ autoAcceptInvitations: next })).autoAcceptInvitations;
+    if (profileQuery.data.value) profileQuery.setData({ ...profileQuery.data.value, autoAcceptInvitations: saved });
+    cache.markChanged(affectedBy.technicianSettings);
     if (next) await loadInvitations();
   } catch {
     autoAcceptError.value = 'Chưa đổi được chế độ tự nhận việc. Vui lòng thử lại.';
@@ -62,11 +58,6 @@ const toggleAutoAccept = async () => {
     savingAutoAccept.value = false;
   }
 };
-
-onMounted(() => {
-  void loadInvitations();
-  void loadAutoAccept();
-});
 
 const detailInvitation = ref<InvitationItem | null>(null);
 
@@ -92,6 +83,7 @@ const handleAccept = async (inv: InvitationItem) => {
   try {
     const result = await bookingsApi.respondInvitation(inv.id, 'ACCEPT');
     if (!result.serviceOrderId) throw new Error('Missing ServiceOrder ID');
+    void cache.refresh(affectedBy.invitationResponse);
     await router.push({ name: 'tech-job-detail', params: { id: result.serviceOrderId } });
   } catch {
     alert('Chưa xác nhận được trạng thái nhận đơn. Hãy kiểm tra danh sách công việc trước khi thử nhận lại.');
@@ -103,7 +95,8 @@ const handleAccept = async (inv: InvitationItem) => {
 const handleDecline = async (inv: InvitationItem) => {
   try {
     await bookingsApi.respondInvitation(inv.id, 'DECLINE');
-    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+    if (invitationsQuery.data.value) invitationsQuery.setData(invitationsQuery.data.value.filter((i) => i.id !== inv.id));
+    cache.markChanged(affectedBy.invitationResponse);
     if (detailInvitation.value?.id === inv.id) detailInvitation.value = null;
   } catch {
     alert('Chưa thể từ chối lời mời. Vui lòng thử lại.');

@@ -42,6 +42,8 @@ import {
   type MyVerification,
 } from '../../api/technician-verification.api';
 import { catalogApi, type ServiceItem, type ServiceCategory } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
@@ -298,12 +300,14 @@ const selectedSkillFilter = ref<'ALL' | 'ACTIVE' | 'VERIFIED' | 'PENDING'>('ALL'
 const evidenceUploadingId = ref<string | null>(null);
 const rejectionReasons = ref<Record<string, string | null>>({});
 
+const reference = useReferenceData();
+
 const loadServicesAndOfferings = async () => {
   loadingSkills.value = true;
   try {
     const [servicesRes, categoriesRes, offerings] = await Promise.all([
-      catalogApi.getServices({ limit: 100 }),
-      catalogApi.getCategories().catch(() => []),
+      reference(queryKeys.reference.services({ limit: 100 }), () => catalogApi.getServices({ limit: 100 })),
+      reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories()).catch(() => []),
       technicianProfileApi.getMyServices(),
     ]);
     catalogServices.value = servicesRes.data;

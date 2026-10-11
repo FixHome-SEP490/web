@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import {
@@ -20,6 +20,8 @@ import {
 } from '../../components';
 import { ordersApi, isHistoricalOrder, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { useQueryChoice } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -41,6 +43,7 @@ const PAGE_SIZE = 20;
 
 const activeTab = useQueryChoice<JobTab>('tab', TAB_KEYS, 'all');
 const actionLoading = ref<string | null>(null);
+const cache = useCacheUpdates();
 
 const {
   page,
@@ -49,15 +52,16 @@ const {
   loading,
   error,
   load,
-  reset,
+  changingPage,
+  prefetch,
 } = usePagedList<TechnicianOrderItem>({
+  key: () => queryKeys.orders.technicianJobs({ tab: activeTab.value }),
   pageSize: PAGE_SIZE,
   fetch: (p, size) => ordersApi.getTechnicianJobsPage(p, size, { statuses: TAB_STATES[activeTab.value] }),
 });
 
 // How many jobs each tab holds: one row per tab is enough to read its total.
-const counts = ref<Partial<Record<JobTab, number>>>({});
-async function loadCounts() {
+async function fetchCounts(): Promise<Partial<Record<JobTab, number>>> {
   const totals = await Promise.all(
     TAB_KEYS.map((key) =>
       ordersApi.getTechnicianJobsPage(1, 1, { statuses: TAB_STATES[key] }).then((r) => r.total).catch(() => null),
@@ -68,17 +72,19 @@ async function loadCounts() {
     const value = totals[index];
     if (value !== null) next[key] = value;
   });
-  counts.value = next;
+  return next;
 }
+const { data: counts, refetch: refetchCounts } = useCachedQuery({
+  key: queryKeys.orders.technicianJobCounts,
+  fetch: fetchCounts,
+});
 async function loadJobs() {
-  await Promise.all([load(), loadCounts()]);
+  await Promise.all([load(), refetchCounts()]);
 }
 
-watch(activeTab, () => reset());
 watch(total, (value) => {
   if (!loading.value && !error.value) counts.value = { ...counts.value, [activeTab.value]: value };
 });
-onMounted(() => void loadCounts());
 
 const rows = computed(() =>
   jobs.value.map((entry) =>
@@ -91,10 +97,10 @@ const rows = computed(() =>
 const loadError = () => userFacingError(error.value, 'Không thể tải danh sách công việc. Vui lòng thử lại.');
 
 const tabs = computed(() => [
-  { key: 'all' as const, label: 'Tất cả', count: counts.value.all ?? null },
-  { key: 'pending' as const, label: 'Cần di chuyển', count: counts.value.pending ?? null },
-  { key: 'in_progress' as const, label: 'Đang sửa chữa', count: counts.value.in_progress ?? null },
-  { key: 'completed' as const, label: 'Hoàn thành', count: counts.value.completed ?? null },
+  { key: 'all' as const, label: 'Tất cả', count: counts.value?.all ?? null },
+  { key: 'pending' as const, label: 'Cần di chuyển', count: counts.value?.pending ?? null },
+  { key: 'in_progress' as const, label: 'Đang sửa chữa', count: counts.value?.in_progress ?? null },
+  { key: 'completed' as const, label: 'Hoàn thành', count: counts.value?.completed ?? null },
 ]);
 
 // Quick action: start moving to customer's home
@@ -103,7 +109,7 @@ const handleEnRoute = async (job: ServiceOrderItem) => {
   try {
     await ordersApi.enRoute(job.id);
     toast.success('Đã cập nhật: bạn đang trên đường tới nhà khách hàng.');
-    await loadJobs();
+    await cache.refresh(affectedBy.orderChange);
   } catch (err: unknown) {
     toast.error(userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.'));
   } finally {
@@ -200,7 +206,11 @@ const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white h
 
     <!-- One surface, one row per job -->
     <template v-else>
-    <ul class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+    <ul
+      class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
+    >
       <template v-for="row in rows" :key="row.id">
       <!-- Old orders: a short summary only, no customer details -->
       <li
@@ -326,6 +336,7 @@ const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white h
       :page-size="PAGE_SIZE"
       :total="total"
       :disabled="loading"
+      @prefetch="prefetch"
     />
     </template>
   </div>

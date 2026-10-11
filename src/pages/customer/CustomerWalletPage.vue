@@ -7,6 +7,8 @@ import { useRoute } from 'vue-router';
 import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { customerWalletApi, customerWalletTypeLabels, isIncomingWalletTransaction, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
 import { usePagedList } from '../../composables/usePagedList';
+import type { PageResult } from '../../api/paging';
+import { queryKeys } from '../../lib/query-keys';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -16,8 +18,6 @@ const MIN = 10_000;
 const MAX = 50_000_000;
 
 const PAGE_SIZE = 20;
-const balance = ref(0);
-const balanceLoaded = ref(false);
 // One request reads the balance and a page of the history (?page=2 in the address).
 const {
   page,
@@ -26,15 +26,25 @@ const {
   loading,
   error,
   load,
-} = usePagedList<CustomerWalletTransaction>({
+  result,
+  changingPage,
+  prefetch,
+} = usePagedList<CustomerWalletTransaction, PageResult<CustomerWalletTransaction> & { balance: number }>({
+  key: () => queryKeys.wallet.customer({}),
   pageSize: PAGE_SIZE,
   fetch: async (p, size) => {
     const result = await customerWalletApi.summary(p, size);
-    balance.value = result.balance;
-    balanceLoaded.value = true;
-    return { items: result.transactions, total: result.meta.total, page: result.meta.page || p, pageSize: size };
+    return {
+      items: result.transactions,
+      total: result.meta.total,
+      page: result.meta.page || p,
+      pageSize: size,
+      balance: result.balance,
+    };
   },
 });
+const balance = computed(() => result.value?.balance ?? 0);
+const balanceLoaded = computed(() => result.value !== null);
 const loadError = computed(() => (error.value ? userFacingError(error.value, 'Chưa tải được ví, vui lòng thử lại.') : ''));
 
 const amountText = ref('');
@@ -142,7 +152,13 @@ async function topUp() {
         <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
       </div>
       <p v-else-if="transactions.length === 0" class="text-sm text-ink-500">Chưa có giao dịch nào.</p>
-      <ul v-else class="divide-y divide-ink-100" data-testid="wallet-transactions">
+      <ul
+        v-else
+        class="divide-y divide-ink-100 transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
+        :aria-busy="changingPage"
+        data-testid="wallet-transactions"
+      >
         <li v-for="t in transactions" :key="t.id" class="flex items-start justify-between gap-3 py-3 text-sm">
           <div class="min-w-0">
             <p class="font-semibold text-ink-900">{{ LABELS[t.type] ?? 'Giao dịch' }}</p>
@@ -163,6 +179,7 @@ async function topUp() {
         :page-size="PAGE_SIZE"
         :total="total"
         :disabled="loading"
+        @prefetch="prefetch"
       />
     </section>
   </div>

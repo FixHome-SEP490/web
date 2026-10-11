@@ -64,6 +64,9 @@ import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.v
 import AiSummaryDialog from '../../components/technician/AiSummaryDialog.vue';
 import CameraCapture from '../../components/technician/CameraCapture.vue';
 import { getBestPosition } from '../../utils/best-position';
+import { useQueryClient } from '@tanstack/vue-query';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -72,11 +75,10 @@ const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
 let jobId = String(route.params.id ?? '');
-let loadGeneration = 0;
-let disposed = false;
+const jobIdRef = ref(jobId);
+const cache = useCacheUpdates();
+const queryClient = useQueryClient();
 
-const loading = ref(true);
-const loadFailed = ref(false);
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
 // Re-evaluated every 30 s so the depart button lights up on time without a reload.
@@ -249,6 +251,7 @@ const handleWithdrawOrder = async () => {
   withdrawError.value = '';
   try {
     await ordersApi.cancelOrder(jobId, reason);
+    void cache.refresh(affectedBy.orderChange);
     showWithdrawModal.value = false;
     toast.success('Đã huỷ đơn.');
     await router.push('/tech/jobs');
@@ -578,97 +581,157 @@ const handleKeyDown = (e: KeyboardEvent) => {
   else if (replacementOpen.value && !replacementSending.value) replacementOpen.value = false;
 };
 
-onMounted(() => {
-  disposed = false;
-  window.addEventListener('keydown', handleKeyDown);
-  void loadJob(jobId);
-});
+// Everything the job page reads, in one cached answer: a return visit shows it at
+// once and reads it again in the background; every action of the technician
+// reads it again (and drops the other order lists, so none is shown stale).
+type CashSettlementRecord = Awaited<ReturnType<typeof ordersApi.getCashSettlement>>;
+interface TechnicianJobBundle {
+  historical: HistoricalOrderItem | null;
+  job: ServiceOrderItem | null;
+  /** undefined when the evidence endpoint is not there. */
+  evidences?: EvidenceRecord[];
+  booking: (BookingItem & { media: BookingMedia[] }) | null;
+  settlement: CashSettlementRecord;
+  /** Read only once the repair started; undefined keeps what is shown. */
+  costs?: AdditionalCostRecord[];
+  /** Read only for a completed job; undefined keeps what is shown. */
+  review?: Review | null;
+}
 
-const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {}) => {
-  const generation = ++loadGeneration;
-  const isCurrent = () => !disposed && generation === loadGeneration && requestedJobId === jobId;
-  if (!options.silent) {
-    loading.value = true;
-    loadFailed.value = false;
-    bookingForMedia.value = null;
+// The booking (with its private photos) is read once per visit; later reads of the
+// same job reuse it, as the page did before the cache.
+let bookingReadThisVisit = false;
+
+async function fetchJobBundle(id: string): Promise<TechnicianJobBundle> {
+  const data = await ordersApi.getTechnicianOrder(id);
+  if (isHistoricalOrder(data)) {
+    // No private data or workspace API calls for old technicians.
+    return { historical: data, job: null, booking: null, settlement: null };
   }
+  let evidences: EvidenceRecord[] | undefined;
   try {
-    const data = await ordersApi.getTechnicianOrder(requestedJobId);
-    if (!isCurrent()) return;
-    if (isHistoricalOrder(data)) {
-      historicalJob.value = data;
-      job.value = null;
-      stopLocationPing();
-      return; // No private data or workspace API calls for old technicians.
-    }
-    historicalJob.value = null;
-    job.value = data;
-    loadFailed.value = false;
-    isEnRoute.value = data.status !== 'ACCEPTED';
-    gpsCheckedIn.value = !!data.arrivalVerified;
-    if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
-    else stopLocationPing();
-
-    try {
-      if (typeof ordersApi.getEvidence === 'function') {
-        const evList = await ordersApi.getEvidence(requestedJobId);
-        evidences.value = Array.isArray(evList) ? evList : [];
-      }
-    } catch {
-      evidences.value = [];
-    }
-
-    beforePhotoUploaded.value = beforeEvidences.value.length > 0 || Number(data.beforeEvidenceCount) > 0;
-    afterPhotoUploaded.value = afterEvidences.value.length > 0 || Number(data.afterEvidenceCount) > 0;
-    isCompleted.value = data.status === 'COMPLETED';
-    completionRequested.value = !!data.completionRequestedAt;
-    quotationSubmitted.value = !!data.quotation;
-    declaredCashAmount.value = Number(data.grandTotal);
-
-    const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
-    if (bookingId && (!options.silent || !bookingForMedia.value)) {
-      try {
-        const booking = await bookingsApi.getBooking(bookingId);
-        if (isCurrent() && isFullBookingWithMedia(booking, bookingId)) {
-          bookingForMedia.value = booking;
-        }
-      } catch {
-        if (isCurrent()) bookingForMedia.value = null;
-      }
-    }
-    if (!isCurrent()) return;
-
-    const settlement = await ordersApi.getCashSettlement(requestedJobId);
-    if (!isCurrent()) return;
-    cashSettled.value = !!settlement;
-    cashSettlementStatus.value = (settlement?.status as typeof cashSettlementStatus.value) || null;
-    if (settlement) {
-      hasCashPayment.value = 'YES';
-    }
-    if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
-      const costs = await ordersApi.getAdditionalCosts(requestedJobId);
-      if (!isCurrent()) return;
-      additionalCosts.value = costs;
-    }
-
-    if (data.status === 'COMPLETED') {
-      try {
-        const rev = await reviewsApi.getByOrder(requestedJobId);
-        if (isCurrent()) customerReview.value = rev;
-      } catch {
-        if (isCurrent()) customerReview.value = null;
-      }
+    if (typeof ordersApi.getEvidence === 'function') {
+      const evList = await ordersApi.getEvidence(id);
+      evidences = Array.isArray(evList) ? evList : [];
     }
   } catch {
-    if (!isCurrent()) return;
-    if (job.value || historicalJob.value) {
-      actionMessage.value = { type: 'error', text: 'Chưa cập nhật được công việc. Vui lòng thử lại.' };
-    } else {
-      loadFailed.value = true;
-    }
-  } finally {
-    if (isCurrent() && !options.silent) loading.value = false;
+    evidences = [];
   }
+
+  let booking: TechnicianJobBundle['booking'] = null;
+  const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
+  const previous = queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(id));
+  if (bookingId && bookingReadThisVisit && previous?.job?.id === id && previous.booking?.id === bookingId) {
+    booking = previous.booking;
+  } else if (bookingId) {
+    try {
+      const read = await bookingsApi.getBooking(bookingId);
+      if (isFullBookingWithMedia(read, bookingId)) booking = read;
+    } catch {
+      booking = null;
+    }
+  }
+  bookingReadThisVisit = true;
+
+  const settlement = await ordersApi.getCashSettlement(id);
+  const costs =
+    data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED' ? await ordersApi.getAdditionalCosts(id) : undefined;
+  let review: Review | null | undefined;
+  if (data.status === 'COMPLETED') {
+    try {
+      review = await reviewsApi.getByOrder(id);
+    } catch {
+      review = null;
+    }
+  }
+  return { historical: null, job: data, evidences, booking, settlement, costs, review };
+}
+
+const jobQuery = useCachedQuery({
+  key: () => queryKeys.orders.technicianDetail(jobIdRef.value),
+  fetch: () => fetchJobBundle(jobIdRef.value),
+  enabled: () => !!jobIdRef.value,
+  // Status and money of a job change from the other side too (customer, manager):
+  // the cached copy shows at once, and every visit reads it again.
+  staleTime: 0,
+  // Each answer is applied to the page state below, even one equal to the last.
+  structuralSharing: false,
+});
+
+/** Spreads one answer over the page state. */
+function applyJobBundle(bundle: TechnicianJobBundle) {
+  if (bundle.historical) {
+    historicalJob.value = bundle.historical;
+    job.value = null;
+    stopLocationPing();
+    return;
+  }
+  const data = bundle.job;
+  if (!data) return;
+  historicalJob.value = null;
+  job.value = data;
+  isEnRoute.value = data.status !== 'ACCEPTED';
+  gpsCheckedIn.value = !!data.arrivalVerified;
+  if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
+  else stopLocationPing();
+
+  if (bundle.evidences !== undefined) evidences.value = bundle.evidences;
+  beforePhotoUploaded.value = beforeEvidences.value.length > 0 || Number(data.beforeEvidenceCount) > 0;
+  afterPhotoUploaded.value = afterEvidences.value.length > 0 || Number(data.afterEvidenceCount) > 0;
+  isCompleted.value = data.status === 'COMPLETED';
+  completionRequested.value = !!data.completionRequestedAt;
+  quotationSubmitted.value = !!data.quotation;
+  declaredCashAmount.value = Number(data.grandTotal);
+  bookingForMedia.value = bundle.booking;
+
+  const settlement = bundle.settlement;
+  cashSettled.value = !!settlement;
+  cashSettlementStatus.value = (settlement?.status as typeof cashSettlementStatus.value) || null;
+  if (settlement) hasCashPayment.value = 'YES';
+  if (bundle.costs) additionalCosts.value = bundle.costs;
+  if (bundle.review !== undefined) customerReview.value = bundle.review;
+}
+
+let mounted = false;
+watch(
+  () => [jobQuery.query.data.value, jobQuery.query.dataUpdatedAt.value] as const,
+  ([bundle]) => {
+    if (mounted && bundle) applyJobBundle(bundle);
+  },
+);
+
+/** Skeleton only when nothing of this job is known yet. */
+const loading = computed(() => jobQuery.query.data.value === undefined && jobQuery.loading.value);
+const loadFailed = computed(
+  () => !!jobQuery.error.value && jobQuery.query.data.value === undefined && !job.value && !historicalJob.value,
+);
+// A failed re-read keeps the job on screen with a short line.
+watch(
+  () => jobQuery.query.errorUpdatedAt.value,
+  () => {
+    if (jobQuery.query.error.value && (job.value || historicalJob.value)) {
+      actionMessage.value = { type: 'error', text: 'Chưa cập nhật được công việc. Vui lòng thử lại.' };
+    }
+  },
+);
+
+onMounted(() => {
+  mounted = true;
+  window.addEventListener('keydown', handleKeyDown);
+  // A cached answer shows at once; a stale one is read again in the background.
+  const cached = jobQuery.query.data.value;
+  if (cached) applyJobBundle(cached);
+});
+
+/**
+ * Reads the job again. After an action (`silent`) every order list, wallet and
+ * earnings copy is refreshed or dropped too, so nothing shows the state before it.
+ */
+const loadJob = async (requestedJobId = jobId, options: { silent?: boolean } = {}) => {
+  // A reload asked for a job the page has since left does nothing.
+  if (requestedJobId !== jobIdRef.value) return;
+  if (options.silent) await cache.refresh(affectedBy.orderChange);
+  else await jobQuery.refetch();
 };
 
 watch(
@@ -676,10 +739,11 @@ watch(
   (nextId, previousId) => {
     if (!nextId || nextId === previousId) return;
     jobId = nextId;
+    bookingReadThisVisit = false;
     bookingForMedia.value = null;
     faceUploaded.value = false;
     cameraPurpose.value = null;
-    void loadJob(nextId);
+    jobIdRef.value = nextId;
   },
 );
 
@@ -758,8 +822,7 @@ const startLocationPing = () => {
 };
 
 onUnmounted(() => {
-  disposed = true;
-  loadGeneration += 1;
+  mounted = false;
   bookingForMedia.value = null;
   stopLocationPing();
   window.removeEventListener('keydown', handleKeyDown);
@@ -770,6 +833,7 @@ const handleEnRoute = async () => {
     actionLoading.value = true;
     actionMessage.value = null;
     await ordersApi.enRoute(jobId);
+    cache.markChanged(affectedBy.orderChange);
     isEnRoute.value = true;
     if (job.value) job.value.status = 'EN_ROUTE';
     startLocationPing();
@@ -1133,6 +1197,7 @@ async function handleSubmitAdditionalCost() {
       ? await ordersApi.reviseAdditionalCost(acReviseId.value, body)
       : await ordersApi.createAdditionalCost(jobId, body);
     additionalCosts.value = [saved, ...additionalCosts.value.filter((c) => c.id !== acReviseId.value)];
+    cache.markChanged(affectedBy.orderChange);
     showAdditionalCostForm.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi chi phí phát sinh, chờ khách duyệt.' };
   } catch (err: unknown) {
@@ -1176,6 +1241,7 @@ const sendReplacement = async () => {
   replacementError.value = '';
   try {
     await supportCasesApi.createCase({ caseType: 'technician_replacement', reason, serviceOrderId: jobId, isUrgent: true });
+    cache.markChanged(affectedBy.orderChange);
     replacementSent.value = true;
     replacementOpen.value = false;
   } catch (err) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Star } from 'lucide-vue-next';
 import { FhStatusPill, FhButton, FhSkeleton, FhEmptyState, FhMoney } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
@@ -13,6 +13,8 @@ import { consoleTextarea } from '../../components/console/console-ui';
 import { bookingStatusLabel } from '../../components/console/console-labels';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { useQueryChoice } from '../../composables/useQueryState';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
@@ -46,15 +48,16 @@ const {
   loading,
   error: loadError,
   load,
-  reset,
+  changingPage,
+  prefetch,
 } = usePagedList<BookingItem>({
+  key: () => queryKeys.bookings.board({ tab: activeTab.value }),
   pageSize: PAGE_SIZE,
   fetch: (p, size) => bookingsApi.getStaffBookingsPage(p, size, boardFilter(activeTab.value)),
 });
 
 // How many wait in each view: one row per view is enough to read the total.
-const counts = ref<Partial<Record<BoardTab, number>>>({});
-async function loadCounts() {
+async function fetchCounts(): Promise<Partial<Record<BoardTab, number>>> {
   const results = await Promise.all(
     TAB_KEYS.map((key) => bookingsApi.getStaffBookingsPage(1, 1, boardFilter(key)).then((r) => r.total).catch(() => null)),
   );
@@ -63,19 +66,22 @@ async function loadCounts() {
     const value = results[index];
     if (value !== null) next[key] = value;
   });
-  counts.value = next;
+  return next;
 }
+const { data: counts, refetch: refetchCounts } = useCachedQuery({
+  key: queryKeys.bookings.boardCounts,
+  fetch: fetchCounts,
+});
+const cache = useCacheUpdates();
 
 function loadBookings() {
   void load();
-  void loadCounts();
+  void refetchCounts();
 }
 
-watch(activeTab, () => reset());
 watch(total, (value) => {
   if (!loading.value && !loadError.value) counts.value = { ...counts.value, [activeTab.value]: value };
 });
-onMounted(loadCounts);
 
 function isExpired(booking: BookingItem): boolean {
   const end = booking.preferredEndAt || booking.preferredAt;
@@ -83,8 +89,8 @@ function isExpired(booking: BookingItem): boolean {
 }
 
 const tabs = computed(() => [
-  { key: 'actionable' as const, label: 'Cần gán thợ', count: counts.value.actionable ?? null },
-  { key: 'expired' as const, label: 'Đã quá hạn', count: counts.value.expired ?? null },
+  { key: 'actionable' as const, label: 'Cần gán thợ', count: counts.value?.actionable ?? null },
+  { key: 'expired' as const, label: 'Đã quá hạn', count: counts.value?.expired ?? null },
 ]);
 
 function relativeTime(iso: string): string {
@@ -139,7 +145,7 @@ async function confirmAssign(candidate: TechnicianCandidate) {
     await bookingsApi.assignTechnicianToBooking(assignBooking.value.id, candidate.id, assignReason.value.trim());
     showAssignModal.value = false;
     // The booking leaves this tab once a technician has it.
-    loadBookings();
+    void cache.refresh(affectedBy.bookingChange);
   } catch {
     candidatesError.value = 'Không gán được thợ này. Thợ có thể đã hết điều kiện nhận việc, hãy chọn thợ khác.';
   } finally {
@@ -168,6 +174,8 @@ async function confirmAssign(candidate: TechnicianCandidate) {
         :columns="columns"
         :rows="bookings"
         :loading="loading"
+        class="transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
         empty-text="Không có yêu cầu nào cần gán thợ."
       >
         <template #cell-service="{ row }">
@@ -189,7 +197,7 @@ async function confirmAssign(candidate: TechnicianCandidate) {
           <FhButton v-else variant="primary" size="sm" @click="openAssign(row)">Gán thợ</FhButton>
         </template>
       </ConsoleTable>
-      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" @prefetch="prefetch" />
     </template>
 
     <template v-else>
@@ -197,6 +205,8 @@ async function confirmAssign(candidate: TechnicianCandidate) {
         :columns="columns"
         :rows="bookings"
         :loading="loading"
+        class="transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
         empty-text="Không có yêu cầu nào quá hạn."
       >
         <template #cell-service="{ row }">
@@ -216,7 +226,7 @@ async function confirmAssign(candidate: TechnicianCandidate) {
           <span class="whitespace-nowrap text-sm text-ink-500">Chờ khách đặt lại</span>
         </template>
       </ConsoleTable>
-      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" @prefetch="prefetch" />
     </template>
 
     <!-- Assign dialog -->

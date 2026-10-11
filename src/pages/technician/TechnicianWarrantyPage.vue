@@ -8,6 +8,8 @@ import TechnicianWarrantyActionModal, {
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { getSupportErrorMessage } from '../console/support-cases.utils';
 import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
   claimDisplayMeta,
@@ -27,7 +29,10 @@ const {
   loading,
   error,
   load,
+  refreshing,
+  prefetch,
 } = usePagedList<StaffWarrantyClaim>({
+  key: () => queryKeys.warranty.technicianClaims({}),
   pageSize: PAGE_SIZE,
   fetch: (p, pageSize) => warrantyClaimsApi.listMine({ page: p, pageSize }),
 });
@@ -58,7 +63,10 @@ const groups = computed(() => [
   },
 ]);
 
+const cache = useCacheUpdates();
+
 function replace(updated: StaffWarrantyClaim) {
+  cache.markChanged(affectedBy.warrantyChange);
   const index = claims.value.findIndex((c) => c.id === updated.id);
   if (updated.technician === null && index >= 0) {
     // Handed back to the manager: it no longer belongs to this technician.
@@ -132,7 +140,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
-        <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
+        <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
         <span class="hidden sm:inline">Tải lại</span>
       </FhButton>
     </div>
@@ -277,7 +285,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           </ul>
         </section>
       </template>
-      <FhPagination v-model:page="page" :page-size="PAGE_SIZE" :total="total" :disabled="loading" />
+      <FhPagination v-model:page="page" :page-size="PAGE_SIZE" :total="total" :disabled="loading" @prefetch="prefetch" />
     </template>
 
     <TechnicianWarrantyActionModal

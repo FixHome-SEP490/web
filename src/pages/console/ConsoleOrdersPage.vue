@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { watch } from 'vue';
 import { FhStatusPill, FhMoney } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -9,6 +8,7 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
+import { queryKeys } from '../../lib/query-keys';
 import { SEARCH_MAX_LENGTH, useQueryChoice, useQuerySearch } from '../../composables/useQueryState';
 import { vnDateString } from '../../utils/vn-time';
 import { formatCurrencyVND, hasRating, ratingLabel } from '../../utils/formatters';
@@ -36,8 +36,10 @@ const {
   loading,
   error: loadError,
   load: loadOrders,
-  reset,
+  changingPage,
+  prefetch,
 } = usePagedList<ServiceOrderItem>({
+  key: () => queryKeys.orders.console({ status: statusFilter.value, search: search.value }),
   pageSize: PAGE_SIZE,
   fetch: (p, size) =>
     ordersApi.getConsoleOrdersPage(p, size, {
@@ -45,8 +47,6 @@ const {
       search: search.value,
     }),
 });
-
-watch([statusFilter, search], () => reset());
 
 const columns: ConsoleColumn[] = [
   { key: 'code', label: 'Mã đơn' },
@@ -75,6 +75,8 @@ const columns: ConsoleColumn[] = [
       :columns="columns"
       :rows="orders"
       :loading="loading"
+      class="transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
       empty-text="Không có đơn nào phù hợp."
     >
       <template #cell-code="{ row }">
@@ -110,6 +112,13 @@ const columns: ConsoleColumn[] = [
         <FhStatusPill :status="row.status" class="whitespace-nowrap" />
       </template>
     </ConsoleTable>
-    <ConsolePagination v-if="!loadError" v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
+    <ConsolePagination
+      v-if="!loadError"
+      v-model:page="page"
+      :total="total"
+      :page-size="PAGE_SIZE"
+      :disabled="loading"
+      @prefetch="prefetch"
+    />
   </div>
 </template>
