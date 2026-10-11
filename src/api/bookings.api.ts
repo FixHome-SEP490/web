@@ -265,6 +265,9 @@ export function isFullBookingWithMedia(
   ));
 }
 
+/** How long the technician list may take before the page offers "Thử lại". */
+export const CANDIDATES_TIMEOUT_MS = 60000;
+
 export const bookingsApi = {
   async createBooking(dto: CreateBookingDto): Promise<BookingItem> {
     const res = await apiClient.post<{ data: BookingItem }>('/bookings', {
@@ -346,7 +349,9 @@ export const bookingsApi = {
 
 
   async getCandidates(bookingId: string): Promise<TechnicianCandidate[]> {
-    const res = await apiClient.get<{ data: TechnicianCandidate[] }>(`/bookings/${bookingId}/technician-candidates`);
+    // Checking each technician takes a dozen database round trips; with a slow or busy database the list
+    // can take longer than the 15s default, and the customer then saw "Không thể tải danh sách" (10/10/2026).
+    const res = await apiClient.get<{ data: TechnicianCandidate[] }>(`/bookings/${bookingId}/technician-candidates`, { timeout: CANDIDATES_TIMEOUT_MS });
     return res.data.data.map(candidate => {
       // Backend shortlist accepts User IDs, never TechnicianProfile IDs.
       if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');

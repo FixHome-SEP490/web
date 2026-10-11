@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 02:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/auto-accept-toggle
+> Cập nhật lần cuối: 2026-10-10 12:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/candidates-timeout
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -249,6 +249,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-10 12:47 (UTC+7) | ToanAltF4 | fix/candidates-timeout | Danh sách kỹ thuật viên phù hợp chờ tối đa 60 giây thay vì 15 giây: mỗi thợ cần khoảng chục truy vấn DB nên khi DB chậm khách thấy Không thể tải danh sách
 - 2026-10-10 02:47 (UTC+7) | ToanAltF4 | feat/auto-accept-toggle | Trang Lời mời nhận việc có công tắc Tự nhận việc (PATCH /technicians/me/profile autoAcceptInvitations); bật thì tải lại danh sách vì lời mời đang chờ được nhận luôn; lỗi chỉ báo thử lại
 - 2026-10-10 02:37 (UTC+7) | ToanAltF4 | feat/schedule-24h | Lịch làm việc hằng tuần của thợ chọn giờ theo 24 giờ (ô chọn mỗi 30 phút, 24:00 lưu là 23:59, giữ giờ lẻ đã lưu), chọn giờ cho ngày nghỉ thì tự bật ngày đó.
 - 2026-10-10 02:09 (UTC+7) | ToanAltF4 | fix/booking-media-caption | Khung ảnh hiện trường bỏ dòng chú thích nhỏ có chữ Backend hiện cho thợ và khách
