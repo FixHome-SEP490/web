@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../src/api/client';
 import { bookingsApi } from '../src/api/bookings.api';
-import { ordersApi } from '../src/api/orders.api';
+import { ordersApi, evidencePhaseToType, evidenceTypeToPhase, normalizeEvidenceType } from '../src/api/orders.api';
 import { profileApi } from '../src/api/profile.api';
 import { bookingSchedule } from '../src/utils/booking-schedule';
 import { vnParts, vnWallClockToDate } from '../src/utils/vn-time';
@@ -51,6 +51,36 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     expect(form.get('type')).toBe('before');
     expect(form.get('file')).toBeInstanceOf(File);
     expect(form.has('mediaUrl')).toBe(false);
+  });
+  it('sends the check-in face photo as checkin_face and reads it back in any case (PO 11/10/2026)', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({data:{data:{}}});
+    const file = new File(['image'],'face.jpg',{type:'image/jpeg'});
+    await ordersApi.uploadEvidence('o',{phase:'CHECKIN_FACE',file});
+    const form = vi.mocked(apiClient.post).mock.calls.at(-1)![1] as FormData;
+    expect(vi.mocked(apiClient.post).mock.calls.at(-1)![0]).toBe('/service-orders/o/evidence');
+    expect(form.get('type')).toBe('checkin_face');
+    await ordersApi.uploadEvidence('o',{phase:'AFTER',file});
+    expect((vi.mocked(apiClient.post).mock.calls.at(-1)![1] as FormData).get('type')).toBe('after');
+    expect(evidencePhaseToType('CHECKIN_FACE')).toBe('checkin_face');
+    expect(evidenceTypeToPhase('checkin_face')).toBe('CHECKIN_FACE');
+    expect(evidenceTypeToPhase('additional')).toBeNull();
+    expect(normalizeEvidenceType('CHECKIN_FACE')).toBe('checkin_face');
+    expect(normalizeEvidenceType('selfie')).toBeNull();
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({data:{data:[
+      {id:'1',type:'CHECKIN_FACE',mediaUrl:'f'},
+      {id:'2',type:'before',mediaUrl:'b'},
+      {id:'3',type:'additional',mediaUrl:'a'},
+      {id:'4',type:'unknown_kind',mediaUrl:'u'},
+    ]}});
+    expect((await ordersApi.getEvidence('o')).map((e) => [e.id, e.type])).toEqual([
+      ['1','checkin_face'],['2','before'],['3','additional'],
+    ]);
+  });
+  it('sends the measured GPS accuracy at check-in, never a made-up one', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({data:{data:{result:'valid'}}});
+    await ordersApi.checkIn('o',{lat:10.1,lng:106.2,accuracyMeters:3200});
+    expect(apiClient.post).toHaveBeenCalledWith('/service-orders/o/check-in',{lat:10.1,lng:106.2,accuracyMeters:3200});
   });
   it('completes with the technician alone: no customer acceptance call (PO 09/10/2026)', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({data:{data:{}}});

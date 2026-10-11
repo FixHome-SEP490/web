@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 12:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/candidates-timeout
+> Cập nhật lần cuối: 2026-10-11 23:48 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/checkin-camera
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -175,7 +175,8 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 
 ### Các bước của thợ trong đơn (08/10/2026, nhánh `feat/technician-order-steps`)
 
-- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Check-in bằng khuôn mặt (PO 11/10/2026, nhánh `feat/checkin-camera`): nút "Check-in" mở `components/technician/CameraCapture.vue` ở chế độ khuôn mặt (camera trước, khung oval, ảnh lưu không lật), chụp xong mới lấy GPS (`utils/best-position.ts`: `watchPosition` độ chính xác cao, lấy bản tốt nhất, xong sớm khi ≤ 100 m, tối đa khoảng 12 giây, kèm một lần đọc vị trí mạng song song), gọi `check-in` với `accuracyMeters` thật, hợp lệ thì tải ảnh loại `checkin_face`. Tải ảnh khuôn mặt hỏng thì bước kế là "Chụp khuôn mặt check-in". Sau đó "Chụp ảnh máy" (ảnh trước sửa), rồi ảnh sau sửa; cả ba bước và nút thêm ảnh trước/sau đều chỉ chụp bằng camera, không còn ô chọn ảnh. Lỗi camera hoặc vị trí chỉ hiện một câu dễ hiểu và nút "Thử lại". Chi tiết bước 2 hiện ảnh khuôn mặt check-in. Trang đơn của khách hiện ảnh `checkin_face` với nhãn "Check-in" trong mục "Tất cả".
 - Sau check-in, menu "Thêm" của trang công việc có "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
 
 ### Giao diện kỹ thuật viên gọn lại (10/10/2026, nhánh `feat/technician-ui-redesign`)
@@ -216,6 +217,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Socket.IO tới `<origin của VITE_API_BASE_URL>/chat`: nhận `message:*`, `conversation:updated`, `typing`, `call:*`; gửi `conversation:join`, `conversation:leave`, `typing`, `call:*`.
 - AI chỉ qua `POST /ai/diagnoses`, `POST /ai/chat/ask`, `GET /ai/chat/acknowledgements` của `backend`; mô tả tối đa 2000 ký tự, câu hỏi 1000, tối đa 3 ảnh.
 - Thông báo đọc qua REST, đếm chưa đọc mỗi 30 giây khi tab đang mở.
+- Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
 - Biến môi trường (chỉ tên): `VITE_API_BASE_URL`, `VITE_MAPTILER_KEY`, `VITE_GOOGLE_CLIENT_ID` (để trống thì ẩn nút Google), `VITE_APP_TITLE` (hiện không dùng), `DEV_HTTPS` (bật HTTPS khi dev để gọi thoại qua mạng LAN). Mọi biến `VITE_*` đều công khai trong bundle, không đặt bí mật.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
@@ -244,11 +246,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
 - Console chưa có trang chi tiết riêng cho bảo hành và nhật ký thao tác; chi tiết mở ở khung bên. Trang Nhật ký thao tác vẫn hiện mã đối tượng, mã người thực hiện, địa chỉ IP và dữ liệu trước/sau dạng JSON trong khung chi tiết vì đó là nội dung kiểm toán.
 - Image Docker dùng Node 20 trong khi `.nvmrc` yêu cầu 22.22.2.
-- Check-in trên web chỉ dùng GPS thật của thiết bị; laptop không có GPS sẽ không check-in được (kỹ thuật viên chủ yếu check-in bằng `mobile`).
+- Check-in trên web chỉ dùng vị trí thật của thiết bị; máy không có định vị hoặc chặn quyền vị trí sẽ không check-in được. Sai số và khoảng cách tối đa 5 km do `backend` quyết. Luồng chụp khuôn mặt check-in trên `mobile` CHƯA KIỂM CHỨNG.
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-11 23:48 (UTC+7) | ToanAltF4 | feat/checkin-camera | Thợ check-in bằng ảnh khuôn mặt chụp từ camera, ảnh trước và sau sửa chỉ chụp bằng camera, GPS check-in lấy bản tốt nhất bằng watchPosition và gửi sai số thật.
 - 2026-10-10 12:47 (UTC+7) | ToanAltF4 | fix/candidates-timeout | Danh sách kỹ thuật viên phù hợp chờ tối đa 60 giây thay vì 15 giây: mỗi thợ cần khoảng chục truy vấn DB nên khi DB chậm khách thấy Không thể tải danh sách
 - 2026-10-10 02:47 (UTC+7) | ToanAltF4 | feat/auto-accept-toggle | Trang Lời mời nhận việc có công tắc Tự nhận việc (PATCH /technicians/me/profile autoAcceptInvitations); bật thì tải lại danh sách vì lời mời đang chờ được nhận luôn; lỗi chỉ báo thử lại
 - 2026-10-10 02:37 (UTC+7) | ToanAltF4 | feat/schedule-24h | Lịch làm việc hằng tuần của thợ chọn giờ theo 24 giờ (ô chọn mỗi 30 phút, 24:00 lưu là 23:59, giữ giờ lẻ đã lưu), chọn giờ cho ngày nghỉ thì tự bật ngày đó.

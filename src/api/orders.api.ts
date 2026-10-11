@@ -234,6 +234,38 @@ export interface CreateWarrantyClaimPayload {
   evidenceRefs?: string[];
 }
 
+/** Evidence kinds as the backend stores them; `checkin_face` is the face photo taken at check-in. */
+export type EvidenceType = 'before' | 'after' | 'additional' | 'checkin_face';
+/** The same kinds as the web passes them when uploading. */
+export type EvidencePhase = 'BEFORE' | 'AFTER' | 'CHECKIN_FACE';
+
+export interface OrderEvidenceRecord {
+  id: string;
+  type: EvidenceType;
+  mediaUrl: string;
+  note?: string | null;
+  capturedAt?: string | null;
+  createdAt?: string;
+}
+
+const EVIDENCE_TYPES: readonly EvidenceType[] = ['before', 'after', 'additional', 'checkin_face'];
+
+/** `CHECKIN_FACE` -> `checkin_face`: the value sent in the multipart `type` field. */
+export function evidencePhaseToType(phase: EvidencePhase): EvidenceType {
+  return phase.toLowerCase() as EvidenceType;
+}
+
+/** `checkin_face` -> `CHECKIN_FACE`. */
+export function evidenceTypeToPhase(type: EvidenceType): EvidencePhase | null {
+  return type === 'additional' ? null : (type.toUpperCase() as EvidencePhase);
+}
+
+/** Reads a type from the backend in any case; an unknown one gives null. */
+export function normalizeEvidenceType(value: unknown): EvidenceType | null {
+  const lower = String(value ?? '').trim().toLowerCase();
+  return (EVIDENCE_TYPES as readonly string[]).includes(lower) ? (lower as EvidenceType) : null;
+}
+
 export interface ApiResponse<T = unknown> {
   data?: T;
   message?: string;
@@ -366,12 +398,13 @@ export const ordersApi = {
 
   async checkIn(
     orderId: string,
-    coords: { lat: number; lng: number; accuracyMeters?: number },
+    coords: { lat: number; lng: number; accuracyMeters: number },
   ): Promise<Record<string, unknown>> {
+    // The real accuracy of the fix is sent as measured; the server judges it.
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/check-in`, {
       lat: coords.lat,
       lng: coords.lng,
-      accuracyMeters: coords.accuracyMeters ?? 20,
+      accuracyMeters: coords.accuracyMeters,
     });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
@@ -388,21 +421,25 @@ export const ordersApi = {
 
   async uploadEvidence(
     orderId: string,
-    body: { phase: 'BEFORE' | 'AFTER'; file: File; caption?: string },
+    body: { phase: EvidencePhase; file: File; caption?: string },
   ): Promise<Record<string, unknown>> {
     const form = new FormData();
     form.append('file', body.file);
-    form.append('type', body.phase.toLowerCase());
+    form.append('type', evidencePhaseToType(body.phase));
     if (body.caption) form.append('note', body.caption);
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
-  async getEvidence(
-    orderId: string,
-  ): Promise<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; note?: string | null; capturedAt?: string | null; createdAt?: string }>> {
-    const res = await apiClient.get<ApiResponse<Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; note?: string | null; capturedAt?: string | null; createdAt?: string }>>>(`/service-orders/${orderId}/evidence`);
-    return (res.data?.data || res.data || []) as Array<{ id: string; type: 'before' | 'after' | 'additional'; mediaUrl: string; note?: string | null; capturedAt?: string | null; createdAt?: string }>;
+  async getEvidence(orderId: string): Promise<OrderEvidenceRecord[]> {
+    const res = await apiClient.get<ApiResponse<OrderEvidenceRecord[]>>(`/service-orders/${orderId}/evidence`);
+    const rows = (res.data?.data || res.data || []) as OrderEvidenceRecord[];
+    if (!Array.isArray(rows)) return [];
+    // Types come back lower case; anything unknown is left out rather than shown under a wrong label.
+    return rows.flatMap((row) => {
+      const type = normalizeEvidenceType(row?.type);
+      return type ? [{ ...row, type }] : [];
+    });
   },
 
   async deleteEvidence(orderId: string, evidenceId: string): Promise<void> {
