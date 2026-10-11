@@ -30,6 +30,7 @@ import {
 import {
   FhButton,
   FhMoney,
+  FhSkeleton,
 } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
@@ -458,7 +459,13 @@ const urgencyList = [
   },
 ] as const;
 
-onMounted(async () => {
+// Services and saved addresses: skeletons until they arrive, a retry line if they do not.
+const catalogLoading = ref(true);
+const catalogLoadFailed = ref(false);
+
+async function loadCatalog() {
+  catalogLoading.value = true;
+  catalogLoadFailed.value = false;
   try {
     const [cats, addrs] = await Promise.all([
       catalogApi.getCategories(true),
@@ -534,9 +541,13 @@ onMounted(async () => {
     if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
 
   } catch {
-    window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
+    catalogLoadFailed.value = true;
+  } finally {
+    catalogLoading.value = false;
   }
-});
+}
+
+onMounted(loadCatalog);
 
 onBeforeUnmount(() => {
   isPhotoFlowDisposed.value = true;
@@ -795,6 +806,16 @@ const createAndFindTech = async () => {
           </p>
         </div>
 
+        <div
+          v-if="catalogLoadFailed"
+          role="alert"
+          class="p-3.5 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3"
+          data-testid="booking-catalog-error"
+        >
+          <span>Chưa tải được dịch vụ và địa chỉ, vui lòng thử lại.</span>
+          <FhButton variant="secondary" size="sm" @click="loadCatalog">Thử lại</FhButton>
+        </div>
+
         <div class="space-y-7 text-xs sm:text-sm">
           <!-- Choosing the service is the plain form's job; the AI form leaves it to the assistant. -->
           <template v-if="!isAiFlow">
@@ -808,7 +829,16 @@ const createAndFindTech = async () => {
               <span class="text-[11px] text-ink-500">{{ categories.length }} nhóm khả dụng</span>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div
+              v-if="catalogLoading"
+              class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+              aria-busy="true"
+              aria-label="Đang tải nhóm dịch vụ"
+              data-testid="booking-categories-skeleton"
+            >
+              <FhSkeleton v-for="i in 4" :key="i" height="88px" rounded="lg" />
+            </div>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
                 v-for="cat in categories"
                 :key="cat.id"
@@ -912,7 +942,14 @@ const createAndFindTech = async () => {
             </div>
 
             <!-- Service Cards Grid -->
-            <div v-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
+            <div v-if="catalogLoading" class="grid grid-cols-1 md:grid-cols-2 gap-3" aria-busy="true" aria-label="Đang tải dịch vụ">
+              <div v-for="i in 4" :key="i" class="p-4 rounded-2xl border border-ink-200 bg-white space-y-3">
+                <FhSkeleton width="45%" height="14px" />
+                <FhSkeleton width="80%" height="16px" />
+                <FhSkeleton width="35%" height="14px" />
+              </div>
+            </div>
+            <div v-else-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
               <div
                 v-for="svc in filteredServices"
                 :key="svc.id"
@@ -1309,7 +1346,10 @@ const createAndFindTech = async () => {
         <div class="space-y-5 text-xs sm:text-sm">
           <div>
             <label class="block font-bold text-ink-800 mb-2">Địa chỉ sửa chữa</label>
-            <div class="space-y-2.5">
+            <div v-if="catalogLoading" class="space-y-2.5" aria-busy="true" aria-label="Đang tải địa chỉ">
+              <FhSkeleton v-for="i in 2" :key="i" height="64px" rounded="lg" />
+            </div>
+            <div v-else class="space-y-2.5">
               <div
                 v-for="addr in addresses"
                 :key="addr.id"

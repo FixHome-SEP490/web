@@ -38,6 +38,25 @@ describe('Customer wallet page', () => {
     expect(rows[2]).toContain('Nạp ví');
   });
 
+  it('pages the history with numbers instead of "Xem thêm"', async () => {
+    const page = (n: number, count: number) => ({
+      balance: 750000,
+      transactions: Array.from({ length: count }, (_, i) => ({ ...wallet.transactions[0], id: `p${n}-${i}` })),
+      meta: { page: n, limit: 20, total: 23, totalPages: 2 },
+    });
+    summary.mockReset().mockResolvedValueOnce(page(1, 20)).mockResolvedValueOnce(page(2, 3));
+    const w = mount(CustomerWalletPage);
+    await flushPromises();
+    expect(summary).toHaveBeenCalledWith(1, 20);
+    expect(w.get('[data-testid="pagination-summary"]').text()).toBe('1–20 / 23');
+    expect(w.text()).not.toContain('Xem thêm');
+    await w.get('[data-testid="pagination-page-2"]').trigger('click');
+    await flushPromises();
+    expect(summary).toHaveBeenLastCalledWith(2, 20);
+    expect(w.get('[data-testid="wallet-transactions"]').findAll('li')).toHaveLength(3);
+    expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
+  });
+
   it('checks the amount before opening VNPay', async () => {
     const w = mount(CustomerWalletPage);
     await flushPromises();

@@ -4,6 +4,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useChatStore } from '../../stores/chat.store';
 import ChatThread from '../../components/chat/ChatThread.vue';
+import FhSkeleton from '../../components/FhSkeleton.vue';
 import {
   MessageSquare,
   Search,
@@ -117,9 +118,17 @@ watch(
         <!-- Loading -->
         <div
           v-if="chatStore.loadingConversations && chatStore.conversations.length === 0"
-          class="p-8 text-center text-sm text-ink-400"
+          aria-busy="true"
+          aria-label="Đang tải hội thoại"
+          data-testid="conversations-skeleton"
         >
-          Đang tải danh sách hội thoại...
+          <div v-for="i in 5" :key="i" class="p-3.5 flex items-start gap-3">
+            <span class="w-11 shrink-0"><FhSkeleton width="44px" height="44px" rounded="full" /></span>
+            <span class="flex-1 min-w-0 space-y-2 pt-1">
+              <FhSkeleton width="45%" height="14px" />
+              <FhSkeleton width="80%" height="12px" />
+            </span>
+          </div>
         </div>
 
         <!-- Empty State -->

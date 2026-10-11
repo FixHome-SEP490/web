@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
 import { consoleField, consoleLabel } from '../../components/console/console-ui';
 import { userFacingError } from '../../utils/user-facing-error';
 import { serviceAreasApi, type ServiceArea } from '../../api/service-areas.api';
+import { slicePage } from '../../api/paging';
+import { useQueryPage } from '../../composables/useQueryState';
 
 const loading = ref(true);
 const loadError = ref(false);
@@ -77,6 +80,14 @@ const filteredAreas = computed(() => {
       area.provinceName.toLowerCase().includes(searchQuery.value.toLowerCase());
     return matchProvince && matchSearch;
   });
+});
+
+// The endpoint returns every area (a short admin list), so it is paged here.
+const PAGE_SIZE = 20;
+const page = useQueryPage();
+const areaPage = computed(() => slicePage(filteredAreas.value, page.value, PAGE_SIZE));
+watch([selectedProvince, searchQuery], () => {
+  page.value = 1;
 });
 
 const openAddArea = () => {
@@ -187,7 +198,7 @@ const handleConfirm = async () => {
     <ConsoleTable
       v-else
       :columns="columns"
-      :rows="filteredAreas"
+      :rows="areaPage.items"
       :loading="loading"
       empty-text="Không có khu vực nào phù hợp."
     >
@@ -217,6 +228,7 @@ const handleConfirm = async () => {
         </div>
       </template>
     </ConsoleTable>
+    <ConsolePagination v-if="!loadError" v-model:page="page" :total="areaPage.total" :page-size="PAGE_SIZE" />
 
     <!-- Add / edit dialog -->
     <div

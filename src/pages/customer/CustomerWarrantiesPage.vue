@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -7,18 +7,29 @@ import {
   ChevronRight,
   X,
 } from 'lucide-vue-next';
-import { FhButton, FhSkeleton } from '../../components';
+import { FhButton, FhPagination, FhSkeleton } from '../../components';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../../components/customer/WarrantyClaimModal.vue';
 import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
+import { usePagedList } from '../../composables/usePagedList';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString } from '../../utils/vn-time';
 
-const loading = ref(true);
-const loadFailed = ref(false);
+const PAGE_SIZE = 10;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
-const warrantyOrders = ref<OrderWarrantyGroup[]>([]);
+// Ten completed orders per page; warranties are read for those orders only.
+const {
+  page,
+  items: warrantyOrders,
+  total,
+  loading,
+  error: loadFailed,
+  load: loadWarranties,
+} = usePagedList<OrderWarrantyGroup>({
+  pageSize: PAGE_SIZE,
+  fetch: (p, size) => ordersApi.getOrderWarrantiesPage(p, size),
+});
 
 // Modal Yêu cầu bảo hành trực tiếp
 const showClaimModal = ref(false);
@@ -31,19 +42,6 @@ const allCoveragesBusy = (order: OrderWarrantyGroup) =>
   order.coverages.every((coverage) => busyCoverageIds(order).includes(coverage.id));
 const coverageLabel = (order: OrderWarrantyGroup, claim: WarrantyClaimView) =>
   order.coverages.find((coverage) => coverage.id === claim.warrantyCoverageId)?.itemDescription;
-
-const loadWarranties = async () => {
-  try {
-    loading.value = true;
-    loadFailed.value = false;
-    warrantyOrders.value = await ordersApi.getOrderWarrantiesGrouped();
-  } catch {
-    // A short line and a retry button instead of the server text (PO 10/10/2026).
-    loadFailed.value = true;
-  } finally {
-    loading.value = false;
-  }
-};
 
 const formatDate = (val?: string | null) => {
   if (!val) return '—';
@@ -81,9 +79,6 @@ const onClaimUpdated = (order: OrderWarrantyGroup, claim: WarrantyClaimView) => 
   order.claims = order.claims.map((existing) => (existing.id === claim.id ? claim : existing));
 };
 
-onMounted(() => {
-  loadWarranties();
-});
 </script>
 
 <template>
@@ -139,7 +134,7 @@ onMounted(() => {
 
     <!-- Empty -->
     <div
-      v-else-if="warrantyOrders.length === 0"
+      v-else-if="warrantyOrders.length === 0 && total <= PAGE_SIZE"
       class="text-center py-12 px-6 bg-white rounded-2xl border border-ink-200 space-y-2"
     >
       <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-3">
@@ -150,6 +145,14 @@ onMounted(() => {
         Đơn hoàn tất và đã thanh toán sẽ có bảo hành ở đây.
       </p>
     </div>
+
+    <p
+      v-else-if="warrantyOrders.length === 0"
+      class="py-8 px-6 bg-white rounded-2xl border border-ink-200 text-center text-sm text-ink-600"
+      data-testid="warranties-page-empty"
+    >
+      Các đơn ở trang này không có bảo hành.
+    </p>
 
     <!-- One surface per order -->
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
@@ -248,6 +251,13 @@ onMounted(() => {
         </div>
       </section>
     </div>
+
+    <FhPagination
+      v-if="!loading && !loadFailed"
+      v-model:page="page"
+      :page-size="PAGE_SIZE"
+      :total="total"
+    />
 
     <WarrantyClaimModal
       v-if="selectedOrderForClaim"

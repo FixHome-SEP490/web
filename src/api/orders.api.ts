@@ -1,5 +1,6 @@
 // src/api/orders.api.ts
 import apiClient from './client';
+import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 
 export type CanonicalOrderStatus =
@@ -343,12 +344,10 @@ export const ordersApi = {
 
   async getCustomerOrders(): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeOrder); },
 
-  async getCustomerOrdersPaged(page: number, pageSize: number): Promise<{ data: ServiceOrderItem[]; total: number }> {
-    const res = await apiClient.get<{ data: ServiceOrderItem[]; meta: { total: number } }>('/service-orders/my', { params: { page, pageSize } });
-    if (typeof res.data.meta?.total !== 'number') {
-      throw new Error('Unexpected API response: service-orders/my missing meta.total');
-    }
-    return { data: res.data.data.map(normalizeOrder), total: res.data.meta.total };
+  /** One page of the customer's orders, newest first, by state(s) and server search. */
+  async getMyOrdersPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<ServiceOrderItem>> {
+    const res = await apiClient.get<unknown>('/service-orders/my', { params: { page, pageSize, ...filterParams(filter) } });
+    return readPage(res.data, { page, pageSize }, normalizeOrder);
   },
 
   /** Completed and cancelled orders of the signed-in user, newest first. */
@@ -356,24 +355,28 @@ export const ordersApi = {
     page = 1,
     pageSize = 20,
     status?: 'completed' | 'cancelled',
+    search?: string,
   ): Promise<{ data: RepairHistoryItem[]; total: number }> {
-    const res = await apiClient.get<{ data: RepairHistoryItem[]; meta?: { total?: number } }>('/repair-history', {
-      params: { page, pageSize, ...(status ? { status } : {}) },
+    const res = await apiClient.get<unknown>('/repair-history', {
+      params: { page, pageSize, ...filterParams({ status, search }) },
     });
-    const rows = Array.isArray(res.data?.data) ? res.data.data : [];
     const money = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
-    return {
-      data: rows.map((row) => ({
-        ...row,
-        laborTotal: money(row.laborTotal),
-        partsTotal: money(row.partsTotal),
-        grandTotal: money(row.grandTotal),
-      })),
-      total: typeof res.data?.meta?.total === 'number' ? res.data.meta.total : rows.length,
-    };
+    const result = readPage(res.data, { page, pageSize }, (row: RepairHistoryItem) => ({
+      ...row,
+      laborTotal: money(row.laborTotal),
+      partsTotal: money(row.partsTotal),
+      grandTotal: money(row.grandTotal),
+    }));
+    return { data: result.items, total: result.total };
   },
 
   async getTechnicianJobs(): Promise<TechnicianOrderItem[]> { const res = await apiClient.get<{data: TechnicianOrderItem[]}>('/service-orders/my'); return res.data.data.map(normalizeTechnicianOrder); },
+
+  /** One page of the technician's jobs (old orders come back as short summaries). */
+  async getTechnicianJobsPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<TechnicianOrderItem>> {
+    const res = await apiClient.get<unknown>('/service-orders/my', { params: { page, pageSize, ...filterParams(filter) } });
+    return readPage(res.data, { page, pageSize }, normalizeTechnicianOrder);
+  },
 
   async getTechnicianOrder(id: string): Promise<TechnicianOrderItem> {
     const res = await apiClient.get<{ data: TechnicianOrderItem }>('/service-orders/' + encodeURIComponent(id));
@@ -381,6 +384,12 @@ export const ordersApi = {
   },
 
   async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined}}); return res.data.data.map(normalizeOrder); },
+
+  /** Staff board, one page; `search` matches order code, customer and service name. */
+  async getConsoleOrdersPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<ServiceOrderItem>> {
+    const res = await apiClient.get<unknown>('/service-orders', { params: { page, pageSize, ...filterParams(filter) } });
+    return readPage(res.data, { page, pageSize }, normalizeOrder);
+  },
 
   async getOrder(id: string): Promise<ServiceOrderItem> { const res = await apiClient.get<{data: ServiceOrderItem}>(`/service-orders/${id}`); return normalizeOrder(res.data.data); },
 
@@ -677,15 +686,16 @@ export const ordersApi = {
     return res.data?.data || [];
   },
 
-  async getOrderWarrantiesGrouped(): Promise<OrderWarrantyGroup[]> {
-    const orders = await this.getCustomerOrders();
-    const completedOrders = orders.filter(
-      (o) => o.status?.toUpperCase() === 'COMPLETED'
-    );
-    const groups: OrderWarrantyGroup[] = [];
-
-    await Promise.all(
-      completedOrders.map(async (order) => {
+  /**
+   * One page of the customer's completed orders with their warranties: the
+   * orders come from `/service-orders/my?status=completed`, then only those
+   * orders' warranties and claims are read. An order without coverage is left
+   * out of the page; `total` still counts completed orders, so paging is exact.
+   */
+  async getOrderWarrantiesPage(page: number, pageSize: number): Promise<PageResult<OrderWarrantyGroup>> {
+    const orders = await this.getMyOrdersPage(page, pageSize, { status: 'completed' });
+    const groups = await Promise.all(
+      orders.items.map(async (order): Promise<OrderWarrantyGroup | null> => {
         try {
           const res = await apiClient.get<{
             data: {
@@ -700,7 +710,7 @@ export const ordersApi = {
           }>(`/service-orders/${order.id}/warranties`);
 
           const coverages = res.data?.data || [];
-          if (coverages.length === 0) return;
+          if (coverages.length === 0) return null;
 
           const now = new Date();
           const hasActive = coverages.some(
@@ -725,13 +735,13 @@ export const ordersApi = {
             // a claims fetch error must not hide the warranty itself
           }
 
-          groups.push({
+          return {
             orderId: order.id,
             orderCode: order.code,
             serviceName: order.serviceName,
             technicianName: order.technician?.fullName || 'Kỹ thuật viên FixHome',
             technicianPhone: order.technician?.phoneNumber,
-            completedAt: (order as unknown as { completedAt?: string }).completedAt,
+            completedAt: order.completedAt ?? undefined,
             coverages: coverages.map((c) => ({
               id: c.id,
               invoiceItemId: c.invoiceItemId,
@@ -746,14 +756,15 @@ export const ordersApi = {
             hasActiveCoverage: hasActive,
             status: hasActive ? 'ACTIVE' : 'EXPIRED',
             claims,
-          });
+          };
         } catch {
-          // ignore error for single order
+          // one order that cannot be read does not hide the others
+          return null;
         }
       })
     );
 
-    return groups.sort((a, b) => new Date(b.maxExpiresAt).getTime() - new Date(a.maxExpiresAt).getTime());
+    return { ...orders, items: groups.filter((group): group is OrderWarrantyGroup => group !== null) };
   },
 
   async retryCompletion(orderId: string): Promise<{ completed: boolean; status: string }> {
@@ -785,9 +796,9 @@ export const ordersApi = {
 
   // ── SM/Admin: Cancellations & Strikes ──
 
-  async getCancellations(): Promise<CancellationRecord[]> {
-    const res = await apiClient.get<{ data: CancellationRecord[] }>('/cancellations');
-    return res.data.data;
+  async getCancellationsPage(page: number, pageSize: number): Promise<PageResult<CancellationRecord>> {
+    const res = await apiClient.get<unknown>('/cancellations', { params: { page, pageSize } });
+    return readPage(res.data, { page, pageSize });
   },
 
   async reviewCancellation(

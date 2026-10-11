@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { readPage, type PageResult } from './paging';
 import type { PaginationMeta } from '../types';
 import type { WarrantyClaimView } from './orders.api';
 import type { DeclineReason, InspectionResult, NotCoveredReason, WarrantyClaimStatus } from '../utils/warranty-claim';
@@ -47,11 +48,16 @@ async function post(claimId: string, action: string, body: object): Promise<Staf
 }
 
 export const warrantyClaimsApi = {
-  async listMine(status?: WarrantyClaimStatus): Promise<StaffWarrantyClaim[]> {
-    const res = await apiClient.get<{ data: StaffWarrantyClaim[] }>('/warranty-claims/mine', {
-      params: status ? { status } : {},
+  /** One page of the claims assigned to me, optionally in one state. */
+  async listMine(
+    query: { page?: number; pageSize?: number; status?: WarrantyClaimStatus } = {},
+  ): Promise<PageResult<StaffWarrantyClaim>> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const res = await apiClient.get<unknown>('/warranty-claims/mine', {
+      params: { page, pageSize, ...(query.status ? { status: query.status } : {}) },
     });
-    return res.data.data;
+    return readPage(res.data, { page, pageSize });
   },
 
   accept: (claimId: string, payload: { scheduledAt?: string }) => post(claimId, 'accept', payload),

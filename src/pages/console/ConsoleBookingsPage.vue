@@ -12,10 +12,19 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleTextarea } from '../../components/console/console-ui';
 import { bookingStatusLabel } from '../../components/console/console-labels';
 import { bookingsApi, type BookingItem, type TechnicianCandidate } from '../../api/bookings.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { useQueryChoice } from '../../composables/useQueryState';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
-const activeTab = ref<'actionable' | 'expired'>('actionable');
+// Two views as before: requests that can still get a technician (earliest
+// appointment first) and requests whose appointment has passed. Both cover the
+// states submitted, matching and closed; the server filters, sorts and pages.
+type BoardTab = 'actionable' | 'expired';
+const TAB_KEYS: readonly BoardTab[] = ['actionable', 'expired'];
+const BOARD_STATES = ['submitted', 'matching', 'closed'];
+const PAGE_SIZE = 20;
+const activeTab = useQueryChoice<BoardTab>('tab', TAB_KEYS, 'actionable');
 
 const columns: ConsoleColumn[] = [
   { key: 'service', label: 'Dịch vụ' },
@@ -24,66 +33,59 @@ const columns: ConsoleColumn[] = [
   { key: 'actions', label: '', align: 'right' },
 ];
 
-const loading = ref(true);
-const loadError = ref(false);
-const bookings = ref<BookingItem[]>([]);
+const boardFilter = (tab: BoardTab) => ({
+  statuses: BOARD_STATES,
+  overdue: tab === 'expired',
+  sort: 'appointment' as const,
+});
 
-async function loadBookings() {
-  loading.value = true;
-  loadError.value = false;
-  try {
-    const [submitted, matching, closed] = await Promise.all([
-      bookingsApi.getAllForStaff('SUBMITTED'),
-      bookingsApi.getAllForStaff('MATCHING'),
-      bookingsApi.getAllForStaff('CLOSED'),
-    ]);
-    // CLOSED includes both invitation-shortlist-exhausted (still assignable if the time
-    // window hasn't passed) and backend auto-close on overdue — isExpired() below already
-    // buckets by time regardless of status, so this just restores overdue visibility.
-    bookings.value = [...submitted, ...matching, ...closed];
-  } catch {
-    loadError.value = true;
-  } finally {
-    loading.value = false;
-  }
+const {
+  page,
+  items: bookings,
+  total,
+  loading,
+  error: loadError,
+  load,
+  reset,
+} = usePagedList<BookingItem>({
+  pageSize: PAGE_SIZE,
+  fetch: (p, size) => bookingsApi.getStaffBookingsPage(p, size, boardFilter(activeTab.value)),
+});
+
+// How many wait in each view: one row per view is enough to read the total.
+const counts = ref<Partial<Record<BoardTab, number>>>({});
+async function loadCounts() {
+  const results = await Promise.all(
+    TAB_KEYS.map((key) => bookingsApi.getStaffBookingsPage(1, 1, boardFilter(key)).then((r) => r.total).catch(() => null)),
+  );
+  const next: Partial<Record<BoardTab, number>> = {};
+  TAB_KEYS.forEach((key, index) => {
+    const value = results[index];
+    if (value !== null) next[key] = value;
+  });
+  counts.value = next;
 }
+
+function loadBookings() {
+  void load();
+  void loadCounts();
+}
+
+watch(activeTab, () => reset());
+watch(total, (value) => {
+  if (!loading.value && !loadError.value) counts.value = { ...counts.value, [activeTab.value]: value };
+});
+onMounted(loadCounts);
 
 function isExpired(booking: BookingItem): boolean {
   const end = booking.preferredEndAt || booking.preferredAt;
   return !!end && new Date(end).getTime() <= Date.now();
 }
 
-// Đơn còn kịp gán thì lên đầu (giờ hẹn sớm nhất trước — cần xử lý gấp nhất),
-// đơn đã quá hạn (không gán được nữa, phải chờ khách đặt lại) dồn xuống cuối.
-const actionableBookings = computed(() =>
-  bookings.value
-    .filter((b) => !isExpired(b))
-    .sort((a, b) => new Date(a.preferredAt).getTime() - new Date(b.preferredAt).getTime()),
-);
-const expiredBookings = computed(() =>
-  bookings.value
-    .filter(isExpired)
-    .sort((a, b) => new Date(b.preferredAt).getTime() - new Date(a.preferredAt).getTime()),
-);
-
-// Client-side pagination: the two lists above can grow large as the DB fills up,
-// so render a bounded page of cards instead of dumping everything into one long scroll.
-const PAGE_SIZE = 10;
-const actionablePage = ref(1);
-const expiredPage = ref(1);
-function paginate<T>(list: T[], page: number) {
-  return list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-}
 const tabs = computed(() => [
-  { key: 'actionable' as const, label: 'Cần gán thợ', count: loading.value ? null : actionableBookings.value.length },
-  { key: 'expired' as const, label: 'Đã quá hạn', count: loading.value ? null : expiredBookings.value.length },
+  { key: 'actionable' as const, label: 'Cần gán thợ', count: counts.value.actionable ?? null },
+  { key: 'expired' as const, label: 'Đã quá hạn', count: counts.value.expired ?? null },
 ]);
-const actionableTotalPages = computed(() => Math.max(1, Math.ceil(actionableBookings.value.length / PAGE_SIZE)));
-const expiredTotalPages = computed(() => Math.max(1, Math.ceil(expiredBookings.value.length / PAGE_SIZE)));
-const actionablePageItems = computed(() => paginate(actionableBookings.value, actionablePage.value));
-const expiredPageItems = computed(() => paginate(expiredBookings.value, expiredPage.value));
-watch(actionableTotalPages, (tp) => { if (actionablePage.value > tp) actionablePage.value = tp; });
-watch(expiredTotalPages, (tp) => { if (expiredPage.value > tp) expiredPage.value = tp; });
 
 function relativeTime(iso: string): string {
   const diffMs = new Date(iso).getTime() - Date.now();
@@ -136,7 +138,8 @@ async function confirmAssign(candidate: TechnicianCandidate) {
     // (candidate.technicianId is the TechnicianProfile's own id — wrong id for this call).
     await bookingsApi.assignTechnicianToBooking(assignBooking.value.id, candidate.id, assignReason.value.trim());
     showAssignModal.value = false;
-    bookings.value = bookings.value.filter((b) => b.id !== assignBooking.value?.id);
+    // The booking leaves this tab once a technician has it.
+    loadBookings();
   } catch {
     candidatesError.value = 'Không gán được thợ này. Thợ có thể đã hết điều kiện nhận việc, hãy chọn thợ khác.';
   } finally {
@@ -144,7 +147,6 @@ async function confirmAssign(candidate: TechnicianCandidate) {
   }
 }
 
-onMounted(loadBookings);
 </script>
 
 <template>
@@ -164,7 +166,7 @@ onMounted(loadBookings);
     <template v-else-if="activeTab === 'actionable'">
       <ConsoleTable
         :columns="columns"
-        :rows="actionablePageItems"
+        :rows="bookings"
         :loading="loading"
         empty-text="Không có yêu cầu nào cần gán thợ."
       >
@@ -182,16 +184,18 @@ onMounted(loadBookings);
           <FhStatusPill :status="row.status" :label="bookingStatusLabel(row.status)" />
         </template>
         <template #cell-actions="{ row }">
-          <FhButton variant="primary" size="sm" @click="openAssign(row)">Gán thợ</FhButton>
+          <!-- The time may pass while the list is open: no button once it has. -->
+          <span v-if="isExpired(row)" class="whitespace-nowrap text-sm text-ink-500">Chờ khách đặt lại</span>
+          <FhButton v-else variant="primary" size="sm" @click="openAssign(row)">Gán thợ</FhButton>
         </template>
       </ConsoleTable>
-      <ConsolePagination v-model:page="actionablePage" :total-pages="actionableTotalPages" />
+      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
     </template>
 
     <template v-else>
       <ConsoleTable
         :columns="columns"
-        :rows="expiredPageItems"
+        :rows="bookings"
         :loading="loading"
         empty-text="Không có yêu cầu nào quá hạn."
       >
@@ -212,7 +216,7 @@ onMounted(loadBookings);
           <span class="whitespace-nowrap text-sm text-ink-500">Chờ khách đặt lại</span>
         </template>
       </ConsoleTable>
-      <ConsolePagination v-model:page="expiredPage" :total-pages="expiredTotalPages" />
+      <ConsolePagination v-model:page="page" :total="total" :page-size="PAGE_SIZE" :disabled="loading" />
     </template>
 
     <!-- Assign dialog -->
