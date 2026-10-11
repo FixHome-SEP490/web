@@ -21,8 +21,8 @@ import { auditActionLabel, auditResourceLabel } from '../src/components/console/
 // Console redesign (PO 10/10/2026): one header per page, compact toolbars,
 // plain tables, one "⋯" menu for secondary actions, no codes on screen.
 
-const { getConsoleOrders } = vi.hoisted(() => ({ getConsoleOrders: vi.fn() }));
-vi.mock('../src/api/orders.api', () => ({ ordersApi: { getConsoleOrders } }));
+const { getConsoleOrdersPage } = vi.hoisted(() => ({ getConsoleOrdersPage: vi.fn() }));
+vi.mock('../src/api/orders.api', () => ({ ordersApi: { getConsoleOrdersPage } }));
 const { getServiceAreas } = vi.hoisted(() => ({ getServiceAreas: vi.fn() }));
 vi.mock('../src/api/service-areas.api', () => ({ serviceAreasApi: { getServiceAreas } }));
 
@@ -161,20 +161,20 @@ describe('Console pages on a failed load', () => {
   const stubs = { 'router-link': RouterLinkStub, RouterLink: RouterLinkStub };
 
   it('orders: one plain sentence and a retry, no status code or English', async () => {
-    getConsoleOrders.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } }));
+    getConsoleOrdersPage.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } }));
     const { default: Page } = await import('../src/pages/console/ConsoleOrdersPage.vue');
     const w = mount(Page, { global: { stubs } });
     await flushPromises();
     expect(w.text()).toContain(CONSOLE_LOAD_ERROR);
     expect(w.text()).not.toMatch(/500|status code|Request failed/);
-    getConsoleOrders.mockResolvedValueOnce([]);
+    getConsoleOrdersPage.mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 });
     await w.findAll('button').find((b) => b.text() === 'Thử lại')!.trigger('click');
     await flushPromises();
     expect(w.text()).toContain('Không có đơn nào phù hợp.');
   });
 
   it('orders: status filter speaks Vietnamese only', async () => {
-    getConsoleOrders.mockResolvedValueOnce([]);
+    getConsoleOrdersPage.mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 });
     const { default: Page } = await import('../src/pages/console/ConsoleOrdersPage.vue');
     const w = mount(Page, { global: { stubs } });
     await flushPromises();

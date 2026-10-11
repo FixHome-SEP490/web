@@ -1,6 +1,7 @@
 // src/api/bookings.api.ts
 import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
 import apiClient from './client';
+import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 
 export interface BookingItem {
   id: string;
@@ -279,12 +280,10 @@ export const bookingsApi = {
 
   async getMyBookings(): Promise<BookingItem[]> { const res = await apiClient.get<{data: BookingItem[]}>('/bookings/my'); return res.data.data.map(normalizeBooking); },
 
-  async getMyBookingsPaged(page: number, pageSize: number): Promise<{ data: BookingItem[]; total: number }> {
-    const res = await apiClient.get<{ data: BookingItem[]; meta: { total: number } }>('/bookings/my', { params: { page, pageSize } });
-    if (typeof res.data.meta?.total !== 'number') {
-      throw new Error('Unexpected API response: bookings/my missing meta.total');
-    }
-    return { data: res.data.data.map(normalizeBooking), total: res.data.meta.total };
+  /** One page of the customer's booking requests, newest first, by state(s) and server search. */
+  async getMyBookingsPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<BookingItem>> {
+    const res = await apiClient.get<unknown>('/bookings/my', { params: { page, pageSize, ...filterParams(filter) } });
+    return readPage(res.data, { page, pageSize }, normalizeBooking);
   },
 
   async getBooking(id: string): Promise<BookingItem> { const res = await apiClient.get<{data: BookingItem}>(`/bookings/${id}`); return normalizeBooking(res.data.data); },
@@ -381,9 +380,20 @@ export const bookingsApi = {
 
   // ── SM/Admin: gán thợ thủ công ──
 
-  async getAllForStaff(status?: BookingItem['status'], pageSize = 100): Promise<BookingItem[]> {
-    const res = await apiClient.get<{ data: BookingItem[] }>('/bookings', { params: { status: status?.toLowerCase(), pageSize } });
-    return res.data.data.map(normalizeBooking);
+  /**
+   * Staff board, one page. `overdue` splits on whether the appointment has
+   * passed; `sort: 'appointment'` lists the earliest appointment first.
+   */
+  async getStaffBookingsPage(
+    page: number,
+    pageSize: number,
+    filter: ListFilter & { overdue?: boolean; sort?: 'created' | 'appointment' } = {},
+  ): Promise<PageResult<BookingItem>> {
+    const params: Record<string, string | number> = { page, pageSize, ...filterParams(filter) };
+    if (filter.overdue !== undefined) params.overdue = String(filter.overdue);
+    if (filter.sort) params.sort = filter.sort;
+    const res = await apiClient.get<unknown>('/bookings', { params });
+    return readPage(res.data, { page, pageSize }, normalizeBooking);
   },
 
   async assignTechnicianToBooking(bookingId: string, technicianId: string, reason: string): Promise<void> {

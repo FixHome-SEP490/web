@@ -1,5 +1,6 @@
 // src/api/notifications.api.ts
 import apiClient from './client';
+import { readPage } from './paging';
 
 export type NotificationSenderRole = 'TECHNICIAN' | 'SERVICE_MANAGER' | 'ADMIN' | 'SYSTEM';
 export type NotificationSeverity = 'error' | 'warning' | 'success' | 'info';
@@ -272,11 +273,13 @@ export function customerNotificationPath(item: NotificationItem): string | null 
 }
 
 export const notificationsApi = {
+  /** One page of my notifications, newest first; the total comes from `meta.total`. */
   async getMyNotifications(page = 1, limit = 20): Promise<NotificationsListResponse> {
-    const res = await apiClient.get<NotificationsListResponse>('/notifications', {
+    const res = await apiClient.get<unknown>('/notifications', {
       params: { page, limit },
     });
-    return res.data;
+    const result = readPage<NotificationItem>(res.data, { page, pageSize: limit });
+    return { data: result.items, total: result.total };
   },
 
   async getUnreadCount(): Promise<number> {

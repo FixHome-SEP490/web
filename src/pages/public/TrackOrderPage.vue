@@ -5,6 +5,7 @@ import { Search } from 'lucide-vue-next';
 
 import {
   FhButton,
+  FhSkeleton,
   FhStatusPill,
   FhTimeline,
   MapTilerMap,
@@ -147,8 +148,30 @@ const handleTrack = async () => {
     </div>
 
     <!-- Results Display -->
-    <div v-if="searched" class="space-y-6 pt-4 max-w-3xl mx-auto">
-      <div v-if="errorMessage" class="bg-white border border-slate-200 rounded-4xl p-8 text-center text-sm font-medium text-slate-500">
+    <div v-if="searched || loading" class="space-y-6 pt-4 max-w-3xl mx-auto">
+      <!-- Looking up: the shape of the result card -->
+      <div
+        v-if="loading"
+        class="bg-white border border-slate-200 rounded-4xl p-8 md:p-10 shadow-xl shadow-slate-200/50 space-y-8"
+        aria-busy="true"
+        aria-label="Đang tra cứu đơn"
+        data-testid="track-skeleton"
+      >
+        <div class="flex items-start justify-between gap-4 pb-6 border-b border-slate-100">
+          <div class="flex-1 space-y-3">
+            <FhSkeleton width="25%" height="12px" />
+            <FhSkeleton width="60%" height="22px" />
+            <FhSkeleton width="45%" height="14px" />
+          </div>
+          <span class="w-28"><FhSkeleton height="24px" rounded="full" /></span>
+        </div>
+        <div class="space-y-4">
+          <FhSkeleton width="30%" height="12px" />
+          <FhSkeleton height="16px" :count="3" />
+        </div>
+      </div>
+
+      <div v-else-if="errorMessage" class="bg-white border border-slate-200 rounded-4xl p-8 text-center text-sm font-medium text-slate-500">
         {{ errorMessage }}
       </div>
 

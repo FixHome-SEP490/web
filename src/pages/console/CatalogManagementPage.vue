@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onBeforeUnmount, onMounted, computed, watch } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhMoney, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
@@ -16,8 +17,12 @@ import {
   type ServiceItem,
 } from '../../api/catalog.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { slicePage } from '../../api/paging';
+import { useQueryChoice, useQueryPage } from '../../composables/useQueryState';
 
-const activeTab = ref<'categories' | 'services'>('categories');
+const PAGE_SIZE = 20;
+const activeTab = useQueryChoice<'categories' | 'services'>('tab', ['categories', 'services'], 'categories');
+const page = useQueryPage();
 const loading = ref(true);
 const error = ref('');
 const loadError = ref('');
@@ -87,16 +92,32 @@ const serviceForm = ref<Partial<ServiceItem>>({
 });
 const isEditingService = ref(false);
 
+// Services are paged, filtered and searched by the server; categories are a
+// short list read whole and paged here.
+const servicesTotal = ref(0);
+const servicesLoading = ref(false);
+let servicesRequest = 0;
+
+async function fetchServices() {
+  const id = ++servicesRequest;
+  const search = searchQuery.value.trim();
+  const result = await catalogApi.getAdminServices({
+    page: activeTab.value === 'services' ? page.value : 1,
+    limit: PAGE_SIZE,
+    ...(selectedCategoryFilter.value !== 'ALL' ? { categoryId: selectedCategoryFilter.value } : {}),
+    ...(search ? { search } : {}),
+  });
+  if (id !== servicesRequest) return;
+  services.value = result.data;
+  servicesTotal.value = result.meta.total;
+}
+
 const loadData = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    const [cats, svcs] = await Promise.all([
-      catalogApi.getAdminCategories(),
-      catalogApi.getAdminServices({ limit: 100 }),
-    ]);
+    const [cats] = await Promise.all([catalogApi.getAdminCategories(), fetchServices()]);
     categories.value = cats;
-    services.value = svcs.data;
   } catch (reason) {
     loadError.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
   } finally {
@@ -104,13 +125,53 @@ const loadData = async () => {
   }
 };
 
+async function reloadServices() {
+  servicesLoading.value = true;
+  loadError.value = '';
+  try {
+    await fetchServices();
+  } catch (reason) {
+    loadError.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
+  } finally {
+    servicesLoading.value = false;
+  }
+}
+
 onMounted(() => {
   loadData();
 });
 
+watch(activeTab, (tab) => {
+  if (page.value !== 1) page.value = 1;
+  else if (tab === 'services') void reloadServices();
+});
+watch(
+  () => page.value,
+  () => {
+    if (activeTab.value === 'services') void reloadServices();
+  },
+);
+watch(selectedCategoryFilter, () => {
+  if (page.value !== 1) page.value = 1;
+  else void reloadServices();
+});
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+watch(searchQuery, () => {
+  if (activeTab.value === 'categories') {
+    page.value = 1;
+    return;
+  }
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (page.value !== 1) page.value = 1;
+    else void reloadServices();
+  }, 350);
+});
+onBeforeUnmount(() => clearTimeout(searchTimer));
+
 const tabs = computed(() => [
   { key: 'categories' as const, label: 'Danh mục', count: loading.value ? null : categories.value.length },
-  { key: 'services' as const, label: 'Dịch vụ', count: loading.value ? null : services.value.length },
+  { key: 'services' as const, label: 'Dịch vụ', count: loading.value ? null : servicesTotal.value },
 ]);
 
 const filteredCategories = computed(() => {
@@ -120,19 +181,7 @@ const filteredCategories = computed(() => {
     (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
   );
 });
-
-const filteredServices = computed(() => {
-  return services.value.filter((s) => {
-    const matchCat =
-      selectedCategoryFilter.value === 'ALL' ||
-      s.categoryId === selectedCategoryFilter.value;
-    const matchSearch =
-      !searchQuery.value ||
-      s.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchQuery.value.toLowerCase());
-    return matchCat && matchSearch;
-  });
-});
+const categoryPage = computed(() => slicePage(filteredCategories.value, page.value, PAGE_SIZE));
 
 // Category Actions
 const openAddCategory = () => {
@@ -309,7 +358,7 @@ const handleConfirm = async () => {
     <ConsoleTable
       v-else-if="activeTab === 'categories'"
       :columns="categoryColumns"
-      :rows="filteredCategories"
+      :rows="categoryPage.items"
       :loading="loading"
       empty-text="Chưa có danh mục."
     >
@@ -339,8 +388,8 @@ const handleConfirm = async () => {
     <ConsoleTable
       v-else
       :columns="serviceColumns"
-      :rows="filteredServices"
-      :loading="loading"
+      :rows="services"
+      :loading="loading || servicesLoading"
       empty-text="Chưa có dịch vụ."
     >
       <template #cell-name="{ row }">
@@ -374,6 +423,19 @@ const handleConfirm = async () => {
         </div>
       </template>
     </ConsoleTable>
+    <ConsolePagination
+      v-if="!loadError && activeTab === 'categories'"
+      v-model:page="page"
+      :total="categoryPage.total"
+      :page-size="PAGE_SIZE"
+    />
+    <ConsolePagination
+      v-else-if="!loadError"
+      v-model:page="page"
+      :total="servicesTotal"
+      :page-size="PAGE_SIZE"
+      :disabled="servicesLoading"
+    />
 
     <!-- Category dialog -->
     <div
