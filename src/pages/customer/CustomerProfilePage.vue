@@ -169,7 +169,9 @@ const onAddressSearchInput = () => {
   searchDebounce = setTimeout(async () => {
     searchingAddress.value = true;
     try {
-      const suggestions = await geoApi.autocomplete(query);
+      // Places near the customer's saved address come first.
+      const home = addresses.value.find((a) => a.isDefault && a.lat != null && a.lng != null) ?? addresses.value.find((a) => a.lat != null && a.lng != null);
+      const suggestions = await geoApi.autocomplete(query, home ? { lat: Number(home.lat), lng: Number(home.lng) } : null);
       if (requestEpoch === addressGeoEpoch && showAddressModal.value) addressSuggestions.value = suggestions;
     } catch {
       if (requestEpoch === addressGeoEpoch) addressSuggestions.value = [];

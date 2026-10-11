@@ -3,7 +3,8 @@ import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
-import { ref, onMounted, computed, watch } from 'vue';
+import ServiceAreaPicker from '../../components/technician/ServiceAreaPicker.vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import {
   MapPin,
   CheckCircle2,
@@ -32,6 +33,7 @@ import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import {
   technicianProfileApi,
   type TechnicianProfileView,
+  type TechnicianServiceAreaView,
   type TechnicianServiceOfferingView,
   type TechnicianTimeOffView,
 } from '../../api/technician-profile.api';
@@ -44,6 +46,7 @@ import { reviewsApi, type Review } from '../../api/reviews.api';
 import { vnDateString } from '../../utils/vn-time';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 import { userFacingError } from '../../utils/user-facing-error';
+import { isLandPlace, NOT_AN_ADDRESS } from '../../utils/place-check';
 
 const authStore = useAuthStore();
 
@@ -497,17 +500,35 @@ const applyPlace = (
   }
 };
 
+/** Set when a dropped pin has no address (e.g. at sea); the pin goes back. */
+const locationNotice = ref('');
+
+/**
+ * Only a real drag or click on the map gets here. The point becomes the address
+ * only when the lookup finds a place on land; a pin at sea goes back to the last
+ * good point with one plain line (PO 12/10/2026).
+ */
 const onLocationMarkerMove = (_id: string, lat: number, lng: number) => {
-  locationLat.value = lat;
-  locationLng.value = lng;
+  const previous = { lat: locationLat.value, lng: locationLng.value };
   locationMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#2563eb' }];
   if (reverseDebounce) clearTimeout(reverseDebounce);
   reverseDebounce = setTimeout(async () => {
     try {
       const place = await geoApi.reverse(lat, lng);
+      if (!isLandPlace(place)) {
+        locationNotice.value = NOT_AN_ADDRESS;
+        locationMarkers.value =
+          previous.lat !== '' && previous.lng !== ''
+            ? [{ id: 'picker', lat: Number(previous.lat), lng: Number(previous.lng), draggable: true, color: '#2563eb' }]
+            : [];
+        return;
+      }
+      locationNotice.value = '';
       applyPlace(lat, lng, place);
     } catch {
-      // Keep pin even if reverse lookup fails
+      // Keep the pin even if the lookup fails; the typed address stays as it was.
+      locationNotice.value = '';
+      applyPlace(lat, lng);
     }
   }, 400);
 };
@@ -522,7 +543,10 @@ const onLocationSearchInput = () => {
   searchDebounce = setTimeout(async () => {
     searchingLocation.value = true;
     try {
-      locationSuggestions.value = await geoApi.autocomplete(query);
+      locationSuggestions.value = await geoApi.autocomplete(
+        query,
+        locationLat.value !== '' && locationLng.value !== '' ? { lat: Number(locationLat.value), lng: Number(locationLng.value) } : null,
+      );
     } catch {
       locationSuggestions.value = [];
     } finally {
@@ -533,6 +557,7 @@ const onLocationSearchInput = () => {
 
 const selectLocationSuggestion = (suggestion: PlaceSuggestion) => {
   locationSuggestions.value = [];
+  locationNotice.value = '';
   mapCenter.value = { lat: suggestion.lat, lng: suggestion.lng };
   applyPlace(suggestion.lat, suggestion.lng, suggestion);
   mapRef.value?.flyTo(suggestion.lat, suggestion.lng);
@@ -540,6 +565,7 @@ const selectLocationSuggestion = (suggestion: PlaceSuggestion) => {
 
 const syncLocationStateFromAddress = () => {
   const addr = technicianAddress.value;
+  locationNotice.value = '';
   locationLine1.value = addr?.line1 ?? '';
   locationWard.value = addr?.ward ?? '';
   locationDistrict.value = addr?.district ?? '';
@@ -579,14 +605,63 @@ const handleSaveLocation = async () => {
       await profileApi.createAddress(addressDto);
     }
     await technicianProfileApi.updateMyProfile({ serviceRadiusKm: locationRadiusKm.value });
-    await loadProfile();
-    showFeedback('Đã lưu khu vực nhận việc.');
   } catch (err) {
     showFeedback(userFacingError(err, 'Không thể lưu vị trí. Vui lòng thử lại.'), 'error');
+    savingLocation.value = false;
+    return;
+  }
+  try {
+    if (serviceAreasChanged.value) {
+      const saved = await technicianProfileApi.updateMyServiceAreas(serviceAreas.value.map((a) => ({ ...a })));
+      savedServiceAreas.value = saved.map((a) => ({ ...a }));
+      serviceAreas.value = saved.map((a) => ({ ...a }));
+    }
+    await loadProfile();
+    showFeedback('Đã lưu khu vực nhận việc.');
+  } catch {
+    showFeedback('Chưa lưu được. Vui lòng thử lại.', 'error');
   } finally {
     savingLocation.value = false;
   }
 };
+
+// ----------------- Khu vực nhận đơn khi tắt app -----------------
+const serviceAreas = ref<TechnicianServiceAreaView[]>([]);
+const savedServiceAreas = ref<TechnicianServiceAreaView[]>([]);
+const loadingServiceAreas = ref(true);
+const serviceAreasLoadFailed = ref(false);
+
+const areaKey = (a: TechnicianServiceAreaView) => `${a.provinceCode}:${a.districtCode}`;
+
+/** Only sent when it really changed, and never when the saved list could not be read. */
+const serviceAreasChanged = computed(() => {
+  if (serviceAreasLoadFailed.value || loadingServiceAreas.value) return false;
+  const before = new Set(savedServiceAreas.value.map(areaKey));
+  const after = new Set(serviceAreas.value.map(areaKey));
+  return before.size !== after.size || [...after].some((k) => !before.has(k));
+});
+
+const loadServiceAreas = async () => {
+  loadingServiceAreas.value = true;
+  serviceAreasLoadFailed.value = false;
+  try {
+    const areas = await technicianProfileApi.getMyServiceAreas();
+    savedServiceAreas.value = areas.map((a) => ({ ...a }));
+    serviceAreas.value = areas.map((a) => ({ ...a }));
+  } catch {
+    serviceAreasLoadFailed.value = true;
+  } finally {
+    loadingServiceAreas.value = false;
+  }
+};
+
+// The map is created when the tab opens; measure it again and put the pin back
+// in the middle, so a click lands where it looks (PO 12/10/2026).
+watch(activeTab, async (tab) => {
+  if (tab !== 'location') return;
+  await nextTick();
+  mapRef.value?.refresh();
+});
 
 // ----------------- Profile Completeness Metric -----------------
 const profileCompleteness = computed(() => {
@@ -669,7 +744,7 @@ const loadAll = async () => {
   loading.value = true;
   loadError.value = '';
   await loadProfile();
-  await Promise.all([loadServicesAndOfferings(), loadTimeOff(), loadReviews()]);
+  await Promise.all([loadServicesAndOfferings(), loadTimeOff(), loadReviews(), loadServiceAreas()]);
   loading.value = false;
 };
 
@@ -1424,11 +1499,23 @@ const openAvatarModal = () => {
               ref="mapRef"
               :center="mapCenter"
               :markers="locationMarkers"
+              :zoom="14"
               click-to-move="picker"
               height-class="h-80 sm:h-96"
               @marker-move="onLocationMarkerMove"
             />
           </div>
+          <p v-if="locationNotice" class="text-sm text-red-600" role="alert" data-testid="location-notice">{{ locationNotice }}</p>
+        </div>
+
+        <div class="pt-5 border-t border-ink-100">
+          <ServiceAreaPicker
+            v-model="serviceAreas"
+            :default-province-name="locationProvince"
+            :loading="loadingServiceAreas"
+            :load-failed="serviceAreasLoadFailed"
+            @retry="loadServiceAreas"
+          />
         </div>
 
         <div class="flex justify-end pt-4 border-t border-ink-100">
