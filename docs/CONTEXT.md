@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-11 23:48 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/checkin-camera
+> Cập nhật lần cuối: 2026-10-12 00:23 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/tech-service-areas
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -251,6 +251,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 00:23 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Gợi ý địa chỉ gửi kèm vị trí để ưu tiên nơi gần (hồ sơ thợ: vị trí ghim; hồ sơ khách: địa chỉ mặc định), server mặc định TP HCM
+- 2026-10-12 00:18 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Hồ sơ kỹ thuật viên, tab Khu vực nhận việc: thêm chọn nhiều quận/huyện ở nhiều tỉnh để nhận đơn khi tắt app (lưu chung nút Lưu khu vực, để trống là theo bán kính), sửa bản đồ mở trong tab ẩn bị lệch tâm và chặn ghim rơi xuống biển.
 - 2026-10-11 23:48 (UTC+7) | ToanAltF4 | feat/checkin-camera | Thợ check-in bằng ảnh khuôn mặt chụp từ camera, ảnh trước và sau sửa chỉ chụp bằng camera, GPS check-in lấy bản tốt nhất bằng watchPosition và gửi sai số thật.
 - 2026-10-10 12:47 (UTC+7) | ToanAltF4 | fix/candidates-timeout | Danh sách kỹ thuật viên phù hợp chờ tối đa 60 giây thay vì 15 giây: mỗi thợ cần khoảng chục truy vấn DB nên khi DB chậm khách thấy Không thể tải danh sách
 - 2026-10-10 02:47 (UTC+7) | ToanAltF4 | feat/auto-accept-toggle | Trang Lời mời nhận việc có công tắc Tự nhận việc (PATCH /technicians/me/profile autoAcceptInvitations); bật thì tải lại danh sách vì lời mời đang chờ được nhận luôn; lỗi chỉ báo thử lại

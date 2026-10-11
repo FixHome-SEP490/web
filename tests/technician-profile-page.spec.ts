@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, h } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
 /**
@@ -7,7 +8,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
  * button, and a service row only offers "Lưu" once it has changed.
  */
 
-const { technicianProfileApi, profileApi, technicianVerificationApi, catalogApi, reviewsApi } = vi.hoisted(() => ({
+const { technicianProfileApi, profileApi, technicianVerificationApi, catalogApi, reviewsApi, geoApi, vietnamProvincesApi } = vi.hoisted(() => ({
   technicianProfileApi: {
     getMyProfile: vi.fn(),
     getMyServices: vi.fn(),
@@ -16,16 +17,21 @@ const { technicianProfileApi, profileApi, technicianVerificationApi, catalogApi,
     setSkillPricing: vi.fn(),
     updateMySchedule: vi.fn(),
     setDefaultLaborWarranty: vi.fn(),
+    getMyServiceAreas: vi.fn(),
+    updateMyServiceAreas: vi.fn(),
   },
-  profileApi: { getAddresses: vi.fn(), updateMe: vi.fn() },
+  profileApi: { getAddresses: vi.fn(), updateMe: vi.fn(), updateAddress: vi.fn(), createAddress: vi.fn() },
   technicianVerificationApi: { getMyVerification: vi.fn() },
   catalogApi: { getServices: vi.fn(), getCategories: vi.fn() },
   reviewsApi: { getByTechnician: vi.fn() },
+  geoApi: { autocomplete: vi.fn(), reverse: vi.fn() },
+  vietnamProvincesApi: { getProvincesWithDistricts: vi.fn() },
 }));
 
 vi.mock('../src/api/technician-profile.api', () => ({ technicianProfileApi }));
 vi.mock('../src/api/profile.api', () => ({ profileApi }));
-vi.mock('../src/api/geo.api', () => ({ geoApi: { autocomplete: vi.fn(), reverse: vi.fn() } }));
+vi.mock('../src/api/geo.api', () => ({ geoApi }));
+vi.mock('../src/api/vietnam-provinces.api', () => ({ vietnamProvincesApi }));
 vi.mock('../src/api/technician-verification.api', () => ({ technicianVerificationApi }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi }));
@@ -105,6 +111,7 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
     catalogApi.getServices.mockResolvedValue({ data: [{ ...SERVICE }] });
     catalogApi.getCategories.mockResolvedValue([]);
     reviewsApi.getByTechnician.mockResolvedValue({ data: [], total: 0 });
+    technicianProfileApi.getMyServiceAreas.mockResolvedValue([]);
   });
 
   it('has no second availability switch: the header owns it', async () => {
@@ -224,5 +231,228 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
 
     expect(wrapper.text()).toContain('Bạn chưa gửi hồ sơ xác minh danh tính.');
     expect(wrapper.findAll('a').filter((a) => a.text() === 'Xác minh ngay')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Khu vực nhận việc: areas for when the app is closed, and the map (PO 12/10/2026)
+// ---------------------------------------------------------------------------
+
+const PROVINCES = [
+  {
+    code: 79,
+    name: 'Thành phố Hồ Chí Minh',
+    districts: [
+      { code: 760, name: 'Quận 1' },
+      { code: 769, name: 'Quận 2' },
+      { code: 764, name: 'Quận Gò Vấp' },
+    ],
+  },
+  { code: 1, name: 'Thành phố Hà Nội', districts: [{ code: 2, name: 'Quận Hoàn Kiếm' }] },
+];
+
+const ADDRESS = {
+  id: 'a-1',
+  line1: '12 Lê Lợi',
+  ward: 'Phường Bến Nghé',
+  district: 'Quận 1',
+  province: 'TP. Hồ Chí Minh',
+  lat: 10.7745,
+  lng: 106.701,
+  isDefault: true,
+};
+
+const mapRefresh = vi.fn();
+const MapStub = defineComponent({
+  name: 'MapTilerMap',
+  props: ['center', 'markers', 'zoom', 'clickToMove', 'heightClass'],
+  emits: ['marker-move'],
+  setup(_, { expose }) {
+    expose({ refresh: mapRefresh, flyTo: vi.fn() });
+    return () => h('div', { 'data-testid': 'map' });
+  },
+});
+
+async function openLocationTab(): Promise<VueWrapper> {
+  const wrapper = mount(TechnicianProfilePage, { global: { stubs: { ...stubs, MapTilerMap: MapStub } } });
+  await flushPromises();
+  await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Khu vực nhận việc'))!.trigger('click');
+  await flushPromises();
+  return wrapper;
+}
+
+const districtChip = (wrapper: VueWrapper, name: string) =>
+  wrapper.get('[aria-label="Quận/huyện"]').findAll('button').find((b) => b.text() === name)!;
+
+const SERVER_ERROR = { response: { status: 500, data: { error: { code: 'INTERNAL', message: 'Internal server error' } } } };
+
+describe('Hồ sơ kỹ thuật viên: khu vực nhận đơn khi tắt app', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    technicianProfileApi.getMyProfile.mockReset();
+    technicianProfileApi.getMyProfile.mockResolvedValue({ ...PROFILE });
+    technicianProfileApi.getMyServices.mockResolvedValue([{ ...OFFERING }]);
+    technicianProfileApi.getMyTimeOff.mockResolvedValue([]);
+    technicianProfileApi.updateMyProfile.mockResolvedValue({ ...PROFILE });
+    technicianProfileApi.getMyServiceAreas.mockReset();
+    technicianProfileApi.getMyServiceAreas.mockResolvedValue([
+      { provinceCode: '79', districtCode: '760' },
+      { provinceCode: '79', districtCode: '764' },
+    ]);
+    technicianProfileApi.updateMyServiceAreas.mockReset();
+    technicianProfileApi.updateMyServiceAreas.mockImplementation(async (areas: unknown) => areas);
+    profileApi.getAddresses.mockResolvedValue([{ ...ADDRESS }]);
+    profileApi.updateAddress.mockResolvedValue({ ...ADDRESS });
+    technicianVerificationApi.getMyVerification.mockResolvedValue({ status: 'VERIFIED', rejectionReason: null, documents: [] });
+    catalogApi.getServices.mockResolvedValue({ data: [{ ...SERVICE }] });
+    catalogApi.getCategories.mockResolvedValue([]);
+    reviewsApi.getByTechnician.mockResolvedValue({ data: [], total: 0 });
+    vietnamProvincesApi.getProvincesWithDistricts.mockResolvedValue(PROVINCES);
+  });
+
+  it('loads the saved areas and shows how many are chosen', async () => {
+    const wrapper = await openLocationTab();
+
+    expect(technicianProfileApi.getMyServiceAreas).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Khu vực nhận đơn khi tắt app');
+    expect(wrapper.get('[data-testid="area-summary"]').text()).toBe('Đã chọn 2 khu vực');
+    expect((wrapper.get('#tp-area-province').element as HTMLSelectElement).value).toBe('79');
+    expect(districtChip(wrapper, 'Quận 1').attributes('aria-pressed')).toBe('true');
+    expect(districtChip(wrapper, 'Quận Gò Vấp').attributes('aria-pressed')).toBe('true');
+  });
+
+  it('saves districts of several provinces with the one "Lưu khu vực" button', async () => {
+    const wrapper = await openLocationTab();
+    expect(buttonsWith(wrapper, 'Lưu khu vực')).toHaveLength(1);
+
+    await districtChip(wrapper, 'Quận Gò Vấp').trigger('click');
+    await districtChip(wrapper, 'Quận 2').trigger('click');
+    await wrapper.get('#tp-area-province').setValue('1');
+    await districtChip(wrapper, 'Quận Hoàn Kiếm').trigger('click');
+    await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+    await flushPromises();
+
+    expect(technicianProfileApi.updateMyServiceAreas).toHaveBeenCalledWith([
+      { provinceCode: '79', districtCode: '760' },
+      { provinceCode: '79', districtCode: '769' },
+      { provinceCode: '1', districtCode: '2' },
+    ]);
+    expect(wrapper.text()).toContain('Đã lưu khu vực nhận việc.');
+    expect(wrapper.get('[data-testid="area-summary"]').text()).toBe('Đã chọn 3 khu vực');
+  });
+
+  it('allows an empty selection, which means "theo bán kính"', async () => {
+    const wrapper = await openLocationTab();
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Bỏ chọn')!.trigger('click');
+    expect(wrapper.get('[data-testid="area-summary"]').text()).toBe('Chưa chọn khu vực nào, nhận đơn theo bán kính.');
+    await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+    await flushPromises();
+
+    expect(technicianProfileApi.updateMyServiceAreas).toHaveBeenCalledWith([]);
+  });
+
+  it('does not resend unchanged areas when only the address is saved', async () => {
+    const wrapper = await openLocationTab();
+    await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+    await flushPromises();
+
+    expect(profileApi.updateAddress).toHaveBeenCalled();
+    expect(technicianProfileApi.updateMyServiceAreas).not.toHaveBeenCalled();
+  });
+
+  it('a failed load of the saved areas never saves over them, and "Thử lại" recovers', async () => {
+    technicianProfileApi.getMyServiceAreas.mockReset();
+    technicianProfileApi.getMyServiceAreas
+      .mockRejectedValueOnce(SERVER_ERROR)
+      .mockResolvedValueOnce([{ provinceCode: '79', districtCode: '760' }]);
+    const wrapper = await openLocationTab();
+
+    expect(wrapper.text()).toContain('Không tải được khu vực đã chọn.');
+    expect(wrapper.text()).not.toMatch(/Internal server error|INTERNAL|500/);
+    await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+    await flushPromises();
+    expect(technicianProfileApi.updateMyServiceAreas).not.toHaveBeenCalled();
+
+    await buttonsWith(wrapper, 'Thử lại')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="area-summary"]').text()).toBe('Đã chọn 1 khu vực');
+  });
+
+  it('a failed save says only to try again', async () => {
+    technicianProfileApi.updateMyServiceAreas.mockRejectedValue(SERVER_ERROR);
+    const wrapper = await openLocationTab();
+
+    await districtChip(wrapper, 'Quận 2').trigger('click');
+    await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Chưa lưu được. Vui lòng thử lại.');
+    expect(wrapper.text()).not.toMatch(/Internal server error|INTERNAL|500/);
+  });
+
+  it('re-measures and re-centres the map each time the tab is shown', async () => {
+    const wrapper = await openLocationTab();
+    expect(mapRefresh).toHaveBeenCalledTimes(1);
+
+    await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Thông tin'))!.trigger('click');
+    await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Khu vực nhận việc'))!.trigger('click');
+    await flushPromises();
+    expect(mapRefresh).toHaveBeenCalledTimes(2);
+    expect(wrapper.findComponent(MapStub).props('zoom')).toBe(14);
+  });
+
+  it('a pin dropped at sea is not taken as the address', async () => {
+    vi.useFakeTimers();
+    try {
+      geoApi.reverse.mockResolvedValue({ lat: 10.5, lng: 107.9, formattedAddress: 'Biển Đông', ward: 'Biển Đông', province: 'Tỉnh Lâm Đồng' });
+      const wrapper = await openLocationTab();
+
+      wrapper.findComponent(MapStub).vm.$emit('marker-move', 'picker', 10.5, 107.9);
+      await vi.advanceTimersByTimeAsync(400);
+      await flushPromises();
+
+      expect(geoApi.reverse).toHaveBeenCalledWith(10.5, 107.9);
+      expect(wrapper.get('[data-testid="location-notice"]').text()).toBe('Vị trí này chưa có địa chỉ, hãy kéo ghim vào đúng nhà.');
+      expect(wrapper.text()).toContain('Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh');
+      expect(wrapper.text()).not.toContain('Lâm Đồng');
+      expect(wrapper.findComponent(MapStub).props('markers')).toEqual([
+        expect.objectContaining({ id: 'picker', lat: 10.7745, lng: 106.701 }),
+      ]);
+
+      await buttonsWith(wrapper, 'Lưu khu vực')[0].trigger('click');
+      await flushPromises();
+      expect(profileApi.updateAddress).toHaveBeenCalledWith('a-1', expect.objectContaining({
+        line1: '12 Lê Lợi',
+        province: 'TP. Hồ Chí Minh',
+        lat: 10.7745,
+        lng: 106.701,
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pin dropped on land becomes the address', async () => {
+    vi.useFakeTimers();
+    try {
+      geoApi.reverse.mockResolvedValue({
+        lat: 10.78,
+        lng: 106.7,
+        formattedAddress: '5 Nguyễn Huệ, Phường Sài Gòn, Thành phố Hồ Chí Minh',
+        ward: 'Phường Sài Gòn',
+        province: 'Thành phố Hồ Chí Minh',
+      });
+      const wrapper = await openLocationTab();
+
+      wrapper.findComponent(MapStub).vm.$emit('marker-move', 'picker', 10.78, 106.7);
+      await vi.advanceTimersByTimeAsync(400);
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="location-notice"]').exists()).toBe(false);
+      expect((wrapper.get('#tp-location').element as HTMLInputElement).value).toBe('5 Nguyễn Huệ, Phường Sài Gòn, Thành phố Hồ Chí Minh');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
