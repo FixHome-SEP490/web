@@ -4,6 +4,7 @@ import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
+import TechnicianWeekCalendar from '../../components/technician/TechnicianWeekCalendar.vue';
 import ServiceAreaPicker from '../../components/technician/ServiceAreaPicker.vue';
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import {
@@ -1304,6 +1305,12 @@ const openAvatarModal = () => {
 
       <!-- TAB: Lịch làm việc -->
       <div v-if="activeTab === 'schedule'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <TechnicianWeekCalendar
+          class="lg:col-span-3"
+          :schedule="weeklyScheduleDraft"
+          :saved-schedule="uniqueSchedule"
+          :time-off="timeOffList"
+        />
         <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-lg font-semibold text-ink-900">Lịch làm việc hằng tuần</h2>

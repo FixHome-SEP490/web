@@ -38,6 +38,12 @@ vi.mock('../src/stores/auth', () => ({
     fetchProfile: vi.fn(),
   }),
 }));
+// The week calendar on this tab reads the jobs; never the live server here.
+const { getTechnicianJobsPage } = vi.hoisted(() => ({ getTechnicianJobsPage: vi.fn() }));
+vi.mock('../src/api/orders.api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/api/orders.api')>()),
+  ordersApi: { getTechnicianJobsPage },
+}));
 vi.mock('../src/components/account/ChangePasswordCard.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../src/components/account/ReputationCard.vue', () => ({ default: { template: '<div />' } }));
 
@@ -106,6 +112,7 @@ describe('Lịch làm việc hằng tuần theo 24 giờ', () => {
     catalogApi.getServices.mockResolvedValue({ data: [] });
     catalogApi.getCategories.mockResolvedValue([]);
     reviewsApi.getByTechnician.mockResolvedValue({ data: [], total: 0 });
+    getTechnicianJobsPage.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 });
   });
 
   it('offers 24-hour times in 30-minute steps, never SA/CH or a native time input', async () => {
@@ -215,5 +222,28 @@ describe('Lịch làm việc hằng tuần theo 24 giờ', () => {
 
     expect(technicianProfileApi.updateMySchedule).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Thứ Tư: giờ kết thúc phải sau giờ bắt đầu.');
+  });
+
+  it('the week calendar above previews an edit at once and notes it is not saved', async () => {
+    const wrapper = await openSchedule();
+    await flushPromises();
+
+    const calendar = wrapper.get('[data-testid="week-calendar"]');
+    const workText = () => calendar.findAll('[data-testid="calendar-block-work"]').map((w) => w.text());
+    expect(workText()).toEqual(['06:00–24:00', '08:15–17:45']);
+    expect(calendar.find('[data-testid="calendar-unsaved"]').exists()).toBe(false);
+
+    await timeSelect(wrapper, 'bắt đầu', 'Thứ Tư').setValue('13:30');
+    expect(workText()).toEqual(['06:00–24:00', '08:15–17:45', '13:30–18:00']);
+    expect(calendar.get('[data-testid="calendar-unsaved"]').text()).toBe('Chưa lưu');
+
+    technicianProfileApi.getMyProfile.mockResolvedValue({
+      ...PROFILE,
+      schedules: [...SCHEDULES, { dayOfWeek: 3, startTime: '13:30', endTime: '18:00' }],
+    });
+    await saveButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(calendar.find('[data-testid="calendar-unsaved"]').exists()).toBe(false);
+    expect(workText()).toEqual(['06:00–24:00', '08:15–17:45', '13:30–18:00']);
   });
 });
