@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Repair history from the server's read model: the customer's completed and
 // cancelled orders, newest first, with what each one cost.
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   History,
@@ -49,9 +49,8 @@ function updateTabIndicator() {
     return;
   }
   indicatorStyle.value = {
-    transform: `translate3d(${el.offsetLeft}px, ${el.offsetTop}px, 0)`,
+    transform: `translate3d(${el.offsetLeft}px, 0, 0)`,
     width: `${el.offsetWidth}px`,
-    height: `${el.offsetHeight}px`,
     opacity: '1',
   };
 }
@@ -83,16 +82,69 @@ async function load(nextPage = 1) {
   }
 }
 
+// Infinite scroll sentinel observer
+const sentinelRef = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
+
+function setupInfiniteScroll() {
+  if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+
+  observer?.disconnect();
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (
+        entry?.isIntersecting &&
+        hasMore.value &&
+        !loading.value &&
+        !loadingMore.value &&
+        !error.value
+      ) {
+        load(page.value + 1);
+      }
+    },
+    { rootMargin: '250px' },
+  );
+
+  if (sentinelRef.value && hasMore.value) {
+    observer.observe(sentinelRef.value);
+  }
+}
+
+watch([sentinelRef, hasMore, loading], () => {
+  void nextTick(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    if (sentinelRef.value && observer) {
+      observer.disconnect();
+      if (hasMore.value && !loading.value) {
+        observer.observe(sentinelRef.value);
+      }
+    }
+  });
+});
+
 watch(filter, () => {
   void nextTick(updateTabIndicator);
   load(1);
 });
 
 onMounted(() => {
+  void nextTick(updateTabIndicator);
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    document.fonts.ready.then(() => updateTabIndicator());
+  }
+  setupInfiniteScroll();
   load(1);
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateTabIndicator);
   }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateTabIndicator);
+  }
+  observer?.disconnect();
 });
 </script>
 
@@ -124,7 +176,7 @@ onMounted(() => {
     >
       <!-- Animated sliding indicator pill -->
       <div
-        class="pointer-events-none absolute rounded-xl bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        class="pointer-events-none absolute top-1 bottom-1 left-0 rounded-xl bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
         :style="indicatorStyle"
         aria-hidden="true"
       />
@@ -298,12 +350,25 @@ onMounted(() => {
       </li>
     </ul>
 
-    <!-- Load more action -->
-    <div v-if="!loading && hasMore" class="flex justify-center pt-2">
-      <FhButton variant="secondary" size="md" :loading="loadingMore" data-testid="history-load-more" @click="load(page + 1)">
-        <RefreshCw :size="16" />
-        Xem thêm
-      </FhButton>
+    <!-- Infinite scroll sentinel & status -->
+    <div
+      v-if="!loading && hasMore"
+      ref="sentinelRef"
+      data-testid="history-sentinel"
+      class="py-6 flex flex-col items-center justify-center gap-2"
+    >
+      <div v-if="loadingMore" class="flex items-center gap-2 text-sm text-ink-500 font-medium">
+        <RefreshCw :size="16" class="animate-spin text-brand-600" />
+        <span>Đang tải thêm lịch sử...</span>
+      </div>
+    </div>
+
+    <!-- End of list message -->
+    <div
+      v-else-if="!loading && items.length > 0 && !hasMore"
+      class="py-6 text-center text-xs text-ink-400 font-medium"
+    >
+      Đã hiển thị tất cả lịch sử
     </div>
   </div>
 </template>

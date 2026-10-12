@@ -8,12 +8,10 @@ import {
   Wallet,
   ArrowDownLeft,
   ArrowUpRight,
-  ShieldCheck,
   CreditCard,
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Sparkles,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from '../../components';
 import {
@@ -144,28 +142,18 @@ onMounted(() => load(1));
         <div class="pointer-events-none absolute right-16 -bottom-16 w-40 h-40 rounded-full bg-success-400/10 blur-lg" />
 
         <div class="relative z-10 space-y-4">
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/15 backdrop-blur-xs text-white">
-                <CreditCard :size="18" />
-              </span>
-              <span class="font-bold text-sm tracking-wide uppercase text-white/90">FixHome Wallet</span>
-            </div>
-          </div>
-
           <div class="space-y-1 pt-1">
             <p class="text-xs font-medium text-white/80 uppercase tracking-wider">Số dư khả dụng</p>
             <div class="text-3xl sm:text-4xl font-extrabold font-num text-white tracking-tight" data-testid="wallet-balance">
               <span v-if="loading" class="block w-48" aria-busy="true" aria-label="Đang tải số dư">
                 <FhSkeleton height="40px" class="bg-white/20" />
               </span>
-              <FhMoney v-else :amount="balance" emphasis />
+              <FhMoney v-else :amount="balance" class="text-white !text-3xl sm:!text-4xl font-extrabold" />
             </div>
           </div>
 
           <div class="pt-2 border-t border-white/15 flex items-center justify-between gap-3 text-xs text-white/80">
-            <span class="flex items-center gap-1.5">
-              <Sparkles :size="14" class="text-warning-300" />
+            <span class="flex items-center gap-1.5">  
               <span>Dùng thanh toán đơn sửa chữa, không rút ra được.</span>
             </span>
           </div>
