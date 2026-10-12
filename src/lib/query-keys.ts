@@ -15,6 +15,8 @@ export const queryKeys = {
     technicianJobCounts: ['orders', 'technician-job-counts'] as const,
     technicianActive: ['orders', 'technician-active'] as const,
     technicianDetail: (id: string) => ['orders', 'technician-detail', id] as const,
+    /** Jobs with an appointment, for the week calendar of the schedule tab. */
+    technicianCalendar: ['orders', 'technician-calendar'] as const,
     customerList: (filter: Filter) => ['orders', 'customer-list', filter] as const,
     customerRecent: ['orders', 'customer-recent'] as const,
     customerDetail: (id: string) => ['orders', 'customer-detail', id] as const,

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-12 16:49 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/pager-phone-width
+> Cập nhật lần cuối: 2026-10-12 17:11 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/schedule-calendar-week
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -139,6 +139,8 @@ Onboarding và KYC, bật tắt nhận việc (cần đủ số dư ví), lời 
 
 Lịch làm việc hằng tuần (PO 10/10/2026) chọn giờ bằng `components/technician/TimeSelect24.vue`: 24 giờ, mỗi 30 phút, không có SA/CH; giờ kết thúc "24:00" lưu là `23:59` (backend chỉ nhận `HH:mm` và so chữ bắt đầu < kết thúc); giờ lẻ đã lưu (vd `08:15`) giữ nguyên. Chọn giờ cho ngày đang nghỉ thì tự bật ngày đó; công tắc vẫn dùng để tắt ngày.
 
+Lịch tuần (PO 12/10/2026) nằm trên đầu tab Lịch làm việc, `components/technician/TechnicianWeekCalendar.vue` với phép tính ở `utils/week-calendar.ts`: cột là ngày (tuần bắt đầu Thứ Hai), hàng là giờ, tính theo giờ Việt Nam. Hiện giờ nhận việc theo bản đang sửa (chưa lưu thì có nhãn vàng "Chưa lưu"), ngày nghỉ (gạch chéo, giờ nhận việc ngày đó bị mờ) và lịch hẹn của tuần (bấm mở `/tech/jobs/:id`, trùng giờ thì xếp cạnh nhau), cùng vạch đỏ giờ hiện tại. Khung giờ mặc định 06:00 đến 22:00, tự nới ra đủ giờ khi có khối nằm ngoài. Lịch hẹn đọc `GET /service-orders/my?statuses=accepted,en_route,under_repair,completed&pageSize=100` qua khoá `orders.technician-calendar`; giờ bắt đầu là `scheduledAt`, giờ kết thúc suy từ `slot` (sáng 12:00, chiều 18:00, như `booking-slots.ts` của backend); việc tới ngay hoặc đơn cũ không có buổi thì vẽ một giờ từ giờ bắt đầu. Đọc lịch hẹn lỗi vẫn hiện giờ nhận việc kèm nút Thử lại. Đơn đã xong hiện nhạt kèm chữ "Đã xong". Trên điện thoại chỉ hiện một ngày, chọn ngày ở dải bảy ngày phía trên, trang không cuộn ngang (đã kiểm bằng Chrome ở 1440, 768 và 390 px, trình duyệt đặt múi giờ New York).
+
 ### Console (`/console`)
 
 - Cả quản lý dịch vụ và admin: tổng quan, đơn, booking (gán thợ thủ công), yêu cầu linh kiện, ví và rút tiền, khu vực phục vụ.
@@ -275,12 +277,15 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
 - Console chưa có trang chi tiết riêng cho bảo hành và nhật ký thao tác; chi tiết mở ở khung bên. Trang Nhật ký thao tác vẫn hiện mã đối tượng, mã người thực hiện, địa chỉ IP và dữ liệu trước/sau dạng JSON trong khung chi tiết vì đó là nội dung kiểm toán.
 - Image Docker dùng Node 20 trong khi `.nvmrc` yêu cầu 22.22.2.
+- Lịch tuần của thợ chỉ đọc 100 đơn tạo gần nhất (backend chưa lọc theo ngày hẹn), nên tuần xa trong quá khứ có thể thiếu đơn đã xong; danh sách đơn không trả giờ kết thúc hẹn nên việc tới ngay chỉ vẽ một giờ.
 - Check-in trên web chỉ dùng vị trí thật của thiết bị; máy không có định vị hoặc chặn quyền vị trí sẽ không check-in được. Sai số và khoảng cách tối đa 5 km do `backend` quyết. Luồng chụp khuôn mặt check-in trên `mobile` CHƯA KIỂM CHỨNG.
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
 - 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
+- 2026-10-12 16:48 (UTC+7) | ToanAltF4 | feat/schedule-calendar | Tab Lịch làm việc của thợ có lịch tuần kiểu Google Calendar (ngày là cột, giờ là hàng, giờ Việt Nam): giờ nhận việc theo bản đang sửa, ngày nghỉ, lịch hẹn của tuần và vạch giờ hiện tại; điện thoại xem từng ngày.
 - 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
 - 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
 - 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.
@@ -318,5 +323,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
 - 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
-- 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
-- 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
