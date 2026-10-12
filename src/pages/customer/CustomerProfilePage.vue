@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tidyAddressText } from '../../utils/address-text';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
@@ -14,6 +15,9 @@ import {
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import { useAuthStore } from '../../stores/auth';
+import { toast } from 'vue-sonner';
+import { validateFullName, validatePhoneNumber } from '../../utils/input-validation';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const authStore = useAuthStore();
 
@@ -22,6 +26,8 @@ const phoneNumber = ref('');
 const avatarUrl = ref('');
 const isSaving = ref(false);
 const saveSuccess = ref(false);
+// Shown under the form instead of a browser alert (PO 12/10/2026), with the real reason.
+const profileError = ref('');
 
 const addresses = ref<UserAddress[]>([]);
 const addressesFailed = ref(false);
@@ -128,7 +134,8 @@ const applyPlace = (lat: number, lng: number, place?: { formattedAddress?: strin
   addressLng.value = lng;
   addressMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#dc2626' }];
   if (place) {
-    addressForm.value.line1 = place.formattedAddress || place.description || addressForm.value.line1;
+    const picked = place.formattedAddress || place.description;
+    addressForm.value.line1 = picked ? tidyAddressText(picked) : addressForm.value.line1;
     addressForm.value.ward = originalAddress.value ? (place.ward || '') : (place.ward || addressForm.value.ward);
     addressForm.value.district = place.district || addressForm.value.district;
     addressForm.value.province = place.province || addressForm.value.province;
@@ -195,13 +202,13 @@ const searchByCoordinates = async () => {
   invalidateEditLocation();
   const requestEpoch = addressGeoEpoch;
   if (addressLat.value === '' || addressLng.value === '') {
-    alert('Vui lòng nhập đủ vĩ độ và kinh độ.');
+    toast.warning('Vui lòng nhập đủ vĩ độ và kinh độ.');
     return;
   }
   const lat = Number(addressLat.value);
   const lng = Number(addressLng.value);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    alert('Toạ độ không hợp lệ.');
+    toast.warning('Toạ độ không hợp lệ.');
     return;
   }
   searchingByCoords.value = true;
@@ -217,7 +224,7 @@ const searchByCoordinates = async () => {
     mapCenter.value = { lat, lng };
     applyPlace(lat, lng);
     mapRef.value?.flyTo(lat, lng);
-    alert('Đã ghim toạ độ trên bản đồ, nhưng không tra được địa chỉ tương ứng.');
+    toast.warning('Đã ghim toạ độ trên bản đồ, nhưng không tra được địa chỉ tương ứng.');
   } finally {
     searchingByCoords.value = false;
   }
@@ -226,7 +233,7 @@ const searchByCoordinates = async () => {
 const locateAddress = () => {
   invalidateEditLocation();
   const requestEpoch = addressGeoEpoch;
-  if (!navigator.geolocation) return alert('Thiết bị không hỗ trợ định vị.');
+  if (!navigator.geolocation) return void toast.error('Thiết bị không hỗ trợ định vị.');
   navigator.geolocation.getCurrentPosition(async position => {
     if (requestEpoch !== addressGeoEpoch || !showAddressModal.value) return;
     const { latitude, longitude } = position.coords;
@@ -240,7 +247,7 @@ const locateAddress = () => {
     } catch {
       // Keep the raw coordinates pinned even if reverse lookup fails.
     }
-  }, () => alert('Không thể lấy vị trí. Hãy cấp quyền hoặc nhập tọa độ địa chỉ.'), { timeout: 10000 });
+  }, () => toast.error('Không thể lấy vị trí. Hãy cấp quyền hoặc nhập tọa độ địa chỉ.'), { timeout: 10000 });
 };
 
 onMounted(async () => {
@@ -268,6 +275,8 @@ const loadAddresses = async () => {
 };
 
 const handleSaveProfile = async () => {
+  profileError.value = validateFullName(fullName.value) || validatePhoneNumber(phoneNumber.value);
+  if (profileError.value) return;
   isSaving.value = true;
   saveSuccess.value = false;
   try {
@@ -288,8 +297,8 @@ const handleSaveProfile = async () => {
       saveSuccess.value = false;  
       showEditProfileModal.value = false;
     }, 1500);
-  } catch {
-    alert('Không thể cập nhật hồ sơ. Vui lòng thử lại.');
+  } catch (err) {
+    profileError.value = userFacingError(err, 'Không thể cập nhật hồ sơ. Vui lòng thử lại.');
   } finally {
     isSaving.value = false;
   }
@@ -304,15 +313,16 @@ const openEditProfileModal = () => {
   phoneNumber.value = authStore.user?.phoneNumber || '';
   showEditProfileModal.value = true;
   saveSuccess.value = false;
+  profileError.value = '';
 };
 
 const handleAddAddress = async () => {
   if (!addressForm.value.line1.trim()) {
-    alert('Vui lòng tìm hoặc chọn địa chỉ trên bản đồ trước khi lưu.');
+    toast.warning('Vui lòng tìm hoặc chọn địa chỉ trên bản đồ trước khi lưu.');
     return;
   }
   if (!addressForm.value.province) {
-    alert('Chưa xác định được tỉnh/thành. Vui lòng chọn lại vị trí trên bản đồ hoặc tìm địa chỉ khác.');
+    toast.warning('Chưa xác định được tỉnh/thành. Vui lòng chọn lại vị trí trên bản đồ hoặc tìm địa chỉ khác.');
     return;
   }
   try {
@@ -342,8 +352,8 @@ const handleAddAddress = async () => {
       isDefault: false,
     };
     await loadAddresses();
-  } catch {
-    alert('Không thể lưu địa chỉ. Vui lòng thử lại.');
+  } catch (err) {
+    toast.error(userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.'));
   }
 };
 
@@ -413,8 +423,8 @@ const confirmDelete = async () => {
     try {
       await profileApi.deleteAddress(addressToDelete.value);
       await loadAddresses();
-    } catch {
-      alert('Không thể xoá địa chỉ.');
+    } catch (err) {
+      toast.error(userFacingError(err, 'Không thể xoá địa chỉ.'));
     }
   }
   showDeleteConfirm.value = false;
@@ -511,7 +521,7 @@ const confirmDelete = async () => {
                   Mặc định
                 </span>
               </p>
-              <p class="text-sm text-ink-800 text-pretty">{{ addr.line1 }}</p>
+              <p class="text-sm text-ink-800 text-pretty">{{ tidyAddressText(addr.line1) }}</p>
               <p class="text-sm text-ink-500 text-pretty">{{ addr.ward ? addr.ward + ', ' : '' }}{{ addr.district }}, {{ addr.province }}</p>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -563,14 +573,16 @@ const confirmDelete = async () => {
         <div class="space-y-4 text-sm">
           <div>
             <label class="block font-semibold text-ink-700 mb-1.5">Họ và tên</label>
-            <input v-model="fullName" type="text" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600" />
+            <input v-model="fullName" type="text" data-testid="profile-fullname" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600" />
           </div>
           
           <div>
             <label class="block font-semibold text-ink-700 mb-1.5">Số điện thoại</label>
-            <input v-model="phoneNumber" type="text" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num" placeholder="0912345678" />
+            <input v-model="phoneNumber" type="text" data-testid="profile-phone" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num" placeholder="0912345678" />
           </div>
           
+          <p v-if="profileError" role="alert" class="text-xs text-danger-600" data-testid="profile-error">{{ profileError }}</p>
+
           <div v-if="saveSuccess" class="bg-success-50 text-success-700 text-xs px-3 py-2 rounded border border-success-200 flex items-center gap-1.5">
             <Check :size="14" /> Cập nhật thành công!
           </div>
@@ -580,7 +592,7 @@ const confirmDelete = async () => {
           <FhButton variant="ghost" size="sm" @click="showEditProfileModal = false">
             Huỷ bỏ
           </FhButton>
-          <FhButton variant="primary" size="sm" :loading="isSaving" @click="handleSaveProfile">
+          <FhButton variant="primary" size="sm" :loading="isSaving" data-testid="profile-save" @click="handleSaveProfile">
             Lưu thay đổi
           </FhButton>
         </div>

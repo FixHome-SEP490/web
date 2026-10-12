@@ -54,8 +54,10 @@ function intent(target: number) {
   emit('prefetch', target);
 }
 
+// No display class here: each button sets its own, so `hidden sm:inline-flex`
+// really hides the other page numbers on a phone (an `inline-flex` here won).
 const button =
-  'inline-flex h-9 items-center justify-center rounded-[var(--radius-sm)] border text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40';
+  'h-9 items-center justify-center rounded-[var(--radius-sm)] border text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40';
 const idle = 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50';
 const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
 </script>
@@ -72,7 +74,7 @@ const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
     <div class="flex items-center gap-1">
       <button
         type="button"
-        :class="[button, idle, 'gap-1 px-2.5']"
+        :class="[button, idle, 'inline-flex gap-1 px-2.5']"
         aria-label="Trang trước"
         :disabled="disabled || current <= 1"
         data-testid="pagination-prev"
@@ -102,7 +104,7 @@ const active = 'border-brand-600 bg-brand-50 font-semibold text-brand-700';
       </template>
       <button
         type="button"
-        :class="[button, idle, 'gap-1 px-2.5']"
+        :class="[button, idle, 'inline-flex gap-1 px-2.5']"
         aria-label="Trang sau"
         :disabled="disabled || current >= count"
         data-testid="pagination-next"

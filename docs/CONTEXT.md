@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-12 02:07 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/client-cache
+> Cập nhật lần cuối: 2026-10-12 16:49 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/pager-phone-width
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -280,6 +280,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
 - 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
 - 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
 - 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.
@@ -319,4 +320,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
 - 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
 - 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
-- 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).

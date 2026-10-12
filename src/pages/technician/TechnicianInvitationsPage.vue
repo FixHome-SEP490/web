@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { useRouter } from 'vue-router';
 import { Mail, Clock, MapPin, Check, ChevronRight, X } from 'lucide-vue-next';
 import {
@@ -86,7 +87,7 @@ const handleAccept = async (inv: InvitationItem) => {
     void cache.refresh(affectedBy.invitationResponse);
     await router.push({ name: 'tech-job-detail', params: { id: result.serviceOrderId } });
   } catch {
-    alert('Chưa xác nhận được trạng thái nhận đơn. Hãy kiểm tra danh sách công việc trước khi thử nhận lại.');
+    toast.error('Chưa xác nhận được trạng thái nhận đơn. Hãy kiểm tra danh sách công việc trước khi thử nhận lại.');
   } finally {
     responding.value = false;
   }
@@ -99,7 +100,7 @@ const handleDecline = async (inv: InvitationItem) => {
     cache.markChanged(affectedBy.invitationResponse);
     if (detailInvitation.value?.id === inv.id) detailInvitation.value = null;
   } catch {
-    alert('Chưa thể từ chối lời mời. Vui lòng thử lại.');
+    toast.error('Chưa thể từ chối lời mời. Vui lòng thử lại.');
   }
 };
 

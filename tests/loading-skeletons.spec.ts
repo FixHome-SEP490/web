@@ -31,6 +31,8 @@ import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue
 import MessagesPage from '../src/pages/chat/MessagesPage.vue';
 import TrackOrderPage from '../src/pages/public/TrackOrderPage.vue';
 import VnpayReturnPage from '../src/pages/public/VnpayReturnPage.vue';
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }));
+vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 const Button = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -57,6 +59,8 @@ describe('Booking form', () => {
     fail(new Error('Network Error'));
     await flushPromises();
     expect(alert).not.toHaveBeenCalled();
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(toastMock.warning).not.toHaveBeenCalled();
     const error = wrapper.get('[data-testid="booking-catalog-error"]');
     expect(error.text()).toContain('Thử lại');
     expect(wrapper.text()).not.toContain('Network Error');

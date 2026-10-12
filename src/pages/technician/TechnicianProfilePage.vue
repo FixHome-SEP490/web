@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tidyAddressText } from '../../utils/address-text';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
@@ -497,7 +498,8 @@ const applyPlace = (
   locationLng.value = lng;
   locationMarkers.value = [{ id: 'picker', lat, lng, draggable: true, color: '#2563eb' }];
   if (place) {
-    locationLine1.value = place.formattedAddress || place.description || locationLine1.value;
+    const picked = place.formattedAddress || place.description;
+    locationLine1.value = picked ? tidyAddressText(picked) : locationLine1.value;
     locationWard.value = place.ward || '';
     locationDistrict.value = place.district || locationDistrict.value;
     locationProvince.value = place.province || locationProvince.value;
@@ -907,7 +909,7 @@ const openAvatarModal = () => {
           <p class="text-sm text-ink-500 flex items-center gap-1.5 min-w-0">
             <MapPin :size="14" class="text-ink-400 shrink-0" />
             <span v-if="technicianAddress" class="truncate" :title="technicianAddress.line1">
-              {{ technicianAddress.line1 }}
+              {{ tidyAddressText(technicianAddress.line1) }}
             </span>
             <span v-else class="truncate">Chưa có địa chỉ nhận việc</span>
             <span class="shrink-0 whitespace-nowrap">· {{ technicianProfile.serviceRadiusKm }} km</span>
