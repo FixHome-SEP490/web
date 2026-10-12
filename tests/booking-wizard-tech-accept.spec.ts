@@ -12,6 +12,8 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRo
 import { bookingsApi } from '../src/api/bookings.api';
 import TechnicianInvitationsPage from '../src/pages/technician/TechnicianInvitationsPage.vue';
 import BookingCandidatesPage from '../src/pages/customer/BookingCandidatesPage.vue';
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }));
+vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 const ActionButton = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -28,6 +30,7 @@ const global = { stubs: { FhButton: ActionButton, FhCountdown: true, FhMoney: tr
 beforeEach(() => {
   mockGet.mockReset(); mockPost.mockReset(); push.mockReset();
   vi.stubGlobal('alert', vi.fn());
+  toastMock.error.mockReset();
 });
 
 describe('WEB-WIZARD-TECH Accept must open the returned ServiceOrder', () => {
@@ -58,7 +61,9 @@ describe('WEB-WIZARD-TECH Accept must open the returned ServiceOrder', () => {
     await accept!.trigger('click');
     await flushPromises();
     expect(push).not.toHaveBeenCalled();
-    expect(vi.mocked(alert)).toHaveBeenCalledWith(expect.stringContaining('Chưa xác nhận được'));
+    // Shown as an in-app notice, not a browser alert (PO 12/10/2026).
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('Chưa xác nhận được'));
+    expect(vi.mocked(alert)).not.toHaveBeenCalled();
   });
 });
 

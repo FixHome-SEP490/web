@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 12:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/candidates-timeout
+> Cập nhật lần cuối: 2026-10-12 17:11 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/schedule-calendar-week
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -94,6 +94,30 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
+### Bộ nhớ đệm phía trình duyệt (PO 12/10/2026, nhánh `feat/client-cache`)
+
+Dữ liệu server đi qua một bộ đệm TanStack Vue Query (`@tanstack/vue-query` v5, đăng ký trong `main.ts`): trang đã mở hiện ngay bản đã đọc, rồi đọc lại ngầm khi bản đó quá hạn. Quy tắc:
+
+- `lib/query-client.ts`: một `QueryClient` dùng chung; dữ liệu mới trong 30 giây (`STALE_TIME`), giữ 10 phút khi không trang nào dùng (`GC_TIME`), đọc lại khi quay lại tab, thử lại 1 lần với lỗi mạng hoặc 5xx, không thử lại lỗi 4xx.
+- `lib/query-keys.ts` là chỗ duy nhất đặt khoá: phần tử đầu là tài nguyên (`orders`, `bookings`, `invitations`, `wallet`, `earnings`, `notifications`, `technician`, `warranty`, `addresses`, `console-dashboard`, `reference`), sau đó là bộ lọc và trang. `affectedBy` gom khoá theo loại hành động.
+- Sau hành động của chính người dùng (nhận, từ chối lời mời, các bước đơn, báo giá, chi phí phát sinh, thanh toán, tiền mặt, rút tiền, đặt và huỷ yêu cầu, hồ sơ): `refreshAfterChange` đọc lại dữ liệu đang hiện và bỏ dữ liệu không trang nào hiện, nên tiền và trạng thái đơn không bao giờ hiện bản trước hành động. Thêm một lưới an toàn: mọi lệnh ghi thành công qua `api/client.ts` (`registerMutationListener`) gọi `markChanged(keysChangedBy(url))`; đường dẫn không có trong bảng thì coi như đổi mọi dữ liệu của người dùng.
+- Chi tiết đơn của thợ và của khách có `staleTime` 0: hiện bản đệm ngay, mỗi lần mở đều đọc lại vì phía bên kia cũng đổi được đơn.
+- Danh sách phân trang (`usePagedList`): mỗi trang của mỗi bộ lọc là một khoá; đổi trang giữ hàng cũ mờ đi (`aria-busy`) tới khi trang mới về, chỉ lần đầu mới có khung xám; đổi bộ lọc về trang 1; rê chuột hoặc focus vào nút trang thì đọc trước trang đó.
+- Dữ liệu tham chiếu (danh mục, dịch vụ, tỉnh và quận, ngân hàng) mới trong 10 phút (`REFERENCE_STALE_TIME`, `useReferenceData`).
+- Rê chuột lên mục sidebar (thợ, khách, console) đọc trước dữ liệu chính của trang đó (`lib/queries.ts`, cùng khoá và cùng hàm đọc với trang).
+- Đăng xuất, phiên hết hạn (`clearSession`) và đăng nhập tài khoản khác (`setAuth` với id khác) xoá toàn bộ bộ đệm; lưu hồ sơ của cùng tài khoản thì giữ.
+- Trang đã dùng bộ đệm: thợ (tổng quan, công việc, lời mời, thu nhập, ví, chi tiết công việc, bảo hành, header của `TechnicianLayout`), khách (tổng quan, đơn của tôi, lịch sử, chi tiết đơn, thông báo, ví, bảo hành), console (tổng quan, đơn sửa chữa, gán thợ, huỷ đơn). Chuông thông báo vẫn dùng `notifications.store` (danh sách ngắn riêng, không trùng yêu cầu với trang thông báo).
+- Test: `tests/support/query-client.ts` (khai trong `setupFiles` của `vitest.config.ts`) cho mỗi test một `QueryClient` mới, tắt thử lại, `gcTime` 0; `tests/query-cache.spec.ts` kiểm hành vi bộ đệm.
+
+### Phân trang mọi danh sách (PO 12/10/2026, nhánh `feat/list-pagination`)
+
+Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagination.vue` ("1–20 / 57", Trước, số trang có dấu "…", Sau; trên điện thoại chỉ hiện số trang hiện tại; ẩn khi chỉ có một trang). `ConsolePagination` bọc lại chính nó nên console cùng một kiểu. Trang, tab và bộ lọc nằm trên địa chỉ (`?page=2&tab=...`, `composables/useQueryState.ts`) để quay lại hay tải lại vẫn đúng trang; `composables/usePagedList.ts` giữ một danh sách phân trang (bỏ câu trả lời cũ về muộn, trang quá số trang thì về trang cuối). `api/paging.ts` là chỗ duy nhất đọc `data` + `meta.total` (`readPage`), dựng tham số lọc (`filterParams`: một trạng thái gửi `status`, nhiều trạng thái gửi một yêu cầu `statuses=a,b`, `search` đã cắt khoảng trắng) và cắt trang danh sách đã tải (`slicePage`). Ô tìm kiếm tìm ở `backend` (`useQuerySearch`: gửi sau khoảng 300 ms ngừng gõ, về trang 1, giữ ở `?q=`).
+
+- Kỹ thuật viên: Công việc 20 đơn mỗi trang, giữ bốn tab cũ (Tất cả, Cần di chuyển = `accepted,en_route`, Đang sửa chữa, Hoàn thành), mỗi tab một yêu cầu `statuses=`, số đếm từng tab đọc bằng `pageSize=1`. Thu nhập dùng `GET /technicians/me/earnings` (`api/technician-earnings.api.ts`): chọn Hôm nay, Tuần này, Tháng này, Tất cả, nút ‹ › sang kỳ trước hoặc sau (tuần từ thứ Hai, giờ Việt Nam, `utils/earnings-period.ts`), thẻ tổng của cả kỳ (đơn hoàn thành, đã thanh toán x/y, tiền công, thực nhận sau phí, giá trị đơn), số dư ví như cũ, danh sách đơn hoàn thành phân trang. Bảo hành đọc `GET /warranty-claims/mine?page&pageSize`.
+- Khách: Đơn của tôi có hai danh sách phân trang riêng (yêu cầu đặt lịch `?requestsPage=`, đơn sửa chữa `?page=`, 10 mỗi trang); tab nhiều trạng thái gửi một yêu cầu `statuses=`; booking `matched` không liệt kê vì đơn của nó đã có (`backend` đặt `matched` cùng lúc tạo đơn). Ô tìm kiếm tìm ở `backend` (mã đơn, tên dịch vụ, không phân biệt dấu); Lịch sử sửa chữa cũng có ô tìm kiếm như vậy. Lịch sử sửa chữa, ví, thông báo (20 mỗi trang, tổng đọc từ `meta.total`) dùng phân trang số thay cho "Xem thêm"; bộ lọc của trang thông báo (loại, chưa đọc, chữ) vẫn chỉ lọc trang đang xem vì `GET /notifications` không có tham số lọc; bảo hành đọc 10 đơn hoàn thành mỗi trang (`status=completed`) rồi chỉ hỏi bảo hành của 10 đơn đó.
+- Console: Đơn sửa chữa và Huỷ đơn phân trang ở `backend` (tìm theo mã đơn, tên khách, tên dịch vụ qua `search`); Gán thợ giữ hai tab Cần gán thợ và Đã quá hạn, mỗi tab một yêu cầu `statuses=submitted,matching,closed&overdue=false|true&sort=appointment` (giờ hẹn sớm nhất trước), đếm bằng `pageSize=1`; yêu cầu quá giờ không có nút Gán thợ. Dịch vụ phân trang ở `backend`; danh mục và khu vực phục vụ phân trang trên trình duyệt vì endpoint trả cả danh sách.
+- Khung xám khi tải thay cho vòng xoay hoặc chữ "Đang tải": form đặt lịch (nhóm dịch vụ, dịch vụ, địa chỉ; lỗi tải hiện dòng "Thử lại" thay cho hộp `alert`), danh sách hội thoại, tra cứu đơn, trang trả về từ VNPay.
+
 ### Khách hàng (`/app`)
 
 - Hai form đặt lịch trên cùng trang `NewBookingWizardPage.vue`: `/app/bookings/new` khách tự chọn dịch vụ, không có AI; `/app/bookings/ai` khách mô tả và gửi tối đa 3 ảnh, trò chuyện với AI, AI gợi ý dịch vụ và khách được đổi. AI lỗi không chặn đặt lịch.
@@ -114,6 +138,8 @@ Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau 
 Onboarding và KYC, bật tắt nhận việc (cần đủ số dư ví), lời mời (nhận hoặc từ chối), danh sách và chi tiết công việc (đi đến, check-in GPS, bắt đầu sửa, ảnh trước và sau, báo giá, chi phí phát sinh, linh kiện, khai tiền mặt, huỷ), bảo hành, thu nhập, ví (nạp qua VNPay, tài khoản ngân hàng, rút tiền qua payOS), hồ sơ (kỹ năng và giá công, lịch, ngày nghỉ, đánh giá).
 
 Lịch làm việc hằng tuần (PO 10/10/2026) chọn giờ bằng `components/technician/TimeSelect24.vue`: 24 giờ, mỗi 30 phút, không có SA/CH; giờ kết thúc "24:00" lưu là `23:59` (backend chỉ nhận `HH:mm` và so chữ bắt đầu < kết thúc); giờ lẻ đã lưu (vd `08:15`) giữ nguyên. Chọn giờ cho ngày đang nghỉ thì tự bật ngày đó; công tắc vẫn dùng để tắt ngày.
+
+Lịch tuần (PO 12/10/2026) nằm trên đầu tab Lịch làm việc, `components/technician/TechnicianWeekCalendar.vue` với phép tính ở `utils/week-calendar.ts`: cột là ngày (tuần bắt đầu Thứ Hai), hàng là giờ, tính theo giờ Việt Nam. Hiện giờ nhận việc theo bản đang sửa (chưa lưu thì có nhãn vàng "Chưa lưu"), ngày nghỉ (gạch chéo, giờ nhận việc ngày đó bị mờ) và lịch hẹn của tuần (bấm mở `/tech/jobs/:id`, trùng giờ thì xếp cạnh nhau), cùng vạch đỏ giờ hiện tại. Khung giờ mặc định 06:00 đến 22:00, tự nới ra đủ giờ khi có khối nằm ngoài. Lịch hẹn đọc `GET /service-orders/my?statuses=accepted,en_route,under_repair,completed&pageSize=100` qua khoá `orders.technician-calendar`; giờ bắt đầu là `scheduledAt`, giờ kết thúc suy từ `slot` (sáng 12:00, chiều 18:00, như `booking-slots.ts` của backend); việc tới ngay hoặc đơn cũ không có buổi thì vẽ một giờ từ giờ bắt đầu. Đọc lịch hẹn lỗi vẫn hiện giờ nhận việc kèm nút Thử lại. Đơn đã xong hiện nhạt kèm chữ "Đã xong". Trên điện thoại chỉ hiện một ngày, chọn ngày ở dải bảy ngày phía trên, trang không cuộn ngang (đã kiểm bằng Chrome ở 1440, 768 và 390 px, trình duyệt đặt múi giờ New York).
 
 ### Console (`/console`)
 
@@ -175,7 +201,8 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 
 ### Các bước của thợ trong đơn (08/10/2026, nhánh `feat/technician-order-steps`)
 
-- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Bước tới nơi là một nút "Check-in và chụp ảnh sản phẩm": chọn ảnh trước, rồi check-in GPS, rồi lưu ảnh. Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Trang công việc: không còn nút "Bắt đầu sửa chữa" (backend tự chuyển khi đủ điều kiện). Khi đang sửa, nút "Hoàn thành (chụp ảnh sau sửa)" chụp ảnh rồi tự gửi yêu cầu nghiệm thu.
+- Check-in bằng khuôn mặt (PO 11/10/2026, nhánh `feat/checkin-camera`): nút "Check-in" mở `components/technician/CameraCapture.vue` ở chế độ khuôn mặt (camera trước, khung oval, ảnh lưu không lật), chụp xong mới lấy GPS (`utils/best-position.ts`: `watchPosition` độ chính xác cao, lấy bản tốt nhất, xong sớm khi ≤ 100 m, tối đa khoảng 12 giây, kèm một lần đọc vị trí mạng song song), gọi `check-in` với `accuracyMeters` thật, hợp lệ thì tải ảnh loại `checkin_face`. Tải ảnh khuôn mặt hỏng thì bước kế là "Chụp khuôn mặt check-in". Sau đó "Chụp ảnh máy" (ảnh trước sửa), rồi ảnh sau sửa; cả ba bước và nút thêm ảnh trước/sau đều chỉ chụp bằng camera, không còn ô chọn ảnh. Lỗi camera hoặc vị trí chỉ hiện một câu dễ hiểu và nút "Thử lại". Chi tiết bước 2 hiện ảnh khuôn mặt check-in. Trang đơn của khách hiện ảnh `checkin_face` với nhãn "Check-in" trong mục "Tất cả".
 - Sau check-in, menu "Thêm" của trang công việc có "Cần thay đổi thợ": nhập lý do, tạo support case `technician_replacement` (khẩn) cho quản lý. Loại này cũng có trong "Báo cáo vấn đề" của thợ và có nhãn trong console.
 
 ### Giao diện kỹ thuật viên gọn lại (10/10/2026, nhánh `feat/technician-ui-redesign`)
@@ -205,6 +232,7 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - `src/services/`: `chat-socket.service.ts` (Socket.IO), `webrtc-call.service.ts`, `google-identity.service.ts`.
 - `src/stores/`: Pinia `auth`, `chat`, `call`, `notifications`.
 - `src/utils/`: định dạng tiền và giờ Việt Nam (`vn-time`), kiểm dữ liệu nhập, ảnh gửi AI.
+- `src/lib/`: bộ đệm dữ liệu server (`query-client.ts`, `query-keys.ts`, `queries.ts`); trang đọc qua `composables/useCachedQuery.ts` và `composables/usePagedList.ts`.
 - `tests/`: spec Vitest.
 
 Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết thường của `backend` sang viết hoa.
@@ -213,9 +241,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - REST tới `backend` qua `VITE_API_BASE_URL` (mặc định `http://localhost:3000/api/v1`), JWT trong `localStorage` (`access_token`, `refresh_token`), refresh qua `POST /auth/refresh`.
 - Danh sách gửi `page` và `pageSize` hoặc `limit` không quá 100; `status` viết thường đúng enum của `backend`.
+- `GET /service-orders/my`, `GET /service-orders`, `GET /repair-history` nhận `search`; hai cái đầu và `GET /bookings/my`, `GET /bookings` nhận `statuses=a,b`; `GET /bookings` nhận thêm `search`, `overdue=true|false`, `sort=created|appointment`. CHƯA KIỂM CHỨNG với `backend` thật.
+- Thu nhập thợ `GET /technicians/me/earnings?from=&to=&page=&pageSize=` (ngày `yyyy-MM-dd` giờ Việt Nam, gồm cả hai đầu, bỏ trống là mọi lúc) trả tổng của cả kỳ và `payouts` của trang; `GET /warranty-claims/mine` nhận `page`, `pageSize`, `status` và trả `meta.total`. Hai hợp đồng này `backend` làm song song, web CHƯA KIỂM CHỨNG với `backend` thật.
 - Socket.IO tới `<origin của VITE_API_BASE_URL>/chat`: nhận `message:*`, `conversation:updated`, `typing`, `call:*`; gửi `conversation:join`, `conversation:leave`, `typing`, `call:*`.
 - AI chỉ qua `POST /ai/diagnoses`, `POST /ai/chat/ask`, `GET /ai/chat/acknowledgements` của `backend`; mô tả tối đa 2000 ký tự, câu hỏi 1000, tối đa 3 ảnh.
 - Thông báo đọc qua REST, đếm chưa đọc mỗi 30 giây khi tab đang mở.
+- Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
 - Biến môi trường (chỉ tên): `VITE_API_BASE_URL`, `VITE_MAPTILER_KEY`, `VITE_GOOGLE_CLIENT_ID` (để trống thì ẩn nút Google), `VITE_APP_TITLE` (hiện không dùng), `DEV_HTTPS` (bật HTTPS khi dev để gọi thoại qua mạng LAN). Mọi biến `VITE_*` đều công khai trong bundle, không đặt bí mật.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
@@ -241,14 +272,26 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 8. Việc đang dở và rủi ro đã biết
 
 - Thông báo dùng polling, chưa nhận đẩy realtime.
+- Bộ đệm phía trình duyệt (`feat/client-cache`) đã qua lint, typecheck, test và build nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt. Thêm dependency `@tanstack/vue-query` nên ai chạy Docker phải `docker compose up -d --build`. Các trang chưa chuyển (form đặt lịch, chi tiết yêu cầu đặt lịch, hồ sơ, trang admin, các trang console còn lại) vẫn đọc khi mở; lệnh ghi của chúng vẫn làm cũ bộ đệm qua lưới an toàn.
+- Tổng quan khách, tổng quan thợ và `TechnicianLayout` vẫn gọi `GET /service-orders/my` không tham số nên chỉ thấy 20 đơn mới nhất; tổng quan console gọi `GET /service-orders` như vậy. Phân trang mới CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt.
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
 - Console chưa có trang chi tiết riêng cho bảo hành và nhật ký thao tác; chi tiết mở ở khung bên. Trang Nhật ký thao tác vẫn hiện mã đối tượng, mã người thực hiện, địa chỉ IP và dữ liệu trước/sau dạng JSON trong khung chi tiết vì đó là nội dung kiểm toán.
 - Image Docker dùng Node 20 trong khi `.nvmrc` yêu cầu 22.22.2.
-- Check-in trên web chỉ dùng GPS thật của thiết bị; laptop không có GPS sẽ không check-in được (kỹ thuật viên chủ yếu check-in bằng `mobile`).
+- Lịch tuần của thợ chỉ đọc 100 đơn tạo gần nhất (backend chưa lọc theo ngày hẹn), nên tuần xa trong quá khứ có thể thiếu đơn đã xong; danh sách đơn không trả giờ kết thúc hẹn nên việc tới ngay chỉ vẽ một giờ.
+- Check-in trên web chỉ dùng vị trí thật của thiết bị; máy không có định vị hoặc chặn quyền vị trí sẽ không check-in được. Sai số và khoảng cách tối đa 5 km do `backend` quyết. Luồng chụp khuôn mặt check-in trên `mobile` CHƯA KIỂM CHỨNG.
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
+- 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
+- 2026-10-12 16:48 (UTC+7) | ToanAltF4 | feat/schedule-calendar | Tab Lịch làm việc của thợ có lịch tuần kiểu Google Calendar (ngày là cột, giờ là hàng, giờ Việt Nam): giờ nhận việc theo bản đang sửa, ngày nghỉ, lịch hẹn của tuần và vạch giờ hiện tại; điện thoại xem từng ngày.
+- 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
+- 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
+- 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.
+- 2026-10-12 00:23 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Gợi ý địa chỉ gửi kèm vị trí để ưu tiên nơi gần (hồ sơ thợ: vị trí ghim; hồ sơ khách: địa chỉ mặc định), server mặc định TP HCM
+- 2026-10-12 00:18 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Hồ sơ kỹ thuật viên, tab Khu vực nhận việc: thêm chọn nhiều quận/huyện ở nhiều tỉnh để nhận đơn khi tắt app (lưu chung nút Lưu khu vực, để trống là theo bán kính), sửa bản đồ mở trong tab ẩn bị lệch tâm và chặn ghim rơi xuống biển.
+- 2026-10-11 23:48 (UTC+7) | ToanAltF4 | feat/checkin-camera | Thợ check-in bằng ảnh khuôn mặt chụp từ camera, ảnh trước và sau sửa chỉ chụp bằng camera, GPS check-in lấy bản tốt nhất bằng watchPosition và gửi sai số thật.
 - 2026-10-10 12:47 (UTC+7) | ToanAltF4 | fix/candidates-timeout | Danh sách kỹ thuật viên phù hợp chờ tối đa 60 giây thay vì 15 giây: mỗi thợ cần khoảng chục truy vấn DB nên khi DB chậm khách thấy Không thể tải danh sách
 - 2026-10-10 02:47 (UTC+7) | ToanAltF4 | feat/auto-accept-toggle | Trang Lời mời nhận việc có công tắc Tự nhận việc (PATCH /technicians/me/profile autoAcceptInvitations); bật thì tải lại danh sách vì lời mời đang chờ được nhận luôn; lỗi chỉ báo thử lại
 - 2026-10-10 02:37 (UTC+7) | ToanAltF4 | feat/schedule-24h | Lịch làm việc hằng tuần của thợ chọn giờ theo 24 giờ (ô chọn mỗi 30 phút, 24:00 lưu là 23:59, giữ giờ lẻ đã lưu), chọn giờ cho ngày nghỉ thì tự bật ngày đó.
@@ -280,9 +323,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
 - 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.
 - 2026-10-08 21:43 (UTC+7) | ToanAltF4 | feat/profile-password-and-sm-areas | Đổi mật khẩu trong hồ sơ khách và thợ; menu console có Khu vực phục vụ.
-- 2026-10-07 22:07 (UTC+7) | ToanAltF4 | fix/order-pages-wording-and-totals | Trang đơn khách: tổng tiền khi chờ duyệt báo giá, ẩn huỷ khi đang sửa; trang thợ và thư mời bỏ số cứng, mã thô, UUID.
-- 2026-10-07 21:48 (UTC+7) | ToanAltF4 | fix/ai-step-service-hint | Bước AI: khi chưa có dịch vụ sau câu trả lời của trợ lý thì nhắc khách tự chọn dịch vụ.
-- 2026-10-07 21:24 (UTC+7) | ToanAltF4 | fix/strike-waive-reason | Miễn vi phạm bắt ghi lý do; câu hậu quả đúng với backend (không tự gỡ tạm khoá).
-- 2026-10-07 21:05 (UTC+7) | ToanAltF4 | fix/cash-case-resolution | Case tiền mặt chọn kết quả từ danh sách, gửi đúng mã chốt tiền của backend thay vì gõ tay.
-- 2026-10-07 19:37 (UTC+7) | ToanAltF4 | fix/no-fake-data-and-po-decisions | Ghi việc gỡ dữ liệu giả, BRX-064, nút xác nhận vi phạm, khoá cấu hình mới và check-in chỉ dùng GPS thật
-- 2026-10-07 14:43 (UTC+7) | ToanAltF4 | docs/repo-context | Tạo file context theo bộ quy tắc chung của bốn repo, ghi hiện trạng sau đợt sửa lỗi ngày 07/10/2026

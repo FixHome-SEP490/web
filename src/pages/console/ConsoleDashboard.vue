@@ -1,39 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { ChevronRight } from 'lucide-vue-next';
 import { FhSkeleton, FhStatusPill } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
-import { dashboardApi, type OperationalDashboard } from '../../api/dashboard.api';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useAuthStore } from '../../stores/auth';
+import { useCachedQuery } from '../../composables/useCachedQuery';
+import { sharedQueries } from '../../lib/queries';
 
 const authStore = useAuthStore();
 // Support and cancellations are the service manager's pages; the admin sees the counts only.
 const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
 
-const loading = ref(true);
-const loadError = ref(false);
-const ops = ref<OperationalDashboard | null>(null);
-const watchOrders = ref<ServiceOrderItem[]>([]);
+// Counts and the orders to watch, cached together: a return visit shows them at
+// once and reads them again in the background.
+const dashboardQuery = useCachedQuery(sharedQueries.consoleDashboard);
+const loading = dashboardQuery.loading;
+const loadError = computed(() => !!dashboardQuery.error.value);
+const ops = computed(() => dashboardQuery.data.value?.ops ?? null);
+const watchOrders = computed(() => dashboardQuery.data.value?.watchOrders ?? []);
 
-async function loadDashboard() {
-  loading.value = true;
-  loadError.value = false;
-  try {
-    const [opsData, orders] = await Promise.all([
-      dashboardApi.getOperational(),
-      ordersApi.getConsoleOrders(),
-    ]);
-    ops.value = opsData;
-    watchOrders.value = orders
-      .filter((o) => ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'].includes(o.status))
-      .slice(0, 5);
-  } catch {
-    loadError.value = true;
-  } finally {
-    loading.value = false;
-  }
+function loadDashboard() {
+  void dashboardQuery.refetch();
 }
 
 const countOf = (status: string) =>
@@ -84,7 +72,6 @@ const attention = computed<AttentionRow[]>(() => {
   ];
 });
 
-onMounted(loadDashboard);
 </script>
 
 <template>

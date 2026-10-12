@@ -2,10 +2,13 @@
 // Customer wallet (PO 08/10/2026): the balance, a VNPay top-up, and the
 // history of top-ups, invoice payments and refunds. Money in the wallet pays
 // FixHome orders; it cannot be withdrawn.
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { FhButton, FhMoney, FhSkeleton } from '../../components';
+import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { customerWalletApi, customerWalletTypeLabels, isIncomingWalletTransaction, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
+import { usePagedList } from '../../composables/usePagedList';
+import type { PageResult } from '../../api/paging';
+import { queryKeys } from '../../lib/query-keys';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -14,13 +17,35 @@ const PRESETS = [100_000, 200_000, 500_000, 1_000_000];
 const MIN = 10_000;
 const MAX = 50_000_000;
 
-const balance = ref(0);
-const transactions = ref<CustomerWalletTransaction[]>([]);
-const page = ref(1);
-const totalPages = ref(0);
-const loading = ref(true);
-const loadingMore = ref(false);
-const loadError = ref('');
+const PAGE_SIZE = 20;
+// One request reads the balance and a page of the history (?page=2 in the address).
+const {
+  page,
+  items: transactions,
+  total,
+  loading,
+  error,
+  load,
+  result,
+  changingPage,
+  prefetch,
+} = usePagedList<CustomerWalletTransaction, PageResult<CustomerWalletTransaction> & { balance: number }>({
+  key: () => queryKeys.wallet.customer({}),
+  pageSize: PAGE_SIZE,
+  fetch: async (p, size) => {
+    const result = await customerWalletApi.summary(p, size);
+    return {
+      items: result.transactions,
+      total: result.meta.total,
+      page: result.meta.page || p,
+      pageSize: size,
+      balance: result.balance,
+    };
+  },
+});
+const balance = computed(() => result.value?.balance ?? 0);
+const balanceLoaded = computed(() => result.value !== null);
+const loadError = computed(() => (error.value ? userFacingError(error.value, 'Chưa tải được ví, vui lòng thử lại.') : ''));
 
 const amountText = ref('');
 const topUpError = ref('');
@@ -36,24 +61,6 @@ const paymentResult = computed(() => {
 
 const LABELS = customerWalletTypeLabels;
 const isIncoming = isIncomingWalletTransaction;
-
-async function load(next = 1) {
-  if (next === 1) loading.value = true;
-  else loadingMore.value = true;
-  loadError.value = '';
-  try {
-    const result = await customerWalletApi.summary(next, 20);
-    balance.value = result.balance;
-    transactions.value = next === 1 ? result.transactions : [...transactions.value, ...result.transactions];
-    page.value = result.meta.page;
-    totalPages.value = result.meta.totalPages;
-  } catch (err) {
-    loadError.value = userFacingError(err, 'Chưa tải được ví, vui lòng thử lại.');
-  } finally {
-    loading.value = false;
-    loadingMore.value = false;
-  }
-}
 
 async function topUp() {
   if (redirecting.value) return;
@@ -72,7 +79,6 @@ async function topUp() {
   }
 }
 
-onMounted(() => load(1));
 </script>
 
 <template>
@@ -91,8 +97,9 @@ onMounted(() => load(1));
       <div class="p-5 space-y-1">
         <p class="text-sm text-ink-500">Số dư</p>
         <p class="text-3xl font-bold text-ink-900 font-num whitespace-nowrap" data-testid="wallet-balance">
-          <span v-if="loading" class="block w-40" aria-busy="true" aria-label="Đang tải số dư"><FhSkeleton height="36px" /></span>
-          <FhMoney v-else :amount="balance" emphasis />
+          <span v-if="!balanceLoaded && loading" class="block w-40" aria-busy="true" aria-label="Đang tải số dư"><FhSkeleton height="36px" /></span>
+          <FhMoney v-else-if="balanceLoaded" :amount="balance" emphasis />
+          <span v-else>—</span>
         </p>
         <p class="text-sm text-ink-500">Dùng để trả đơn sửa chữa, không rút ra được.</p>
       </div>
@@ -142,10 +149,16 @@ onMounted(() => load(1));
       </div>
       <div v-else-if="loadError" class="flex flex-wrap items-center justify-between gap-3 py-1">
         <p class="text-sm text-ink-700">{{ loadError }}</p>
-        <FhButton variant="secondary" size="sm" @click="load(1)">Thử lại</FhButton>
+        <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
       </div>
       <p v-else-if="transactions.length === 0" class="text-sm text-ink-500">Chưa có giao dịch nào.</p>
-      <ul v-else class="divide-y divide-ink-100" data-testid="wallet-transactions">
+      <ul
+        v-else
+        class="divide-y divide-ink-100 transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
+        :aria-busy="changingPage"
+        data-testid="wallet-transactions"
+      >
         <li v-for="t in transactions" :key="t.id" class="flex items-start justify-between gap-3 py-3 text-sm">
           <div class="min-w-0">
             <p class="font-semibold text-ink-900">{{ LABELS[t.type] ?? 'Giao dịch' }}</p>
@@ -160,9 +173,14 @@ onMounted(() => load(1));
           </div>
         </li>
       </ul>
-      <div v-if="page < totalPages" class="flex justify-center pt-2">
-        <FhButton variant="secondary" size="sm" :loading="loadingMore" @click="load(page + 1)">Xem thêm</FhButton>
-      </div>
+      <FhPagination
+        v-if="!loadError"
+        v-model:page="page"
+        :page-size="PAGE_SIZE"
+        :total="total"
+        :disabled="loading"
+        @prefetch="prefetch"
+      />
     </section>
   </div>
 </template>

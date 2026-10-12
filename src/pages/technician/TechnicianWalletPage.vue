@@ -16,11 +16,8 @@ import {
 } from 'lucide-vue-next';
 import {
   walletApi,
-  type WalletSummary,
   type WalletTransaction,
-  type WithdrawalRequest,
   type BankAccount,
-  type BankOption,
 } from '../../api/wallet.api';
 import {
   FhButton,
@@ -36,22 +33,55 @@ import {
 import { extractApiErrorMessage } from '../../utils/input-validation';
 import { toast } from 'vue-sonner';
 import { userFacingError, withoutCodes } from '../../utils/user-facing-error';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { REFERENCE_STALE_TIME } from '../../lib/query-client';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
+import { sharedQueries } from '../../lib/queries';
 
-const loading = ref(true);
+const cache = useCacheUpdates();
 const refreshing = ref(false);
-const error = ref<string | null>(null);
-
-const wallet = ref<WalletSummary | null>(null);
 const activeTab = ref<'transactions' | 'withdrawals'>('transactions');
 
+// The wallet, the bank account and each page of history are cached: a return
+// visit shows them at once and reads them again in the background. Any money
+// action of the technician re-reads them (see handleWithdraw).
+const walletQuery = useCachedQuery(sharedQueries.technicianWallet);
+const wallet = computed(() => walletQuery.data.value ?? null);
+const error = computed<string | null>(() =>
+  walletQuery.error.value ? userFacingError(walletQuery.error.value, 'Không thể tải thông tin ví. Vui lòng thử lại.') : null,
+);
+
+const bankQuery = useCachedQuery({
+  key: queryKeys.wallet.technicianBankAccount,
+  fetch: () => walletApi.getMyBankAccount(),
+});
+const bankAccount = computed<BankAccount | null>(() => bankQuery.data.value ?? null);
+
+const loading = computed(() => walletQuery.loading.value || bankQuery.loading.value);
+
 // Transactions State
-const transactions = ref<WalletTransaction[]>([]);
-const txLoading = ref(false);
 const txFilterType = ref<string>('ALL');
 const txPage = ref(1);
-const txTotalPages = ref(1);
-const txTotal = ref(0);
-const txError = ref<string | null>(null);
+const txQuery = useCachedQuery({
+  key: () => queryKeys.wallet.technicianTransactions({ type: txFilterType.value, page: txPage.value }),
+  fetch: () =>
+    walletApi.getMyTransactions({
+      page: txPage.value,
+      limit: 15,
+      type: txFilterType.value === 'ALL' ? undefined : txFilterType.value,
+    }),
+  enabled: () => !!wallet.value,
+  // Another page of the same filter keeps the rows on screen meanwhile.
+  keepPreviousWhen: (previousKey) =>
+    (previousKey[previousKey.length - 1] as { type?: string } | undefined)?.type === txFilterType.value,
+});
+const transactions = computed<WalletTransaction[]>(() => txQuery.data.value?.data ?? []);
+const txLoading = txQuery.loading;
+const txTotal = computed(() => txQuery.data.value?.meta.total ?? 0);
+const txTotalPages = computed(() => txQuery.data.value?.meta.totalPages || 1);
+const txError = computed<string | null>(() =>
+  txQuery.error.value ? userFacingError(txQuery.error.value, 'Không thể tải biến động số dư. Vui lòng thử lại.') : null,
+);
 
 const txFilters = [
   { id: 'ALL', label: 'Tất cả' },
@@ -63,13 +93,18 @@ const txFilters = [
   { id: 'ADJUSTMENT', label: 'Điều chỉnh' },
 ];
 
-// Withdrawals State
-const withdrawals = ref<WithdrawalRequest[]>([]);
-const wdLoading = ref(false);
-const wdError = ref<string | null>(null);
+// Withdrawals State: read once the tab is opened.
 const wdPage = ref(1);
-const wdTotalPages = ref(1);
-const wdTotal = ref(0);
+const wdQuery = useCachedQuery({
+  key: () => queryKeys.wallet.technicianWithdrawals({ page: wdPage.value }),
+  fetch: () => walletApi.getMyWithdrawals({ page: wdPage.value, limit: 15 }),
+  enabled: () => activeTab.value === 'withdrawals',
+});
+const withdrawals = computed(() => wdQuery.data.value?.data ?? []);
+const wdLoading = wdQuery.loading;
+const wdError = computed<string | null>(() =>
+  wdQuery.error.value ? userFacingError(wdQuery.error.value, 'Không thể tải lịch sử rút tiền. Vui lòng thử lại.') : null,
+);
 
 // Modals
 const showTopUpModal = ref(false);
@@ -96,8 +131,15 @@ const topUpPresets = [100000, 200000, 500000, 1000000];
 // Saved once and reused. The backend only accepts it when the holder name
 // matches the name verified at KYC, which is why a withdrawal never carries
 // its own bank details.
-const bankAccount = ref<BankAccount | null>(null);
-const banks = ref<BankOption[]>([]);
+// The bank list is reference data, read when the form first opens.
+const banksWanted = ref(false);
+const banksQuery = useCachedQuery({
+  key: queryKeys.reference.banks,
+  fetch: () => walletApi.listBanks(),
+  enabled: banksWanted,
+  staleTime: REFERENCE_STALE_TIME,
+});
+const banks = computed(() => banksQuery.data.value ?? []);
 const showBankModal = ref(false);
 const bankForm = ref({ bankBin: '', accountNumber: '', accountName: '' });
 const bankSaving = ref(false);
@@ -140,94 +182,25 @@ const openTxJob = (tx: WalletTransaction) => {
   if (id) void router.push(`/tech/jobs/${id}`);
 };
 
-const loadWallet = async () => {
-  try {
-    error.value = null;
-    wallet.value = await walletApi.getMyWallet();
-  } catch (err: unknown) {
-    error.value = userFacingError(err, 'Không thể tải thông tin ví. Vui lòng thử lại.');
-  }
-};
-
-const loadTransactions = async () => {
-  if (!wallet.value) return;
-  txLoading.value = true;
-  txError.value = null;
-  try {
-    const res = await walletApi.getMyTransactions({
-      page: txPage.value,
-      limit: 15,
-      type: txFilterType.value === 'ALL' ? undefined : txFilterType.value,
-    });
-    transactions.value = res.data;
-    txTotal.value = res.meta.total;
-    txTotalPages.value = res.meta.totalPages || 1;
-  } catch (err) {
-    console.error('Failed to load transactions:', err);
-    txError.value = userFacingError(err, 'Không thể tải biến động số dư. Vui lòng thử lại.');
-  } finally {
-    txLoading.value = false;
-  }
-};
-
-const loadBankAccount = async () => {
-  try {
-    bankAccount.value = await walletApi.getMyBankAccount();
-  } catch (err) {
-    console.error('Failed to load bank account:', err);
-  }
-};
-
-const loadBanks = async () => {
-  if (banks.value.length > 0) return;
-  try {
-    banks.value = await walletApi.listBanks();
-  } catch (err) {
-    console.error('Failed to load bank list:', err);
-  }
-};
-
-const loadWithdrawals = async () => {
-  wdLoading.value = true;
-  wdError.value = null;
-  try {
-    const res = await walletApi.getMyWithdrawals({
-      page: wdPage.value,
-      limit: 15,
-    });
-    withdrawals.value = res.data;
-    wdTotal.value = res.meta.total;
-    wdTotalPages.value = res.meta.totalPages || 1;
-  } catch (err) {
-    console.error('Failed to load withdrawals:', err);
-    wdError.value = userFacingError(err, 'Không thể tải lịch sử rút tiền. Vui lòng thử lại.');
-  } finally {
-    wdLoading.value = false;
-  }
+const loadTransactions = () => txQuery.refetch();
+const loadWithdrawals = () => wdQuery.refetch();
+const loadBanks = () => {
+  banksWanted.value = true;
 };
 
 const refreshAll = async () => {
   refreshing.value = true;
-  await Promise.all([loadWallet(), loadBankAccount()]);
-  if (activeTab.value === 'transactions') {
-    await loadTransactions();
-  } else {
-    await loadWithdrawals();
-  }
+  await Promise.all([
+    walletQuery.refetch(),
+    bankQuery.refetch(),
+    activeTab.value === 'transactions' ? loadTransactions() : loadWithdrawals(),
+  ]);
   refreshing.value = false;
 };
 
+// A new filter starts again at page 1; the key change reads it.
 watch(txFilterType, () => {
   txPage.value = 1;
-  loadTransactions();
-});
-
-watch(activeTab, (newTab) => {
-  if (newTab === 'transactions' && transactions.value.length === 0) {
-    loadTransactions();
-  } else if (newTab === 'withdrawals' && withdrawals.value.length === 0) {
-    loadWithdrawals();
-  }
 });
 
 const route = useRoute();
@@ -235,18 +208,13 @@ const router = useRouter();
 const returnBanner = ref<{ type: 'success' | 'error'; message: string } | null>(null);
 
 onMounted(async () => {
-  loading.value = true;
-  await Promise.all([loadWallet(), loadBankAccount()]);
-  await loadTransactions();
-  loading.value = false;
-
   if (route.query.payment === 'success') {
     returnBanner.value = {
       type: 'success',
       message: 'Nạp tiền thành công. Số dư đã được cập nhật.',
     };
-    await loadWallet();
-    await loadTransactions();
+    // Money just moved: never show the balance from before the top-up.
+    await cache.refresh(affectedBy.walletChange);
     router.replace({ query: {} });
   } else if (route.query.payment === 'failed') {
     returnBanner.value = {
@@ -295,7 +263,7 @@ const openBankModal = async (forWithdraw = false) => {
     accountName: bankAccount.value?.accountName ?? '',
   };
   showBankModal.value = true;
-  await loadBanks();
+  loadBanks();
 };
 
 const handleSaveBank = async () => {
@@ -317,11 +285,13 @@ const handleSaveBank = async () => {
 
   bankSaving.value = true;
   try {
-    bankAccount.value = await walletApi.saveMyBankAccount({
-      bankBin: bankForm.value.bankBin,
-      accountNumber,
-      accountName,
-    });
+    bankQuery.setData(
+      await walletApi.saveMyBankAccount({
+        bankBin: bankForm.value.bankBin,
+        accountNumber,
+        accountName,
+      }),
+    );
     showBankModal.value = false;
     // They came here on the way to withdrawing: carry on to where they meant to go.
     if (bankNeededForWithdraw.value) openWithdraw();
@@ -376,9 +346,9 @@ const handleWithdraw = async () => {
     } else {
       toast.info(result.message);
     }
-    await Promise.all([loadWallet(), loadTransactions()]);
+    // Money moved: the balance and both histories are read again, never shown stale.
+    await cache.refresh(affectedBy.walletChange);
     activeTab.value = 'withdrawals';
-    await loadWithdrawals();
   } catch (err: unknown) {
     // Refused before any money moved: the wallet is untouched.
     withdrawError.value = extractApiErrorMessage(err, 'Rút tiền không thành công');
@@ -679,10 +649,10 @@ const handleWithdraw = async () => {
           >
             <span class="text-sm text-ink-500 whitespace-nowrap">Trang {{ txPage }}/{{ txTotalPages }}</span>
             <div class="flex items-center gap-2">
-              <FhButton variant="secondary" size="sm" :disabled="txPage <= 1" @click="txPage--; loadTransactions()">
+              <FhButton variant="secondary" size="sm" :disabled="txPage <= 1" @click="txPage--">
                 Trước
               </FhButton>
-              <FhButton variant="secondary" size="sm" :disabled="txPage >= txTotalPages" @click="txPage++; loadTransactions()">
+              <FhButton variant="secondary" size="sm" :disabled="txPage >= txTotalPages" @click="txPage++">
                 Sau
               </FhButton>
             </div>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-vue-next';
-import { FhButton } from '../../components';
+import { CheckCircle2, XCircle } from 'lucide-vue-next';
+import { FhButton, FhSkeleton } from '../../components';
 import { ordersApi } from '../../api/orders.api';
 import { useAuthStore } from '../../stores/auth';
 
@@ -76,7 +76,7 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen flex items-center justify-center bg-ink-50 p-4">
     <div class="bg-white rounded-2xl max-w-sm w-full p-8 space-y-5 shadow-xl text-center border border-ink-100">
-      <Loader2 v-if="phase === 'checking'" :size="48" class="text-brand-600 mx-auto animate-spin" />
+      <div v-if="phase === 'checking'" class="mx-auto w-12" aria-hidden="true"><FhSkeleton width="48px" height="48px" rounded="full" /></div>
       <CheckCircle2 v-else-if="phase === 'paid'" :size="48" class="text-emerald-600 mx-auto" />
       <CheckCircle2 v-else-if="phase === 'pending'" :size="48" class="text-amber-500 mx-auto" />
       <XCircle v-else :size="48" class="text-rose-600 mx-auto" />
@@ -90,10 +90,13 @@ onUnmounted(() => {
             : 'Thanh toán chưa hoàn tất'
           }}
         </h1>
-        <p class="text-xs text-ink-500">
+        <div v-if="phase === 'checking'" class="space-y-2 pt-1" aria-busy="true" aria-label="Đang xác nhận thanh toán" data-testid="vnpay-checking">
+          <span class="block mx-auto w-4/5"><FhSkeleton height="12px" /></span>
+          <span class="block mx-auto w-3/5"><FhSkeleton height="12px" /></span>
+        </div>
+        <p v-else class="text-xs text-ink-500">
           {{
-            phase === 'checking' ? 'Vui lòng đợi trong giây lát, hệ thống đang đối soát với VNPay.'
-            : phase === 'paid' && orderId && !isTechnician
+            phase === 'paid' && orderId && !isTechnician
               ? `Hóa đơn đã được thanh toán thành công. Tự động chuyển tới trang đánh giá dịch vụ sau ${countdown}s...`
             : phase === 'paid'
               ? 'Hóa đơn của bạn đã được ghi nhận thanh toán qua VNPay.'
@@ -122,12 +125,15 @@ onUnmounted(() => {
         </FhButton>
       </div>
 
+      <div v-else-if="phase === 'checking'" class="pt-2" aria-hidden="true">
+        <FhSkeleton height="40px" rounded="md" />
+      </div>
+
       <div v-else class="pt-2">
         <FhButton
           variant="primary"
           size="md"
           class="w-full"
-          :disabled="phase === 'checking'"
           @click="router.push(isTechnician ? '/tech/wallet' : '/app/orders')"
         >
           {{ isTechnician ? 'Xem ví kỹ thuật viên' : 'Xem đơn hàng của tôi' }}

@@ -67,7 +67,31 @@ function flyTo(lat: number, lng: number) {
   map?.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 16) });
 }
 
-defineExpose({ flyTo });
+/** The pin the user moves (or the first one), else the centre prop. */
+function focusPoint(): { lat: number; lng: number } {
+  const pin = props.markers.find((m) => m.id === props.clickToMove) ?? props.markers[0];
+  return pin ? { lat: pin.lat, lng: pin.lng } : props.center;
+}
+
+/**
+ * Re-measure the container and put the pin back in the middle. A map created
+ * inside a hidden tab (0×0 container) keeps a wrong size and centre, so a click
+ * then lands far from where it looks (PO 12/10/2026: the pin ended up at sea).
+ */
+function refresh() {
+  if (!map) return;
+  map.resize();
+  const p = focusPoint();
+  map.jumpTo({ center: [p.lng, p.lat], zoom: props.zoom });
+}
+
+defineExpose({ flyTo, refresh });
+
+let resizeObserver: ResizeObserver | null = null;
+/** True while the container has no size; the next real size re-centres the map. */
+let hidden = false;
+
+const hasSize = (el: HTMLElement) => el.clientWidth > 0 && el.clientHeight > 0;
 
 onMounted(() => {
   if (!mapsKey || !containerRef.value) {
@@ -83,7 +107,28 @@ onMounted(() => {
       attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    map.on('load', () => syncMarkers(props.markers));
+    hidden = !hasSize(containerRef.value);
+    map.on('load', () => {
+      syncMarkers(props.markers);
+      map?.resize();
+    });
+    if (typeof ResizeObserver !== 'undefined') {
+      const el = containerRef.value;
+      resizeObserver = new ResizeObserver(() => {
+        if (!map) return;
+        if (!hasSize(el)) {
+          hidden = true;
+          return;
+        }
+        if (hidden) {
+          hidden = false;
+          refresh();
+        } else {
+          map.resize();
+        }
+      });
+      resizeObserver.observe(el);
+    }
     if (props.clickToMove) {
       map.on('click', (e: maplibregl.MapMouseEvent) => {
         if (!props.clickToMove) return;
@@ -99,6 +144,8 @@ watch(() => props.markers, (list) => syncMarkers(list), { deep: true });
 watch(() => props.center, (c) => { if (map) map.setCenter([c.lng, c.lat]); });
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
   markerInstances.clear();
   map?.remove();
   map = null;

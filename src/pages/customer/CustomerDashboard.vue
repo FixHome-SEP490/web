@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { composeAddressText } from '../../utils/address-text';
 // src/pages/customer/CustomerDashboard.vue
 // Home of the customer (PO 10/10/2026): one emphasis block (search), each action once.
 // "Đặt thợ ngay" and "Chẩn đoán bằng AI" live in the top bar, so the page does not repeat them.
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat.store';
@@ -19,25 +20,41 @@ import {
   Wrench,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import type { ServiceOrderItem } from '../../api/orders.api';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 import { vnDateString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
+import { useCachedQuery } from '../../composables/useCachedQuery';
+import { REFERENCE_STALE_TIME } from '../../lib/query-client';
+import { queryKeys } from '../../lib/query-keys';
+import { sharedQueries } from '../../lib/queries';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 
 const searchQuery = ref('');
-const orders = ref<ServiceOrderItem[]>([]);
-const addresses = ref<UserAddress[]>([]);
 const selectedAddress = ref('');
-const loading = ref(true);
-const ordersFailed = ref(false);
+
+// Each block is cached: a return visit shows it at once and reads it again in the background.
+const ordersQuery = useCachedQuery(sharedQueries.customerRecentOrders);
+const orders = computed<ServiceOrderItem[]>(() => (ordersQuery.error.value ? [] : (ordersQuery.data.value ?? [])));
+const loading = ordersQuery.loading;
+const ordersFailed = computed(() => !!ordersQuery.error.value);
+
+const addressesQuery = useCachedQuery({ key: queryKeys.addresses, fetch: () => profileApi.getAddresses() });
 
 // Dịch vụ lấy thật từ danh mục của backend; không có thì ẩn khối này.
-const popularServices = ref<ServiceItem[]>([]);
+const servicesQuery = useCachedQuery({
+  key: queryKeys.reference.services({ page: 1, limit: 6 }),
+  fetch: () => catalogApi.getServices({ page: 1, limit: 6 }),
+  staleTime: REFERENCE_STALE_TIME,
+});
+const popularServices = computed<ServiceItem[]>(() =>
+  (servicesQuery.error.value ? [] : (servicesQuery.data.value?.data ?? [])).filter((svc) => svc.isActive !== false),
+);
+const servicesLoading = servicesQuery.loading;
 
 function isFixedPrice(svc: ServiceItem): boolean {
   return svc.pricingMode?.toLowerCase() === 'fixed_price' && svc.fixedPrice != null && svc.fixedPrice > 0;
@@ -56,33 +73,24 @@ const promises = [
 ];
 
 function formatAddress(addr: UserAddress): string {
-  return [addr.line1, addr.ward, addr.district, addr.province].filter(Boolean).join(', ');
+  return composeAddressText([addr.line1, addr.ward, addr.district, addr.province]);
 }
 
-async function load() {
-  loading.value = true;
-  ordersFailed.value = false;
-  try {
-    const [orderList, addrList, serviceList] = await Promise.all([
-      ordersApi.getCustomerOrders().catch(() => {
-        ordersFailed.value = true;
-        return [] as ServiceOrderItem[];
-      }),
-      profileApi.getAddresses().catch(() => []),
-      catalogApi.getServices({ page: 1, limit: 6 }).then((res) => res.data).catch(() => []),
-    ]);
-    orders.value = orderList;
-    addresses.value = addrList;
-    popularServices.value = serviceList.filter((svc) => svc.isActive !== false);
-
+watch(
+  () => addressesQuery.data.value,
+  (addrList?: UserAddress[]) => {
+    if (!addrList) return;
     const def = addrList.find((a) => a.isDefault) ?? addrList[0];
     selectedAddress.value = def ? formatAddress(def) : '';
-  } finally {
-    loading.value = false;
-  }
-}
+  },
+  { immediate: true },
+);
 
-onMounted(load);
+function load() {
+  void ordersQuery.refetch();
+  void addressesQuery.refetch();
+  void servicesQuery.refetch();
+}
 
 const IN_PROGRESS = ['EN_ROUTE', 'UNDER_REPAIR', 'ACCEPTED', 'IN_PROGRESS'];
 
@@ -278,7 +286,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- Services from the catalogue -->
-    <section v-if="loading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4" aria-busy="true" aria-label="Đang tải dịch vụ">
+    <section v-if="servicesLoading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4" aria-busy="true" aria-label="Đang tải dịch vụ">
       <FhSkeleton width="30%" height="22px" />
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FhSkeleton height="44px" :count="3" />

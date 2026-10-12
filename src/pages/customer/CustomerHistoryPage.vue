@@ -1,11 +1,14 @@
 <script setup lang="ts">
 // Repair history from the server's read model: the customer's completed and
 // cancelled orders, newest first, with what each one cost.
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { History, ChevronRight, RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
+import { History, ChevronRight, Search } from 'lucide-vue-next';
+import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { queryKeys } from '../../lib/query-keys';
+import { SEARCH_MAX_LENGTH, useQueryChoice, useQuerySearch } from '../../composables/useQueryState';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
 
@@ -14,13 +17,30 @@ type Filter = 'all' | 'completed' | 'cancelled';
 const PAGE_SIZE = 20;
 const router = useRouter();
 
-const filter = ref<Filter>('all');
-const items = ref<RepairHistoryItem[]>([]);
-const total = ref(0);
-const page = ref(1);
-const loading = ref(true);
-const loadingMore = ref(false);
-const error = ref<string | null>(null);
+// Filter and page stay in the address bar (?filter=cancelled&page=2).
+const filter = useQueryChoice<Filter>('filter', ['all', 'completed', 'cancelled'], 'all');
+// Server search (order code, service; accents ignored), kept as ?q=.
+const { input: searchQuery, search } = useQuerySearch();
+const {
+  page,
+  items,
+  total,
+  loading,
+  error: loadError,
+  load,
+  changingPage,
+  prefetch,
+} = usePagedList<RepairHistoryItem>({
+  key: () => queryKeys.orders.history({ filter: filter.value, search: search.value }),
+  pageSize: PAGE_SIZE,
+  fetch: async (p, size) => {
+    const result = await ordersApi.getRepairHistory(p, size, filter.value === 'all' ? undefined : filter.value, search.value || undefined);
+    return { items: result.data, total: result.total, page: p, pageSize: size };
+  },
+});
+const error = computed(() =>
+  loadError.value ? userFacingError(loadError.value, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.') : null,
+);
 
 const tabs: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
@@ -28,39 +48,26 @@ const tabs: { key: Filter; label: string }[] = [
   { key: 'cancelled', label: 'Đã hủy' },
 ];
 
-const hasMore = computed(() => items.value.length < total.value);
-
 const isCancelled = (item: RepairHistoryItem) => String(item.status).toLowerCase() === 'cancelled';
 const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancelledAt : item.completedAt);
-
-async function load(nextPage = 1) {
-  if (nextPage === 1) loading.value = true;
-  else loadingMore.value = true;
-  error.value = null;
-  try {
-    const result = await ordersApi.getRepairHistory(
-      nextPage,
-      PAGE_SIZE,
-      filter.value === 'all' ? undefined : filter.value,
-    );
-    items.value = nextPage === 1 ? result.data : [...items.value, ...result.data];
-    total.value = result.total;
-    page.value = nextPage;
-  } catch (err) {
-    error.value = userFacingError(err, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.');
-  } finally {
-    loading.value = false;
-    loadingMore.value = false;
-  }
-}
-
-watch(filter, () => load(1));
-onMounted(() => load(1));
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-5 pb-12">
     <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Lịch sử sửa chữa</h1>
+
+    <div class="relative">
+      <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+      <input
+        v-model="searchQuery"
+        type="text"
+        :maxlength="SEARCH_MAX_LENGTH"
+        placeholder="Tìm theo mã đơn, dịch vụ…"
+        aria-label="Tìm trong lịch sử"
+        data-testid="history-search"
+        class="w-full h-11 pl-10 pr-4 rounded-xl bg-white border border-ink-200 text-base sm:text-sm text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+      />
+    </div>
 
     <div class="grid grid-cols-3 gap-1 p-1 bg-white rounded-2xl border border-ink-200 text-sm font-medium" role="tablist">
       <button
@@ -80,7 +87,7 @@ onMounted(() => load(1));
 
     <div v-if="error" role="alert" class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3">
       <span>{{ error }}</span>
-      <FhButton variant="secondary" size="sm" @click="load(1)">Thử lại</FhButton>
+      <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
     </div>
 
     <div v-if="loading" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải lịch sử sửa chữa">
@@ -99,12 +106,17 @@ onMounted(() => load(1));
         <History :size="24" />
       </div>
       <p class="text-base font-semibold text-ink-900">
-        {{ filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
+        {{ search ? 'Không có đơn phù hợp.' : filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
       </p>
-      <p class="text-sm text-ink-500">Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.</p>
+      <p class="text-sm text-ink-500">{{ search ? 'Thử từ khoá khác.' : 'Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.' }}</p>
     </div>
 
-    <ul v-else-if="items.length > 0" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+    <ul
+      v-else-if="items.length > 0"
+      class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100 overflow-hidden transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
+    >
       <li
         v-for="item in items"
         :key="item.orderId"
@@ -138,11 +150,13 @@ onMounted(() => load(1));
       </li>
     </ul>
 
-    <div v-if="!loading && hasMore" class="flex justify-center">
-      <FhButton variant="secondary" size="sm" :loading="loadingMore" data-testid="history-load-more" @click="load(page + 1)">
-        <RefreshCw :size="16" />
-        Xem thêm
-      </FhButton>
-    </div>
+    <FhPagination
+      v-if="!error"
+      v-model:page="page"
+      :page-size="PAGE_SIZE"
+      :total="total"
+      :disabled="loading"
+      @prefetch="prefetch"
+    />
   </div>
 </template>

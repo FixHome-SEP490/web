@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
@@ -31,48 +31,52 @@ import {
   FhCountdown,
   FhSkeleton,
 } from '../../components';
-import { ordersApi, isHistoricalOrder, type ServiceOrderItem } from '../../api/orders.api';
+import type { ServiceOrderItem } from '../../api/orders.api';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { sessionLabel } from '../../utils/booking-session';
 import { availabilityText, type TechnicianAvailability } from '../../utils/availability';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
-import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 import { addDaysToKey, vnDayKey, weekdayOfKey } from '../../utils/vn-time';
-import { walletApi, type WalletSummary } from '../../api/wallet.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
+import { sharedQueries } from '../../lib/queries';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 
-const loading = ref(true);
+const cache = useCacheUpdates();
 const refreshing = ref(false);
-const jobsError = ref('');
-const jobs = ref<ServiceOrderItem[]>([]);
-const isAvailable = ref<boolean | null>(null);
-const profile = ref<TechnicianProfileView | null>(null);
-const invitations = ref<InvitationItem[]>([]);
-const wallet = ref<WalletSummary | null>(null);
+
+// Each block is cached on its own: a return visit shows the last answer at once
+// and reads it again in the background. A block that fails stays empty.
+const jobsQuery = useCachedQuery(sharedQueries.technicianActiveJobs);
+const loading = jobsQuery.loading;
+const jobs = computed<ServiceOrderItem[]>(() => (jobsQuery.error.value ? [] : (jobsQuery.data.value ?? [])));
+const jobsError = computed(() =>
+  jobsQuery.error.value ? userFacingError(jobsQuery.error.value, 'Không thể tải công việc. Vui lòng thử lại.') : '',
+);
+
+const invitationsQuery = useCachedQuery(sharedQueries.technicianInvitations);
+const invitations = computed<InvitationItem[]>(() => (invitationsQuery.error.value ? [] : (invitationsQuery.data.value ?? [])));
+
+const walletQuery = useCachedQuery(sharedQueries.technicianWallet);
+const wallet = computed(() => (walletQuery.error.value ? null : (walletQuery.data.value ?? null)));
+
+const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
+const profile = computed<TechnicianProfileView | null>(() => (profileQuery.error.value ? null : (profileQuery.data.value ?? null)));
+const isAvailable = computed<boolean | null>(() => profile.value?.isAvailable ?? null);
+
 const decliningInvitation = ref(false);
 const acceptingInvitation = ref(false);
 
 const topInvitation = computed(() => invitations.value[0] ?? null);
 
-const loadWallet = async () => {
-  try {
-    wallet.value = await walletApi.getMyWallet();
-  } catch {
-    wallet.value = null;
-  }
-};
-
-const loadInvitations = async () => {
-  try {
-    invitations.value = await bookingsApi.getMyInvitations();
-  } catch {
-    invitations.value = [];
-  }
+/** Drops the invitation from the cached list at once; the server copy is read again. */
+const dropInvitation = (id: string) => {
+  if (invitationsQuery.data.value) invitationsQuery.setData(invitationsQuery.data.value.filter((i) => i.id !== id));
 };
 
 const declineTopInvitation = async () => {
@@ -81,7 +85,8 @@ const declineTopInvitation = async () => {
   decliningInvitation.value = true;
   try {
     await bookingsApi.respondInvitation(inv.id, 'DECLINE');
-    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+    dropInvitation(inv.id);
+    cache.markChanged(affectedBy.invitationResponse);
   } catch (err) {
     toast.error(userFacingError(err, 'Chưa thể từ chối lời mời. Vui lòng thử lại.'));
   } finally {
@@ -95,14 +100,15 @@ const handleAcceptTopInvitation = async () => {
   acceptingInvitation.value = true;
   try {
     const result = await bookingsApi.respondInvitation(inv.id, 'ACCEPT');
-    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+    dropInvitation(inv.id);
+    void cache.refresh(affectedBy.invitationResponse);
     if (result?.serviceOrderId) {
       await router.push(`/tech/jobs/${result.serviceOrderId}`);
     } else {
       await router.push('/tech/jobs');
     }
   } catch {
-    alert('Không thể nhận đơn lúc này. Vui lòng kiểm tra lại danh sách công việc.');
+    toast.error('Không thể nhận đơn lúc này. Vui lòng kiểm tra lại danh sách công việc.');
   } finally {
     acceptingInvitation.value = false;
   }
@@ -110,70 +116,31 @@ const handleAcceptTopInvitation = async () => {
 
 // The header switch (layout) turns receiving on and off; here we only say what it means right now,
 // because the weekly schedule can also switch receiving on and off.
-const availability = ref<TechnicianAvailability | null>(null);
+const availabilityQuery = useCachedQuery({
+  key: queryKeys.technician.availability,
+  fetch: () => technicianProfileApi.getMyAvailability(),
+});
+const availability = computed<TechnicianAvailability | null>(() =>
+  availabilityQuery.error.value ? null : (availabilityQuery.data.value ?? null),
+);
 const availabilityView = computed(() => availabilityText(availability.value, isAvailable.value));
 /** The one line under the name: "Ngoài giờ làm · Tự nhận việc lại lúc 08:00 T7 10/10". */
 const availabilityDetail = computed(() =>
   availability.value && availability.value.state !== 'paused' ? availabilityView.value.detail : '',
 );
-const loadAvailability = async () => {
-  try {
-    availability.value = await technicianProfileApi.getMyAvailability();
-  } catch {
-    availability.value = null;
-  }
-};
-
-const identityVerified = ref(false);
-
-const loadVerification = async () => {
-  try {
-    const status = await technicianOnboardingApi.getStatus();
-    identityVerified.value = status.verificationStatus === 'verified' || status.onboardingStatus === 'approved';
-  } catch {
-    identityVerified.value = false;
-  }
-};
-
-const loadData = async () => {
-  jobsError.value = '';
-  const verificationRequest = loadVerification();
-  void loadAvailability();
-  const profileRequest = technicianProfileApi.getMyProfile()
-    .then((p) => {
-      profile.value = p;
-      isAvailable.value = p.isAvailable;
-    })
-    .catch(() => {
-      profile.value = null;
-      isAvailable.value = null;
-    });
-
-  try {
-    const list = await ordersApi.getTechnicianJobs();
-    jobs.value = list.filter((item): item is ServiceOrderItem => !isHistoricalOrder(item));
-  } catch (err) {
-    jobs.value = [];
-    jobsError.value = userFacingError(err, 'Không thể tải công việc. Vui lòng thử lại.');
-  } finally {
-    loading.value = false;
-  }
-
-  await loadInvitations();
-  await loadWallet();
-  await profileRequest;
-  await verificationRequest;
-};
+const onboardingQuery = useCachedQuery(sharedQueries.technicianOnboarding);
+const identityVerified = computed(() => {
+  const status = onboardingQuery.error.value ? null : onboardingQuery.data.value;
+  return !!status && (status.verificationStatus === 'verified' || status.onboardingStatus === 'approved');
+});
 
 const handleRefresh = async () => {
   refreshing.value = true;
-  await loadData();
+  await Promise.all(
+    [jobsQuery, invitationsQuery, walletQuery, profileQuery, availabilityQuery, onboardingQuery].map((q) => q.refetch()),
+  );
   refreshing.value = false;
 };
-
-onMounted(async () => {
-  await loadData();
-});
 
 const completedJobs = computed(() => {
   return jobs.value.filter((j) => String(j.status).toUpperCase() === 'COMPLETED');
