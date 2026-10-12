@@ -26,6 +26,7 @@ import {
   X,
   Minus,
   RotateCcw,
+  ChevronDown,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -113,6 +114,15 @@ const removePhotoByLocalId = (localId: number) => {
 
 const addresses = ref<UserAddress[]>([]);
 const selectedAddressId = ref('');
+const isAddressDropdownOpen = ref(false);
+const toggleAddressDropdown = () => {
+  isAddressDropdownOpen.value = !isAddressDropdownOpen.value;
+};
+const selectAddress = (id: string) => {
+  selectedAddressId.value = id;
+  isAddressDropdownOpen.value = false;
+};
+const selectedAddress = computed(() => addresses.value.find((a) => a.id === selectedAddressId.value));
 // Sessions (PO 08/10/2026): morning 8-12 or afternoon 13-18 of one day, Vietnam
 // time, at most one booking per technician per session; or "come now".
 const bookingMode = ref<BookingMode>('scheduled');
@@ -757,22 +767,39 @@ const createAndFindTech = async () => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-6 pb-12">
-    <!-- Stepper: the steps of whichever form this is -->
-    <div class="bg-white rounded-2xl border border-ink-200/90 p-4 shadow-xs">
-      <div class="flex items-center justify-between text-xs font-semibold overflow-x-auto no-scrollbar gap-2" data-testid="booking-stepper">
+  <div class="max-w-3xl mx-auto space-y-6 pb-16">
+    <!-- Stepper: Pill shaped, centered, matching user image design -->
+    <div class="bg-white rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-xs" data-testid="booking-stepper">
+      <div class="flex items-center justify-between sm:justify-center overflow-x-auto no-scrollbar gap-2 sm:gap-6">
         <template v-for="(item, index) in stepItems" :key="item.id">
-          <div v-if="index > 0" class="w-6 sm:w-10 h-0.5 shrink-0 transition-colors" :class="stepIndex >= index ? 'bg-brand-600' : 'bg-ink-200'"></div>
-          <div class="flex items-center gap-2 shrink-0" :class="stepIndex >= index ? 'text-brand-600 font-bold' : 'text-ink-400'">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-num font-bold" :class="stepIndex >= index ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-500'">{{ index + 1 }}</span>
-            <span class="whitespace-nowrap">{{ item.label }}</span>
+          <!-- Step pill item -->
+          <div
+            class="flex items-center gap-2 sm:gap-2.5 shrink-0 transition-colors duration-200"
+            :class="stepIndex >= index ? 'text-brand-600 font-bold' : 'text-ink-400 font-medium'"
+          >
+            <span
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-num font-bold transition-all duration-300 shadow-2xs"
+              :class="stepIndex >= index ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-500'"
+            >
+              {{ index + 1 }}
+            </span>
+            <span class="text-xs sm:text-sm whitespace-nowrap">{{ item.label }}</span>
           </div>
+
+          <!-- Connector bar between steps -->
+          <div
+            v-if="index < stepItems.length - 1"
+            class="w-8 sm:w-16 h-[2px] rounded-full shrink-0 transition-colors duration-300"
+            :class="stepIndex > index ? 'bg-brand-600' : 'bg-ink-200'"
+          ></div>
         </template>
       </div>
     </div>
 
-    <!-- Step 1: Service & Issue Description -->
-    <div v-if="step === 1" class="space-y-6">
+    <!-- Animated Step Containers -->
+    <Transition name="wizard-step" mode="out-in">
+      <!-- Step 1: Service & Issue Description -->
+      <div v-if="step === 1" key="step-1" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-7">
         <!-- Title & Subtitle + Trust banner -->
         <div class="space-y-3">
@@ -1295,7 +1322,7 @@ const createAndFindTech = async () => {
     </div>
 
     <!-- Step 2: Address & Schedule -->
-    <div v-if="step === 2" class="space-y-6">
+    <div v-else-if="step === 2" key="step-2" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
           <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
@@ -1308,28 +1335,153 @@ const createAndFindTech = async () => {
 
         <div class="space-y-5 text-xs sm:text-sm">
           <div>
-            <label class="block font-bold text-ink-800 mb-2">Địa chỉ sửa chữa</label>
-            <div class="space-y-2.5">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block font-bold text-ink-800 text-xs sm:text-sm">
+                Địa chỉ sửa chữa <span class="text-danger-600 font-bold">*</span>
+              </label>
+              <span v-if="addresses.length > 0" class="text-[11px] text-ink-500 font-medium">
+                {{ addresses.length }} địa chỉ đã lưu
+              </span>
+            </div>
+
+            <!-- Custom Select Box for Addresses -->
+            <div v-if="addresses.length > 0" class="space-y-2">
+              <!-- Selected Address Display (Select Trigger) -->
               <div
-                v-for="addr in addresses"
-                :key="addr.id"
-                class="p-4 rounded-2xl border cursor-pointer flex items-center justify-between transition-all"
-                :class="selectedAddressId === addr.id ? 'border-brand-600 bg-brand-50/70 ring-2 ring-brand-500' : 'border-ink-200 bg-white hover:bg-ink-50'"
-                @click="selectedAddressId = addr.id"
+                role="button"
+                tabindex="0"
+                class="p-4 rounded-2xl border bg-white transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 shadow-xs select-none"
+                :class="isAddressDropdownOpen
+                  ? 'border-brand-600 ring-2 ring-brand-500/20'
+                  : 'border-ink-200 hover:border-brand-300 hover:bg-ink-50/40'"
+                @click="toggleAddressDropdown"
+                @keydown.enter.prevent="toggleAddressDropdown"
+                @keydown.space.prevent="toggleAddressDropdown"
               >
-                <div class="space-y-0.5">
-                  <div class="font-bold text-xs text-ink-900 flex items-center gap-1.5">
-                    <MapPin :size="15" class="text-brand-600" />
-                    {{ addr.label || 'Địa chỉ' }}
+                <div class="flex items-start gap-3 min-w-0 flex-1">
+                  <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-100 shadow-2xs">
+                    <MapPin :size="18" />
                   </div>
-                  <div class="text-xs text-ink-700 font-medium">{{ addr.line1 }}</div>
-                  <div class="text-[11px] text-ink-400">{{ addr.district }}, {{ addr.province }}</div>
+                  <div class="space-y-0.5 min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-xs sm:text-sm text-ink-900">
+                        {{ selectedAddress?.label || 'Địa chỉ tiếp nhận' }}
+                      </span>
+                      <span
+                        v-if="selectedAddress?.isDefault"
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200"
+                      >
+                        Mặc định
+                      </span>
+                    </div>
+                    <div class="text-xs text-ink-700 font-medium truncate">
+                      {{ selectedAddress?.line1 || 'Vui lòng chọn địa chỉ' }}
+                    </div>
+                    <div v-if="selectedAddress" class="text-[11px] text-ink-400 truncate">
+                      {{ selectedAddress.district }}, {{ selectedAddress.province }}
+                    </div>
+                  </div>
                 </div>
-                <CheckCircle2 v-if="selectedAddressId === addr.id" :size="20" class="text-brand-600 shrink-0" />
+
+                <div class="flex items-center gap-2 shrink-0 pl-2">
+                  <span class="text-xs font-semibold text-brand-600 hidden sm:inline">
+                    {{ isAddressDropdownOpen ? 'Thu gọn' : 'Thay đổi' }}
+                  </span>
+                  <div
+                    class="w-7 h-7 rounded-lg bg-ink-100/80 flex items-center justify-center text-ink-600 transition-transform duration-200"
+                    :class="{ 'rotate-180 bg-brand-50 text-brand-600': isAddressDropdownOpen }"
+                  >
+                    <ChevronDown :size="15" />
+                  </div>
+                </div>
               </div>
 
-              <router-link to="/app/profile" class="inline-flex items-center gap-1 text-xs text-brand-600 font-bold pt-1 hover:underline">
-                <Plus :size="14" /> Thêm địa chỉ mới vào sổ địa chỉ
+              <!-- Dropdown Options Menu -->
+              <Transition name="fade-slide">
+                <div
+                  v-if="isAddressDropdownOpen"
+                  class="rounded-2xl border border-ink-200 bg-white p-2.5 shadow-md space-y-1.5"
+                >
+                  <div class="px-2 py-1 text-[11px] font-bold text-ink-400 uppercase tracking-wider">
+                    Chọn địa chỉ trong sổ địa chỉ
+                  </div>
+
+                  <div class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                    <div
+                      v-for="addr in addresses"
+                      :key="addr.id"
+                      role="option"
+                      :aria-selected="selectedAddressId === addr.id"
+                      class="p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-3 transition-all duration-150"
+                      :class="selectedAddressId === addr.id
+                        ? 'border-brand-600 bg-brand-50/70 ring-1 ring-brand-500/20'
+                        : 'border-ink-100 bg-white hover:bg-ink-50 hover:border-ink-200'"
+                      @click="selectAddress(addr.id)"
+                    >
+                      <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                        <!-- Custom Radio Dot -->
+                        <div class="pt-0.5 shrink-0">
+                          <div
+                            class="w-4 h-4 rounded-full border flex items-center justify-center transition-colors"
+                            :class="selectedAddressId === addr.id
+                              ? 'border-brand-600 bg-brand-600 text-white'
+                              : 'border-ink-300 bg-white'"
+                          >
+                            <div v-if="selectedAddressId === addr.id" class="w-1.5 h-1.5 rounded-full bg-white"></div>
+                          </div>
+                        </div>
+
+                        <div class="space-y-0.5 min-w-0 flex-1">
+                          <div class="flex items-center gap-1.5">
+                            <span class="font-bold text-xs text-ink-900">
+                              {{ addr.label || 'Địa chỉ' }}
+                            </span>
+                            <span
+                              v-if="addr.isDefault"
+                              class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-50 text-brand-700"
+                            >
+                              Mặc định
+                            </span>
+                          </div>
+                          <div class="text-xs text-ink-700 font-medium truncate">{{ addr.line1 }}</div>
+                          <div class="text-[11px] text-ink-400 truncate">{{ addr.district }}, {{ addr.province }}</div>
+                        </div>
+                      </div>
+
+                      <CheckCircle2 v-if="selectedAddressId === addr.id" :size="16" class="text-brand-600 shrink-0" />
+                    </div>
+                  </div>
+
+                  <!-- Add new address action link -->
+                  <div class="pt-1.5 border-t border-ink-100">
+                    <router-link
+                      to="/app/profile"
+                      class="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold text-brand-600 hover:bg-brand-50 transition-colors"
+                    >
+                      <Plus :size="14" /> Thêm địa chỉ mới vào sổ địa chỉ
+                    </router-link>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+
+            <!-- Empty address state -->
+            <div
+              v-else
+              class="p-6 rounded-2xl border border-dashed border-ink-300 bg-ink-50/70 text-center space-y-3"
+            >
+              <div class="w-10 h-10 rounded-full bg-white text-ink-400 flex items-center justify-center mx-auto shadow-xs border border-ink-100">
+                <MapPin :size="18" />
+              </div>
+              <div>
+                <p class="text-xs sm:text-sm font-bold text-ink-800">Bạn chưa có địa chỉ nào được lưu</p>
+                <p class="text-[11px] text-ink-500 mt-0.5">Vui lòng thêm địa chỉ nhà để thợ có thể tới sửa chữa.</p>
+              </div>
+              <router-link
+                to="/app/profile"
+                class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors shadow-xs"
+              >
+                <Plus :size="14" /> Thêm địa chỉ mới
               </router-link>
             </div>
           </div>
@@ -1398,7 +1550,7 @@ const createAndFindTech = async () => {
     </div>
 
     <!-- Step 3: conversation with the assistant before booking -->
-    <div v-if="step === 3" class="space-y-6">
+    <div v-else-if="step === 3" key="step-3" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-5 sm:p-8 shadow-xs space-y-5">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -1479,7 +1631,7 @@ const createAndFindTech = async () => {
     </div>
 
     <!-- Step 4: Final Summary & Launch Matching -->
-    <div v-if="step === 4" class="space-y-6">
+    <div v-else-if="step === 4" key="step-4" class="space-y-6">
       <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div>
           <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
@@ -1579,5 +1731,31 @@ const createAndFindTech = async () => {
         </div>
       </div>
     </div>
-  </div>
+  </Transition>
+</div>
 </template>
+
+<style scoped>
+.wizard-step-enter-active,
+.wizard-step-leave-active {
+  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.wizard-step-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.wizard-step-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+</style>

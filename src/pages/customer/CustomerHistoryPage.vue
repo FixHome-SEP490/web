@@ -14,7 +14,7 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
+import { FhButton, FhMoney, FhSkeleton } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
@@ -32,26 +32,42 @@ const loading = ref(true);
 const loadingMore = ref(false);
 const error = ref<string | null>(null);
 
-const tabs: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Tất cả' },
-  { key: 'completed', label: 'Hoàn thành' },
-  { key: 'cancelled', label: 'Đã hủy' },
-];
+const tabs = computed<{ key: Filter; label: string; count: number }[]>(() => [
+  { key: 'all', label: 'Tất cả', count: total.value },
+  {
+    key: 'completed',
+    label: 'Hoàn thành',
+    count: items.value.filter((i) => !isCancelled(i)).length,
+  },
+  {
+    key: 'cancelled',
+    label: 'Đã hủy',
+    count: items.value.filter((i) => isCancelled(i)).length,
+  },
+]);
 
 // Sliding indicator state
+const tabListRef = ref<HTMLElement | null>(null);
 const tabRefs = ref<Record<string, HTMLElement | null>>({});
 const indicatorStyle = ref<Record<string, string>>({ opacity: '0' });
 
 function updateTabIndicator() {
   const el = tabRefs.value[filter.value];
-  if (!el || el.offsetWidth === 0) {
+  const container = tabListRef.value;
+  if (!el || !container || el.offsetWidth === 0) {
     indicatorStyle.value = { opacity: '0' };
     return;
   }
+  const left = el.offsetLeft;
+  const top = el.offsetTop;
+  const width = el.offsetWidth;
+  const height = el.offsetHeight;
+
   indicatorStyle.value = {
-    transform: `translate3d(${el.offsetLeft}px, 0, 0)`,
-    width: `${el.offsetWidth}px`,
-    opacity: '1',
+    transform: `translate3d(${left}px, ${top}px, 0)`,
+    width: `${width}px`,
+    height: `${height}px`,
+    opacity: width > 0 ? '1' : '0',
   };
 }
 
@@ -168,32 +184,39 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Sliding Filter Tabs -->
+    <!-- Interactive animated sliding tab bar -->
     <div
-      class="relative flex items-center p-1 bg-ink-100/80 backdrop-blur-xs rounded-2xl border border-ink-200/80 text-sm font-medium select-none"
+      ref="tabListRef"
+      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 select-none scrollbar-none"
       role="tablist"
       aria-label="Lọc lịch sử sửa chữa"
     >
-      <!-- Animated sliding indicator pill -->
+      <!-- Sliding active indicator pill -->
       <div
-        class="pointer-events-none absolute top-1 bottom-1 left-0 rounded-xl bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
         :style="indicatorStyle"
         aria-hidden="true"
       />
 
       <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        :ref="(el) => { tabRefs[tab.key] = el as HTMLElement }"
+        v-for="t in tabs"
+        :key="t.key"
+        :ref="(el) => { tabRefs[t.key] = el as HTMLElement }"
         type="button"
         role="tab"
-        :aria-selected="filter === tab.key"
-        :data-testid="`history-filter-${tab.key}`"
-        class="relative flex-1 h-10 px-3 rounded-xl transition-colors whitespace-nowrap text-center font-medium z-10"
-        :class="filter === tab.key ? 'text-brand-700 font-semibold' : 'text-ink-600 hover:text-ink-900'"
-        @click="filter = tab.key"
+        :aria-selected="filter === t.key"
+        :data-testid="`history-filter-${t.key}`"
+        class="relative z-10 flex h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs sm:text-sm font-medium transition-colors"
+        :class="filter === t.key ? 'font-semibold text-ink-900' : 'text-ink-600 hover:text-ink-900'"
+        @click="filter = t.key"
       >
-        {{ tab.label }}
+        <span>{{ t.label }}</span>
+        <span
+          class="inline-flex items-center rounded-full px-1.5 py-0.2 font-num text-xs transition-colors"
+          :class="filter === t.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'bg-ink-200/60 text-ink-600'"
+        >
+          {{ t.count }}
+        </span>
       </button>
     </div>
 
@@ -318,9 +341,18 @@ onUnmounted(() => {
           </div>
 
           <!-- Status pill & arrow -->
-          <div class="flex items-center gap-2 shrink-0">
-            <FhStatusPill :status="isCancelled(item) ? 'CANCELLED' : 'COMPLETED'" />
-            <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 hidden sm:block" />
+          <div class="flex items-start gap-2 shrink-0 pt-0.5">
+            <span
+              class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap transition-colors"
+              :class="
+                isCancelled(item)
+                  ? 'bg-ink-200/60 text-ink-600'
+                  : 'bg-brand-50 text-brand-700'
+              "
+            >
+              {{ isCancelled(item) ? 'Đã hủy' : 'Hoàn thành' }}
+            </span>
+            <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 hidden sm:block" />
           </div>
         </div>
 
@@ -361,6 +393,16 @@ onUnmounted(() => {
         <RefreshCw :size="16" class="animate-spin text-brand-600" />
         <span>Đang tải thêm lịch sử...</span>
       </div>
+      <button
+        type="button"
+        class="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink-200 bg-white px-4 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50 disabled:opacity-50"
+        :disabled="loadingMore"
+        data-testid="history-load-more"
+        @click="load(page + 1)"
+      >
+        <RefreshCw :size="14" :class="loadingMore ? 'animate-spin' : ''" />
+        <span>{{ loadingMore ? 'Đang tải…' : 'Xem thêm' }}</span>
+      </button>
     </div>
 
     <!-- End of list message -->
