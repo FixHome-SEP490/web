@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-10 12:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/candidates-timeout
+> Cập nhật lần cuối: 2026-10-12 12:02 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -249,6 +249,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-12 12:02 (UTC+7) | Lạc Vỹ | LacVy | Tinh chỉnh CustomerDashboard: làm gọn Order in progress, danh sách đơn gần đây và catalogue dịch vụ, loại bỏ các chi tiết thừa
+- 2026-10-12 10:20 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX trang chi tiết đơn và bảo hành: accordion mượt, tab indicator, bộ lọc và thống kê
 - 2026-10-10 12:47 (UTC+7) | ToanAltF4 | fix/candidates-timeout | Danh sách kỹ thuật viên phù hợp chờ tối đa 60 giây thay vì 15 giây: mỗi thợ cần khoảng chục truy vấn DB nên khi DB chậm khách thấy Không thể tải danh sách
 - 2026-10-10 02:47 (UTC+7) | ToanAltF4 | feat/auto-accept-toggle | Trang Lời mời nhận việc có công tắc Tự nhận việc (PATCH /technicians/me/profile autoAcceptInvitations); bật thì tải lại danh sách vì lời mời đang chờ được nhận luôn; lỗi chỉ báo thử lại
 - 2026-10-10 02:37 (UTC+7) | ToanAltF4 | feat/schedule-24h | Lịch làm việc hằng tuần của thợ chọn giờ theo 24 giờ (ô chọn mỗi 30 phút, 24:00 lưu là 23:59, giữ giờ lẻ đã lưu), chọn giờ cho ngày nghỉ thì tự bật ngày đó.
