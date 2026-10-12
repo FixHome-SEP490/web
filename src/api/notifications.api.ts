@@ -271,26 +271,72 @@ export function customerNotificationPath(item: NotificationItem): string | null 
   return `/app/orders/${item.referenceId}`;
 }
 
+export interface NotificationApiEnvelope<T> {
+  success?: boolean;
+  statusCode?: number;
+  message?: string;
+  data?: T;
+  meta?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+  };
+  total?: number;
+  count?: number;
+}
+
 export const notificationsApi = {
   async getMyNotifications(page = 1, limit = 20): Promise<NotificationsListResponse> {
-    const res = await apiClient.get<NotificationsListResponse>('/notifications', {
+    const res = await apiClient.get<NotificationApiEnvelope<NotificationItem[]> | NotificationItem[]>('/notifications', {
       params: { page, limit },
     });
-    return res.data;
+    const body = res.data;
+    const data: NotificationItem[] = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.data)
+        ? body.data
+        : [];
+    const total: number =
+      (typeof body === 'object' && body !== null && 'meta' in body && typeof body.meta?.total === 'number')
+        ? body.meta.total
+        : (typeof body === 'object' && body !== null && 'total' in body && typeof body.total === 'number')
+          ? body.total
+          : data.length;
+    return { data, total };
   },
 
   async getUnreadCount(): Promise<number> {
-    const res = await apiClient.get<UnreadCountResponse>('/notifications/unread-count');
-    return res.data?.count ?? 0;
+    const res = await apiClient.get<NotificationApiEnvelope<{ count: number } | number> | { count: number } | number>('/notifications/unread-count');
+    const raw = res.data;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'object' && raw !== null) {
+      if ('count' in raw && typeof raw.count === 'number') return raw.count;
+      if ('data' in raw) {
+        if (typeof raw.data === 'number') return raw.data;
+        if (typeof raw.data === 'object' && raw.data !== null && 'count' in raw.data && typeof raw.data.count === 'number') {
+          return raw.data.count;
+        }
+      }
+    }
+    return 0;
   },
 
   async markAsRead(id: string): Promise<NotificationItem> {
-    const res = await apiClient.patch<NotificationItem>(`/notifications/${id}/read`);
-    return res.data;
+    const res = await apiClient.patch<NotificationApiEnvelope<NotificationItem> | NotificationItem>(`/notifications/${id}/read`);
+    const body = res.data;
+    if (typeof body === 'object' && body !== null && 'data' in body && body.data) {
+      return body.data as NotificationItem;
+    }
+    return body as NotificationItem;
   },
 
   async markAllAsRead(): Promise<{ affected: number }> {
-    const res = await apiClient.patch<{ affected: number }>('/notifications/read-all');
-    return res.data;
+    const res = await apiClient.patch<NotificationApiEnvelope<{ affected: number }> | { affected: number }>('/notifications/read-all');
+    const body = res.data;
+    if (typeof body === 'object' && body !== null && 'data' in body && body.data) {
+      return body.data as { affected: number };
+    }
+    return body as { affected: number };
   },
 };
