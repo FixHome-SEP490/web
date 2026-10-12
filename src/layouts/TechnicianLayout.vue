@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { userFacingError } from '../utils/user-facing-error';
 import { useAuthStore } from '../stores/auth';
@@ -26,11 +26,12 @@ import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { ordersApi } from '../api/orders.api';
-import { bookingsApi } from '../api/bookings.api';
 import { technicianProfileApi } from '../api/technician-profile.api';
-import { technicianOnboardingApi } from '../api/technician-onboarding.api';
-import { walletApi, type WalletSummary } from '../api/wallet.api';
+import type { WalletSummary } from '../api/wallet.api';
 import { toast } from 'vue-sonner';
+import { useCacheUpdates, useCachedQuery, useRoutePrefetch } from '../composables/useCachedQuery';
+import { affectedBy } from '../lib/query-keys';
+import { sharedQueries } from '../lib/queries';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -39,55 +40,40 @@ const router = useRouter();
 const hasActionBar = computed(() => route?.meta?.actionBar === true);
 const chatStore = useChatStore();
 const callStore = useCallStore();
+const cache = useCacheUpdates();
+const prefetchRoute = useRoutePrefetch();
 const isAvailable = ref(true);
 const togglingAvailability = ref(false);
 const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
-const invitationCount = ref(0);
 
-const refreshInvitationCount = async () => {
-  try {
-    const invitations = await bookingsApi.getMyInvitations();
-    invitationCount.value = invitations.length;
-  } catch {
-    // ignore
-  }
-};
+// The badge, the switch and the banners read the same cached data as the pages:
+// one request serves both, and the 30-second poll keeps the pages fresh too.
+const invitationsQuery = useCachedQuery(sharedQueries.technicianInvitations);
+const invitationCount = computed(() => invitationsQuery.data.value?.length ?? 0);
+const refreshInvitationCount = () => invitationsQuery.refetch();
 
-const loadAvailability = async () => {
-  try {
-    const profile = await technicianProfileApi.getMyProfile();
-    if (profile && typeof profile.isAvailable === 'boolean') {
-      isAvailable.value = profile.isAvailable;
-    }
-  } catch {
-    // fallback to current
-  }
-};
+const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
+watch(
+  () => profileQuery.data.value,
+  (profile) => {
+    if (profile && typeof profile.isAvailable === 'boolean') isAvailable.value = profile.isAvailable;
+  },
+  { immediate: true },
+);
 
-const onboardingStatus = ref<string | null>(null);
-const verificationStatus = ref<string | null>(null);
+const onboardingQuery = useCachedQuery(sharedQueries.technicianOnboarding);
+const onboardingStatus = computed<string | null>(() =>
+  onboardingQuery.error.value ? null : (onboardingQuery.data.value?.onboardingStatus ?? null),
+);
+const verificationStatus = computed<string | null>(() =>
+  onboardingQuery.error.value ? null : onboardingQuery.data.value?.verificationStatus || null,
+);
 
-const loadOnboardingStatus = async () => {
-  try {
-    const res = await technicianOnboardingApi.getStatus();
-    onboardingStatus.value = res.onboardingStatus;
-    verificationStatus.value = res.verificationStatus || null;
-  } catch {
-    onboardingStatus.value = null;
-    verificationStatus.value = null;
-  }
-};
-
-const walletSummary = ref<WalletSummary | null>(null);
-
-const loadWalletSummary = async () => {
-  try {
-    walletSummary.value = await walletApi.getMyWallet();
-  } catch {
-    walletSummary.value = null;
-  }
-};
+const walletQuery = useCachedQuery(sharedQueries.technicianWallet);
+const walletSummary = computed<WalletSummary | null>(() =>
+  walletQuery.error.value ? null : (walletQuery.data.value ?? null),
+);
 
 /** Approved, but the deposit is below the floor: no new jobs until topped up. */
 const needsDeposit = computed(
@@ -128,8 +114,9 @@ onMounted(async () => {
   } catch {
     // ignore
   }
-  await Promise.all([refreshInvitationCount(), loadAvailability(), loadOnboardingStatus(), loadWalletSummary()]);
-  invitationPoll = setInterval(refreshInvitationCount, 30000);
+  invitationPoll = setInterval(() => void refreshInvitationCount(), 30000);
+  // Location is reported only while taking jobs: wait for the switch's state.
+  await profileQuery.query.suspense();
   pingLocation();
   locationPing = setInterval(pingLocation, 5 * 60_000);
 });
@@ -154,6 +141,8 @@ const toggleAvailability = async () => {
   try {
     await technicianProfileApi.updateMyProfile({ isAvailable: next });
     isAvailable.value = next;
+    // The dashboard explains what the switch means right now: read it again.
+    void cache.refresh(affectedBy.technicianSettings);
     toast.success(next ? 'Đã bật trạng thái nhận việc' : 'Đã chuyển sang trạng thái tạm nghỉ');
   } catch (err) {
     toast.error(userFacingError(err, 'Chưa đổi được trạng thái nhận việc. Vui lòng thử lại.'));
@@ -272,6 +261,8 @@ const tabItems: NavItem[] = [
               v-for="item in group.items"
               :key="item.to"
               :to="item.to"
+              @mouseenter="prefetchRoute(item.to)"
+              @focus="prefetchRoute(item.to)"
               class="h-10 px-3 rounded-xl flex items-center gap-3 text-sm font-medium text-ink-600 whitespace-nowrap hover:bg-ink-50 hover:text-ink-900 transition-colors"
               :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
               :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
@@ -468,6 +459,7 @@ const tabItems: NavItem[] = [
           v-for="item in tabItems"
           :key="item.to"
           :to="item.to"
+          @touchstart.passive="prefetchRoute(item.to)"
           class="relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-ink-500 whitespace-nowrap"
           :active-class="item.exact ? '' : 'text-brand-600'"
           :exact-active-class="item.exact ? 'text-brand-600' : ''"

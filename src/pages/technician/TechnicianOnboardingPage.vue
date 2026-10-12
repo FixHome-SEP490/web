@@ -35,6 +35,8 @@ import {
   type SubmitDocumentPayload,
 } from '../../api/technician-verification.api';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import { walletApi, type WalletSummary } from '../../api/wallet.api';
 import { geoApi, type PlaceSuggestion } from '../../api/geo.api';
 import {
@@ -910,14 +912,16 @@ const handleReturnToStatus = () => {
   isReviewing.value = false;
 };
 
+const reference = useReferenceData();
+
 const loadInitialData = async () => {
   loading.value = true;
   try {
     const [statusRes, catRes, servicesRes, vnProvincesRes, myVerificationRes, myWalletRes] = await Promise.all([
       technicianOnboardingApi.getStatus().catch(() => null),
-      catalogApi.getCategories(true).catch(() => []),
-      catalogApi.getServices({ limit: 100 }).catch(() => ({ data: [] })),
-      vietnamProvincesApi.getProvincesWithDistricts().catch(() => []),
+      reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true)).catch(() => []),
+      reference(queryKeys.reference.services({ limit: 100 }), () => catalogApi.getServices({ limit: 100 })).catch(() => ({ data: [] })),
+      reference(queryKeys.reference.provinces, () => vietnamProvincesApi.getProvincesWithDistricts()).catch(() => []),
       technicianVerificationApi.getMyVerification().catch(() => null),
       walletApi.getMyWallet().catch(() => null),
     ]);

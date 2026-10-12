@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tidyAddressText } from '../../utils/address-text';
+import { toast } from 'vue-sonner';
 // src/pages/customer/NewBookingWizardPage.vue
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -31,9 +33,12 @@ import {
 import {
   FhButton,
   FhMoney,
+  FhSkeleton,
 } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
@@ -248,7 +253,7 @@ const stepIndex = computed(() => stepItems.value.findIndex((item) => item.id ===
 /** AI form, step 1 -> the conversation. */
 function startAiStep() {
   if (!description.value.trim()) {
-    window.alert('Vui lòng mô tả sơ bộ tình trạng thiết bị để trợ lý phân tích.');
+    toast.warning('Vui lòng mô tả sơ bộ tình trạng thiết bị để trợ lý phân tích.');
     return;
   }
   step.value = 3;
@@ -258,7 +263,7 @@ function startAiStep() {
 /** AI form, conversation -> address and time, once a service is chosen. */
 function leaveAiStep() {
   if (!selectedServiceId.value) {
-    window.alert('Trợ lý chưa chọn được dịch vụ. Anh/chị trả lời thêm hoặc chọn dịch vụ ở bên dưới khung chat.');
+    toast.warning('Trợ lý chưa chọn được dịch vụ. Anh/chị trả lời thêm hoặc chọn dịch vụ ở bên dưới khung chat.');
     return;
   }
   step.value = 2;
@@ -468,10 +473,18 @@ const urgencyList = [
   },
 ] as const;
 
-onMounted(async () => {
+// Services and saved addresses: skeletons until they arrive, a retry line if they do not.
+// The catalog is reference data, cached for the next form.
+const reference = useReferenceData();
+const catalogLoading = ref(true);
+const catalogLoadFailed = ref(false);
+
+async function loadCatalog() {
+  catalogLoading.value = true;
+  catalogLoadFailed.value = false;
   try {
     const [cats, addrs] = await Promise.all([
-      catalogApi.getCategories(true),
+      reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true)),
       profileApi.getAddresses(),
     ]);
     categories.value = cats;
@@ -544,9 +557,13 @@ onMounted(async () => {
     if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
 
   } catch {
-    window.alert('Không thể tải dịch vụ hoặc địa chỉ. Vui lòng tải lại trang.');
+    catalogLoadFailed.value = true;
+  } finally {
+    catalogLoading.value = false;
   }
-});
+}
+
+onMounted(loadCatalog);
 
 onBeforeUnmount(() => {
   isPhotoFlowDisposed.value = true;
@@ -576,7 +593,7 @@ const onCategorySelect = (catId: string) => {
 const openPhotoPicker = () => {
   if (uploadingPhoto.value) return;
   if (uploadedPhotos.value.length >= 5) {
-    window.alert('Tối đa 5 ảnh thiết bị.');
+    toast.warning('Tối đa 5 ảnh thiết bị.');
     return;
   }
   photoInput.value?.click();
@@ -587,10 +604,10 @@ const handlePhotoFiles = async (files: File[]) => {
 
   const remaining = 5 - uploadedPhotos.value.length;
   if (remaining <= 0) {
-    window.alert('Tối đa 5 ảnh thiết bị.');
+    toast.warning('Tối đa 5 ảnh thiết bị.');
     return;
   }
-  if (files.length > remaining) window.alert('Tối đa 5 ảnh thiết bị.');
+  if (files.length > remaining) toast.warning('Tối đa 5 ảnh thiết bị.');
   const toUpload = files.slice(0, remaining);
 
   uploadingPhoto.value = true;
@@ -601,11 +618,11 @@ const handlePhotoFiles = async (files: File[]) => {
     const usable: { original: File; file: File }[] = [];
     for (const original of toUpload) {
       if (!looksLikeImage(original)) {
-        window.alert(`"${original.name}" không phải ảnh. Vui lòng chọn ảnh chụp thiết bị.`);
+        toast.warning(`"${original.name}" không phải ảnh. Vui lòng chọn ảnh chụp thiết bị.`);
         continue;
       }
       if (original.size > MAX_ORIGINAL_PHOTO_BYTES) {
-        window.alert(`Ảnh "${original.name}" quá lớn (trên 30 MB).`);
+        toast.warning(`Ảnh "${original.name}" quá lớn (trên 30 MB).`);
         continue;
       }
       usable.push({ original, file: original });
@@ -617,7 +634,7 @@ const handlePhotoFiles = async (files: File[]) => {
         // Not readable here (e.g. HEIC outside Safari): send it as it is only if the server takes it.
         ?? (ALLOWED_MEDIA_MIME_TYPES.includes(original.type) && original.size <= MAX_MEDIA_SIZE_BYTES ? original : null);
       if (file) ready.push(file);
-      else window.alert(`Chưa đọc được ảnh "${original.name}". Vui lòng chọn ảnh JPG hoặc PNG.`);
+      else toast.error(`Chưa đọc được ảnh "${original.name}". Vui lòng chọn ảnh JPG hoặc PNG.`);
     });
     if (isPhotoFlowDisposed.value) return;
 
@@ -638,7 +655,7 @@ const handlePhotoFiles = async (files: File[]) => {
         console.error(`[NewBookingWizardPage] Upload booking photo failed for "${photo.file.name}":`, err);
         const photoStillSelected = removePhotoByLocalId(photo.localId);
         if (!isPhotoFlowDisposed.value && photoStillSelected) {
-          window.alert(`Không thể tải ảnh "${photo.file.name}" lên. Vui lòng thử lại.`);
+          toast.error(`Không thể tải ảnh "${photo.file.name}" lên. Vui lòng thử lại.`);
         }
       }
     }));
@@ -669,14 +686,14 @@ const removePhoto = (idx: number) => {
 
 const goToStep2 = () => {
   if (!selectedServiceId.value) {
-    window.alert('Vui lòng chọn một dịch vụ cụ thể.');
+    toast.warning('Vui lòng chọn một dịch vụ cụ thể.');
     return;
   }
   if (!description.value.trim()) {
     if (isFixedPrice.value && selectedService.value) {
       description.value = `Yêu cầu dịch vụ niêm yết: ${selectedService.value.name} (${quantity.value} ${selectedService.value.unit || 'thiết bị'})`;
     } else {
-      window.alert('Vui lòng mô tả sơ bộ tình trạng lỗi của thiết bị.');
+      toast.warning('Vui lòng mô tả sơ bộ tình trạng lỗi của thiết bị.');
       return;
     }
   }
@@ -685,17 +702,17 @@ const goToStep2 = () => {
 
 const goToNextStepFrom2 = async () => {
   if (!selectedAddressId.value && addresses.value.length > 0) {
-    window.alert('Vui lòng chọn địa chỉ sửa chữa.');
+    toast.warning('Vui lòng chọn địa chỉ sửa chữa.');
     return;
   }
   sessions.value = upcomingSessions(14);
   const schedule = scheduleForBooking();
   if ('error' in schedule) {
-    window.alert(schedule.error);
+    toast.warning(schedule.error);
     return;
   }
   if (customerNote.value.trim().length > 1000) {
-    window.alert('Ghi chú cho thợ tối đa 1000 ký tự.');
+    toast.warning('Ghi chú cho thợ tối đa 1000 ký tự.');
     return;
   }
 
@@ -704,19 +721,19 @@ const goToNextStepFrom2 = async () => {
 
 const createAndFindTech = async () => {
   if (uploadingPhoto.value) {
-    window.alert('Vui lòng chờ ảnh tải lên hoàn tất trước khi đặt lịch.');
+    toast.warning('Vui lòng chờ ảnh tải lên hoàn tất trước khi đặt lịch.');
     return;
   }
   const photoUploadIds = uploadedPhotos.value.flatMap((photo) => photo.uploadId ? [photo.uploadId] : []);
   if (photoUploadIds.length !== uploadedPhotos.value.length) {
-    window.alert('Không thể xác nhận ảnh. Vui lòng chọn lại ảnh trước khi đặt lịch.');
+    toast.warning('Không thể xác nhận ảnh. Vui lòng chọn lại ảnh trước khi đặt lịch.');
     return;
   }
 
   // The session may have started while the customer was reading the summary.
   const schedule = scheduleForBooking();
   if ('error' in schedule) {
-    window.alert(schedule.error);
+    toast.warning(schedule.error);
     sessions.value = upcomingSessions(14);
     step.value = 2;
     return;
@@ -759,7 +776,7 @@ const createAndFindTech = async () => {
         friendlyMessage = 'Tài khoản của bạn tạm thời bị tạm dừng đặt lịch.';
       }
     }
-    window.alert(friendlyMessage);
+    toast.warning(friendlyMessage);
   } finally {
     loading.value = false;
   }
@@ -822,6 +839,16 @@ const createAndFindTech = async () => {
           </p>
         </div>
 
+        <div
+          v-if="catalogLoadFailed"
+          role="alert"
+          class="p-3.5 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3"
+          data-testid="booking-catalog-error"
+        >
+          <span>Chưa tải được dịch vụ và địa chỉ, vui lòng thử lại.</span>
+          <FhButton variant="secondary" size="sm" @click="loadCatalog">Thử lại</FhButton>
+        </div>
+
         <div class="space-y-7 text-xs sm:text-sm">
           <!-- Choosing the service is the plain form's job; the AI form leaves it to the assistant. -->
           <template v-if="!isAiFlow">
@@ -835,7 +862,16 @@ const createAndFindTech = async () => {
               <span class="text-[11px] text-ink-500">{{ categories.length }} nhóm khả dụng</span>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div
+              v-if="catalogLoading"
+              class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+              aria-busy="true"
+              aria-label="Đang tải nhóm dịch vụ"
+              data-testid="booking-categories-skeleton"
+            >
+              <FhSkeleton v-for="i in 4" :key="i" height="88px" rounded="lg" />
+            </div>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
                 v-for="cat in categories"
                 :key="cat.id"
@@ -939,7 +975,14 @@ const createAndFindTech = async () => {
             </div>
 
             <!-- Service Cards Grid -->
-            <div v-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
+            <div v-if="catalogLoading" class="grid grid-cols-1 md:grid-cols-2 gap-3" aria-busy="true" aria-label="Đang tải dịch vụ">
+              <div v-for="i in 4" :key="i" class="p-4 rounded-2xl border border-ink-200 bg-white space-y-3">
+                <FhSkeleton width="45%" height="14px" />
+                <FhSkeleton width="80%" height="16px" />
+                <FhSkeleton width="35%" height="14px" />
+              </div>
+            </div>
+            <div v-else-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
               <div
                 v-for="svc in filteredServices"
                 :key="svc.id"
@@ -1339,13 +1382,17 @@ const createAndFindTech = async () => {
               <label class="block font-bold text-ink-800 text-xs sm:text-sm">
                 Địa chỉ sửa chữa <span class="text-danger-600 font-bold">*</span>
               </label>
-              <span v-if="addresses.length > 0" class="text-[11px] text-ink-500 font-medium">
+              <span v-if="!catalogLoading && addresses.length > 0" class="text-[11px] text-ink-500 font-medium">
                 {{ addresses.length }} địa chỉ đã lưu
               </span>
             </div>
 
+            <div v-if="catalogLoading" class="space-y-2.5" aria-busy="true" aria-label="Đang tải địa chỉ">
+              <FhSkeleton v-for="i in 2" :key="i" height="64px" rounded="lg" />
+            </div>
+
             <!-- Custom Select Box for Addresses -->
-            <div v-if="addresses.length > 0" class="space-y-2">
+            <div v-else-if="addresses.length > 0" class="space-y-2">
               <!-- Selected Address Display (Select Trigger) -->
               <div
                 role="button"
@@ -1375,7 +1422,7 @@ const createAndFindTech = async () => {
                       </span>
                     </div>
                     <div class="text-xs text-ink-700 font-medium truncate">
-                      {{ selectedAddress?.line1 || 'Vui lòng chọn địa chỉ' }}
+                      {{ selectedAddress?.line1 ? tidyAddressText(selectedAddress.line1) : 'Vui lòng chọn địa chỉ' }}
                     </div>
                     <div v-if="selectedAddress" class="text-[11px] text-ink-400 truncate">
                       {{ selectedAddress.district }}, {{ selectedAddress.province }}
@@ -1443,7 +1490,7 @@ const createAndFindTech = async () => {
                               Mặc định
                             </span>
                           </div>
-                          <div class="text-xs text-ink-700 font-medium truncate">{{ addr.line1 }}</div>
+                          <div class="text-xs text-ink-700 font-medium truncate">{{ tidyAddressText(addr.line1) }}</div>
                           <div class="text-[11px] text-ink-400 truncate">{{ addr.district }}, {{ addr.province }}</div>
                         </div>
                       </div>
@@ -1680,7 +1727,7 @@ const createAndFindTech = async () => {
             <div class="flex items-center justify-between py-2">
               <span class="text-ink-500">Địa chỉ thực hiện:</span>
               <span class="font-semibold text-ink-900 text-right max-w-xs">
-                {{ addresses.find((a) => a.id === selectedAddressId)?.line1 }}
+                {{ tidyAddressText(addresses.find((a) => a.id === selectedAddressId)?.line1) }}
               </span>
             </div>
             <div class="flex items-center justify-between py-2">

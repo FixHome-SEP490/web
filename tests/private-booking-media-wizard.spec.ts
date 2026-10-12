@@ -43,6 +43,13 @@ vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }));
+vi.mock('vue-sonner', () => ({ toast: toastMock }));
+// Messages the wizard shows the customer (in-app notices since 12/10/2026, never browser alerts).
+const notices = () => [toastMock.error, toastMock.warning]
+  .flatMap((fn) => fn.mock.calls.map((args, i) => ({ args, order: fn.mock.invocationCallOrder[i] })))
+  .sort((x, y) => x.order - y.order)
+  .map((n) => n.args);
 
 const ActionButton = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -118,6 +125,7 @@ beforeEach(() => {
   createBooking.mockResolvedValue({ id: 'booking-id' });
   push.mockReset();
   alert.mockReset();
+  toastMock.error.mockReset(); toastMock.warning.mockReset();
   normalizeForUpload.mockReset().mockResolvedValue(null);
   vi.stubGlobal('alert', alert);
   createObjectURL.mockReset().mockReturnValue('blob:booking-photo');
@@ -185,8 +193,9 @@ describe('customer New Booking private photo flow', () => {
 
     expect(wrapper.find('img[src="blob:booking-photo"]').exists()).toBe(false);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:booking-photo');
-    expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert.mock.calls[0][0]).not.toContain('private backend detail');
+    expect(notices()).toHaveLength(1);
+    expect(String(notices()[0][0])).not.toContain('private backend detail');
+    expect(alert).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -224,7 +233,7 @@ describe('customer New Booking private photo flow', () => {
     pending.resolve({ uploadId: 'late-upload-id', mimeType: file.type, sizeBytes: file.size });
     await flushPromises();
     expect(wrapper.find('img[src="blob:booking-photo"]').exists()).toBe(false);
-    expect(alert).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
     await submitFixedPriceBooking(wrapper);
     expect(createBooking.mock.calls[0][0].photoUploadIds).toEqual([]);
     wrapper.unmount();
@@ -245,7 +254,7 @@ describe('customer New Booking private photo flow', () => {
     pending.resolve({ uploadId: 'late-upload-id', mimeType: file.type, sizeBytes: file.size });
     await flushPromises();
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
-    expect(alert).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
   });
 
   it('uploads the shrunk JPEG instead of the camera original, a HEIC with no type included', async () => {
@@ -258,7 +267,7 @@ describe('customer New Booking private photo flow', () => {
     await flushPromises();
     expect(normalizeForUpload).toHaveBeenCalledWith(big);
     expect(uploadBookingPhoto).toHaveBeenCalledWith(small);
-    expect(alert).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
     wrapper.unmount();
   });
 
@@ -269,7 +278,8 @@ describe('customer New Booking private photo flow', () => {
     await selectPhoto(wrapper, huge);
     await selectPhoto(wrapper, heic);
     expect(uploadBookingPhoto).not.toHaveBeenCalled();
-    expect(alert.mock.calls.map((c) => c[0])).toEqual([
+    expect(alert).not.toHaveBeenCalled();
+    expect(notices().map((c) => c[0])).toEqual([
       'Ảnh "huge.jpg" quá lớn (trên 30 MB).',
       'Chưa đọc được ảnh "IMG_0002.heic". Vui lòng chọn ảnh JPG hoặc PNG.',
     ]);

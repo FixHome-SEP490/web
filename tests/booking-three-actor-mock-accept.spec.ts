@@ -17,6 +17,10 @@ import { bookingsApi } from '../src/api/bookings.api';
 import BookingCandidatesPage from '../src/pages/customer/BookingCandidatesPage.vue';
 import BookingDetailPage from '../src/pages/customer/BookingDetailPage.vue';
 import TechnicianInvitationsPage from '../src/pages/technician/TechnicianInvitationsPage.vue';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
+
+/** Each actor signs in on their own device: their own query cache. */
+const asNewSession = () => installQueryClient(createTestQueryClient());
 
 const Button = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -153,12 +157,14 @@ describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only
     expect(customerPage.find('[data-testid="booking-open-service-order"]').exists()).toBe(false);
 
     fake.setActor('tech-a');
+    asNewSession();
     const technicianA = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
     expect(technicianA.text()).toContain('Synthetic District, Synthetic Province');
     expect(technicianA.text()).not.toContain(privateDetail);
     await technicianA.find('button.w-full').trigger('click');
     fake.setActor('tech-b');
+    asNewSession();
     const technicianB = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
     expect(technicianB.text()).not.toContain('Synthetic District, Synthetic Province');
@@ -192,6 +198,7 @@ describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only
     await bookingsApi.respondInvitation('invite-tech-a', 'DECLINE');
     expect(fake.state.invitations.map(i => i.status)).toEqual(['declined', 'pending']);
     fake.setActor('tech-b');
+    asNewSession();
     const page = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
     expect(page.text()).toContain('Synthetic District, Synthetic Province');
@@ -208,6 +215,7 @@ describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only
     const fake = scenario();
     await sendTwoCustomerChoices();
     fake.setActor('tech-a');
+    asNewSession();
     const first = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
     fake.expire('tech-a');
@@ -215,6 +223,7 @@ describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only
     expect(fake.state.serviceOrderCount).toBe(0);
     first.unmount();
     fake.setActor('tech-b');
+    asNewSession();
     const second = mount(TechnicianInvitationsPage, { global: ui });
     await flushPromises();
     expect(fake.state.invitations.map(i => i.status)).toEqual(['expired', 'pending']);

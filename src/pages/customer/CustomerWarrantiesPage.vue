@@ -11,18 +11,34 @@ import {
   Wrench,
   ShieldAlert,
 } from 'lucide-vue-next';
-import { FhButton, FhSkeleton, FhStatusPill } from '../../components';
+import { FhButton, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../../components/customer/WarrantyClaimModal.vue';
 import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString } from '../../utils/vn-time';
 
-const loading = ref(true);
-const loadFailed = ref(false);
+const PAGE_SIZE = 10;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const cache = useCacheUpdates();
 
-const warrantyOrders = ref<OrderWarrantyGroup[]>([]);
+// Ten completed orders per page; warranties are read for those orders only.
+const {
+  page,
+  items: warrantyOrders,
+  total,
+  loading,
+  error: loadFailed,
+  load: loadWarranties,
+  prefetch,
+} = usePagedList<OrderWarrantyGroup>({
+  key: () => queryKeys.warranty.customerOrders({}),
+  pageSize: PAGE_SIZE,
+  fetch: (p, size) => ordersApi.getOrderWarrantiesPage(p, size),
+});
 
 // Filter and search state
 type WarrantyTab = 'ALL' | 'ACTIVE' | 'PROCESSING' | 'EXPIRED';
@@ -123,21 +139,6 @@ const filteredWarrantyOrders = computed(() => {
 
   return list;
 });
-
-const loadWarranties = async () => {
-  try {
-    loading.value = true;
-    loadFailed.value = false;
-    warrantyOrders.value = await ordersApi.getOrderWarrantiesGrouped();
-    nextTick(updateTabIndicator);
-  } catch {
-    // A short line and a retry button instead of the server text (PO 10/10/2026).
-    loadFailed.value = true;
-  } finally {
-    loading.value = false;
-  }
-};
-
 const formatDate = (val?: string | null) => {
   if (!val) return '—';
   try {
@@ -164,6 +165,7 @@ const onClaimSubmitted = (claim: WarrantyClaimView) => {
   showClaimModal.value = false;
   if (!order) return;
   order.claims = [claim, ...order.claims];
+  cache.markChanged(affectedBy.warrantyChange);
   actionMessage.value = {
     type: 'success',
     text: `Đã gửi yêu cầu bảo hành cho đơn ${order.orderCode}. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.`,
@@ -172,6 +174,7 @@ const onClaimSubmitted = (claim: WarrantyClaimView) => {
 
 const onClaimUpdated = (order: OrderWarrantyGroup, claim: WarrantyClaimView) => {
   order.claims = order.claims.map((existing) => (existing.id === claim.id ? claim : existing));
+  cache.markChanged(affectedBy.warrantyChange);
 };
 
 onMounted(() => {
@@ -181,7 +184,6 @@ onMounted(() => {
       window.addEventListener('resize', updateTabIndicator);
     }
   });
-  loadWarranties();
 });
 
 onUnmounted(() => {
@@ -322,7 +324,7 @@ onUnmounted(() => {
 
     <!-- Empty completely -->
     <div
-      v-else-if="warrantyOrders.length === 0"
+      v-else-if="warrantyOrders.length === 0 && total <= PAGE_SIZE"
       class="text-center py-16 px-6 bg-white rounded-2xl border border-ink-200 space-y-3 shadow-xs"
     >
       <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
@@ -336,7 +338,7 @@ onUnmounted(() => {
 
     <!-- Search / Filter Empty -->
     <div
-      v-else-if="filteredWarrantyOrders.length === 0"
+      v-else-if="filteredWarrantyOrders.length === 0 && warrantyOrders.length > 0"
       class="text-center py-12 px-6 bg-white rounded-2xl border border-ink-200 space-y-2 shadow-xs"
     >
       <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-2">
@@ -356,6 +358,14 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
+
+    <p
+      v-else-if="warrantyOrders.length === 0"
+      class="py-8 px-6 bg-white rounded-2xl border border-ink-200 text-center text-sm text-ink-600"
+      data-testid="warranties-page-empty"
+    >
+      Các đơn ở trang này không có bảo hành.
+    </p>
 
     <!-- One surface per order -->
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -494,6 +504,14 @@ onUnmounted(() => {
         </div>
       </section>
     </div>
+
+    <FhPagination
+      v-if="!loading && !loadFailed"
+      v-model:page="page"
+      :page-size="PAGE_SIZE"
+      :total="total"
+      @prefetch="prefetch"
+    />
 
     <!-- Direct Warranty Claim Modal -->
     <WarrantyClaimModal

@@ -27,7 +27,7 @@ import {
   type MapMarker,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -41,6 +41,8 @@ import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/cus
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
 import { toTimelineSteps } from '../../utils/order-timeline';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { formatRating } from '../../utils/formatters';
 
 const route = useRoute();
@@ -48,9 +50,8 @@ const showRebook = ref(false);
 const router = useRouter();
 const chatStore = useChatStore();
 const orderId = route.params.id as string;
+const cache = useCacheUpdates();
 
-const loading = ref(true);
-const loadFailed = ref(false);
 const actionLoading = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
@@ -146,7 +147,8 @@ const formatFullTimestamp = (val?: string | null) => {
 // Evidence Photos State (Ảnh trước và sau khi làm + Ghi chú của thợ)
 export interface OrderEvidence {
   id: string;
-  type: 'before' | 'after' | 'additional';
+  /** `checkin_face` (the technician's face at check-in) appears only under "Tất cả". */
+  type: EvidenceType;
   mediaUrl: string;
   note?: string | null;
   capturedAt?: string | null;
@@ -257,8 +259,126 @@ watch(() => order.value?.arrivalVerified, (verified) => {
 
 onUnmounted(stopTrackingPoll);
 
+// Everything the order page reads, in one cached answer. Each part that cannot be
+// read is left as it was (undefined), as before the cache.
+type CashSettlementView = NonNullable<typeof cashSettlement.value>;
+interface CustomerOrderBundle {
+  order: ServiceOrderItem;
+  invoice?: { id?: string; [key: string]: unknown } | null;
+  settlement?: CashSettlementView;
+  evidences: OrderEvidence[];
+  booking?: BookingItem | null;
+  review?: Review | null;
+  costs?: AdditionalCostRecord[];
+  warranties?: OrderWarrantyRecord[];
+  claims?: WarrantyClaimView[];
+}
+
+/** Undefined when the read fails: the page keeps what it showed. */
+const optional = async <T,>(read: () => Promise<T>): Promise<T | undefined> => {
+  try {
+    return await read();
+  } catch {
+    return undefined;
+  }
+};
+
+async function fetchOrderBundle(): Promise<CustomerOrderBundle> {
+  const data = await ordersApi.getOrder(orderId);
+  const completed = data.status === 'COMPLETED' || (data.status as string) === 'completed';
+  const invoice = await optional(() => ordersApi.getInvoice(orderId));
+  const settlement = await optional(() => ordersApi.getCashSettlement(orderId));
+  // Before and after photos from the technician.
+  let evidences: OrderEvidence[] = [];
+  try {
+    evidences = await ordersApi.getEvidence(orderId);
+  } catch {
+    evidences = [];
+  }
+  // The original booking, for the description and the diagnosis.
+  const bookingId = data.bookingId;
+  const booking = bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined;
+  const review = data.status === 'COMPLETED' ? await optional(() => reviewsApi.getByOrder(orderId)) : undefined;
+  // Additional costs exist only once the repair started.
+  const costs =
+    data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
+      ? await optional(() => ordersApi.getAdditionalCosts(orderId))
+      : undefined;
+  const warranties = completed
+    ? await optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[])
+    : undefined;
+  const claims = completed ? await optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : undefined;
+  return {
+    order: data,
+    invoice,
+    settlement: settlement ? (settlement as unknown as CashSettlementView) : undefined,
+    evidences,
+    booking,
+    review,
+    costs,
+    warranties,
+    claims,
+  };
+}
+
+const orderQuery = useCachedQuery({
+  key: queryKeys.orders.customerDetail(orderId),
+  fetch: fetchOrderBundle,
+  // Status and money change from the other side too: the cached copy shows at
+  // once, and every visit reads it again.
+  staleTime: 0,
+  structuralSharing: false,
+});
+
+function applyOrderBundle(bundle: CustomerOrderBundle) {
+  order.value = bundle.order;
+  if (bundle.invoice !== undefined) invoice.value = bundle.invoice;
+  if (bundle.settlement) {
+    cashSettlement.value = bundle.settlement;
+    confirmCashAmount.value = bundle.settlement.declaredAmount;
+  }
+  evidences.value = bundle.evidences;
+  if (bundle.booking) bookingDetails.value = bundle.booking;
+  if (bundle.review !== undefined) existingReview.value = bundle.review;
+  if (bundle.costs) additionalCosts.value = bundle.costs;
+  if (bundle.warranties) orderWarranties.value = bundle.warranties;
+  if (bundle.claims) warrantyClaims.value = bundle.claims;
+}
+
+let mounted = false;
+onUnmounted(() => {
+  mounted = false;
+});
+watch(
+  () => [orderQuery.query.data.value, orderQuery.query.dataUpdatedAt.value] as const,
+  ([bundle]) => {
+    if (mounted && bundle) applyOrderBundle(bundle);
+  },
+);
+
+/** Skeleton only when nothing of this order is known yet. */
+const loading = computed(() => orderQuery.query.data.value === undefined && orderQuery.loading.value);
+// The page shows a short line and a retry button instead of the server text.
+const loadFailed = computed(() => !!orderQuery.error.value && !order.value);
+
+/**
+ * Reads the order again (`silent` keeps the page on screen, which it always does
+ * now that the order is cached). Order lists, wallets and earnings that the
+ * action may have changed are refreshed or dropped too.
+ */
+const loadOrder = async (silent = false) => {
+  if (silent || order.value) await cache.refresh(affectedBy.orderChange);
+  else await orderQuery.refetch();
+};
+
 onMounted(async () => {
-  await loadOrder();
+  mounted = true;
+  const cached = orderQuery.query.data.value;
+  if (cached) applyOrderBundle(cached);
+  await orderQuery.query.suspense();
+  const fresh = orderQuery.query.data.value;
+  if (fresh && mounted) applyOrderBundle(fresh);
+  if (!mounted) return;
   if (route.query.claimWarranty === 'true' || route.query.claimWarranty === '1') {
     showWarrantyClaimModal.value = true;
   }
@@ -270,94 +390,6 @@ onMounted(async () => {
     showReviewModal.value = true;
   }
 });
-
-/** silent keeps the page on screen while it is read again (after paying from the wallet). */
-const loadOrder = async (silent = false) => {
-  try {
-    if (!silent) loading.value = true;
-    loadFailed.value = false;
-    const data = await ordersApi.getOrder(orderId);
-    order.value = data;
-
-
-    // Try load invoice
-    try {
-      invoice.value = await ordersApi.getInvoice(orderId);
-    } catch {
-      // Ignore
-    }
-
-    // Try load cash settlement
-    try {
-      const settlement = await ordersApi.getCashSettlement(orderId);
-      if (settlement) {
-        cashSettlement.value = settlement as unknown as {
-          id: string;
-          declaredAmount: number;
-          confirmedAmount?: number;
-          status: 'pending_confirmation' | 'confirmed' | 'disputed';
-          technicianNotes?: string;
-        };
-        confirmCashAmount.value = cashSettlement.value.declaredAmount;
-      }
-    } catch {
-      // Ignore
-    }
-
-    // Tải bằng chứng ảnh trước & sau khi làm từ thợ
-    try {
-      evidences.value = await ordersApi.getEvidence(orderId);
-    } catch {
-      evidences.value = [];
-    }
-
-    // Tải thông tin booking gốc để có mô tả chi tiết & chẩn đoán nếu có
-    if (data.bookingId) {
-      try {
-        bookingDetails.value = await bookingsApi.getBooking(data.bookingId);
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Try load existing review (chỉ có nghĩa khi đơn đã hoàn tất)
-    if (data.status === 'COMPLETED') {
-      try {
-        existingReview.value = await reviewsApi.getByOrder(orderId);
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Chi phí phát sinh chỉ tồn tại khi đơn đang UNDER_REPAIR hoặc đã COMPLETED
-    if (data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED') {
-      try {
-        additionalCosts.value = await ordersApi.getAdditionalCosts(orderId);
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Tải thông tin bảo hành & yêu cầu bảo hành nếu đơn COMPLETED
-    if (data.status === 'COMPLETED' || (data.status as string) === 'completed') {
-      try {
-        orderWarranties.value = (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[];
-      } catch {
-        // Ignore
-      }
-      try {
-        warrantyClaims.value = await ordersApi.getOrderWarrantyClaims(orderId);
-      } catch {
-        // Ignore
-      }
-    }
-  } catch {
-    // The page shows a short line and a retry button instead of the server text.
-    if (!order.value) loadFailed.value = true;
-  } finally {
-    loading.value = false;
-  }
-};
 
 const handleApproveQuotation = async () => {
   try {
@@ -397,6 +429,8 @@ const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'A
     const updated = await ordersApi.decideAdditionalCost(cost.id, action);
     const idx = additionalCosts.value.findIndex((c) => c.id === cost.id);
     if (idx !== -1) additionalCosts.value[idx] = updated;
+    // Totals change with the decision: read the order again in the background.
+    void cache.refresh(affectedBy.orderChange);
     actionMessage.value = {
       type: 'success',
       text: action === 'APPROVE' ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.' : 'Đã từ chối chi phí phát sinh.',
@@ -432,6 +466,7 @@ const handleConfirmCashPayment = async () => {
       }
     } else {
       cashSettlement.value.status = 'disputed';
+      void cache.refresh(affectedBy.orderChange);
       actionMessage.value = {
         type: 'success',
         text: 'Số tiền bạn nhập không khớp với thợ khai báo — đã gửi FixHome đối soát.',
@@ -506,6 +541,7 @@ const confirmCancel = async () => {
     if (order.value) {
       order.value.status = 'CANCELLED';
     }
+    void cache.refresh(affectedBy.orderChange);
     showCancelModal.value = false;
     actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu huỷ đơn thành công.' };
   } catch (err) {
@@ -527,6 +563,7 @@ const handleCloseReviewModal = () => {
 
 const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
   warrantyClaims.value = [claim, ...warrantyClaims.value];
+  void cache.refresh(affectedBy.warrantyChange);
   showWarrantyClaimModal.value = false;
   actionMessage.value = {
     type: 'success',
@@ -535,10 +572,12 @@ const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
 };
 const onWarrantyClaimUpdated = (claim: WarrantyClaimView) => {
   warrantyClaims.value = warrantyClaims.value.map((existing) => (existing.id === claim.id ? claim : existing));
+  void cache.refresh(affectedBy.warrantyChange);
 };
 
 const handleReviewSubmitted = (review: Review) => {
   existingReview.value = review;
+  void cache.refresh(affectedBy.orderChange);
   showReviewModal.value = false;
   if (route.query.autoReview || route.query.review) {
     const nextQuery = { ...route.query };
@@ -601,12 +640,14 @@ const evidenceTypeLabel = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'Trước khi sửa';
   if (t === 'after') return 'Sau khi sửa';
+  if (t === 'checkin_face') return 'Check-in';
   return 'Phát sinh';
 };
 const evidenceTypeClass = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'bg-brand-600';
   if (t === 'after') return 'bg-success-600';
+  if (t === 'checkin_face') return 'bg-ink-700';
   return 'bg-warning-600';
 };
 const openMenuAction = (action: () => void) => {

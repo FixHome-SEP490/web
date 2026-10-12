@@ -15,6 +15,8 @@ import {
   ShieldCheck,
 } from 'lucide-vue-next';
 import { catalogApi, type ServiceCategory } from '../../api/catalog.api';
+import { useReferenceData } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
 import { FhEmptyState, FhSkeleton } from '../index';
 
 const categories = ref<ServiceCategory[]>([]);
@@ -56,11 +58,13 @@ function getCategoryIcon(key?: string | null) {
   return iconMap[normalized] || Wrench;
 }
 
+const reference = useReferenceData();
+
 async function loadCategories() {
   loading.value = true;
   error.value = false;
   try {
-    categories.value = await catalogApi.getCategories(true);
+    categories.value = await reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true));
   } catch {
     error.value = true;
     categories.value = [];

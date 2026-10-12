@@ -21,9 +21,12 @@ import {
   UserCheck,
   Building2,
 } from 'lucide-vue-next';
-import { FhButton, FhSkeleton } from '../../components';
+import { FhButton, FhPagination, FhSkeleton } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
+import { customerNotificationPath, getNotificationCategory, notificationsApi, type NotificationItem } from '../../api/notifications.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { toast } from 'vue-sonner';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -31,12 +34,30 @@ type Category = 'ALL' | 'TECHNICIAN' | 'SERVICE_MANAGER' | 'ADMIN';
 
 const router = useRouter();
 const notifStore = useNotificationsStore();
+const cache = useCacheUpdates();
 
 const searchQuery = ref('');
 const selectedCategory = ref<Category>('ALL');
 const onlyUnread = ref(false);
-/** Until the first read finishes the page shows rows shaped like notifications, not "no notifications". */
-const firstLoad = ref(true);
+const PAGE_SIZE = 20;
+// Server pages of 20 (?page=2 in the address); the filters below apply to the page shown.
+const {
+  page,
+  items: notifications,
+  total,
+  loading,
+  error,
+  load,
+  changingPage,
+  prefetch,
+} = usePagedList<NotificationItem>({
+  key: () => queryKeys.notifications.list({}),
+  pageSize: PAGE_SIZE,
+  fetch: async (p, size) => {
+    const result = await notificationsApi.getMyNotifications(p, size);
+    return { items: result.data, total: result.total, page: p, pageSize: size };
+  },
+});
 
 const categories: { key: Category; label: string; icon: unknown }[] = [
   { key: 'ALL', label: 'Tất cả', icon: Bell },
@@ -59,19 +80,15 @@ const iconFor = {
   bell: Bell,
 } as const;
 
-onMounted(async () => {
-  try {
-    await notifStore.fetchNotifications(1, 50);
-  } finally {
-    firstLoad.value = false;
-  }
+onMounted(() => {
+  void notifStore.fetchUnreadCount();
 });
 
 const hasFilter = computed(() => onlyUnread.value || selectedCategory.value !== 'ALL' || searchQuery.value.trim() !== '');
 
 const filteredNotifications = computed(() => {
   const q = searchQuery.value.toLowerCase().trim();
-  return notifStore.notifications.filter((item) => {
+  return notifications.value.filter((item) => {
     if (onlyUnread.value && item.isRead) return false;
     if (selectedCategory.value !== 'ALL' && getNotificationCategory(item).category !== selectedCategory.value) return false;
     if (q && !item.title?.toLowerCase().includes(q) && !item.message?.toLowerCase().includes(q)) return false;
@@ -82,6 +99,10 @@ const filteredNotifications = computed(() => {
 const handleItemClick = async (item: NotificationItem) => {
   if (!item.isRead) {
     await notifStore.markAsRead(item.id);
+    item.isRead = true;
+    cache.markChanged(affectedBy.notificationsRead);
+    // The bell keeps its own short list; read the count again so both agree.
+    void notifStore.fetchUnreadCount();
   }
   const path = customerNotificationPath(item);
   if (path) router.push(path);
@@ -89,6 +110,10 @@ const handleItemClick = async (item: NotificationItem) => {
 
 const handleMarkAllRead = async () => {
   await notifStore.markAllAsRead();
+  notifications.value.forEach((n) => {
+    n.isRead = true;
+  });
+  cache.markChanged(affectedBy.notificationsRead);
   toast.success('Đã đánh dấu tất cả thông báo là đã đọc');
 };
 
@@ -187,13 +212,13 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
     </div>
 
     <!-- Skeleton Loading -->
-    <div
-      v-if="firstLoad && notifStore.notifications.length === 0"
+    <ul
+      v-if="loading"
       class="bg-white rounded-3xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs"
       aria-busy="true"
       aria-label="Đang tải thông báo"
     >
-      <div v-for="i in 4" :key="i" class="p-5 flex items-start gap-4">
+      <li v-for="i in 4" :key="i" class="p-5 flex items-start gap-4">
         <FhSkeleton width="44px" height="44px" rounded="lg" class="shrink-0" />
         <div class="flex-1 space-y-2">
           <div class="flex justify-between items-center">
@@ -203,10 +228,20 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
           <FhSkeleton width="85%" height="14px" />
           <FhSkeleton width="30%" height="12px" />
         </div>
-      </div>
-    </div>
+      </li>
+    </ul>
 
     <!-- Empty State -->
+    <div
+      v-else-if="error"
+      role="alert"
+      class="p-6 bg-white rounded-2xl border border-ink-200 flex flex-col items-center text-center gap-3"
+      data-testid="notifications-load-error"
+    >
+      <p class="text-sm text-ink-700">Chưa tải được thông báo, vui lòng thử lại.</p>
+      <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
+    </div>
+
     <div
       v-else-if="filteredNotifications.length === 0"
       data-testid="notifications-empty"
@@ -215,8 +250,8 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       <div class="w-16 h-16 rounded-2xl bg-ink-100/80 flex items-center justify-center text-ink-400 mx-auto mb-2">
         <Inbox :size="32" />
       </div>
-      <p class="text-lg font-semibold text-ink-900">
-        {{ hasFilter ? 'Không có thông báo nào phù hợp.' : 'Bạn chưa có thông báo nào.' }}
+      <p class="text-base sm:text-lg font-semibold text-ink-900">
+        {{ hasFilter ? (total > PAGE_SIZE ? 'Trang này không có thông báo phù hợp.' : 'Không có thông báo nào phù hợp.') : 'Bạn chưa có thông báo nào.' }}
       </p>
       <p class="text-sm text-ink-500 max-w-sm mx-auto">
         {{ hasFilter ? 'Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục để tìm thông báo.' : 'Các thông báo mới về đơn sửa chữa và tài khoản sẽ hiển thị ở đây.' }}
@@ -227,7 +262,12 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
     </div>
 
     <!-- Notifications List -->
-    <ul v-else class="bg-white rounded-3xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs">
+    <ul
+      v-else
+      class="bg-white rounded-3xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
+    >
       <li v-for="item in filteredNotifications" :key="item.id">
         <button
           type="button"
@@ -285,5 +325,13 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
         </button>
       </li>
     </ul>
+
+    <FhPagination
+      v-if="!loading && !error"
+      v-model:page="page"
+      :page-size="PAGE_SIZE"
+      :total="total"
+      @prefetch="prefetch"
+    />
   </div>
 </template>

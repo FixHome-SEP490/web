@@ -3,7 +3,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useChatStore } from '../../stores/chat.store';
-import { useAuthStore } from '../../stores/auth.store';
+import { useAuthStore } from '../../stores/auth';
 import ChatThread from '../../components/chat/ChatThread.vue';
 import { FhButton, FhSkeleton } from '../../components';
 import {
@@ -271,6 +271,7 @@ watch(
           <div
             v-if="chatStore.loadingConversations && chatStore.conversations.length === 0"
             class="space-y-2 p-2"
+            data-testid="conversations-skeleton"
             aria-busy="true"
             aria-label="Đang tải danh sách hội thoại"
           >

@@ -22,9 +22,11 @@ export interface PlaceLocation {
 }
 
 export const geoApi = {
-  async autocomplete(input: string): Promise<PlaceSuggestion[]> {
+  /** `near` puts places around that point first (the server defaults to TP Hồ Chí Minh). */
+  async autocomplete(input: string, near?: { lat: number; lng: number } | null): Promise<PlaceSuggestion[]> {
     if (!input.trim()) return [];
-    const res = await apiClient.get<ApiResponse<PlaceSuggestion[]>>('/geo/autocomplete', { params: { input } });
+    const params = near && Number.isFinite(near.lat) && Number.isFinite(near.lng) ? { input, lat: near.lat, lng: near.lng } : { input };
+    const res = await apiClient.get<ApiResponse<PlaceSuggestion[]>>('/geo/autocomplete', { params });
     return res.data?.data || [];
   },
 

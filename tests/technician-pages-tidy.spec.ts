@@ -15,6 +15,7 @@ import TechnicianJobsPage from '../src/pages/technician/TechnicianJobsPage.vue';
 import TechnicianInvitationsPage from '../src/pages/technician/TechnicianInvitationsPage.vue';
 import TechnicianEarningsPage from '../src/pages/technician/TechnicianEarningsPage.vue';
 import TechnicianWarrantyPage from '../src/pages/technician/TechnicianWarrantyPage.vue';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
 
 const Button = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -75,12 +76,17 @@ describe('TechnicianJobsPage', () => {
   });
 
   it('tells an empty filter apart from no jobs at all', async () => {
-    mockGet.mockResolvedValue({ data: { data: [order('a', 'ACCEPTED')] } });
+    // The server filters: a completed-only request returns nothing here.
+    mockGet.mockImplementation(async (_path: string, config?: { params?: { status?: string } }) => ({
+      data: { data: config?.params?.status === 'completed' ? [] : [order('a', 'ACCEPTED')], meta: { total: config?.params?.status === 'completed' ? 0 : 1 } },
+    }));
     const wrapper = mount(TechnicianJobsPage, { global: { stubs } });
     await flushPromises();
     const completedTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().startsWith('Hoàn thành'))!;
     await completedTab.trigger('click');
+    await flushPromises();
     expect(completedTab.attributes('aria-selected')).toBe('true');
+    expect(mockGet).toHaveBeenLastCalledWith('/service-orders/my', { params: { page: 1, pageSize: 20, status: 'completed' } });
     expect(wrapper.text()).toContain('Không có công việc ở mục này');
   });
 });
@@ -144,7 +150,15 @@ describe('TechnicianEarningsPage', () => {
   it('reaches the wallet from one row and hides the totals when loading fails', async () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/technician/wallet') return { data: { data: { balance: 500000 } } };
-      return { data: { data: [order('a', 'COMPLETED', { completedAt: '2030-01-02T00:00:00Z', paymentStatus: 'PAID' })] } };
+      return {
+        data: {
+          data: {
+            totalCompletedOrders: 1, totalGross: 100000, totalNet: 90000, totalOrderValue: 120000, paidOrders: 1,
+            payouts: [{ orderId: 'a', orderCode: 'SO-a', date: '02/01/2030', gross: 100000, net: 90000, orderValue: 120000, paid: true }],
+            page: 1, pageSize: 20, total: 1,
+          },
+        },
+      };
     });
     const wrapper = mount(TechnicianEarningsPage, { global: { stubs } });
     await flushPromises();
@@ -155,6 +169,8 @@ describe('TechnicianEarningsPage', () => {
 
     mockGet.mockReset();
     mockGet.mockRejectedValue(serverFailure);
+    // A new session: the cached earnings must not answer for it.
+    installQueryClient(createTestQueryClient());
     const failed = mount(TechnicianEarningsPage, { global: { stubs } });
     await flushPromises();
     expect(failed.get('[role="alert"]').text()).toContain('Thử lại');

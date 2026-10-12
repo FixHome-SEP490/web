@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import { FhStatusPill, FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
 import { orderStatusLabel, roleLabel } from '../../components/console/console-labels';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 
 interface CancellationRow extends CancellationRecord {
   orderCode: string;
@@ -21,11 +25,34 @@ const columns: ConsoleColumn[] = [
   { key: 'actions', label: '', align: 'right' },
 ];
 
-const loading = ref(true);
-const loadError = ref(false);
+const PAGE_SIZE = 20;
 const boostError = ref('');
-const rows = ref<CancellationRow[]>([]);
 const busyId = ref('');
+const cache = useCacheUpdates();
+
+// The list carries the order code and who cancelled: Service Managers may
+// not read user records, and one request per row was slow besides.
+const {
+  page,
+  items,
+  total,
+  loading,
+  error: loadError,
+  load: loadCancellations,
+  changingPage,
+  prefetch,
+} = usePagedList<CancellationRecord>({
+  key: () => queryKeys.orders.cancellations,
+  pageSize: PAGE_SIZE,
+  fetch: (p, size) => ordersApi.getCancellationsPage(p, size),
+});
+const rows = computed<CancellationRow[]>(() =>
+  items.value.map((c) => ({
+    ...c,
+    orderCode: c.orderCode ?? '—',
+    actorName: c.actorName ?? 'Không rõ',
+  })),
+);
 
 /**
  * Cancelling costs reputation points by itself (PO 09/10/2026); the list only
@@ -37,44 +64,25 @@ function pointsLabel(row: CancellationRow): string {
   return typeof delta === 'number' && delta < 0 ? `Trừ ${-delta} điểm uy tín` : 'Không trừ điểm';
 }
 
-async function loadCancellations() {
-  loading.value = true;
-  loadError.value = false;
-  try {
-    // The list carries the order code and who cancelled: Service Managers may
-    // not read user records, and one request per row was slow besides.
-    const list = await ordersApi.getCancellations();
-    rows.value = list.map((c) => ({
-      ...c,
-      orderCode: c.orderCode ?? '—',
-      actorName: c.actorName ?? 'Không rõ',
-    }));
-  } catch {
-    loadError.value = true;
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function handleGrantBoost(row: CancellationRow) {
   busyId.value = row.id;
   boostError.value = '';
   try {
     const updated = await ordersApi.reviewCancellation(row.id, { grantPriorityBoost: true });
-    Object.assign(row, updated);
+    const index = items.value.findIndex((item) => item.id === row.id);
+    if (index >= 0) items.value[index] = { ...items.value[index], ...updated };
+    cache.markChanged(affectedBy.orderChange);
   } catch {
     boostError.value = 'Chưa cấp được Boost, vui lòng thử lại.';
   } finally {
     busyId.value = '';
   }
 }
-
-onMounted(loadCancellations);
 </script>
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Huỷ đơn" :count="loading || loadError ? null : rows.length" />
+    <ConsolePageHeader title="Huỷ đơn" :count="loading || loadError ? null : total" />
 
     <ConsoleLoadError v-if="loadError" @retry="loadCancellations" />
     <ConsoleTable
@@ -82,6 +90,8 @@ onMounted(loadCancellations);
       :columns="columns"
       :rows="rows"
       :loading="loading"
+      class="transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
       empty-text="Chưa có đơn nào bị huỷ."
     >
       <template #cell-orderCode="{ row }">
@@ -124,6 +134,14 @@ onMounted(loadCancellations);
         </FhButton>
       </template>
     </ConsoleTable>
+    <ConsolePagination
+      v-if="!loadError"
+      v-model:page="page"
+      :total="total"
+      :page-size="PAGE_SIZE"
+      :disabled="loading"
+      @prefetch="prefetch"
+    />
     <p v-if="boostError" class="text-sm text-danger-600" role="alert">{{ boostError }}</p>
   </div>
 </template>

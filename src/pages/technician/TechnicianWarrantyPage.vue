@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
-import { FhButton, FhEmptyState, FhSkeleton } from '../../components';
+import { FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
 } from '../../components/technician/TechnicianWarrantyActionModal.vue';
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { getSupportErrorMessage } from '../console/support-cases.utils';
+import { usePagedList } from '../../composables/usePagedList';
+import { useCacheUpdates } from '../../composables/useCachedQuery';
+import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
   claimDisplayMeta,
@@ -17,9 +20,25 @@ import {
   type NotCoveredReason,
 } from '../../utils/warranty-claim';
 
-const claims = ref<StaffWarrantyClaim[]>([]);
-const loading = ref(true);
-const loadError = ref('');
+const PAGE_SIZE = 20;
+// Server pages of 20; the groups below sort the claims on the current page.
+const {
+  page,
+  items: claims,
+  total,
+  loading,
+  error,
+  load,
+  refreshing,
+  prefetch,
+} = usePagedList<StaffWarrantyClaim>({
+  key: () => queryKeys.warranty.technicianClaims({}),
+  pageSize: PAGE_SIZE,
+  fetch: (p, pageSize) => warrantyClaimsApi.listMine({ page: p, pageSize }),
+});
+const loadError = computed(() =>
+  error.value ? getSupportErrorMessage(error.value, 'Không thể tải danh sách bảo hành. Vui lòng thử lại.') : '',
+);
 const notice = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const busyId = ref('');
 
@@ -44,23 +63,15 @@ const groups = computed(() => [
   },
 ]);
 
-async function load() {
-  loading.value = true;
-  loadError.value = '';
-  try {
-    claims.value = await warrantyClaimsApi.listMine();
-  } catch (reason) {
-    loadError.value = getSupportErrorMessage(reason, 'Không thể tải danh sách bảo hành. Vui lòng thử lại.');
-  } finally {
-    loading.value = false;
-  }
-}
+const cache = useCacheUpdates();
 
 function replace(updated: StaffWarrantyClaim) {
+  cache.markChanged(affectedBy.warrantyChange);
   const index = claims.value.findIndex((c) => c.id === updated.id);
   if (updated.technician === null && index >= 0) {
     // Handed back to the manager: it no longer belongs to this technician.
     claims.value.splice(index, 1);
+    total.value = Math.max(0, total.value - 1);
   } else if (index >= 0) {
     claims.value[index] = updated;
   }
@@ -122,7 +133,6 @@ const hasNextStep = (claim: StaffWarrantyClaim) =>
   ['submitted', 'accepted', 'in_progress', 'inspected', 'awaiting_customer'].includes(claim.status);
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 
-onMounted(load);
 </script>
 
 <template>
@@ -130,7 +140,7 @@ onMounted(load);
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
-        <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
+        <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
         <span class="hidden sm:inline">Tải lại</span>
       </FhButton>
     </div>
@@ -275,6 +285,7 @@ onMounted(load);
           </ul>
         </section>
       </template>
+      <FhPagination v-model:page="page" :page-size="PAGE_SIZE" :total="total" :disabled="loading" @prefetch="prefetch" />
     </template>
 
     <TechnicianWarrantyActionModal

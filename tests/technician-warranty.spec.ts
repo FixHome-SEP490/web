@@ -16,6 +16,7 @@ import OrderComplaintPanel from '../src/components/customer/OrderComplaintPanel.
 import TechnicianWarrantyActionModal from '../src/components/technician/TechnicianWarrantyActionModal.vue';
 import TechnicianWarrantyPage from '../src/pages/technician/TechnicianWarrantyPage.vue';
 import { allowedComplaintTypes, complaintTypeLabel } from '../src/utils/order-complaint';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
 
 const claim = (overrides: Partial<StaffWarrantyClaim> = {}): StaffWarrantyClaim => ({
   id: 'claim-1',
@@ -64,10 +65,18 @@ const routerStub = { 'router-link': { template: '<a><slot /></a>' } };
 describe('warrantyClaimsApi (technician)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('lists my claims, optionally by status, and posts each command to its own route', async () => {
+  it('lists my claims a page at a time, optionally by status, and posts each command to its own route', async () => {
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: [claim()], meta: { page: 2, pageSize: 20, total: 21 } } });
+    const listed = await warrantyClaimsApi.listMine({ page: 2, pageSize: 20, status: 'accepted' });
+    expect(apiClientMock.get).toHaveBeenCalledWith('/warranty-claims/mine', { params: { page: 2, pageSize: 20, status: 'accepted' } });
+    expect(listed).toMatchObject({ total: 21, page: 2, pageSize: 20 });
+    expect(listed.items).toHaveLength(1);
+
+    // Without a status the filter is left out; an answer without meta is read as all there is.
     apiClientMock.get.mockResolvedValueOnce({ data: { data: [claim()] } });
-    await warrantyClaimsApi.listMine('accepted');
-    expect(apiClientMock.get).toHaveBeenCalledWith('/warranty-claims/mine', { params: { status: 'accepted' } });
+    const bare = await warrantyClaimsApi.listMine();
+    expect(apiClientMock.get).toHaveBeenLastCalledWith('/warranty-claims/mine', { params: { page: 1, pageSize: 20 } });
+    expect(bare.total).toBe(1);
 
     apiClientMock.post.mockResolvedValue({ data: { data: claim() } });
     await warrantyClaimsApi.accept('claim-1', { scheduledAt: '2026-10-02T02:00:00.000Z' });
@@ -201,6 +210,8 @@ describe('TechnicianWarrantyPage', () => {
     expect(empty.text()).toContain('Chưa có yêu cầu bảo hành');
 
     apiClientMock.get.mockRejectedValueOnce({ response: { data: { message: 'Không có quyền.' } } });
+    // A new session: the cached empty list must not answer for it.
+    installQueryClient(createTestQueryClient());
     const failed = mount(TechnicianWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
     expect(failed.text()).toContain('Không có quyền.');
@@ -230,6 +241,24 @@ describe('TechnicianWarrantyPage', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('Cần xử lý (1)');
     expect(wrapper.text()).toContain('Đã trả yêu cầu về cho quản lý dịch vụ');
+  });
+  it('asks the server for 20 claims a page and moves to the next page', async () => {
+    const first = Array.from({ length: 20 }, (_, i) => claim({ id: `p1-${i}`, status: 'submitted' }));
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: first, meta: { page: 1, pageSize: 20, total: 23 } } });
+    const wrapper = mount(TechnicianWarrantyPage, { global: { stubs: routerStub } });
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/warranty-claims/mine', { params: { page: 1, pageSize: 20 } });
+    expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–20 / 23');
+
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: [claim({ id: 'p2-0', status: 'resolved' })], meta: { page: 2, pageSize: 20, total: 23 } },
+    });
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click');
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenLastCalledWith('/warranty-claims/mine', { params: { page: 2, pageSize: 20 } });
+    expect(wrapper.find('[data-testid="warranty-claim-p1-0"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Đã đóng (1)');
+    expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('21–23 / 23');
   });
 });
 

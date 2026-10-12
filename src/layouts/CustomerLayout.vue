@@ -23,9 +23,11 @@ import AccountMenu from '../components/account/AccountMenu.vue';
 import CallOverlay from '../components/chat/CallOverlay.vue';
 import { toast } from 'vue-sonner';
 import { vnDateString } from '../utils/vn-time';
+import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
 const notifStore = useNotificationsStore();
 const callStore = useCallStore();
@@ -244,9 +246,11 @@ const handleLogout = async () => {
               :key="item.to"
               :ref="(el) => setNavItemRef(item.to, el)"
               :to="item.to"
-              class="relative h-16 px-4 inline-flex items-center gap-2 whitespace-nowrap text-ink-600 hover:text-ink-900 transition-colors"
-              :active-class="item.exact ? '' : 'text-brand-600 font-semibold'"
-              :exact-active-class="item.exact ? 'text-brand-600 font-semibold' : ''"
+              @mouseenter="prefetchRoute(item.to)"
+              @focus="prefetchRoute(item.to)"
+              class="h-9 px-3 rounded-xl inline-flex items-center gap-2 whitespace-nowrap hover:bg-ink-100 hover:text-ink-900 transition-colors"
+              :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
+              :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
             >
               <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" />
               <span>{{ item.label }}</span>

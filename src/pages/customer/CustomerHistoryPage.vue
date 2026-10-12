@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 import {
   History,
   ChevronRight,
-  RefreshCw,
+  Search,
   Wrench,
   User,
   MapPin,
@@ -14,8 +14,11 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhSkeleton } from '../../components';
+import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
+import { usePagedList } from '../../composables/usePagedList';
+import { queryKeys } from '../../lib/query-keys';
+import { SEARCH_MAX_LENGTH, useQueryChoice, useQuerySearch } from '../../composables/useQueryState';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString } from '../../utils/vn-time';
 
@@ -24,13 +27,30 @@ type Filter = 'all' | 'completed' | 'cancelled';
 const PAGE_SIZE = 20;
 const router = useRouter();
 
-const filter = ref<Filter>('all');
-const items = ref<RepairHistoryItem[]>([]);
-const total = ref(0);
-const page = ref(1);
-const loading = ref(true);
-const loadingMore = ref(false);
-const error = ref<string | null>(null);
+// Filter and page stay in the address bar (?filter=cancelled&page=2).
+const filter = useQueryChoice<Filter>('filter', ['all', 'completed', 'cancelled'], 'all');
+// Server search (order code, service; accents ignored), kept as ?q=.
+const { input: searchQuery, search } = useQuerySearch();
+const {
+  page,
+  items,
+  total,
+  loading,
+  error: loadError,
+  load,
+  changingPage,
+  prefetch,
+} = usePagedList<RepairHistoryItem>({
+  key: () => queryKeys.orders.history({ filter: filter.value, search: search.value }),
+  pageSize: PAGE_SIZE,
+  fetch: async (p, size) => {
+    const result = await ordersApi.getRepairHistory(p, size, filter.value === 'all' ? undefined : filter.value, search.value || undefined);
+    return { items: result.data, total: result.total, page: p, pageSize: size };
+  },
+});
+const error = computed(() =>
+  loadError.value ? userFacingError(loadError.value, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.') : null,
+);
 
 const tabs = computed<{ key: Filter; label: string; count: number }[]>(() => [
   { key: 'all', label: 'Tất cả', count: total.value },
@@ -71,77 +91,10 @@ function updateTabIndicator() {
   };
 }
 
-const hasMore = computed(() => items.value.length < total.value);
-
 const isCancelled = (item: RepairHistoryItem) => String(item.status).toLowerCase() === 'cancelled';
 const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancelledAt : item.completedAt);
-
-async function load(nextPage = 1) {
-  if (nextPage === 1) loading.value = true;
-  else loadingMore.value = true;
-  error.value = null;
-  try {
-    const result = await ordersApi.getRepairHistory(
-      nextPage,
-      PAGE_SIZE,
-      filter.value === 'all' ? undefined : filter.value,
-    );
-    items.value = nextPage === 1 ? result.data : [...items.value, ...result.data];
-    total.value = result.total;
-    page.value = nextPage;
-  } catch (err) {
-    error.value = userFacingError(err, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.');
-  } finally {
-    loading.value = false;
-    loadingMore.value = false;
-    void nextTick(updateTabIndicator);
-  }
-}
-
-// Infinite scroll sentinel observer
-const sentinelRef = ref<HTMLElement | null>(null);
-let observer: IntersectionObserver | null = null;
-
-function setupInfiniteScroll() {
-  if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
-
-  observer?.disconnect();
-  observer = new IntersectionObserver(
-    (entries) => {
-      const entry = entries[0];
-      if (
-        entry?.isIntersecting &&
-        hasMore.value &&
-        !loading.value &&
-        !loadingMore.value &&
-        !error.value
-      ) {
-        load(page.value + 1);
-      }
-    },
-    { rootMargin: '250px' },
-  );
-
-  if (sentinelRef.value && hasMore.value) {
-    observer.observe(sentinelRef.value);
-  }
-}
-
-watch([sentinelRef, hasMore, loading], () => {
-  void nextTick(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    if (sentinelRef.value && observer) {
-      observer.disconnect();
-      if (hasMore.value && !loading.value) {
-        observer.observe(sentinelRef.value);
-      }
-    }
-  });
-});
-
 watch(filter, () => {
   void nextTick(updateTabIndicator);
-  load(1);
 });
 
 onMounted(() => {
@@ -149,8 +102,6 @@ onMounted(() => {
   if (typeof document !== 'undefined' && document.fonts?.ready) {
     document.fonts.ready.then(() => updateTabIndicator());
   }
-  setupInfiniteScroll();
-  load(1);
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateTabIndicator);
   }
@@ -160,7 +111,6 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateTabIndicator);
   }
-  observer?.disconnect();
 });
 </script>
 
@@ -182,6 +132,20 @@ onUnmounted(() => {
         <Sparkles :size="14" class="text-brand-600" />
         <span>Tổng {{ total }} đơn trong lịch sử</span>
       </div>
+    </div>
+
+    <!-- Search input -->
+    <div class="relative">
+      <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+      <input
+        v-model="searchQuery"
+        type="text"
+        :maxlength="SEARCH_MAX_LENGTH"
+        placeholder="Tìm theo mã đơn, dịch vụ…"
+        aria-label="Tìm trong lịch sử"
+        data-testid="history-search"
+        class="w-full h-11 pl-10 pr-4 rounded-xl bg-white border border-ink-200 text-base sm:text-sm text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+      />
     </div>
 
     <!-- Interactive animated sliding tab bar -->
@@ -230,7 +194,7 @@ onUnmounted(() => {
         <AlertCircle :size="18" class="text-danger-600 shrink-0" />
         <span class="font-medium text-pretty">{{ error }}</span>
       </div>
-      <FhButton variant="secondary" size="sm" @click="load(1)">
+      <FhButton variant="secondary" size="sm" @click="load">
         Thử lại
       </FhButton>
     </div>
@@ -270,12 +234,12 @@ onUnmounted(() => {
         <History :size="32" />
       </div>
       <p class="text-lg font-semibold text-ink-900">
-        {{ filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
+        {{ search ? 'Không có đơn phù hợp.' : filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
       </p>
       <p class="text-sm text-ink-500 max-w-sm mx-auto">
-        Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.
+        {{ search ? 'Thử từ khoá khác.' : 'Đơn hoàn thành hoặc đã hủy sẽ hiện ở đây.' }}
       </p>
-      <div class="pt-2">
+      <div v-if="!search" class="pt-2">
         <FhButton variant="primary" size="sm" @click="router.push('/app/bookings/new')">
           Đặt thợ ngay
         </FhButton>
@@ -285,7 +249,9 @@ onUnmounted(() => {
     <!-- History items list -->
     <ul
       v-else-if="items.length > 0"
-      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs"
+      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs transition-opacity"
+      :class="{ 'opacity-60': changingPage }"
+      :aria-busy="changingPage"
     >
       <li
         v-for="item in items"
@@ -342,16 +308,10 @@ onUnmounted(() => {
 
           <!-- Status pill & arrow -->
           <div class="flex items-start gap-2 shrink-0 pt-0.5">
-            <span
-              class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap transition-colors"
-              :class="
-                isCancelled(item)
-                  ? 'bg-ink-200/60 text-ink-600'
-                  : 'bg-brand-50 text-brand-700'
-              "
-            >
-              {{ isCancelled(item) ? 'Đã hủy' : 'Hoàn thành' }}
-            </span>
+            <FhStatusPill
+              :status="item.status"
+              :label="isCancelled(item) ? 'Đã hủy' : 'Hoàn thành'"
+            />
             <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 hidden sm:block" />
           </div>
         </div>
@@ -382,35 +342,13 @@ onUnmounted(() => {
       </li>
     </ul>
 
-    <!-- Infinite scroll sentinel & status -->
-    <div
-      v-if="!loading && hasMore"
-      ref="sentinelRef"
-      data-testid="history-sentinel"
-      class="py-6 flex flex-col items-center justify-center gap-2"
-    >
-      <div v-if="loadingMore" class="flex items-center gap-2 text-sm text-ink-500 font-medium">
-        <RefreshCw :size="16" class="animate-spin text-brand-600" />
-        <span>Đang tải thêm lịch sử...</span>
-      </div>
-      <button
-        type="button"
-        class="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink-200 bg-white px-4 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50 disabled:opacity-50"
-        :disabled="loadingMore"
-        data-testid="history-load-more"
-        @click="load(page + 1)"
-      >
-        <RefreshCw :size="14" :class="loadingMore ? 'animate-spin' : ''" />
-        <span>{{ loadingMore ? 'Đang tải…' : 'Xem thêm' }}</span>
-      </button>
-    </div>
-
-    <!-- End of list message -->
-    <div
-      v-else-if="!loading && items.length > 0 && !hasMore"
-      class="py-6 text-center text-xs text-ink-400 font-medium"
-    >
-      Đã hiển thị tất cả lịch sử
-    </div>
+    <FhPagination
+      v-if="!error"
+      v-model:page="page"
+      :page-size="PAGE_SIZE"
+      :total="total"
+      :disabled="loading"
+      @prefetch="prefetch"
+    />
   </div>
 </template>

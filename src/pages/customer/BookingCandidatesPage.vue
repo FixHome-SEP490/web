@@ -173,8 +173,8 @@ const successMessage = computed(() => selectedCount.value === 1
         <div class="leading-relaxed text-pretty space-y-1">
           <p class="font-semibold text-ink-900">Chọn 1 hoặc 2 kỹ thuật viên theo thứ tự ưu tiên</p>
           <p class="text-xs sm:text-sm text-ink-600">
-            • <strong>Chọn 1 người:</strong> Lời mời sẽ được gửi ngay cho thợ đó.<br />
-            • <strong>Chọn 2 người:</strong> Thợ số 1 nhận lời mời trước. Thợ số 2 là dự phòng và chỉ nhận đơn nếu thợ số 1 từ chối hoặc hết giờ nhận.
+            • <strong>Chọn 1 người:</strong> Chọn 1 người thì người đó được mời ngay.<br />
+            • <strong>Chọn 2 người:</strong> Người số 1 nhận lời mời trước; người số 2 là dự phòng và chỉ được mời khi người số 1 từ chối hoặc hết hạn phản hồi.
           </p>
         </div>
       </div>
