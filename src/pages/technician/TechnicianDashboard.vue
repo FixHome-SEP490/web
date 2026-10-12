@@ -108,7 +108,7 @@ const handleAcceptTopInvitation = async () => {
       await router.push('/tech/jobs');
     }
   } catch {
-    alert('Không thể nhận đơn lúc này. Vui lòng kiểm tra lại danh sách công việc.');
+    toast.error('Không thể nhận đơn lúc này. Vui lòng kiểm tra lại danh sách công việc.');
   } finally {
     acceptingInvitation.value = false;
   }

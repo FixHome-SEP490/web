@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { composeAddressText } from '../../utils/address-text';
 // src/pages/customer/CustomerDashboard.vue
 // Home of the customer (PO 10/10/2026): one emphasis block (search), each action once.
 // "Đặt thợ ngay" and "Chẩn đoán bằng AI" live in the top bar, so the page does not repeat them.
@@ -72,7 +73,7 @@ const promises = [
 ];
 
 function formatAddress(addr: UserAddress): string {
-  return [addr.line1, addr.ward, addr.district, addr.province].filter(Boolean).join(', ');
+  return composeAddressText([addr.line1, addr.ward, addr.district, addr.province]);
 }
 
 watch(

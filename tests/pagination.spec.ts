@@ -87,6 +87,8 @@ describe('FhPagination', () => {
     expect(wrapper.get('[data-testid="pagination-page-5"]').classes()).not.toContain('hidden');
     expect(wrapper.get('[data-testid="pagination-page-4"]').classes()).toContain('hidden');
     expect(wrapper.get('[data-testid="pagination-page-4"]').classes()).toContain('sm:inline-flex');
+    // A bare `inline-flex` next to `hidden` wins in the stylesheet and shows every number on a phone.
+    expect(wrapper.get('[data-testid="pagination-page-4"]').classes()).not.toContain('inline-flex');
   });
 
   it('is the same pager in the console, also for lists that only know their page count', async () => {
