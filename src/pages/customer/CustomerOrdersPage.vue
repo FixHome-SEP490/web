@@ -52,9 +52,12 @@ const { input: searchQuery, search } = useQuerySearch();
 const emptyPage = <T,>(page: number, pageSize: number): Promise<PageResult<T>> =>
   Promise.resolve({ items: [], total: 0, page, pageSize });
 
-// Each tab is one or more server states, asked for in one request (`statuses=`).
+// The current Backend list contract only accepts one `status` per request.
+// Composite tabs therefore merge their individual status pages in the client.
+// This avoids the strict ValidationPipe rejecting the whole page for sending
+// the not-yet-supported `statuses` or `search` query parameters.
 const ORDER_STATES: Record<Tab, string[]> = {
-  ALL: [],
+  ALL: ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'],
   IN_PROGRESS: ['accepted', 'en_route', 'under_repair'],
   COMPLETED: ['completed'],
   CANCELLED: ['cancelled'],
@@ -67,21 +70,114 @@ const BOOKING_STATES: Record<Tab, string[]> = {
   CANCELLED: ['cancelled'],
 };
 
+type DatedItem = { id: string; createdAt: string };
+
+const BACKEND_PAGE_SIZE = 100;
+
+function foldSearchText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
+function newestFirst(a: DatedItem, b: DatedItem): number {
+  return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+}
+
+async function readStatusPrefix<T extends DatedItem>(
+  status: string,
+  wanted: number | null,
+  fetchPage: (page: number, pageSize: number, status: string) => Promise<PageResult<T>>,
+): Promise<{ items: T[]; total: number }> {
+  const chunkSize = wanted === null ? BACKEND_PAGE_SIZE : Math.min(BACKEND_PAGE_SIZE, Math.max(1, wanted));
+  const first = await fetchPage(1, chunkSize, status);
+  const target = wanted === null ? first.total : Math.min(first.total, wanted);
+  const pages = Math.ceil(target / chunkSize);
+  const rest: PageResult<T>[] = [];
+  // Keep at most one request per status in flight; a long history must not
+  // create an unbounded burst of requests while the customer is searching.
+  for (let nextPage = 2; nextPage <= pages; nextPage += 1) {
+    rest.push(await fetchPage(nextPage, chunkSize, status));
+  }
+  return { items: [first, ...rest].flatMap((result) => result.items).slice(0, target), total: first.total };
+}
+
+/**
+ * Produces an exact page across several separately paged statuses. Without a
+ * search, only the prefix that can reach the requested page is read. Search is
+ * performed locally because these two Backend endpoints do not accept it yet.
+ */
+async function readMergedPage<T extends DatedItem>(options: {
+  page: number;
+  pageSize: number;
+  statuses: readonly string[];
+  search: string;
+  fetchPage: (page: number, pageSize: number, status: string) => Promise<PageResult<T>>;
+  searchableText: (item: T) => string;
+}): Promise<PageResult<T>> {
+  const query = foldSearchText(options.search.trim());
+  const wanted = query ? null : options.page * options.pageSize;
+  const groups = await Promise.all(
+    options.statuses.map((status) => readStatusPrefix(status, wanted, options.fetchPage)),
+  );
+  const unique = new Map<string, T>();
+  for (const item of groups.flatMap((group) => group.items).sort(newestFirst)) unique.set(item.id, item);
+  const rows = [...unique.values()]
+    .sort(newestFirst)
+    .filter((item) => !query || foldSearchText(options.searchableText(item)).includes(query));
+  const total = query ? rows.length : groups.reduce((sum, group) => sum + group.total, 0);
+  const start = (options.page - 1) * options.pageSize;
+  return { items: rows.slice(start, start + options.pageSize), total, page: options.page, pageSize: options.pageSize };
+}
+
+function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
+  // The unfiltered endpoint already provides the exact ALL page efficiently.
+  if (activeTab.value === 'ALL' && !search.value) return ordersApi.getMyOrdersPage(page, pageSize);
+  const statuses = ORDER_STATES[activeTab.value];
+  if (statuses.length === 1 && !search.value) {
+    return ordersApi.getMyOrdersPage(page, pageSize, { status: statuses[0] });
+  }
+  return readMergedPage({
+    page,
+    pageSize,
+    statuses,
+    search: search.value,
+    fetchPage: (statusPage, statusPageSize, status) =>
+      ordersApi.getMyOrdersPage(statusPage, statusPageSize, { status }),
+    searchableText: (order) => `${order.code} ${order.serviceName}`,
+  });
+}
+
+function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<BookingItem>> {
+  const statuses = BOOKING_STATES[activeTab.value];
+  if (statuses.length === 0) return emptyPage<BookingItem>(page, pageSize);
+  if (statuses.length === 1 && !search.value) {
+    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0] });
+  }
+  return readMergedPage({
+    page,
+    pageSize,
+    statuses,
+    search: search.value,
+    fetchPage: (statusPage, statusPageSize, status) =>
+      bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status }),
+    searchableText: (booking) => booking.serviceName ?? '',
+  });
+}
+
 const ordersList = usePagedList<ServiceOrderItem>({
   key: () => queryKeys.orders.customerList({ tab: activeTab.value, search: search.value }),
   pageSize: PAGE_SIZE,
-  fetch: (page, size) =>
-    ordersApi.getMyOrdersPage(page, size, { statuses: ORDER_STATES[activeTab.value], search: search.value }),
+  fetch: fetchOrdersPage,
 });
 const bookingsList = usePagedList<BookingItem>({
   key: () => queryKeys.bookings.customerList({ tab: activeTab.value, search: search.value }),
   pageSize: PAGE_SIZE,
   page: useQueryPage('requestsPage'),
-  fetch: (page, size) => {
-    const states = BOOKING_STATES[activeTab.value];
-    if (states.length === 0) return emptyPage<BookingItem>(page, size);
-    return bookingsApi.getMyBookingsPage(page, size, { statuses: states, search: search.value });
-  },
+  fetch: fetchBookingsPage,
 });
 
 const {
