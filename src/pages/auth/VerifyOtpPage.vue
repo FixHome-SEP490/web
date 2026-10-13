@@ -2,8 +2,9 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Mail, AlertCircle, CheckCircle2, ArrowLeft, Clock, RotateCcw } from 'lucide-vue-next';
-import { FhButton } from '../../components';
+import { Mail, ArrowLeft, Clock, RotateCcw } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import { extractApiErrorMessage } from '../../utils/input-validation';
 
 const router = useRouter();
 const route = useRoute();
@@ -13,7 +14,8 @@ const email = ref((route.query.email as string) || '');
 const digits = ref<string[]>(['', '', '', '', '', '']);
 const inputRefs = ref<HTMLInputElement[]>([]);
 const errorMessage = ref('');
-const successMessage = ref('');
+const isCooldown = ref(false);
+
 const resendCooldown = ref(60);
 let cooldownInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -77,7 +79,6 @@ const handleInput = (index: number, event: Event) => {
   const value = input.value.replace(/\D/g, ''); // only digits
 
   errorMessage.value = '';
-  successMessage.value = '';
 
   if (value.length > 0) {
     digits.value[index] = value.slice(-1); // take the last entered char
@@ -129,19 +130,33 @@ const handlePaste = (event: ClipboardEvent) => {
 };
 
 const handleVerify = async () => {
+  if (isCooldown.value || authStore.loading) return;
+
   if (!isComplete.value) {
     errorMessage.value = 'Vui lòng nhập đầy đủ mã OTP 6 chữ số';
+    toast.error(errorMessage.value);
     return;
   }
 
+  if (expireSeconds.value <= 0) {
+    errorMessage.value = 'Mã OTP đã hết hạn. Vui lòng bấm Gửi lại mã.';
+    toast.error(errorMessage.value);
+    return;
+  }
+
+  isCooldown.value = true;
   errorMessage.value = '';
-  successMessage.value = '';
 
   try {
     const verifiedUser = await authStore.verifyRegisterOtp({
       email: email.value.trim().toLowerCase(),
       otp: otpCode.value,
     });
+
+    toast.success('Xác thực tài khoản thành công!', {
+      description: `Chào mừng ${verifiedUser?.fullName || 'bạn'} đến với FixHome.`,
+    });
+
     // Check if user is technician: route to onboarding wizard
     const role = (verifiedUser?.role || (route.query.role as string) || '').toUpperCase();
     if (role === 'TECHNICIAN') {
@@ -150,17 +165,21 @@ const handleVerify = async () => {
       router.push('/app');
     }
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      'Mã OTP không chính xác hoặc đã hết hạn';
+    errorMessage.value = extractApiErrorMessage(
+      err,
+      'Mã OTP không chính xác hoặc đã hết hạn. Vui lòng thử lại.',
+    );
+    toast.error(errorMessage.value);
 
-    // Highlight and focus on the first box again
+    // Highlight and refocus on the first box
     nextTick(() => {
       inputRefs.value[0]?.focus();
       inputRefs.value[0]?.select();
     });
+  } finally {
+    setTimeout(() => {
+      isCooldown.value = false;
+    }, 1500);
   }
 };
 
@@ -168,11 +187,12 @@ const handleResend = async () => {
   if (resendCooldown.value > 0 || authStore.loading) return;
 
   errorMessage.value = '';
-  successMessage.value = '';
 
   try {
     const res = await authStore.resendRegisterOtp(email.value.trim().toLowerCase());
-    successMessage.value = res?.message || 'Mã OTP mới đã được gửi đến email của bạn!';
+    toast.success('Mã OTP mới đã được gửi!', {
+      description: res?.message || 'Vui lòng kiểm tra email của bạn.',
+    });
     digits.value = ['', '', '', '', '', ''];
     startCooldown(60);
     startExpireTimer();
@@ -180,65 +200,62 @@ const handleResend = async () => {
       inputRefs.value[0]?.focus();
     });
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      'Không thể gửi lại mã OTP. Vui lòng thử lại sau.';
+    errorMessage.value = extractApiErrorMessage(
+      err,
+      'Không thể gửi lại mã OTP. Vui lòng thử lại sau.',
+    );
+    toast.error(errorMessage.value);
   }
 };
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Navigation Back Link -->
-    <div>
+  <div class="w-full flex flex-col">
+    <!-- Back Navigation -->
+    <div class="mb-5">
       <router-link
         to="/register"
-        class="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-500 hover:text-brand-600 transition-colors group"
+        class="inline-flex items-center gap-1.5 text-[13px] font-bold text-slate-500 hover:text-slate-800 transition-colors group cursor-pointer"
       >
-        <ArrowLeft :size="15" class="transition-transform group-hover:-translate-x-0.5" />
+        <ArrowLeft :size="16" class="transition-transform group-hover:-translate-x-0.5 text-slate-400 group-hover:text-slate-700" />
         Quay lại đăng ký
       </router-link>
     </div>
 
     <!-- Header Section -->
-    <div class="space-y-2 text-center sm:text-left">
-      <h2 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Xác thực tài khoản</h2>
-      <p class="text-sm text-ink-500 leading-relaxed">
-        Nhập mã OTP 6 chữ số vừa được gửi đến địa chỉ email:
+    <div class="text-left mb-6 space-y-1.5">
+      <h2 class="text-3xl font-black text-slate-900 tracking-tight">Xác thực tài khoản</h2>
+      <p class="text-slate-500 font-medium text-[13px] leading-relaxed">
+        Nhập mã OTP 6 chữ số vừa được gửi đến địa chỉ email của bạn.
       </p>
-      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-sm)] bg-brand-50 border border-brand-200/60 text-brand-900 text-xs font-medium">
-        <Mail :size="14" class="text-brand-600 shrink-0" />
-        <span class="font-semibold">{{ email }}</span>
+    </div>
+
+    <!-- Redesigned Target Email Badge -->
+    <div class="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs mb-5">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center shrink-0 text-brand-600">
+          <Mail :size="15" />
+        </div>
+        <div class="min-w-0 text-left">
+          <p class="text-[11px] font-semibold text-slate-400 leading-tight">Mã gửi đến email</p>
+          <p class="text-[13px] font-bold text-slate-800 truncate leading-snug">{{ email }}</p>
+        </div>
       </div>
+      <router-link
+        to="/register"
+        class="text-[12px] text-brand-600 hover:text-brand-700 font-bold px-2.5 py-1.5 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer shrink-0"
+      >
+        Đổi email
+      </router-link>
     </div>
 
-    <!-- Error Alert Box -->
-    <div
-      v-if="errorMessage"
-      class="p-3.5 rounded-[var(--radius-sm)] bg-danger-50 border border-danger-200 text-danger-800 text-sm flex items-start gap-2.5"
-    >
-      <AlertCircle :size="18" class="text-danger-600 shrink-0 mt-0.5" />
-      <span>{{ errorMessage }}</span>
-    </div>
-
-    <!-- Success Alert Box -->
-    <div
-      v-if="successMessage"
-      class="p-3.5 rounded-[var(--radius-sm)] bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5"
-    >
-      <CheckCircle2 :size="18" class="text-emerald-600 shrink-0 mt-0.5" />
-      <span>{{ successMessage }}</span>
-    </div>
-
-    <form class="space-y-6" @submit.prevent="handleVerify">
+    <form class="space-y-5" @submit.prevent="handleVerify">
       <!-- 6-Digit OTP Input Grid -->
-      <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider text-ink-700 mb-3 text-center sm:text-left">
-          Mã xác thực OTP (6 chữ số)
+      <div class="space-y-2">
+        <label class="block text-[13px] font-bold text-slate-700">
+          Mã xác thực OTP <span class="text-red-500">*</span>
         </label>
-        <div class="flex items-center justify-between gap-2 sm:gap-3" @paste="handlePaste">
+        <div class="flex items-center justify-between gap-2 sm:gap-2.5" @paste="handlePaste">
           <input
             v-for="(digit, idx) in digits"
             :key="idx"
@@ -249,55 +266,65 @@ const handleResend = async () => {
             pattern="[0-9]*"
             maxlength="1"
             autocomplete="one-time-code"
-            class="w-12 h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold font-num bg-white border border-ink-200 rounded-[var(--radius-sm)] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 transition-all shadow-sm"
-            :class="{ 'border-brand-600 ring-2 ring-brand-600/20': digit }"
+            class="w-12 h-14 sm:w-13 sm:h-15 text-center text-xl sm:text-2xl font-bold bg-slate-50/50 border rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 shadow-sm"
+            :class="[
+              digit ? 'border-brand-500 bg-white ring-2 ring-brand-500/15' : 'border-slate-200',
+              errorMessage ? 'border-red-400' : ''
+            ]"
             @input="handleInput(idx, $event)"
             @keydown="handleKeyDown(idx, $event)"
           />
         </div>
+        <p v-if="errorMessage" class="text-[11px] leading-tight text-red-500 font-medium pt-0.5">
+          {{ errorMessage }}
+        </p>
       </div>
 
       <!-- Expiry Countdown & Resend Info -->
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-ink-500 pt-1">
-        <div class="flex items-center gap-1.5 font-num" :class="expireSeconds < 60 ? 'text-danger-600 font-bold' : ''">
-          <Clock :size="14" />
-          <span>Thời hạn mã: {{ formattedExpireTime }}</span>
+      <div class="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+        <div
+          class="flex items-center gap-1.5 font-medium"
+          :class="expireSeconds < 60 ? 'text-red-500 font-bold animate-pulse' : ''"
+        >
+          <Clock :size="14" class="shrink-0" />
+          <span>Thời hạn: <strong class="font-bold">{{ formattedExpireTime }}</strong></span>
         </div>
 
         <div>
           <button
             v-if="resendCooldown === 0"
             type="button"
-            class="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 font-semibold cursor-pointer transition-colors"
+            class="inline-flex items-center gap-1 text-[12px] text-brand-600 hover:text-brand-700 font-bold cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="authStore.loading"
             @click="handleResend"
           >
             <RotateCcw :size="13" />
             Gửi lại mã OTP
           </button>
-          <span v-else class="text-ink-400 font-num">
-            Gửi lại mã sau ({{ resendCooldown }}s)
+          <span v-else class="text-[12px] text-slate-400 font-medium">
+            Gửi lại sau {{ resendCooldown }}s
           </span>
         </div>
       </div>
 
       <!-- Submit Action -->
-      <FhButton
+      <button
         type="submit"
-        variant="primary"
-        size="lg"
-        block
-        :loading="authStore.loading"
-        :disabled="!isComplete || expireSeconds <= 0"
-        class="mt-2"
+        class="w-full h-10 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-bold border border-slate-300 rounded-xl transition-all mt-4 flex items-center justify-center gap-2 shadow-sm hover:shadow-md cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white disabled:shadow-none"
+        :disabled="!isComplete || expireSeconds <= 0 || authStore.loading || isCooldown"
       >
-        Xác nhận & Kích hoạt tài khoản
-      </FhButton>
+        <span
+          v-if="authStore.loading"
+          class="w-4 h-4 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin"
+        ></span>
+        <span>{{ authStore.loading ? 'Đang xác thực...' : 'Xác thực & Kích hoạt tài khoản' }}</span>
+      </button>
     </form>
 
     <!-- Footer Links -->
-    <div class="text-center text-sm text-ink-600 pt-2">
-      Chưa nhận được email? Kiểm tra hộp thư Rác/Spam hoặc
-      <router-link to="/login" class="text-brand-600 hover:text-brand-700 font-semibold ml-1">
+    <div class="text-center text-[13px] text-slate-500 font-medium pt-6">
+      Chưa nhận được email? Kiểm tra hộp thư Rác (Spam) hoặc
+      <router-link to="/login" class="text-brand-600 hover:text-brand-700 font-bold ml-1">
         Đăng nhập
       </router-link>
     </div>

@@ -83,6 +83,10 @@ const displayedNotifications = computed(() => {
   return notifStore.notifications;
 });
 
+const effectiveUnreadCount = computed(() => {
+  return Math.max(notifStore.unreadCount, notifStore.unreadNotifications.length);
+});
+
 const formatTimeAgo = (dateStr: string): string => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -197,14 +201,11 @@ const handleViewAll = () => {
 
       <!-- Unread Badge with Ping Animation -->
       <span
-        v-if="notifStore.unreadCount > 0"
-        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-bold text-white bg-danger-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
+        v-if="effectiveUnreadCount > 0"
+        class="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1.5 flex items-center justify-center text-[10px] font-bold text-white bg-danger-600 rounded-full shadow-xs ring-2 ring-white font-num leading-none"
       >
-        <span
-          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-400 opacity-75"
-        ></span>
         <span class="relative">
-          {{ notifStore.unreadCount > 99 ? '99+' : notifStore.unreadCount }}
+          {{ effectiveUnreadCount > 99 ? '99+' : effectiveUnreadCount }}
         </span>
       </span>
     </button>
@@ -227,15 +228,15 @@ const handleViewAll = () => {
           <div class="flex items-center gap-2">
             <span class="font-bold text-sm text-ink-900">Thông báo</span>
             <span
-              v-if="notifStore.unreadCount > 0"
+              v-if="effectiveUnreadCount > 0"
               class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-brand-100 text-brand-700 font-num"
             >
-              {{ notifStore.unreadCount }} mới
+              {{ effectiveUnreadCount }} mới
             </span>
           </div>
 
           <button
-            v-if="notifStore.unreadCount > 0"
+            v-if="effectiveUnreadCount > 0"
             type="button"
             class="text-[11px] font-medium text-ink-500 hover:text-brand-600 transition-colors flex items-center gap-1"
             title="Đánh dấu đã đọc tất cả"
@@ -254,7 +255,7 @@ const handleViewAll = () => {
             :class="activeTab === 'all' ? 'text-brand-600 font-bold border-b-2 border-brand-600' : 'text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'all'"
           >
-            Tất cả ({{ notifStore.notifications.length }})
+            Tất cả ({{ notifStore.total || notifStore.notifications.length }})
           </button>
           <button
             type="button"
@@ -262,7 +263,7 @@ const handleViewAll = () => {
             :class="activeTab === 'unread' ? 'text-brand-600 font-bold border-b-2 border-brand-600' : 'text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'unread'"
           >
-            Chưa đọc ({{ notifStore.unreadCount }})
+            Chưa đọc ({{ effectiveUnreadCount }})
           </button>
         </div>
 

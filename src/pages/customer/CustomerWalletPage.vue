@@ -7,7 +7,7 @@ import { useRoute } from 'vue-router';
 import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { customerWalletApi, customerWalletTypeLabels, isIncomingWalletTransaction, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
 import { usePagedList } from '../../composables/usePagedList';
-import type { PageResult } from '../../api/paging';
+import { pageCount, type PageResult } from '../../api/paging';
 import { queryKeys } from '../../lib/query-keys';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
@@ -45,6 +45,7 @@ const {
 });
 const balance = computed(() => result.value?.balance ?? 0);
 const balanceLoaded = computed(() => result.value !== null);
+const totalPages = computed(() => pageCount(total.value, PAGE_SIZE));
 const loadError = computed(() => (error.value ? userFacingError(error.value, 'Chưa tải được ví, vui lòng thử lại.') : ''));
 
 const amountText = ref('');
@@ -82,15 +83,48 @@ async function topUp() {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto space-y-5 pb-12">
-    <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Ví của tôi</h1>
+  <div class="max-w-3xl mx-auto space-y-6 pb-16">
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
+        <Wallet :size="28" class="text-brand-600 shrink-0" />
+        <span>Ví của tôi</span>
+      </h1>
+      <p class="text-sm text-ink-500 mt-1">
+        Nạp tiền và theo dõi các khoản thanh toán đơn sửa chữa, hoàn tiền linh kiện tiện lợi.
+      </p>
+    </div>
 
-    <p v-if="paymentResult?.ok" role="status" data-testid="topup-result" class="rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-800 text-pretty">
-      Đã nạp<template v-if="paymentResult.amount"> <FhMoney :amount="paymentResult.amount" /></template> vào ví. Số dư cập nhật khi VNPay xác nhận, thường trong vài giây.
-    </p>
-    <p v-else-if="paymentResult" role="alert" data-testid="topup-result" class="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800 text-pretty">
-      Giao dịch nạp ví chưa thành công, tiền chưa bị trừ. Bạn có thể thử lại.
-    </p>
+    <!-- VNPay payment result banner -->
+    <div
+      v-if="paymentResult?.ok"
+      role="status"
+      data-testid="topup-result"
+      class="rounded-2xl border border-success-200 bg-success-50/90 p-4 text-sm text-success-800 flex items-start gap-3 shadow-xs"
+    >
+      <CheckCircle2 :size="20" class="text-success-600 shrink-0 mt-0.5" />
+      <div class="space-y-0.5">
+        <p class="font-bold">Nạp tiền thành công!</p>
+        <p class="text-pretty">
+          Đã nạp<template v-if="paymentResult.amount"> <span class="font-bold font-num"><FhMoney :amount="paymentResult.amount" /></span></template> vào ví. Số dư cập nhật khi VNPay xác nhận, thường trong vài giây.
+        </p>
+      </div>
+    </div>
+
+    <div
+      v-else-if="paymentResult"
+      role="alert"
+      data-testid="topup-result"
+      class="rounded-2xl border border-danger-200 bg-danger-50/90 p-4 text-sm text-danger-800 flex items-start gap-3 shadow-xs"
+    >
+      <AlertCircle :size="20" class="text-danger-600 shrink-0 mt-0.5" />
+      <div class="space-y-0.5">
+        <p class="font-bold">Giao dịch nạp ví chưa thành công</p>
+        <p class="text-pretty">
+          Giao dịch nạp ví chưa thành công, tiền chưa bị trừ. Bạn có thể thử lại.
+        </p>
+      </div>
+    </div>
 
     <!-- Balance and top-up: one surface -->
     <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden">
@@ -104,47 +138,96 @@ async function topUp() {
         <p class="text-sm text-ink-500">Dùng để trả đơn sửa chữa, không rút ra được.</p>
       </div>
 
-      <div class="p-5 border-t border-ink-100 space-y-3">
-        <h2 class="text-base font-semibold text-ink-900">Nạp tiền qua VNPay</h2>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="preset in PRESETS"
-            :key="preset"
-            type="button"
-            class="h-9 rounded-xl border px-3 text-sm font-semibold whitespace-nowrap"
-            :class="Number(amountText) === preset ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-700 hover:border-ink-300'"
-            :aria-pressed="Number(amountText) === preset"
-            @click="amountText = String(preset)"
-          >
-            <FhMoney :amount="preset" />
-          </button>
+      <!-- Top-up Section -->
+      <div class="p-6 sm:p-8 space-y-5">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
+            <CreditCard :size="18" class="text-brand-600" />
+            <span>Nạp tiền qua VNPay</span>
+          </h2>
+          <span class="text-xs text-ink-500 font-medium hidden sm:inline">Hỗ trợ mọi ngân hàng & thẻ ATM / QR</span>
         </div>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input
-            v-model="amountText"
-            type="number"
-            inputmode="numeric"
-            min="10000"
-            max="50000000"
-            step="10000"
-            placeholder="Số tiền khác"
-            aria-label="Số tiền nạp"
-            data-testid="topup-amount"
-            class="w-full sm:flex-1 min-w-0 h-11 rounded-xl border border-ink-200 px-3 text-base sm:text-sm"
-          />
-          <FhButton variant="primary" size="md" :loading="redirecting" data-testid="topup-submit" @click="topUp">Nạp qua VNPay</FhButton>
+
+        <!-- Presets Buttons -->
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-ink-600">Chọn nhanh số tiền nạp:</p>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <button
+              v-for="preset in PRESETS"
+              :key="preset"
+              type="button"
+              class="h-11 rounded-xl border text-sm font-bold font-num whitespace-nowrap transition-all flex items-center justify-center cursor-pointer select-none"
+              :class="Number(amountText) === preset
+                ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs scale-[1.02]'
+                : 'border-ink-200 text-ink-700 bg-white hover:border-brand-300 hover:bg-brand-50/30'"
+              :aria-pressed="Number(amountText) === preset"
+              @click="amountText = String(preset)"
+            >
+              <FhMoney :amount="preset" />
+            </button>
+          </div>
         </div>
-        <p v-if="topUpError" role="alert" class="text-sm text-danger-700">{{ topUpError }}</p>
+
+        <!-- Custom Input & Submit Button -->
+        <div class="space-y-2 pt-1">
+          <p class="text-xs font-medium text-ink-600">Hoặc nhập số tiền khác:</p>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1 min-w-0">
+              <input
+                v-model="amountText"
+                type="number"
+                inputmode="numeric"
+                min="10000"
+                max="50000000"
+                step="10000"
+                placeholder="Số tiền khác (từ 10.000 ₫)"
+                aria-label="Số tiền nạp"
+                data-testid="topup-amount"
+                class="w-full h-11.5 rounded-xl border border-ink-200 px-3.5 text-base sm:text-sm font-semibold font-num text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:font-normal placeholder:text-ink-400"
+              />
+            </div>
+            <FhButton
+              variant="primary"
+              size="md"
+              :loading="redirecting"
+              data-testid="topup-submit"
+              class="h-11.5 px-6 font-semibold shrink-0"
+              @click="topUp"
+            >
+              Nạp qua VNPay
+            </FhButton>
+          </div>
+          <p v-if="topUpError" role="alert" class="text-xs font-semibold text-danger-700 flex items-center gap-1.5 pt-1">
+            <AlertCircle :size="14" class="shrink-0" />
+            <span>{{ topUpError }}</span>
+          </p>
+        </div>
       </div>
     </section>
 
-    <!-- History -->
-    <section class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2">
-      <h2 class="text-base font-semibold text-ink-900">Lịch sử giao dịch</h2>
-      <div v-if="loading" class="space-y-3 py-1" aria-busy="true" aria-label="Đang tải giao dịch">
-        <div v-for="i in 3" :key="i" class="flex items-center justify-between gap-3">
-          <FhSkeleton width="45%" height="16px" />
-          <span class="w-24"><FhSkeleton height="16px" /></span>
+    <!-- History Section -->
+    <section class="rounded-3xl border border-ink-200/90 bg-white p-6 sm:p-8 space-y-4 shadow-xs">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
+          <RefreshCw :size="18" class="text-brand-600" />
+          <span>Lịch sử giao dịch</span>
+        </h2>
+        <span v-if="transactions.length > 0" class="text-xs text-ink-500 font-num">
+          Trang {{ page }} / {{ totalPages || 1 }}
+        </span>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div v-if="loading" class="space-y-4 py-2" aria-busy="true" aria-label="Đang tải giao dịch">
+        <div v-for="i in 3" :key="i" class="flex items-center justify-between gap-3 py-2 border-b border-ink-50">
+          <div class="flex items-center gap-3 w-1/2">
+            <FhSkeleton width="36px" height="36px" rounded="lg" />
+            <div class="space-y-1 flex-1">
+              <FhSkeleton width="60%" height="16px" />
+              <FhSkeleton width="40%" height="12px" />
+            </div>
+          </div>
+          <FhSkeleton width="90px" height="20px" />
         </div>
       </div>
       <div v-else-if="loadError" class="flex flex-wrap items-center justify-between gap-3 py-1">
@@ -165,11 +248,17 @@ async function topUp() {
             <p v-if="t.description" class="text-ink-500 text-pretty">{{ t.description }}</p>
             <p class="text-ink-500 font-num whitespace-nowrap">{{ vnDateTimeString(t.createdAt) }}</p>
           </div>
-          <div class="shrink-0 text-right">
-            <p class="font-semibold font-num whitespace-nowrap" :class="isIncoming(t) ? 'text-success-700' : 'text-ink-900'">
+
+          <div class="shrink-0 text-right space-y-0.5">
+            <p
+              class="font-bold font-num text-sm whitespace-nowrap"
+              :class="isIncoming(t) ? 'text-success-700' : 'text-ink-900'"
+            >
               {{ isIncoming(t) ? '+' : '−' }}<FhMoney :amount="t.amount" />
             </p>
-            <p class="text-ink-500 whitespace-nowrap">Số dư <FhMoney :amount="t.balanceAfter" /></p>
+            <p class="text-xs text-ink-500 whitespace-nowrap font-num">
+              Số dư <span class="font-medium text-ink-700"><FhMoney :amount="t.balanceAfter" /></span>
+            </p>
           </div>
         </li>
       </ul>
