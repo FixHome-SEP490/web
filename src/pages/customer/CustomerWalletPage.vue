@@ -1,10 +1,15 @@
 <script setup lang="ts">
 // Customer wallet (PO 08/10/2026): the balance, a VNPay top-up, and the
-// history of top-ups, invoice payments and refunds. Money in the wallet pays
-// FixHome orders; it cannot be withdrawn.
+// history of top-ups, invoice payments, refunds and withdrawals. Since PO
+// 14/10/2026 the balance can also be withdrawn to the customer's bank account
+// after a one-time identity check (CustomerWithdrawPanel).
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
+import CustomerWithdrawPanel from '../../components/customer/CustomerWithdrawPanel.vue';
+import CustomerWithdrawalHistory from '../../components/customer/CustomerWithdrawalHistory.vue';
+import { useQueryChoice } from '../../composables/useQueryState';
 import { customerWalletApi, customerWalletTypeLabels, isIncomingWalletTransaction, type CustomerWalletTransaction } from '../../api/customer-wallet.api';
 import { usePagedList } from '../../composables/usePagedList';
 import type { PageResult } from '../../api/paging';
@@ -13,6 +18,8 @@ import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
 const route = useRoute();
+// Top up or withdraw; ?action=withdraw opens the withdrawal (the identity page links back to it).
+const action = useQueryChoice<'topup' | 'withdraw'>('action', ['topup', 'withdraw'], 'topup');
 const PRESETS = [100_000, 200_000, 500_000, 1_000_000];
 const MIN = 10_000;
 const MAX = 50_000_000;
@@ -59,6 +66,11 @@ const paymentResult = computed(() => {
   return { ok: status === 'success', amount: Number.isFinite(amount) ? amount : null };
 });
 
+const ACTIONS = [
+  { key: 'topup' as const, label: 'Nạp tiền', icon: ArrowDownLeft },
+  { key: 'withdraw' as const, label: 'Rút tiền', icon: ArrowUpRight },
+];
+
 const LABELS = customerWalletTypeLabels;
 const isIncoming = isIncomingWalletTransaction;
 
@@ -101,10 +113,29 @@ async function topUp() {
           <FhMoney v-else-if="balanceLoaded" :amount="balance" emphasis />
           <span v-else>—</span>
         </p>
-        <p class="text-sm text-ink-500">Dùng để trả đơn sửa chữa, không rút ra được.</p>
+        <p class="text-sm text-ink-500 text-pretty">Dùng để trả đơn sửa chữa hoặc rút về tài khoản ngân hàng của bạn.</p>
+        <div class="grid grid-cols-2 gap-2 pt-3" role="group" aria-label="Chọn thao tác với ví">
+          <button
+            v-for="choice in ACTIONS"
+            :key="choice.key"
+            type="button"
+            class="h-11 rounded-xl border text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            :class="action === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-700 hover:border-ink-300'"
+            :aria-pressed="action === choice.key"
+            :data-testid="`wallet-action-${choice.key}`"
+            @click="action = choice.key"
+          >
+            <component :is="choice.icon" :size="16" aria-hidden="true" />
+            {{ choice.label }}
+          </button>
+        </div>
       </div>
 
-      <div class="p-5 border-t border-ink-100 space-y-3">
+      <div v-if="action === 'withdraw'" class="p-5 border-t border-ink-100">
+        <CustomerWithdrawPanel />
+      </div>
+
+      <div v-else class="p-5 border-t border-ink-100 space-y-3">
         <h2 class="text-base font-semibold text-ink-900">Nạp tiền qua VNPay</h2>
         <div class="flex flex-wrap gap-2">
           <button
@@ -137,6 +168,8 @@ async function topUp() {
         <p v-if="topUpError" role="alert" class="text-sm text-danger-700">{{ topUpError }}</p>
       </div>
     </section>
+
+    <CustomerWithdrawalHistory v-if="action === 'withdraw'" />
 
     <!-- History -->
     <section class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2">

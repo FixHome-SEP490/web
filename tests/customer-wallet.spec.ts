@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-// Customer wallet (PO 08/10/2026): balance, VNPay top-up, history; no withdrawal.
+// Customer wallet (PO 08/10/2026): balance, VNPay top-up, history. Since PO 14/10/2026 the
+// balance can also be withdrawn (tests/customer-withdrawal.spec.ts covers that flow).
 const { summary, topUp, route } = vi.hoisted(() => ({ summary: vi.fn(), topUp: vi.fn(), route: { query: {} as Record<string, string> } }));
 vi.mock('../src/api/customer-wallet.api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../src/api/customer-wallet.api')>()), customerWalletApi: { summary, topUp } }));
 vi.mock('vue-router', () => ({ useRoute: () => route }));
@@ -24,18 +25,39 @@ describe('Customer wallet page', () => {
     summary.mockResolvedValue(wallet);
   });
 
-  it('shows the balance, says it cannot be withdrawn and lists money in and out', async () => {
+  it('shows the balance, offers top-up and withdrawal, and lists money in and out', async () => {
     const w = mount(CustomerWalletPage);
     await flushPromises();
     expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
-    expect(w.text()).toContain('không rút ra được');
-    expect(w.text()).not.toMatch(/Rút tiền/);
+    expect(w.text()).toContain('rút về tài khoản ngân hàng');
+    expect(w.text()).not.toContain('không rút ra được');
+    // Top-up is open by default; the withdrawal opens on its own button.
+    expect(w.get('[data-testid="wallet-action-topup"]').attributes('aria-pressed')).toBe('true');
+    expect(w.get('[data-testid="wallet-action-withdraw"]').text()).toContain('Rút tiền');
+    expect(w.find('[data-testid="withdraw-panel"]').exists()).toBe(false);
     const rows = w.get('[data-testid="wallet-transactions"]').findAll('li').map((li) => li.text().replace(/\s+/g, ' '));
     expect(rows[0]).toContain('Hoàn tiền');
     expect(rows[0]).toContain('+');
     expect(rows[1]).toContain('Thanh toán đơn');
     expect(rows[1]).toContain('−');
     expect(rows[2]).toContain('Nạp ví');
+  });
+
+  it('labels a withdrawal as money out and its refund as money in', async () => {
+    summary.mockResolvedValue({
+      ...wallet,
+      transactions: [
+        { id: 'w2', type: 'withdrawal_refund', amount: 300000, balanceAfter: 750000, description: null, createdAt: '2026-10-14T10:00:00Z' },
+        { id: 'w1', type: 'withdrawal', amount: 300000, balanceAfter: 450000, description: null, createdAt: '2026-10-14T09:00:00Z' },
+      ],
+    });
+    const w = mount(CustomerWalletPage);
+    await flushPromises();
+    const rows = w.get('[data-testid="wallet-transactions"]').findAll('li').map((li) => li.text().replace(/\s+/g, ' '));
+    expect(rows[0]).toContain('Hoàn tiền rút không thành công');
+    expect(rows[0]).toContain('+300.000');
+    expect(rows[1]).toContain('Rút về ngân hàng');
+    expect(rows[1]).toContain('−300.000');
   });
 
   it('pages the history with numbers instead of "Xem thêm"', async () => {

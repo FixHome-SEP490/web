@@ -151,6 +151,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Ví của tôi' },
       },
       {
+        // Once, before the first withdrawal (PO 14/10/2026).
+        path: 'kyc',
+        name: 'customer-kyc',
+        component: () => import('../pages/customer/CustomerKycPage.vue'),
+        meta: { title: 'Xác minh danh tính' },
+      },
+      {
         path: 'warranties',
         name: 'customer-warranties',
         component: () => import('../pages/customer/CustomerWarrantiesPage.vue'),
@@ -310,8 +317,9 @@ const routes: RouteRecordRaw[] = [
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        // KYC decisions are Admin's (BRX-041); the page has nothing else.
-        meta: { title: 'Duyệt hồ sơ kỹ thuật viên', roles: ['ADMIN'] },
+        // KYC decisions are Admin's (BRX-041): technicians, and customers before
+        // their first withdrawal (PO 14/10/2026). The page has nothing else.
+        meta: { title: 'Duyệt xác minh danh tính', roles: ['ADMIN'] },
       },
       {
         path: 'cancellations',

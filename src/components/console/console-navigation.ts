@@ -72,7 +72,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
       {
         group: 'Kỹ thuật viên',
         items: [
-          item('Duyệt hồ sơ', '/console/technicians', UserCheck),
+          item('Duyệt danh tính', '/console/technicians', UserCheck),
           item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award),
           item('Tra cứu', '/console/admin/technician-directory', UserSearch),
         ],

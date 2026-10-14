@@ -17,7 +17,19 @@ import {
   type VerificationStatus,
 } from '../../api/admin-verifications.api';
 import TechnicianVerificationDrawer from '../../components/console/TechnicianVerificationDrawer.vue';
+import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
+import CustomerVerificationsTab from '../../components/console/CustomerVerificationsTab.vue';
+import { useQueryChoice } from '../../composables/useQueryState';
 import { vnDateString } from '../../utils/vn-time';
+
+// Admin reviews identity checks of technicians and, since PO 14/10/2026, of
+// customers before their first withdrawal: one tab each (?tab=customers).
+type ReviewTab = 'technicians' | 'customers';
+const activeTab = useQueryChoice<ReviewTab>('tab', ['technicians', 'customers'], 'technicians');
+const tabs = [
+  { key: 'technicians' as const, label: 'Kỹ thuật viên' },
+  { key: 'customers' as const, label: 'Khách hàng' },
+];
 
 const columns: ConsoleColumn[] = [
   { key: 'technician', label: 'Kỹ thuật viên' },
@@ -74,7 +86,12 @@ const loadVerifications = async () => {
 };
 
 onMounted(() => {
-  void loadVerifications();
+  if (activeTab.value === 'technicians') void loadVerifications();
+});
+
+// The technician list is read when its tab is shown.
+watch(activeTab, (tab) => {
+  if (tab === 'technicians') void loadVerifications();
 });
 
 watch(statusFilter, () => {
@@ -216,8 +233,13 @@ const formatDate = (value: string) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Duyệt hồ sơ kỹ thuật viên" :count="loading || loadError ? null : total" />
+    <ConsolePageHeader title="Duyệt xác minh danh tính" :count="activeTab !== 'technicians' || loading || loadError ? null : total" />
 
+    <ConsoleTabs v-model="activeTab" :tabs="tabs" />
+
+    <CustomerVerificationsTab v-if="activeTab === 'customers'" />
+
+    <template v-else>
     <div class="flex flex-wrap items-center gap-2">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, email, số điện thoại" label="Tìm hồ sơ" />
       <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái hồ sơ">
@@ -277,6 +299,7 @@ const formatDate = (value: string) => {
     </ConsoleTable>
 
     <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+    </template>
 
     <!-- Reject -->
     <FhConfirmDialog
