@@ -31,7 +31,8 @@ const authStore = useAuthStore();
 const identityQuery = useCachedQuery({
   key: queryKeys.identity.customer,
   fetch: () => customerVerificationApi.getMine(),
-  enabled: () => authStore.user?.role === 'CUSTOMER',
+  // The API sends roles in lower case ('customer'); compare without case.
+  enabled: () => authStore.user?.role?.toUpperCase() === 'CUSTOMER',
 });
 const identityVerified = computed(() => identityQuery.data.value?.status === 'verified');
 const verifiedBirthDate = computed(() => {

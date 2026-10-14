@@ -13,7 +13,8 @@ vi.mock('../src/api/customer-verification.api', async (importOriginal) => ({
 }));
 vi.mock('../src/stores/auth', () => ({
   useAuthStore: () => ({
-    user: { id: 'mock-user', role: 'CUSTOMER', fullName: 'Nguyễn Văn An', phoneNumber: '0904000001', email: 'example.invalid' },
+    // Lower case, exactly as the API returns it (an upper-case-only check missed it in the browser).
+    user: { id: 'mock-user', role: 'customer', fullName: 'Nguyễn Văn An', phoneNumber: '0904000001', email: 'example.invalid' },
     token: 't',
     setAuth: vi.fn(),
     fetchProfile: vi.fn(),

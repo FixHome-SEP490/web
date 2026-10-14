@@ -141,7 +141,7 @@ function validate(): boolean {
   const address = validateAddressText(form.address);
   if (address) next.address = address;
   for (const side of sides) {
-    if (!side.file) side.error = `Vui lòng chọn ảnh ${side.label.toLowerCase()}.`;
+    if (!side.file) side.error = `Vui lòng chọn ảnh ${side.label.charAt(0).toLowerCase()}${side.label.slice(1)}.`;
   }
   errors.value = next;
   return Object.keys(next).length === 0 && sides.every((side) => side.file && !side.error);
