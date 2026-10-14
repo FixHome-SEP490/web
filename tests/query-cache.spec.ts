@@ -276,6 +276,10 @@ describe('cache rules', () => {
     expect(roots('/quotations/q1/approve')).toEqual(expect.arrayContaining(['orders', 'wallet', 'earnings']));
     expect(roots('/me/addresses')).toEqual(['addresses']);
     expect(roots('/notifications/read-all')).toEqual(['notifications']);
+    // An identity check decides whether the customer can withdraw (PO 14/10/2026).
+    expect(roots('/customer/verification')).toEqual(expect.arrayContaining(['identity', 'wallet']));
+    expect(roots('/admin/customer-verifications/v1/approve')).toEqual(expect.arrayContaining(['identity', 'wallet']));
+    expect(roots('/customer/wallet/withdrawals')).toEqual(expect.arrayContaining(['wallet']));
     // Chat, sign-in and uploads change nothing that is cached.
     expect(keysChangedBy('/messages/m1')).toEqual([]);
     expect(keysChangedBy('/auth/logout')).toEqual([]);

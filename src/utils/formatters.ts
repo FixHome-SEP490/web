@@ -134,3 +134,25 @@ export function hasRating(
 ): boolean {
   return ratingLabel(value, ratingCount) !== NO_RATING_LABEL;
 }
+
+/**
+ * A name as banks print it on an account: no accents, upper case, single
+ * spaces ("Nguyễn Văn Thọ" -> "NGUYEN VAN THO"). Mirrors the backend's
+ * `normalizeAccountName`, which compares the holder with the verified name.
+ */
+export function toBankAccountName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** A calendar day 'YYYY-MM-DD' (a birth date) as dd/MM/yyyy; no time zone is involved. */
+export function formatDayKey(value: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '—';
+}

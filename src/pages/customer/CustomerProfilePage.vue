@@ -3,8 +3,8 @@ import { tidyAddressText } from '../../utils/address-text';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
-import { ref, onMounted } from 'vue';
-import { MapPin, Plus, Trash2, Check, Pencil, Camera, X } from 'lucide-vue-next';
+import { computed, ref, onMounted } from 'vue';
+import { MapPin, Plus, Trash2, Check, Pencil, Camera, X, ShieldCheck } from 'lucide-vue-next';
 import {
   FhButton,
   FhConfirmDialog,
@@ -18,8 +18,26 @@ import { useAuthStore } from '../../stores/auth';
 import { toast } from 'vue-sonner';
 import { validateFullName, validatePhoneNumber } from '../../utils/input-validation';
 import { userFacingError } from '../../utils/user-facing-error';
+import { customerVerificationApi } from '../../api/customer-verification.api';
+import { useCachedQuery } from '../../composables/useCachedQuery';
+import { queryKeys } from '../../lib/query-keys';
+import { formatDayKey } from '../../utils/formatters';
 
 const authStore = useAuthStore();
+
+// After the identity check is approved (PO 14/10/2026) the name and date of
+// birth are the ones on the citizen ID card: shown with a note, not editable
+// (the server refuses a change anyway).
+const identityQuery = useCachedQuery({
+  key: queryKeys.identity.customer,
+  fetch: () => customerVerificationApi.getMine(),
+  enabled: () => authStore.user?.role === 'CUSTOMER',
+});
+const identityVerified = computed(() => identityQuery.data.value?.status === 'verified');
+const verifiedBirthDate = computed(() => {
+  const state = identityQuery.data.value;
+  return state?.status === 'verified' ? state.verification?.dateOfBirth || state.profile.dateOfBirth || null : null;
+});
 
 const fullName = ref('');
 const phoneNumber = ref('');
@@ -275,13 +293,15 @@ const loadAddresses = async () => {
 };
 
 const handleSaveProfile = async () => {
-  profileError.value = validateFullName(fullName.value) || validatePhoneNumber(phoneNumber.value);
+  const locked = identityVerified.value;
+  profileError.value = (locked ? '' : validateFullName(fullName.value)) || validatePhoneNumber(phoneNumber.value);
   if (profileError.value) return;
   isSaving.value = true;
   saveSuccess.value = false;
   try {
     const updated = await profileApi.updateMe({
-      fullName: fullName.value.trim(),
+      // A verified name is never sent: it can no longer change.
+      fullName: locked ? undefined : fullName.value.trim(),
       phoneNumber: phoneNumber.value.trim() || undefined,
     });
     if (authStore.user && authStore.token) {
@@ -469,8 +489,18 @@ const confirmDelete = async () => {
           </div>
           <dl class="divide-y divide-ink-100 text-sm">
             <div class="flex items-center justify-between gap-3 py-2.5">
-              <dt class="text-ink-500">Họ và tên</dt>
-              <dd class="font-medium text-ink-900 text-right">{{ authStore.user?.fullName }}</dd>
+              <dt class="text-ink-500 shrink-0">Họ và tên</dt>
+              <dd class="min-w-0 text-right">
+                <span class="block font-medium text-ink-900" data-testid="profile-name">{{ authStore.user?.fullName }}</span>
+                <span v-if="identityVerified" class="inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap" data-testid="profile-name-verified"><ShieldCheck :size="12" aria-hidden="true" /> Đã xác minh theo CCCD</span>
+              </dd>
+            </div>
+            <div v-if="verifiedBirthDate" class="flex items-center justify-between gap-3 py-2.5" data-testid="profile-dob">
+              <dt class="text-ink-500 shrink-0">Ngày sinh</dt>
+              <dd class="min-w-0 text-right">
+                <span class="block font-medium text-ink-900 font-num whitespace-nowrap">{{ formatDayKey(verifiedBirthDate) }}</span>
+                <span class="inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap"><ShieldCheck :size="12" aria-hidden="true" /> Đã xác minh theo CCCD</span>
+              </dd>
             </div>
             <div class="flex items-center justify-between gap-3 py-2.5">
               <dt class="text-ink-500">Số điện thoại</dt>
@@ -571,7 +601,12 @@ const confirmDelete = async () => {
         </h3>
 
         <div class="space-y-4 text-sm">
-          <div>
+          <div v-if="identityVerified" data-testid="profile-fullname-locked">
+            <p class="block font-semibold text-ink-700 mb-1.5">Họ và tên</p>
+            <p class="h-10 px-3 flex items-center bg-ink-50 border border-ink-200 rounded-sm text-ink-700">{{ authStore.user?.fullName }}</p>
+            <p class="mt-1 text-xs text-ink-500 text-pretty">Đã xác minh theo CCCD nên không đổi được.</p>
+          </div>
+          <div v-else>
             <label class="block font-semibold text-ink-700 mb-1.5">Họ và tên</label>
             <input v-model="fullName" type="text" data-testid="profile-fullname" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600" />
           </div>
