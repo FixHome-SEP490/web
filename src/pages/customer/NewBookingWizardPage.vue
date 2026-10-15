@@ -175,7 +175,14 @@ const aiSessionId = computed(() => {
   return id && SESSION_PATTERN.test(id) ? id : null;
 });
 const aiSuggested = computed(() => aiConversation.pinnedService.value);
-const aiRecap = computed(() => (aiSessionId.value ? bookingRecap(aiConversation.lastReply.value) : null));
+// The latest reply may only answer a question; the appliance comes from the last one that named it.
+const aiRecap = computed(() => {
+  if (!aiSessionId.value) return null;
+  const last = aiConversation.lastReply.value;
+  const device = last?.device ?? [...aiConversation.messages.value].reverse().find((m) => m.reply?.device)?.reply?.device ?? null;
+  return bookingRecap(last ? { ...last, device } : null);
+});
+const urgencyLabel = computed(() => urgencyList.find((u) => u.key === urgency.value)?.label ?? '');
 const aiSuggestsOtherService = computed(
   () => !!aiSuggested.value?.serviceId && aiSuggested.value.serviceId !== selectedServiceId.value,
 );
@@ -1432,11 +1439,11 @@ const createAndFindTech = async () => {
 
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
+        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
           <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" data-testid="step2-next" @click="goToNextStepFrom2">
+          <FhButton variant="primary" size="md" class="w-full sm:w-auto" data-testid="step2-next" @click="goToNextStepFrom2">
             Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
 
@@ -1608,7 +1615,7 @@ const createAndFindTech = async () => {
 
             <div class="flex items-center justify-between pt-2">
               <span class="text-ink-500">Mức độ khẩn cấp:</span>
-              <span class="font-bold text-brand-700">{{ urgency }}</span>
+              <span class="font-bold text-brand-700">{{ urgencyLabel }}</span>
             </div>
           </div>
 
@@ -1633,7 +1640,7 @@ const createAndFindTech = async () => {
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
+        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
           <FhButton variant="ghost" size="md" @click="step = 2">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
@@ -1641,6 +1648,7 @@ const createAndFindTech = async () => {
           <FhButton
             variant="primary"
             size="lg"
+            class="w-full sm:w-auto"
             :loading="loading"
             @click="createAndFindTech"
           >

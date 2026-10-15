@@ -42,6 +42,12 @@ describe('bookingRecap', () => {
     expect(bookingRecap({ sessionId: 's', status: 'ok', notesVi: ['', '  '] })).toBeNull();
   });
 
+  it("speaks of an earlier booking as the customer's own", () => {
+    expect(bookingRecap({ sessionId: 's', status: 'ok', notesVi: ['Khách từng đặt "Sửa điều hòa" ngày 03/08/2026, khi đó trợ lý nghi thiếu gas.'] })?.told).toEqual([
+      'Bạn từng đặt "Sửa điều hòa" ngày 03/08/2026, khi đó trợ lý nghi thiếu gas.',
+    ]);
+  });
+
   it('keeps a recap with notes only', () => {
     expect(bookingRecap({ sessionId: 's', status: 'ok', notesVi: ['Khách đã thay pin remote rồi, đã loại hết pin remote.'] })).toEqual({
       device: null,

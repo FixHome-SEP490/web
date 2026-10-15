@@ -380,6 +380,7 @@ export interface BookingRecap {
 const TOLD_FOR_CUSTOMER: Array<[RegExp, string]> = [
   [/^Khách bác khả năng /, 'Không phải '],
   [/^Khách nghi /, 'Bạn nghi '],
+  [/^Khách từng đặt /, 'Bạn từng đặt '],
   [/^Khách có tả /, 'Có '],
   [/^Khách cho biết /, ''],
   [/^Khách /, ''],
