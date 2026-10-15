@@ -2,17 +2,6 @@
 // src/components/chat/AiAssistantWidget.vue
 //
 // The AI assistant, as a floating panel beside the human chat.
-//
-// Deliberately a separate button from ChatFloatingWidget. They look alike and
-// do entirely different things - one reaches a technician, the other reaches a
-// model - and a customer who cannot tell them apart will send a real question
-// into the wrong one. Different icon, different colour, different wording.
-//
-// Nothing is persisted. Closing the panel ends the conversation, which is the
-// right behaviour for a diagnosis assistant: yesterday's washing machine has
-// nothing to do with today's question. The conversation itself lives in
-// useAiConversation, shared with the booking form's diagnosis step.
-
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Bot, X, RotateCcw, CalendarPlus } from 'lucide-vue-next';
@@ -24,11 +13,11 @@ const router = useRouter();
 const chatStore = useChatStore();
 const route = useRoute();
 
-// Sits above the chat launcher; takes its place while open (the chat launcher
-// hides then) or where there is no chat launcher, on the messages page.
+// Sits above the chat launcher except on the messages page where there is no human chat launcher.
 const stackedAboveChat = computed(
-  () => !isOpen.value && !/^\/(app|tech)\/messages/.test(route.path),
+  () => !/^\/(app|tech)\/messages/.test(route.path),
 );
+
 // Shared with the chat panel so the two never open together.
 const isOpen = computed({
   get: () => chatStore.isAiPanelOpen,
@@ -43,8 +32,15 @@ const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
 const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords } = conversation;
 
 async function toggle() {
-  isOpen.value = !isOpen.value;
-  if (isOpen.value) await loadHoldingLines();
+  const nextOpen = !isOpen.value;
+  if (nextOpen) {
+    // Explicitly close human chat widget so opening AI modal immediately hides Message modal
+    chatStore.closeWidget();
+  }
+  isOpen.value = nextOpen;
+  if (nextOpen) {
+    await loadHoldingLines();
+  }
 }
 
 /**
@@ -59,8 +55,6 @@ function goToBooking() {
   void router.push({
     name: 'ai-booking',
     query: {
-      // The id when the backend could resolve the catalogue code, and the name
-      // as a fallback for the wizard's own matching when it could not.
       serviceId: service.serviceId || undefined,
       q: service.nameVi,
       aiSession: sessionId.value || undefined,
@@ -71,52 +65,65 @@ function goToBooking() {
 </script>
 
 <template>
-  <div
-    v-if="!hiddenHere"
-    class="fixed right-4 sm:right-5 z-40 flex flex-col items-end"
-    :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
-  >
+  <div v-if="!hiddenHere">
+    <!-- AI Assistant Modal Popup (Anchored at bottom, located to the left of the round FAB icons - same position and alignment as Message modal) -->
     <transition
       enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0 translate-y-2"
+      enter-from-class="opacity-0 translate-y-4 scale-95"
+      enter-to-class="opacity-100 translate-y-0 scale-100"
       leave-active-class="transition duration-150 ease-in"
-      leave-to-class="opacity-0 translate-y-2"
+      leave-from-class="opacity-100 translate-y-0 scale-100"
+      leave-to-class="opacity-0 translate-y-4 scale-95"
     >
       <div
         v-if="isOpen"
-        class="mb-3 w-[calc(100vw_-_2rem)] sm:w-[26rem] h-[32rem] max-h-[calc(100dvh_-_var(--fh-dock,1.25rem)_-_6rem)] rounded-2xl bg-white shadow-(--shadow-e3) border border-ink-200 flex flex-col overflow-hidden"
+        class="fixed z-40 transition-[height] duration-200 ease-out bottom-[var(--fh-dock,0px)] right-2 left-2 sm:left-auto sm:right-22 md:right-24 sm:bottom-0 w-auto sm:w-[380px] md:w-[400px] h-[520px] max-h-[calc(100dvh_-_var(--fh-dock,0px)_-_1rem)] sm:max-h-[calc(100dvh_-_2rem)] bg-white rounded-2xl sm:rounded-b-none sm:rounded-t-2xl border border-ink-200 sm:border-b-0 shadow-2xl flex flex-col overflow-hidden"
       >
         <!-- Header -->
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-ink-100">
-          <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
-            <Bot :size="17" class="text-brand-700" />
+        <div class="px-3.5 py-2.5 border-b border-ink-100 bg-white flex items-center justify-between gap-2 flex-shrink-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
+              <Bot :size="17" class="text-brand-700" />
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-bold text-ink-900 leading-tight">Trợ lý FixHome</p>
+              <p class="text-xs text-ink-500 leading-tight truncate mt-0.5">
+                {{
+                  turnCount > 0
+                    ? `Đang nhớ cuộc trò chuyện · quên sau ${SESSION_IDLE_MINUTES} phút`
+                    : 'Chẩn đoán sơ bộ, không thay thợ'
+                }}
+              </p>
+            </div>
           </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-bold text-ink-900 leading-tight">Trợ lý FixHome</p>
-            <p class="text-xs text-ink-500 leading-tight">
-              {{
-                turnCount > 0
-                  ? `Đang nhớ cuộc trò chuyện · quên sau ${SESSION_IDLE_MINUTES} phút`
-                  : 'Chẩn đoán sơ bộ, không thay thợ'
-              }}
-            </p>
+
+          <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+            <button
+              type="button"
+              class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              :disabled="turnCount === 0"
+              title="Bắt đầu phiên mới"
+              aria-label="Bắt đầu phiên mới"
+              @click="startOver"
+            >
+              <RotateCcw :size="16" />
+            </button>
+            <button
+              type="button"
+              class="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+              title="Đóng trợ lý AI"
+              aria-label="Đóng trợ lý AI"
+              @click="toggle"
+            >
+              <X :size="17" />
+            </button>
           </div>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent"
-            :disabled="turnCount === 0"
-            title="Bắt đầu phiên mới"
-            aria-label="Bắt đầu phiên mới"
-            @click="startOver"
-          >
-            <RotateCcw :size="16" />
-          </button>
         </div>
 
         <AiConversationThread :conversation="conversation" class="flex-1 min-h-0">
           <!-- Pinned booking. Stays put; replaced when the assistant changes it. -->
           <template #pinned>
-            <div v-if="pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100">
+            <div v-if="pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-brand-700">Dịch vụ đang chọn</p>
                 <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>
@@ -137,18 +144,26 @@ function goToBooking() {
       </div>
     </transition>
 
-    <!-- Its own look, white with a robot, so it is never mistaken for the
-         solid chat button that reaches a real technician. -->
-    <button
-      v-if="!chatStore.isWidgetOpen"
-      type="button"
-      class="w-13 h-13 rounded-full bg-white border border-ink-200 text-brand-600 flex items-center justify-center shadow-(--shadow-e2) hover:bg-brand-50 active:scale-95 transition-[background-color,transform] duration-150"
-      :aria-label="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
-      :title="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
-      @click="toggle"
+    <!-- Floating Action Button for AI (always fixed above the chat FAB) -->
+    <div
+      class="fixed right-4 sm:right-5 z-40"
+      :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
     >
-      <X v-if="isOpen" :size="24" />
-      <Bot v-else :size="24" />
-    </button>
+      <button
+        type="button"
+        class="w-13 h-13 rounded-full border flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
+        :class="[
+          isOpen
+            ? 'bg-brand-50 border-brand-400 text-brand-700 ring-4 ring-brand-100 shadow-xl'
+            : 'bg-white border-ink-200 text-brand-600 shadow-(--shadow-e2) hover:bg-brand-50'
+        ]"
+        :aria-label="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
+        :title="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
+        @click="toggle"
+      >
+        <X v-if="isOpen" :size="24" />
+        <Bot v-else :size="24" />
+      </button>
+    </div>
   </div>
 </template>
