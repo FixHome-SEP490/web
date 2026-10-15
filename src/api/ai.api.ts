@@ -119,11 +119,20 @@ function unwrap<T>(payload: unknown): T {
   return current as T;
 }
 
+/** Too many messages in a minute: said plainly, never as an error code. */
+const TOO_FAST =
+  'Anh/chị nhắn hơi nhanh, em chưa kịp xử lý hết ạ. Anh/chị đợi khoảng một phút rồi gửi lại giúp em nhé.';
+
+function tooFast(error: unknown): boolean {
+  return (error as { response?: { status?: number } })?.response?.status === 429;
+}
+
 /** What to say when even our own backend is unreachable. */
-function offline(sessionId?: string | null): AiReply {
+function offline(sessionId?: string | null, sentenceOverride?: string): AiReply {
   const sentence =
+    sentenceOverride ??
     'Hiện chưa kết nối được tới trợ lý ạ. Anh/chị kiểm tra lại mạng giúp em, ' +
-    'hoặc vẫn có thể đặt thợ bình thường.';
+      'hoặc vẫn có thể đặt thợ bình thường.';
   return {
     sessionId: sessionId ?? null,
     status: 'unavailable',
@@ -159,8 +168,8 @@ export const aiApi = {
         { timeout: AI_REQUEST_TIMEOUT },
       );
       return unwrap<AiReply>(response.data);
-    } catch {
-      return offline(payload.sessionId);
+    } catch (error) {
+      return offline(payload.sessionId, tooFast(error) ? TOO_FAST : undefined);
     }
   },
 
@@ -173,8 +182,31 @@ export const aiApi = {
         { timeout: AI_REQUEST_TIMEOUT },
       );
       return unwrap<AiReply>(response.data);
+    } catch (error) {
+      return offline(payload.sessionId, tooFast(error) ? TOO_FAST : undefined);
+    }
+  },
+
+  /**
+   * The customer's verdict on an answer, for the team to learn from. Best
+   * effort: thanking the customer does not depend on it being stored.
+   */
+  async feedback(payload: {
+    sessionId: string;
+    verdict: 'wrong' | 'right';
+    note?: string;
+    reply?: string;
+  }): Promise<boolean> {
+    try {
+      await apiClient.post('/ai/feedback', {
+        sessionId: payload.sessionId,
+        verdict: payload.verdict,
+        note: payload.note?.trim().slice(0, 300) || undefined,
+        reply: payload.reply?.slice(0, 1000) || undefined,
+      });
+      return true;
     } catch {
-      return offline(payload.sessionId);
+      return false;
     }
   },
 

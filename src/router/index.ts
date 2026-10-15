@@ -394,6 +394,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Ví khách hàng', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/ai-quality',
+        name: 'admin-ai-quality',
+        component: () => import('../pages/console/admin/AdminAiQualityPage.vue'),
+        meta: { title: 'Chất lượng trợ lý AI', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/payments',
         name: 'admin-payments',
         component: () => import('../pages/console/admin/AdminPaymentsPage.vue'),
