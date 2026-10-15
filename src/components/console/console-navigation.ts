@@ -2,6 +2,7 @@ import type { Component } from 'vue';
 import {
   Award,
   Ban,
+  Bot,
   Boxes,
   CreditCard,
   FolderKanban,
@@ -68,7 +69,10 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
   }
   if (role === 'ADMIN') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, warranty] },
+      {
+        group: 'Vận hành',
+        items: [overview, orders, bookings, partRequests, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+      },
       {
         group: 'Kỹ thuật viên',
         items: [

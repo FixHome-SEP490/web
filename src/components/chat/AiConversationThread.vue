@@ -6,7 +6,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
-import { AI_MAX_IMAGES } from '../../api/ai.api';
+import { AI_MAX_IMAGES, aiApi } from '../../api/ai.api';
 import { DESCRIBE_BEFORE_SEND, priceLabel, quickReplies, type AiChatMessage, type AiConversation } from '../../composables/useAiConversation';
 
 const props = withDefaults(
@@ -53,6 +53,31 @@ function answersFor(message: AiChatMessage): string[] {
 
 function answer(text: string) {
   void c.sendTurn(text, []);
+}
+
+/**
+ * "Đúng ý / Chưa đúng" under the newest answer. A "chưa đúng" opens a short
+ * optional note; either way the customer is thanked and the verdict goes to
+ * the team, who turn the wrong ones into new test conversations.
+ */
+type Verdict = 'asking' | 'note' | 'thanked';
+const verdicts = reactive<Record<string, Verdict>>({});
+const notes = reactive<Record<string, string>>({});
+
+function canRate(message: AiChatMessage): boolean {
+  return !!c.sessionId && !!message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable';
+}
+
+function verdictFor(message: AiChatMessage): Verdict | null {
+  if (verdicts[message.id]) return verdicts[message.id];
+  return canRate(message) && !c.isThinking && message.id === latestReplyId.value ? 'asking' : null;
+}
+
+function rate(message: AiChatMessage, verdict: 'right' | 'wrong', note?: string) {
+  verdicts[message.id] = 'thanked';
+  if (c.sessionId) {
+    void aiApi.feedback({ sessionId: c.sessionId, verdict, note, reply: message.text });
+  }
 }
 
 defineExpose({ scrollToEnd });
@@ -141,6 +166,27 @@ defineExpose({ scrollToEnd });
               <p v-if="message.reply.priceEstimate?.requiresAssessment" class="text-xs text-ink-500">Thợ xem tận nơi rồi mới báo giá chính xác ạ.</p>
 
               <p v-if="message.reply.disclaimerVi" class="text-xs text-ink-400 leading-snug">{{ message.reply.disclaimerVi }}</p>
+            </div>
+
+            <div v-if="verdictFor(message)" class="text-xs text-ink-500" data-testid="ai-feedback">
+              <div v-if="verdictFor(message) === 'asking'" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Câu trả lời này có đúng ý anh/chị không?</span>
+                <button type="button" class="font-semibold text-ink-700 hover:text-brand-700" data-testid="ai-feedback-right" @click="rate(message, 'right')">Đúng ý</button>
+                <button type="button" class="font-semibold text-ink-700 hover:text-danger-700" data-testid="ai-feedback-wrong" @click="verdicts[message.id] = 'note'">Chưa đúng</button>
+              </div>
+              <form v-else-if="verdictFor(message) === 'note'" class="flex items-end gap-2" @submit.prevent="rate(message, 'wrong', notes[message.id])">
+                <textarea
+                  v-model="notes[message.id]"
+                  rows="2"
+                  maxlength="300"
+                  class="flex-1 min-w-0 rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
+                  placeholder="Anh/chị góp ý thêm cho em (không bắt buộc)"
+                  aria-label="Góp ý cho trợ lý"
+                  data-testid="ai-feedback-note"
+                />
+                <button type="submit" class="whitespace-nowrap rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-700" data-testid="ai-feedback-send">Gửi góp ý</button>
+              </form>
+              <p v-else data-testid="ai-feedback-thanks">Em cảm ơn anh/chị, em ghi nhận để học thêm ạ.</p>
             </div>
           </div>
         </div>
