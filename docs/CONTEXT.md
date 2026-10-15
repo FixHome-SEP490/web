@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-14 23:46 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/customer-withdrawal-kyc
+> Cập nhật lần cuối: 2026-10-16 00:21 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/staff-customer-withdrawals
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -188,6 +188,12 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 - Bộ đệm: khoá `identity` (`identity.customer`, `identity.adminCustomers`), `wallet.customerWithdrawalInfo`, `wallet.customerWithdrawals`, `reference.customerBanks`; ghi vào `/customer/verification` hoặc `/admin/customer-verifications` làm mới `identity` và `wallet`.
 - Test: `tests/customer-withdrawal.spec.ts`, `tests/customer-kyc-page.spec.ts`, `tests/customer-profile-verified.spec.ts`, `tests/admin-customer-verifications.spec.ts`.
 
+### Quản lý xem lệnh rút của khách (PO 16/10/2026, nhánh `feat/staff-customer-withdrawals`)
+
+- Tab "Yêu cầu rút tiền" của `/console/wallets` (quản lý dịch vụ và admin) chia hai tab con "Kỹ thuật viên" và "Khách hàng" (`?payout=customers`; mở link có tham số này thì vào thẳng danh sách khách). Hai danh sách và hai bộ tổng tách riêng, không gộp. Số dư ví nguồn payOS là một kênh chi chung nên chỉ hiện một lần phía trên hai tab. Số đếm chuyển từ tab "Yêu cầu rút tiền" xuống từng tab con; phần kỹ thuật viên giữ nguyên danh sách, bộ lọc và nút "Kiểm tra lại".
+- Tab khách (`components/console/CustomerWithdrawalsTab.vue`, API `api/console-customer-withdrawals.api.ts`): ba thẻ tổng của khách (đã chuyển, đang chuyển, thất bại đã hoàn ví), tìm ở `backend` theo tên, email, số điện thoại (`?cwq=`, chờ 300 ms), lọc trạng thái (`?cwstatus=`), phân trang 15 (`?cwpage=`), cột khách và liên hệ, số tiền, tài khoản đã che, trạng thái kèm lý do thất bại hoặc ghi chú hoàn ví, "Kiểm tra lại" chỉ ở lệnh đang chuyển, báo kết quả bằng câu của server.
+- Bộ đệm: khoá `wallet.consoleCustomerWithdrawals`, `wallet.consoleCustomerPayout` (gốc `['wallet', 'console-customer-withdrawals']`); ghi vào `/service-manager/customer-withdrawals` làm mới `wallet` và `earnings`. Test: `tests/console-customer-withdrawals.spec.ts`.
+
 ### Trang đơn: tổng tiền, nút huỷ, câu chữ (07/10/2026, nhánh `fix/order-pages-wording-and-totals`)
 
 - Trang đơn của khách: khi báo giá chờ duyệt (chưa có hoá đơn) "Tổng công" và "Tổng phụ tùng" lấy tổng các dòng báo giá thay vì 0; có hoá đơn thì lấy số của đơn (đã gồm phát sinh). Nút Huỷ đơn chỉ hiện ở ACCEPTED và EN_ROUTE vì backend không cho khách huỷ khi đang sửa.
@@ -257,6 +263,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Thông báo đọc qua REST, đếm chưa đọc mỗi 30 giây khi tab đang mở.
 - Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
 - Khách rút ví (backend nhánh `feat/customer-withdrawal-kyc`): `GET /customer/verification`, `POST /customer/verification/upload-url`, `POST /customer/verification`, `GET /customer/verification/documents/:id/access`, `GET /customer/wallet/withdrawal-info`, `GET /customer/wallet/banks`, `GET|PUT /customer/wallet/bank-account`, `POST|GET /customer/wallet/withdrawals` (`page`, `limit`); admin `GET /admin/customer-verifications` (`status` `pending|verified|rejected`, `search`, `page`, `limit`), `GET /admin/customer-verifications/:id`, `.../documents/:documentId/access`, `PATCH .../approve`, `PATCH .../reject` (`rejectionReason`). Loại giao dịch ví khách thêm `withdrawal`, `withdrawal_refund`. CHƯA KIỂM CHỨNG với `backend` thật.
+- Quản lý xem lệnh rút của khách (quản lý dịch vụ và admin, `backend` làm song song): `GET /service-manager/customer-withdrawals` (`page`, `limit`, `status` `PROCESSING|SUCCESS|FAILED`, `search`) trả lệnh kèm `customer {id, fullName, email, phoneNumber}` và số tài khoản đã che; `GET /service-manager/customer-withdrawals/payout-overview` (tổng của khách, `sourceBalance` là ví nguồn chung với kỹ thuật viên); `POST /service-manager/customer-withdrawals/:id/reconcile` trả lệnh kèm `message`. CHƯA KIỂM CHỨNG với `backend` thật.
 - Biến môi trường (chỉ tên): `VITE_API_BASE_URL`, `VITE_MAPTILER_KEY`, `VITE_GOOGLE_CLIENT_ID` (để trống thì ẩn nút Google), `VITE_APP_TITLE` (hiện không dùng), `DEV_HTTPS` (bật HTTPS khi dev để gọi thoại qua mạng LAN). Mọi biến `VITE_*` đều công khai trong bundle, không đặt bí mật.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
@@ -284,6 +291,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - Thông báo dùng polling, chưa nhận đẩy realtime.
 - Khách rút ví và xác minh danh tính (`feat/customer-withdrawal-kyc`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. `mobile` chưa có (PO để mobile làm sau).
+- Tab "Khách hàng" trong rút tiền của console (`feat/staff-customer-withdrawals`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. Tiêu đề trang và mục menu vẫn là "Ví kỹ thuật viên".
 - Bộ đệm phía trình duyệt (`feat/client-cache`) đã qua lint, typecheck, test và build nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt. Thêm dependency `@tanstack/vue-query` nên ai chạy Docker phải `docker compose up -d --build`. Các trang chưa chuyển (form đặt lịch, chi tiết yêu cầu đặt lịch, hồ sơ, trang admin, các trang console còn lại) vẫn đọc khi mở; lệnh ghi của chúng vẫn làm cũ bộ đệm qua lưới an toàn.
 - Tổng quan khách, tổng quan thợ và `TechnicianLayout` vẫn gọi `GET /service-orders/my` không tham số nên chỉ thấy 20 đơn mới nhất; tổng quan console gọi `GET /service-orders` như vậy. Phân trang mới CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt.
 - Mã chết còn trong repo: `layouts/AdminLayout.vue`, `pages/dashboard/DashboardPage.vue`, `utils/storage.ts`, `assets/styles/main.css`, `tests/setup.ts` (chưa nối vào cấu hình Vitest).
@@ -295,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 00:21 (UTC+7) | ToanAltF4 | feat/staff-customer-withdrawals | Quản lý dịch vụ và admin xem lệnh rút của khách ở tab Khách hàng trong Yêu cầu rút tiền của /console/wallets, tách khỏi kỹ thuật viên (danh sách, tổng, tìm, lọc, Kiểm tra lại), ví nguồn payOS chung hiện một lần
 - 2026-10-14 23:46 (UTC+7) | ToanAltF4 | feat/customer-withdrawal-kyc | Khách rút ví về ngân hàng sau một lần xác minh danh tính bằng ảnh hai mặt CCCD (trang /app/kyc, phần Rút tiền ở ví, lịch sử rút), hồ sơ khoá họ tên và ngày sinh đã xác minh, admin duyệt xác minh của khách ở tab Khách hàng của trang Duyệt xác minh danh tính, nhãn withdrawal và withdrawal_refund
 - 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
 - 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
@@ -334,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 10:31 (UTC+7) | ToanAltF4 | feat/reputation-web | Điểm uy tín: thẻ điểm ở hồ sơ khách và thợ, trang SM xem lịch sử và điều chỉnh điểm
 - 2026-10-09 00:14 (UTC+7) | ToanAltF4 | feat/technician-certificates | Đăng ký thợ: chứng chỉ không bắt buộc (bản công chứng), câu nhắc đến trụ sở sau khi gửi hồ sơ.
 - 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
-- 2026-10-08 23:40 (UTC+7) | ToanAltF4 | feat/technician-sessions-ui | Thợ: lịch hẹn theo buổi, ghi chú khách, nút xuất phát theo giờ cho phép, gửi GPS định kỳ, bán kính 40 km.

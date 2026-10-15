@@ -47,6 +47,11 @@ export const queryKeys = {
     /** Which withdrawal step the customer is at (identity, bank account, open payout). */
     customerWithdrawalInfo: ['wallet', 'customer-withdrawal', 'info'] as const,
     customerWithdrawals: (filter: Filter) => ['wallet', 'customer-withdrawal', 'list', filter] as const,
+    /** Console (Service Manager, Admin): every customer withdrawal, kept apart from the technicians'. */
+    consoleCustomerWithdrawalsAll: ['wallet', 'console-customer-withdrawals'] as const,
+    consoleCustomerWithdrawals: (filter: Filter) => ['wallet', 'console-customer-withdrawals', 'list', filter] as const,
+    /** Customer payout totals and the payOS source balance shared with technicians. */
+    consoleCustomerPayout: ['wallet', 'console-customer-withdrawals', 'overview'] as const,
   },
   /** Identity verification: the customer's own status and the admin review lists. */
   identity: {
@@ -141,6 +146,8 @@ const NO_CACHED_EFFECT = /^\/(auth|messages|conversations|media|ai|service-order
 const WRITE_EFFECTS: ReadonlyArray<readonly [RegExp, readonly QueryKey[]]> = [
   [/^\/(technician\/wallet|customer\/wallet|invoices)(\/|$)/, [...affectedBy.walletChange, ...affectedBy.orderChange]],
   [/^\/(customer\/verification|admin\/customer-verifications)(\/|$)/, affectedBy.identityChange],
+  // Re-checking a customer payout may refund the customer's wallet.
+  [/^\/service-manager\/customer-withdrawals(\/|$)/, affectedBy.walletChange],
   [/^\/(invitations)(\/|$)/, affectedBy.invitationResponse],
   [/^\/bookings(\/|$)/, affectedBy.bookingChange],
   [/^\/warranty-claims(\/|$)/, affectedBy.warrantyChange],
