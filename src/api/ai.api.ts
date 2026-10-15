@@ -96,6 +96,11 @@ export interface AiReply {
   confidence?: number;
   isLowConfidence?: boolean;
   clarification?: Clarification | null;
+  /**
+   * What the conversation established beyond the symptom, about "Khách": what
+   * they already tried or ruled out, what they suspect. Goes to the technician.
+   */
+  notesVi?: string[];
   disclaimerVi?: string;
 }
 

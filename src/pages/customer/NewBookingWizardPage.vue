@@ -41,7 +41,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
@@ -175,6 +175,7 @@ const aiSessionId = computed(() => {
   return id && SESSION_PATTERN.test(id) ? id : null;
 });
 const aiSuggested = computed(() => aiConversation.pinnedService.value);
+const aiRecap = computed(() => (aiSessionId.value ? bookingRecap(aiConversation.lastReply.value) : null));
 const aiSuggestsOtherService = computed(
   () => !!aiSuggested.value?.serviceId && aiSuggested.value.serviceId !== selectedServiceId.value,
 );
@@ -1536,13 +1537,36 @@ const createAndFindTech = async () => {
           </p>
         </div>
 
-        <p
-          v-if="aiSessionId"
-          data-testid="ai-summary-note"
-          class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
-        >
-          Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
-        </p>
+        <div v-if="aiSessionId" class="space-y-3">
+          <dl
+            v-if="aiRecap"
+            data-testid="ai-recap"
+            class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2 text-sm"
+          >
+            <div v-if="aiRecap.device" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Thiết bị</dt>
+              <dd class="text-ink-900">{{ aiRecap.device }}</dd>
+            </div>
+            <div v-if="aiRecap.faults.length" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Có thể là</dt>
+              <dd class="text-ink-900">{{ aiRecap.faults.join(', ') }}</dd>
+            </div>
+            <div v-if="aiRecap.told.length" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Bạn đã cho biết</dt>
+              <dd class="text-ink-900">
+                <ul class="space-y-0.5" data-testid="ai-recap-told">
+                  <li v-for="line in aiRecap.told" :key="line" class="text-pretty">{{ line }}</li>
+                </ul>
+              </dd>
+            </div>
+          </dl>
+          <p
+            data-testid="ai-summary-note"
+            class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
+          >
+            Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
+          </p>
+        </div>
 
         <div class="space-y-4 text-xs sm:text-sm">
           <div class="p-5 rounded-2xl bg-ink-50 border border-ink-200 space-y-3 divide-y divide-ink-200/60">

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 02:55 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-feedback-quality
+> Cập nhật lần cuối: 2026-10-16 04:03 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-notes
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,7 +92,7 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ## 3. Trạng thái hiện tại
 
-Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
+Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã trao đổi (`aiSummary.notes`: khách đã thử gì, đã loại gì, đang nghi gì), đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
 ### Bộ nhớ đệm phía trình duyệt (PO 12/10/2026, nhánh `feat/client-cache`)
 
@@ -124,7 +124,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 - Chọn 1 đến 2 kỹ thuật viên ở trang ứng viên, theo dõi booking, huỷ, đổi lịch, gia hạn tìm thợ.
 - Đơn sửa chữa: duyệt hoặc từ chối báo giá và chi phí phát sinh, xem hoá đơn, thanh toán VNPay hoặc tiền mặt, xác nhận hoàn tất, xem bằng chứng, bảo hành và yêu cầu bảo hành, đánh giá kỹ thuật viên, khiếu nại.
 - Lịch sử sửa chữa (trong menu avatar), hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
-- Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Khối "Đặt thợ" trong bong bóng (và nút "Đổi sang dịch vụ này" ở bước AI của form) chỉ hiện khi trợ lý đã trả lời xong (`isThinking` false); khách nhắn thêm thì ẩn cho tới khi tin trả lời về (`tests/ai-widget-book-after-reply.spec.ts`). Khi trợ lý hỏi lại một câu có/không (kết thúc bằng "không?" hoặc "chưa?"), dưới câu hỏi mới nhất có nút trả lời nhanh "Có"/"Không"/"Không rõ" hoặc "Rồi"/"Chưa"/"Không rõ", bấm là gửi như tin nhắn (`quickReplies` trong `useAiConversation.ts`, `tests/ai-quick-replies.spec.ts`); ẩn khi trợ lý đang trả lời hoặc khách đã nhắn tiếp. Dưới câu trả lời mới nhất có "Câu trả lời này có đúng ý anh/chị không? Đúng ý · Chưa đúng"; "Chưa đúng" mở ô góp ý không bắt buộc; gửi qua `aiApi.feedback` (backend `POST /ai/feedback`), lỗi thì vẫn cảm ơn (`tests/ai-feedback.spec.ts`). Khách nhắn quá nhanh (429) thì báo "Anh/chị nhắn hơi nhanh..." thay vì "chưa kết nối được". Admin có trang `/console/admin/ai-quality` (`AdminAiQualityPage.vue`, mục "Trợ lý AI" trong nhóm Vận hành, backend `GET /admin/ai-quality`): số cuộc trò chuyện, lượt nhắn, đặt thợ từ trợ lý và tỉ lệ, số khách báo chưa đúng/đúng ý, 20 câu trả lời bị báo chưa đúng gần nhất kèm lời khách và góp ý, bảng theo ngày; chọn 7/30/90 ngày. Chỉ xem. Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
+- Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Khối "Đặt thợ" trong bong bóng (và nút "Đổi sang dịch vụ này" ở bước AI của form) chỉ hiện khi trợ lý đã trả lời xong (`isThinking` false); khách nhắn thêm thì ẩn cho tới khi tin trả lời về (`tests/ai-widget-book-after-reply.spec.ts`). Khi trợ lý hỏi lại một câu có/không (kết thúc bằng "không?" hoặc "chưa?"), dưới câu hỏi mới nhất có nút trả lời nhanh "Có"/"Không"/"Không rõ" hoặc "Rồi"/"Chưa"/"Không rõ", bấm là gửi như tin nhắn (`quickReplies` trong `useAiConversation.ts`, `tests/ai-quick-replies.spec.ts`); ẩn khi trợ lý đang trả lời hoặc khách đã nhắn tiếp. Dưới câu trả lời mới nhất có "Câu trả lời này có đúng ý anh/chị không? Đúng ý · Chưa đúng"; "Chưa đúng" mở ô góp ý không bắt buộc; gửi qua `aiApi.feedback` (backend `POST /ai/feedback`), lỗi thì vẫn cảm ơn (`tests/ai-feedback.spec.ts`). Khách nhắn quá nhanh (429) thì báo "Anh/chị nhắn hơi nhanh..." thay vì "chưa kết nối được". Admin có trang `/console/admin/ai-quality` (`AdminAiQualityPage.vue`, mục "Trợ lý AI" trong nhóm Vận hành, backend `GET /admin/ai-quality`): số cuộc trò chuyện, lượt nhắn, đặt thợ từ trợ lý và tỉ lệ, số khách báo chưa đúng/đúng ý, 20 câu trả lời bị báo chưa đúng gần nhất kèm lời khách và góp ý, bảng theo ngày; chọn 7/30/90 ngày. Chỉ xem. Bước Xác nhận của form đặt qua AI hiện khung tóm tắt kỹ thuật viên sẽ nhận (thiết bị, tối đa 2 lỗi có thể là, "Bạn đã cho biết" từ `notesVi` của câu trả lời mới nhất, đổi giọng "Khách ..." sang lời của khách) bằng `bookingRecap` trong `useAiConversation.ts` (`tests/ai-booking-recap.spec.ts`). Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
 
 ### Header thống nhất và landing (PO 09/10/2026, nhánh `feat/unified-header-landing`)
 
@@ -303,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 04:03 (UTC+7) | ToanAltF4 | feat/ai-notes | Bước Xác nhận hiện tóm tắt gửi thợ (thiết bị, lỗi có thể là, khách đã cho biết); hộp tóm tắt AI của thợ có dòng Đã trao đổi
 - 2026-10-16 02:55 (UTC+7) | ToanAltF4 | feat/ai-feedback-quality | Nút Đúng ý/Chưa đúng cho câu trả lời AI, câu báo khi nhắn quá nhanh, trang chất lượng trợ lý AI cho admin
 - 2026-10-16 01:37 (UTC+7) | ToanAltF4 | feat/chat-quick-replies | Nút trả lời nhanh Có/Không/Không rõ khi trợ lý AI hỏi lại
 - 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
@@ -342,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 19:38 (UTC+7) | ToanAltF4 | feat/admin-technician-search | Admin tra cứu kỹ thuật viên và xem đủ thông tin
 - 2026-10-09 19:10 (UTC+7) | ToanAltF4 | feat/sm-replace-technician | SM xử lý yêu cầu đổi thợ: giao thợ khác hoặc huỷ không trừ điểm
 - 2026-10-09 18:33 (UTC+7) | ToanAltF4 | feat/customer-wallet-web | Ví khách: trang ví, nạp VNPay, trả hoá đơn bằng ví, SM hoàn tiền vào ví
-- 2026-10-09 17:41 (UTC+7) | ToanAltF4 | feat/customer-sessions-web | Khách đặt lịch theo buổi hoặc tới ngay kèm ghi chú, đổi lịch theo buổi thợ còn trống, đặt lại thợ cũ; lời mời phía thợ hiện buổi
