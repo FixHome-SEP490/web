@@ -3,11 +3,11 @@
 // floating assistant and the booking form's diagnosis step; the owner keeps
 // the conversation (useAiConversation) and puts its own action in the
 // `pinned` slot - "Đặt thợ" in the assistant, "Đổi dịch vụ" in the form.
-import { nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, priceLabel, type AiConversation } from '../../composables/useAiConversation';
+import { DESCRIBE_BEFORE_SEND, priceLabel, quickReplies, type AiChatMessage, type AiConversation } from '../../composables/useAiConversation';
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +34,25 @@ async function onFiles(event: Event) {
   const chosen = Array.from(target.files || []);
   target.value = '';
   await c.addFiles(chosen);
+}
+
+/** The newest assistant reply, the only one whose question can still be answered. */
+const latestReplyId = computed(() => {
+  for (let i = c.messages.length - 1; i >= 0; i -= 1) {
+    const message = c.messages[i];
+    if (message.sender === 'user') return null;
+    if (message.reply && !message.isAcknowledgement) return message.id;
+  }
+  return null;
+});
+
+function answersFor(message: AiChatMessage): string[] {
+  if (c.isThinking || message.id !== latestReplyId.value) return [];
+  return quickReplies(message.reply?.clarification?.questionsVi?.[0]);
+}
+
+function answer(text: string) {
+  void c.sendTurn(text, []);
 }
 
 defineExpose({ scrollToEnd });
@@ -100,8 +119,19 @@ defineExpose({ scrollToEnd });
               </div>
 
               <div v-if="message.reply.clarification?.questionsVi?.length" class="rounded-lg bg-warning-50 border border-warning-200 p-2.5" data-testid="ai-questions">
-                <p class="text-xs font-semibold text-warning-800 mb-1">Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé</p>
+                <p class="text-xs font-semibold text-warning-800 mb-1">{{ answersFor(message).length ? 'Em hỏi thêm một chút, anh/chị bấm chọn hoặc trả lời ở ô bên dưới nhé' : 'Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé' }}</p>
                 <p v-for="(question, index) in message.reply.clarification.questionsVi" :key="index" class="text-sm text-warning-900 leading-relaxed">{{ question }}</p>
+                <div v-if="answersFor(message).length" class="flex flex-wrap gap-2 mt-2" data-testid="ai-quick-replies">
+                  <button
+                    v-for="choice in answersFor(message)"
+                    :key="choice"
+                    type="button"
+                    class="px-3.5 py-1.5 rounded-full border border-warning-300 bg-white text-sm font-semibold text-ink-900 hover:bg-warning-100 active:scale-95 transition-[background-color,transform] duration-150"
+                    @click="answer(choice)"
+                  >
+                    {{ choice }}
+                  </button>
+                </div>
               </div>
 
               <div v-if="priceLabel(message.reply)" class="flex items-center justify-between gap-3 pt-2 border-t border-ink-100">

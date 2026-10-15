@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 01:25 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/chat-book-after-reply
+> Cập nhật lần cuối: 2026-10-16 01:37 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/chat-quick-replies
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -124,7 +124,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 - Chọn 1 đến 2 kỹ thuật viên ở trang ứng viên, theo dõi booking, huỷ, đổi lịch, gia hạn tìm thợ.
 - Đơn sửa chữa: duyệt hoặc từ chối báo giá và chi phí phát sinh, xem hoá đơn, thanh toán VNPay hoặc tiền mặt, xác nhận hoàn tất, xem bằng chứng, bảo hành và yêu cầu bảo hành, đánh giá kỹ thuật viên, khiếu nại.
 - Lịch sử sửa chữa (trong menu avatar), hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
-- Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Khối "Đặt thợ" trong bong bóng (và nút "Đổi sang dịch vụ này" ở bước AI của form) chỉ hiện khi trợ lý đã trả lời xong (`isThinking` false); khách nhắn thêm thì ẩn cho tới khi tin trả lời về (`tests/ai-widget-book-after-reply.spec.ts`). Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
+- Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Khối "Đặt thợ" trong bong bóng (và nút "Đổi sang dịch vụ này" ở bước AI của form) chỉ hiện khi trợ lý đã trả lời xong (`isThinking` false); khách nhắn thêm thì ẩn cho tới khi tin trả lời về (`tests/ai-widget-book-after-reply.spec.ts`). Khi trợ lý hỏi lại một câu có/không (kết thúc bằng "không?" hoặc "chưa?"), dưới câu hỏi mới nhất có nút trả lời nhanh "Có"/"Không"/"Không rõ" hoặc "Rồi"/"Chưa"/"Không rõ", bấm là gửi như tin nhắn (`quickReplies` trong `useAiConversation.ts`, `tests/ai-quick-replies.spec.ts`); ẩn khi trợ lý đang trả lời hoặc khách đã nhắn tiếp. Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
 
 ### Header thống nhất và landing (PO 09/10/2026, nhánh `feat/unified-header-landing`)
 
@@ -303,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 01:37 (UTC+7) | ToanAltF4 | feat/chat-quick-replies | Nút trả lời nhanh Có/Không/Không rõ khi trợ lý AI hỏi lại
 - 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
 - 2026-10-16 01:01 (UTC+7) | ToanAltF4 | chore/payout-page-title | Trang /console/wallets đổi tên thành Chi hộ và rút tiền (menu SM/Admin, tiêu đề trang, title route); tab Ví đổi thành Ví kỹ thuật viên
 - 2026-10-16 00:21 (UTC+7) | ToanAltF4 | feat/staff-customer-withdrawals | Quản lý dịch vụ và admin xem lệnh rút của khách ở tab Khách hàng trong Yêu cầu rút tiền của /console/wallets, tách khỏi kỹ thuật viên (danh sách, tổng, tìm, lọc, Kiểm tra lại), ví nguồn payOS chung hiện một lần
@@ -342,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 18:33 (UTC+7) | ToanAltF4 | feat/customer-wallet-web | Ví khách: trang ví, nạp VNPay, trả hoá đơn bằng ví, SM hoàn tiền vào ví
 - 2026-10-09 17:41 (UTC+7) | ToanAltF4 | feat/customer-sessions-web | Khách đặt lịch theo buổi hoặc tới ngay kèm ghi chú, đổi lịch theo buổi thợ còn trống, đặt lại thợ cũ; lời mời phía thợ hiện buổi
 - 2026-10-09 15:35 (UTC+7) | ToanAltF4 | feat/auto-reputation-web | Bỏ xác nhận/miễn vi phạm thủ công, trang huỷ đơn hiện số điểm đã trừ, gộp trang Vi phạm vào Điểm uy tín
-- 2026-10-09 10:31 (UTC+7) | ToanAltF4 | feat/reputation-web | Điểm uy tín: thẻ điểm ở hồ sơ khách và thợ, trang SM xem lịch sử và điều chỉnh điểm
