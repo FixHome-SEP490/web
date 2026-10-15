@@ -286,6 +286,22 @@ export function useAiConversation(options: AiConversationOptions = {}) {
 
 export type AiConversation = ReturnType<typeof useAiConversation>;
 
+/**
+ * One-tap answers to the question the assistant just asked, or none when the
+ * question is not a yes/no one ("bắt đầu từ khi nào?"). A tapped answer cannot
+ * be misread, and an older customer does not have to type it. "Không rõ" is
+ * an answer too: the assistant moves on instead of waiting for a yes or no.
+ */
+export function quickReplies(question: string | undefined | null): string[] {
+  const q = (question || '').normalize('NFC').trim().toLowerCase();
+  if (!q.endsWith('?')) return [];
+  const words = q.slice(0, -1).trim().split(/\s+/);
+  const last = words[words.length - 1];
+  if (last === 'chưa') return ['Rồi', 'Chưa', 'Không rõ'];
+  if (last === 'không') return ['Có', 'Không', 'Không rõ'];
+  return [];
+}
+
 let shared: AiConversation | null = null;
 
 /**
