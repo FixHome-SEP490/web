@@ -27,7 +27,7 @@ async function scrollToEnd() {
   if (thread.value) thread.value.scrollTop = thread.value.scrollHeight;
 }
 
-watch(() => [c.messages.length, c.isThinking], scrollToEnd, { immediate: true });
+watch(() => [c.messages.length, c.isThinking, c.messages[c.messages.length - 1]?.text], scrollToEnd, { immediate: true });
 
 async function onFiles(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -192,7 +192,7 @@ defineExpose({ scrollToEnd });
         </div>
       </div>
 
-      <ChatTypingDots v-if="c.isThinking" />
+      <ChatTypingDots v-if="c.isThinking && !c.isRevealing" />
     </div>
 
     <slot name="pinned" />

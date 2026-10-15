@@ -67,6 +67,36 @@ export interface AiConversationOptions {
   onUpdate?: () => void;
   /** Test seam for the acknowledgement pause. */
   dwellMs?: number;
+  /**
+   * Pause between the pieces of a reply as it is written out. Defaults to a
+   * short pause in a browser and none where motion is reduced or there is no
+   * browser (tests); 0 shows the reply at once.
+   */
+  revealMs?: number;
+}
+
+/** A reply is written out in at most this many steps, so a long one still takes about a second. */
+export const REVEAL_STEPS = 40;
+const REVEAL_DEFAULT_MS = 28;
+
+function defaultRevealMs(): number {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 0;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : REVEAL_DEFAULT_MS;
+}
+
+/**
+ * The text as it grows: whole words, at most REVEAL_STEPS pieces, the last one
+ * the full text. The reply has already passed every check on the server; this
+ * only paces how it appears.
+ */
+export function revealSteps(text: string): string[] {
+  const words = text.split(/(?<=\s)/);
+  if (words.length <= 1) return [text];
+  const size = Math.max(1, Math.ceil(words.length / REVEAL_STEPS));
+  const steps: string[] = [];
+  for (let end = size; end < words.length; end += size) steps.push(words.slice(0, end).join('').trimEnd());
+  steps.push(text);
+  return steps;
 }
 
 let messageCounter = 0;
@@ -104,7 +134,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   const messages = ref<AiChatMessage[]>(greetingMessage());
   const input = ref('');
   const pending = ref<PickedImage[]>([]);
+  /** True from Send until the reply is fully on screen: nothing to act on before then. */
   const isThinking = ref(false);
+  /** The reply is being written out; the typing dots give way to it. */
+  const isRevealing = ref(false);
   const turnCount = ref(0);
   const problem = ref('');
 
@@ -232,12 +265,28 @@ export function useAiConversation(options: AiConversationOptions = {}) {
       !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
     if (offered && !keepsSpecific) pinnedService.value = offered;
 
-    messages.value.push({
-      id: nextId(),
-      sender: 'bot',
-      text: reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply),
-      reply,
-    });
+    const shown = reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply);
+    const pace = options.revealMs ?? defaultRevealMs();
+    const steps = pace > 0 ? revealSteps(shown) : [shown];
+    if (steps.length === 1) {
+      messages.value.push({ id: nextId(), sender: 'bot', text: shown, reply });
+    } else {
+      // Written out piece by piece; the details under it (price, services,
+      // questions) and every button come only once the whole text is there.
+      isRevealing.value = true;
+      messages.value.push({ id: nextId(), sender: 'bot', text: '' });
+      const live = messages.value[messages.value.length - 1];
+      for (const step of steps) {
+        // Started over meanwhile: this reply belongs to a conversation that is gone.
+        if (!messages.value.includes(live)) break;
+        live.text = step;
+        updated();
+        if (step !== shown) await new Promise((resolve) => setTimeout(resolve, pace));
+      }
+      live.text = shown;
+      live.reply = reply;
+      isRevealing.value = false;
+    }
     isThinking.value = false;
     updated();
   }
@@ -272,6 +321,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     sessionId,
     pinnedService,
     lastReply,
+    isRevealing,
     canSend,
     needsDescription,
     loadHoldingLines,
