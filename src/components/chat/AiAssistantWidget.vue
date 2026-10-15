@@ -40,7 +40,15 @@ const conversation = useSharedAiConversation();
 
 /** Pages that hold the assistant conversation themselves (the booking form). */
 const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
-const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords } = conversation;
+const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords, isThinking } = conversation;
+
+/**
+ * The booking card shows only once the assistant has finished answering. While
+ * a follow-up is being worked on, the service it pinned may be about to change,
+ * and a button offering the old one beside a reply still being written reads
+ * as the assistant answering before it has listened.
+ */
+const showBooking = computed(() => !!pinnedService.value && !isThinking.value);
 
 async function toggle() {
   isOpen.value = !isOpen.value;
@@ -116,7 +124,13 @@ function goToBooking() {
         <AiConversationThread :conversation="conversation" class="flex-1 min-h-0">
           <!-- Pinned booking. Stays put; replaced when the assistant changes it. -->
           <template #pinned>
-            <div v-if="pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100">
+            <transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 translate-y-1"
+              leave-active-class="transition duration-100 ease-in"
+              leave-to-class="opacity-0"
+            >
+            <div v-if="showBooking && pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100">
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-brand-700">Dịch vụ đang chọn</p>
                 <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>
@@ -132,6 +146,7 @@ function goToBooking() {
                 Đặt thợ
               </button>
             </div>
+            </transition>
           </template>
         </AiConversationThread>
       </div>

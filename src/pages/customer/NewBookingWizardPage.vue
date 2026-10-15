@@ -1469,7 +1469,7 @@ const createAndFindTech = async () => {
           <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
             <template #pinned>
               <div
-                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId"
+                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
                 class="flex flex-wrap items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
                 data-testid="ai-suggested-service"
               >
