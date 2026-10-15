@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 00:21 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/staff-customer-withdrawals
+> Cập nhật lần cuối: 2026-10-16 01:01 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: chore/payout-page-title
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -303,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 01:01 (UTC+7) | ToanAltF4 | chore/payout-page-title | Trang /console/wallets đổi tên thành Chi hộ và rút tiền (menu SM/Admin, tiêu đề trang, title route); tab Ví đổi thành Ví kỹ thuật viên
 - 2026-10-16 00:21 (UTC+7) | ToanAltF4 | feat/staff-customer-withdrawals | Quản lý dịch vụ và admin xem lệnh rút của khách ở tab Khách hàng trong Yêu cầu rút tiền của /console/wallets, tách khỏi kỹ thuật viên (danh sách, tổng, tìm, lọc, Kiểm tra lại), ví nguồn payOS chung hiện một lần
 - 2026-10-14 23:46 (UTC+7) | ToanAltF4 | feat/customer-withdrawal-kyc | Khách rút ví về ngân hàng sau một lần xác minh danh tính bằng ảnh hai mặt CCCD (trang /app/kyc, phần Rút tiền ở ví, lịch sử rút), hồ sơ khoá họ tên và ngày sinh đã xác minh, admin duyệt xác minh của khách ở tab Khách hàng của trang Duyệt xác minh danh tính, nhãn withdrawal và withdrawal_refund
 - 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
@@ -342,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 15:35 (UTC+7) | ToanAltF4 | feat/auto-reputation-web | Bỏ xác nhận/miễn vi phạm thủ công, trang huỷ đơn hiện số điểm đã trừ, gộp trang Vi phạm vào Điểm uy tín
 - 2026-10-09 10:31 (UTC+7) | ToanAltF4 | feat/reputation-web | Điểm uy tín: thẻ điểm ở hồ sơ khách và thợ, trang SM xem lịch sử và điều chỉnh điểm
 - 2026-10-09 00:14 (UTC+7) | ToanAltF4 | feat/technician-certificates | Đăng ký thợ: chứng chỉ không bắt buộc (bản công chứng), câu nhắc đến trụ sở sau khi gửi hồ sơ.
-- 2026-10-09 00:03 (UTC+7) | ToanAltF4 | feat/technician-order-steps | Thợ: check-in kèm ảnh một nút, hoàn thành kèm ảnh rồi gửi nghiệm thu, bỏ nút bắt đầu sửa, nút cần thay đổi thợ sau check-in.
