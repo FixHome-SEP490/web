@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     environment: 'happy-dom',
-    setupFiles: ['tests/support/query-client.ts'],
+    setupFiles: ['tests/support/query-client.ts', 'tests/support/reduced-motion.ts'],
   },
 });
