@@ -64,6 +64,8 @@ export interface AiBookingSummary {
   requiresAssessment?: boolean | null;
   recommendedServiceName?: string | null;
   photoCount?: number;
+  /** What the customer already tried, ruled out or suspects, from the AI. */
+  notes?: string[];
   recordedAt?: string;
 }
 

@@ -319,3 +319,43 @@ export function useSharedAiConversation(): AiConversation {
 export function resetSharedAiConversation() {
   shared = null;
 }
+
+export interface BookingRecap {
+  device: string | null;
+  faults: string[];
+  told: string[];
+}
+
+// The AI writes its notes about "Khách" for the technician; the customer reads them as their own.
+const TOLD_FOR_CUSTOMER: Array<[RegExp, string]> = [
+  [/^Khách bác khả năng /, 'Không phải '],
+  [/^Khách nghi /, 'Bạn nghi '],
+  [/^Khách có tả /, 'Có '],
+  [/^Khách cho biết /, ''],
+  [/^Khách /, ''],
+];
+
+/**
+ * What the technician will be handed, shown to the customer on the confirm
+ * step so they see they will not have to tell it all again. Empty when the
+ * assistant has not named anything yet.
+ */
+export function bookingRecap(reply: AiReply | null | undefined): BookingRecap | null {
+  if (!reply) return null;
+  const device = reply.device?.nameVi?.trim() || null;
+  const faults = (reply.suspectedFaults ?? [])
+    .map((fault) => fault.nameVi?.trim())
+    .filter((name): name is string => !!name)
+    .slice(0, 2);
+  const told = (reply.notesVi ?? [])
+    .map((note) => (note || '').trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((note) => {
+      const rule = TOLD_FOR_CUSTOMER.find(([pattern]) => pattern.test(note));
+      const text = rule ? note.replace(rule[0], rule[1]) : note;
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    });
+  if (!device && !faults.length && !told.length) return null;
+  return { device, faults, told };
+}

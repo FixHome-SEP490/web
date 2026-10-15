@@ -19,6 +19,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 const customerWords = computed(() => (props.summary.customerText || props.description || '').trim());
 const faults = computed(() => (props.summary.suspectedFaults ?? []).filter(Boolean));
 const actions = computed(() => (props.summary.suggestedActions ?? []).filter(Boolean));
+const notes = computed(() => (props.summary.notes ?? []).filter(Boolean));
 const hasPrice = computed(() => props.summary.priceMin != null || props.summary.priceMax != null);
 </script>
 
@@ -61,6 +62,10 @@ const hasPrice = computed(() => props.summary.priceMin != null || props.summary.
           <div v-if="faults.length" class="flex gap-3">
             <dt class="w-24 shrink-0 text-ink-500">Có thể là</dt>
             <dd class="text-ink-900"><ul class="space-y-0.5"><li v-for="f in faults" :key="f">{{ f }}</li></ul></dd>
+          </div>
+          <div v-if="notes.length" class="flex gap-3">
+            <dt class="w-24 shrink-0 text-ink-500">Đã trao đổi</dt>
+            <dd class="text-ink-900"><ul class="space-y-0.5" data-testid="ai-summary-notes"><li v-for="n in notes" :key="n">{{ n }}</li></ul></dd>
           </div>
           <div v-if="actions.length" class="flex gap-3">
             <dt class="w-24 shrink-0 text-ink-500">Đã khuyên khách</dt>
