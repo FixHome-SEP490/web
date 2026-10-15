@@ -141,7 +141,7 @@ const techTxLoading = ref(false);
 const techTxError = ref(false);
 
 const tabs = computed(() => [
-  { key: 'wallets' as const, label: 'Ví', count: walletsTotal.value },
+  { key: 'wallets' as const, label: 'Ví kỹ thuật viên', count: walletsTotal.value },
   { key: 'withdrawals' as const, label: 'Yêu cầu rút tiền' },
   ...(isAdmin.value ? [{ key: 'config' as const, label: 'Cấu hình' }] : []),
 ]);
@@ -368,7 +368,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Ví kỹ thuật viên">
+    <ConsolePageHeader title="Chi hộ và rút tiền">
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem @click="refreshActiveTab">Làm mới</ConsoleMenuItem>

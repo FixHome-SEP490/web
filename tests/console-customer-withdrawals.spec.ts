@@ -137,6 +137,13 @@ describe('Rút tiền của khách hàng trong console', () => {
     expect(customerApi.payoutOverview).not.toHaveBeenCalled();
   });
 
+  it('titles the page for both sides and keeps the wallet tab about technicians', async () => {
+    const w = mount(ConsoleWalletsPage, { global: { stubs } });
+    await flushPromises();
+    expect(w.find('h1').text()).toBe('Chi hộ và rút tiền');
+    expect(tab(w, 'Ví kỹ thuật viên').exists()).toBe(true);
+  });
+
   it('keeps the two lists apart when switching tabs', async () => {
     const w = await openPayouts();
     const techListCalls = walletApi.listWithdrawals.mock.calls.length;

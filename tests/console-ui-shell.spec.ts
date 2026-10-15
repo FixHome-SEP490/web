@@ -55,6 +55,13 @@ describe('Console sidebar', () => {
     expect(consoleNavigation('CUSTOMER')).toEqual([]);
   });
 
+  it('names the payout page for both technicians and customers in both menus', () => {
+    for (const role of ['SERVICE_MANAGER', 'ADMIN']) {
+      const item = consoleNavigation(role).flatMap((g) => g.items).find((i) => i.path === '/console/wallets');
+      expect(item?.label).toBe('Chi hộ và rút tiền');
+    }
+  });
+
   it('gives every console route a plain Vietnamese title', () => {
     const consoleRoutes = router.getRoutes().filter((r) => r.path.startsWith('/console') && r.meta.title);
     expect(consoleRoutes.length).toBeGreaterThan(15);

@@ -311,7 +311,7 @@ const routes: RouteRecordRaw[] = [
         path: 'wallets',
         name: 'console-wallets',
         component: () => import('../pages/console/ConsoleWalletsPage.vue'),
-        meta: { title: 'Ví kỹ thuật viên', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        meta: { title: 'Chi hộ và rút tiền', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'technicians',
