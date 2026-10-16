@@ -14,6 +14,7 @@ export { default as FhSkeleton } from './FhSkeleton.vue';
 export { default as FhPagination } from './FhPagination.vue';
 export { default as FhConfirmDialog } from './FhConfirmDialog.vue';
 export { default as AppSidebar } from './AppSidebar.vue';
+export type { NavItem as SidebarNavItem, NavGroup as SidebarNavGroup } from './AppSidebar.vue';
 export { default as ChatThread } from './chat/ChatThread.vue';
 export { default as ChatFloatingWidget } from './chat/ChatFloatingWidget.vue';
 export { default as AiAssistantWidget } from './chat/AiAssistantWidget.vue';

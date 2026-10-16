@@ -36,7 +36,7 @@ describe('GoogleSignInButton', () => {
     await flushPromises();
 
     expect(mockRender).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('hoặc');
+    expect(wrapper.text()).toContain('Hoặc tiếp tục với');
   });
 
   // Chưa điền CLIENT_ID mà vẫn hiện nút thì người dùng bấm vào không có gì xảy

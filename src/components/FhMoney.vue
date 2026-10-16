@@ -35,11 +35,11 @@ const formattedAmount = computed(() => {
     class="inline-flex items-baseline gap-1 font-num tabular-nums select-none"
     :class="[
       emphasis
-        ? 'text-lg sm:text-xl font-bold text-ink-900 tracking-tight'
-        : 'text-sm sm:text-base font-semibold text-ink-900',
+        ? 'text-lg sm:text-xl font-bold tracking-tight'
+        : 'text-sm sm:text-base font-semibold',
     ]"
   >
     <span>{{ formattedAmount }}</span>
-    <span class="text-[0.85em] font-normal text-ink-600">{{ currency }}</span>
+    <span class="text-[0.85em] font-normal opacity-80">{{ currency }}</span>
   </span>
 </template>

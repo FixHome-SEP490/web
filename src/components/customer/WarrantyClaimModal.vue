@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Camera, X } from 'lucide-vue-next';
+import { Camera, X, ShieldAlert, AlertTriangle, AlertCircle, Wrench } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import { ordersApi, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
@@ -92,117 +92,206 @@ async function submit() {
 <template>
   <div
     v-if="open"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overflow-y-auto"
     @keydown.esc="close"
   >
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="warranty-claim-title"
-      class="bg-white rounded-[var(--radius-lg)] max-w-md w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+      class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto transition-all"
     >
-      <div class="flex items-center justify-between">
-        <h3 id="warranty-claim-title" class="text-base font-bold text-ink-900">Yêu cầu bảo hành</h3>
-        <button type="button" class="p-1 rounded-full hover:bg-ink-100" aria-label="Đóng" @click="close">
-          <X :size="18" />
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <ShieldAlert :size="22" />
+          </div>
+          <div>
+            <h3 id="warranty-claim-title" class="text-lg font-bold text-ink-900 tracking-tight">
+              Yêu cầu bảo hành
+            </h3>
+            <p class="text-xs text-ink-500 mt-0.5">
+              Gửi thông tin sự cố để thợ phụ trách liên hệ khắc phục sớm nhất.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="w-8 h-8 rounded-full bg-ink-100 hover:bg-ink-200 text-ink-500 hover:text-ink-800 flex items-center justify-center transition-colors shrink-0"
+          aria-label="Đóng"
+          @click="close"
+        >
+          <X :size="16" />
         </button>
       </div>
 
-      <p class="text-xs text-ink-600">
-        Đơn <span class="font-num font-bold text-brand-700">{{ orderCode }}</span> · {{ serviceName }} ·
-        Kỹ thuật viên phụ trách: {{ technicianName }}
-      </p>
+      <!-- Order Context Card -->
+      <div class="rounded-2xl bg-ink-50/80 border border-ink-100 p-3.5 space-y-2 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-ink-500">Đơn hàng:</span>
+          <span class="font-bold text-ink-900 font-num">#{{ orderCode }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-ink-500">Dịch vụ:</span>
+          <span class="font-semibold text-ink-800 text-right truncate max-w-[240px]">{{ serviceName }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-1 border-t border-ink-100/70">
+          <span class="text-ink-500">Kỹ thuật viên:</span>
+          <span class="font-medium text-ink-800">{{ technicianName }}</span>
+        </div>
+      </div>
 
-      <fieldset class="space-y-1.5">
-        <legend class="text-xs font-medium text-ink-700 mb-1">Hạng mục cần bảo hành</legend>
-        <label
-          v-for="coverage in coverages"
-          :key="coverage.id"
-          class="flex items-start gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs"
-          :class="[
-            busyCoverageIds.includes(coverage.id) ? 'opacity-60 border-ink-200' : 'border-ink-300 cursor-pointer',
-            selectedId === coverage.id ? 'border-brand-600 bg-brand-50' : '',
-          ]"
-        >
-          <input
-            v-model="selectedId"
-            type="radio"
-            name="warranty-coverage"
-            class="mt-0.5"
-            :value="coverage.id"
-            :disabled="busyCoverageIds.includes(coverage.id)"
-          />
-          <span class="flex-1">
-            <span class="block font-medium text-ink-900">{{ coverage.itemDescription }}</span>
-            <span class="block text-ink-500">
-              Hạn bảo hành: {{ formatDateVN(coverage.expiresAt) }} ·
-              {{ coverage.status === 'ACTIVE' ? 'Còn hạn' : 'Đã hết hạn' }}
-              <template v-if="busyCoverageIds.includes(coverage.id)"> · Đang có yêu cầu chưa xử lý xong</template>
-            </span>
-          </span>
-        </label>
+      <!-- Fieldset: Select coverage item -->
+      <fieldset class="space-y-2">
+        <legend class="text-xs font-semibold text-ink-800 mb-1 flex items-center gap-1.5">
+          <Wrench :size="13" class="text-ink-500" />
+          <span>Chọn hạng mục cần bảo hành</span>
+        </legend>
+
+        <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+          <label
+            v-for="coverage in coverages"
+            :key="coverage.id"
+            class="relative flex items-start gap-3 p-3 rounded-xl border text-xs transition-all select-none"
+            :class="[
+              busyCoverageIds.includes(coverage.id)
+                ? 'opacity-60 border-ink-200 bg-ink-50 cursor-not-allowed'
+                : selectedId === coverage.id
+                ? 'border-brand-600 bg-brand-50/40 ring-1 ring-brand-500/20 cursor-pointer'
+                : 'border-ink-200 bg-white hover:border-ink-300 cursor-pointer',
+            ]"
+          >
+            <input
+              v-model="selectedId"
+              type="radio"
+              name="warranty-coverage"
+              class="mt-0.5 h-4 w-4 text-brand-600 focus:ring-brand-500 cursor-pointer"
+              :value="coverage.id"
+              :disabled="busyCoverageIds.includes(coverage.id)"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold text-ink-900 truncate">{{ coverage.itemDescription }}</span>
+                <span
+                  class="px-2 py-0.5 rounded-md text-[11px] font-semibold shrink-0"
+                  :class="coverage.status === 'ACTIVE' ? 'bg-success-100 text-success-800' : 'bg-ink-200 text-ink-600'"
+                >
+                  {{ coverage.status === 'ACTIVE' ? 'Còn hạn' : 'Đã hết hạn' }}
+                </span>
+              </div>
+              <div class="text-[11px] text-ink-500 mt-1 flex items-center gap-2">
+                <span>Hạn bảo hành: <strong class="font-num text-ink-700">{{ formatDateVN(coverage.expiresAt) }}</strong></span>
+                <span v-if="busyCoverageIds.includes(coverage.id)" class="text-warning-700 font-medium">
+                  · Đang có yêu cầu chưa xử lý xong
+                </span>
+              </div>
+            </div>
+          </label>
+        </div>
       </fieldset>
 
-      <p
+      <!-- Expired coverage note -->
+      <div
         v-if="selected && selected.status !== 'ACTIVE'"
         role="status"
-        class="p-2.5 rounded-[var(--radius-sm)] bg-warning-50 text-warning-700 text-xs"
+        class="p-3 rounded-xl bg-warning-50 border border-warning-200 text-warning-800 text-xs flex items-start gap-2"
       >
-        Hạng mục này đã hết hạn bảo hành. Bạn vẫn có thể gửi yêu cầu, quản lý dịch vụ sẽ xem xét và phản hồi.
-      </p>
+        <AlertTriangle :size="16" class="text-warning-600 shrink-0 mt-0.5" />
+        <span class="text-pretty">
+          Hạng mục này <strong>đã hết hạn bảo hành</strong>. Bạn vẫn có thể gửi yêu cầu, quản lý dịch vụ FixHome sẽ xem xét và phản hồi hướng hỗ trợ.
+        </span>
+      </div>
 
-      <div class="space-y-1">
-        <label for="warranty-claim-description" class="text-xs font-medium text-ink-700">Mô tả sự cố</label>
+      <!-- Problem Description Textarea -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label for="warranty-claim-description" class="text-xs font-semibold text-ink-800">
+            Mô tả sự cố bạn gặp phải <span class="text-danger-500">*</span>
+          </label>
+          <span
+            class="text-[11px] font-num"
+            :class="description.trim().length < MIN_LENGTH ? 'text-ink-400' : 'text-success-600 font-medium'"
+          >
+            {{ description.trim().length }}/{{ MIN_LENGTH }} ký tự tối thiểu
+          </span>
+        </div>
         <textarea
           id="warranty-claim-description"
           v-model="description"
-          rows="4"
+          rows="3"
           maxlength="2000"
-          placeholder="Mô tả hiện tượng lỗi xuất hiện lại sau khi sửa"
-          class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+          placeholder="Mô tả cụ thể hiện tượng lỗi lặp lại (ví dụ: máy lại bị rò nước ở vị trí cũ, công tắc chập chờn sau 2 ngày dùng...)"
+          class="w-full p-3 bg-white border border-ink-200 rounded-xl text-sm placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors resize-none"
         ></textarea>
       </div>
 
+      <!-- Evidence Photos Upload -->
       <div class="space-y-2">
-        <span class="text-xs font-medium text-ink-700">Ảnh đính kèm (không bắt buộc, tối đa {{ evidence.maxPhotos }} ảnh)</span>
-        <div v-if="evidence.photos.value.length" class="flex flex-wrap gap-2">
-          <div v-for="(photo, index) in evidence.photos.value" :key="photo.url" class="relative">
-            <img :src="photo.url" :alt="photo.name" class="w-16 h-16 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-semibold text-ink-800">Ảnh hiện trường sự cố (tối đa {{ evidence.maxPhotos }} ảnh)</span>
+          <span class="text-ink-400">Không bắt buộc</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div
+            v-for="(photo, index) in evidence.photos.value"
+            :key="photo.url"
+            class="relative w-16 h-16 rounded-xl overflow-hidden border border-ink-200 group"
+          >
+            <img :src="photo.url" :alt="photo.name" class="w-full h-full object-cover" />
             <button
               type="button"
-              class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-white border border-ink-300 flex items-center justify-center"
+              class="absolute top-1 right-1 w-5 h-5 rounded-full bg-ink-900/80 hover:bg-danger-600 text-white flex items-center justify-center transition-colors shadow-xs"
               :aria-label="`Bỏ ảnh ${photo.name}`"
               @click="evidence.remove(index)"
             >
               <X :size="12" />
             </button>
           </div>
+
+          <label
+            v-if="evidence.photos.value.length < evidence.maxPhotos"
+            class="inline-flex flex-col items-center justify-center w-16 h-16 rounded-xl border border-dashed border-ink-300 hover:border-brand-500 hover:bg-brand-50/30 text-ink-500 hover:text-brand-600 cursor-pointer transition-colors"
+            :class="{ 'opacity-60 pointer-events-none': evidence.uploading.value }"
+          >
+            <Camera :size="18" />
+            <span class="text-[10px] mt-1">{{ evidence.uploading.value ? 'Đang tải...' : 'Thêm ảnh' }}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="evidence.pick" />
+          </label>
         </div>
-        <label
-          class="inline-flex items-center gap-1.5 h-[36px] px-3 text-sm rounded-[var(--radius-sm)] border border-ink-300 cursor-pointer hover:bg-ink-50"
-          :class="{ 'opacity-60 pointer-events-none': evidence.uploading.value || evidence.photos.value.length >= evidence.maxPhotos }"
-        >
-          <Camera :size="14" />
-          {{ evidence.uploading.value ? 'Đang tải ảnh…' : 'Thêm ảnh' }}
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="evidence.pick" />
-        </label>
       </div>
 
-      <p v-if="error || evidence.error.value" role="alert" class="text-xs text-danger-700">{{ error || evidence.error.value }}</p>
+      <!-- Error message -->
+      <div
+        v-if="error || evidence.error.value"
+        role="alert"
+        class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-700 flex items-center gap-2"
+      >
+        <AlertCircle :size="16" class="shrink-0" />
+        <span class="text-pretty">{{ error || evidence.error.value }}</span>
+      </div>
 
-      <div class="flex gap-2 pt-2">
-        <FhButton variant="ghost" size="sm" class="flex-1" :disabled="submitting || evidence.uploading.value" @click="close">
-          Đóng
+      <!-- Action buttons -->
+      <div class="flex items-center gap-3 pt-1">
+        <FhButton
+          variant="secondary"
+          size="md"
+          class="flex-1"
+          :disabled="submitting || evidence.uploading.value"
+          @click="close"
+        >
+          Hủy bỏ
         </FhButton>
         <FhButton
           variant="primary"
-          size="sm"
+          size="md"
           class="flex-1"
           :loading="submitting"
           :disabled="submitting || evidence.uploading.value || !selectable.length"
           @click="submit"
         >
-          {{ submitting ? 'Đang gửi yêu cầu…' : 'Gửi yêu cầu bảo hành' }}
+          Gửi yêu cầu bảo hành
         </FhButton>
       </div>
     </div>

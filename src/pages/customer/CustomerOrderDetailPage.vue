@@ -13,6 +13,7 @@ import {
   X,
   BadgeCheck,
   MoreHorizontal,
+  ChevronDown,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -593,6 +594,13 @@ const handleReviewSubmitted = (review: Review) => {
 // Actions at the top of the page (PO 10/10/2026): one visible secondary action for the
 // state of the order, rare and destructive ones in the "⋯" menu.
 const moreOpen = ref(false);
+
+// ── Collapsible section states (YouTube description style) ──
+const isCostsExpanded = ref(true);
+const isPhotosExpanded = ref(true);
+const isTimelineExpanded = ref(true);
+const isWarrantyExpanded = ref(true);
+
 const isCompleted = computed(() => String(order.value?.status ?? '').toUpperCase() === 'COMPLETED');
 const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
 const canCancel = computed(() => order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE');
@@ -1051,16 +1059,63 @@ const parsedReview = computed(() => {
       </section>
 
       <!-- 4. Progress -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
-        <h2 class="text-lg font-semibold text-ink-900">Tiến trình</h2>
-        <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
-        <p v-else class="text-sm text-ink-500">Chưa có cập nhật.</p>
+      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+        <button
+          type="button"
+          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :aria-expanded="isTimelineExpanded"
+          @click="isTimelineExpanded = !isTimelineExpanded"
+        >
+          <div class="flex items-center gap-2.5">
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">Tiến trình</h2>
+            <span v-if="timelineSteps.length > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-ink-100 text-ink-600 font-num">
+              {{ timelineSteps.length }} mốc
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
+            <span class="hidden sm:inline">{{ isTimelineExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
+            <div
+              class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
+              :class="{ 'rotate-180': isTimelineExpanded }"
+            >
+              <ChevronDown :size="18" />
+            </div>
+          </div>
+        </button>
+        <div
+          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          :class="isTimelineExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
+        >
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
+            <div class="pt-4">
+              <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
+              <p v-else class="text-sm text-ink-500">Chưa có cập nhật.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- 5. Photos from the technician -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="text-lg font-semibold text-ink-900">Ảnh sửa chữa</h2>
+      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+        <div class="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            class="flex items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"
+            :aria-expanded="isPhotosExpanded"
+            @click="isPhotosExpanded = !isPhotosExpanded"
+          >
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">Ảnh sửa chữa</h2>
+            <span v-if="evidences.length > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-ink-100 text-ink-600 font-num">
+              {{ evidences.length }}
+            </span>
+            <div
+              class="flex h-6 w-6 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
+              :class="{ 'rotate-180': isPhotosExpanded }"
+            >
+              <ChevronDown :size="16" />
+            </div>
+          </button>
+
           <div v-if="evidences.length > 0" class="flex items-center gap-1.5 overflow-x-auto" role="tablist" aria-label="Lọc ảnh">
             <button
               v-for="tab in [
@@ -1073,8 +1128,8 @@ const parsedReview = computed(() => {
               type="button"
               role="tab"
               :aria-selected="evidenceFilter === tab.key"
-              class="h-8 px-3 rounded-full text-sm font-medium transition-colors shrink-0 whitespace-nowrap"
-              :class="evidenceFilter === tab.key ? 'bg-brand-600 text-white' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50'"
+              class="h-8 px-3 rounded-full text-xs sm:text-sm font-medium transition-colors shrink-0 whitespace-nowrap"
+              :class="evidenceFilter === tab.key ? 'bg-brand-600 text-white shadow-xs' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50'"
               @click="evidenceFilter = (tab.key as 'ALL' | 'BEFORE' | 'AFTER' | 'ADDITIONAL')"
             >
               {{ tab.label }}
@@ -1082,158 +1137,194 @@ const parsedReview = computed(() => {
           </div>
         </div>
 
-        <p v-if="filteredEvidences.length === 0" class="text-sm text-ink-500 text-pretty">
-          <template v-if="order.status === 'EN_ROUTE' || order.status === 'ACCEPTED'">Kỹ thuật viên sẽ chụp ảnh khi tới nơi.</template>
-          <template v-else-if="order.status === 'UNDER_REPAIR'">Kỹ thuật viên sẽ chụp ảnh sau khi sửa xong.</template>
-          <template v-else>Chưa có ảnh.</template>
-        </p>
+        <div
+          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          :class="isPhotosExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
+        >
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
+            <div class="pt-4">
+              <p v-if="filteredEvidences.length === 0" class="text-sm text-ink-500 text-pretty">
+                <template v-if="order.status === 'EN_ROUTE' || order.status === 'ACCEPTED'">Kỹ thuật viên sẽ chụp ảnh khi tới nơi.</template>
+                <template v-else-if="order.status === 'UNDER_REPAIR'">Kỹ thuật viên sẽ chụp ảnh sau khi sửa xong.</template>
+                <template v-else>Chưa có ảnh.</template>
+              </p>
 
-        <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <button
-            v-for="ev in filteredEvidences"
-            :key="ev.id"
-            type="button"
-            class="text-left rounded-xl border border-ink-200 bg-white overflow-hidden hover:border-ink-300 transition-colors flex flex-col"
-            :aria-label="`Phóng to ảnh ${evidenceTypeLabel(ev.type).toLowerCase()}`"
-            @click="openLightbox(ev)"
-          >
-            <span class="relative block aspect-4/3 bg-ink-100 overflow-hidden">
-              <img :src="ev.mediaUrl" :alt="ev.note || 'Ảnh sửa chữa'" class="w-full h-full object-cover" loading="lazy" />
-              <span class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white whitespace-nowrap" :class="evidenceTypeClass(ev.type)">
-                {{ evidenceTypeLabel(ev.type) }}
-              </span>
-            </span>
-            <span class="block p-2.5 space-y-0.5">
-              <span v-if="ev.note?.trim()" class="block text-sm text-ink-800 line-clamp-2">{{ ev.note }}</span>
-              <span class="block text-xs text-ink-500 font-num whitespace-nowrap">{{ formatFullTimestamp(ev.capturedAt || ev.createdAt) }}</span>
-            </span>
-          </button>
+              <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <button
+                  v-for="ev in filteredEvidences"
+                  :key="ev.id"
+                  type="button"
+                  class="text-left rounded-xl border border-ink-200 bg-white overflow-hidden hover:border-ink-300 hover:shadow-xs transition-all flex flex-col group"
+                  :aria-label="`Phóng to ảnh ${evidenceTypeLabel(ev.type).toLowerCase()}`"
+                  @click="openLightbox(ev)"
+                >
+                  <span class="relative block aspect-4/3 bg-ink-100 overflow-hidden">
+                    <img :src="ev.mediaUrl" :alt="ev.note || 'Ảnh sửa chữa'" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                    <span class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white whitespace-nowrap shadow-xs" :class="evidenceTypeClass(ev.type)">
+                      {{ evidenceTypeLabel(ev.type) }}
+                    </span>
+                  </span>
+                  <span class="block p-2.5 space-y-0.5">
+                    <span v-if="ev.note?.trim()" class="block text-sm text-ink-800 line-clamp-2">{{ ev.note }}</span>
+                    <span class="block text-xs text-ink-500 font-num whitespace-nowrap">{{ formatFullTimestamp(ev.capturedAt || ev.createdAt) }}</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       <!-- 6. Costs: one list, lines grouped, one total -->
       <section
-        class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-5 text-sm"
-        :class="canDecideQuotation ? 'order-1' : 'order-3'"
+        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs text-sm"
+        :class="canDecideQuotation ? 'order-1 ring-1 ring-brand-200' : 'order-3'"
         data-testid="order-costs"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-lg font-semibold text-ink-900">{{ canDecideQuotation ? 'Báo giá chờ bạn duyệt' : 'Chi phí' }}</h2>
-          <span
-            v-if="order.status !== 'CANCELLED' && !notQuotedYet"
-            class="font-medium whitespace-nowrap"
-            :class="isPaid ? 'text-success-700' : 'text-ink-500'"
-          >
-            {{ isPaid ? 'Đã thanh toán' : 'Chưa thanh toán' }}
-          </span>
-        </div>
-
-        <p v-if="notQuotedYet" class="text-ink-600 text-pretty" data-testid="order-not-quoted">
-          {{ order.status === 'CANCELLED' ? 'Đơn đã huỷ trước khi có báo giá.' : 'Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.' }}
-        </p>
-
-        <template v-else>
-        <div class="space-y-1">
-          <div class="flex items-center justify-between gap-3 text-ink-500">
-            <h3 class="font-medium">Tiền công</h3>
-            <span class="font-num whitespace-nowrap">Tổng công: <FhMoney :amount="shownLaborTotal" /></span>
+        <button
+          type="button"
+          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :aria-expanded="isCostsExpanded"
+          @click="isCostsExpanded = !isCostsExpanded"
+        >
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ canDecideQuotation ? 'Báo giá chờ bạn duyệt' : 'Chi phí' }}</h2>
+            <span
+              v-if="order.status !== 'CANCELLED' && !notQuotedYet"
+              class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+              :class="isPaid ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-800'"
+            >
+              {{ isPaid ? 'Đã thanh toán' : 'Chưa thanh toán' }}
+            </span>
           </div>
-          <ul class="divide-y divide-ink-100">
-            <template v-if="laborItems.length > 0">
-              <li v-for="item in laborItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
-                <span class="min-w-0 text-ink-900">
-                  {{ item.description }}
-                  <span class="block text-ink-500 font-num whitespace-nowrap">
-                    {{ item.quantity }} × <FhMoney :amount="item.unitPrice" />
-                    <template v-if="item.warrantyDays"> · Bảo hành {{ item.warrantyDays }}&nbsp;ngày</template>
-                  </span>
-                </span>
-                <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
-              </li>
-            </template>
-            <li v-else class="flex items-start justify-between gap-3 py-2.5">
-              <span class="min-w-0 text-ink-900">
-                {{ order.serviceName }}
-                <span class="block text-ink-500 font-num whitespace-nowrap">
-                  {{ order.quantity || 1 }} × <FhMoney :amount="order.laborTotal" />
-                  <template v-if="order.laborWarrantyDays"> · Bảo hành {{ order.laborWarrantyDays }}&nbsp;ngày</template>
-                </span>
-              </span>
-              <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="order.laborTotal" /></span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="space-y-1">
-          <div class="flex items-center justify-between gap-3 text-ink-500">
-            <h3 class="font-medium">Linh kiện</h3>
-            <span class="font-num whitespace-nowrap">Tổng linh kiện: <FhMoney :amount="shownPartsTotal" /></span>
+          <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
+            <span v-if="!notQuotedYet" class="text-sm font-semibold text-ink-900 font-num hidden sm:inline">
+              <FhMoney :amount="order.grandTotal" />
+            </span>
+            <span class="hidden sm:inline">{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
+            <div
+              class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
+              :class="{ 'rotate-180': isCostsExpanded }"
+            >
+              <ChevronDown :size="18" />
+            </div>
           </div>
-          <ul v-if="partsItems.length > 0" class="divide-y divide-ink-100">
-            <li v-for="item in partsItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
-              <span class="min-w-0 text-ink-900">
-                {{ item.description }}
-                <span class="block text-ink-500 font-num whitespace-nowrap">
-                  {{ item.quantity }} × <FhMoney :amount="item.unitPrice" />
-                  <template v-if="item.warrantyDays"> · Bảo hành {{ item.warrantyDays }}&nbsp;ngày</template>
-                </span>
-              </span>
-              <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
-            </li>
-          </ul>
-          <p v-else class="py-2.5 text-ink-500">Không thay linh kiện.</p>
-        </div>
+        </button>
 
-        <div v-if="decidedAdditionalCosts.length > 0" class="space-y-1">
-          <h3 class="font-medium text-ink-500">Phát sinh</h3>
-          <ul class="divide-y divide-ink-100">
-            <li v-for="cost in decidedAdditionalCosts" :key="cost.id" class="py-2.5 space-y-1.5">
-              <div class="flex items-start justify-between gap-3">
-                <span class="min-w-0 text-ink-900 text-pretty">{{ cost.reason }}</span>
-                <span class="flex items-center gap-2 shrink-0">
-                  <FhStatusPill :status="cost.status" :label="additionalCostLabels[cost.status]" />
-                  <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="additionalCostTotal(cost)" /></span>
-                </span>
-              </div>
-              <ul class="text-ink-500 space-y-0.5">
-                <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between gap-3">
-                  <span class="min-w-0">
-                    {{ item.description }} <span class="font-num whitespace-nowrap">· {{ item.quantity }} × <FhMoney :amount="item.unitPrice" /></span>
-                    <span v-if="item.partSource === 'external'" class="whitespace-nowrap"> · Linh kiện ngoài</span>
-                    <span v-else-if="item.partSource === 'fixhome'" class="whitespace-nowrap"> · Linh kiện FixHome</span>
-                  </span>
-                  <span class="font-num whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
-                </li>
-                <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between gap-3">
-                  <span>Phí giao linh kiện</span>
-                  <span class="font-num whitespace-nowrap"><FhMoney :amount="cost.shippingFee" /></span>
-                </li>
-              </ul>
-              <img
-                v-for="url in cost.evidenceUrls ?? []"
-                :key="url"
-                :src="url"
-                alt="Ảnh phát sinh"
-                class="inline-block w-12 h-12 mr-2 rounded-lg object-cover border border-ink-200"
-              />
-            </li>
-          </ul>
-        </div>
+        <div
+          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          :class="isCostsExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
+        >
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
+            <div class="pt-4 space-y-5">
+              <p v-if="notQuotedYet" class="text-ink-600 text-pretty" data-testid="order-not-quoted">
+                {{ order.status === 'CANCELLED' ? 'Đơn đã huỷ trước khi có báo giá.' : 'Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.' }}
+              </p>
 
-        </template>
+              <template v-else>
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between gap-3 text-ink-500">
+                    <h3 class="font-medium">Tiền công</h3>
+                    <span class="font-num whitespace-nowrap">Tổng công: <FhMoney :amount="shownLaborTotal" /></span>
+                  </div>
+                  <ul class="divide-y divide-ink-100">
+                    <template v-if="laborItems.length > 0">
+                      <li v-for="item in laborItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
+                        <span class="min-w-0 text-ink-900">
+                          {{ item.description }}
+                          <span class="block text-ink-500 font-num whitespace-nowrap">
+                            {{ item.quantity }} × <FhMoney :amount="item.unitPrice" />
+                            <template v-if="item.warrantyDays"> · Bảo hành {{ item.warrantyDays }}&nbsp;ngày</template>
+                          </span>
+                        </span>
+                        <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
+                      </li>
+                    </template>
+                    <li v-else class="flex items-start justify-between gap-3 py-2.5">
+                      <span class="min-w-0 text-ink-900">
+                        {{ order.serviceName }}
+                        <span class="block text-ink-500 font-num whitespace-nowrap">
+                          {{ order.quantity || 1 }} × <FhMoney :amount="order.laborTotal" />
+                          <template v-if="order.laborWarrantyDays"> · Bảo hành {{ order.laborWarrantyDays }}&nbsp;ngày</template>
+                        </span>
+                      </span>
+                      <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="order.laborTotal" /></span>
+                    </li>
+                  </ul>
+                </div>
 
-        <div v-if="!notQuotedYet" class="pt-4 border-t border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div class="flex items-baseline gap-3">
-            <span class="text-ink-500">Tổng cộng</span>
-            <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
-          </div>
-          <div v-if="canDecideQuotation" class="flex items-center gap-2">
-            <FhButton variant="secondary" size="md" :disabled="actionLoading" @click="handleRejectQuotation">
-              Từ chối báo giá
-            </FhButton>
-            <FhButton variant="primary" size="md" :disabled="actionLoading" @click="handleApproveQuotation">
-              Duyệt báo giá
-            </FhButton>
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between gap-3 text-ink-500">
+                    <h3 class="font-medium">Linh kiện</h3>
+                    <span class="font-num whitespace-nowrap">Tổng linh kiện: <FhMoney :amount="shownPartsTotal" /></span>
+                  </div>
+                  <ul v-if="partsItems.length > 0" class="divide-y divide-ink-100">
+                    <li v-for="item in partsItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
+                      <span class="min-w-0 text-ink-900">
+                        {{ item.description }}
+                        <span class="block text-ink-500 font-num whitespace-nowrap">
+                          {{ item.quantity }} × <FhMoney :amount="item.unitPrice" />
+                          <template v-if="item.warrantyDays"> · Bảo hành {{ item.warrantyDays }}&nbsp;ngày</template>
+                        </span>
+                      </span>
+                      <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
+                    </li>
+                  </ul>
+                  <p v-else class="py-2.5 text-ink-500">Không thay linh kiện.</p>
+                </div>
+
+                <div v-if="decidedAdditionalCosts.length > 0" class="space-y-1">
+                  <h3 class="font-medium text-ink-500">Phát sinh</h3>
+                  <ul class="divide-y divide-ink-100">
+                    <li v-for="cost in decidedAdditionalCosts" :key="cost.id" class="py-2.5 space-y-1.5">
+                      <div class="flex items-start justify-between gap-3">
+                        <span class="min-w-0 text-ink-900 text-pretty">{{ cost.reason }}</span>
+                        <span class="flex items-center gap-2 shrink-0">
+                          <FhStatusPill :status="cost.status" :label="additionalCostLabels[cost.status]" />
+                          <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="additionalCostTotal(cost)" /></span>
+                        </span>
+                      </div>
+                      <ul class="text-ink-500 space-y-0.5">
+                        <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between gap-3">
+                          <span class="min-w-0">
+                            {{ item.description }} <span class="font-num whitespace-nowrap">· {{ item.quantity }} × <FhMoney :amount="item.unitPrice" /></span>
+                            <span v-if="item.partSource === 'external'" class="whitespace-nowrap"> · Linh kiện ngoài</span>
+                            <span v-else-if="item.partSource === 'fixhome'" class="whitespace-nowrap"> · Linh kiện FixHome</span>
+                          </span>
+                          <span class="font-num whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
+                        </li>
+                        <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between gap-3">
+                          <span>Phí giao linh kiện</span>
+                          <span class="font-num whitespace-nowrap"><FhMoney :amount="cost.shippingFee" /></span>
+                        </li>
+                      </ul>
+                      <img
+                        v-for="url in cost.evidenceUrls ?? []"
+                        :key="url"
+                        :src="url"
+                        alt="Ảnh phát sinh"
+                        class="inline-block w-12 h-12 mr-2 rounded-lg object-cover border border-ink-200"
+                      />
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="pt-4 border-t border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div class="flex items-baseline gap-3">
+                    <span class="text-ink-500">Tổng cộng</span>
+                    <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
+                  </div>
+                  <div v-if="canDecideQuotation" class="flex items-center gap-2">
+                    <FhButton variant="secondary" size="md" :disabled="actionLoading" @click="handleRejectQuotation">
+                      Từ chối báo giá
+                    </FhButton>
+                    <FhButton variant="primary" size="md" :disabled="actionLoading" @click="handleApproveQuotation">
+                      Duyệt báo giá
+                    </FhButton>
+                  </div>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
       </section>
@@ -1241,59 +1332,84 @@ const parsedReview = computed(() => {
       <!-- 7. Warranty of this order -->
       <section
         v-if="isCompleted && orderWarranties.length > 0"
-        class="order-3 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4 text-sm"
+        class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs text-sm"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-lg font-semibold text-ink-900">Bảo hành</h2>
-          <span
-            class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
-            :class="
-              activeWarrantyClaim
-                ? 'bg-warning-50 text-warning-800 border border-warning-200'
-                : isOrderWarrantyActive
-                ? 'bg-success-50 text-success-700 border border-success-200'
-                : 'bg-ink-100 text-ink-600 border border-ink-200'
-            "
-          >
-            {{ activeWarrantyClaim ? 'Đang xử lý bảo hành' : isOrderWarrantyActive ? 'Còn hiệu lực' : 'Đã hết hạn' }}
-          </span>
-        </div>
-
-        <ul class="divide-y divide-ink-100">
-          <li v-for="w in orderWarranties" :key="w.id" class="py-2.5 flex items-start justify-between gap-3">
-            <span class="min-w-0">
-              <span class="block font-medium text-ink-900">{{ w.note || 'Bảo hành dịch vụ' }}</span>
-              <span class="block text-ink-500 font-num">
-                {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
-              </span>
-            </span>
+        <button
+          type="button"
+          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :aria-expanded="isWarrantyExpanded"
+          @click="isWarrantyExpanded = !isWarrantyExpanded"
+        >
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">Bảo hành</h2>
             <span
-              class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
-              :class="new Date(w.expiresAt) > new Date() ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-600'"
+              class="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+              :class="
+                activeWarrantyClaim
+                  ? 'bg-warning-50 text-warning-800 border border-warning-200'
+                  : isOrderWarrantyActive
+                  ? 'bg-success-50 text-success-700 border border-success-200'
+                  : 'bg-ink-100 text-ink-600 border border-ink-200'
+              "
             >
-              {{ new Date(w.expiresAt) > new Date() ? 'Còn hạn' : 'Hết hạn' }}
+              {{ activeWarrantyClaim ? 'Đang xử lý bảo hành' : isOrderWarrantyActive ? 'Còn hiệu lực' : 'Đã hết hạn' }}
             </span>
-          </li>
-        </ul>
-        <p class="flex items-center justify-between gap-3">
-          <span class="text-ink-500">Hết hạn muộn nhất</span>
-          <span class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ formatDate(maxWarrantyExpiresAt) }}</span>
-        </p>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
+            <span class="hidden sm:inline">{{ isWarrantyExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
+            <div
+              class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
+              :class="{ 'rotate-180': isWarrantyExpanded }"
+            >
+              <ChevronDown :size="18" />
+            </div>
+          </div>
+        </button>
 
-        <div v-if="warrantyClaims.length" class="space-y-2">
-          <WarrantyClaimCard
-            v-for="claim in warrantyClaims"
-            :key="claim.id"
-            :claim="claim"
-            :coverage-label="claimCoverageLabel(claim)"
-            @updated="onWarrantyClaimUpdated"
-          />
-        </div>
+        <div
+          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          :class="isWarrantyExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
+        >
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
+            <div class="pt-4 space-y-4">
+              <ul class="divide-y divide-ink-100">
+                <li v-for="w in orderWarranties" :key="w.id" class="py-2.5 flex items-start justify-between gap-3">
+                  <span class="min-w-0">
+                    <span class="block font-medium text-ink-900">{{ w.note || 'Bảo hành dịch vụ' }}</span>
+                    <span class="block text-ink-500 font-num">
+                      {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
+                    </span>
+                  </span>
+                  <span
+                    class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
+                    :class="new Date(w.expiresAt) > new Date() ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-600'"
+                  >
+                    {{ new Date(w.expiresAt) > new Date() ? 'Còn hạn' : 'Hết hạn' }}
+                  </span>
+                </li>
+              </ul>
+              <p class="flex items-center justify-between gap-3">
+                <span class="text-ink-500">Hết hạn muộn nhất</span>
+                <span class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ formatDate(maxWarrantyExpiresAt) }}</span>
+              </p>
 
-        <div v-if="hasClaimableCoverage" class="flex justify-end pt-1">
-          <FhButton :variant="reviewPending ? 'secondary' : 'primary'" size="sm" @click="showWarrantyClaimModal = true">
-            Yêu cầu bảo hành
-          </FhButton>
+              <div v-if="warrantyClaims.length" class="space-y-2">
+                <WarrantyClaimCard
+                  v-for="claim in warrantyClaims"
+                  :key="claim.id"
+                  :claim="claim"
+                  :coverage-label="claimCoverageLabel(claim)"
+                  @updated="onWarrantyClaimUpdated"
+                />
+              </div>
+
+              <div v-if="hasClaimableCoverage" class="flex justify-end pt-1">
+                <FhButton :variant="reviewPending ? 'secondary' : 'primary'" size="sm" @click="showWarrantyClaimModal = true">
+                  Yêu cầu bảo hành
+                </FhButton>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1335,7 +1451,7 @@ const parsedReview = computed(() => {
       :open="showWarrantyClaimModal"
       :order-id="orderId"
       :order-code="order.code"
-      :service-name="order.serviceName"
+      :service-name="order.serviceName || ''"
       :technician-name="order.technician?.fullName || 'Kỹ thuật viên FixHome'"
       :coverages="claimableCoverages"
       :busy-coverage-ids="busyCoverageIds"

@@ -55,17 +55,21 @@ onMounted(async () => {
 
 <template>
   <div v-if="configured" class="w-full">
-    <div class="relative flex py-1 items-center mb-3">
-      <div class="grow border-t border-slate-200"></div>
-      <span class="shrink-0 mx-3 text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-        hoặc
+    <!-- Premium Separator -->
+    <div class="relative flex py-2 items-center mb-4 mt-2">
+      <div class="grow border-t border-slate-200/80"></div>
+      <span class="shrink-0 mx-4 text-[11.5px] font-bold tracking-wide text-slate-400">
+        Hoặc tiếp tục với
       </span>
-      <div class="grow border-t border-slate-200"></div>
+      <div class="grow border-t border-slate-200/80"></div>
     </div>
 
-    <div ref="host" class="flex justify-center [color-scheme:light]"></div>
+    <!-- Google Button -->
+    <div class="w-full flex justify-center cursor-pointer">
+      <div ref="host" class="w-full flex justify-center cursor-pointer"></div>
+    </div>
 
-    <p v-if="failed" class="mt-2 text-center text-[11px] text-red-500 font-medium">
+    <p v-if="failed" class="mt-3 text-center text-[11px] text-red-500 font-medium">
       Không tải được đăng nhập Google. Bạn vẫn có thể dùng mật khẩu.
     </p>
   </div>
