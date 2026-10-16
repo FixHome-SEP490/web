@@ -15,7 +15,6 @@ import {
   Plus,
   Trash2,
   Navigation,
-  AlertCircle,
   MessageSquare,
   Loader2,
   X,
@@ -93,6 +92,14 @@ const fixedPriceTotal = computed(() => {
 });
 const historicalJob = ref<HistoricalOrderItem | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const notifySuccess = (text: string) => {
+  actionMessage.value = { type: 'success', text };
+  toast.success(text);
+};
+const notifyError = (text: string) => {
+  actionMessage.value = { type: 'error', text };
+  toast.error(text);
+};
 const bookingForMedia = ref<(BookingItem & { media: BookingMedia[] }) | null>(null);
 const bookingMedia = computed(() => bookingForMedia.value?.media ?? []);
 const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
@@ -193,7 +200,6 @@ const cameraMode = computed<'face' | 'product'>(() =>
 );
 const openCamera = (purpose: CameraPurpose) => {
   if (actionLoading.value) return;
-  actionMessage.value = null;
   cameraPurpose.value = purpose;
 };
 
@@ -257,6 +263,7 @@ const handleWithdrawOrder = async () => {
     await router.push('/tech/jobs');
   } catch (err: unknown) {
     withdrawError.value = userFacingError(err, 'Chưa huỷ được đơn. Vui lòng thử lại.');
+    notifyError(withdrawError.value);
   } finally {
     withdrawing.value = false;
     actionLoading.value = false;
@@ -525,7 +532,6 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
   if (!evidence) return;
   if (!window.confirm('Xoá ảnh này?')) return;
   actionLoading.value = true;
-  actionMessage.value = null;
   try {
     if (typeof ordersApi.deleteEvidence === 'function') {
       await ordersApi.deleteEvidence(jobId, evidence.id);
@@ -535,9 +541,9 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
       previewModalUrl.value = null;
     }
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: 'Đã xoá ảnh.' };
+    notifySuccess('Đã xoá ảnh.');
   } catch (err: unknown) {
-    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa xoá được ảnh. Vui lòng thử lại.') };
+    notifyError(userFacingError(err, 'Chưa xoá được ảnh. Vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -548,7 +554,6 @@ async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
   let saved = false;
   actionLoading.value = true;
   uploadingPhase.value = phase;
-  actionMessage.value = null;
   try {
     for (const file of files) {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
@@ -559,12 +564,9 @@ async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
     saved = true;
     if (phase === 'CHECKIN_FACE') faceUploaded.value = true;
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.' };
+    notifySuccess(files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.');
   } catch (err: unknown) {
-    actionMessage.value = {
-      type: 'error',
-      text: userFacingError(err, 'Chưa lưu được ảnh. Vui lòng chụp lại.'),
-    };
+    notifyError(userFacingError(err, 'Chưa lưu được ảnh. Vui lòng chụp lại.'));
   } finally {
     actionLoading.value = false;
     uploadingPhase.value = null;
@@ -710,7 +712,7 @@ watch(
   () => jobQuery.query.errorUpdatedAt.value,
   () => {
     if (jobQuery.query.error.value && (job.value || historicalJob.value)) {
-      actionMessage.value = { type: 'error', text: 'Chưa cập nhật được công việc. Vui lòng thử lại.' };
+      notifyError('Chưa cập nhật được công việc. Vui lòng thử lại.');
     }
   },
 );
@@ -831,15 +833,14 @@ onUnmounted(() => {
 const handleEnRoute = async () => {
   try {
     actionLoading.value = true;
-    actionMessage.value = null;
     await ordersApi.enRoute(jobId);
     cache.markChanged(affectedBy.orderChange);
     isEnRoute.value = true;
     if (job.value) job.value.status = 'EN_ROUTE';
     startLocationPing();
-    actionMessage.value = { type: 'success', text: 'Đã báo khách là bạn đang đến.' };
+    notifySuccess('Đã báo khách là bạn đang đến.');
   } catch (err) {
-    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa bắt đầu di chuyển được. Vui lòng thử lại.') };
+    notifyError(userFacingError(err, 'Chưa bắt đầu di chuyển được. Vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -866,13 +867,12 @@ const checkInRefusal = (result: Record<string, unknown>): string => {
 const handleCheckInWithFace = async (face: File) => {
   actionLoading.value = true;
   checkingIn.value = true;
-  actionMessage.value = null;
   try {
     let coords: { lat: number; lng: number; accuracyMeters: number };
     try {
       coords = await getBestPosition();
     } catch {
-      actionMessage.value = { type: 'error', text: 'Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.' };
+      notifyError('Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.');
       return;
     }
 
@@ -880,11 +880,11 @@ const handleCheckInWithFace = async (face: File) => {
     try {
       result = await ordersApi.checkIn(jobId, coords);
     } catch (err: unknown) {
-      actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa check-in được. Vui lòng thử lại.') };
+      notifyError(userFacingError(err, 'Chưa check-in được. Vui lòng thử lại.'));
       return;
     }
     if (result.result !== 'valid') {
-      actionMessage.value = { type: 'error', text: checkInRefusal(result) };
+      notifyError(checkInRefusal(result));
       return;
     }
 
@@ -901,9 +901,11 @@ const handleCheckInWithFace = async (face: File) => {
       // The check-in stands; the next step asks for the face photo again.
     }
     await loadJob(jobId, { silent: true });
-    actionMessage.value = faceSaved
-      ? { type: 'success', text: 'Đã check-in. Giờ chụp ảnh máy trước khi sửa.' }
-      : { type: 'error', text: 'Đã check-in nhưng chưa lưu được ảnh khuôn mặt. Bấm "Chụp khuôn mặt check-in" để chụp lại.' };
+    if (faceSaved) {
+      notifySuccess('Đã check-in. Giờ chụp ảnh máy trước khi sửa.');
+    } else {
+      notifyError('Đã check-in nhưng chưa lưu được ảnh khuôn mặt. Bấm "Chụp khuôn mặt check-in" để chụp lại.');
+    }
   } finally {
     actionLoading.value = false;
     checkingIn.value = false;
@@ -944,7 +946,7 @@ const quoteLaborWarrantyValid = computed(() => {
 
 const handleSubmitQuotation = async () => {
   if (!quoteLaborWarrantyValid.value) {
-    actionMessage.value = { type: 'error', text: 'Bảo hành công từ 0 đến 365 ngày.' };
+    notifyError('Bảo hành công từ 0 đến 365 ngày.');
     return;
   }
   actionLoading.value = true;
@@ -956,10 +958,10 @@ const handleSubmitQuotation = async () => {
     );
     quotationSubmitted.value = true;
     editingQuotation.value = false;
-    actionMessage.value = { type: 'success', text: 'Đã gửi báo giá, chờ khách duyệt.' };
+    notifySuccess('Đã gửi báo giá, chờ khách duyệt.');
     await loadJob(jobId, { silent: true });
   } catch (err) {
-    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa gửi được báo giá. Kiểm tra nội dung và giá rồi thử lại.') };
+    notifyError(userFacingError(err, 'Chưa gửi được báo giá. Kiểm tra nội dung và giá rồi thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -1152,7 +1154,7 @@ async function handleUploadAcEvidence(file?: File) {
     const media = await mediaApi.upload(file);
     acEvidenceUrls.value.push(media.url);
   } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa tải được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB.' };
+    notifyError('Chưa tải được ảnh. Chọn ảnh JPEG, PNG hoặc WebP dưới 10 MB.');
   } finally {
     acUploading.value = false;
   }
@@ -1160,7 +1162,7 @@ async function handleUploadAcEvidence(file?: File) {
 
 async function handleSubmitAdditionalCost() {
   if (!acReason.value.trim()) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng ghi lý do phát sinh.' };
+    notifyError('Vui lòng ghi lý do phát sinh.');
     return;
   }
 
@@ -1171,13 +1173,13 @@ async function handleSubmitAdditionalCost() {
   });
 
   if (validItems.length === 0) {
-    actionMessage.value = { type: 'error', text: 'Thêm ít nhất 1 hạng mục phát sinh.' };
+    notifyError('Thêm ít nhất 1 hạng mục phát sinh.');
     return;
   }
 
   const hasEmptyDesc = validItems.some((i) => !i.description?.trim());
   if (hasEmptyDesc) {
-    actionMessage.value = { type: 'error', text: 'Ghi mô tả cho mọi hạng mục phát sinh.' };
+    notifyError('Ghi mô tả cho mọi hạng mục phát sinh.');
     return;
   }
 
@@ -1199,12 +1201,9 @@ async function handleSubmitAdditionalCost() {
     additionalCosts.value = [saved, ...additionalCosts.value.filter((c) => c.id !== acReviseId.value)];
     cache.markChanged(affectedBy.orderChange);
     showAdditionalCostForm.value = false;
-    actionMessage.value = { type: 'success', text: 'Đã gửi chi phí phát sinh, chờ khách duyệt.' };
+    notifySuccess('Đã gửi chi phí phát sinh, chờ khách duyệt.');
   } catch (err: unknown) {
-    actionMessage.value = {
-      type: 'error',
-      text: userFacingError(err, 'Chưa gửi được chi phí phát sinh. Vui lòng thử lại.'),
-    };
+    notifyError(userFacingError(err, 'Chưa gửi được chi phí phát sinh. Vui lòng thử lại.'));
   } finally {
     acSubmitting.value = false;
   }
@@ -1244,8 +1243,10 @@ const sendReplacement = async () => {
     cache.markChanged(affectedBy.orderChange);
     replacementSent.value = true;
     replacementOpen.value = false;
+    notifySuccess('Đã gửi yêu cầu đổi thợ tới quản lý dịch vụ.');
   } catch (err) {
     replacementError.value = userFacingError(err, 'Chưa gửi được. Vui lòng thử lại.');
+    notifyError(replacementError.value);
   } finally {
     replacementSending.value = false;
   }
@@ -1256,12 +1257,9 @@ const handleCompleteOrder = async () => {
   try {
     await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất công việc' });
     await loadJob(jobId, { silent: true });
-    actionMessage.value = { type: 'success', text: 'Đã hoàn thành. Chờ khách thanh toán.' };
+    notifySuccess('Đã hoàn thành. Chờ khách thanh toán.');
   } catch (err) {
-    actionMessage.value = {
-      type: 'error',
-      text: userFacingError(err, 'Chưa hoàn thành được. Kiểm tra ảnh sau sửa và chi phí đang chờ duyệt.'),
-    };
+    notifyError(userFacingError(err, 'Chưa hoàn thành được. Kiểm tra ảnh sau sửa và chi phí đang chờ duyệt.'));
   } finally {
     actionLoading.value = false;
   }
@@ -1269,7 +1267,7 @@ const handleCompleteOrder = async () => {
 
 const handleDeclareCash = async () => {
   if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
-    actionMessage.value = { type: 'error', text: 'Vui lòng nhập số tiền mặt đã thu.' };
+    notifyError('Vui lòng nhập số tiền mặt đã thu.');
     return;
   }
   try {
@@ -1285,9 +1283,9 @@ const handleDeclareCash = async () => {
       | 'pending_confirmation'
       | 'confirmed'
       | 'disputed';
-    actionMessage.value = { type: 'success', text: 'Đã khai báo tiền mặt, chờ khách xác nhận.' };
+    notifySuccess('Đã khai báo tiền mặt, chờ khách xác nhận.');
   } catch (err) {
-    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.') };
+    notifyError(userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -1300,14 +1298,14 @@ const refreshJobStatus = async () => {
   try {
     await loadJob(jobId, { silent: true });
     if (isCompleted.value || job.value?.status === 'COMPLETED') {
-      actionMessage.value = { type: 'success', text: 'Đơn đã hoàn thành.' };
+      notifySuccess('Đơn đã hoàn thành.');
     } else if (isPaid.value) {
-      actionMessage.value = { type: 'success', text: 'Khách đã thanh toán.' };
+      notifySuccess('Khách đã thanh toán.');
     } else {
-      actionMessage.value = { type: 'success', text: 'Đã cập nhật.' };
+      notifySuccess('Đã cập nhật.');
     }
   } catch {
-    actionMessage.value = { type: 'error', text: 'Chưa cập nhật được. Vui lòng thử lại.' };
+    notifyError('Chưa cập nhật được. Vui lòng thử lại.');
   } finally {
     refreshingStatus.value = false;
   }
@@ -1436,6 +1434,8 @@ const toggleMore = async () => {
         </div>
       </div>
 
+
+
       <!-- Result of the last action -->
       <div
         v-if="actionMessage"
@@ -1444,7 +1444,7 @@ const toggleMore = async () => {
         :role="actionMessage.type === 'success' ? 'status' : 'alert'"
       >
         <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0 mt-px" />
-        <AlertCircle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
+        <AlertTriangle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
         <span class="flex-1 min-w-0 text-pretty">{{ actionMessage.text }}</span>
         <button type="button" class="shrink-0 -m-1 p-1 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng thông báo" @click="actionMessage = null">
           <X :size="16" />

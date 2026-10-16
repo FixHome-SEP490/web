@@ -2,7 +2,7 @@
 // Earnings for a day, a week (Monday to Sunday), a month or all time, in
 // Vietnam time (PO 12/10/2026). The server totals the whole period and pages
 // the completed orders; the wallet balance stays one tap from the wallet.
-import { computed } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next';
 
@@ -114,6 +114,62 @@ const emptyText = computed(() => {
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 inline-flex items-center justify-center shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
+
+// ── Period Tab sliding indicator animation ──
+const periodListRef = ref<HTMLElement | null>(null);
+const periodTabRefs = ref<Record<string, HTMLElement | null>>({});
+const periodIndicatorStyle = ref<Record<string, string>>({
+  opacity: '0',
+});
+
+function updatePeriodIndicator() {
+  const activeEl = periodTabRefs.value[kind.value];
+  const container = periodListRef.value;
+  if (!activeEl || !container) {
+    periodIndicatorStyle.value = { opacity: '0' };
+    return;
+  }
+  const left = activeEl.offsetLeft;
+  const top = activeEl.offsetTop;
+  const width = activeEl.offsetWidth;
+  const height = activeEl.offsetHeight;
+
+  periodIndicatorStyle.value = {
+    transform: `translate3d(${left}px, ${top}px, 0)`,
+    width: `${width}px`,
+    height: `${height}px`,
+    opacity: '1',
+  };
+}
+
+let periodResizeObserver: ResizeObserver | null = null;
+
+watch(kind, () => {
+  void nextTick(updatePeriodIndicator);
+});
+
+onMounted(() => {
+  void nextTick(() => {
+    updatePeriodIndicator();
+    setTimeout(updatePeriodIndicator, 60);
+  });
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updatePeriodIndicator);
+    if (periodListRef.value && typeof ResizeObserver !== 'undefined') {
+      periodResizeObserver = new ResizeObserver(() => {
+        updatePeriodIndicator();
+      });
+      periodResizeObserver.observe(periodListRef.value);
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updatePeriodIndicator);
+  }
+  periodResizeObserver?.disconnect();
+});
 </script>
 
 <template>
@@ -129,19 +185,28 @@ const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink
     <!-- Period: what to total, and which one -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div
-        class="grid grid-cols-4 gap-1 p-1 bg-white rounded-2xl border border-ink-200 text-sm font-medium sm:w-auto"
+        ref="periodListRef"
+        class="relative grid grid-cols-4 gap-1 p-1 bg-ink-100 rounded-full text-sm font-medium sm:w-auto select-none overflow-hidden"
         role="tablist"
         aria-label="Khoảng thời gian"
       >
+        <!-- Sliding active background pill -->
+        <div
+          class="pointer-events-none absolute top-0 left-0 rounded-full bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+          :style="periodIndicatorStyle"
+          aria-hidden="true"
+        />
+
         <button
           v-for="item in kinds"
           :key="item.key"
+          :ref="(el) => { periodTabRefs[item.key] = el as HTMLElement }"
           type="button"
           role="tab"
           :aria-selected="kind === item.key"
           :data-testid="`earnings-period-${item.key}`"
-          class="h-10 px-3 rounded-xl transition-colors whitespace-nowrap"
-          :class="[focusRing, kind === item.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-ink-50']"
+          class="relative z-10 h-10 px-3 rounded-full transition-colors whitespace-nowrap text-center cursor-pointer"
+          :class="[focusRing, kind === item.key ? 'font-bold text-ink-900' : 'text-ink-600 hover:text-ink-900']"
           @click="choose(item.key)"
         >
           {{ item.label }}
