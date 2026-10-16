@@ -199,11 +199,11 @@ function handleHeaderClick() {
 
 <template>
   <div
-    class="flex flex-col bg-white overflow-hidden transition-[height] duration-150"
+    class="flex flex-col bg-white overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
     :class="[
       fullHeight
-        ? (isMinimized ? 'h-auto' : 'h-full')
-        : (isMinimized ? 'h-auto' : 'h-[500px]')
+        ? (isMinimized ? 'h-[57px]' : 'h-full')
+        : (isMinimized ? 'h-[57px]' : 'h-[500px]')
     ]"
   >
     <!-- Thread Header -->
@@ -323,113 +323,122 @@ function handleHeaderClick() {
     </header>
 
     <!-- Body Content (Stream & Composer, hidden when minimized) -->
-    <div v-show="!isMinimized" class="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-      <!-- Read-only Banner (if applicable) -->
-      <div
-        v-if="!canSend && conversation"
-        class="px-3 py-2 bg-warning-50 border-b border-warning-200 text-warning-800 text-xs flex items-center gap-2 flex-shrink-0"
-      >
-        <Lock :size="14" class="flex-shrink-0 text-warning-600" />
-        <span>Cuộc trò chuyện này đang ở chế độ chỉ đọc do đơn dịch vụ đã chuyển trạng thái.</span>
-      </div>
-
-      <!-- Message Stream -->
-      <div
-        ref="scrollContainer"
-        class="flex-1 overflow-y-auto p-4 bg-ink-25 relative"
-        @scroll="handleScroll"
-      >
-        <!-- Loading older indicator -->
-        <div v-if="chatStore.loadingMore" class="text-center py-2 text-xs text-ink-400">
-          Đang tải tin nhắn cũ...
-        </div>
-
-        <!-- Empty Conversation State -->
+    <transition
+      enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition-all duration-200 ease-in"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div v-show="!isMinimized" class="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+        <!-- Read-only Banner (if applicable) -->
         <div
-          v-if="!chatStore.loadingMessages && messages.length === 0"
-          class="h-full flex flex-col items-center justify-center text-center p-6 text-ink-500"
+          v-if="!canSend && conversation"
+          class="px-3 py-2 bg-warning-50 border-b border-warning-200 text-warning-800 text-xs flex items-center gap-2 flex-shrink-0"
         >
-          <div class="w-12 h-12 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mb-2">
-            <Send :size="20" />
-          </div>
-          <p class="text-sm font-semibold text-ink-800">Chưa có tin nhắn nào</p>
-          <p class="text-xs text-ink-500 mt-1 max-w-[220px]">
-            Hãy gửi tin nhắn để trao đổi chi tiết về tình trạng thiết bị và thời gian sửa chữa.
-          </p>
+          <Lock :size="14" class="flex-shrink-0 text-warning-600" />
+          <span>Cuộc trò chuyện này đang ở chế độ chỉ đọc do đơn dịch vụ đã chuyển trạng thái.</span>
         </div>
 
-        <!-- Message Items -->
-        <template v-else>
-          <ChatMessageItem
-            v-for="msg in messages"
-            :key="msg.id"
-            :message="msg"
-            :is-me="msg.senderId === authStore.user?.id"
-            :counterpart-name="conversation?.counterpart?.fullName"
-            :counterpart-avatar="conversation?.counterpart?.avatarUrl"
-            @edit="handleEdit"
-            @delete="handleDelete"
-          />
-        </template>
-
-        <!-- Typing Indicator Bubble -->
+        <!-- Message Stream -->
         <div
-          v-if="chatStore.isCounterpartTyping"
-          class="flex items-center gap-2 mb-2 text-xs text-ink-500"
+          ref="scrollContainer"
+          class="flex-1 overflow-y-auto p-4 bg-ink-25 relative"
+          @scroll="handleScroll"
         >
-          <ChatTypingDots />
-          <span class="italic text-[11px]">
-            {{ conversation?.counterpart?.fullName || 'Đối phương' }} đang soạn tin...
-          </span>
-        </div>
-
-        <!-- Scroll to bottom pill button -->
-        <button
-          v-if="showScrollToBottom"
-          type="button"
-          class="sticky bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold shadow-md flex items-center gap-1 hover:bg-brand-700 transition-all z-10"
-          @click="scrollToBottom(true)"
-        >
-          <span>Tin nhắn mới</span>
-          <ChevronDown :size="14" />
-        </button>
-      </div>
-
-      <!-- Message Composer / Input Area -->
-      <footer class="p-3 bg-white border-t border-ink-200 flex-shrink-0">
-        <form
-          v-if="canSend"
-          class="flex items-end gap-2"
-          @submit.prevent="handleSend"
-        >
-          <div class="flex-1 bg-ink-50 border border-ink-200 rounded-xl focus-within:border-brand-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-brand-500 transition-all px-3 py-2">
-            <textarea
-              v-model="messageInput"
-              rows="1"
-              placeholder="Nhập tin nhắn... (Enter để gửi)"
-              class="w-full bg-transparent border-none outline-none text-sm text-ink-900 placeholder:text-ink-400 resize-none max-h-24"
-              :disabled="sending"
-              @keydown="onInputKeyup"
-            ></textarea>
+          <!-- Loading older indicator -->
+          <div v-if="chatStore.loadingMore" class="text-center py-2 text-xs text-ink-400">
+            Đang tải tin nhắn cũ...
           </div>
 
-          <button
-            type="submit"
-            :disabled="!messageInput.trim() || sending"
-            class="p-2.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs flex-shrink-0"
-            title="Gửi tin nhắn"
+          <!-- Empty Conversation State -->
+          <div
+            v-if="!chatStore.loadingMessages && messages.length === 0"
+            class="h-full flex flex-col items-center justify-center text-center p-6 text-ink-500"
           >
-            <Send :size="18" />
-          </button>
-        </form>
+            <div class="w-12 h-12 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mb-2">
+              <Send :size="20" />
+            </div>
+            <p class="text-sm font-semibold text-ink-800">Chưa có tin nhắn nào</p>
+            <p class="text-xs text-ink-500 mt-1 max-w-[220px]">
+              Hãy gửi tin nhắn để trao đổi chi tiết về tình trạng thiết bị và thời gian sửa chữa.
+            </p>
+          </div>
 
-        <div
-          v-else
-          class="py-2 text-center text-xs text-ink-400 bg-ink-50 rounded-lg border border-ink-200"
-        >
-          Khung trò chuyện đã đóng
+          <!-- Message Items -->
+          <template v-else>
+            <ChatMessageItem
+              v-for="msg in messages"
+              :key="msg.id"
+              :message="msg"
+              :is-me="msg.senderId === authStore.user?.id"
+              :counterpart-name="conversation?.counterpart?.fullName"
+              :counterpart-avatar="conversation?.counterpart?.avatarUrl"
+              @edit="handleEdit"
+              @delete="handleDelete"
+            />
+          </template>
+
+          <!-- Typing Indicator Bubble -->
+          <div
+            v-if="chatStore.isCounterpartTyping"
+            class="flex items-center gap-2 mb-2 text-xs text-ink-500"
+          >
+            <ChatTypingDots />
+            <span class="italic text-[11px]">
+              {{ conversation?.counterpart?.fullName || 'Đối phương' }} đang soạn tin...
+            </span>
+          </div>
+
+          <!-- Scroll to bottom pill button -->
+          <button
+            v-if="showScrollToBottom"
+            type="button"
+            class="sticky bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold shadow-md flex items-center gap-1 hover:bg-brand-700 transition-all z-10"
+            @click="scrollToBottom(true)"
+          >
+            <span>Tin nhắn mới</span>
+            <ChevronDown :size="14" />
+          </button>
         </div>
-      </footer>
-    </div>
+
+        <!-- Message Composer / Input Area -->
+        <footer class="p-3 bg-white border-t border-ink-200 flex-shrink-0">
+          <form
+            v-if="canSend"
+            class="flex items-end gap-2"
+            @submit.prevent="handleSend"
+          >
+            <div class="flex-1 bg-ink-50 border border-ink-200 rounded-xl focus-within:border-brand-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-brand-500 transition-all px-3 py-2">
+              <textarea
+                v-model="messageInput"
+                rows="1"
+                placeholder="Nhập tin nhắn... (Enter để gửi)"
+                class="w-full bg-transparent border-none outline-none text-sm text-ink-900 placeholder:text-ink-400 resize-none max-h-24"
+                :disabled="sending"
+                @keydown="onInputKeyup"
+              ></textarea>
+            </div>
+
+            <button
+              type="submit"
+              :disabled="!messageInput.trim() || sending"
+              class="p-2.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs flex-shrink-0"
+              title="Gửi tin nhắn"
+            >
+              <Send :size="18" />
+            </button>
+          </form>
+
+          <div
+            v-else
+            class="py-2 text-center text-xs text-ink-400 bg-ink-50 rounded-lg border border-ink-200"
+          >
+            Khung trò chuyện đã đóng
+          </div>
+        </footer>
+      </div>
+    </transition>
   </div>
 </template>
