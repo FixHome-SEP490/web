@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 17:13 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/smart-voice-call
+> Cập nhật lần cuối: 2026-10-16 19:24 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/map-worker-build
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -303,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 19:24 (UTC+7) | ToanAltF4 | fix/map-worker-build | Bản đồ trên bản build triển khai chỉ hiện nền: maplibre 6 tìm worker cạnh file của nó lúc chạy nên Vite không xuất worker (fixhome.sbs trả index.html); nay build worker bằng ?worker&url (worker.format es) và setWorkerUrl trước khi tạo bản đồ
 - 2026-10-16 17:13 (UTC+7) | ToanAltF4 | feat/smart-voice-call | Gọi thoại thông minh: chuông chờ/nhạc chuông (Web Audio, rung trên điện thoại), trạng thái Đang gọi/Đang đổ chuông/Đang kết nối, màn kết thúc (từ chối, không trả lời, máy bận, không liên lạc được, không kết nối được, cuộc gọi nhỡ, thời lượng) có Gọi lại; quá 20 s chưa nối thì báo; socket đọc token mới mỗi lần nối lại và tự làm mới phiên khi bị server từ chối
 - 2026-10-16 15:44 (UTC+7) | ToanAltF4 | fix/checkin-recent-fix | Check-in thợ: trình duyệt không trả vị trí mới trong lúc chờ (Chrome desktop vị trí Wi-Fi, đã có ping đang chạy) thì dùng vị trí ping trong 2 phút gần nhất; server vẫn kiểm 5 km
 - 2026-10-16 11:33 (UTC+7) | ToanAltF4 | fix/technician-topup-envelope | Nạp ví thợ: đọc success/message ở envelope (backend nhấc lên ngoài data), trước đây web luôn báo Chưa mở được cổng thanh toán VNPay; thêm test với đúng phản hồi thật
@@ -342,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 21:47 (UTC+7) | ToanAltF4 | feat/admin-warranty-view | Admin xem yêu cầu bảo hành (chỉ đọc)
 - 2026-10-09 21:30 (UTC+7) | ToanAltF4 | feat/admin-payments | Admin xem danh sách thanh toán
 - 2026-10-09 21:17 (UTC+7) | ToanAltF4 | feat/sm-dashboard-replacements | Tổng quan quản lý: yêu cầu đổi thợ đang chờ, đơn tự huỷ vì không xuất phát
-- 2026-10-09 20:45 (UTC+7) | ToanAltF4 | feat/admin-customer-wallets | Admin xem và điều chỉnh ví khách
