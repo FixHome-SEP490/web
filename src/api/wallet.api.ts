@@ -174,19 +174,23 @@ export const walletApi = {
     const key =
       idempotencyKey ||
       `TOPUP_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // The server's response envelope lifts `success` and `message` out of the
+    // controller's reply, so they sit beside `data`, not inside it.
     const res = await apiClient.post<{
-      data?: { success?: boolean; paymentId?: string; paymentUrl?: string | null; message?: string };
+      success?: boolean;
+      message?: string;
+      data?: { paymentId?: string; paymentUrl?: string | null };
     }>('/technician/wallet/top-up', { amount: Number(amount), idempotencyKey: key });
     const payload = res.data?.data;
     const paymentUrl = typeof payload?.paymentUrl === 'string' ? payload.paymentUrl.trim() : '';
-    if (payload?.success !== true || !paymentUrl) {
+    if (res.data?.success === false || !paymentUrl) {
       throw new Error(TOP_UP_NOT_STARTED);
     }
     return {
       success: true,
-      paymentId: payload.paymentId ?? '',
+      paymentId: payload?.paymentId ?? '',
       paymentUrl,
-      message: payload.message ?? '',
+      message: res.data?.message ?? '',
     };
   },
 
