@@ -6,7 +6,7 @@ import ReputationCard from '../../components/account/ReputationCard.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
 import TechnicianWeekCalendar from '../../components/technician/TechnicianWeekCalendar.vue';
 import ServiceAreaPicker from '../../components/technician/ServiceAreaPicker.vue';
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import {
   MapPin,
   CheckCircle2,
@@ -69,6 +69,62 @@ const profileTabs: { key: TabKey; label: string }[] = [
 const openChecklistItem = (item: { targetTab: TabKey; to?: string }) => {
   if (!item.to) activeTab.value = item.targetTab;
 };
+
+// ── Profile Tab sliding indicator animation ──
+const profileTabListRef = ref<HTMLElement | null>(null);
+const profileTabRefs = ref<Record<string, HTMLElement | null>>({});
+const profileIndicatorStyle = ref<Record<string, string>>({
+  opacity: '0',
+});
+
+function updateProfileTabIndicator() {
+  const activeEl = profileTabRefs.value[activeTab.value];
+  const container = profileTabListRef.value;
+  if (!activeEl || !container) {
+    profileIndicatorStyle.value = { opacity: '0' };
+    return;
+  }
+  const left = activeEl.offsetLeft;
+  const top = activeEl.offsetTop;
+  const width = activeEl.offsetWidth;
+  const height = activeEl.offsetHeight;
+
+  profileIndicatorStyle.value = {
+    transform: `translate3d(${left}px, ${top}px, 0)`,
+    width: `${width}px`,
+    height: `${height}px`,
+    opacity: '1',
+  };
+}
+
+let profileTabResizeObserver: ResizeObserver | null = null;
+
+watch(activeTab, () => {
+  void nextTick(updateProfileTabIndicator);
+});
+
+onMounted(() => {
+  void nextTick(() => {
+    updateProfileTabIndicator();
+    setTimeout(updateProfileTabIndicator, 60);
+  });
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updateProfileTabIndicator);
+    if (profileTabListRef.value && typeof ResizeObserver !== 'undefined') {
+      profileTabResizeObserver = new ResizeObserver(() => {
+        updateProfileTabIndicator();
+      });
+      profileTabResizeObserver.observe(profileTabListRef.value);
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateProfileTabIndicator);
+  }
+  profileTabResizeObserver?.disconnect();
+});
 
 const loading = ref(true);
 const loadError = ref('');
@@ -918,23 +974,35 @@ const openAvatarModal = () => {
         </div>
       </section>
 
-      <!-- Tabs -->
-      <div class="bg-white rounded-2xl border border-ink-200 p-1.5 flex items-center gap-1 overflow-x-auto" role="tablist">
+      <!-- Tabs with sliding active pill -->
+      <div
+        ref="profileTabListRef"
+        class="relative bg-ink-100 rounded-full p-1.5 flex items-center gap-1 overflow-x-auto select-none scrollbar-none"
+        role="tablist"
+      >
+        <!-- Sliding active background pill -->
+        <div
+          class="pointer-events-none absolute top-0 left-0 rounded-full bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+          :style="profileIndicatorStyle"
+          aria-hidden="true"
+        />
+
         <button
           v-for="t in profileTabs"
           :key="t.key"
+          :ref="(el) => { profileTabRefs[t.key] = el as HTMLElement }"
           type="button"
           role="tab"
           :aria-selected="activeTab === t.key"
-          class="flex-1 shrink-0 min-w-max h-10 px-4 rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-          :class="activeTab === t.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100/70'"
+          class="relative z-10 flex-1 shrink-0 min-w-max h-10 px-4 rounded-full text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          :class="activeTab === t.key ? 'font-bold text-ink-900' : 'font-medium text-ink-600 hover:text-ink-900'"
           @click="activeTab = t.key"
         >
           <span>{{ t.label }}</span>
           <span
             v-if="t.key === 'services' && technicianProfile.skills.length > 0"
-            class="px-1.5 rounded-full text-xs font-num font-semibold"
-            :class="activeTab === t.key ? 'bg-white text-brand-700' : 'bg-ink-100 text-ink-600'"
+            class="px-2 py-0.5 rounded-full text-xs font-num font-semibold transition-colors"
+            :class="activeTab === t.key ? 'bg-ink-100 text-ink-900' : 'bg-white/80 text-ink-600'"
           >
             {{ technicianProfile.skills.length }}
           </span>

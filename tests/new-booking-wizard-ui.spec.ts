@@ -207,10 +207,15 @@ describe('NewBookingWizardPage UI & UX enhancements', () => {
     const wrapper = mount(NewBookingWizardPage, { global: { stubs } });
     await flushPromises();
 
-    const urgentBtn = wrapper.findAll('button').find((b) => b.text().includes('Khẩn cấp') && b.text().includes('Trong 1–2h'));
+    const slider = wrapper.find('[data-testid="urgency-slider"]');
+    expect(slider.exists()).toBe(true);
+
+    const urgentBtn = wrapper.findAll('button').find((b) => b.text().includes('Khẩn cấp'));
     expect(urgentBtn).toBeDefined();
     await urgentBtn?.trigger('click');
 
-    expect(urgentBtn?.classes()).toContain('border-brand-600');
+    const rangeInput = wrapper.find('#urgency-range');
+    expect((rangeInput.element as HTMLInputElement).value).toBe('2');
+    expect(wrapper.text()).toContain('Ưu tiên');
   });
 });

@@ -37,6 +37,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
       notifications.value = res.data;
       total.value = res.total;
       await fetchUnreadCount();
+      if (unreadNotifications.value.length > unreadCount.value) {
+        unreadCount.value = unreadNotifications.value.length;
+      }
     } catch {
       // Non-blocking
     } finally {

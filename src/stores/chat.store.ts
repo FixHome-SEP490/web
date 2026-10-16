@@ -117,7 +117,9 @@ export const useChatStore = defineStore('chat', () => {
           : m,
       );
     } else {
-      messages.value[msg.conversationId] = [...list, msg];
+      messages.value[msg.conversationId] = [...list, msg].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
     }
 
     // Update conversation metadata
@@ -235,8 +237,10 @@ export const useChatStore = defineStore('chat', () => {
     try {
       loadingMessages.value = true;
       const page = await messagingApi.listMessages(conversationId, { limit: 30 });
-      // Backend returns newest page with newest messages; reverse to display chronologically (oldest to newest)
-      messages.value[conversationId] = [...page.data].reverse();
+      // Ensure messages are strictly chronological (oldest at top, newest at bottom)
+      messages.value[conversationId] = [...page.data].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
       nextBeforeMap.value[conversationId] = page.nextBefore;
     } catch (err) {
       console.error('Failed to load messages:', err);
@@ -252,9 +256,11 @@ export const useChatStore = defineStore('chat', () => {
     try {
       loadingMore.value = true;
       const page = await messagingApi.listMessages(conversationId, { limit: 30, before });
-      const older = [...page.data].reverse();
       const existing = messages.value[conversationId] || [];
-      messages.value[conversationId] = [...older, ...existing];
+      const combined = [...page.data, ...existing];
+      messages.value[conversationId] = combined.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
       nextBeforeMap.value[conversationId] = page.nextBefore;
     } catch (err) {
       console.error('Failed to load older messages:', err);

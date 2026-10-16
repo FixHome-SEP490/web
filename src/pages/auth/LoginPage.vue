@@ -59,12 +59,16 @@ const handleGoogleCredential = async (idToken: string) => {
   }
 };
 
+const isCooldown = ref(false);
+
 const handleLogin = async () => {
+  if (isCooldown.value || authStore.loading) return;
   if (!identifier.value || !password.value) {
     errorMessage.value = 'Vui lòng điền đầy đủ email/SĐT và mật khẩu';
     return;
   }
 
+  isCooldown.value = true;
   errorMessage.value = '';
   try {
     goAfterLogin(
@@ -80,49 +84,48 @@ const handleLogin = async () => {
       'Email/Số điện thoại hoặc mật khẩu không chính xác',
     );
     toast.error(errorMessage.value);
+  } finally {
+    setTimeout(() => {
+      isCooldown.value = false;
+    }, 2000);
   }
 };
 </script>
 
 <template>
-  <div class="w-full flex flex-col space-y-6">
-    <!-- Breadcrumb -->
-    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-      Trang chủ / Đăng nhập
-    </div>
-
+  <div class="w-full flex flex-col">
     <!-- Header -->
-    <div class="space-y-1 text-left mb-4">
-      <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Chào mừng trở lại</h2>
-      <p class="text-sm text-slate-500 font-medium">
-        Đăng nhập để theo dõi yêu cầu và lịch hẹn của bạn.
+    <div class="text-left mb-8 space-y-2">
+      <h2 class="text-3xl font-black text-slate-900 tracking-tight">Mừng bạn quay lại</h2>
+      <p class="text-slate-500 font-medium">
+        Đăng nhập để tiếp tục sử dụng các dịch vụ của FixHome.
       </p>
     </div>
 
     <form class="space-y-5" @submit.prevent="handleLogin">
       <!-- Identifier Input -->
-      <div>
-        <label class="block text-xs font-bold text-slate-800 mb-2">
+      <div class="space-y-1.5">
+        <label class="block text-[13px] font-bold text-slate-700">
           Email hoặc Số điện thoại <span class="text-red-500">*</span>
         </label>
         <input
           v-model="identifier"
           type="text"
           required
-          placeholder="bạn@vidu.vn hoặc 090 123 4567"
-          class="w-full h-12 px-4 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+          placeholder="Nhập email hoặc SĐT"
+          class="w-full h-12 px-4 text-sm bg-slate-50/50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200"
         />
       </div>
 
       <!-- Password Input -->
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <label class="block text-xs font-bold text-slate-800">
-            Mật khẩu
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="block text-[13px] font-bold text-slate-700">
+            Mật khẩu <span class="text-red-500">*</span>
           </label>
           <router-link
             to="/forgot-password"
-            class="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors"
+            class="text-[13px] text-brand-600 hover:text-brand-700 font-bold transition-colors"
           >
             Quên mật khẩu?
           </router-link>
@@ -132,12 +135,12 @@ const handleLogin = async () => {
             v-model="password"
             :type="showPassword ? 'text' : 'password'"
             required
-            placeholder="••••••••"
-            class="w-full h-12 pl-4 pr-11 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-shadow"
+            placeholder="Nhập mật khẩu"
+            class="w-full h-12 pl-4 pr-11 text-sm bg-slate-50/50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200"
           />
           <button
             type="button"
-            class="absolute right-4 top-[0.85rem] text-slate-400 hover:text-slate-600 transition-colors"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
             @click="showPassword = !showPassword"
           >
             <component :is="showPassword ? EyeOff : Eye" :size="18" />
@@ -146,32 +149,41 @@ const handleLogin = async () => {
       </div>
 
       <!-- Remember me -->
-      <div class="flex items-center gap-2 mt-2">
-        <input type="checkbox" id="remember" class="w-4 h-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500" />
-        <label for="remember" class="text-xs text-slate-500 font-medium cursor-pointer">Ghi nhớ thiết bị này</label>
+      <div class="flex items-center gap-2.5 pt-1">
+        <div class="relative flex items-center">
+          <input type="checkbox" id="remember" class="peer w-5 h-5 appearance-none border-2 border-slate-200 rounded text-brand-500 checked:bg-brand-500 checked:border-brand-500 focus:ring-brand-500 focus:ring-offset-0 transition-colors cursor-pointer" />
+          <svg class="absolute inset-0 w-5 h-5 p-0.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <label for="remember" class="text-[13px] text-slate-600 font-semibold cursor-pointer select-none">Ghi nhớ đăng nhập</label>
       </div>
 
       <!-- Submit Button -->
       <button
         type="submit"
-        class="w-full h-12 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl transition-colors mt-2"
-        :disabled="authStore.loading"
+        class="w-full h-10 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-bold border border-slate-300 rounded-xl transition-all mt-4 flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
+        :disabled="authStore.loading || isCooldown"
+        :class="(authStore.loading || isCooldown) ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'"
       >
-        <span v-if="authStore.loading">Đang xử lý...</span>
-        <span v-else>Đăng nhập</span>
+        <span v-if="authStore.loading" class="w-4 h-4 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin"></span>
+        <span>{{ authStore.loading ? 'Đang xử lý...' : 'Đăng nhập' }}</span>
       </button>
     </form>
 
-    <GoogleSignInButton
-      text="signin_with"
-      @credential="handleGoogleCredential"
-      @error="(message: string) => (errorMessage = message)"
-    />
+    <div class="mt-4">
+      <GoogleSignInButton
+        text="signin_with"
+        @credential="handleGoogleCredential"
+        @error="(message: string) => (errorMessage = message)"
+        class="w-full"
+      />
+    </div>
 
     <!-- Register Link (Mobile fallback) -->
-    <div class="text-center text-xs text-slate-500 font-medium lg:hidden pt-4">
+    <div class="text-center text-[13px] text-slate-500 font-medium lg:hidden pt-8">
       Chưa có tài khoản?
-      <router-link to="/register" class="text-slate-900 hover:underline font-bold ml-1">
+      <router-link to="/register" class="text-brand-600 hover:text-brand-700 font-bold ml-1">
         Đăng ký miễn phí
       </router-link>
     </div>

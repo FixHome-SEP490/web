@@ -80,8 +80,7 @@ const day = (n: number) => `2026-09-${String(n).padStart(2, '0')}T08:00:00Z`;
 
 /**
  * Serves `/service-orders/my` and `/bookings/my` from per-state lists like the
- * server: `status` or `statuses=a,b`, `search` on code and service name,
- * newest first, sliced by page and pageSize.
+ * current server: one optional `status`, newest first, sliced by page and pageSize.
  */
 function serve(
   orders: Record<string, ReturnType<typeof makeOrder>[]>,
@@ -166,7 +165,12 @@ describe('CustomerOrdersPage: requests per tab', () => {
     const wrapper = await mountPage();
 
     expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10 }]);
-    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'submitted,matching,closed,cancelled' }]);
+    expect(calls('/bookings/my')).toEqual([
+      { page: 1, pageSize: 10, status: 'submitted' },
+      { page: 1, pageSize: 10, status: 'matching' },
+      { page: 1, pageSize: 10, status: 'closed' },
+      { page: 1, pageSize: 10, status: 'cancelled' },
+    ]);
     // A matched booking shows as its order only.
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="order-card-o1"]').exists()).toBe(true);
@@ -193,9 +197,16 @@ describe('CustomerOrdersPage: requests per tab', () => {
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-IN_PROGRESS"]').trigger('click');
     await flushPromises();
-    // Several states, one request for each list.
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'accepted,en_route,under_repair' }]);
-    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'submitted,matching' }]);
+    // The strict Backend DTO accepts one status per request; the page merges them.
+    expect(calls('/service-orders/my')).toEqual([
+      { page: 1, pageSize: 10, status: 'accepted' },
+      { page: 1, pageSize: 10, status: 'en_route' },
+      { page: 1, pageSize: 10, status: 'under_repair' },
+    ]);
+    expect(calls('/bookings/my')).toEqual([
+      { page: 1, pageSize: 10, status: 'submitted' },
+      { page: 1, pageSize: 10, status: 'matching' },
+    ]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oR']);
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bM']);
 
@@ -244,7 +255,12 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     mockGet.mockClear();
     await pager.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
-    expect(calls('/bookings/my')).toEqual([{ page: 2, pageSize: 10, statuses: 'submitted,matching,closed,cancelled' }]);
+    expect(calls('/bookings/my')).toEqual([
+      { page: 1, pageSize: 20, status: 'submitted' },
+      { page: 1, pageSize: 20, status: 'matching' },
+      { page: 1, pageSize: 20, status: 'closed' },
+      { page: 1, pageSize: 20, status: 'cancelled' },
+    ]);
     expect(calls('/service-orders/my')).toEqual([]);
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['c6', 'c5', 'c4', 'c3', 'c2', 'c1']);
   });
@@ -271,7 +287,7 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     expect(calls('/service-orders/my').filter((p) => p.page === 2)).toHaveLength(1);
   });
 
-  it('searches on the server, a moment after typing, from page 1 of both lists', async () => {
+  it('searches locally without sending query parameters rejected by the Backend DTO', async () => {
     serve({ accepted: orders25 }, { submitted: [makeBooking({ id: 'bS', serviceName: 'Sửa điều hoà' })] });
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="orders-section"] [data-testid="pagination-page-2"]').trigger('click');
@@ -283,9 +299,19 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     expect(mockGet).not.toHaveBeenCalled();
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, search: 'ORD-3' }]);
-    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'submitted,matching,closed,cancelled', search: 'ORD-3' }]);
+    expect(calls('/service-orders/my')).toEqual(
+      ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status })),
+    );
+    expect(calls('/bookings/my')).toEqual(
+      ['submitted', 'matching', 'closed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status })),
+    );
+    expect(mockGet.mock.calls.some(([, options]) => 'statuses' in (options as { params: Params }).params || 'search' in (options as { params: Params }).params)).toBe(false);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['o3']);
+
+    await wrapper.get('input[type="text"]').setValue('sua dieu hoa');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    expect(cardIds(wrapper, 'booking-card-')).toEqual(['bS']);
 
     await wrapper.get('input[type="text"]').setValue('khong co');
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -309,7 +335,7 @@ describe('CustomerOrdersPage: partial failure', () => {
   it('shows bookings when orders fail, with a banner', async () => {
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
       if (url === '/service-orders/my') throw new Error('Network Error');
-      return opts.params.statuses?.split(',').includes('submitted') ? response([makeBooking()], 1) : response([], 0);
+      return opts.params.status === 'submitted' ? response([makeBooking()], 1) : response([], 0);
     });
     const wrapper = await mountPage();
     expect(wrapper.get('[data-testid="booking-card-b1"]').text()).toContain('Sửa điều hoà');
@@ -330,7 +356,7 @@ describe('CustomerOrdersPage: partial failure', () => {
   it('retries the page that failed and keeps the other list on screen', async () => {
     let attempts = 0;
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
-      if (url === '/bookings/my') return opts.params.statuses?.split(',').includes('submitted') ? response([makeBooking({ id: 'keep' })], 1) : response([], 0);
+      if (url === '/bookings/my') return opts.params.status === 'submitted' ? response([makeBooking({ id: 'keep' })], 1) : response([], 0);
       if (opts.params.page === 2) {
         attempts++;
         if (attempts === 1) throw new Error('network failure');
