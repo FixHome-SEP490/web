@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useBundledMaplibreWorker } from '../../utils/maplibre-worker';
 
 export interface MapMarker {
   id: string;
@@ -99,6 +100,7 @@ onMounted(() => {
     return;
   }
   try {
+    useBundledMaplibreWorker();
     map = new maplibregl.Map({
       container: containerRef.value,
       style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${mapsKey}`,

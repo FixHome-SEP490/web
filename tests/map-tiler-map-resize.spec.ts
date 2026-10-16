@@ -34,6 +34,8 @@ vi.mock('maplibre-gl', () => {
   return { Map, Marker, NavigationControl };
 });
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
+// The bundled worker is a build artifact; the map logic under test never starts it.
+vi.mock('../src/utils/maplibre-worker', () => ({ useBundledMaplibreWorker: vi.fn() }));
 
 import MapTilerMap from '../src/components/common/MapTilerMap.vue';
 

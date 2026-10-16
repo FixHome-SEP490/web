@@ -37,5 +37,10 @@ export default defineConfig(({ mode }) => {
       // Serving it straight from node_modules keeps that URL intact.
       exclude: ['maplibre-gl'],
     },
+    worker: {
+      // maplibre's worker is an ES module (src/utils/maplibre-worker.ts builds
+      // it with ?worker&url); the default iife format cannot hold its imports.
+      format: 'es' as const,
+    },
   }
 })
