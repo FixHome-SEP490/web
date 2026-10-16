@@ -2,13 +2,13 @@
 // src/pages/customer/CustomerOrdersPage.vue
 // Two server-paged lists (PO 12/10/2026): booking requests that no technician
 // has taken yet, and repair orders. Each has its own numbered pager; the tab
-// and both pages stay in the address bar (?tab=COMPLETED&page=2).
+// and both pages stay in the address bar (?tab=COMPLETED&page=2). One list is
+// on screen at a time, picked by a two-way switch with both counts (?list=).
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   MapPin,
   ChevronRight,
-  ChevronDown,
   Search,
   MessageSquare,
   Receipt,
@@ -29,7 +29,7 @@ import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import type { PageResult } from '../../api/paging';
 import { usePagedList } from '../../composables/usePagedList';
 import { queryKeys } from '../../lib/query-keys';
-import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch } from '../../composables/useQueryState';
+import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch, useQueryState } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
@@ -205,9 +205,23 @@ const {
 const ordersError = computed(() => (ordersFailure.value ? 'Chưa tải được đơn sửa chữa, vui lòng thử lại.' : null));
 const bookingsError = computed(() => (bookingsFailure.value ? 'Chưa tải được yêu cầu đặt lịch, vui lòng thử lại.' : null));
 
-// ── Collapsible list sections (YouTube-style expandable) ──
-const isBookingsExpanded = ref(true);
-const isOrdersExpanded = ref(true);
+// ── Which list is on screen ──
+type ListView = 'orders' | 'requests';
+const chosenList = useQueryState<ListView | null>(
+  'list',
+  (raw) => (raw === 'orders' || raw === 'requests' ? raw : null),
+  (value) => value ?? undefined,
+);
+// Until the customer picks, show the list that has something, repair orders first.
+const listView = computed<ListView>(() => {
+  if (chosenList.value) return chosenList.value;
+  const ordersEmpty = !loadingOrders.value && ordersTotal.value === 0;
+  return ordersEmpty && !loadingBookings.value && bookingsTotal.value > 0 ? 'requests' : 'orders';
+});
+const listChoices = computed(() => [
+  { key: 'orders' as const, label: 'Đơn sửa chữa', count: ordersTotal.value, loading: loadingOrders.value },
+  { key: 'requests' as const, label: 'Yêu cầu đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value },
+]);
 
 // ── Tab sliding indicator animation ──
 const tabListRef = ref<HTMLElement | null>(null);
@@ -319,6 +333,15 @@ const getStatusBadge = (status: string) => {
       return { label: 'Trạng thái chưa xác định', tone: 'bg-ink-100 text-ink-600' };
   }
 };
+
+// An order whose technician stepped off before arriving waits for another one:
+// it is not "on the way" when nobody is assigned.
+const awaitingReplacement = (order: ServiceOrderItem) =>
+  ['ACCEPTED', 'EN_ROUTE'].includes(String(order.status).toUpperCase()) && !order.technician;
+const orderPill = (order: ServiceOrderItem) =>
+  awaitingReplacement(order)
+    ? { status: 'PENDING', label: 'Đang tìm thợ thay thế' }
+    : { status: order.status, label: getStatusBadge(order.status).label };
 
 async function handleChat(order: ServiceOrderItem, event: Event) {
   event.stopPropagation();
@@ -473,43 +496,45 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </p>
     </div>
 
-    <div v-else class="space-y-5">
-      <!-- Bookings with no technician yet, so no service order -->
-      <section v-if="loadingBookings || bookingsTotal > 0" class="space-y-2" data-testid="requests-section">
+    <div v-else class="space-y-3">
+      <!-- Repair orders or booking requests: one list at a time -->
+      <div class="grid grid-cols-2 gap-2" role="group" aria-label="Chọn danh sách">
         <button
+          v-for="choice in listChoices"
+          :key="choice.key"
           type="button"
-          class="group flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-ink-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          :aria-expanded="isBookingsExpanded"
-          @click="isBookingsExpanded = !isBookingsExpanded"
+          class="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
+          :aria-pressed="listView === choice.key"
+          :data-testid="`list-switch-${choice.key}`"
+          @click="chosenList = choice.key"
         >
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-ink-800 transition-colors group-hover:text-ink-900">Yêu cầu đặt lịch</h2>
-            <span class="inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-semibold text-ink-600">
-              {{ bookingsTotal }}
-            </span>
-          </div>
-
-          <div class="flex items-center gap-1 text-xs font-medium text-ink-500">
-            <div
-              class="flex h-6 w-6 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out group-hover:text-ink-600"
-              :class="{ 'rotate-180': isBookingsExpanded }"
-            >
-              <ChevronDown :size="16" />
-            </div>
-          </div>
+          <span class="truncate">{{ choice.label }}</span>
+          <span
+            v-if="!choice.loading"
+            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs"
+            :class="listView === choice.key ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'"
+          >{{ choice.count }}</span>
         </button>
+      </div>
 
-        <div
-          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          :class="isBookingsExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
-        >
-          <div class="min-h-0 overflow-hidden space-y-2">
+      <!-- Bookings with no technician yet, so no service order -->
+      <section v-if="listView === 'requests'" class="space-y-2" data-testid="requests-section">
+          <div class="space-y-2">
             <div v-if="loadingBookings" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải yêu cầu">
               <div v-for="i in 2" :key="i" class="px-5 py-4 space-y-2">
                 <FhSkeleton width="50%" height="18px" />
                 <FhSkeleton width="30%" height="14px" />
               </div>
             </div>
+
+            <p
+              v-else-if="bookingsTotal === 0"
+              data-testid="requests-empty"
+              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+            >
+              Không có yêu cầu đặt lịch ở mục này.
+            </p>
 
             <ul
               v-else
@@ -566,45 +591,25 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               @prefetch="prefetchBookings"
             />
           </div>
-        </div>
       </section>
 
       <!-- Service orders -->
-      <section v-if="loadingOrders || ordersTotal > 0" class="space-y-2" data-testid="orders-section">
-        <button
-          type="button"
-          class="group flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-ink-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          :aria-expanded="isOrdersExpanded"
-          @click="isOrdersExpanded = !isOrdersExpanded"
-        >
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-ink-800 transition-colors group-hover:text-ink-900">Đơn sửa chữa</h2>
-            <span class="inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-semibold text-ink-600">
-              {{ ordersTotal }}
-            </span>
-          </div>
-
-          <div class="flex items-center gap-1 text-xs font-medium text-ink-500">
-            <div
-              class="flex h-6 w-6 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out group-hover:text-ink-600"
-              :class="{ 'rotate-180': isOrdersExpanded }"
-            >
-              <ChevronDown :size="16" />
-            </div>
-          </div>
-        </button>
-
-        <div
-          class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          :class="isOrdersExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
-        >
-          <div class="min-h-0 overflow-hidden space-y-2">
+      <section v-else class="space-y-2" data-testid="orders-section">
+          <div class="space-y-2">
             <div v-if="loadingOrders" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
               <div v-for="i in 3" :key="i" class="px-5 py-4 space-y-2">
                 <FhSkeleton width="55%" height="18px" />
                 <FhSkeleton width="35%" height="14px" />
               </div>
             </div>
+
+            <p
+              v-else-if="ordersTotal === 0"
+              data-testid="orders-empty"
+              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+            >
+              Không có đơn sửa chữa ở mục này.
+            </p>
 
             <ul
               v-else
@@ -627,8 +632,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
                   <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
                     <h3 class="font-semibold text-ink-900">{{ order.serviceName }}</h3>
                     <FhStatusPill
-                      :status="order.status"
-                      :label="getStatusBadge(order.status).label"
+                      :status="orderPill(order).status"
+                      :label="orderPill(order).label"
                     />
                   </div>
                   <p class="truncate font-num text-sm text-ink-500">{{ order.code || order.id.slice(0, 8) }} · {{ vnDateString(order.createdAt) }}</p>
@@ -638,6 +643,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
                         {{ order.technician.fullName }}
                         <span v-if="formatRating(order.technician.averageRating)" class="whitespace-nowrap text-ink-500"> · <span class="text-warning-600">★</span> {{ formatRating(order.technician.averageRating) }}</span>
                       </template>
+                      <span v-else-if="awaitingReplacement(order)" class="text-ink-500">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
                       <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
                     </p>
                     <span v-if="Number(order.grandTotal) > 0" class="shrink-0 whitespace-nowrap font-num text-sm font-semibold text-ink-900">
@@ -678,7 +684,6 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               @prefetch="prefetchOrders"
             />
           </div>
-        </div>
       </section>
     </div>
 

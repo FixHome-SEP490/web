@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 23:30 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: chore/merge-main-into-dev
+> Cập nhật lần cuối: 2026-10-17 00:04 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ui-feedback
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -304,6 +304,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-17 00:04 (UTC+7) | ToanAltF4 | fix/ui-feedback | Sửa theo góp ý giao diện: Đơn của tôi chọn một trong hai danh sách (Đơn sửa chữa / Yêu cầu đặt lịch, có số đếm, ?list=), đơn chờ thợ thay thế hiện Đang tìm thợ thay thế; thợ thấy Bạn đã rời đơn với đơn đã rút; bảo hành ghi Công sửa/Linh kiện, tên hạng mục và số ngày còn lại; thêm màu ink-950 nên các hộp thoại có lại nền mờ, test quét màu theme
 - 2026-10-16 23:30 (UTC+7) | ToanAltF4 | chore/merge-main-into-dev | Gộp main vào dev để PR #147 hết conflict: giữ giao diện mới của main (ví, trợ lý AI, chat, đặt lịch), ghép lại phần của dev (rút tiền ví khách, nút Đặt thợ chỉ hiện khi trợ lý trả lời xong, gọi thoại isBusy, check-in dùng vị trí ping gần nhất); trang ví import đủ icon còn thiếu bên main
 - 2026-10-16 19:24 (UTC+7) | ToanAltF4 | fix/map-worker-build | Bản đồ trên bản build triển khai chỉ hiện nền: maplibre 6 tìm worker cạnh file của nó lúc chạy nên Vite không xuất worker (fixhome.sbs trả index.html); nay build worker bằng ?worker&url (worker.format es) và setWorkerUrl trước khi tạo bản đồ
 - 2026-10-16 17:13 (UTC+7) | ToanAltF4 | feat/smart-voice-call | Gọi thoại thông minh: chuông chờ/nhạc chuông (Web Audio, rung trên điện thoại), trạng thái Đang gọi/Đang đổ chuông/Đang kết nối, màn kết thúc (từ chối, không trả lời, máy bận, không liên lạc được, không kết nối được, cuộc gọi nhỡ, thời lượng) có Gọi lại; quá 20 s chưa nối thì báo; socket đọc token mới mỗi lần nối lại và tự làm mới phiên khi bị server từ chối
@@ -343,4 +344,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-10 00:44 (UTC+7) | ToanAltF4 | feat/customer-ui-redesign | Khu khách hàng: mỗi hành động một lần, menu ⋯ cho huỷ, khung xám khi tải, gom thông tin vào một khối
 - 2026-10-10 00:40 (UTC+7) | ToanAltF4 | feat/technician-ui-redesign | Khu kỹ thuật viên gọn lại: trang công việc chỉ hiện việc cần làm, các bước sau Xem thêm, Huỷ đơn thay Rút khỏi đơn, bỏ nút trùng ở layout và các trang
 - 2026-10-10 00:14 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Gộp header thống nhất lên dev mới (giữ luật bỏ nghiệm thu ở landing)
-- 2026-10-10 00:00 (UTC+7) | ToanAltF4 | feat/faster-photo-handling | Ảnh: chuẩn hoá trước khi tải, nhận nhiều định dạng, song song

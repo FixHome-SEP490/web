@@ -27,7 +27,7 @@ import {
   type MapMarker,
   type TimelineStep,
 } from '../../components';
-import { ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType } from '../../api/orders.api';
+import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType, type WarrantyCoverageRecord } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -63,15 +63,7 @@ const showPaymentModal = ref(false);
 const showWarrantyClaimModal = ref(false);
 const showTrackingModal = ref(false);
 // Warranty Coverages & Claims for completed order
-interface OrderWarrantyRecord {
-  id: string;
-  invoiceItemId?: string | null;
-  warrantyDaysSnapshot: number;
-  note?: string | null;
-  startsAt: string;
-  expiresAt: string;
-  status: string;
-}
+type OrderWarrantyRecord = WarrantyCoverageRecord;
 
 const orderWarranties = ref<OrderWarrantyRecord[]>([]);
 const warrantyClaims = ref<WarrantyClaimView[]>([]);
@@ -86,7 +78,9 @@ const claimableCoverages = computed<ClaimableCoverage[]>(() =>
     .filter((w) => w.status?.toUpperCase() !== 'VOIDED')
     .map((w) => ({
       id: w.id,
-      itemDescription: w.note || 'Bảo hành dịch vụ',
+      ...describeCoverage(w),
+      warrantyDaysSnapshot: w.warrantyDaysSnapshot,
+      startsAt: w.startsAt,
       expiresAt: w.expiresAt,
       status:
         new Date(w.expiresAt).getTime() > Date.now() && w.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED',
@@ -1375,9 +1369,11 @@ const parsedReview = computed(() => {
               <ul class="divide-y divide-ink-100">
                 <li v-for="w in orderWarranties" :key="w.id" class="py-2.5 flex items-start justify-between gap-3">
                   <span class="min-w-0">
-                    <span class="block font-medium text-ink-900">{{ w.note || 'Bảo hành dịch vụ' }}</span>
+                    <span class="block font-medium text-ink-900">
+                      <span v-if="coverageKindLabel(describeCoverage(w).kind)" class="font-normal text-ink-500">{{ coverageKindLabel(describeCoverage(w).kind) }} · </span>{{ describeCoverage(w).itemDescription }}
+                    </span>
                     <span class="block text-ink-500 font-num">
-                      {{ w.warrantyDaysSnapshot > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
+                      {{ (w.warrantyDaysSnapshot ?? 0) > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
                     </span>
                   </span>
                   <span

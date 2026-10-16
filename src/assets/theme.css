@@ -26,6 +26,7 @@
   --color-ink-700: #443E37;
   --color-ink-800: #2B2722;
   --color-ink-900: #1A1714;     /* text primary */
+  --color-ink-950: #0D0B09;     /* modal backdrop (with opacity) */
 
   /* ---- Semantic ---- */
   --color-success-50:  #E7F6F0;
@@ -113,6 +114,7 @@
   --color-ink-700: #334155;
   --color-ink-800: #1E293B;
   --color-ink-900: #0F172A;
+  --color-ink-950: #020617;
 
   --color-success-50:  #ECFDF5;
   --color-success-100: #D1FAE5;

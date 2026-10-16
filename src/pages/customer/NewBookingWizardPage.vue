@@ -1231,7 +1231,7 @@ const createAndFindTech = async () => {
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
                     Gói trọn gói chuẩn
                   </span>
-                  <span class="font-bold text-xs sm:text-sm text-brand-950">
+                  <span class="font-bold text-xs sm:text-sm text-brand-900">
                     {{ selectedService?.name }}
                   </span>
                 </div>
@@ -1990,7 +1990,7 @@ const createAndFindTech = async () => {
                 <span class="font-bold text-ink-900 font-num">{{ quantity }} {{ selectedService?.unit || 'thiết bị' }}</span>
               </div>
               <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
-                <span class="font-bold text-brand-950">Tổng thanh toán niêm yết:</span>
+                <span class="font-bold text-brand-900">Tổng thanh toán niêm yết:</span>
                 <span class="font-bold text-brand-700 text-base font-num">
                   <FhMoney :amount="totalFixedAmount" />
                 </span>

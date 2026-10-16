@@ -18,7 +18,7 @@ import {
   FhSkeleton,
   FhStatusPill,
 } from '../../components';
-import { ordersApi, isHistoricalOrder, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
+import { ordersApi, historicalPill, isHistoricalOrder, isReleasedJob, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
@@ -298,10 +298,10 @@ onUnmounted(() => {
           <span class="flex-1 min-w-0 space-y-1">
             <span class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
               <span class="font-num text-ink-700 whitespace-nowrap">#{{ row.old.code }}</span>
-              <FhStatusPill :status="row.old.status" />
+              <FhStatusPill :status="historicalPill(row.old).status" :label="historicalPill(row.old).label" />
               <span class="text-ink-500 whitespace-nowrap">{{ vnDateString(row.old.createdAt) }}</span>
             </span>
-            <span class="block text-sm text-ink-500">Đơn cũ, chỉ xem tóm tắt.</span>
+            <span class="block text-sm text-ink-500">{{ isReleasedJob(row.old) ? 'Bạn không còn phụ trách đơn này, chỉ xem tóm tắt.' : 'Đơn cũ, chỉ xem tóm tắt.' }}</span>
           </span>
           <ChevronRight :size="18" class="text-ink-400 shrink-0" aria-hidden="true" />
         </button>

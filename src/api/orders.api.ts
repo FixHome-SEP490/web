@@ -46,6 +46,15 @@ export interface RepairHistoryItem {
 }
 export const isHistoricalOrder = (order: TechnicianOrderItem): order is HistoricalOrderItem =>
   (order as HistoricalOrderItem).historical === true;
+/**
+ * The technician stepped off this order (withdrew, or was replaced) while it is still
+ * open: its own status ("on the way") is someone else's now, so it is shown as left.
+ */
+export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
+  !['completed', 'cancelled'].includes(String(order.status).toLowerCase());
+/** The pill for an order the technician no longer holds. */
+export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
+  isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
 export interface ServiceOrderItem {
   /** scheduled = one morning/afternoon session; urgent = come now (PO 08/10/2026). */
   bookingMode?: 'scheduled' | 'urgent';
@@ -188,11 +197,42 @@ export interface WarrantyItem {
   technicianName: string;
 }
 
+/** labor = the technician's work, part = a part they fitted; null on coverages without an invoice line. */
+export type CoverageKind = 'labor' | 'part' | null;
+
+/** A coverage as GET /service-orders/:id/warranties returns it. */
+export interface WarrantyCoverageRecord {
+  id: string;
+  invoiceItemId?: string | null;
+  warrantyDaysSnapshot?: number;
+  note?: string | null;
+  startsAt: string;
+  expiresAt: string;
+  status: string;
+  /** The invoice line it covers (backend 17/10/2026). */
+  itemType?: 'labor' | 'parts_equipment' | null;
+  itemDescription?: string | null;
+}
+
+/** What a coverage is for, in the customer's words: the invoice line, else the note. */
+export function describeCoverage(coverage: Pick<WarrantyCoverageRecord, 'itemType' | 'itemDescription' | 'note'>): {
+  itemDescription: string;
+  kind: CoverageKind;
+} {
+  const kind: CoverageKind = coverage.itemType === 'labor' ? 'labor' : coverage.itemType === 'parts_equipment' ? 'part' : null;
+  const name = coverage.itemDescription?.trim() || coverage.note?.trim();
+  return { kind, itemDescription: name || (kind === 'part' ? 'Bảo hành linh kiện' : 'Bảo hành dịch vụ') };
+}
+
+export const coverageKindLabel = (kind: CoverageKind | undefined): string =>
+  kind === 'labor' ? 'Công sửa' : kind === 'part' ? 'Linh kiện' : '';
+
 export interface OrderWarrantyItem {
   id: string;
   invoiceItemId?: string | null;
   warrantyDaysSnapshot: number;
   itemDescription: string;
+  kind?: CoverageKind;
   startsAt: string;
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED';
@@ -653,31 +693,13 @@ export const ordersApi = {
   async getWarranties(): Promise<WarrantyItem[]> {
     const orders = await this.getCustomerOrders();
     const lists = await Promise.all(orders.map(async order => {
-      const res = await apiClient.get<{data: {id:string;startsAt:string;expiresAt:string;status:string;note?:string}[]}>(`/service-orders/${order.id}/warranties`);
-      return res.data.data.map(w => ({...w, orderCode:order.code, serviceName:order.serviceName, itemDescription:w.note || 'Bảo hành dịch vụ', technicianName:order.technician?.fullName || '', status:w.status.toUpperCase() as WarrantyItem['status']}));
+      const res = await apiClient.get<{data: WarrantyCoverageRecord[]}>(`/service-orders/${order.id}/warranties`);
+      return res.data.data.map(w => ({...w, orderCode:order.code, serviceName:order.serviceName, itemDescription:describeCoverage(w).itemDescription, technicianName:order.technician?.fullName || '', status:w.status.toUpperCase() as WarrantyItem['status']}));
     })); return lists.flat();
   },
 
-  async getOrderWarranties(orderId: string): Promise<{
-    id: string;
-    invoiceItemId?: string | null;
-    warrantyDaysSnapshot: number;
-    note?: string | null;
-    startsAt: string;
-    expiresAt: string;
-    status: string;
-  }[]> {
-    const res = await apiClient.get<{
-      data: {
-        id: string;
-        invoiceItemId?: string | null;
-        warrantyDaysSnapshot: number;
-        note?: string | null;
-        startsAt: string;
-        expiresAt: string;
-        status: string;
-      }[];
-    }>(`/service-orders/${orderId}/warranties`);
+  async getOrderWarranties(orderId: string): Promise<WarrantyCoverageRecord[]> {
+    const res = await apiClient.get<{ data: WarrantyCoverageRecord[] }>(`/service-orders/${orderId}/warranties`);
     return res.data?.data || [];
   },
 
@@ -697,17 +719,7 @@ export const ordersApi = {
     const groups = await Promise.all(
       orders.items.map(async (order): Promise<OrderWarrantyGroup | null> => {
         try {
-          const res = await apiClient.get<{
-            data: {
-              id: string;
-              invoiceItemId?: string | null;
-              warrantyDaysSnapshot?: number;
-              startsAt: string;
-              expiresAt: string;
-              status: string;
-              note?: string;
-            }[];
-          }>(`/service-orders/${order.id}/warranties`);
+          const res = await apiClient.get<{ data: WarrantyCoverageRecord[] }>(`/service-orders/${order.id}/warranties`);
 
           const coverages = res.data?.data || [];
           if (coverages.length === 0) return null;
@@ -746,7 +758,7 @@ export const ordersApi = {
               id: c.id,
               invoiceItemId: c.invoiceItemId,
               warrantyDaysSnapshot: c.warrantyDaysSnapshot || 0,
-              itemDescription: c.note || 'Bảo hành dịch vụ',
+              ...describeCoverage(c),
               startsAt: c.startsAt,
               expiresAt: c.expiresAt,
               status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',

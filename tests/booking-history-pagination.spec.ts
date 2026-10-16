@@ -174,6 +174,8 @@ describe('CustomerOrdersPage: requests per tab', () => {
     // A matched booking shows as its order only.
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="order-card-o1"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
+    expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Đã huỷ trước khi có thợ');
     expect(wrapper.text()).toContain('Chưa tìm được thợ, chờ hỗ trợ');
     expect(wrapper.get('[data-testid="history-tab-ALL"]').text()).toBe('Tất cả (3)');
@@ -192,7 +194,9 @@ describe('CustomerOrdersPage: requests per tab', () => {
     expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled' }]);
     expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled' }]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oX']);
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bC']);
+    await wrapper.get('[data-testid="list-switch-orders"]').trigger('click');
 
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-IN_PROGRESS"]').trigger('click');
@@ -208,7 +212,9 @@ describe('CustomerOrdersPage: requests per tab', () => {
       { page: 1, pageSize: 10, status: 'matching' },
     ]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oR']);
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bM']);
+    await wrapper.get('[data-testid="list-switch-orders"]').trigger('click');
 
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-COMPLETED"]').trigger('click');
@@ -311,12 +317,57 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     await wrapper.get('input[type="text"]').setValue('sua dieu hoa');
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bS']);
 
     await wrapper.get('input[type="text"]').setValue('khong co');
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
     expect(wrapper.get('[data-testid="history-empty-state"]').text()).toContain('Không có đơn phù hợp');
+  });
+});
+
+describe('CustomerOrdersPage: one list at a time', () => {
+  it('shows repair orders first, with both counts on the switch, and the requests on demand', async () => {
+    serve(
+      { accepted: [makeOrder({ id: 'o1', bookingId: 'x1' })], completed: [makeOrder({ id: 'o2', bookingId: 'x2', status: 'completed' })] },
+      { submitted: [makeBooking({ id: 'b1' })] },
+    );
+    const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="list-switch-orders"]').text()).toBe('Đơn sửa chữa2');
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toBe('Yêu cầu đặt lịch1');
+    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
+    expect(cardIds(wrapper, 'order-card-').sort()).toEqual(['o1', 'o2']);
+    expect(cardIds(wrapper, 'booking-card-')).toEqual([]);
+
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
+    expect(cardIds(wrapper, 'booking-card-')).toEqual(['b1']);
+    expect(cardIds(wrapper, 'order-card-')).toEqual([]);
+    expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
+  });
+
+  it('opens on the requests when there is no repair order yet', async () => {
+    serve({}, { submitted: [makeBooking({ id: 'b1' })] });
+    const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
+    expect(cardIds(wrapper, 'booking-card-')).toEqual(['b1']);
+  });
+
+  it('says so when the chosen list is empty but the other one is not', async () => {
+    serve({ accepted: [makeOrder({ id: 'o1', bookingId: 'x1' })] }, {});
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
+    expect(wrapper.get('[data-testid="requests-empty"]').text()).toBe('Không có yêu cầu đặt lịch ở mục này.');
+    expect(wrapper.find('[data-testid="history-empty-state"]').exists()).toBe(false);
+  });
+
+  it('an order whose technician stepped off reads as looking for another one, not on the way', async () => {
+    serve({ en_route: [{ ...makeOrder({ id: 'o1', bookingId: 'x1', status: 'en_route' }), technician: null }] }, {});
+    const wrapper = await mountPage();
+    const card = wrapper.get('[data-testid="order-card-o1"]');
+    expect(card.text()).toContain('Đang tìm thợ thay thế');
+    expect(card.text()).toContain('Thợ trước đã rút, FixHome đang tìm thợ khác');
+    expect(card.text()).not.toContain('Đang di chuyển');
   });
 });
 
@@ -368,7 +419,8 @@ describe('CustomerOrdersPage: partial failure', () => {
     await wrapper.get('[data-testid="orders-section"] [data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="orders-error-banner"]').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="booking-card-keep"]').exists()).toBe(true);
+    // The other list is still there, one tap away, with its count.
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('1');
 
     await wrapper.get('[data-testid="retry-orders"]').trigger('click');
     await flushPromises();
@@ -376,6 +428,8 @@ describe('CustomerOrdersPage: partial failure', () => {
     expect(calls('/service-orders/my').filter((p) => p.page === 2)).toHaveLength(2);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['o11']);
     expect(wrapper.find('[data-testid="orders-error-banner"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
+    expect(wrapper.get('[data-testid="booking-card-keep"]').exists()).toBe(true);
   });
 
   it('does not claim an empty history when both lists fail', async () => {
