@@ -45,6 +45,7 @@ import {
 } from '../../components';
 import {
   ordersApi,
+  historicalPill,
   isHistoricalOrder,
   type HistoricalOrderItem,
   type ServiceOrderItem,
@@ -1372,7 +1373,7 @@ const toggleMore = async () => {
     >
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h1 class="text-lg font-bold text-ink-900">Công việc <span class="font-num whitespace-nowrap">{{ historicalJob.code }}</span></h1>
-        <FhStatusPill :status="historicalJob.status" />
+        <FhStatusPill :status="historicalPill(historicalJob).status" :label="historicalPill(historicalJob).label" />
       </div>
       <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
       <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>

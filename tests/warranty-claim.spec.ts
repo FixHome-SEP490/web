@@ -91,6 +91,38 @@ describe('ordersApi warranty claim calls', () => {
   });
 });
 
+describe('what each coverage covers', () => {
+  it('names the invoice line and its kind, falling back to the note, then a generic label', async () => {
+    const { describeCoverage } = await import('../src/api/orders.api');
+    expect(describeCoverage({ itemType: 'labor', itemDescription: 'Thay ổ cắm điện - tiền công' })).toEqual({ kind: 'labor', itemDescription: 'Thay ổ cắm điện - tiền công' });
+    expect(describeCoverage({ itemType: 'parts_equipment', itemDescription: 'Ổ cắm Panasonic' })).toEqual({ kind: 'part', itemDescription: 'Ổ cắm Panasonic' });
+    expect(describeCoverage({ itemType: 'parts_equipment', itemDescription: ' ' })).toEqual({ kind: 'part', itemDescription: 'Bảo hành linh kiện' });
+    expect(describeCoverage({ note: 'Bảo hành bổ sung' })).toEqual({ kind: null, itemDescription: 'Bảo hành bổ sung' });
+    expect(describeCoverage({})).toEqual({ kind: null, itemDescription: 'Bảo hành dịch vụ' });
+  });
+
+  it('the claim dialog tells labor from a part and how long each is still covered', async () => {
+    const wrapper = mount(WarrantyClaimModal, {
+      props: {
+        open: true, orderId: 'order-1', orderCode: 'SO-1', serviceName: 'Thay ổ cắm điện', technicianName: 'Kỹ thuật viên A',
+        coverages: [
+          { id: 'l', kind: 'labor' as const, itemDescription: 'Thay ổ cắm điện - tiền công', warrantyDaysSnapshot: 30, expiresAt: FUTURE, status: 'ACTIVE' as const },
+          { id: 'p', kind: 'part' as const, itemDescription: 'Ổ cắm Panasonic', warrantyDaysSnapshot: 90, expiresAt: PAST, status: 'EXPIRED' as const },
+        ],
+        busyCoverageIds: [],
+      },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="coverage-kind"]').map((k) => k.text())).toEqual(['Công sửa', 'Linh kiện']);
+    const terms = wrapper.findAll('[data-testid="coverage-term"]').map((t) => t.text());
+    expect(terms[0]).toMatch(/^Bảo hành 30 ngày · đến \d{2}\/\d{2}\/\d{4} · còn 10 ngày$/);
+    expect(terms[1]).toMatch(/^Hết hạn \d{2}\/\d{2}\/\d{4}$/);
+    expect(wrapper.text()).toContain('Ổ cắm Panasonic');
+    wrapper.unmount();
+  });
+});
+
 describe('WarrantyClaimModal', () => {
   const coverages = [
     { id: 'cov-expired', itemDescription: 'Van khóa cũ', expiresAt: PAST, status: 'EXPIRED' as const },

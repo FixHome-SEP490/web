@@ -24,6 +24,7 @@ vi.mock('../src/api/orders.api', () => ({
     getEvidence: mocks.getEvidence,
   },
   isHistoricalOrder: (order: { historical?: boolean }) => order.historical === true,
+  historicalPill: (order: { status: string }) => ({ status: order.status, label: '' }),
 }));
 
 vi.mock('../src/api/bookings.api', () => ({
