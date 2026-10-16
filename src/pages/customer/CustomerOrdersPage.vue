@@ -244,13 +244,21 @@ function selectTab(key: Tab) {
   }
 }
 
-// ── Computed ──
+// ── Computed & Count ──
 const loading = computed(() => loadingOrders.value && loadingBookings.value);
 const hasError = computed(() => !!(ordersError.value || bookingsError.value));
-const allCount = computed(() =>
-  activeTab.value === 'ALL' && !loadingOrders.value && !loadingBookings.value && !hasError.value
-    ? ordersTotal.value + bookingsTotal.value
-    : null,
+
+// Keep total count persistent once fetched so switching tabs doesn't cause tab width jitter
+const totalCount = ref<number | null>(null);
+
+watch(
+  [ordersTotal, bookingsTotal, loadingOrders, loadingBookings, hasError, activeTab],
+  () => {
+    if (activeTab.value === 'ALL' && !loadingOrders.value && !loadingBookings.value && !hasError.value) {
+      totalCount.value = ordersTotal.value + bookingsTotal.value;
+    }
+  },
+  { immediate: true },
 );
 
 const isOverdue = (booking: BookingItem) =>
@@ -264,7 +272,9 @@ const pendingLabel = (booking: BookingItem) => {
   return 'Đang tìm thợ phù hợp';
 };
 
-watch(activeTab, () => {
+let tabResizeObserver: ResizeObserver | null = null;
+
+watch([activeTab, totalCount], () => {
   void nextTick(updateTabIndicator);
 });
 
@@ -272,6 +282,12 @@ onMounted(() => {
   void nextTick(updateTabIndicator);
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateTabIndicator);
+    if (tabListRef.value && typeof ResizeObserver !== 'undefined') {
+      tabResizeObserver = new ResizeObserver(() => {
+        updateTabIndicator();
+      });
+      tabResizeObserver.observe(tabListRef.value);
+    }
   }
 });
 
@@ -279,6 +295,7 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateTabIndicator);
   }
+  tabResizeObserver?.disconnect();
 });
 
 // ── Filtering ──
@@ -346,7 +363,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <div
       ref="tabListRef"
-      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 select-none scrollbar-none"
+      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 select-none scrollbar-none"
       role="tablist"
       aria-label="Lọc đơn sửa chữa"
     >
@@ -359,7 +376,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
       <button
         v-for="tab in [
-          { key: 'ALL' as const, label: allCount === null ? 'Tất cả' : `Tất cả (${allCount})` },
+          { key: 'ALL' as const, label: totalCount === null ? 'Tất cả' : `Tất cả (${totalCount})` },
           { key: 'IN_PROGRESS' as const, label: 'Đang xử lý' },
           { key: 'COMPLETED' as const, label: 'Hoàn tất' },
           { key: 'CANCELLED' as const, label: 'Đã huỷ' },
@@ -370,7 +387,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
         type="button"
         role="tab"
         :aria-selected="activeTab === tab.key"
-        class="relative z-10 flex h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs sm:text-sm font-medium transition-colors"
+        class="relative z-10 flex h-9 shrink-0 min-w-[5.25rem] sm:min-w-[5.75rem] items-center justify-center gap-1.5 rounded-lg px-3.5 text-xs sm:text-sm font-medium transition-colors"
         :class="activeTab === tab.key ? 'font-semibold text-ink-900' : 'text-ink-600 hover:text-ink-900'"
         @click="selectTab(tab.key)"
       >

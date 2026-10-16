@@ -432,14 +432,34 @@ const categorySymptoms = computed<string[]>(() => {
   ];
 });
 
-function addSymptom(symptom: string) {
-  if (!description.value.trim() || description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:')) {
+/**
+ * Symptoms are written into the description as comma-separated parts. Only the
+ * first one keeps its capital letter, so every comparison ignores case;
+ * comparing case-sensitively let the later chips be appended again and again.
+ */
+const descriptionParts = () => description.value.split(',').map((part) => part.trim()).filter(Boolean);
+const sameSymptom = (a: string, b: string) => a.toLocaleLowerCase('vi') === b.toLocaleLowerCase('vi');
+
+function hasSymptom(symptom: string) {
+  return descriptionParts().some((part) => sameSymptom(part, symptom));
+}
+
+/** A chip toggles: first click adds the symptom, a second click takes it out. */
+function toggleSymptom(symptom: string) {
+  userModifiedDescription.value = true;
+  const isTemplate =
+    description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:');
+  if (!description.value.trim() || isTemplate) {
     description.value = symptom;
-    userModifiedDescription.value = true;
-  } else if (!description.value.includes(symptom)) {
-    description.value = `${description.value.trim()}, ${symptom.toLowerCase()}`;
-    userModifiedDescription.value = true;
+    return;
   }
+  const parts = descriptionParts();
+  if (parts.some((part) => sameSymptom(part, symptom))) {
+    const rest = parts.filter((part) => !sameSymptom(part, symptom)).join(', ');
+    description.value = rest ? rest.charAt(0).toLocaleUpperCase('vi') + rest.slice(1) : '';
+    return;
+  }
+  description.value = `${description.value.trim().replace(/,\s*$/, '')}, ${symptom.toLocaleLowerCase('vi')}`;
 }
 
 const urgencyList = [
@@ -472,6 +492,115 @@ const urgencyList = [
     icon: Flame,
   },
 ] as const;
+
+/** Track colour per level, from calm to alarming. */
+const URGENCY_COLORS: Record<(typeof urgencyList)[number]['key'], string> = {
+  LOW: '#16a34a',
+  NORMAL: '#2563eb',
+  HIGH: '#f59e0b',
+  EMERGENCY: '#dc2626',
+};
+
+/** Continuous slider position: follows pointer continuously when dragging, snaps on release. */
+const sliderValue = ref<number>(Math.max(0, urgencyList.findIndex((lvl) => lvl.key === urgency.value)));
+const isDraggingSlider = ref(false);
+const urgencyTrackRef = ref<HTMLElement | null>(null);
+
+watch(
+  () => urgency.value,
+  (val) => {
+    const idx = urgencyList.findIndex((lvl) => lvl.key === val);
+    if (idx >= 0 && !isDraggingSlider.value && Math.round(sliderValue.value) !== idx) {
+      sliderValue.value = idx;
+    }
+  },
+);
+
+const activeUrgencyIndex = computed(() => {
+  return Math.min(urgencyList.length - 1, Math.max(0, Math.round(sliderValue.value)));
+});
+const currentUrgency = computed(() => urgencyList[activeUrgencyIndex.value]);
+const urgencyColor = computed(() => URGENCY_COLORS[currentUrgency.value.key]);
+const urgencyFillPercent = computed(() => {
+  return Math.min(100, Math.max(0, (sliderValue.value / (urgencyList.length - 1)) * 100));
+});
+
+function setUrgencyIndex(idx: number) {
+  isDraggingSlider.value = false;
+  const clamped = Math.min(urgencyList.length - 1, Math.max(0, idx));
+  sliderValue.value = clamped;
+  urgency.value = urgencyList[clamped].key;
+}
+
+function updateSliderFromClientX(clientX: number) {
+  const track = urgencyTrackRef.value;
+  if (!track) return;
+  const rect = track.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  sliderValue.value = ratio * (urgencyList.length - 1);
+  urgency.value = urgencyList[activeUrgencyIndex.value].key;
+}
+
+function onSliderTrackPointerDown(event: PointerEvent) {
+  const track = urgencyTrackRef.value;
+  if (track && 'setPointerCapture' in track) {
+    try {
+      track.setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
+  }
+  isDraggingSlider.value = true;
+  updateSliderFromClientX(event.clientX);
+}
+
+function onSliderTrackPointerMove(event: PointerEvent) {
+  if (!isDraggingSlider.value) return;
+  updateSliderFromClientX(event.clientX);
+}
+
+function onSliderTrackPointerUp(event: PointerEvent) {
+  if (!isDraggingSlider.value) return;
+  const track = urgencyTrackRef.value;
+  if (track && 'releasePointerCapture' in track && track.hasPointerCapture(event.pointerId)) {
+    try {
+      track.releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
+  }
+  isDraggingSlider.value = false;
+  setUrgencyIndex(Math.round(sliderValue.value));
+}
+
+function onSliderNativeInput(event: Event) {
+  const val = Number((event.target as HTMLInputElement).value);
+  if (!Number.isNaN(val)) {
+    sliderValue.value = val;
+    urgency.value = urgencyList[activeUrgencyIndex.value].key;
+  }
+}
+
+function onSliderNativeChange() {
+  setUrgencyIndex(Math.round(sliderValue.value));
+}
+
+function onSliderKeyDown(e: KeyboardEvent) {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    setUrgencyIndex(Math.min(urgencyList.length - 1, activeUrgencyIndex.value + 1));
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    setUrgencyIndex(Math.max(0, activeUrgencyIndex.value - 1));
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    setUrgencyIndex(0);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    setUrgencyIndex(urgencyList.length - 1);
+  }
+}
 
 // Services and saved addresses: skeletons until they arrive, a retry line if they do not.
 // The catalog is reference data, cached for the next form.
@@ -1262,12 +1391,13 @@ const createAndFindTech = async () => {
                   :key="sym"
                   type="button"
                   class="px-2.5 py-1 rounded-xl text-[11px] font-medium transition-all active:scale-95 border"
-                  :class="description.includes(sym)
+                  :class="hasSymptom(sym)
                     ? 'bg-brand-50 text-brand-700 border-brand-300 font-bold'
                     : 'bg-ink-50 text-ink-700 border-ink-200 hover:bg-white hover:border-brand-200'"
-                  @click="addSymptom(sym)"
+                  :aria-pressed="hasSymptom(sym)"
+                  @click="toggleSymptom(sym)"
                 >
-                  + {{ sym }}
+                  {{ hasSymptom(sym) ? '✓' : '+' }} {{ sym }}
                 </button>
               </div>
             </div>
@@ -1292,35 +1422,148 @@ const createAndFindTech = async () => {
               <span class="text-[11px] text-ink-500">Chọn mức độ mong muốn thợ có mặt</span>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <button
-                v-for="lvl in urgencyList"
-                :key="lvl.key"
-                type="button"
-                class="p-3.5 rounded-2xl border text-left transition-all active:scale-95 flex flex-col justify-between gap-2"
-                :class="urgency === lvl.key
-                  ? 'border-brand-600 bg-brand-50/80 text-brand-900 ring-2 ring-brand-500 font-bold shadow-xs'
-                  : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
-                @click="urgency = (lvl.key as any)"
-              >
-                <div class="flex items-center justify-between w-full">
-                  <component
-                    :is="lvl.icon"
-                    :size="16"
-                    :class="urgency === lvl.key ? 'text-brand-600' : 'text-ink-400'"
-                  />
-                  <span
-                    class="text-xs font-bold px-1.5 py-0.5 rounded-full"
-                    :class="urgency === lvl.key ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'"
+            <div
+              class="p-4 rounded-2xl border transition-all duration-350 ease-out space-y-4 shadow-2xs"
+              :style="{
+                borderColor: `${urgencyColor}40`,
+                backgroundColor: `${urgencyColor}0a`
+              }"
+              data-testid="urgency-slider"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div
+                    class="w-9 h-9 rounded-xl flex items-center justify-center bg-white border shadow-xs shrink-0 transition-all duration-350 ease-out"
+                    :style="{
+                      color: urgencyColor,
+                      borderColor: `${urgencyColor}30`,
+                      boxShadow: `0 2px 8px ${urgencyColor}20`
+                    }"
                   >
-                    {{ lvl.badge }}
+                    <Transition name="urgency-icon" mode="out-in">
+                      <component :is="currentUrgency.icon" :key="currentUrgency.key" :size="18" />
+                    </Transition>
+                  </div>
+                  <div class="min-w-0 overflow-hidden">
+                    <Transition name="urgency-text" mode="out-in">
+                      <div :key="currentUrgency.key">
+                        <div class="text-xs sm:text-[13px] font-bold text-ink-900 truncate">
+                          {{ currentUrgency.label }}
+                        </div>
+                        <div class="text-[11px] text-ink-500 truncate">
+                          Thợ có mặt {{ currentUrgency.hint.toLowerCase() }}
+                        </div>
+                      </div>
+                    </Transition>
+                  </div>
+                </div>
+
+                <Transition name="urgency-badge" mode="out-in">
+                  <span
+                    :key="currentUrgency.key"
+                    class="text-[11px] font-bold px-2.5 py-0.5 rounded-full text-white transition-all duration-350 shadow-2xs shrink-0"
+                    :style="{
+                      backgroundColor: urgencyColor,
+                      boxShadow: `0 2px 6px ${urgencyColor}40`
+                    }"
+                  >
+                    {{ currentUrgency.badge }}
                   </span>
+                </Transition>
+              </div>
+
+              <!-- Smooth Custom Track with Realtime Dragging & Spring Snap -->
+              <div
+                ref="urgencyTrackRef"
+                class="relative py-3 flex items-center select-none group cursor-pointer touch-none"
+                data-testid="urgency-slider-track"
+                @pointerdown="onSliderTrackPointerDown"
+                @pointermove="onSliderTrackPointerMove"
+                @pointerup="onSliderTrackPointerUp"
+                @pointercancel="onSliderTrackPointerUp"
+              >
+                <!-- Track Base -->
+                <div class="w-full h-2 rounded-full bg-ink-200/80 overflow-hidden relative pointer-events-none">
+                  <!-- Continuous Fill Bar -->
+                  <div
+                    class="h-full rounded-full"
+                    :class="isDraggingSlider ? '' : 'transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]'"
+                    :style="{
+                      width: `${urgencyFillPercent}%`,
+                      backgroundColor: urgencyColor
+                    }"
+                  ></div>
                 </div>
-                <div>
-                  <div class="text-xs sm:text-[13px] font-bold">{{ lvl.label }}</div>
-                  <div class="text-xs text-ink-500 mt-0.5 font-normal">{{ lvl.hint }}</div>
+
+                <!-- Step notch dots -->
+                <div class="absolute inset-x-0 flex justify-between px-0.5 pointer-events-none">
+                  <span
+                    v-for="(lvl, i) in urgencyList"
+                    :key="lvl.key"
+                    class="w-2.5 h-2.5 rounded-full transition-all duration-300 ease-out"
+                    :class="i <= activeUrgencyIndex ? 'bg-white shadow-2xs scale-100 ring-2 ring-white/60' : 'bg-ink-300/80 scale-90'"
+                    :style="i <= activeUrgencyIndex ? { backgroundColor: '#ffffff' } : {}"
+                  ></span>
                 </div>
-              </button>
+
+                <!-- Floating Thumb Knob follows cursor directly when dragging, springs on snap -->
+                <div
+                  class="urgency-thumb-knob absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-[3px] pointer-events-none flex items-center justify-center shadow-md"
+                  :class="[
+                    isDraggingSlider ? 'scale-110' : 'transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-hover:scale-110 active:scale-95'
+                  ]"
+                  :style="{
+                    left: `${urgencyFillPercent}%`,
+                    borderColor: urgencyColor,
+                    boxShadow: `0 3px 10px ${urgencyColor}4d`,
+                  }"
+                >
+                  <div
+                    class="w-1.5 h-1.5 rounded-full transition-colors duration-300"
+                    :style="{ backgroundColor: urgencyColor }"
+                  ></div>
+                </div>
+
+                <!-- Native Range Input (Accessible, Keyboard Focus, Testable) -->
+                <input
+                  id="urgency-range"
+                  type="range"
+                  min="0"
+                  :max="urgencyList.length - 1"
+                  step="0.001"
+                  :value="sliderValue"
+                  class="sr-only"
+                  aria-label="Mức độ khẩn cấp"
+                  :aria-valuetext="`${currentUrgency.label} – ${currentUrgency.hint}`"
+                  @keydown="onSliderKeyDown"
+                  @input="onSliderNativeInput"
+                  @change="onSliderNativeChange"
+                />
+              </div>
+
+              <!-- Step labels below with active state & subtle elevation -->
+              <div class="grid grid-cols-4 gap-1 text-[11px] select-none -mt-1 pt-0.5">
+                <button
+                  v-for="(lvl, i) in urgencyList"
+                  :key="lvl.key"
+                  type="button"
+                  class="py-1 px-1 rounded-lg text-center transition-all duration-300 cursor-pointer flex flex-col items-center justify-center relative hover:bg-white/60"
+                  :class="activeUrgencyIndex === i ? 'font-bold' : 'text-ink-500 hover:text-ink-800'"
+                  :style="activeUrgencyIndex === i ? { color: urgencyColor } : {}"
+                  @click="setUrgencyIndex(i)"
+                >
+                  <span class="block transition-transform duration-300 truncate w-full" :class="activeUrgencyIndex === i ? '-translate-y-0.5' : ''">
+                    {{ lvl.label }}
+                  </span>
+                  <span
+                    class="w-1.5 h-1.5 rounded-full mt-1 transition-all duration-300"
+                    :style="{
+                      backgroundColor: activeUrgencyIndex === i ? urgencyColor : 'transparent',
+                      transform: activeUrgencyIndex === i ? 'scale(1)' : 'scale(0)'
+                    }"
+                  ></span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1737,7 +1980,7 @@ const createAndFindTech = async () => {
 
             <div class="flex items-center justify-between pt-2">
               <span class="text-ink-500">Mức độ khẩn cấp:</span>
-              <span class="font-bold text-brand-700">{{ urgency }}</span>
+              <span class="font-bold" :style="{ color: urgencyColor }">{{ currentUrgency.label }} · {{ currentUrgency.hint }}</span>
             </div>
           </div>
 
@@ -1804,5 +2047,49 @@ const createAndFindTech = async () => {
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+/* Urgency slider transitions & animations */
+.urgency-icon-enter-active,
+.urgency-icon-leave-active {
+  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.urgency-icon-enter-from {
+  opacity: 0;
+  transform: scale(0.6) rotate(-20deg);
+}
+.urgency-icon-leave-to {
+  opacity: 0;
+  transform: scale(0.6) rotate(20deg);
+}
+
+.urgency-text-enter-active,
+.urgency-text-leave-active {
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.urgency-text-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.urgency-text-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.urgency-badge-enter-active,
+.urgency-badge-leave-active {
+  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.urgency-badge-enter-from {
+  opacity: 0;
+  transform: scale(0.8);
+}
+.urgency-badge-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.urgency-thumb-knob {
+  will-change: left, transform;
 }
 </style>

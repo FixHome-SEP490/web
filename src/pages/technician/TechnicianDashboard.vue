@@ -5,7 +5,6 @@ import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat.store';
 import {
-  Wrench,
   Clock,
   MapPin,
   CheckCircle2,
@@ -16,12 +15,10 @@ import {
   Phone,
   RefreshCw,
   Navigation,
-  Sparkles,
   Check,
-  Radio,
   AlertCircle,
   ChevronRight,
-  Camera,
+  User,
 } from 'lucide-vue-next';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
@@ -202,20 +199,16 @@ const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} 
 
 const isOneOf = (job: ServiceOrderItem, statuses: string[]) => statuses.includes(String(job.status).toUpperCase());
 
-/** Done steps are green, the current one blue, the rest neutral. */
-const stepClass = (done: boolean | undefined, current: boolean) =>
-  done ? 'text-success-700' : current ? 'text-brand-700 font-medium' : 'text-ink-500';
-
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 </script>
 
 <template>
-  <div class="space-y-6 pb-4">
-    <!-- 1. Who is working and whether jobs reach them right now (the switch itself lives in the header) -->
-    <header class="flex items-start justify-between gap-4">
+  <div class="space-y-6 pb-6">
+    <!-- 1. Who is working and whether jobs reach them right now -->
+    <header class="bg-white rounded-2xl border border-ink-200/90 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
       <div class="flex items-center gap-4 min-w-0">
         <div class="relative shrink-0">
-          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-brand-50 border border-brand-100 text-brand-700 font-semibold flex items-center justify-center text-2xl overflow-hidden">
+          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-ink-100 border border-ink-200 text-brand-700 font-bold flex items-center justify-center text-2xl overflow-hidden shadow-2xs">
             <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
             <span v-else>{{ authStore.user?.fullName?.charAt(0) || 'T' }}</span>
           </div>
@@ -228,8 +221,17 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </div>
 
         <div class="min-w-0 space-y-1">
-          <p class="text-sm text-ink-500 first-letter:uppercase">{{ currentDateFormatted }}</p>
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="text-xs font-semibold text-ink-500 uppercase tracking-wider">{{ currentDateFormatted }}</p>
+            <span
+              v-if="identityVerified"
+              class="inline-flex items-center gap-1 h-5 px-2 rounded-md bg-brand-50 text-brand-700 text-[11px] font-semibold"
+            >
+              <ShieldCheck :size="13" />
+              Đã xác minh
+            </span>
+          </div>
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight truncate">
             {{ authStore.user?.fullName || 'Kỹ thuật viên' }}
           </h1>
           <p
@@ -237,160 +239,237 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
             class="text-sm flex flex-wrap items-center gap-x-2"
             :class="availabilityView.receiving ? 'text-success-700' : 'text-ink-600'"
           >
-            <span class="font-semibold whitespace-nowrap">{{ availabilityView.title }}</span>
-            <span v-if="availabilityDetail" class="text-ink-600 whitespace-nowrap">{{ availabilityDetail }}</span>
+            <span class="inline-flex items-center gap-1.5 font-bold">
+              <span
+                class="w-2 h-2 rounded-full"
+                :class="availabilityView.receiving ? 'bg-success-600 animate-pulse' : 'bg-ink-400'"
+              ></span>
+              {{ availabilityView.title }}
+            </span>
+            <span v-if="availabilityDetail" class="text-ink-500 font-medium whitespace-nowrap">{{ availabilityDetail }}</span>
           </p>
         </div>
       </div>
 
-      <FhButton variant="secondary" size="sm" class="h-10" :disabled="refreshing" aria-label="Tải lại" @click="handleRefresh">
-        <RefreshCw :size="16" :class="{ 'animate-spin': refreshing }" />
-        <span class="hidden sm:inline">Tải lại</span>
-      </FhButton>
+      <!-- Quick reputation stats & refresh button -->
+      <div class="flex items-center justify-between md:justify-end gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-ink-100 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap text-xs sm:text-sm">
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-ink-50 rounded-xl border border-ink-200/70 text-ink-700 font-medium">
+            <MapPin :size="14" class="text-ink-400 shrink-0" />
+            <span>Bán kính</span>
+            <strong class="font-bold text-ink-900 font-num">{{ profile ? `${profile.serviceRadiusKm} km` : '—' }}</strong>
+          </div>
+
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-ink-50 rounded-xl border border-ink-200/70 text-ink-700 font-medium">
+            <Star :size="14" class="text-warning-500 fill-warning-500 shrink-0" />
+            <strong class="font-bold text-ink-900 font-num">{{ profile && hasRating(profile.averageRating, profile.ratingCount) ? ratingLabel(profile.averageRating, profile.ratingCount) : 'Chưa có đánh giá' }}</strong>
+            <span class="text-ink-400 text-xs">({{ profile?.ratingCount ?? 0 }})</span>
+          </div>
+
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-ink-50 rounded-xl border border-ink-200/70 text-ink-700 font-medium">
+            <span>Tin cậy</span>
+            <strong class="font-bold font-num">{{ profile?.reliabilityScore != null ? `${profile.reliabilityScore}%` : '—' }}</strong>
+          </div>
+        </div>
+
+        <FhButton variant="secondary" size="sm" class="h-10 px-3.5 rounded-xl shrink-0" :disabled="refreshing" aria-label="Tải lại" @click="handleRefresh">
+          <RefreshCw :size="15" :class="{ 'animate-spin': refreshing }" />
+          <span class="hidden sm:inline font-medium">Tải lại</span>
+        </FhButton>
+      </div>
     </header>
 
-    <!-- Reputation in one quiet row -->
-    <div class="flex items-center gap-x-5 gap-y-2 flex-wrap text-sm text-ink-600 -mt-2">
-      <span
-        v-if="identityVerified"
-        class="inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-brand-50 text-brand-700 text-xs font-medium whitespace-nowrap"
-      >
-        <ShieldCheck :size="14" />
-        Đã xác minh danh tính
-      </span>
-      <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
-        <MapPin :size="15" class="text-ink-400" />
-        Bán kính <strong class="font-semibold text-ink-900 font-num">{{ profile ? `${profile.serviceRadiusKm} km` : '—' }}</strong>
-      </span>
-      <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
-        <Star :size="15" class="text-warning-500 fill-warning-500" />
-        <strong class="font-semibold text-ink-900 font-num">{{ profile && hasRating(profile.averageRating, profile.ratingCount) ? ratingLabel(profile.averageRating, profile.ratingCount) : 'Chưa có đánh giá' }}</strong>
-        <span class="text-ink-400">({{ profile?.ratingCount ?? 0 }})</span>
-      </span>
-      <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
-        <Sparkles :size="15" class="text-ink-400" />
-        Độ tin cậy <strong class="font-semibold text-success-700 font-num">{{ profile?.reliabilityScore != null ? `${profile.reliabilityScore}%` : '—' }}</strong>
-      </span>
-    </div>
-
-    <!-- 2. A job offer waiting for an answer: the main action of the screen when there is one -->
+    <!-- 2. A job offer waiting for an answer: the main urgent action when there is one -->
     <section
       v-if="topInvitation"
-      class="p-5 sm:p-6 rounded-2xl bg-white border border-brand-200 shadow-(--shadow-e1) flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+      class="p-5 sm:p-6 rounded-2xl bg-white border-2 border-brand-500 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
       data-testid="dashboard-invitation"
     >
-      <button
-        type="button"
-        class="min-w-0 flex-1 text-left space-y-1.5 rounded-xl"
-        :class="focusRing"
-        @click="router.push('/tech/invitations')"
-      >
-        <span class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm font-semibold text-brand-700 whitespace-nowrap">Lời mời nhận việc mới</span>
+      <div class="min-w-0 flex-1 space-y-2.5">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-bold uppercase tracking-wide">
+            <span class="w-2 h-2 rounded-full bg-brand-600 animate-ping"></span>
+            Lời mời nhận việc mới
+          </span>
           <FhCountdown :expires-at="topInvitation.expiresAt" />
-          <span v-if="invitations.length > 1" class="text-xs font-medium text-ink-600 bg-ink-100 h-6 px-2 rounded-lg inline-flex items-center whitespace-nowrap">
+          <span v-if="invitations.length > 1" class="text-xs font-semibold text-ink-600 bg-ink-100 h-6 px-2.5 rounded-lg inline-flex items-center whitespace-nowrap">
             +{{ invitations.length - 1 }} lời mời khác
           </span>
-        </span>
-        <span class="block text-lg font-semibold text-ink-900 text-balance">
-          {{ topInvitation.booking?.serviceName || 'Dịch vụ sửa chữa tại nhà' }}
-        </span>
-        <span class="flex flex-col sm:flex-row sm:items-center gap-x-5 gap-y-1 text-sm text-ink-600">
-          <span class="flex items-start gap-1.5 min-w-0">
-            <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
-            <span class="text-pretty">{{ topInvitation.booking?.addressSummary || 'Khu vực địa phương' }}</span>
-          </span>
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <Clock :size="15" class="text-ink-400" />
-            <strong class="font-semibold text-ink-900">{{ sessionLabel({ bookingMode: topInvitation.booking?.bookingMode, slot: topInvitation.booking?.slot, start: topInvitation.booking?.preferredStartAt }) }}</strong>
-          </span>
-        </span>
-      </button>
+        </div>
 
-      <div class="grid grid-cols-2 lg:flex items-center gap-2.5 shrink-0">
-        <FhButton variant="secondary" size="md" :loading="decliningInvitation" @click="declineTopInvitation">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-ink-900 tracking-tight text-balance">
+            {{ topInvitation.booking?.serviceName || 'Dịch vụ sửa chữa tại nhà' }}
+          </h2>
+          <div class="mt-2 flex flex-col sm:flex-row sm:items-center gap-x-6 gap-y-1.5 text-sm text-ink-700">
+            <span class="flex items-start gap-1.5 min-w-0">
+              <MapPin :size="16" class="text-brand-600 shrink-0 mt-0.5" />
+              <span class="font-medium text-pretty">{{ topInvitation.booking?.addressSummary || 'Khu vực địa phương' }}</span>
+            </span>
+            <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Clock :size="16" class="text-brand-600 shrink-0" />
+              <span class="text-ink-500">Thời gian:</span>
+              <strong class="font-bold text-ink-900">{{ sessionLabel({ bookingMode: topInvitation.booking?.bookingMode, slot: topInvitation.booking?.slot, start: topInvitation.booking?.preferredStartAt }) }}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:flex items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-ink-100">
+        <FhButton
+          variant="secondary"
+          size="md"
+          class="h-11 px-5 rounded-xl font-semibold border-ink-200 hover:bg-ink-100 text-ink-700"
+          :loading="decliningInvitation"
+          @click="declineTopInvitation"
+        >
           Từ chối
         </FhButton>
-        <FhButton variant="primary" size="md" :loading="acceptingInvitation" @click="handleAcceptTopInvitation">
-          <Check :size="16" />
-          Chấp nhận đơn này
+        <FhButton
+          variant="primary"
+          size="md"
+          class="h-11 px-5 rounded-xl font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
+          :loading="acceptingInvitation"
+          @click="handleAcceptTopInvitation"
+        >
+          <Check :size="18" />
+          <span>Chấp nhận đơn này</span>
         </FhButton>
       </div>
     </section>
 
-    <!-- 3. Three numbers in one strip -->
+    <!-- 3. Key metrics grid: 3 punchy, field-ready metric cards (grounded, non-AI) -->
     <section
-      class="bg-white rounded-2xl border border-ink-200 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ink-100 overflow-hidden"
+      class="grid grid-cols-1 sm:grid-cols-3 gap-3.5"
       data-testid="dashboard-summary"
     >
+      <!-- Card 1: Ví thợ & Ký quỹ -->
       <button
         type="button"
-        class="p-4 sm:p-5 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-ink-300 transition-colors text-left flex flex-col justify-between min-h-[136px] cursor-pointer"
         :class="focusRing"
         @click="router.push('/tech/wallet')"
       >
-        <span class="flex-1 min-w-0 space-y-1">
-          <span class="block text-sm text-ink-500">Số dư ví</span>
-          <FhSkeleton v-if="loading" width="140px" height="28px" />
+        <div class="flex items-center justify-between w-full">
+          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Số dư ví</span>
+          <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
+            Chi tiết
+            <span aria-hidden="true">&rarr;</span>
+          </span>
+        </div>
+
+        <div class="my-auto py-1">
+          <FhSkeleton v-if="loading" width="140px" height="32px" />
           <span
             v-else
-            class="block text-2xl font-semibold font-num whitespace-nowrap"
+            class="block text-2xl sm:text-3xl font-bold font-num tracking-tight"
             :class="wallet && wallet.balance < 0 ? 'text-danger-600' : 'text-ink-900'"
           >
             {{ wallet ? money(wallet.balance) : '—' }}
           </span>
-          <span v-if="wallet" class="text-sm flex items-center gap-1.5 whitespace-nowrap" :class="wallet.eligibleForJobs ? 'text-success-700' : 'text-danger-600'">
-            <CheckCircle2 v-if="wallet.eligibleForJobs" :size="15" class="shrink-0" />
-            <AlertCircle v-else :size="15" class="shrink-0" />
+        </div>
+
+        <div>
+          <div
+            v-if="wallet"
+            class="flex items-center gap-1.5 text-xs"
+            :class="wallet.eligibleForJobs ? 'text-success-700 font-medium' : 'text-danger-700 font-semibold'"
+          >
+            <CheckCircle2 v-if="wallet.eligibleForJobs" :size="14" class="shrink-0" />
+            <AlertCircle v-else :size="14" class="shrink-0" />
             <template v-if="wallet.eligibleForJobs">Đủ điều kiện nhận việc</template>
-            <template v-else>Dưới mức ký quỹ <span class="font-num">{{ money(wallet.minimumBalance) }}</span></template>
-          </span>
-        </span>
-        <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+            <template v-else>Dưới mức ký quỹ <span class="font-num font-bold ml-0.5">{{ money(wallet.minimumBalance) }}</span></template>
+          </div>
+          <span v-else class="text-xs text-ink-400">Đang tải trạng thái ví…</span>
+        </div>
       </button>
 
-      <div class="p-4 sm:p-5 space-y-1">
-        <span class="block text-sm text-ink-500">Đang làm</span>
-        <FhSkeleton v-if="loading" width="80px" height="28px" />
-        <span v-else class="block text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
-          {{ activeJobs.length }} <span class="text-base font-medium text-ink-500 font-sans">đơn</span>
-        </span>
-        <span class="block text-sm text-ink-600 whitespace-nowrap">
-          {{ enRouteJobs.length }} đang di chuyển · {{ underRepairJobs.length }} đang sửa
-        </span>
+      <!-- Card 2: Đơn đang xử lý -->
+      <div
+        class="p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs flex flex-col justify-between min-h-[136px]"
+      >
+        <div class="flex items-center justify-between w-full">
+          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Đang làm</span>
+          <span
+            v-if="activeJobs.length > 0"
+            class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-ink-100 text-ink-800 font-num"
+          >
+            {{ activeJobs.length }} việc
+          </span>
+        </div>
+
+        <div class="my-auto py-1">
+          <FhSkeleton v-if="loading" width="80px" height="32px" />
+          <div v-else class="text-2xl sm:text-3xl font-bold text-ink-900 font-num tracking-tight">
+            {{ activeJobs.length }} <span class="text-base font-normal text-ink-500 font-sans">đơn</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-ink-600 flex items-center gap-1.5">
+          <template v-if="activeJobs.length > 0">
+            <span class="inline-flex items-center gap-1 font-medium text-ink-700">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+              {{ enRouteJobs.length }} di chuyển
+            </span>
+            <span class="text-ink-300">·</span>
+            <span class="inline-flex items-center gap-1 font-medium text-ink-700">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+              {{ underRepairJobs.length }} đang sửa
+            </span>
+          </template>
+          <template v-else>
+            <span class="text-ink-400">Sẵn sàng nhận việc mới</span>
+          </template>
+        </div>
       </div>
 
+      <!-- Card 3: Hoàn thành tuần này -->
       <button
         type="button"
-        class="p-4 sm:p-5 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-ink-300 transition-colors text-left flex flex-col justify-between min-h-[136px] cursor-pointer"
         :class="focusRing"
         @click="router.push('/tech/earnings')"
       >
-        <span class="flex-1 min-w-0 space-y-1">
-          <span class="block text-sm text-ink-500">Hoàn thành tuần này</span>
-          <FhSkeleton v-if="loading" width="80px" height="28px" />
-          <span v-else class="block text-2xl font-semibold text-ink-900 font-num whitespace-nowrap">
-            {{ completedCount }} <span class="text-base font-medium text-ink-500 font-sans">đơn</span>
+        <div class="flex items-center justify-between w-full">
+          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Hoàn thành tuần này</span>
+          <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
+            Bảng kê
+            <span aria-hidden="true">&rarr;</span>
           </span>
-          <span class="block text-sm text-ink-600 whitespace-nowrap">
-            Tích lũy <strong class="font-semibold text-ink-800 font-num">{{ money(totalEarnings) }}</strong>
-          </span>
-        </span>
-        <ChevronRight :size="18" class="text-ink-400 shrink-0" />
+        </div>
+
+        <div class="my-auto py-1">
+          <FhSkeleton v-if="loading" width="80px" height="32px" />
+          <div v-else class="text-2xl sm:text-3xl font-bold text-ink-900 font-num tracking-tight">
+            {{ completedCount }} <span class="text-base font-normal text-ink-500 font-sans">đơn</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-ink-600 truncate">
+          Tích lũy: <strong class="font-bold text-ink-900 font-num text-sm ml-0.5">{{ money(totalEarnings) }}</strong>
+        </div>
       </button>
     </section>
 
     <!-- 4. Work in progress, then recent completions -->
     <div class="space-y-6">
-      <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
-        <header class="px-5 sm:px-6 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
-          <h2 class="text-lg font-semibold text-ink-900">Đơn đang xử lý</h2>
+      <section class="bg-white rounded-2xl border border-ink-200/90 shadow-xs overflow-hidden">
+        <header class="px-5 sm:px-6 py-4 border-b border-ink-100 flex items-center justify-between gap-3 bg-white">
+          <div class="flex items-center gap-2.5">
+            <h2 class="text-lg font-bold text-ink-900">Đơn đang xử lý</h2>
+            <span
+              v-if="activeJobs.length > 0"
+              class="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-50 text-brand-700 font-num"
+            >
+              {{ activeJobs.length }}
+            </span>
+          </div>
           <router-link
             to="/tech/jobs"
-            class="h-10 -mr-2 px-2 rounded-lg text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap"
+            class="h-9 px-3 rounded-xl text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1 whitespace-nowrap transition-colors"
             :class="focusRing"
           >
-            Xem tất cả
+            <span>Xem tất cả</span>
             <ChevronRight :size="16" />
           </router-link>
         </header>
@@ -402,117 +481,255 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           <FhSkeleton width="100%" height="40px" rounded="md" />
         </div>
 
-        <div v-else-if="jobsError" role="alert" class="px-5 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-sm text-danger-700">
-          <span>{{ jobsError }}</span>
-          <FhButton variant="secondary" size="sm" class="h-10" @click="handleRefresh">Thử lại</FhButton>
+        <div v-else-if="jobsError" role="alert" class="px-5 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-sm text-danger-700 bg-danger-50/50">
+          <div class="flex items-center gap-2 min-w-0">
+            <AlertCircle :size="18" class="text-danger-600 shrink-0" />
+            <span class="font-medium">{{ jobsError }}</span>
+          </div>
+          <FhButton variant="secondary" size="sm" class="h-9 px-4 rounded-xl border-danger-200 text-danger-700 hover:bg-danger-100" @click="handleRefresh">Thử lại</FhButton>
         </div>
 
         <ul v-else-if="activeJobs.length > 0" class="divide-y divide-ink-100">
           <li
             v-for="job in activeJobs"
             :key="job.id"
-            class="p-5 sm:p-6 flex gap-3 hover:bg-ink-25 transition-colors cursor-pointer"
-            @click="router.push(`/tech/jobs/${job.id}`)"
+            class="p-5 sm:p-6 hover:bg-ink-25/80 transition-colors"
           >
-            <div class="flex-1 min-w-0 space-y-3">
-              <div class="space-y-1">
-                <div class="flex items-center gap-x-2.5 gap-y-1 flex-wrap text-sm">
-                  <span class="text-ink-500 font-num whitespace-nowrap">#{{ job.code || job.id.slice(0, 8) }}</span>
+            <div class="space-y-4">
+              <!-- Job Header: Code, Status Pill, Scheduled Time -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div class="flex items-center gap-2.5 flex-wrap">
+                  <span class="text-sm font-bold text-ink-900 font-num bg-ink-100 px-2.5 py-1 rounded-lg">#{{ job.code || job.id.slice(0, 8) }}</span>
                   <FhStatusPill :status="job.status" />
-                  <span class="inline-flex items-center gap-1.5 text-ink-600 whitespace-nowrap">
-                    <Clock :size="15" class="text-ink-400" />
-                    <strong class="font-semibold text-ink-900 font-num">{{ formatScheduledTime(job.scheduledAt) }}</strong>
-                  </span>
                 </div>
-                <h3 class="text-base sm:text-lg font-semibold text-ink-900 text-balance">{{ job.serviceName || 'Dịch vụ sửa chữa tại nhà' }}</h3>
-                <p class="text-sm text-ink-900">
-                  {{ job.customerName || 'Khách hàng FixHome' }}
-                  <span v-if="job.customerPhone" class="ml-1 text-ink-500 font-num whitespace-nowrap">{{ job.customerPhone }}</span>
-                </p>
-                <p class="text-sm text-ink-600 flex items-start gap-1.5">
-                  <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
-                  <span class="text-pretty">{{ job.addressSummary }}</span>
-                </p>
+                <div class="inline-flex items-center gap-1.5 text-xs sm:text-sm text-ink-600 bg-ink-50 px-3 py-1.5 rounded-lg border border-ink-100 shrink-0">
+                  <Clock :size="15" class="text-ink-400" />
+                  <span>Hẹn lúc:</span>
+                  <strong class="font-bold text-ink-900 font-num">{{ formatScheduledTime(job.scheduledAt) }}</strong>
+                </div>
               </div>
 
-              <!-- The four steps of a visit -->
-              <ol class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm" aria-label="Tiến độ">
-                <li
-                  class="inline-flex items-center gap-1.5 whitespace-nowrap"
-                  :class="stepClass(job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED']), isOneOf(job, ['EN_ROUTE']))"
-                >
-                  <CheckCircle2 v-if="job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED'])" :size="16" class="shrink-0" />
-                  <Radio v-else :size="16" class="shrink-0" />
-                  Đến nơi
-                </li>
-                <li
-                  class="inline-flex items-center gap-1.5 whitespace-nowrap"
-                  :class="stepClass((job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED']), isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']))"
-                >
-                  <CheckCircle2 v-if="(job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED'])" :size="16" class="shrink-0" />
-                  <Camera v-else :size="16" class="shrink-0" />
-                  Ảnh hiện trạng
-                </li>
-                <li
-                  class="inline-flex items-center gap-1.5 whitespace-nowrap"
-                  :class="stepClass(isOneOf(job, ['COMPLETED']), isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']))"
-                >
-                  <CheckCircle2 v-if="isOneOf(job, ['COMPLETED'])" :size="16" class="shrink-0" />
-                  <Wrench v-else :size="16" class="shrink-0" />
-                  Báo giá và sửa
-                </li>
-                <li
-                  class="inline-flex items-center gap-1.5 whitespace-nowrap"
-                  :class="stepClass(isOneOf(job, ['COMPLETED']), !!job.completionRequestedAt)"
-                >
-                  <CheckCircle2 v-if="isOneOf(job, ['COMPLETED'])" :size="16" class="shrink-0" />
-                  <Clock v-else :size="16" class="shrink-0" />
-                  Thanh toán
-                </li>
-              </ol>
+              <!-- Service & Customer Details -->
+              <div class="space-y-1.5">
+                <h3 class="text-base sm:text-lg font-bold text-ink-900 text-balance hover:text-brand-700 transition-colors cursor-pointer" @click="router.push(`/tech/jobs/${job.id}`)">
+                  {{ job.serviceName || 'Dịch vụ sửa chữa tại nhà' }}
+                </h3>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 text-sm">
+                  <p class="font-semibold text-ink-800 flex items-center gap-1.5">
+                    <User :size="15" class="text-ink-400 shrink-0" />
+                    <span>{{ job.customerName || 'Khách hàng FixHome' }}</span>
+                    <span v-if="job.customerPhone" class="text-ink-500 font-normal font-num ml-1">({{ job.customerPhone }})</span>
+                  </p>
+                  <span class="hidden sm:inline text-ink-300">·</span>
+                  <p class="text-ink-600 flex items-start gap-1.5 min-w-0">
+                    <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+                    <span class="text-pretty truncate" :title="job.addressSummary">{{ job.addressSummary }}</span>
+                  </p>
+                </div>
+              </div>
 
-              <div class="flex flex-wrap items-center gap-2">
+              <!-- Timeline Progress Tracker -->
+              <div class="py-3.5 px-4 bg-ink-25/80 rounded-xl border border-ink-100/90">
+                <div class="flex items-center justify-between mb-3 text-xs">
+                  <span class="font-semibold text-ink-500 uppercase tracking-wider">Tiến độ thực hiện</span>
+                  <span class="font-medium text-ink-700">
+                    {{
+                      isOneOf(job, ['COMPLETED'])
+                        ? 'Hoàn thành'
+                        : job.completionRequestedAt
+                          ? 'Chờ thanh toán'
+                          : isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS'])
+                            ? ((job.beforeEvidenceCount ?? 0) > 0 ? 'Đang sửa chữa' : 'Cần chụp hiện trạng')
+                            : 'Đang di chuyển'
+                    }}
+                  </span>
+                </div>
+
+                <ol class="relative flex items-start justify-between w-full" aria-label="Tiến độ">
+                  <!-- Connecting horizontal background line -->
+                  <div class="absolute left-6 right-6 top-3 h-0.5 bg-ink-200 -z-0" aria-hidden="true">
+                    <!-- Progress fill -->
+                    <div
+                      class="h-full bg-brand-600 transition-all duration-300"
+                      :style="{
+                        width: isOneOf(job, ['COMPLETED'])
+                          ? '100%'
+                          : job.completionRequestedAt
+                            ? '75%'
+                            : (job.beforeEvidenceCount ?? 0) > 0
+                              ? '50%'
+                              : (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']))
+                                ? '25%'
+                                : '0%'
+                      }"
+                    />
+                  </div>
+
+                  <!-- Step 1: Đến nơi -->
+                  <li class="relative z-10 flex flex-col items-center text-center flex-1">
+                    <div
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors"
+                      :class="[
+                        (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED']))
+                          ? 'bg-success-600 text-white'
+                          : isOneOf(job, ['EN_ROUTE'])
+                            ? 'bg-white border-2 border-brand-600 text-brand-600 ring-4 ring-brand-100'
+                            : 'bg-white border-2 border-ink-200 text-ink-400 font-num'
+                      ]"
+                    >
+                      <Check v-if="job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED'])" :size="13" :stroke-width="3" />
+                      <span v-else-if="isOneOf(job, ['EN_ROUTE'])" class="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                      <span v-else class="text-[10px]">1</span>
+                    </div>
+                    <span
+                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      :class="[
+                        (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED']))
+                          ? 'text-ink-900 font-semibold'
+                          : isOneOf(job, ['EN_ROUTE'])
+                            ? 'text-brand-700 font-bold'
+                            : 'text-ink-400'
+                      ]"
+                    >
+                      Đến nơi
+                    </span>
+                  </li>
+
+                  <!-- Step 2: Ảnh hiện trạng -->
+                  <li class="relative z-10 flex flex-col items-center text-center flex-1">
+                    <div
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors"
+                      :class="[
+                        ((job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED']))
+                          ? 'bg-success-600 text-white'
+                          : (!((job.beforeEvidenceCount ?? 0) > 0) && (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS'])))
+                            ? 'bg-white border-2 border-brand-600 text-brand-600 ring-4 ring-brand-100'
+                            : 'bg-white border-2 border-ink-200 text-ink-400 font-num'
+                      ]"
+                    >
+                      <Check v-if="(job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED'])" :size="13" :stroke-width="3" />
+                      <span v-else-if="!((job.beforeEvidenceCount ?? 0) > 0) && (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']))" class="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                      <span v-else class="text-[10px]">2</span>
+                    </div>
+                    <span
+                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      :class="[
+                        ((job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED']))
+                          ? 'text-ink-900 font-semibold'
+                          : (!((job.beforeEvidenceCount ?? 0) > 0) && (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS'])))
+                            ? 'text-brand-700 font-bold'
+                            : 'text-ink-400'
+                      ]"
+                    >
+                      Ảnh hiện trạng
+                    </span>
+                  </li>
+
+                  <!-- Step 3: Báo giá & sửa -->
+                  <li class="relative z-10 flex flex-col items-center text-center flex-1">
+                    <div
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors"
+                      :class="[
+                        (isOneOf(job, ['COMPLETED']) || !!job.completionRequestedAt)
+                          ? 'bg-success-600 text-white'
+                          : (isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']) && ((job.beforeEvidenceCount ?? 0) > 0))
+                            ? 'bg-white border-2 border-brand-600 text-brand-600 ring-4 ring-brand-100'
+                            : 'bg-white border-2 border-ink-200 text-ink-400 font-num'
+                      ]"
+                    >
+                      <Check v-if="isOneOf(job, ['COMPLETED']) || !!job.completionRequestedAt" :size="13" :stroke-width="3" />
+                      <span v-else-if="isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']) && ((job.beforeEvidenceCount ?? 0) > 0)" class="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                      <span v-else class="text-[10px]">3</span>
+                    </div>
+                    <span
+                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      :class="[
+                        (isOneOf(job, ['COMPLETED']) || !!job.completionRequestedAt)
+                          ? 'text-ink-900 font-semibold'
+                          : (isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']) && ((job.beforeEvidenceCount ?? 0) > 0))
+                            ? 'text-brand-700 font-bold'
+                            : 'text-ink-400'
+                      ]"
+                    >
+                      Báo giá & sửa
+                    </span>
+                  </li>
+
+                  <!-- Step 4: Thanh toán -->
+                  <li class="relative z-10 flex flex-col items-center text-center flex-1">
+                    <div
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors"
+                      :class="[
+                        isOneOf(job, ['COMPLETED'])
+                          ? 'bg-success-600 text-white'
+                          : (!!job.completionRequestedAt && !isOneOf(job, ['COMPLETED']))
+                            ? 'bg-white border-2 border-brand-600 text-brand-600 ring-4 ring-brand-100'
+                            : 'bg-white border-2 border-ink-200 text-ink-400 font-num'
+                      ]"
+                    >
+                      <Check v-if="isOneOf(job, ['COMPLETED'])" :size="13" :stroke-width="3" />
+                      <span v-else-if="!!job.completionRequestedAt && !isOneOf(job, ['COMPLETED'])" class="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                      <span v-else class="text-[10px]">4</span>
+                    </div>
+                    <span
+                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      :class="[
+                        isOneOf(job, ['COMPLETED'])
+                          ? 'text-ink-900 font-semibold'
+                          : (!!job.completionRequestedAt && !isOneOf(job, ['COMPLETED']))
+                            ? 'text-brand-700 font-bold'
+                            : 'text-ink-400'
+                      ]"
+                    >
+                      Thanh toán
+                    </span>
+                  </li>
+                </ol>
+              </div>
+
+              <!-- Quick Field Actions for Technician -->
+              <div class="flex flex-wrap items-center gap-2.5 pt-1">
                 <a
                   :href="getMapUrl(job.addressSummary)"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors"
+                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs"
                   :class="focusRing"
                   @click.stop
                 >
-                  <Navigation :size="16" class="text-ink-500" />
-                  Chỉ đường
+                  <Navigation :size="16" class="text-brand-600" />
+                  <span>Chỉ đường</span>
                 </a>
-                <button
-                  type="button"
-                  class="h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors"
-                  :class="focusRing"
-                  @click.stop="handleChatWithCustomer(job)"
-                >
-                  <MessageSquare :size="16" class="text-ink-500" />
-                  Nhắn tin
-                </button>
                 <a
                   v-if="job.customerPhone"
                   :href="`tel:${job.customerPhone}`"
-                  class="h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors"
+                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs"
                   :class="focusRing"
                   @click.stop
                 >
-                  <Phone :size="16" class="text-ink-500" />
-                  Gọi điện
+                  <Phone :size="16" class="text-success-600" />
+                  <span>Gọi điện</span>
                 </a>
+                <button
+                  type="button"
+                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                  :class="focusRing"
+                  @click.stop="handleChatWithCustomer(job)"
+                >
+                  <MessageSquare :size="16" class="text-brand-600" />
+                  <span>Nhắn tin</span>
+                </button>
+                <button
+                  type="button"
+                  class="w-full sm:w-auto sm:ml-auto h-10 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-sm font-bold inline-flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer"
+                  :class="focusRing"
+                  @click.stop="router.push(`/tech/jobs/${job.id}`)"
+                >
+                  <span>Chi tiết đơn</span>
+                  <ChevronRight :size="16" />
+                </button>
               </div>
             </div>
-            <router-link
-              :to="`/tech/jobs/${job.id}`"
-              class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700 hidden sm:flex items-center justify-center shrink-0 self-center"
-              :class="focusRing"
-              aria-label="Mở chi tiết công việc"
-              @click.stop
-            >
-              <ChevronRight :size="20" aria-hidden="true" />
-            </router-link>
           </li>
         </ul>
 
@@ -520,32 +737,46 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto">
             <Briefcase :size="24" />
           </div>
-          <h3 class="text-base font-semibold text-ink-900">Chưa có việc đang làm</h3>
-          <p class="text-sm text-ink-500">Lời mời mới sẽ hiện ở đầu trang này.</p>
+          <h3 class="text-base font-bold text-ink-900">Chưa có việc đang làm</h3>
+          <p class="text-sm text-ink-500 max-w-sm mx-auto text-pretty">
+            Khi có đơn đặt lịch mới phù hợp với khu vực và chuyên môn của bạn, thông báo và lời mời nhận việc sẽ hiển thị tại đây.
+          </p>
         </div>
       </section>
 
-      <section v-if="completedJobs.length > 0" class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
-        <header class="px-5 sm:px-6 py-4 border-b border-ink-100">
-          <h2 class="text-lg font-semibold text-ink-900">Hoàn thành gần đây</h2>
+      <!-- Section 5: Recent completed jobs -->
+      <section v-if="completedJobs.length > 0" class="bg-white rounded-2xl border border-ink-200/90 shadow-xs overflow-hidden">
+        <header class="px-5 sm:px-6 py-4 border-b border-ink-100 flex items-center justify-between">
+          <h2 class="text-lg font-bold text-ink-900">Hoàn thành gần đây</h2>
+          <span class="text-xs text-ink-500 font-medium font-num">{{ completedJobs.length }} đơn đã xong</span>
         </header>
 
         <ul class="divide-y divide-ink-100">
           <li v-for="job in completedJobs.slice(0, 4)" :key="job.id">
             <button
               type="button"
-              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+              class="w-full px-5 sm:px-6 py-4 flex items-center gap-4 text-left hover:bg-ink-25/80 transition-colors cursor-pointer"
               :class="focusRing"
               @click="router.push(`/tech/jobs/${job.id}`)"
             >
+              <div class="w-10 h-10 rounded-xl bg-success-50 text-success-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 :size="20" />
+              </div>
               <span class="flex-1 min-w-0 space-y-0.5">
-                <span class="block text-sm text-ink-500 font-num truncate">#{{ job.code || job.id.slice(0, 8) }}</span>
-                <span class="block text-sm font-semibold text-ink-900 truncate" :title="job.serviceName">{{ job.serviceName }}</span>
-                <span class="block text-sm text-ink-500 truncate" :title="job.addressSummary">{{ job.addressSummary }}</span>
+                <span class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-ink-600 font-num">#{{ job.code || job.id.slice(0, 8) }}</span>
+                  <span class="text-ink-300">·</span>
+                  <span class="text-xs text-ink-500">{{ formatScheduledTime(job.completedAt || job.scheduledAt) }}</span>
+                </span>
+                <span class="block text-sm font-bold text-ink-900 truncate" :title="job.serviceName">{{ job.serviceName }}</span>
+                <span class="block text-xs text-ink-500 truncate" :title="job.addressSummary">{{ job.addressSummary }}</span>
               </span>
-              <span class="text-right shrink-0 space-y-0.5">
-                <span class="block text-base font-semibold text-ink-900 font-num whitespace-nowrap">+{{ money(job.laborTotal || job.grandTotal || 0) }}</span>
-                <span class="block text-sm whitespace-nowrap" :class="isPaid(job) ? 'text-success-700' : 'text-warning-700'">
+              <span class="text-right shrink-0 space-y-1">
+                <span class="block text-base font-bold text-ink-900 font-num whitespace-nowrap">+{{ money(job.laborTotal || job.grandTotal || 0) }}</span>
+                <span
+                  class="inline-block px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
+                  :class="isPaid(job) ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'"
+                >
                   {{ isPaid(job) ? 'Đã thanh toán' : 'Chưa thanh toán' }}
                 </span>
               </span>
@@ -557,3 +788,4 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </div>
   </div>
 </template>
+

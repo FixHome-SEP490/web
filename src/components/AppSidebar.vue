@@ -15,12 +15,16 @@ import type { Component } from 'vue';
 
 export interface NavItem {
   label: string;
-  path: string;
+  path?: string;
+  to?: string;
   icon: Component;
+  exact?: boolean;
+  badge?: string | number | null | (() => string | number | null);
 }
 
 export interface NavGroup {
   group?: string;
+  title?: string;
   items: NavItem[];
 }
 
@@ -28,9 +32,13 @@ withDefaults(defineProps<{
   navigation: NavGroup[];
   title?: string;
   subtitle?: string;
+  homePath?: string;
+  showProfile?: boolean;
 }>(), {
   title: 'FixHome',
-  subtitle: 'Console'
+  subtitle: 'Console',
+  homePath: '/',
+  showProfile: true,
 });
 
 // Narrow screens start collapsed (icons only): the full 16rem sidebar left a
@@ -51,12 +59,15 @@ const profileMenu = ref<HTMLElement | null>(null);
 const profileTrigger = ref<HTMLButtonElement | null>(null);
 const profileMenuId = useId();
 const avatarFailed = ref(false);
-const fullName = computed(() => authStore.user?.fullName?.trim() || 'T\u00e0i kho\u1ea3n');
+const fullName = computed(() => authStore.user?.fullName?.trim() || 'Tài khoản');
 const userAvatar = computed(() => authStore.user?.avatarUrl);
 const userInitial = computed(() => fullName.value.charAt(0).toLocaleUpperCase('vi'));
 
 watch(userAvatar, () => { avatarFailed.value = false; });
-watch(() => route.fullPath, () => { showProfileDropdown.value = false; });
+watch(() => route?.fullPath, () => {
+  showProfileDropdown.value = false;
+  hideTooltip();
+});
 
 const closeProfileMenu = (restoreFocus = false) => {
   showProfileDropdown.value = false;
@@ -77,12 +88,21 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleOutsideC
 
 const hoveredItem = ref<{ label: string, top: number } | null>(null);
 
-const showTooltip = (event: MouseEvent, label: string) => {
+const getItemPath = (item: NavItem): string => item.path || item.to || '';
+const getGroupTitle = (group: NavGroup): string => group.group || group.title || '';
+
+const getBadge = (item: NavItem): string | null => {
+  if (!item.badge) return null;
+  const val = typeof item.badge === 'function' ? item.badge() : item.badge;
+  return val !== null && val !== undefined && val !== '' ? String(val) : null;
+};
+
+const showTooltip = (event: MouseEvent, label: string, badge?: string | null) => {
   if (!isCollapsed.value) return;
   const target = event.currentTarget as HTMLElement;
   const rect = target.getBoundingClientRect();
   hoveredItem.value = {
-    label,
+    label: badge ? `${label} (${badge})` : label,
     top: rect.top + (rect.height / 2)
   };
 };
@@ -102,8 +122,15 @@ const handleLogout = async () => {
   window.location.href = '/login';
 };
 
-const isActive = (path: string) => {
-  return route.path === path || (path !== '/console' && route.path.startsWith(`${path}/`));
+const isActive = (item: NavItem) => {
+  const p = getItemPath(item);
+  if (!p) return false;
+  const currentPath = route?.path || '';
+  if (!currentPath) return false;
+  if (item.exact || p === '/console' || p === '/tech' || p === '/admin' || p === '/') {
+    return currentPath === p;
+  }
+  return currentPath === p || currentPath.startsWith(`${p}/`);
 };
 </script>
 
@@ -122,12 +149,22 @@ const isActive = (path: string) => {
       >
         <!-- Expanded Mode: Logo & Brand on left -->
         <template v-if="!isCollapsed">
-          <div class="flex items-center gap-3 pr-10 min-w-0">
+          <router-link :to="homePath" class="flex items-center gap-2.5 pr-10 min-w-0" aria-label="FixHome">
             <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs" />
-            <span class="text-lg font-bold text-slate-900 tracking-wide whitespace-nowrap truncate">
-              {{ title }}
-            </span>
-          </div>
+            <div class="flex flex-col leading-tight min-w-0">
+              <span class="text-lg font-bold tracking-tight whitespace-nowrap truncate">
+                <template v-if="title === 'FixHome'">
+                  <span class="text-brand-600">Fix</span><span class="text-success-600">Home</span>
+                </template>
+                <template v-else>
+                  <span class="text-slate-900">{{ title }}</span>
+                </template>
+              </span>
+              <span v-if="subtitle" class="text-xs text-slate-500 font-medium whitespace-nowrap truncate">
+                {{ subtitle }}
+              </span>
+            </div>
+          </router-link>
 
           <!-- Collapse Trigger: Separate in Top-Right Corner -->
           <button
@@ -168,34 +205,45 @@ const isActive = (path: string) => {
 
       <!-- Navigation -->
       <div class="nav-container flex-1 overflow-y-auto">
-        <div v-for="(group, idx) in navigation" :key="idx" class="mb-5">
+        <div v-for="(group, idx) in navigation" :key="idx" :class="isCollapsed ? 'mb-3' : 'mb-5'">
           <div
-            v-if="group.group"
+            v-if="!isCollapsed && getGroupTitle(group)"
             class="px-6 text-xs font-semibold text-slate-400 mb-1.5 transition-opacity duration-300 whitespace-nowrap overflow-hidden"
-            :class="isCollapsed ? 'opacity-0 h-0 invisible' : 'opacity-100 h-auto'"
           >
-            {{ group.group }}
+            {{ getGroupTitle(group) }}
           </div>
           
           <div class="flex flex-col gap-0.5">
             <router-link
               v-for="item in group.items"
-              :key="item.path"
-              :to="item.path"
+              :key="getItemPath(item)"
+              :to="getItemPath(item)"
               class="nav-item group"
-              :class="{ 'active': isActive(item.path) }"
-              @mouseenter="(e) => { showTooltip(e, item.label); prefetchRoute(item.path); }"
-              @focus="prefetchRoute(item.path)"
+              :class="{ 'active': isActive(item) }"
+              @mouseenter="(e) => { showTooltip(e, item.label, getBadge(item)); prefetchRoute(getItemPath(item)); }"
+              @focus="prefetchRoute(getItemPath(item))"
               @mouseleave="hideTooltip"
             >
-              <div class="icon-wrapper shrink-0">
+              <div class="icon-wrapper shrink-0 relative flex items-center justify-center">
                 <component :is="item.icon" :size="20" stroke-width="2.5" />
+                <span
+                  v-if="isCollapsed && getBadge(item)"
+                  class="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold inline-flex items-center justify-center ring-2 ring-white"
+                >
+                  {{ getBadge(item) }}
+                </span>
               </div>
               <span 
-                class="transition-opacity duration-300 whitespace-nowrap overflow-hidden"
-                :class="isCollapsed ? 'opacity-0 w-0 invisible' : 'opacity-100 w-auto'"
+                v-if="!isCollapsed"
+                class="flex-1 transition-opacity duration-300 whitespace-nowrap overflow-hidden truncate"
               >
                 {{ item.label }}
+              </span>
+              <span
+                v-if="!isCollapsed && getBadge(item)"
+                class="min-w-5 h-5 px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold font-num inline-flex items-center justify-center shrink-0 ml-auto"
+              >
+                {{ getBadge(item) }}
               </span>
             </router-link>
           </div>
@@ -204,7 +252,7 @@ const isActive = (path: string) => {
     </div>
 
     <!-- User profile -->
-    <div class="shrink-0 pb-2">
+    <div v-if="showProfile" class="shrink-0 pb-2">
       <div
         ref="profileMenu"
         class="relative"
@@ -355,22 +403,41 @@ const isActive = (path: string) => {
 
 /* --- Collapsed State --- */
 .sidebar-collapsed .nav-item {
-  padding: 12px;
-  margin: 0 8px;
-  border-radius: 16px;
+  width: 44px;
+  height: 44px;
+  margin: 3px auto;
+  padding: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  width: calc(100% - 16px);
   gap: 0;
 }
 
 .sidebar-collapsed .nav-item .icon-wrapper {
   margin: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-collapsed .nav-item.active {
   background-color: #eff6ff;
   color: #2563eb;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.sidebar-collapsed .profile-trigger {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
 }
 
 .profile-trigger,

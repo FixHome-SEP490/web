@@ -21,7 +21,8 @@ import {
   ChevronRight,
 } from 'lucide-vue-next';
 
-import { ChatFloatingWidget } from '../components';
+import { ChatFloatingWidget, AppSidebar } from '../components';
+import type { SidebarNavGroup } from '../components';
 import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -36,6 +37,17 @@ import { sharedQueries } from '../lib/queries';
 const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
+const pageTitle = computed(() => (route.meta?.title as string) || '');
+
+// Browser tab follows the page: "{Tiêu đề} | FixHome".
+watch(
+  () => route.meta?.title,
+  (title) => {
+    if (typeof document !== 'undefined') document.title = title ? `${String(title)} | FixHome` : 'FixHome';
+  },
+  { immediate: true },
+);
+
 // Pages with a sticky action bar on phones (route meta actionBar) lift the floating chat above it.
 const hasActionBar = computed(() => route?.meta?.actionBar === true);
 const chatStore = useChatStore();
@@ -178,40 +190,40 @@ const onboardingBanner = computed(() => {
   return { tone: 'note' as const, state: onboardingStatus.value === 'submitted' ? 'Chờ xét duyệt' : 'Chưa hoàn tất' };
 });
 
-type NavItem = { to: string; label: string; icon: typeof Wrench; exact?: boolean; badge?: () => string | null };
+type TabNavItem = { to: string; label: string; icon: typeof Wrench; exact?: boolean; badge?: () => string | null };
 
-const navGroups: { title: string; items: NavItem[] }[] = [
+const sidebarNavigation = computed<SidebarNavGroup[]>(() => [
   {
-    title: 'Công việc',
+    group: 'Công việc',
     items: [
-      { to: '/tech', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
+      { path: '/tech', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
       {
-        to: '/tech/invitations',
+        path: '/tech/invitations',
         label: 'Lời mời nhận việc',
         icon: Inbox,
         badge: () => (invitationCount.value > 0 ? String(invitationCount.value) : null),
       },
       {
-        to: '/tech/jobs',
+        path: '/tech/jobs',
         label: 'Công việc',
         icon: Wrench,
         badge: () => (activeJobs.value > 0 ? String(activeJobs.value) : null),
       },
-      { to: '/tech/warranty', label: 'Bảo hành', icon: ShieldCheck },
+      { path: '/tech/warranty', label: 'Bảo hành', icon: ShieldCheck },
     ],
   },
   {
-    title: 'Tài chính',
+    group: 'Tài chính',
     items: [
-      { to: '/tech/earnings', label: 'Thu nhập', icon: Banknote },
-      { to: '/tech/wallet', label: 'Ví của tôi', icon: Wallet },
+      { path: '/tech/earnings', label: 'Thu nhập', icon: Banknote },
+      { path: '/tech/wallet', label: 'Ví của tôi', icon: Wallet },
     ],
   },
   {
-    title: 'Liên lạc',
+    group: 'Liên lạc',
     items: [
       {
-        to: '/tech/messages',
+        path: '/tech/messages',
         label: 'Tin nhắn',
         icon: MessageSquare,
         badge: () => (chatStore.totalUnreadCount > 0 ? unread.value : null),
@@ -219,16 +231,16 @@ const navGroups: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Tài khoản',
+    group: 'Tài khoản',
     items: [
-      { to: '/tech/profile', label: 'Hồ sơ kỹ thuật viên', icon: User },
-      { to: '/tech/kyc', label: 'Xác minh danh tính', icon: BadgeCheck },
+      { path: '/tech/profile', label: 'Hồ sơ kỹ thuật viên', icon: User },
+      { path: '/tech/kyc', label: 'Xác minh danh tính', icon: BadgeCheck },
     ],
   },
-];
+]);
 
 /** Bottom tabs below lg, the same five the mobile app shows first. */
-const tabItems: NavItem[] = [
+const tabItems: TabNavItem[] = [
   { to: '/tech', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
   { to: '/tech/jobs', label: 'Công việc', icon: Wrench, badge: () => (activeJobs.value > 0 ? '' : null) },
   { to: '/tech/invitations', label: 'Thư mời', icon: Inbox, badge: () => (invitationCount.value > 0 ? '' : null) },
@@ -240,56 +252,30 @@ const tabItems: NavItem[] = [
 <template>
   <!-- --fh-dock lifts floating buttons above the bottom tab bar on narrow screens. -->
   <div
-    class="min-h-screen bg-ink-50 text-ink-900"
+    class="min-h-screen bg-ink-50 text-ink-900 flex"
     :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
-    <!-- Sidebar, wide screens -->
-    <aside class="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 flex-col bg-white border-r border-ink-200">
-      <router-link to="/" class="h-16 px-5 flex items-center gap-2.5 border-b border-ink-100 shrink-0" aria-label="FixHome - Trang chủ">
-        <img src="/logo.png" alt="" class="w-9 h-9 object-contain rounded-xl" />
-        <span class="flex flex-col leading-tight">
-          <span class="text-lg font-bold tracking-tight whitespace-nowrap"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
-          <span class="text-xs text-ink-500 whitespace-nowrap">Kỹ thuật viên</span>
-        </span>
-      </router-link>
+    <!-- Collapsible Sidebar on wide screens -->
+    <AppSidebar
+      class="hidden lg:flex shrink-0"
+      :navigation="sidebarNavigation"
+      subtitle="Kỹ thuật viên"
+      home-path="/"
+    />
 
-      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-5" aria-label="Điều hướng chính">
-        <div v-for="group in navGroups" :key="group.title">
-          <p class="px-3 mb-1.5 text-xs font-medium text-ink-400">{{ group.title }}</p>
-          <div class="space-y-0.5">
-            <router-link
-              v-for="item in group.items"
-              :key="item.to"
-              :to="item.to"
-              @mouseenter="prefetchRoute(item.to)"
-              @focus="prefetchRoute(item.to)"
-              class="h-10 px-3 rounded-xl flex items-center gap-3 text-sm font-medium text-ink-600 whitespace-nowrap hover:bg-ink-50 hover:text-ink-900 transition-colors"
-              :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
-              :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
-            >
-              <component :is="item.icon" :size="18" :stroke-width="1.75" class="shrink-0" />
-              <span class="flex-1 truncate">{{ item.label }}</span>
-              <span
-                v-if="item.badge && item.badge()"
-                class="min-w-5 h-5 px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold font-num inline-flex items-center justify-center"
-              >
-                {{ item.badge() }}
-              </span>
-            </router-link>
-          </div>
-        </div>
-      </nav>
-    </aside>
-
-    <div class="lg:pl-64 min-h-screen flex flex-col">
+    <div class="flex-1 min-w-0 min-h-screen flex flex-col">
       <header class="sticky top-0 z-20 bg-white border-b border-ink-200">
         <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
-          <!-- Logo only when the sidebar is hidden -->
+          <!-- Logo only when the sidebar is hidden (narrow screens) -->
           <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0" aria-label="FixHome - Trang chủ">
             <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg" />
             <span class="text-lg font-bold tracking-tight whitespace-nowrap hidden sm:inline"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
           </router-link>
-          <div class="hidden lg:block" />
+
+          <!-- Current Page Title on wide screens -->
+          <div class="hidden lg:flex items-center gap-3">
+            <h1 v-if="pageTitle" class="text-lg font-semibold text-ink-900 tracking-tight">{{ pageTitle }}</h1>
+          </div>
 
           <div class="flex items-center gap-2 sm:gap-3 shrink-0">
             <!-- Messages live in the sidebar on wide screens -->

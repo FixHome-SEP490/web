@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import {
@@ -135,36 +135,108 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors ${focusRing}`;
+// ── Sliding Active Background Pill ──
+const jobTabListRef = ref<HTMLElement | null>(null);
+const jobTabRefs = ref<Record<string, HTMLElement | null>>({});
+const jobIndicatorStyle = ref<Record<string, string>>({
+  opacity: '0',
+});
+
+function updateJobIndicator() {
+  const activeEl = jobTabRefs.value[activeTab.value];
+  const container = jobTabListRef.value;
+  if (!activeEl || !container) {
+    jobIndicatorStyle.value = { opacity: '0' };
+    return;
+  }
+  const left = activeEl.offsetLeft;
+  const top = activeEl.offsetTop;
+  const width = activeEl.offsetWidth;
+  const height = activeEl.offsetHeight;
+
+  jobIndicatorStyle.value = {
+    transform: `translate3d(${left}px, ${top}px, 0)`,
+    width: `${width}px`,
+    height: `${height}px`,
+    opacity: '1',
+  };
+}
+
+let jobTabResizeObserver: ResizeObserver | null = null;
+
+watch(activeTab, () => {
+  void nextTick(updateJobIndicator);
+});
+
+watch(
+  counts,
+  () => {
+    void nextTick(updateJobIndicator);
+  },
+  { deep: true },
+);
+
+onMounted(() => {
+  void nextTick(() => {
+    updateJobIndicator();
+    setTimeout(updateJobIndicator, 60);
+  });
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updateJobIndicator);
+    if (jobTabListRef.value && typeof ResizeObserver !== 'undefined') {
+      jobTabResizeObserver = new ResizeObserver(() => {
+        updateJobIndicator();
+      });
+      jobTabResizeObserver.observe(jobTabListRef.value);
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateJobIndicator);
+  }
+  jobTabResizeObserver?.disconnect();
+});
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto space-y-5">
     <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
 
-    <!-- Filter tabs -->
+    <!-- Filter tabs with sliding active pill -->
     <div
-      class="flex items-center gap-1 p-1 bg-ink-100/80 rounded-2xl overflow-x-auto no-scrollbar text-sm font-semibold select-none"
+      ref="jobTabListRef"
+      class="relative bg-ink-100 rounded-full p-1.5 flex items-center gap-1 overflow-x-auto select-none scrollbar-none text-sm font-semibold"
       role="tablist"
       aria-label="Lọc công việc"
     >
+      <!-- Sliding active background pill -->
+      <div
+        class="pointer-events-none absolute top-0 left-0 rounded-full bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        :style="jobIndicatorStyle"
+        aria-hidden="true"
+      />
+
       <button
         v-for="tab in tabs"
         :key="tab.key"
+        :ref="(el) => { jobTabRefs[tab.key] = el as HTMLElement }"
         type="button"
         role="tab"
         :aria-selected="activeTab === tab.key"
-        class="h-10 px-4 rounded-xl transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+        class="relative z-10 h-10 px-4 rounded-full transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer"
         :class="[
           focusRing,
-          activeTab === tab.key ? 'bg-white text-brand-700 shadow-xs' : 'text-ink-600 hover:text-ink-900',
+          activeTab === tab.key ? 'font-bold text-ink-900' : 'font-medium text-ink-600 hover:text-ink-900',
         ]"
         @click="activeTab = tab.key"
       >
-        {{ tab.label }}
+        <span>{{ tab.label }}</span>{{ ' ' }}
         <span
           v-if="tab.count != null && (tab.key === 'all' || tab.count > 0)"
-          class="min-w-5 h-5 px-1.5 rounded-full text-xs font-num inline-flex items-center justify-center"
-          :class="activeTab === tab.key ? 'bg-brand-50 text-brand-700' : 'bg-ink-200/60 text-ink-600'"
+          class="min-w-5 h-5 px-1.5 rounded-full text-xs font-num inline-flex items-center justify-center transition-colors"
+          :class="activeTab === tab.key ? 'bg-ink-100 text-ink-900' : 'bg-white/80 text-ink-600'"
           :data-testid="`jobs-tab-count-${tab.key}`"
         >
           {{ tab.count }}

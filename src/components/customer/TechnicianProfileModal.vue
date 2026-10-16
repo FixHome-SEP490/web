@@ -59,6 +59,22 @@ function updateTabIndicator() {
   };
 }
 
+let resizeObserver: ResizeObserver | null = null;
+
+watch(tabListRef, (el) => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  if (el && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateTabIndicator();
+    });
+    resizeObserver.observe(el);
+  }
+  void nextTick(updateTabIndicator);
+});
+
 const fetchReviews = async (techId: string) => {
   loadingReviews.value = true;
   try {
@@ -78,7 +94,10 @@ watch(
     if (open && id) {
       activeTab.value = 'about';
       void fetchReviews(id as string);
-      void nextTick(updateTabIndicator);
+      void nextTick(() => {
+        updateTabIndicator();
+        setTimeout(updateTabIndicator, 50);
+      });
     }
   },
   { immediate: true },
@@ -96,6 +115,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateTabIndicator);
   }
@@ -233,7 +256,7 @@ const handleClose = () => emit('close');
         >
           <!-- Sliding active indicator pill -->
           <div
-            class="pointer-events-none absolute top-1 bottom-1 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+            class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
             :style="indicatorStyle"
             aria-hidden="true"
           />
