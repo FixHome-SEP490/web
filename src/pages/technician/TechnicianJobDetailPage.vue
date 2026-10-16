@@ -789,6 +789,15 @@ const removeItem = (idx: number) => {
 };
 
 let locationPing: ReturnType<typeof setInterval> | null = null;
+/** The last fix the en-route ping got; a check-in may fall back to it (see RECENT_FIX_MS). */
+let lastPingFix: { lat: number; lng: number; accuracyMeters: number; at: number } | null = null;
+/**
+ * How old a ping fix may be and still stand in for a check-in position. A browser that
+ * already handed the ping a fix may not produce a fresh one within the check-in wait
+ * (desktop Chrome on Wi-Fi location does this), and a fix from the last two minutes is
+ * still where the technician is; the server applies the same 5 km geofence to it.
+ */
+const RECENT_FIX_MS = 120_000;
 const stopLocationPing = () => {
   if (locationPing) {
     clearInterval(locationPing);
@@ -801,6 +810,12 @@ const startLocationPing = () => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        lastPingFix = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+          at: Date.now(),
+        };
         ordersApi
           .updateLocation(jobId, {
             lat: position.coords.latitude,
@@ -872,8 +887,12 @@ const handleCheckInWithFace = async (face: File) => {
     try {
       coords = await getBestPosition();
     } catch {
-      actionMessage.value = { type: 'error', text: 'Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.' };
-      return;
+      const recent = lastPingFix && Date.now() - lastPingFix.at <= RECENT_FIX_MS ? lastPingFix : null;
+      if (!recent) {
+        actionMessage.value = { type: 'error', text: 'Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.' };
+        return;
+      }
+      coords = { lat: recent.lat, lng: recent.lng, accuracyMeters: recent.accuracyMeters };
     }
 
     let result: Record<string, unknown>;

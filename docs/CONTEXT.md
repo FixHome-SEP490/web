@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-16 11:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/technician-topup-envelope
+> Cập nhật lần cuối: 2026-10-16 15:44 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/checkin-recent-fix
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -303,6 +303,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-16 15:44 (UTC+7) | ToanAltF4 | fix/checkin-recent-fix | Check-in thợ: trình duyệt không trả vị trí mới trong lúc chờ (Chrome desktop vị trí Wi-Fi, đã có ping đang chạy) thì dùng vị trí ping trong 2 phút gần nhất; server vẫn kiểm 5 km
 - 2026-10-16 11:33 (UTC+7) | ToanAltF4 | fix/technician-topup-envelope | Nạp ví thợ: đọc success/message ở envelope (backend nhấc lên ngoài data), trước đây web luôn báo Chưa mở được cổng thanh toán VNPay; thêm test với đúng phản hồi thật
 - 2026-10-16 05:16 (UTC+7) | ToanAltF4 | fix/ai-confirm-step | Bước Xác nhận: mức khẩn cấp bằng chữ, nút không tràn trên điện thoại, tóm tắt AI lấy thiết bị từ câu có nhận ra và nói Bạn từng đặt
 - 2026-10-16 04:26 (UTC+7) | ToanAltF4 | feat/ai-reveal | Câu trả lời trợ lý hiện dần từng cụm chữ, nút và chi tiết chỉ ra khi hiện xong
@@ -342,4 +343,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-09 21:17 (UTC+7) | ToanAltF4 | feat/sm-dashboard-replacements | Tổng quan quản lý: yêu cầu đổi thợ đang chờ, đơn tự huỷ vì không xuất phát
 - 2026-10-09 20:45 (UTC+7) | ToanAltF4 | feat/admin-customer-wallets | Admin xem và điều chỉnh ví khách
 - 2026-10-09 20:34 (UTC+7) | ToanAltF4 | feat/refund-parts-only | Hoàn tiền vào ví chỉ hiện với khiếu nại linh kiện, bảo hành; FixHome chịu
-- 2026-10-09 20:04 (UTC+7) | ToanAltF4 | feat/availability-status | Dashboard thợ hiện trạng thái nhận việc theo lịch tuần
