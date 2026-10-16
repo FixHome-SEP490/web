@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // src/components/chat/CallOverlay.vue
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { Phone, PhoneOff, Mic, MicOff, Wrench, UserCheck } from 'lucide-vue-next';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Wrench, UserCheck } from 'lucide-vue-next';
 import { useCallStore } from '../../stores/call.store';
 
 /**
@@ -30,10 +30,12 @@ watch(
   },
 );
 
-/** Escape declines a ringing call, the same as the red button. */
+/** Escape declines a ringing call, hangs up a live one, or closes the end screen. */
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !callStore.isActive) return;
-  if (callStore.status === 'incoming') {
+  if (callStore.status === 'ended') {
+    callStore.dismissEnded();
+  } else if (callStore.status === 'incoming') {
     void callStore.declineCall();
   } else {
     void callStore.hangUp();
@@ -67,7 +69,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
           <!-- Who is on the line -->
           <div
             class="w-20 h-20 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-2xl font-bold overflow-hidden"
-            :class="callStore.status === 'incoming' ? 'animate-pulse' : ''"
+            :class="callStore.status === 'incoming' || callStore.status === 'ringing' ? 'animate-pulse ring-4 ring-brand-200' : callStore.status === 'ended' ? 'opacity-70' : ''"
           >
             <img
               v-if="callStore.peer?.avatarUrl"
@@ -92,11 +94,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
           </p>
 
           <p
-            class="mt-3 text-sm text-ink-600"
-            :class="callStore.status === 'connected' ? 'font-num tabular-nums' : ''"
+            class="mt-3 text-sm"
+            :class="[
+              callStore.status === 'connected' ? 'font-num tabular-nums text-ink-600' : '',
+              callStore.status === 'ended' && callStore.endInfo?.failed ? 'font-semibold text-danger-600' : 'text-ink-600',
+              callStore.status === 'ended' && !callStore.endInfo?.failed ? 'font-semibold text-ink-900' : '',
+            ]"
             aria-live="polite"
+            data-testid="call-status"
           >
             {{ callStore.statusLabel }}
+          </p>
+          <p
+            v-if="callStore.status === 'ended' && callStore.endInfo?.detail"
+            class="mt-1 text-xs text-ink-500"
+            data-testid="call-end-detail"
+          >
+            {{ callStore.endInfo.detail }}
           </p>
 
           <!-- Answer or decline -->
@@ -119,6 +133,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
               @click="callStore.acceptCall()"
             >
               <Phone :size="22" />
+            </button>
+          </div>
+
+          <!-- After the call: call again, or close -->
+          <div
+            v-else-if="callStore.status === 'ended'"
+            class="mt-8 flex items-center justify-center gap-3"
+          >
+            <button
+              type="button"
+              class="h-10 px-4 rounded-full bg-ink-100 text-ink-700 text-sm font-semibold hover:bg-ink-200 focus:outline-none focus:ring-2 focus:ring-ink-400 focus:ring-offset-2"
+              data-testid="call-dismiss"
+              @click="callStore.dismissEnded()"
+            >
+              Đóng
+            </button>
+            <button
+              v-if="callStore.endInfo?.canRedial"
+              type="button"
+              class="h-10 px-4 rounded-full bg-success-600 text-white text-sm font-semibold flex items-center gap-2 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-success-600 focus:ring-offset-2"
+              data-testid="call-redial"
+              @click="callStore.redial()"
+            >
+              <PhoneCall :size="16" />
+              Gọi lại
             </button>
           </div>
 

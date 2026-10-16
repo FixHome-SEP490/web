@@ -10,52 +10,75 @@ import {
   webRtcCallService,
   CallMediaError,
 } from '../services/webrtc-call.service';
+import { callTones } from '../services/call-tones';
 import { useChatStore } from './chat.store';
 
 /**
  * Where a call is in its life.
  *
- * "connecting" is the gap between the other side picking up and the audio
- * actually flowing. It is short on a local network but it is not nothing, and
- * showing "Đã kết nối" during it would be a lie the user can hear.
+ * - outgoing: asked the server to ring; the other phone has not rung yet.
+ * - ringing: the other phone is ringing (its app said so); the caller hears ringback.
+ * - incoming: this phone is ringing.
+ * - connecting: picked up, the audio path is being set up.
+ * - connected: talking.
+ * - ended: the call is over and the screen says how, for a moment, with
+ *   "Gọi lại" where calling again makes sense.
  */
 export type CallStatus =
   | 'idle'
   | 'outgoing'
+  | 'ringing'
   | 'incoming'
   | 'connecting'
-  | 'connected';
+  | 'connected'
+  | 'ended';
 
-/** What to tell the user when a call stops. */
-const END_REASON_TEXT: Record<CallEndReason, string> = {
-  rejected: 'Cuộc gọi bị từ chối',
-  cancelled: 'Người gọi đã huỷ',
-  ended: 'Cuộc gọi đã kết thúc',
-  timeout: 'Không có người bắt máy',
-  disconnected: 'Mất kết nối với đối phương',
-  busy: 'Đối phương đang bận',
-};
+/** Who placed the current call, from this side's point of view. */
+type CallRole = 'caller' | 'callee';
+
+/** What the end screen shows. */
+export interface CallEndInfo {
+  title: string;
+  detail: string;
+  /** Offer "Gọi lại": the call did not happen and trying again may work. */
+  canRedial: boolean;
+  /** A real failure (busy, refused, no answer) rather than a normal hang-up. */
+  failed: boolean;
+}
+
+/** How long the end screen stays before it closes by itself. */
+const END_SCREEN_MS = 4000;
+const END_SCREEN_REDIAL_MS = 7000;
+/** Picked up but no audio path after this long: say so instead of hanging. */
+const CONNECT_TIMEOUT_MS = 20_000;
 
 /** What to tell the user when the server will not place the call. */
 const INVITE_REASON_TEXT: Record<string, string> = {
-  busy: 'Đối phương đang có cuộc gọi khác',
   forbidden: 'Không thể gọi trong cuộc trò chuyện này',
   invalid: 'Không thể bắt đầu cuộc gọi',
+  self_busy: 'Bạn đang trong một cuộc gọi khác',
 };
 
 export const useCallStore = defineStore('call', () => {
   const status = ref<CallStatus>('idle');
   const callId = ref<string | null>(null);
   const conversationId = ref<string | null>(null);
+  const role = ref<CallRole | null>(null);
   const isMuted = ref(false);
   const durationSeconds = ref(0);
+  const endInfo = ref<CallEndInfo | null>(null);
   /** Not deeply reactive: a MediaStream is a handle, not a value to diff. */
   const remoteStream = shallowRef<MediaStream | null>(null);
 
   let isInitialized = false;
   let durationTimer: ReturnType<typeof setInterval> | null = null;
+  let endTimer: ReturnType<typeof setTimeout> | null = null;
+  let connectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** The call screen is up (a call, or the moment after one). */
   const isActive = computed(() => status.value !== 'idle');
+  /** A call is in progress: no second call can start or be received. */
+  const isBusy = computed(() => status.value !== 'idle' && status.value !== 'ended');
   const isInCall = computed(
     () => status.value === 'connecting' || status.value === 'connected',
   );
@@ -76,29 +99,31 @@ export const useCallStore = defineStore('call', () => {
   const peerName = computed(() => peer.value?.fullName || 'Người dùng');
 
   const peerRoleLabel = computed(() => {
-    const role = peer.value?.role?.toUpperCase();
-    if (role === 'TECHNICIAN') return 'Kỹ thuật viên';
-    if (role === 'CUSTOMER') return 'Khách hàng';
+    const r = peer.value?.role?.toUpperCase();
+    if (r === 'TECHNICIAN') return 'Kỹ thuật viên';
+    if (r === 'CUSTOMER') return 'Khách hàng';
     return '';
   });
 
-  const durationLabel = computed(() => {
-    const total = durationSeconds.value;
-    const minutes = Math.floor(total / 60);
-    const seconds = total % 60;
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
-  });
+  const formatDuration = (total: number) =>
+    `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+
+  const durationLabel = computed(() => formatDuration(durationSeconds.value));
 
   const statusLabel = computed(() => {
     switch (status.value) {
       case 'outgoing':
-        return 'Đang gọi...';
+        return 'Đang gọi…';
+      case 'ringing':
+        return 'Đang đổ chuông…';
       case 'incoming':
-        return 'Cuộc gọi đến';
+        return 'Cuộc gọi thoại đến';
       case 'connecting':
-        return 'Đang kết nối...';
+        return 'Đang kết nối…';
       case 'connected':
         return durationLabel.value;
+      case 'ended':
+        return endInfo.value?.title ?? '';
       default:
         return '';
     }
@@ -114,20 +139,34 @@ export const useCallStore = defineStore('call', () => {
   function initCallSignalling(): void {
     if (isInitialized) return;
     isInitialized = true;
+    callTones.prime();
 
     chatSocketService.subscribe({
       onCallIncoming(event) {
         // The server allows only one live call per person, so anything arriving
         // while busy is a stale event rather than a second caller.
-        if (status.value !== 'idle') return;
+        if (isBusy.value) return;
+        clearEndScreen();
         callId.value = event.callId;
         conversationId.value = event.conversationId;
+        role.value = 'callee';
         status.value = 'incoming';
+        callTones.ringtone();
+        // Tell the caller it is ringing here: they hear ringback from now on.
+        chatSocketService.callRinging(event.callId);
+      },
+
+      onCallRinging(event) {
+        if (event.callId !== callId.value || status.value !== 'outgoing') return;
+        status.value = 'ringing';
+        callTones.ringback();
       },
 
       async onCallAccepted(event) {
         if (event.callId !== callId.value) return;
+        callTones.stop();
         status.value = 'connecting';
+        startConnectTimeout();
         try {
           openPeerConnection();
           chatSocketService.sendOffer(event.callId, await webRtcCallService.createOffer());
@@ -162,20 +201,52 @@ export const useCallStore = defineStore('call', () => {
 
       onCallEnded(event) {
         if (event.callId !== callId.value) return;
-        // A call that was never answered does not deserve a toast on the side
-        // that hung up, but every other ending is worth a word.
-        toast.info(END_REASON_TEXT[event.reason] ?? 'Cuộc gọi đã kết thúc');
-        reset();
+        endedByServer(event.reason);
+      },
+
+      onCallMissed(event) {
+        // Someone tried while this line was busy: a quiet heads-up, not an interruption.
+        const chatStore = useChatStore();
+        const from = chatStore.conversations.find((c) => c.id === event.conversationId)?.counterpart?.fullName;
+        toast.info(`${from || 'Một người'} vừa gọi cho bạn lúc bạn đang trong cuộc gọi khác`);
       },
 
       onStatusChange(connected) {
         // Losing the socket means losing signalling; the media would follow.
-        if (!connected && isActive.value) {
-          toast.error('Mất kết nối máy chủ, cuộc gọi đã dừng');
-          reset();
+        if (!connected && isBusy.value) {
+          showEnd({ title: 'Mất kết nối máy chủ', detail: 'Cuộc gọi đã dừng. Kiểm tra mạng rồi gọi lại.', canRedial: true, failed: true });
         }
       },
     });
+  }
+
+  /** The server says the call is over; what that means depends on which side we are. */
+  function endedByServer(reason: CallEndReason): void {
+    const caller = role.value === 'caller';
+    const talked = durationSeconds.value;
+    switch (reason) {
+      case 'answered_elsewhere':
+        // Picked up on another of this person's devices: just stop ringing here.
+        reset();
+        return;
+      case 'rejected':
+        if (!caller) return reset();
+        return showEnd({ title: 'Cuộc gọi bị từ chối', detail: `${peerName.value} đang bận, hãy nhắn tin hoặc gọi lại sau.`, canRedial: true, failed: true });
+      case 'cancelled':
+        if (caller) return reset();
+        return showEnd({ title: 'Cuộc gọi nhỡ', detail: `${peerName.value} đã gọi cho bạn.`, canRedial: true, failed: true });
+      case 'timeout':
+        return caller
+          ? showEnd({ title: 'Không trả lời', detail: `${peerName.value} chưa nghe máy.`, canRedial: true, failed: true })
+          : showEnd({ title: 'Cuộc gọi nhỡ', detail: `${peerName.value} đã gọi cho bạn.`, canRedial: true, failed: true });
+      case 'busy':
+        return showEnd({ title: 'Máy bận', detail: `${peerName.value} đang trong cuộc gọi khác.`, canRedial: true, failed: true });
+      case 'disconnected':
+        return showEnd({ title: 'Mất kết nối', detail: `Không còn kết nối với ${peerName.value}.`, canRedial: true, failed: true });
+      case 'ended':
+      default:
+        return showEnd({ title: 'Cuộc gọi đã kết thúc', detail: talked ? `Thời lượng ${formatDuration(talked)}` : '', canRedial: false, failed: false });
+    }
   }
 
   function openPeerConnection(): void {
@@ -190,10 +261,11 @@ export const useCallStore = defineStore('call', () => {
       },
       onConnectionStateChange(state) {
         if (state === 'connected') {
+          clearConnectTimeout();
           status.value = 'connected';
           startTimer();
         } else if (state === 'failed') {
-          failCall('Không kết nối được. Hãy kiểm tra hai máy có chung mạng không.');
+          failCall('Không kết nối được');
         }
       },
     });
@@ -201,9 +273,10 @@ export const useCallStore = defineStore('call', () => {
 
   // ----------------------------------------------------------------- actions
 
-  /** Place a call in the conversation currently on screen. */
+  /** Place a call in a conversation. */
   async function startCall(targetConversationId: string): Promise<void> {
-    if (status.value !== 'idle') return;
+    if (isBusy.value) return;
+    clearEndScreen();
 
     // The microphone is opened first on purpose: if it is going to fail, it
     // should fail before the other person's screen lights up.
@@ -219,23 +292,35 @@ export const useCallStore = defineStore('call', () => {
     }
 
     conversationId.value = targetConversationId;
+    role.value = 'caller';
     status.value = 'outgoing';
 
     const result = await chatSocketService.callInvite(targetConversationId);
     if (!result.ok || !result.callId) {
-      toast.error(
-        INVITE_REASON_TEXT[result.reason ?? 'invalid'] ??
-          'Không thể bắt đầu cuộc gọi',
-      );
+      if (result.reason === 'offline') {
+        return showEnd({ title: 'Không liên lạc được', detail: `${peerName.value} hiện không mở ứng dụng. Họ sẽ thấy cuộc gọi nhỡ của bạn.`, canRedial: true, failed: true });
+      }
+      if (result.reason === 'busy') {
+        return showEnd({ title: 'Máy bận', detail: `${peerName.value} đang trong cuộc gọi khác.`, canRedial: true, failed: true });
+      }
+      toast.error(INVITE_REASON_TEXT[result.reason ?? 'invalid'] ?? 'Không thể bắt đầu cuộc gọi');
       reset();
       return;
     }
     callId.value = result.callId;
   }
 
+  /** Call the same person again from the end screen. */
+  async function redial(): Promise<void> {
+    const target = conversationId.value;
+    if (status.value !== 'ended' || !target) return;
+    await startCall(target);
+  }
+
   /** Pick up. The peer connection is ready before the server is told. */
   async function acceptCall(): Promise<void> {
     if (status.value !== 'incoming' || !callId.value) return;
+    callTones.stop();
 
     try {
       await webRtcCallService.acquireMicrophone();
@@ -249,10 +334,10 @@ export const useCallStore = defineStore('call', () => {
     }
 
     status.value = 'connecting';
+    startConnectTimeout();
     const result = await chatSocketService.callAccept(callId.value);
     if (!result.ok) {
-      toast.error('Cuộc gọi không còn hiệu lực');
-      reset();
+      showEnd({ title: 'Cuộc gọi không còn hiệu lực', detail: 'Người gọi đã dừng trước khi bạn nghe máy.', canRedial: true, failed: true });
     }
   }
 
@@ -268,8 +353,10 @@ export const useCallStore = defineStore('call', () => {
    */
   async function hangUp(): Promise<void> {
     const id = callId.value;
-    const wasRinging = status.value === 'outgoing';
-    reset();
+    const wasRinging = status.value === 'outgoing' || status.value === 'ringing';
+    const talked = durationSeconds.value;
+    if (wasRinging) reset();
+    else showEnd({ title: 'Cuộc gọi đã kết thúc', detail: talked ? `Thời lượng ${formatDuration(talked)}` : '', canRedial: false, failed: false });
     if (!id) return;
     await (wasRinging
       ? chatSocketService.callCancel(id)
@@ -281,13 +368,48 @@ export const useCallStore = defineStore('call', () => {
     webRtcCallService.setMuted(isMuted.value);
   }
 
+  /** Close the end screen now. */
+  function dismissEnded(): void {
+    if (status.value === 'ended') reset();
+  }
+
   // ------------------------------------------------------------------ teardown
 
-  function failCall(message: string): void {
-    toast.error(message);
+  function failCall(title: string): void {
     const id = callId.value;
-    reset();
+    showEnd({ title, detail: 'Mạng của một trong hai bên đang chặn cuộc gọi. Hãy thử lại hoặc nhắn tin.', canRedial: true, failed: true });
     if (id) void chatSocketService.callEnd(id);
+  }
+
+  /** Stop the call and show how it ended; the screen closes by itself. */
+  function showEnd(info: CallEndInfo): void {
+    stopMedia();
+    callId.value = null;
+    endInfo.value = info;
+    status.value = 'ended';
+    if (info.failed) callTones.failed();
+    else callTones.ended();
+    if (endTimer) clearTimeout(endTimer);
+    endTimer = setTimeout(reset, info.canRedial ? END_SCREEN_REDIAL_MS : END_SCREEN_MS);
+  }
+
+  function clearEndScreen(): void {
+    if (endTimer) clearTimeout(endTimer);
+    endTimer = null;
+    endInfo.value = null;
+    if (status.value === 'ended') status.value = 'idle';
+  }
+
+  function startConnectTimeout(): void {
+    clearConnectTimeout();
+    connectTimer = setTimeout(() => {
+      if (status.value === 'connecting') failCall('Không kết nối được');
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  function clearConnectTimeout(): void {
+    if (connectTimer) clearTimeout(connectTimer);
+    connectTimer = null;
   }
 
   function startTimer(): void {
@@ -305,26 +427,40 @@ export const useCallStore = defineStore('call', () => {
     }
   }
 
-  /** Back to idle, microphone released. Every exit path goes through here. */
-  function reset(): void {
+  /** Microphone, audio, tones and timers off. */
+  function stopMedia(): void {
     stopTimer();
+    clearConnectTimeout();
+    callTones.stop();
     webRtcCallService.stop();
+    isMuted.value = false;
+    remoteStream.value = null;
+  }
+
+  /** Back to idle, microphone released. Every exit path ends here. */
+  function reset(): void {
+    stopMedia();
+    if (endTimer) clearTimeout(endTimer);
+    endTimer = null;
     status.value = 'idle';
     callId.value = null;
     conversationId.value = null;
-    isMuted.value = false;
+    role.value = null;
+    endInfo.value = null;
     durationSeconds.value = 0;
-    remoteStream.value = null;
   }
 
   return {
     status,
     callId,
     conversationId,
+    role,
     isMuted,
     durationSeconds,
     remoteStream,
+    endInfo,
     isActive,
+    isBusy,
     isInCall,
     peer,
     peerName,
@@ -333,9 +469,11 @@ export const useCallStore = defineStore('call', () => {
     statusLabel,
     initCallSignalling,
     startCall,
+    redial,
     acceptCall,
     declineCall,
     hangUp,
+    dismissEnded,
     toggleMute,
   };
 });
