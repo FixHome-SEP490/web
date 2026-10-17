@@ -56,6 +56,25 @@ export const mediaApi = {
     return { uploadId: data.uploadId, mimeType: data.mimeType, sizeBytes: data.sizeBytes };
   },
 
+  /**
+   * Uploads a short private video of the problem (PO 18/10/2026): mp4, mov or
+   * webm up to 50 MB. It goes with the booking for the technician; the AI never sees it.
+   */
+  async uploadBookingVideo(file: File): Promise<UploadedBookingPhoto> {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await apiClient.post<{ data: UploadedBookingPhoto }>(
+      '/media/booking-video-upload',
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 },
+    );
+    const data = res.data?.data;
+    if (!data || typeof data.uploadId !== 'string' || !data.uploadId.trim() || typeof data.mimeType !== 'string') {
+      throw new Error('Unexpected API response: invalid private Booking video metadata');
+    }
+    return { uploadId: data.uploadId, mimeType: data.mimeType, sizeBytes: Number(data.sizeBytes) || 0 };
+  },
+
   /** Downloads private Booking media through the authenticated Backend proxy. */
   async getBookingMediaContent(bookingId: string, mediaId: string): Promise<Blob> {
     const res = await apiClient.get<Blob>(

@@ -17,8 +17,12 @@ import {
   Wrench,
   UserCheck,
   Phone,
+  Paperclip,
+  ShieldCheck,
 } from 'lucide-vue-next';
+import { RouterLink } from 'vue-router';
 import { useCallStore } from '../../stores/call.store';
+import { CHAT_IMAGE_TYPES, CHAT_VIDEO_TYPES, chatAttachmentProblem } from '../../api/messaging.api';
 
 const props = withDefaults(
   defineProps<{
@@ -78,6 +82,47 @@ const canSend = computed(() => {
   // alone, which is why it worked.
   return conversation.value.canSend !== false;
 });
+
+/** PO 18/10/2026: the order is done, so the chat is closed until a warranty claim reopens it. */
+const closedByCompletion = computed(() => conversation.value?.closedReason === 'order_completed');
+const viewerIsCustomer = computed(() => authStore.hasRole('customer'));
+
+// Photos and short videos in the chat (PO 18/10/2026).
+const fileInput = ref<HTMLInputElement | null>(null);
+const attachError = ref('');
+const acceptTypes = [...CHAT_IMAGE_TYPES, ...CHAT_VIDEO_TYPES].join(',');
+
+function pickAttachment() {
+  attachError.value = '';
+  fileInput.value?.click();
+}
+
+async function onAttachmentPicked(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || sending.value || !canSend.value) return;
+  const problem = chatAttachmentProblem(file);
+  if (problem) {
+    attachError.value = problem;
+    return;
+  }
+  const caption = messageInput.value.trim();
+  sending.value = true;
+  attachError.value = '';
+  messageInput.value = '';
+  try {
+    await chatStore.sendAttachment(file, caption);
+    scrollToBottom(true);
+  } catch {
+    messageInput.value = caption;
+    attachError.value = file.type.startsWith('video/')
+      ? 'Chưa gửi được video, vui lòng thử lại.'
+      : 'Chưa gửi được ảnh, vui lòng thử lại.';
+  } finally {
+    sending.value = false;
+  }
+}
 
 const callStore = useCallStore();
 
@@ -334,7 +379,27 @@ function handleHeaderClick() {
       <div v-show="!isMinimized" class="flex-1 flex flex-col min-h-0 overflow-hidden relative">
         <!-- Read-only Banner (if applicable) -->
         <div
-          v-if="!canSend && conversation"
+          v-if="!canSend && conversation && closedByCompletion"
+          class="px-3 py-2 bg-warning-50 border-b border-warning-200 text-warning-800 text-xs flex flex-wrap items-center gap-x-2 gap-y-1.5 flex-shrink-0"
+          data-testid="chat-closed-completed"
+        >
+          <Lock :size="14" class="flex-shrink-0 text-warning-600" />
+          <span class="flex-1 min-w-[180px]">
+            {{ viewerIsCustomer
+              ? 'Đơn đã hoàn tất nên cuộc trò chuyện đã khoá. Nếu thiết bị gặp lại vấn đề, hãy gửi yêu cầu bảo hành để nhắn tin lại với kỹ thuật viên.'
+              : 'Đơn đã hoàn tất nên cuộc trò chuyện đã khoá. Khi khách gửi yêu cầu bảo hành, cuộc trò chuyện sẽ mở lại.' }}
+          </span>
+          <RouterLink
+            v-if="viewerIsCustomer && conversation.serviceOrderId"
+            :to="{ name: 'customer-order-detail', params: { id: conversation.serviceOrderId }, query: { claimWarranty: 'true' } }"
+            class="inline-flex items-center gap-1 rounded-lg bg-white border border-warning-300 px-2.5 py-1 font-semibold text-warning-800 hover:bg-warning-100 whitespace-nowrap"
+            data-testid="chat-claim-warranty"
+          >
+            <ShieldCheck :size="13" /> Yêu cầu bảo hành
+          </RouterLink>
+        </div>
+        <div
+          v-else-if="!canSend && conversation"
           class="px-3 py-2 bg-warning-50 border-b border-warning-200 text-warning-800 text-xs flex items-center gap-2 flex-shrink-0"
         >
           <Lock :size="14" class="flex-shrink-0 text-warning-600" />
@@ -405,11 +470,31 @@ function handleHeaderClick() {
 
         <!-- Message Composer / Input Area -->
         <footer class="p-3 bg-white border-t border-ink-200 flex-shrink-0">
+          <p v-if="canSend && attachError" class="mb-2 text-xs text-danger-700" role="alert" data-testid="chat-attach-error">{{ attachError }}</p>
           <form
             v-if="canSend"
             class="flex items-end gap-2"
             @submit.prevent="handleSend"
           >
+            <input
+              ref="fileInput"
+              type="file"
+              class="hidden"
+              :accept="acceptTypes"
+              data-testid="chat-attach-input"
+              @change="onAttachmentPicked"
+            />
+            <button
+              type="button"
+              class="p-2.5 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+              title="Gửi ảnh hoặc video"
+              aria-label="Gửi ảnh hoặc video"
+              :disabled="sending"
+              data-testid="chat-attach"
+              @click="pickAttachment"
+            >
+              <Paperclip :size="18" />
+            </button>
             <div class="flex-1 bg-ink-50 border border-ink-200 rounded-xl focus-within:border-brand-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-brand-500 transition-all px-3 py-2">
               <textarea
                 v-model="messageInput"
@@ -435,7 +520,7 @@ function handleHeaderClick() {
             v-else
             class="py-2 text-center text-xs text-ink-400 bg-ink-50 rounded-lg border border-ink-200"
           >
-            Khung trò chuyện đã đóng
+            {{ closedByCompletion ? 'Cuộc trò chuyện đã khoá vì đơn đã hoàn tất' : 'Khung trò chuyện đã đóng' }}
           </div>
         </footer>
       </div>

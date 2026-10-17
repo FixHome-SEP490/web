@@ -4,6 +4,7 @@ import { ref, computed, nextTick } from 'vue';
 import type { ChatMessage } from '../../api/messaging.api';
 import { MoreVertical, Edit2, Trash2 } from 'lucide-vue-next';
 import { vnTimeString } from '../../utils/vn-time';
+import ChatAttachmentView from './ChatAttachmentView.vue';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -159,9 +160,17 @@ function confirmDelete() {
         </div>
       </div>
 
+      <!-- Photo or video (PO 18/10/2026), above its caption -->
+      <ChatAttachmentView
+        v-if="!isEditing && message.attachment && !message.isDeleted"
+        :message="message"
+        :is-me="isMe"
+        :class="message.content ? 'mb-1' : ''"
+      />
+
       <!-- Normal Bubble -->
       <div
-        v-else
+        v-if="!isEditing && (message.isDeleted || message.content || !message.attachment)"
         class="px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap rounded-2xl"
         :class="[
           message.isDeleted

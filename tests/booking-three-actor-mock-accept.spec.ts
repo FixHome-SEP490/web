@@ -45,7 +45,8 @@ function scenario() {
   }));
   const preview = { id: bookingId, district: 'Synthetic District', province: 'Synthetic Province',
     serviceName: 'Synthetic repair', quantity: 1, urgency: 'medium', preferredStartAt: '2030-01-01T09:00:00Z',
-    preferredEndAt: '2030-01-01T10:00:00Z', customerId: privateDetail, description: privateDetail,
+    // PO 18/10/2026: the description is part of the preview; the address, the customer and the diagnosis are not.
+    preferredEndAt: '2030-01-01T10:00:00Z', customerId: privateDetail, description: 'Synthetic description of the fault',
     addressTextSnapshot: privateDetail, media: [{ url: privateDetail }], diagnosis: { raw: privateDetail } };
   const booking = () => ({ id: bookingId, customerId: 'customer', serviceId: 'service-synthetic',
     addressId: 'address-synthetic', serviceNameSnapshot: 'Synthetic repair',

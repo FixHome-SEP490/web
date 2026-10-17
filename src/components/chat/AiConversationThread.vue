@@ -4,10 +4,22 @@
 // the conversation (useAiConversation) and puts its own action in the
 // `pinned` slot - "Đặt thợ" in the assistant, "Đổi dịch vụ" in the form.
 import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
+import { Bot, X, Image as ImageIcon, Send, AlertTriangle, Play } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
 import { AI_MAX_IMAGES, aiApi } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, priceLabel, quickReplies, type AiChatMessage, type AiConversation } from '../../composables/useAiConversation';
+import {
+  AI_MAX_VIDEOS,
+  AI_VIDEO_TYPES,
+  DESCRIBE_BEFORE_SEND,
+  VIDEO_NOT_ANALYSED,
+  priceLabel,
+  quickReplies,
+  type AiChatMessage,
+  type AiConversation,
+} from '../../composables/useAiConversation';
+
+/** Photos for the assistant, and short videos that only travel with the booking (PO 18/10/2026). */
+const ACCEPT = ['image/*', '.heic', '.heif', ...AI_VIDEO_TYPES].join(',');
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +31,9 @@ const props = withDefaults(
 
 // reactive() unwraps the refs, so the template reads c.messages, not .value.
 const c = reactive(props.conversation);
+// Videos (PO 18/10/2026); a conversation built without them shows none.
+const pendingVideos = computed(() => c.pendingVideos ?? []);
+const sentVideoCount = computed(() => (c.sentVideos ?? []).length);
 const thread = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -93,9 +108,23 @@ defineExpose({ scrollToEnd });
             <div v-if="message.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
               <img v-for="(src, index) in message.images" :key="index" :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
             </div>
+            <div v-if="message.videos?.length" class="flex flex-wrap gap-1.5 mb-1.5" data-testid="ai-message-videos">
+              <video
+                v-for="(src, index) in message.videos"
+                :key="index"
+                :src="src"
+                controls
+                playsinline
+                preload="metadata"
+                class="w-44 max-w-full rounded-lg bg-ink-900"
+              ></video>
+            </div>
             <p v-if="message.text" class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ message.text }}</p>
           </div>
         </div>
+        <p v-if="message.sender === 'user' && message.videos?.length" class="mt-1 text-right text-[11px] text-ink-500" data-testid="ai-video-note">
+          {{ VIDEO_NOT_ANALYSED }}
+        </p>
 
         <div v-else class="flex gap-2">
           <div class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center shrink-0 mt-0.5">
@@ -197,8 +226,8 @@ defineExpose({ scrollToEnd });
 
     <slot name="pinned" />
 
-    <!-- Picked images -->
-    <div v-if="c.pending.length" class="flex items-center gap-2 px-3.5 py-2 border-t border-ink-100">
+    <!-- Picked images and videos -->
+    <div v-if="c.pending.length || pendingVideos.length" class="flex flex-wrap items-center gap-2 px-3.5 py-2 border-t border-ink-100">
       <div v-for="(image, index) in c.pending" :key="index" class="relative">
         <img :src="image.dataUrl" alt="" class="w-14 h-14 object-cover rounded-lg" />
         <button
@@ -211,15 +240,33 @@ defineExpose({ scrollToEnd });
           <X :size="11" />
         </button>
       </div>
-      <span class="text-xs text-ink-500 whitespace-nowrap">{{ c.pending.length }}/{{ AI_MAX_IMAGES }} ảnh</span>
+      <div v-for="(video, index) in pendingVideos" :key="video.id" class="relative" data-testid="ai-pending-video">
+        <video :src="video.url" muted playsinline preload="metadata" class="w-14 h-14 object-cover rounded-lg bg-ink-900" aria-hidden="true"></video>
+        <span class="absolute inset-0 flex items-center justify-center text-white"><Play :size="16" /></span>
+        <button
+          type="button"
+          class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-ink-900 text-white flex items-center justify-center"
+          title="Bỏ video này"
+          aria-label="Bỏ video này"
+          @click="c.removePendingVideo(index)"
+        >
+          <X :size="11" />
+        </button>
+      </div>
+      <span class="text-xs text-ink-500 whitespace-nowrap">
+        <template v-if="c.pending.length">{{ c.pending.length }}/{{ AI_MAX_IMAGES }} ảnh</template>
+        <template v-if="c.pending.length && pendingVideos.length"> · </template>
+        <template v-if="pendingVideos.length">{{ pendingVideos.length + sentVideoCount }}/{{ AI_MAX_VIDEOS }} video</template>
+      </span>
+      <p v-if="pendingVideos.length" class="basis-full text-[11px] text-ink-500">{{ VIDEO_NOT_ANALYSED }}</p>
     </div>
     <p v-if="c.problem" class="px-3.5 pb-1 text-xs text-danger-600">{{ c.problem }}</p>
     <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-xs text-warning-700" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
 
     <!-- Composer -->
     <div class="flex items-end gap-2 px-3 py-2.5 border-t border-ink-100 bg-white">
-      <input ref="fileInput" type="file" accept="image/*,.heic,.heif" multiple class="hidden" @change="onFiles" />
-      <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh thiết bị" aria-label="Gửi ảnh thiết bị" @click="fileInput?.click()">
+      <input ref="fileInput" type="file" :accept="ACCEPT" multiple class="hidden" data-testid="ai-file-input" @change="onFiles" />
+      <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
         <ImageIcon :size="19" />
       </button>
       <textarea

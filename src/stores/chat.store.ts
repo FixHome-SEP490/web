@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import {
+  isConversationClosedError,
   messagingApi,
   type ConversationItem,
   type ChatMessage,
@@ -311,6 +312,51 @@ export const useChatStore = defineStore('chat', () => {
       messages.value[convId] = (messages.value[convId] || []).filter(
         (m) => m.clientMessageId !== clientMessageId,
       );
+      // The order completed meanwhile: reload the thread so the composer locks.
+      if (isConversationClosedError(err)) void handleConversationUpdated(convId);
+      throw err;
+    }
+  }
+
+  /**
+   * A photo or short video, with an optional caption (PO 18/10/2026). The bubble
+   * shows the local file at once and turns into the stored one when the upload ends.
+   */
+  async function sendAttachment(file: File, caption = '') {
+    const convId = activeConversationId.value;
+    if (!convId) return;
+    const clientMessageId = `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const kind: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const localPreviewUrl = URL.createObjectURL(file);
+    const optimisticMsg: ChatMessage = {
+      id: clientMessageId,
+      conversationId: convId,
+      senderId: authStore.user?.id || '',
+      content: caption.trim(),
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+      isDeleted: false,
+      clientMessageId,
+      attachment: { kind, mimeType: file.type, sizeBytes: file.size },
+      localPreviewUrl,
+    };
+    messages.value[convId] = [...(messages.value[convId] || []), optimisticMsg];
+    sendTyping(false);
+    try {
+      const persisted = await messagingApi.sendAttachment(convId, file, caption, clientMessageId);
+      // Keep showing the local file until this bubble unmounts; the stored copy loads on the next visit.
+      messages.value[convId] = (messages.value[convId] || []).map((m) =>
+        m.clientMessageId === clientMessageId ? { ...persisted, localPreviewUrl } : m,
+      );
+      const conv = conversations.value.find((c) => c.id === convId);
+      if (conv) {
+        conv.lastMessageAt = persisted.createdAt;
+        conv.lastMessagePreview = persisted.content || (kind === 'video' ? 'Đã gửi một video' : 'Đã gửi một ảnh');
+      }
+    } catch (err) {
+      messages.value[convId] = (messages.value[convId] || []).filter((m) => m.clientMessageId !== clientMessageId);
+      URL.revokeObjectURL(localPreviewUrl);
+      if (isConversationClosedError(err)) void handleConversationUpdated(convId);
       throw err;
     }
   }
@@ -404,6 +450,7 @@ export const useChatStore = defineStore('chat', () => {
     loadMessages,
     loadOlderMessages,
     sendMessage,
+    sendAttachment,
     editMessage,
     deleteMessage,
     markAsRead,

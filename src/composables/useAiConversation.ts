@@ -54,9 +54,33 @@ export interface AiChatMessage {
   sender: 'user' | 'bot';
   text: string;
   images?: string[];
+  /** Local object URLs of the videos sent with this message; the AI never receives them. */
+  videos?: string[];
   reply?: AiReply;
   isAcknowledgement?: boolean;
 }
+
+/**
+ * PO 18/10/2026: the customer may send a short video in the chat with the
+ * assistant. It is not analysed; it is kept, with the photos and the words,
+ * and goes with the booking for the technician to watch.
+ */
+export interface AttachedVideo {
+  id: string;
+  file: File;
+  url: string;
+}
+export const AI_MAX_VIDEOS = 2;
+export const AI_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+export const AI_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+/** At most this many chat photos go with the booking, besides the ones of the form. */
+export const AI_KEPT_IMAGES = 5;
+export const VIDEO_NOT_ANALYSED = 'Video được gửi kèm cho kỹ thuật viên xem, trợ lý AI không xem video.';
+
+const objectUrl = (file: File) => (typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '');
+const revokeUrl = (url: string) => {
+  if (url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+};
 
 export interface AiConversationOptions {
   /** First assistant line, shown before the customer says anything. */
@@ -134,6 +158,12 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   const messages = ref<AiChatMessage[]>(greetingMessage());
   const input = ref('');
   const pending = ref<PickedImage[]>([]);
+  /** Videos waiting in the composer, sent with the next message. */
+  const pendingVideos = ref<AttachedVideo[]>([]);
+  /** Videos already in the thread; they go with the booking. */
+  const sentVideos = ref<AttachedVideo[]>([]);
+  /** Photos the customer sent in the thread (not the form's own), for the booking. */
+  const sentImages = ref<string[]>([]);
   /** True from Send until the reply is fully on screen: nothing to act on before then. */
   const isThinking = ref(false);
   /** The reply is being written out; the typing dots give way to it. */
@@ -160,8 +190,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   // Photos go along with words, never instead of them (BRX-064).
   const canSend = computed(() => input.value.trim().length > 0 && !isThinking.value);
 
-  /** Photos are waiting but nothing is written yet: say why Send is off. */
-  const needsDescription = computed(() => pending.value.length > 0 && input.value.trim().length === 0);
+  /** Photos or videos are waiting but nothing is written yet: say why Send is off. */
+  const needsDescription = computed(
+    () => (pending.value.length > 0 || pendingVideos.value.length > 0) && input.value.trim().length === 0,
+  );
 
   const updated = () => options.onUpdate?.();
 
@@ -182,17 +214,39 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     pinnedService.value = null;
     lastReply.value = null;
     pending.value = [];
+    for (const video of [...pendingVideos.value, ...sentVideos.value]) revokeUrl(video.url);
+    pendingVideos.value = [];
+    sentVideos.value = [];
+    sentImages.value = [];
     input.value = '';
     turnCount.value = 0;
     problem.value = '';
     messages.value = greetingMessage();
   }
 
-  /** Add picked files to the photos waiting to be sent (at most three). */
+  /** Add picked files: photos wait to be sent to the assistant (at most three), videos only travel with the booking. */
   async function addFiles(files: File[]) {
     if (files.length === 0) return;
-    const result = await prepareForAi(files, pending.value.length);
-    problem.value = result.problemVi || '';
+    const videos = files.filter((file) => (file.type || '').toLowerCase().startsWith('video/'));
+    const images = files.filter((file) => !videos.includes(file));
+    let videoProblem = '';
+    for (const file of videos) {
+      if (!AI_VIDEO_TYPES.includes(file.type.toLowerCase())) {
+        videoProblem = 'Chỉ gửi được video MP4, MOV hoặc WebM.';
+      } else if (file.size > AI_VIDEO_MAX_BYTES) {
+        videoProblem = 'Video lớn hơn 50 MB, vui lòng quay ngắn hơn.';
+      } else if (pendingVideos.value.length + sentVideos.value.length >= AI_MAX_VIDEOS) {
+        videoProblem = `Gửi được tối đa ${AI_MAX_VIDEOS} video.`;
+      } else {
+        pendingVideos.value = [...pendingVideos.value, { id: nextId(), file, url: objectUrl(file) }];
+      }
+    }
+    if (images.length === 0) {
+      problem.value = videoProblem;
+      return;
+    }
+    const result = await prepareForAi(images, pending.value.length);
+    problem.value = result.problemVi || videoProblem;
     if (result.images.length > 0) {
       pending.value = [...pending.value, ...result.images].slice(0, AI_MAX_IMAGES);
     }
@@ -202,16 +256,48 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     pending.value = pending.value.filter((_, i) => i !== index);
   }
 
+  function removePendingVideo(index: number) {
+    const video = pendingVideos.value[index];
+    if (video) revokeUrl(video.url);
+    pendingVideos.value = pendingVideos.value.filter((_, i) => i !== index);
+  }
+
+  /** Drop a video already in the thread from what goes with the booking. */
+  function removeSentVideo(id: string) {
+    const video = sentVideos.value.find((item) => item.id === id);
+    if (!video) return;
+    sentVideos.value = sentVideos.value.filter((item) => item.id !== id);
+    for (const message of messages.value) {
+      if (message.videos?.includes(video.url)) message.videos = message.videos.filter((url) => url !== video.url);
+    }
+    revokeUrl(video.url);
+  }
+
+  /** What the booking takes from this conversation for the technician: the photos and videos sent in it. */
+  function bookingAttachments(): { images: string[]; videos: File[] } {
+    return { images: [...sentImages.value], videos: sentVideos.value.map((video) => video.file) };
+  }
+
   /**
    * Send one turn. Text is required; photos ride along with it and always go
    * to the diagnosis route; text that reads
    * like a question goes to the question route; anything else is a
    * description and goes to diagnosis, continuing the same session either way.
    */
-  async function sendTurn(text: string, images: PickedImage[]) {
+  async function sendTurn(
+    text: string,
+    images: PickedImage[],
+    opts: { videos?: AttachedVideo[]; keepImagesForBooking?: boolean } = {},
+  ) {
     // A description is required, with or without photos (BRX-064).
     if (!text.trim()) return;
     if (isThinking.value) return;
+    const videos = opts.videos ?? [];
+    // The form's own photos are uploaded by the form; only the chat's are kept here.
+    if (opts.keepImagesForBooking !== false && images.length) {
+      sentImages.value = [...sentImages.value, ...images.map((image) => image.dataUrl)].slice(0, AI_KEPT_IMAGES);
+    }
+    if (videos.length) sentVideos.value = [...sentVideos.value, ...videos];
 
     const isQuestion = images.length === 0 && looksLikeAQuestion(text);
     const situation =
@@ -223,7 +309,13 @@ export function useAiConversation(options: AiConversationOptions = {}) {
             ? 'general_question'
             : 'first_text';
 
-    messages.value.push({ id: nextId(), sender: 'user', text, images: images.map((i) => i.dataUrl) });
+    messages.value.push({
+      id: nextId(),
+      sender: 'user',
+      text,
+      images: images.map((i) => i.dataUrl),
+      ...(videos.length ? { videos: videos.map((video) => video.url) } : {}),
+    });
     messages.value.push({ id: nextId(), sender: 'bot', text: holdingLineFor(situation), isAcknowledgement: true });
     isThinking.value = true;
     updated();
@@ -295,11 +387,13 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   async function send() {
     const text = input.value.trim();
     const images = pending.value;
+    const videos = pendingVideos.value;
     if (!text) return;
     input.value = '';
     pending.value = [];
+    pendingVideos.value = [];
     problem.value = '';
-    await sendTurn(text, images);
+    await sendTurn(text, images, { videos });
   }
 
   /** What the customer typed, oldest first, for the booking description. */
@@ -315,6 +409,9 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     messages,
     input,
     pending,
+    pendingVideos,
+    sentVideos,
+    sentImages,
     isThinking,
     turnCount,
     problem,
@@ -328,6 +425,9 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     startOver,
     addFiles,
     removePending,
+    removePendingVideo,
+    removeSentVideo,
+    bookingAttachments,
     sendTurn,
     send,
     customerWords,

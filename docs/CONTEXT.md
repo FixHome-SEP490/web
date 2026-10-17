@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-17 00:04 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ui-feedback
+> Cập nhật lần cuối: 2026-10-18 03:22 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/po-batch-2026-10-18
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -237,6 +237,17 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 
 Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt nút và chữ. Mỗi hành động một lần trên một màn: trang chủ (`CustomerDashboard.vue`) bỏ thẻ "Đặt thợ", "Chẩn đoán hỏng hóc bằng AI", chip AI (đã có ở thanh trên), khẩu hiệu và dòng chú thích nhỏ; đơn, số đếm và dịch vụ gom vào một khối dạng hàng. Danh sách đơn (`CustomerOrdersPage.vue`) thành hàng chia hai nhóm "Yêu cầu đặt lịch" và "Đơn sửa chữa". Chi tiết đơn (`CustomerOrderDetailPage.vue`) gộp hai thẻ chi phí làm một (`data-testid="order-costs"`, chưa báo giá thì một dòng `order-not-quoted`), "Huỷ đơn" và "Yêu cầu bảo hành" khi không có khối bảo hành nằm trong menu "⋯" (`order-more`, `order-cancel`), đánh giá và yêu cầu bảo hành chỉ một nút; khung `pay-after-completion` giữ nguyên điều kiện. Chi tiết yêu cầu đặt lịch (`BookingDetailPage.vue`) có một bước kế tiếp mỗi lúc, "Huỷ yêu cầu đặt lịch" trong menu "⋯" (`booking-more`, nút `booking-start-cancel` giữ nguyên). Trang chọn thợ chỉ còn ô chọn (`select-technician-btn` nay nằm trên ô chọn) và nút "Xem hồ sơ". Bảo hành, ví, hồ sơ, lịch sử, thông báo gom thành khối có hàng và đường chia. Đang tải hiện khung xám đúng hình nội dung (`FhSkeleton`); tải hỏng hiện "Chưa tải được…, vui lòng thử lại." kèm nút "Thử lại", không hiện chữ lỗi của máy chủ. Test `tests/customer-ui-layout.spec.ts`.
 
+### Đợt PO 18/10/2026 (nhánh `feat/po-batch-2026-10-18`, cần backend cùng tên nhánh)
+
+- Lời mời nhận việc (`TechnicianInvitationsPage.vue`): thẻ có khu vực kèm dải khoảng cách `distanceBand` ("Cách bạn dưới 1 km", "Cách bạn khoảng 3-5 km", "Cách bạn hơn 40 km"; không đo được thì ẩn; backend chỉ gửi dải để thợ không suy ra được nhà khách) và hai dòng mô tả (số điện thoại, email khách gõ vào mô tả đã được backend che); khung chi tiết có "Khách mô tả", kiểu giá ("Giá niêm yết ... × số lượng" hoặc "Báo giá sau khi kiểm tra tại nhà khách"), ảnh và video qua `BookingMediaViewer`, nút "Xem tóm tắt vấn đề từ AI" (`AiSummaryDialog`); dòng vàng nay là "Địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách hiện sau khi bạn nhận đơn." `api/bookings.api.ts` chỉ giữ media có đủ trường an toàn (riêng tư thì `url` phải null).
+- `BookingMediaViewer` phát video (`video/*`): khung lớn có điều khiển, ô nhỏ có nút Play, tiêu đề "Ảnh và video hiện trường".
+- Form đặt lịch: bỏ thanh kéo "Mức độ khẩn cấp" ở bước 1 và dòng của nó ở bước Xác nhận (gửi `urgency: NORMAL` như mobile; "Tới ngay" ở bước thời gian vẫn là cách đặt gấp). `BookingSessionPicker` thành lịch: "Chọn ngày" trên lưới tuần Thứ Hai đến Chủ nhật (ngày ngoài 14 ngày mờ, ngày đã kín xám, ngày đã chọn có dấu tích xanh lá, "Hôm nay"), rồi "Chọn giờ" (Sáng 8:00 - 12:00, Chiều 13:00 - 18:00, có ô tích); vẫn phát `{date, slot}` và giữ `data-testid` cũ, dùng chung cho đặt lịch, đổi buổi và đặt lại thợ.
+- Trợ lý AI nhận video (mp4, mov, webm, tối đa 50 MB, tối đa 2): video không gửi sang AI, hiện trong khung chat với dòng "Video được gửi kèm cho kỹ thuật viên xem, trợ lý AI không xem video."; ảnh khách gửi trong chat và video được giữ trong `useAiConversation` (`bookingAttachments`) và tải lên khi bấm "Tìm kỹ thuật viên ngay" (`POST /media/booking-photo-upload`, `POST /media/booking-video-upload`), gộp vào `photoUploadIds` sau ảnh của bước 1 (tổng tối đa 5 ảnh). Ảnh bước 1 gửi kèm lượt đầu không bị tính hai lần. Bước Xác nhận có "Gửi kèm cho kỹ thuật viên: N ảnh, M video" và nút "Bỏ video"; tải hỏng thì không tạo yêu cầu, bấm lại không tải lại file đã lên.
+- Chat với kỹ thuật viên: nút kẹp giấy gửi một ảnh (10 MB) hoặc video (50 MB), chữ đang gõ thành chú thích; bong bóng hiện file cục bộ ngay, rồi đọc qua `GET /messages/:id/attachment` (`ChatAttachmentView.vue`). Đơn hoàn tất (`closedReason: 'order_completed'`) thì dải vàng báo đã khoá; khách có nút "Yêu cầu bảo hành" mở chi tiết đơn với `?claimWarranty=true`; gửi bị 409 `CONVERSATION_CLOSED` thì tải lại hội thoại để khoá ô soạn.
+- Realtime đơn: `services/order-realtime.ts` (gọi trong `main.ts`) nghe `order:updated` và đọc lại dữ liệu đơn, booking, ví, thu nhập, bảo hành, lời mời đang hiện (gom trong 250 ms), nên trang Công việc, chi tiết công việc, đơn của khách tự cập nhật khi phía bên kia đổi.
+- Gọi thoại: nút "Loa to / Loa nhỏ" giữa Micro và Kết thúc; trình duyệt không chuyển được loa trong của điện thoại nên web đổi âm lượng giọng bên kia (100% hoặc 35%), mỗi cuộc gọi bắt đầu loa to.
+- Test: `tests/technician-invitation-preview.spec.ts`, `rebook-and-sessions.spec.ts`, `new-booking-wizard-ui.spec.ts`, `chat-attachments-and-lock.spec.ts`, `order-realtime.spec.ts`, `call-speaker-toggle.spec.ts`, `ai-video-attachments.spec.ts`, `ai-booking-attachments.spec.ts`.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -258,7 +269,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Danh sách gửi `page` và `pageSize` hoặc `limit` không quá 100; `status` viết thường đúng enum của `backend`.
 - Backend hiện tại chỉ cho `GET /service-orders/my` và `GET /bookings/my` nhận một `status`; gửi `statuses` hoặc `search` bị `ValidationPipe` từ chối. `CustomerOrdersPage` dùng nhiều request `status` đơn và gộp/lọc ở web. Các endpoint danh sách còn lại vẫn cần đối chiếu riêng trước khi dùng `statuses` hoặc `search`.
 - Thu nhập thợ `GET /technicians/me/earnings?from=&to=&page=&pageSize=` (ngày `yyyy-MM-dd` giờ Việt Nam, gồm cả hai đầu, bỏ trống là mọi lúc) trả tổng của cả kỳ và `payouts` của trang; `GET /warranty-claims/mine` nhận `page`, `pageSize`, `status` và trả `meta.total`. Hai hợp đồng này `backend` làm song song, web CHƯA KIỂM CHỨNG với `backend` thật.
-- Socket.IO tới `<origin của VITE_API_BASE_URL>/chat`: nhận `message:*`, `conversation:updated`, `typing`, `call:*`; gửi `conversation:join`, `conversation:leave`, `typing`, `call:*`.
+- Socket.IO tới `<origin của VITE_API_BASE_URL>/chat`: nhận `message:*`, `conversation:updated`, `typing`, `order:updated` (PO 18/10/2026), `call:*`; gửi `conversation:join`, `conversation:leave`, `typing`, `call:*`.
+- Chat có file (PO 18/10/2026): `POST /conversations/:id/attachments` (multipart `file`, `content`, `clientMessageId`), `GET /messages/:id/attachment` (blob), `ChatMessage.attachment {kind, mimeType, sizeBytes}`, `ConversationItem.closedReason`; video booking `POST /media/booking-video-upload`; xem trước lời mời có `description`, `aiSummary`, `media`, `pricingMode`, `fixedUnitPrice`, `distanceBand {minKm, maxKm}`.
 - AI chỉ qua `POST /ai/diagnoses`, `POST /ai/chat/ask`, `GET /ai/chat/acknowledgements` của `backend`; mô tả tối đa 2000 ký tự, câu hỏi 1000, tối đa 3 ảnh.
 - Thông báo đọc qua REST, đếm chưa đọc mỗi 30 giây khi tab đang mở.
 - Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
@@ -286,10 +298,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Duyệt KYC và quản lý danh mục chỉ admin; quản lý dịch vụ không thấy các mục đó. Từ 14/10/2026 admin duyệt cả xác minh danh tính của khách.
 - Khách rút ví (PO 14/10/2026): rút được toàn bộ số dư, tối thiểu 10.000 ₫ mỗi lần, không phí, chuyển ngay không cần duyệt; lần rút đầu cần xác minh danh tính bằng ảnh hai mặt CCCD và thông tin như trên thẻ; duyệt xong thì họ tên và ngày sinh không đổi được, tên chủ tài khoản ngân hàng phải trùng tên đã xác minh.
 - Khách chọn 1 đến 2 kỹ thuật viên; ví kỹ thuật viên tối thiểu 200.000 ₫ (PO xác nhận 07/10/2026).
+- PO 18/10/2026: thợ thấy đủ chi tiết công việc (mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách hoặc phường/xã) trước khi nhận, trừ địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách; chat khoá khi đơn hoàn tất, mở lại khi khách gửi yêu cầu bảo hành; form đặt lịch không còn thanh kéo mức khẩn cấp; lịch hẹn chọn ngày rồi chọn giờ.
 
 ## 8. Việc đang dở và rủi ro đã biết
 
-- Thông báo dùng polling, chưa nhận đẩy realtime.
+- Thông báo dùng polling, chưa nhận đẩy realtime (đơn đã có `order:updated`).
+- Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (chưa đẩy, chưa có trên `dev`): với backend cũ, video và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có `order:updated`. Video HEVC từ iPhone có thể không phát trên Chrome Windows, CHƯA KIỂM CHỨNG trên máy thật.
 - Khách rút ví và xác minh danh tính (`feat/customer-withdrawal-kyc`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. `mobile` chưa có (PO để mobile làm sau).
 - Tab "Khách hàng" trong rút tiền của console (`feat/staff-customer-withdrawals`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. Tiêu đề trang và mục menu vẫn là "Ví kỹ thuật viên".
 - Tìm kiếm ở `CustomerOrdersPage` phải đọc toàn bộ các trạng thái đang chọn rồi lọc ở web vì hai endpoint `/my` chưa hỗ trợ `search`; cần chuyển lại sang tìm kiếm phía backend khi contract được bổ sung để tránh nhiều request với tài khoản có lịch sử dài.
@@ -304,6 +318,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-18 03:22 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Đợt PO 18/10/2026: lời mời có mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách; bỏ thanh kéo mức khẩn cấp; lịch chọn ngày rồi giờ; trợ lý AI nhận video gửi kèm thợ; chat gửi ảnh/video và khoá khi đơn hoàn tất; order:updated realtime; nút loa to/loa nhỏ khi gọi
 - 2026-10-17 00:04 (UTC+7) | ToanAltF4 | fix/ui-feedback | Sửa theo góp ý giao diện: Đơn của tôi chọn một trong hai danh sách (Đơn sửa chữa / Yêu cầu đặt lịch, có số đếm, ?list=), đơn chờ thợ thay thế hiện Đang tìm thợ thay thế; thợ thấy Bạn đã rời đơn với đơn đã rút; bảo hành ghi Công sửa/Linh kiện, tên hạng mục và số ngày còn lại; thêm màu ink-950 nên các hộp thoại có lại nền mờ, test quét màu theme
 - 2026-10-16 23:30 (UTC+7) | ToanAltF4 | chore/merge-main-into-dev | Gộp main vào dev để PR #147 hết conflict: giữ giao diện mới của main (ví, trợ lý AI, chat, đặt lịch), ghép lại phần của dev (rút tiền ví khách, nút Đặt thợ chỉ hiện khi trợ lý trả lời xong, gọi thoại isBusy, check-in dùng vị trí ping gần nhất); trang ví import đủ icon còn thiếu bên main
 - 2026-10-16 19:24 (UTC+7) | ToanAltF4 | fix/map-worker-build | Bản đồ trên bản build triển khai chỉ hiện nền: maplibre 6 tìm worker cạnh file của nó lúc chạy nên Vite không xuất worker (fixhome.sbs trả index.html); nay build worker bằng ?worker&url (worker.format es) và setWorkerUrl trước khi tạo bản đồ
@@ -343,4 +358,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-10 00:58 (UTC+7) | ToanAltF4 | feat/console-ui-redesign | Làm lại giao diện console: tiêu đề, menu, bảng, lỗi tải thống nhất, bỏ mã thô
 - 2026-10-10 00:44 (UTC+7) | ToanAltF4 | feat/customer-ui-redesign | Khu khách hàng: mỗi hành động một lần, menu ⋯ cho huỷ, khung xám khi tải, gom thông tin vào một khối
 - 2026-10-10 00:40 (UTC+7) | ToanAltF4 | feat/technician-ui-redesign | Khu kỹ thuật viên gọn lại: trang công việc chỉ hiện việc cần làm, các bước sau Xem thêm, Huỷ đơn thay Rút khỏi đơn, bỏ nút trùng ở layout và các trang
-- 2026-10-10 00:14 (UTC+7) | ToanAltF4 | feat/unified-header-landing | Gộp header thống nhất lên dev mới (giữ luật bỏ nghiệm thu ở landing)

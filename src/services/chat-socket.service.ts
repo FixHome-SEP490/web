@@ -58,7 +58,15 @@ export interface CallInviteResult {
   reason?: 'invalid' | 'forbidden' | 'busy' | 'self_busy' | 'offline';
 }
 
+/** An order changed on the server (status, quotation, invoice, payment, warranty), PO 18/10/2026. */
+export interface OrderUpdatedEvent {
+  serviceOrderId: string;
+  bookingId: string;
+  status: string;
+}
+
 export interface ChatSocketHandlers {
+  onOrderUpdated?: (event: OrderUpdatedEvent) => void;
   onMessageNew?: (message: ChatMessage) => void;
   onMessageUpdated?: (message: ChatMessage) => void;
   onMessageDeleted?: (message: ChatMessage) => void;
@@ -197,6 +205,7 @@ class ChatSocketService {
         this.emitToHandlers('onConversationUpdated', p),
       );
       socket.on('typing', (e: TypingEvent) => this.emitToHandlers('onTyping', e));
+      socket.on('order:updated', (e: OrderUpdatedEvent) => this.emitToHandlers('onOrderUpdated', e));
 
       socket.on(
         'connect:ready',

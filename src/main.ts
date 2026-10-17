@@ -6,6 +6,7 @@ import App from './App.vue';
 import { queryClient } from './lib/query-client';
 import { keysChangedBy, markChanged } from './lib/query-keys';
 import { registerMutationListener } from './api/client';
+import { startOrderRealtime } from './services/order-realtime';
 import './assets/theme.css';
 
 
@@ -16,6 +17,8 @@ app.use(VueQueryPlugin, { queryClient });
 // Safety net: any successful write drops or marks stale the cached data it may
 // have changed, even from a page that does not refresh the cache itself.
 registerMutationListener((url) => markChanged(queryClient, keysChangedBy(url)));
+// Changes made by the other side (the customer paid, the technician set out) arrive over the socket.
+startOrderRealtime(queryClient);
 app.use(router);
 
 app.mount('#app');
