@@ -82,7 +82,7 @@ const canSend = computed(() => {
 const callStore = useCallStore();
 
 const callButtonTitle = computed(() => {
-  if (callStore.isActive) return 'Đang có cuộc gọi khác';
+  if (callStore.isBusy) return 'Đang có cuộc gọi khác';
   if (!chatStore.isSocketConnected) return 'Mất kết nối, chưa gọi được';
   return 'Gọi thoại';
 });
@@ -275,7 +275,7 @@ function handleHeaderClick() {
           v-if="canSend && !isMinimized"
           type="button"
           class="p-1.5 text-ink-500 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="callStore.isActive || !chatStore.isSocketConnected"
+          :disabled="callStore.isBusy || !chatStore.isSocketConnected"
           :title="callButtonTitle"
           :aria-label="callButtonTitle"
           @click.stop="startVoiceCall"

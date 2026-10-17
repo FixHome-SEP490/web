@@ -2,6 +2,7 @@ import type { Component } from 'vue';
 import {
   Award,
   Ban,
+  Bot,
   Boxes,
   CreditCard,
   FolderKanban,
@@ -44,7 +45,7 @@ const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
 const bookings = item('Gán thợ', '/console/bookings', UserPlus);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
-const technicianWallets = item('Ví kỹ thuật viên', '/console/wallets', Wallet);
+const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
 const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', MapPinned);
 
 /**
@@ -54,7 +55,7 @@ const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', Map
 export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, technicianWallets, serviceAreas] },
+      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, payouts, serviceAreas] },
       {
         group: 'Hỗ trợ',
         items: [
@@ -68,11 +69,14 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
   }
   if (role === 'ADMIN') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, warranty] },
+      {
+        group: 'Vận hành',
+        items: [overview, orders, bookings, partRequests, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+      },
       {
         group: 'Kỹ thuật viên',
         items: [
-          item('Duyệt hồ sơ', '/console/technicians', UserCheck),
+          item('Duyệt danh tính', '/console/technicians', UserCheck),
           item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award),
           item('Tra cứu', '/console/admin/technician-directory', UserSearch),
         ],
@@ -81,7 +85,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
         group: 'Tài chính',
         items: [
           item('Thanh toán', '/console/admin/payments', CreditCard),
-          technicianWallets,
+          payouts,
           item('Ví khách hàng', '/console/admin/customer-wallets', WalletCards),
           item('Công nợ nền tảng', '/console/admin/platform-dues', Receipt),
         ],

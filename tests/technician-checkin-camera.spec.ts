@@ -203,6 +203,44 @@ describe('technician check-in with the face camera', () => {
     wrapper.unmount();
   });
 
+  describe('the browser gives no fresh fix at check-in', () => {
+    const pingFix = { coords: { latitude: 10.7745, longitude: 106.7019, accuracy: 30 } };
+    const withPingGeolocation = () =>
+      Object.defineProperty(navigator, 'geolocation', {
+        configurable: true,
+        value: { getCurrentPosition: (ok: (p: unknown) => void) => ok(pingFix), watchPosition: vi.fn(), clearWatch: vi.fn() },
+      });
+    const dropGeolocation = () => Object.defineProperty(navigator, 'geolocation', { configurable: true, value: undefined });
+
+    it('checks in with the en-route ping fix from the last two minutes', async () => {
+      withPingGeolocation();
+      getBestPosition.mockRejectedValueOnce(new Error('unavailable'));
+      const wrapper = await mountPage();
+      await primary(wrapper, 'Check-in').trigger('click');
+      await shoot(wrapper);
+      expect(mockPost).toHaveBeenCalledWith('/service-orders/job-1/check-in', { lat: 10.7745, lng: 106.7019, accuracyMeters: 30 });
+      expect(evidenceTypesPosted()).toEqual(['checkin_face']);
+      wrapper.unmount();
+      dropGeolocation();
+    });
+
+    it('a ping fix older than two minutes is not used', async () => {
+      withPingGeolocation();
+      const start = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start);
+      const wrapper = await mountPage();
+      clock.mockReturnValue(start + 121_000);
+      getBestPosition.mockRejectedValueOnce(new Error('unavailable'));
+      await primary(wrapper, 'Check-in').trigger('click');
+      await shoot(wrapper);
+      expect(wrapper.text()).toContain('Không lấy được vị trí. Hãy cho phép trình duyệt dùng vị trí rồi thử lại.');
+      expect(posts('/check-in')).toHaveLength(0);
+      clock.mockRestore();
+      wrapper.unmount();
+      dropGeolocation();
+    });
+  });
+
   it('valid check-in but the face upload fails: the next action takes the face again', async () => {
     server.failEvidence = true;
     const wrapper = await mountPage();

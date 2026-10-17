@@ -20,6 +20,7 @@ import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
 import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import CustomerWithdrawalsTab from '../../components/console/CustomerWithdrawalsTab.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
 import {
   formatCurrencyVND,
@@ -28,11 +29,21 @@ import {
   formatWithdrawalStatus,
 } from '../../utils/formatters';
 import { extractApiErrorMessage } from '../../utils/input-validation';
+import { consoleCustomerWithdrawalsApi } from '../../api/console-customer-withdrawals.api';
+import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
+import { useQueryChoice } from '../../composables/useQueryState';
+import { queryKeys } from '../../lib/query-keys';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.userRole === 'ADMIN');
 
-const activeTab = ref<'wallets' | 'withdrawals' | 'config'>('wallets');
+// Withdrawals of technicians and of customers (PO 16/10/2026) are two lists
+// with their own totals, never mixed; only the payOS source balance is shared
+// (one payout channel) and shown once above them (?payout=customers).
+type PayoutTab = 'technicians' | 'customers';
+const payoutTab = useQueryChoice<PayoutTab>('payout', ['technicians', 'customers'], 'technicians');
+
+const activeTab = ref<'wallets' | 'withdrawals' | 'config'>(payoutTab.value === 'customers' ? 'withdrawals' : 'wallets');
 
 // Tab 1: Wallets State
 const wallets = ref<WalletListItem[]>([]);
@@ -87,6 +98,32 @@ const payoutOverview = ref<PayoutOverview | null>(null);
 /** Id of the withdrawal whose payout is being re-checked with payOS. */
 const reconcilingId = ref<string | null>(null);
 
+// Customer side of the payout section: read only while its tab is open.
+const showingCustomerPayouts = computed(() => activeTab.value === 'withdrawals' && payoutTab.value === 'customers');
+const customerPayout = useCachedQuery({
+  key: queryKeys.wallet.consoleCustomerPayout,
+  fetch: () => consoleCustomerWithdrawalsApi.payoutOverview(),
+  enabled: showingCustomerPayouts,
+});
+// The overview is extra context: a failed read hides it, the list still loads on its own.
+const customerOverview = computed(() => (customerPayout.error.value ? null : customerPayout.data.value ?? null));
+const customerOverviewLoading = computed(() => customerPayout.loading.value);
+/** Customer withdrawals for the current filter; known once the customer tab has read its list. */
+const customerWdTotal = ref<number | null>(null);
+const cache = useCacheUpdates();
+
+/** The payout channel both tabs share; either overview carries its balance. */
+const sourceOverview = computed<PayoutOverview | null>(() =>
+  payoutTab.value === 'customers'
+    ? customerOverview.value ?? payoutOverview.value
+    : payoutOverview.value ?? customerOverview.value,
+);
+
+const payoutTabs = computed(() => [
+  { key: 'technicians' as const, label: 'Kỹ thuật viên', count: wdTotal.value },
+  { key: 'customers' as const, label: 'Khách hàng', count: customerWdTotal.value },
+]);
+
 // Admin Adjust Modal
 const showAdjustModal = ref(false);
 const selectedWalletForAdjust = ref<WalletListItem | null>(null);
@@ -104,14 +141,18 @@ const techTxLoading = ref(false);
 const techTxError = ref(false);
 
 const tabs = computed(() => [
-  { key: 'wallets' as const, label: 'Ví', count: walletsTotal.value },
-  { key: 'withdrawals' as const, label: 'Yêu cầu rút tiền', count: wdTotal.value },
+  { key: 'wallets' as const, label: 'Ví kỹ thuật viên', count: walletsTotal.value },
+  { key: 'withdrawals' as const, label: 'Yêu cầu rút tiền' },
   ...(isAdmin.value ? [{ key: 'config' as const, label: 'Cấu hình' }] : []),
 ]);
 
 const refreshActiveTab = () => {
   if (activeTab.value === 'wallets') void loadWallets();
   else if (activeTab.value === 'withdrawals') {
+    if (payoutTab.value === 'customers') {
+      void cache.refresh([queryKeys.wallet.consoleCustomerWithdrawalsAll]);
+      return;
+    }
     void loadWithdrawals();
     void loadPayoutOverview();
   } else void loadConfig();
@@ -301,11 +342,18 @@ watch(wdStatusFilter, () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'wallets') loadWallets();
-  if (tab === 'withdrawals') {
+  if (tab === 'withdrawals' && payoutTab.value === 'technicians') {
     loadWithdrawals();
     loadPayoutOverview();
   }
   if (tab === 'config') loadConfig();
+});
+
+watch(payoutTab, (tab) => {
+  if (tab === 'technicians' && activeTab.value === 'withdrawals') {
+    loadWithdrawals();
+    loadPayoutOverview();
+  }
 });
 
 onMounted(() => {
@@ -320,7 +368,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Ví kỹ thuật viên">
+    <ConsolePageHeader title="Chi hộ và rút tiền">
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem @click="refreshActiveTab">Làm mới</ConsoleMenuItem>
@@ -390,25 +438,42 @@ onMounted(() => {
       <ConsolePagination :page="walletsPage" :total-pages="walletsTotalPages" :disabled="walletsLoading" @update:page="(p) => { walletsPage = p; loadWallets(); }" />
     </div>
 
-    <!-- Withdrawals -->
+    <!-- Withdrawals: technicians and customers apart, one shared payout source -->
     <div v-else-if="activeTab === 'withdrawals'" class="space-y-4">
-      <template v-if="payoutOverview">
+      <template v-if="sourceOverview">
         <p
-          v-if="payoutOverview.provider === 'disabled'"
+          v-if="sourceOverview.provider === 'disabled'"
           class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700"
           role="alert"
         >
           <AlertCircle :size="16" class="shrink-0" aria-hidden="true" />
-          Chưa cấu hình payOS nên chưa thể chi tiền rút cho kỹ thuật viên.
+          Chưa cấu hình payOS nên chưa thể chi tiền rút cho {{ payoutTab === 'customers' ? 'khách hàng' : 'kỹ thuật viên' }}.
         </p>
-        <section class="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Tổng quan chi tiền">
-          <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
+        <section
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4"
+          aria-label="Ví nguồn chi hộ"
+          data-testid="payout-source"
+        >
+          <div class="min-w-0">
             <div class="whitespace-nowrap text-sm text-ink-500">Ví nguồn chi hộ</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-ink-900">
-              {{ payoutOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(payoutOverview.sourceBalance) }}
-            </div>
-            <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ' }}</div>
+            <div class="mt-0.5 text-xs text-ink-500">{{ sourceOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ, chung cho kỹ thuật viên và khách hàng' }}</div>
           </div>
+          <div class="whitespace-nowrap font-num text-xl font-semibold text-ink-900">
+            {{ sourceOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(sourceOverview.sourceBalance) }}
+          </div>
+        </section>
+      </template>
+
+      <ConsoleTabs v-model="payoutTab" :tabs="payoutTabs" />
+
+      <CustomerWithdrawalsTab
+        v-if="payoutTab === 'customers'"
+        :overview="customerOverview"
+        :overview-loading="customerOverviewLoading"
+        @total="customerWdTotal = $event"
+      />
+      <template v-else>
+        <section v-if="payoutOverview" class="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Tổng quan chi tiền">
           <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
             <div class="whitespace-nowrap text-sm text-ink-500">Đã chuyển cho kỹ thuật viên</div>
             <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-success-600">{{ formatCurrencyVND(payoutOverview.paidOut.amount) }}</div>
@@ -419,68 +484,68 @@ onMounted(() => {
             <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-info-600">{{ formatCurrencyVND(payoutOverview.processing.amount) }}</div>
             <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.processing.count }} lệnh chờ payOS xác nhận</div>
           </div>
-          <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
+          <div class="col-span-2 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4 sm:col-span-1">
             <div class="whitespace-nowrap text-sm text-ink-500">Chuyển thất bại</div>
             <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-danger-600">{{ formatCurrencyVND(payoutOverview.failed.amount) }}</div>
             <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.failed.count }} lệnh, tiền đã hoàn về ví kỹ thuật viên</div>
           </div>
         </section>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <select v-model="wdStatusFilter" :class="consoleField" aria-label="Trạng thái rút tiền">
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="PENDING">Chờ duyệt</option>
+            <option value="PROCESSING">Đang chuyển tiền</option>
+            <option value="SUCCESS">Đã chi tiền</option>
+            <option value="FAILED">Chuyển thất bại</option>
+            <option value="REJECTED">Đã từ chối</option>
+          </select>
+        </div>
+
+        <ConsoleLoadError v-if="wdError" @retry="loadWithdrawals" />
+        <ConsoleTable
+          v-else
+          :columns="wdColumns"
+          :rows="withdrawals"
+          :loading="wdLoading"
+          empty-text="Chưa có yêu cầu rút tiền nào."
+        >
+          <template #cell-requestedAt="{ row }">
+            <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.requestedAt) }}</span>
+          </template>
+          <template #cell-technician="{ row }">
+            <div class="whitespace-nowrap font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
+            <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ row.technician?.phoneNumber || '—' }}</div>
+          </template>
+          <template #cell-amount="{ row }">
+            <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(row.amount) }}</span>
+          </template>
+          <template #cell-bankInfo="{ row }">
+            <div class="whitespace-nowrap text-ink-900">{{ row.bankName }}</div>
+            <div class="whitespace-nowrap text-xs text-ink-500"><span class="font-num">{{ row.bankAccountNumber }}</span> · {{ row.bankAccountName }}</div>
+          </template>
+          <template #cell-status="{ row }">
+            <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
+            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-xs text-rose-600">Lý do: {{ row.rejectReason }}</div>
+            <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-xs text-rose-600">{{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví</div>
+            <div v-if="row.status === 'PROCESSING' && row.failureReason" class="mt-1 max-w-56 text-xs text-info-600">{{ row.failureReason }}</div>
+            <div v-if="row.status === 'SUCCESS'" class="mt-1 whitespace-nowrap text-xs text-ink-500">
+              <template v-if="row.payoutBankReference">Mã giao dịch <span class="font-num font-medium text-ink-700">{{ row.payoutBankReference }}</span></template>
+              <template v-else-if="row.processedAt"><span class="font-num">{{ formatDateTimeVN(row.processedAt) }}</span></template>
+            </div>
+          </template>
+          <template #cell-actions="{ row }">
+            <FhButton
+              v-if="row.status === 'PROCESSING'"
+              variant="secondary"
+              size="sm"
+              :loading="reconcilingId === row.id"
+              @click="handleReconcile(row)"
+            >Kiểm tra lại</FhButton>
+          </template>
+        </ConsoleTable>
+        <ConsolePagination :page="wdPage" :total-pages="wdTotalPages" :disabled="wdLoading" @update:page="(p) => { wdPage = p; loadWithdrawals(); }" />
       </template>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <select v-model="wdStatusFilter" :class="consoleField" aria-label="Trạng thái rút tiền">
-          <option value="ALL">Tất cả trạng thái</option>
-          <option value="PENDING">Chờ duyệt</option>
-          <option value="PROCESSING">Đang chuyển tiền</option>
-          <option value="SUCCESS">Đã chi tiền</option>
-          <option value="FAILED">Chuyển thất bại</option>
-          <option value="REJECTED">Đã từ chối</option>
-        </select>
-      </div>
-
-      <ConsoleLoadError v-if="wdError" @retry="loadWithdrawals" />
-      <ConsoleTable
-        v-else
-        :columns="wdColumns"
-        :rows="withdrawals"
-        :loading="wdLoading"
-        empty-text="Chưa có yêu cầu rút tiền nào."
-      >
-        <template #cell-requestedAt="{ row }">
-          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.requestedAt) }}</span>
-        </template>
-        <template #cell-technician="{ row }">
-          <div class="whitespace-nowrap font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
-          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ row.technician?.phoneNumber || '—' }}</div>
-        </template>
-        <template #cell-amount="{ row }">
-          <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(row.amount) }}</span>
-        </template>
-        <template #cell-bankInfo="{ row }">
-          <div class="whitespace-nowrap text-ink-900">{{ row.bankName }}</div>
-          <div class="whitespace-nowrap text-xs text-ink-500"><span class="font-num">{{ row.bankAccountNumber }}</span> · {{ row.bankAccountName }}</div>
-        </template>
-        <template #cell-status="{ row }">
-          <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
-          <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-xs text-rose-600">Lý do: {{ row.rejectReason }}</div>
-          <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-xs text-rose-600">{{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví</div>
-          <div v-if="row.status === 'PROCESSING' && row.failureReason" class="mt-1 max-w-56 text-xs text-info-600">{{ row.failureReason }}</div>
-          <div v-if="row.status === 'SUCCESS'" class="mt-1 whitespace-nowrap text-xs text-ink-500">
-            <template v-if="row.payoutBankReference">Mã giao dịch <span class="font-num font-medium text-ink-700">{{ row.payoutBankReference }}</span></template>
-            <template v-else-if="row.processedAt"><span class="font-num">{{ formatDateTimeVN(row.processedAt) }}</span></template>
-          </div>
-        </template>
-        <template #cell-actions="{ row }">
-          <FhButton
-            v-if="row.status === 'PROCESSING'"
-            variant="secondary"
-            size="sm"
-            :loading="reconcilingId === row.id"
-            @click="handleReconcile(row)"
-          >Kiểm tra lại</FhButton>
-        </template>
-      </ConsoleTable>
-      <ConsolePagination :page="wdPage" :total-pages="wdTotalPages" :disabled="wdLoading" @update:page="(p) => { wdPage = p; loadWithdrawals(); }" />
     </div>
 
     <!-- Wallet settings (admin) -->

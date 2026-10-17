@@ -14,7 +14,7 @@ import {
 import { FhButton, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal from '../../components/customer/WarrantyClaimModal.vue';
-import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
+import { coverageKindLabel, ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
@@ -457,7 +457,7 @@ onUnmounted(() => {
                 class="flex items-center justify-between gap-2.5 px-3 py-2 hover:bg-ink-50/50 transition-colors"
               >
                 <span class="min-w-0 truncate font-medium text-ink-800" :title="item.itemDescription">
-                  {{ item.itemDescription }}
+                  <span v-if="coverageKindLabel(item.kind)" class="text-ink-500 font-normal">{{ coverageKindLabel(item.kind) }} · </span>{{ item.itemDescription }}
                 </span>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="text-ink-400 font-num text-[11px]">{{ formatDate(item.expiresAt) }}</span>

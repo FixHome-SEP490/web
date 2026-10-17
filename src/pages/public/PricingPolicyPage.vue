@@ -27,7 +27,7 @@ useSmoothScroll();
       <div class="w-16 h-16 rounded-full bg-brand-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-brand-500/30">
         <ShieldCheck :size="32" stroke-width="2" />
       </div>
-      <div class="space-y-4 text-brand-950">
+      <div class="space-y-4 text-brand-900">
         <h3 class="text-2xl font-bold text-brand-900">Cam kết 3 Không về Giá cả:</h3>
         <ul class="space-y-3 font-medium text-brand-900/80 leading-relaxed text-base">
           <li class="flex gap-3 items-start"><span class="mt-1 text-brand-600 font-bold">•</span> <span><strong>Không gộp giá:</strong> Tuyệt đối không cho phép báo giá "trọn gói mập mờ" không tách rõ linh kiện.</span></li>

@@ -42,7 +42,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
@@ -185,6 +185,13 @@ const aiSessionId = computed(() => {
   return id && SESSION_PATTERN.test(id) ? id : null;
 });
 const aiSuggested = computed(() => aiConversation.pinnedService.value);
+// The latest reply may only answer a question; the appliance comes from the last one that named it.
+const aiRecap = computed(() => {
+  if (!aiSessionId.value) return null;
+  const last = aiConversation.lastReply.value;
+  const device = last?.device ?? [...aiConversation.messages.value].reverse().find((m) => m.reply?.device)?.reply?.device ?? null;
+  return bookingRecap(last ? { ...last, device } : null);
+});
 const aiSuggestsOtherService = computed(
   () => !!aiSuggested.value?.serviceId && aiSuggested.value.serviceId !== selectedServiceId.value,
 );
@@ -1224,7 +1231,7 @@ const createAndFindTech = async () => {
                   <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
                     Gói trọn gói chuẩn
                   </span>
-                  <span class="font-bold text-xs sm:text-sm text-brand-950">
+                  <span class="font-bold text-xs sm:text-sm text-brand-900">
                     {{ selectedService?.name }}
                   </span>
                 </div>
@@ -1827,11 +1834,11 @@ const createAndFindTech = async () => {
 
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
+        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
           <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
-          <FhButton variant="primary" size="md" data-testid="step2-next" @click="goToNextStepFrom2">
+          <FhButton variant="primary" size="md" class="w-full sm:w-auto" data-testid="step2-next" @click="goToNextStepFrom2">
             Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
           </FhButton>
 
@@ -1865,7 +1872,7 @@ const createAndFindTech = async () => {
           <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
             <template #pinned>
               <div
-                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId"
+                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
                 class="flex flex-wrap items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
                 data-testid="ai-suggested-service"
               >
@@ -1932,13 +1939,36 @@ const createAndFindTech = async () => {
           </p>
         </div>
 
-        <p
-          v-if="aiSessionId"
-          data-testid="ai-summary-note"
-          class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
-        >
-          Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
-        </p>
+        <div v-if="aiSessionId" class="space-y-3">
+          <dl
+            v-if="aiRecap"
+            data-testid="ai-recap"
+            class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2 text-sm"
+          >
+            <div v-if="aiRecap.device" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Thiết bị</dt>
+              <dd class="text-ink-900">{{ aiRecap.device }}</dd>
+            </div>
+            <div v-if="aiRecap.faults.length" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Có thể là</dt>
+              <dd class="text-ink-900">{{ aiRecap.faults.join(', ') }}</dd>
+            </div>
+            <div v-if="aiRecap.told.length" class="flex gap-3">
+              <dt class="w-28 shrink-0 text-ink-500">Bạn đã cho biết</dt>
+              <dd class="text-ink-900">
+                <ul class="space-y-0.5" data-testid="ai-recap-told">
+                  <li v-for="line in aiRecap.told" :key="line" class="text-pretty">{{ line }}</li>
+                </ul>
+              </dd>
+            </div>
+          </dl>
+          <p
+            data-testid="ai-summary-note"
+            class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
+          >
+            Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
+          </p>
+        </div>
 
         <div class="space-y-4 text-xs sm:text-sm">
           <div class="p-5 rounded-2xl bg-ink-50 border border-ink-200 space-y-3 divide-y divide-ink-200/60">
@@ -1960,7 +1990,7 @@ const createAndFindTech = async () => {
                 <span class="font-bold text-ink-900 font-num">{{ quantity }} {{ selectedService?.unit || 'thiết bị' }}</span>
               </div>
               <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
-                <span class="font-bold text-brand-950">Tổng thanh toán niêm yết:</span>
+                <span class="font-bold text-brand-900">Tổng thanh toán niêm yết:</span>
                 <span class="font-bold text-brand-700 text-base font-num">
                   <FhMoney :amount="totalFixedAmount" />
                 </span>
@@ -2005,7 +2035,7 @@ const createAndFindTech = async () => {
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-5 border-t border-ink-100">
+        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
           <FhButton variant="ghost" size="md" @click="step = 2">
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
@@ -2013,6 +2043,7 @@ const createAndFindTech = async () => {
           <FhButton
             variant="primary"
             size="lg"
+            class="w-full sm:w-auto"
             :loading="loading"
             @click="createAndFindTech"
           >

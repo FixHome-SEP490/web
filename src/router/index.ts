@@ -151,6 +151,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Ví của tôi' },
       },
       {
+        // Once, before the first withdrawal (PO 14/10/2026).
+        path: 'kyc',
+        name: 'customer-kyc',
+        component: () => import('../pages/customer/CustomerKycPage.vue'),
+        meta: { title: 'Xác minh danh tính' },
+      },
+      {
         path: 'warranties',
         name: 'customer-warranties',
         component: () => import('../pages/customer/CustomerWarrantiesPage.vue'),
@@ -304,14 +311,15 @@ const routes: RouteRecordRaw[] = [
         path: 'wallets',
         name: 'console-wallets',
         component: () => import('../pages/console/ConsoleWalletsPage.vue'),
-        meta: { title: 'Ví kỹ thuật viên', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        meta: { title: 'Chi hộ và rút tiền', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        // KYC decisions are Admin's (BRX-041); the page has nothing else.
-        meta: { title: 'Duyệt hồ sơ kỹ thuật viên', roles: ['ADMIN'] },
+        // KYC decisions are Admin's (BRX-041): technicians, and customers before
+        // their first withdrawal (PO 14/10/2026). The page has nothing else.
+        meta: { title: 'Duyệt xác minh danh tính', roles: ['ADMIN'] },
       },
       {
         path: 'cancellations',
@@ -384,6 +392,12 @@ const routes: RouteRecordRaw[] = [
         name: 'admin-customer-wallets',
         component: () => import('../pages/console/admin/AdminCustomerWalletsPage.vue'),
         meta: { title: 'Ví khách hàng', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/ai-quality',
+        name: 'admin-ai-quality',
+        component: () => import('../pages/console/admin/AdminAiQualityPage.vue'),
+        meta: { title: 'Chất lượng trợ lý AI', roles: ['ADMIN'] },
       },
       {
         path: 'admin/payments',

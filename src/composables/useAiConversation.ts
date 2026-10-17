@@ -67,6 +67,36 @@ export interface AiConversationOptions {
   onUpdate?: () => void;
   /** Test seam for the acknowledgement pause. */
   dwellMs?: number;
+  /**
+   * Pause between the pieces of a reply as it is written out. Defaults to a
+   * short pause in a browser and none where motion is reduced or there is no
+   * browser (tests); 0 shows the reply at once.
+   */
+  revealMs?: number;
+}
+
+/** A reply is written out in at most this many steps, so a long one still takes about a second. */
+export const REVEAL_STEPS = 40;
+const REVEAL_DEFAULT_MS = 28;
+
+function defaultRevealMs(): number {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 0;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : REVEAL_DEFAULT_MS;
+}
+
+/**
+ * The text as it grows: whole words, at most REVEAL_STEPS pieces, the last one
+ * the full text. The reply has already passed every check on the server; this
+ * only paces how it appears.
+ */
+export function revealSteps(text: string): string[] {
+  const words = text.split(/(?<=\s)/);
+  if (words.length <= 1) return [text];
+  const size = Math.max(1, Math.ceil(words.length / REVEAL_STEPS));
+  const steps: string[] = [];
+  for (let end = size; end < words.length; end += size) steps.push(words.slice(0, end).join('').trimEnd());
+  steps.push(text);
+  return steps;
 }
 
 let messageCounter = 0;
@@ -104,7 +134,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   const messages = ref<AiChatMessage[]>(greetingMessage());
   const input = ref('');
   const pending = ref<PickedImage[]>([]);
+  /** True from Send until the reply is fully on screen: nothing to act on before then. */
   const isThinking = ref(false);
+  /** The reply is being written out; the typing dots give way to it. */
+  const isRevealing = ref(false);
   const turnCount = ref(0);
   const problem = ref('');
 
@@ -232,12 +265,28 @@ export function useAiConversation(options: AiConversationOptions = {}) {
       !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
     if (offered && !keepsSpecific) pinnedService.value = offered;
 
-    messages.value.push({
-      id: nextId(),
-      sender: 'bot',
-      text: reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply),
-      reply,
-    });
+    const shown = reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply);
+    const pace = options.revealMs ?? defaultRevealMs();
+    const steps = pace > 0 ? revealSteps(shown) : [shown];
+    if (steps.length === 1) {
+      messages.value.push({ id: nextId(), sender: 'bot', text: shown, reply });
+    } else {
+      // Written out piece by piece; the details under it (price, services,
+      // questions) and every button come only once the whole text is there.
+      isRevealing.value = true;
+      messages.value.push({ id: nextId(), sender: 'bot', text: '' });
+      const live = messages.value[messages.value.length - 1];
+      for (const step of steps) {
+        // Started over meanwhile: this reply belongs to a conversation that is gone.
+        if (!messages.value.includes(live)) break;
+        live.text = step;
+        updated();
+        if (step !== shown) await new Promise((resolve) => setTimeout(resolve, pace));
+      }
+      live.text = shown;
+      live.reply = reply;
+      isRevealing.value = false;
+    }
     isThinking.value = false;
     updated();
   }
@@ -272,6 +321,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     sessionId,
     pinnedService,
     lastReply,
+    isRevealing,
     canSend,
     needsDescription,
     loadHoldingLines,
@@ -285,6 +335,22 @@ export function useAiConversation(options: AiConversationOptions = {}) {
 }
 
 export type AiConversation = ReturnType<typeof useAiConversation>;
+
+/**
+ * One-tap answers to the question the assistant just asked, or none when the
+ * question is not a yes/no one ("bắt đầu từ khi nào?"). A tapped answer cannot
+ * be misread, and an older customer does not have to type it. "Không rõ" is
+ * an answer too: the assistant moves on instead of waiting for a yes or no.
+ */
+export function quickReplies(question: string | undefined | null): string[] {
+  const q = (question || '').normalize('NFC').trim().toLowerCase();
+  if (!q.endsWith('?')) return [];
+  const words = q.slice(0, -1).trim().split(/\s+/);
+  const last = words[words.length - 1];
+  if (last === 'chưa') return ['Rồi', 'Chưa', 'Không rõ'];
+  if (last === 'không') return ['Có', 'Không', 'Không rõ'];
+  return [];
+}
 
 let shared: AiConversation | null = null;
 
@@ -302,4 +368,45 @@ export function useSharedAiConversation(): AiConversation {
 /** Test seam: forget the shared conversation. */
 export function resetSharedAiConversation() {
   shared = null;
+}
+
+export interface BookingRecap {
+  device: string | null;
+  faults: string[];
+  told: string[];
+}
+
+// The AI writes its notes about "Khách" for the technician; the customer reads them as their own.
+const TOLD_FOR_CUSTOMER: Array<[RegExp, string]> = [
+  [/^Khách bác khả năng /, 'Không phải '],
+  [/^Khách nghi /, 'Bạn nghi '],
+  [/^Khách từng đặt /, 'Bạn từng đặt '],
+  [/^Khách có tả /, 'Có '],
+  [/^Khách cho biết /, ''],
+  [/^Khách /, ''],
+];
+
+/**
+ * What the technician will be handed, shown to the customer on the confirm
+ * step so they see they will not have to tell it all again. Empty when the
+ * assistant has not named anything yet.
+ */
+export function bookingRecap(reply: AiReply | null | undefined): BookingRecap | null {
+  if (!reply) return null;
+  const device = reply.device?.nameVi?.trim() || null;
+  const faults = (reply.suspectedFaults ?? [])
+    .map((fault) => fault.nameVi?.trim())
+    .filter((name): name is string => !!name)
+    .slice(0, 2);
+  const told = (reply.notesVi ?? [])
+    .map((note) => (note || '').trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((note) => {
+      const rule = TOLD_FOR_CUSTOMER.find(([pattern]) => pattern.test(note));
+      const text = rule ? note.replace(rule[0], rule[1]) : note;
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    });
+  if (!device && !faults.length && !told.length) return null;
+  return { device, faults, told };
 }

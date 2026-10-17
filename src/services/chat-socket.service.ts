@@ -1,5 +1,6 @@
 // src/services/chat-socket.service.ts
 import { io, Socket } from 'socket.io-client';
+import apiClient from '../api/client';
 import type { ChatMessage } from '../api/messaging.api';
 
 export interface TypingEvent {
@@ -15,7 +16,9 @@ export type CallEndReason =
   | 'ended'
   | 'timeout'
   | 'disconnected'
-  | 'busy';
+  | 'busy'
+  /** Picked up on another of this person's devices. */
+  | 'answered_elsewhere';
 
 export interface IncomingCallEvent {
   callId: string;
@@ -26,6 +29,16 @@ export interface IncomingCallEvent {
 export interface CallAcceptedEvent {
   callId: string;
   conversationId: string;
+}
+
+/** The callee's device is showing the call. */
+export type CallRingingEvent = CallAcceptedEvent;
+
+/** Someone tried to call you while you were on another call. */
+export interface CallMissedEvent {
+  conversationId: string;
+  fromUserId: string;
+  reason: 'busy';
 }
 
 export interface CallEndedEvent {
@@ -42,7 +55,7 @@ export interface CallSignalEvent<T> {
 export interface CallInviteResult {
   ok: boolean;
   callId?: string;
-  reason?: 'invalid' | 'forbidden' | 'busy';
+  reason?: 'invalid' | 'forbidden' | 'busy' | 'self_busy' | 'offline';
 }
 
 export interface ChatSocketHandlers {
@@ -54,7 +67,9 @@ export interface ChatSocketHandlers {
   onStatusChange?: (connected: boolean) => void;
   onReconnected?: () => void;
   onCallIncoming?: (event: IncomingCallEvent) => void;
+  onCallRinging?: (event: CallRingingEvent) => void;
   onCallAccepted?: (event: CallAcceptedEvent) => void;
+  onCallMissed?: (event: CallMissedEvent) => void;
   onCallEnded?: (event: CallEndedEvent) => void;
   onCallOffer?: (event: CallSignalEvent<RTCSessionDescriptionInit>) => void;
   onCallAnswer?: (event: CallSignalEvent<RTCSessionDescriptionInit>) => void;
@@ -63,6 +78,13 @@ export interface ChatSocketHandlers {
 
 /** How long to wait for the server to acknowledge a call request. */
 const ACK_TIMEOUT_MS = 8000;
+
+/**
+ * A socket the server turned away (an expired token after a restart or a long
+ * sleep) is not retried by Socket.IO on its own. We refresh the session and try
+ * again, a few times, a little later each time.
+ */
+const AUTH_RETRY_DELAYS_MS = [500, 2000, 5000, 10000, 20000];
 
 function socketOrigin(): string {
   const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
@@ -75,6 +97,9 @@ class ChatSocketService {
   private connecting: Promise<void> | null = null;
   private joined = new Set<string>();
   private hasConnectedOnce = false;
+  private authRetries = 0;
+  private recovering = false;
+  private watchingPage = false;
   /**
    * Handed over by the server on connect:ready. Empty is a valid answer — two
    * peers on one Wi-Fi network reach each other without any STUN server.
@@ -120,9 +145,12 @@ class ChatSocketService {
       this.socket?.removeAllListeners();
       this.socket?.disconnect();
 
+      this.watchPage();
       const socket = io(`${socketOrigin()}/chat`, {
         transports: ['websocket', 'polling'],
-        auth: { token },
+        // Read on every (re)connect, so a reconnect after the token was
+        // refreshed does not present the old, expired one.
+        auth: (cb) => cb({ token: localStorage.getItem('access_token') || token }),
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
@@ -142,8 +170,15 @@ class ChatSocketService {
         resolve();
       });
 
-      socket.on('disconnect', () => {
+      socket.on('disconnect', (reason) => {
         this.emitToHandlers('onStatusChange', false);
+        // The server hung up on us (it does so for an expired token); Socket.IO
+        // will not come back by itself in that case.
+        if (reason === 'io server disconnect') void this.recoverSession();
+      });
+
+      socket.on('connect:error', () => {
+        void this.recoverSession();
       });
 
       socket.on('connect_error', () => {
@@ -167,6 +202,7 @@ class ChatSocketService {
         'connect:ready',
         (payload: { iceServers?: RTCIceServer[] }) => {
           this.ice = payload?.iceServers ?? [];
+          this.authRetries = 0;
         },
       );
 
@@ -175,8 +211,14 @@ class ChatSocketService {
       socket.on('call:incoming', (e: IncomingCallEvent) =>
         this.emitToHandlers('onCallIncoming', e),
       );
+      socket.on('call:ringing', (e: CallRingingEvent) =>
+        this.emitToHandlers('onCallRinging', e),
+      );
       socket.on('call:accepted', (e: CallAcceptedEvent) =>
         this.emitToHandlers('onCallAccepted', e),
+      );
+      socket.on('call:missed', (e: CallMissedEvent) =>
+        this.emitToHandlers('onCallMissed', e),
       );
       socket.on('call:ended', (e: CallEndedEvent) =>
         this.emitToHandlers('onCallEnded', e),
@@ -224,6 +266,11 @@ class ChatSocketService {
    */
   callInvite(conversationId: string): Promise<CallInviteResult> {
     return this.emitWithAck<CallInviteResult>('call:invite', { conversationId });
+  }
+
+  /** Tell the caller this device is showing their call, so they hear it ring. */
+  callRinging(callId: string): void {
+    this.socket?.emit('call:ringing', { callId });
   }
 
   callAccept(callId: string): Promise<{ ok: boolean }> {
@@ -280,23 +327,58 @@ class ChatSocketService {
   }
 
   updateToken(token: string): void {
-    if (this.socket) {
-      this.socket.auth = { token };
-      if (this.socket.connected) {
-        // Socket.IO updates auth for next auto-reconnect
-      } else {
-        void this.connect(token);
-      }
+    // The auth callback reads the stored token on every attempt; a dropped
+    // socket only needs to try again now that there is a fresh one.
+    if (this.socket && !this.socket.connected && token) this.socket.connect();
+  }
+
+  /**
+   * Refresh the session (any authenticated request does: the API client trades
+   * the refresh token on a 401) and reconnect. Bounded, so a signed-out user or
+   * a revoked session stops trying.
+   */
+  private async recoverSession(): Promise<void> {
+    if (this.recovering || !this.socket) return;
+    if (this.authRetries >= AUTH_RETRY_DELAYS_MS.length || !localStorage.getItem('refresh_token')) return;
+    this.recovering = true;
+    const delay = AUTH_RETRY_DELAYS_MS[this.authRetries];
+    this.authRetries += 1;
+    try {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      await apiClient.get('/me').catch(() => undefined);
+      if (this.socket && !this.socket.connected && localStorage.getItem('access_token')) this.socket.connect();
+    } finally {
+      this.recovering = false;
     }
+  }
+
+  /** Back online, or back to the tab after a sleep: reconnect if the socket dropped meanwhile. */
+  private watchPage(): void {
+    if (this.watchingPage || typeof window === 'undefined') return;
+    this.watchingPage = true;
+    const revive = () => {
+      if (this.socket && !this.socket.connected && localStorage.getItem('access_token')) {
+        this.authRetries = 0;
+        this.socket.connect();
+      }
+    };
+    window.addEventListener('online', revive);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') revive();
+    });
   }
 
   disconnect(): void {
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = null;
+    // A connect still waiting would otherwise be handed back to the next
+    // connect() (a sign-in after a sign-out) and no new socket would be made.
+    this.connecting = null;
     this.joined.clear();
     this.hasConnectedOnce = false;
     this.ice = [];
+    this.authRetries = 0;
   }
 }
 

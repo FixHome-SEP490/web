@@ -50,6 +50,21 @@ describe('Admin customer wallets', () => {
     expect(history).toContain('Nạp ví');
   });
 
+  it('labels withdrawals as money out and their refunds as money in', async () => {
+    detail.mockResolvedValue(wallet(150000, [
+      { id: 't5', type: 'withdrawal_refund', amount: 30000, balanceAfter: 150000, description: null, createdAt: '2026-10-14T05:00:00Z' },
+      { id: 't4', type: 'withdrawal', amount: 30000, balanceAfter: 120000, description: null, createdAt: '2026-10-14T04:00:00Z' },
+    ]));
+    const w = mount(AdminCustomerWalletsPage);
+    await flushPromises();
+    await w.get('[data-testid="wallet-row-c1"]').trigger('click');
+    await flushPromises();
+    const history = w.get('[data-testid="wallet-history"]').text().replace(/\s+/g, ' ');
+    // Each label is followed by its own date and amount (no other amount between).
+    expect(history).toMatch(/Hoàn tiền rút không thành công[^₫]*\+30\.000/);
+    expect(history).toMatch(/Rút về ngân hàng[^₫]*−30\.000/);
+  });
+
   it('refuses a short reason and a debit above the balance before asking', async () => {
     const w = mount(AdminCustomerWalletsPage, { attachTo: document.body });
     await flushPromises();

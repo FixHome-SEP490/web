@@ -485,7 +485,7 @@ const getStatusBadgeClass = (status: string) => {
         <!-- Pre-Repair Form -->
         <div v-if="showCreateForm" class="space-y-4 pt-3 border-t border-ink-200">
           <!-- Fulfillment & Reason inputs -->
-          <div class="grid sm:grid-cols-2 gap-3 bg-ink-50/60 p-3 rounded-lg border border-ink-150">
+          <div class="grid sm:grid-cols-2 gap-3 bg-ink-50/60 p-3 rounded-lg border border-ink-200">
             <div>
               <label class="block font-semibold text-ink-800 mb-1 text-xs">Phương thức nhận linh kiện</label>
               <select
@@ -1001,7 +1001,7 @@ const getStatusBadgeClass = (status: string) => {
           <!-- Items list in this request -->
           <div class="space-y-1">
             <h5 class="font-semibold text-ink-800 text-[11px]">Chi tiết linh kiện:</h5>
-            <div class="border border-ink-150 rounded-lg overflow-hidden">
+            <div class="border border-ink-200 rounded-lg overflow-hidden">
               <table class="w-full text-left text-xs">
                 <thead class="bg-ink-50 text-ink-600 font-semibold">
                   <tr>

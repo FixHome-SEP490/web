@@ -43,6 +43,20 @@ describe('historical ServiceOrder Web adapter keeps private-free summary separat
     expect(wrapper.text()).not.toContain('Nhắn tin');
     wrapper.unmount();
   });
+  it('an open order the technician stepped off reads as left, not as on the way', async () => {
+    const left = { ...historical, id: 'left', status: 'en_route' };
+    const finished = { ...historical, id: 'finished', code: 'SO-DONE', status: 'completed' };
+    mockGet.mockResolvedValue({ data: { data: [left, finished] } });
+    const wrapper = mount(TechnicianJobsPage, { global: { stubs: { FhButton: true, FhMoney: true, FhCostBreakdown: true } } });
+    await flushPromises();
+    const [leftCard, doneCard] = wrapper.findAll('[data-testid="technician-historical-order"]');
+    expect(leftCard.text()).toContain('Bạn đã rời đơn');
+    expect(leftCard.text()).toContain('Bạn không còn phụ trách đơn này');
+    expect(leftCard.text()).not.toContain('Đang di chuyển');
+    expect(doneCard.text()).toContain('Hoàn thành');
+    expect(doneCard.text()).toContain('Đơn cũ, chỉ xem tóm tắt.');
+    wrapper.unmount();
+  });
   it('shows historical detail without requesting live job financial, GPS or customer data', async () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path !== '/service-orders/synthetic-old-order') throw new Error('Unexpected private endpoint ' + path);

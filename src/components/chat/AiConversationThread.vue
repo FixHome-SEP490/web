@@ -3,11 +3,11 @@
 // floating assistant and the booking form's diagnosis step; the owner keeps
 // the conversation (useAiConversation) and puts its own action in the
 // `pinned` slot - "Đặt thợ" in the assistant, "Đổi dịch vụ" in the form.
-import { nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
-import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, priceLabel, type AiConversation } from '../../composables/useAiConversation';
+import { AI_MAX_IMAGES, aiApi } from '../../api/ai.api';
+import { DESCRIBE_BEFORE_SEND, priceLabel, quickReplies, type AiChatMessage, type AiConversation } from '../../composables/useAiConversation';
 
 const props = withDefaults(
   defineProps<{
@@ -27,13 +27,57 @@ async function scrollToEnd() {
   if (thread.value) thread.value.scrollTop = thread.value.scrollHeight;
 }
 
-watch(() => [c.messages.length, c.isThinking], scrollToEnd, { immediate: true });
+watch(() => [c.messages.length, c.isThinking, c.messages[c.messages.length - 1]?.text], scrollToEnd, { immediate: true });
 
 async function onFiles(event: Event) {
   const target = event.target as HTMLInputElement;
   const chosen = Array.from(target.files || []);
   target.value = '';
   await c.addFiles(chosen);
+}
+
+/** The newest assistant reply, the only one whose question can still be answered. */
+const latestReplyId = computed(() => {
+  for (let i = c.messages.length - 1; i >= 0; i -= 1) {
+    const message = c.messages[i];
+    if (message.sender === 'user') return null;
+    if (message.reply && !message.isAcknowledgement) return message.id;
+  }
+  return null;
+});
+
+function answersFor(message: AiChatMessage): string[] {
+  if (c.isThinking || message.id !== latestReplyId.value) return [];
+  return quickReplies(message.reply?.clarification?.questionsVi?.[0]);
+}
+
+function answer(text: string) {
+  void c.sendTurn(text, []);
+}
+
+/**
+ * "Đúng ý / Chưa đúng" under the newest answer. A "chưa đúng" opens a short
+ * optional note; either way the customer is thanked and the verdict goes to
+ * the team, who turn the wrong ones into new test conversations.
+ */
+type Verdict = 'asking' | 'note' | 'thanked';
+const verdicts = reactive<Record<string, Verdict>>({});
+const notes = reactive<Record<string, string>>({});
+
+function canRate(message: AiChatMessage): boolean {
+  return !!c.sessionId && !!message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable';
+}
+
+function verdictFor(message: AiChatMessage): Verdict | null {
+  if (verdicts[message.id]) return verdicts[message.id];
+  return canRate(message) && !c.isThinking && message.id === latestReplyId.value ? 'asking' : null;
+}
+
+function rate(message: AiChatMessage, verdict: 'right' | 'wrong', note?: string) {
+  verdicts[message.id] = 'thanked';
+  if (c.sessionId) {
+    void aiApi.feedback({ sessionId: c.sessionId, verdict, note, reply: message.text });
+  }
 }
 
 defineExpose({ scrollToEnd });
@@ -100,8 +144,19 @@ defineExpose({ scrollToEnd });
               </div>
 
               <div v-if="message.reply.clarification?.questionsVi?.length" class="rounded-lg bg-warning-50 border border-warning-200 p-2.5" data-testid="ai-questions">
-                <p class="text-xs font-semibold text-warning-800 mb-1">Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé</p>
+                <p class="text-xs font-semibold text-warning-800 mb-1">{{ answersFor(message).length ? 'Em hỏi thêm một chút, anh/chị bấm chọn hoặc trả lời ở ô bên dưới nhé' : 'Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé' }}</p>
                 <p v-for="(question, index) in message.reply.clarification.questionsVi" :key="index" class="text-sm text-warning-900 leading-relaxed">{{ question }}</p>
+                <div v-if="answersFor(message).length" class="flex flex-wrap gap-2 mt-2" data-testid="ai-quick-replies">
+                  <button
+                    v-for="choice in answersFor(message)"
+                    :key="choice"
+                    type="button"
+                    class="px-3.5 py-1.5 rounded-full border border-warning-300 bg-white text-sm font-semibold text-ink-900 hover:bg-warning-100 active:scale-95 transition-[background-color,transform] duration-150"
+                    @click="answer(choice)"
+                  >
+                    {{ choice }}
+                  </button>
+                </div>
               </div>
 
               <div v-if="priceLabel(message.reply)" class="flex items-center justify-between gap-3 pt-2 border-t border-ink-100">
@@ -112,11 +167,32 @@ defineExpose({ scrollToEnd });
 
               <p v-if="message.reply.disclaimerVi" class="text-xs text-ink-400 leading-snug">{{ message.reply.disclaimerVi }}</p>
             </div>
+
+            <div v-if="verdictFor(message)" class="text-xs text-ink-500" data-testid="ai-feedback">
+              <div v-if="verdictFor(message) === 'asking'" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Câu trả lời này có đúng ý anh/chị không?</span>
+                <button type="button" class="font-semibold text-ink-700 hover:text-brand-700" data-testid="ai-feedback-right" @click="rate(message, 'right')">Đúng ý</button>
+                <button type="button" class="font-semibold text-ink-700 hover:text-danger-700" data-testid="ai-feedback-wrong" @click="verdicts[message.id] = 'note'">Chưa đúng</button>
+              </div>
+              <form v-else-if="verdictFor(message) === 'note'" class="flex items-end gap-2" @submit.prevent="rate(message, 'wrong', notes[message.id])">
+                <textarea
+                  v-model="notes[message.id]"
+                  rows="2"
+                  maxlength="300"
+                  class="flex-1 min-w-0 rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
+                  placeholder="Anh/chị góp ý thêm cho em (không bắt buộc)"
+                  aria-label="Góp ý cho trợ lý"
+                  data-testid="ai-feedback-note"
+                />
+                <button type="submit" class="whitespace-nowrap rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-700" data-testid="ai-feedback-send">Gửi góp ý</button>
+              </form>
+              <p v-else data-testid="ai-feedback-thanks">Em cảm ơn anh/chị, em ghi nhận để học thêm ạ.</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <ChatTypingDots v-if="c.isThinking" />
+      <ChatTypingDots v-if="c.isThinking && !c.isRevealing" />
     </div>
 
     <slot name="pinned" />

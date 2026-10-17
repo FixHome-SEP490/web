@@ -44,6 +44,20 @@ export const queryKeys = {
     technicianWithdrawals: (filter: Filter) => ['wallet', 'technician', 'withdrawals', filter] as const,
     technicianBankAccount: ['wallet', 'technician', 'bank-account'] as const,
     customer: (filter: Filter) => ['wallet', 'customer', filter] as const,
+    /** Which withdrawal step the customer is at (identity, bank account, open payout). */
+    customerWithdrawalInfo: ['wallet', 'customer-withdrawal', 'info'] as const,
+    customerWithdrawals: (filter: Filter) => ['wallet', 'customer-withdrawal', 'list', filter] as const,
+    /** Console (Service Manager, Admin): every customer withdrawal, kept apart from the technicians'. */
+    consoleCustomerWithdrawalsAll: ['wallet', 'console-customer-withdrawals'] as const,
+    consoleCustomerWithdrawals: (filter: Filter) => ['wallet', 'console-customer-withdrawals', 'list', filter] as const,
+    /** Customer payout totals and the payOS source balance shared with technicians. */
+    consoleCustomerPayout: ['wallet', 'console-customer-withdrawals', 'overview'] as const,
+  },
+  /** Identity verification: the customer's own status and the admin review lists. */
+  identity: {
+    all: ['identity'] as const,
+    customer: ['identity', 'customer'] as const,
+    adminCustomers: (filter: Filter) => ['identity', 'admin-customers', filter] as const,
   },
   /** Technician earnings per period. */
   earnings: {
@@ -80,6 +94,8 @@ export const queryKeys = {
     /** Provinces with their districts. */
     provinces: ['reference', 'provinces'] as const,
     banks: ['reference', 'banks'] as const,
+    /** Banks a customer withdrawal can go to (read through the customer's own endpoint). */
+    customerBanks: ['reference', 'customer-banks'] as const,
   },
 } as const;
 
@@ -113,6 +129,8 @@ export const affectedBy = {
   ],
   /** Top-ups, withdrawals, wallet payments, bank account. */
   walletChange: [queryKeys.wallet.all, queryKeys.earnings.all],
+  /** Submitting or reviewing an identity check: it decides whether the customer can withdraw. */
+  identityChange: [queryKeys.identity.all, queryKeys.wallet.all],
   /** Profile, availability or auto-accept settings of the technician. */
   technicianSettings: [queryKeys.technician.all, queryKeys.invitations.all],
   /** Saved addresses of the user. */
@@ -127,6 +145,9 @@ const NO_CACHED_EFFECT = /^\/(auth|messages|conversations|media|ai|service-order
 /** Which cached data a successful write to `url` may have changed. */
 const WRITE_EFFECTS: ReadonlyArray<readonly [RegExp, readonly QueryKey[]]> = [
   [/^\/(technician\/wallet|customer\/wallet|invoices)(\/|$)/, [...affectedBy.walletChange, ...affectedBy.orderChange]],
+  [/^\/(customer\/verification|admin\/customer-verifications)(\/|$)/, affectedBy.identityChange],
+  // Re-checking a customer payout may refund the customer's wallet.
+  [/^\/service-manager\/customer-withdrawals(\/|$)/, affectedBy.walletChange],
   [/^\/(invitations)(\/|$)/, affectedBy.invitationResponse],
   [/^\/bookings(\/|$)/, affectedBy.bookingChange],
   [/^\/warranty-claims(\/|$)/, affectedBy.warrantyChange],
@@ -152,6 +173,7 @@ const ALL_USER_DATA: readonly QueryKey[] = [
   queryKeys.warranty.all,
   queryKeys.addresses,
   queryKeys.consoleDashboard,
+  queryKeys.identity.all,
 ];
 
 /**

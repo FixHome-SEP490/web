@@ -9,6 +9,7 @@
 // tương ứng.
 
 import { userFacingError } from './user-facing-error';
+import { vnParts } from './vn-time';
 
 /** Ký tự điều khiển C0/C1. */
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
@@ -82,6 +83,54 @@ export function validatePhoneNumber(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
   if (!PHONE_SHAPE.test(trimmed)) return 'SĐT không hợp lệ (VD: 0901234567)';
+  return '';
+}
+
+/** Số CCCD gồm đúng 12 chữ số (luật `citizenIdNumber` của backend). */
+export function validateCitizenId(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Vui lòng nhập số CCCD';
+  if (!/^\d{12}$/.test(trimmed)) return 'Số CCCD phải gồm đúng 12 chữ số';
+  return '';
+}
+
+/**
+ * Bản sao của `IsAddressText` ở backend: chữ cái có dấu, chữ số, khoảng trắng
+ * và các dấu thường gặp trong địa chỉ; không emoji, ký hiệu hay thẻ HTML.
+ */
+const ADDRESS_ALLOWED = /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} ,./'’()#&:;-]*$/u;
+
+export function validateAddressText(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Vui lòng nhập địa chỉ';
+  if (trimmed.length < 5) return 'Địa chỉ tối thiểu 5 ký tự';
+  if (trimmed.length > 500) return 'Địa chỉ tối đa 500 ký tự';
+  if (containsUnsafeText(trimmed)) return 'Địa chỉ chứa ký tự ẩn không hợp lệ, vui lòng gõ lại';
+  if (!ADDRESS_ALLOWED.test(trimmed))
+    return 'Địa chỉ chỉ gồm chữ, số, khoảng trắng và các dấu , . / - ( ) # : ;';
+  return '';
+}
+
+/** Tuổi tròn theo ngày hôm nay ở Việt Nam (giống `ageInYearsOnVnToday` của backend). */
+export function ageOnVnToday(dateOfBirth: string, now: Date = new Date()): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth.trim());
+  if (!match) return Number.NaN;
+  const [year, month, day] = match.slice(1).map(Number) as [number, number, number];
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return Number.NaN;
+  const today = vnParts(now);
+  const hadBirthday = today.month > month || (today.month === month && today.day >= day);
+  return today.year - year - (hadBirthday ? 0 : 1);
+}
+
+/** Ngày sinh YYYY-MM-DD, có thật, không ở tương lai và đủ `minAge` tuổi. */
+export function validateBirthDate(value: string, minAge = 18, now: Date = new Date()): string {
+  if (!value.trim()) return 'Vui lòng chọn ngày sinh';
+  const age = ageOnVnToday(value, now);
+  if (Number.isNaN(age)) return 'Ngày sinh không hợp lệ';
+  if (age < 0) return 'Ngày sinh không được ở tương lai';
+  if (age > 120) return 'Ngày sinh không hợp lệ';
+  if (age < minAge) return `Bạn cần đủ ${minAge} tuổi trở lên`;
   return '';
 }
 

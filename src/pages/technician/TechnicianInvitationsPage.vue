@@ -271,7 +271,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           </p>
         </div>
 
-        <p class="text-sm text-ink-600 text-pretty">
+        <p class="rounded-xl bg-warning-50 border border-warning-200 px-3 py-2 text-sm text-warning-800 text-pretty" data-testid="invitation-detail-privacy">
           Mô tả, ảnh và địa chỉ chính xác hiện sau khi bạn nhận đơn.
         </p>
 

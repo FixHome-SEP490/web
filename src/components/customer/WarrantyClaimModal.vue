@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Camera, X, ShieldAlert, AlertTriangle, AlertCircle, Wrench } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
-import { ordersApi, type WarrantyClaimView } from '../../api/orders.api';
+import { coverageKindLabel, ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { useEvidencePhotos } from '../../composables/useEvidencePhotos';
 import { formatDateVN } from '../../utils/formatters';
@@ -10,8 +10,22 @@ import { formatDateVN } from '../../utils/formatters';
 export interface ClaimableCoverage {
   id: string;
   itemDescription: string;
+  /** The technician's work or a part they fitted. */
+  kind?: CoverageKind;
+  warrantyDaysSnapshot?: number;
+  startsAt?: string;
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED';
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** "Bảo hành 30 ngày · đến 15/11/2026 · còn 29 ngày", or when it ended. */
+function coverageTerm(coverage: ClaimableCoverage): string {
+  const until = formatDateVN(coverage.expiresAt);
+  if (coverage.status !== 'ACTIVE') return `Hết hạn ${until}`;
+  const days = coverage.warrantyDaysSnapshot ? `Bảo hành ${coverage.warrantyDaysSnapshot} ngày · ` : '';
+  const left = Math.max(0, Math.ceil((new Date(coverage.expiresAt).getTime() - Date.now()) / DAY_MS));
+  return `${days}đến ${until} · còn ${left} ngày`;
 }
 
 const props = defineProps<{
@@ -143,7 +157,7 @@ async function submit() {
       </div>
 
       <!-- Fieldset: Select coverage item -->
-      <fieldset class="space-y-2">
+      <fieldset class="min-w-0 space-y-2">
         <legend class="text-xs font-semibold text-ink-800 mb-1 flex items-center gap-1.5">
           <Wrench :size="13" class="text-ink-500" />
           <span>Chọn hạng mục cần bảo hành</span>
@@ -172,7 +186,15 @@ async function submit() {
             />
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2">
-                <span class="font-semibold text-ink-900 truncate">{{ coverage.itemDescription }}</span>
+                <span class="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span
+                    v-if="coverageKindLabel(coverage.kind)"
+                    class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
+                    :class="coverage.kind === 'part' ? 'bg-ink-100 text-ink-700' : 'bg-brand-50 text-brand-700'"
+                    data-testid="coverage-kind"
+                  >{{ coverageKindLabel(coverage.kind) }}</span>
+                  <span class="min-w-0 font-semibold text-ink-900 truncate" :title="coverage.itemDescription">{{ coverage.itemDescription }}</span>
+                </span>
                 <span
                   class="px-2 py-0.5 rounded-md text-[11px] font-semibold shrink-0"
                   :class="coverage.status === 'ACTIVE' ? 'bg-success-100 text-success-800' : 'bg-ink-200 text-ink-600'"
@@ -181,7 +203,7 @@ async function submit() {
                 </span>
               </div>
               <div class="text-[11px] text-ink-500 mt-1 flex items-center gap-2">
-                <span>Hạn bảo hành: <strong class="font-num text-ink-700">{{ formatDateVN(coverage.expiresAt) }}</strong></span>
+                <span class="font-num text-ink-700" data-testid="coverage-term">{{ coverageTerm(coverage) }}</span>
                 <span v-if="busyCoverageIds.includes(coverage.id)" class="text-warning-700 font-medium">
                   · Đang có yêu cầu chưa xử lý xong
                 </span>

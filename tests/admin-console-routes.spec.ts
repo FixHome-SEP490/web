@@ -9,6 +9,7 @@ describe('Admin console routes (PO 09/10/2026)', () => {
     ['admin-customer-wallets', '/console/admin/customer-wallets'],
     ['admin-payments', '/console/admin/payments'],
     ['admin-reviews', '/console/admin/reviews'],
+    ['admin-ai-quality', '/console/admin/ai-quality'],
   ])('%s is at %s and only for the admin', (name, path) => {
     expect(route(name)?.path).toBe(path);
     expect(route(name)?.meta.roles).toEqual(['ADMIN']);
