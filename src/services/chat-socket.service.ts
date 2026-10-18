@@ -58,15 +58,67 @@ export interface CallInviteResult {
   reason?: 'invalid' | 'forbidden' | 'busy' | 'self_busy' | 'offline';
 }
 
-/** An order changed on the server (status, quotation, invoice, payment, warranty), PO 18/10/2026. */
+/**
+ * What part of an order changed, so a screen reads only that again
+ * (PO 18/10/2026: live updates, not reloading).
+ */
+export type OrderChangeKind =
+  | 'order' | 'status' | 'invoice' | 'quotation' | 'additional_cost' | 'cash'
+  | 'evidence' | 'arrival' | 'part' | 'warranty' | 'assignment';
+
+/** An order changed on the server, after the write committed. */
 export interface OrderUpdatedEvent {
   serviceOrderId: string;
   bookingId: string;
   status: string;
+  /** Missing from an older server: treat as "anything may have changed". */
+  kinds?: OrderChangeKind[];
+  at?: string;
+}
+
+/** The technician moved while on the way; only the customer gets it. */
+export interface OrderLocationEvent {
+  serviceOrderId: string;
+  lat: number;
+  lng: number;
+  updatedAt: string | null;
+}
+
+/** A booking changed (taken, closed, invitations moved on). */
+export interface BookingUpdatedEvent {
+  bookingId: string;
+  status: string;
+  serviceOrderId: string | null;
+}
+
+/** One of my invitations changed (new, accepted, expired, cancelled). */
+export interface InvitationUpdatedEvent {
+  invitationId: string;
+  bookingId: string;
+  status: string;
+}
+
+/** A new notification of mine, in the shape the list shows. */
+export interface NotificationNewEvent {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  referenceId: string | null;
+  referenceType: string | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface ChatSocketHandlers {
   onOrderUpdated?: (event: OrderUpdatedEvent) => void;
+  onOrderLocation?: (event: OrderLocationEvent) => void;
+  onBookingUpdated?: (event: BookingUpdatedEvent) => void;
+  onInvitationUpdated?: (event: InvitationUpdatedEvent) => void;
+  onNotificationNew?: (event: NotificationNewEvent) => void;
+  onWalletUpdated?: (event: { scope: 'technician' | 'customer' }) => void;
+  /** The server missed changes while reconnecting to its database: read open screens once. */
+  onRealtimeResync?: () => void;
   onMessageNew?: (message: ChatMessage) => void;
   onMessageUpdated?: (message: ChatMessage) => void;
   onMessageDeleted?: (message: ChatMessage) => void;
@@ -206,6 +258,12 @@ class ChatSocketService {
       );
       socket.on('typing', (e: TypingEvent) => this.emitToHandlers('onTyping', e));
       socket.on('order:updated', (e: OrderUpdatedEvent) => this.emitToHandlers('onOrderUpdated', e));
+      socket.on('order:location', (e: OrderLocationEvent) => this.emitToHandlers('onOrderLocation', e));
+      socket.on('booking:updated', (e: BookingUpdatedEvent) => this.emitToHandlers('onBookingUpdated', e));
+      socket.on('invitation:updated', (e: InvitationUpdatedEvent) => this.emitToHandlers('onInvitationUpdated', e));
+      socket.on('notification:new', (e: NotificationNewEvent) => this.emitToHandlers('onNotificationNew', e));
+      socket.on('wallet:updated', (e: { scope: 'technician' | 'customer' }) => this.emitToHandlers('onWalletUpdated', e));
+      socket.on('realtime:resync', () => this.emitToHandlers('onRealtimeResync'));
 
       socket.on(
         'connect:ready',

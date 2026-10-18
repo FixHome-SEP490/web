@@ -108,19 +108,16 @@ async function onAttachmentPicked(event: Event) {
     return;
   }
   const caption = messageInput.value.trim();
-  sending.value = true;
   attachError.value = '';
   messageInput.value = '';
+  // The bubble shows how far it is and offers a retry itself; the composer stays free meanwhile.
+  const sent = chatStore.sendAttachment(file, caption);
+  scrollToBottom(true);
   try {
-    await chatStore.sendAttachment(file, caption);
-    scrollToBottom(true);
+    await sent;
   } catch {
-    messageInput.value = caption;
-    attachError.value = file.type.startsWith('video/')
-      ? 'Chưa gửi được video, vui lòng thử lại.'
-      : 'Chưa gửi được ảnh, vui lòng thử lại.';
-  } finally {
-    sending.value = false;
+    // Only a thread that closed meanwhile ends here; the banner above says why.
+    attachError.value = 'Cuộc trò chuyện đã khoá nên chưa gửi được.';
   }
 }
 

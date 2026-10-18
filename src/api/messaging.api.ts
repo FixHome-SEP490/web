@@ -1,5 +1,7 @@
 // src/api/messaging.api.ts
 import apiClient from './client';
+import { toVideoLink, type UploadProgressOptions, type VideoLink } from './media.api';
+import { VIDEO_SOURCE_MAX_BYTES } from '../lib/video-prep';
 
 /**
  * Backend TransformInterceptor wraps responses in `{ data }`.
@@ -81,7 +83,8 @@ export const CHAT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 export function chatAttachmentProblem(file: Pick<File, 'type' | 'size'>): string | null {
   const type = (file.type || '').toLowerCase();
   if (CHAT_IMAGE_TYPES.includes(type)) return file.size > CHAT_IMAGE_MAX_BYTES ? 'Ảnh lớn hơn 10 MB, vui lòng chọn ảnh nhỏ hơn.' : null;
-  if (CHAT_VIDEO_TYPES.includes(type)) return file.size > CHAT_VIDEO_MAX_BYTES ? 'Video lớn hơn 50 MB, vui lòng quay ngắn hơn.' : null;
+  // A heavy video is converted on the device before it goes up (lib/video-prep), which then checks the final size.
+  if (CHAT_VIDEO_TYPES.includes(type)) return file.size > VIDEO_SOURCE_MAX_BYTES ? 'Video lớn hơn 50 MB, vui lòng quay ngắn hơn.' : null;
   return 'Chỉ gửi được ảnh (JPG, PNG, WebP) hoặc video (MP4, MOV, WebM).';
 }
 
@@ -99,6 +102,8 @@ export interface ChatMessage {
   attachment?: ChatAttachment | null;
   /** Client only: the picked file, shown while it uploads and right after. */
   localPreviewUrl?: string;
+  /** This tab is still sending the photo or video (PO 18/10/2026: weak connections). */
+  upload?: { state: 'preparing' | 'uploading' | 'failed'; progress: number; error?: string };
 }
 
 /** The send was refused because the order completed and no warranty claim is open. */
@@ -156,6 +161,7 @@ export const messagingApi = {
     file: File,
     content?: string,
     clientMessageId?: string,
+    opts: UploadProgressOptions = {},
   ): Promise<ChatMessage> {
     const form = new FormData();
     form.append('file', file);
@@ -163,10 +169,20 @@ export const messagingApi = {
     if (clientMessageId) form.append('clientMessageId', clientMessageId);
     const res = await apiClient.post(`/conversations/${conversationId}/attachments`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      // A video on a weak connection needs far more than the 15 s default.
-      timeout: 180000,
+      // No fixed timeout with progress: the caller watches for a stall instead (weak connections).
+      timeout: opts.onProgress ? 0 : 180000,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.onProgress
+        ? { onUploadProgress: (event: { loaded: number; total?: number }) => { if (event.total) opts.onProgress?.(event.loaded / event.total); } }
+        : {}),
     });
     return unwrap<ChatMessage>(res.data);
+  },
+
+  /** A viewing link for a chat video: the player streams it instead of downloading it whole (PO 18/10/2026). */
+  async getAttachmentVideoLink(messageId: string): Promise<VideoLink> {
+    const res = await apiClient.get(`/messages/${encodeURIComponent(messageId)}/attachment/stream`);
+    return toVideoLink(unwrap<VideoLink>(res.data), '/messages/attachment/stream/');
   },
 
   /** The photo or video bytes, through the authenticated proxy (no public link exists). */

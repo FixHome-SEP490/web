@@ -28,6 +28,7 @@ import {
   Minus,
   RotateCcw,
   ChevronDown,
+  Play,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -215,53 +216,56 @@ async function startAiConversation() {
 /**
  * PO 18/10/2026: the photos and videos the customer sent in the chat with the
  * assistant go with the booking for the technician (the videos were never
- * shown to the AI). Uploaded once, at booking time, when the customer is
- * surely signed in; a retry reuses what already went up.
+ * shown to the AI). They went up in the background as soon as they were sent;
+ * the booking takes those that arrived, and the confirm step says where each
+ * one is, with a retry or a way to leave it out, so a weak connection never
+ * blocks booking without the customer knowing why.
  */
-const chatUploads = new Map<string | File, string>();
-const chatAttachments = computed(() => {
-  if (!isAiFlow) return { images: [] as string[], videos: [] as File[] };
-  const { images, videos } = aiConversation.bookingAttachments();
-  // A booking holds five photos; the form's own come first.
-  return { images: images.slice(0, Math.max(0, 5 - uploadedPhotos.value.length)), videos };
-});
+const chatItems = computed(() => (isAiFlow ? aiConversation.attachments.value : []));
+const chatUploads = computed(() =>
+  isAiFlow ? aiConversation.uploads.value : { total: 0, done: 0, failed: 0, busy: 0, progress: 1 },
+);
+/** A booking holds five photos, the form's own first: the chat's beyond that stay out (said on the confirm step). */
+const chatPhotoRoom = computed(() => Math.max(0, 5 - uploadedPhotos.value.length));
+const chatPhotosLeftOut = computed(() => Math.max(0, chatItems.value.filter((item) => item.kind === 'image').length - chatPhotoRoom.value));
 const chatAttachmentSummary = computed(() => {
   const parts: string[] = [];
-  const photos = uploadedPhotos.value.length + chatAttachments.value.images.length;
+  const photos = uploadedPhotos.value.length + Math.min(chatPhotoRoom.value, chatItems.value.filter((item) => item.kind === 'image').length);
+  const videos = chatItems.value.filter((item) => item.kind === 'video').length;
   if (photos) parts.push(`${photos} ảnh`);
-  if (chatAttachments.value.videos.length) parts.push(`${chatAttachments.value.videos.length} video`);
+  if (videos) parts.push(`${videos} video`);
   return parts.join(', ');
 });
 
-function dataUrlToFile(dataUrl: string, name: string): File {
-  const [head, body = ''] = dataUrl.split(',');
-  const mime = /data:([^;]+)/.exec(head)?.[1] || 'image/jpeg';
-  const bytes = Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0));
-  return new File([bytes], name, { type: mime });
+/** A booking holds five photos, the form's own first, and two videos. */
+function chatUploadIdsForBooking(): string[] {
+  const done = chatItems.value.filter((item) => item.state === 'done' && item.uploadId);
+  const images = done.filter((item) => item.kind === 'image').slice(0, chatPhotoRoom.value);
+  const videos = done.filter((item) => item.kind === 'video').slice(0, 2);
+  return [...images, ...videos].map((item) => item.uploadId as string);
 }
 
-async function uploadChatAttachments(): Promise<string[]> {
-  const ids: string[] = [];
-  const { images, videos } = chatAttachments.value;
-  for (const [index, dataUrl] of images.entries()) {
-    let id = chatUploads.get(dataUrl);
-    if (!id) {
-      const ext = dataUrl.startsWith('data:image/png') ? 'png' : dataUrl.startsWith('data:image/webp') ? 'webp' : 'jpg';
-      id = (await mediaApi.uploadBookingPhoto(dataUrlToFile(dataUrl, `tro-ly-${index + 1}.${ext}`))).uploadId;
-      chatUploads.set(dataUrl, id);
-    }
-    ids.push(id);
-  }
-  for (const video of videos) {
-    let id = chatUploads.get(video);
-    if (!id) {
-      id = (await mediaApi.uploadBookingVideo(video)).uploadId;
-      chatUploads.set(video, id);
-    }
-    ids.push(id);
-  }
-  return ids;
+/** "Ảnh 2", "Video 1": numbered within their own kind. */
+function chatItemLabel(item: (typeof chatItems.value)[number]): string {
+  const sameKind = chatItems.value.filter((entry) => entry.kind === item.kind);
+  return `${item.kind === 'video' ? 'Video' : 'Ảnh'} ${sameKind.indexOf(item) + 1}`;
 }
+
+const chatPercent = (fraction: number) => `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+
+/** Where one of the chat's photos or videos is, for the confirm step. */
+function chatItemStatus(item: (typeof chatItems.value)[number]): string {
+  if (item.state === 'preparing') return `Đang nén ${chatPercent(item.video?.progress ?? 0)}`;
+  if (item.state === 'ready') return 'Chờ gửi';
+  if (item.state === 'uploading') return item.retrying ? 'Mạng chập chờn, đang gửi lại' : `Đang gửi ${chatPercent(item.progress)}`;
+  if (item.state === 'done') return 'Đã gửi';
+  return item.error || 'Chưa gửi được';
+}
+
+// Anything that failed while the customer was away (signed out, offline) is tried again here.
+onMounted(() => {
+  if (isAiFlow) aiConversation.retryFailed();
+});
 
 /** Start again from the current description and photos, e.g. after editing step 1. */
 async function restartAiConversation() {
@@ -788,15 +792,17 @@ const createAndFindTech = async () => {
     return;
   }
 
-  loading.value = true;
-  let chatUploadIds: string[] = [];
-  try {
-    chatUploadIds = await uploadChatAttachments();
-  } catch {
-    loading.value = false;
-    toast.warning('Chưa tải được ảnh hoặc video trong cuộc trò chuyện lên. Vui lòng thử lại, hoặc bỏ video ở bước Xác nhận.');
+  // Photos and videos from the chat went up in the background; booking only waits for, or skips, what has not.
+  if (chatUploads.value.busy > 0) {
+    toast.warning('Ảnh, video trong cuộc trò chuyện vẫn đang gửi cho thợ. Chờ một chút, hoặc bấm Bỏ ở mục Gửi kèm cho kỹ thuật viên.');
     return;
   }
+  if (chatUploads.value.failed > 0) {
+    toast.warning('Có ảnh hoặc video chưa gửi được. Bấm Thử lại, hoặc Bỏ để đặt thợ không kèm.');
+    return;
+  }
+  const chatUploadIds = chatUploadIdsForBooking();
+  loading.value = true;
   try {
     if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
     const booking = await bookingsApi.createBooking({
@@ -1780,23 +1786,47 @@ const createAndFindTech = async () => {
                 <span class="text-ink-500">Gửi kèm cho kỹ thuật viên:</span>
                 <span class="font-bold text-ink-900 text-right whitespace-nowrap">{{ chatAttachmentSummary }}</span>
               </div>
-              <ul v-if="chatAttachments.videos.length" class="space-y-1.5">
+              <ul v-if="chatItems.length" class="space-y-1.5">
                 <li
-                  v-for="video in aiConversation.sentVideos.value"
-                  :key="video.id"
-                  class="flex items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-xs"
-                  data-testid="confirm-video"
+                  v-for="item in chatItems"
+                  :key="item.id"
+                  class="flex items-center gap-3 rounded-xl border px-3 py-2 text-xs"
+                  :class="item.state === 'failed' ? 'border-danger-200 bg-danger-50' : 'border-ink-200 bg-ink-50'"
+                  :data-testid="item.kind === 'video' ? 'confirm-video' : 'confirm-photo'"
+                  :data-state="item.state"
                 >
-                  <span class="min-w-0 truncate text-ink-700">{{ video.file.name || 'Video' }}</span>
+                  <img v-if="item.kind === 'image' && item.dataUrl" :src="item.dataUrl" alt="" class="h-9 w-9 shrink-0 rounded-lg object-cover" />
+                  <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-900 text-white"><Play :size="14" /></span>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-semibold text-ink-800">{{ chatItemLabel(item) }}</p>
+                    <p :class="item.state === 'failed' ? 'text-danger-700' : item.state === 'done' ? 'text-success-700' : 'text-ink-500'">
+                      {{ chatItemStatus(item) }}
+                    </p>
+                    <div v-if="item.state === 'uploading' || item.state === 'preparing'" class="mt-1 h-1 overflow-hidden rounded-full bg-ink-200">
+                      <div class="h-full bg-brand-500 transition-[width] duration-300" :style="{ width: chatPercent(item.state === 'preparing' ? item.video?.progress ?? 0 : item.progress) }"></div>
+                    </div>
+                  </div>
+                  <button
+                    v-if="item.state === 'failed'"
+                    type="button"
+                    class="shrink-0 rounded-lg px-2 py-1 font-semibold text-brand-700 hover:bg-brand-50"
+                    data-testid="confirm-attachment-retry"
+                    @click="aiConversation.retryUpload(item.id)"
+                  >
+                    Thử lại
+                  </button>
                   <button
                     type="button"
-                    class="shrink-0 font-semibold text-danger-700 hover:text-danger-800"
-                    @click="aiConversation.removeSentVideo(video.id)"
+                    class="shrink-0 rounded-lg px-2 py-1 font-semibold text-danger-700 hover:bg-danger-50"
+                    data-testid="confirm-attachment-remove"
+                    @click="aiConversation.removeAttachment(item.id)"
                   >
-                    Bỏ video
+                    Bỏ
                   </button>
                 </li>
               </ul>
+              <p v-if="chatPhotosLeftOut > 0" class="text-xs text-warning-700" data-testid="confirm-photos-left-out">Đã đủ 5 ảnh nên {{ chatPhotosLeftOut }} ảnh gửi trong trò chuyện không kèm theo.</p>
+              <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, anh/chị có thể bấm Bỏ để đặt thợ không kèm.</p>
             </div>
           </div>
 
@@ -1831,9 +1861,12 @@ const createAndFindTech = async () => {
             size="lg"
             class="w-full sm:w-auto"
             :loading="loading"
+            :disabled="chatUploads.busy > 0 || chatUploads.failed > 0"
+            data-testid="booking-submit"
             @click="createAndFindTech"
           >
-            Tìm kỹ thuật viên ngay <Wrench :size="16" class="ml-1.5" />
+            <template v-if="chatUploads.busy > 0">Đang gửi ảnh, video cho thợ {{ Math.round(chatUploads.progress * 100) }}%</template>
+            <template v-else>Tìm kỹ thuật viên ngay <Wrench :size="16" class="ml-1.5" /></template>
           </FhButton>
         </div>
       </div>

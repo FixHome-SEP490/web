@@ -66,7 +66,7 @@ describe('Reschedule by session (mock HTTP only)', () => {
     orderStatus = 'en_route';
     await render();
     current = booking(state);
-    await vi.advanceTimersByTimeAsync(5000); await flushPromises();
+    await vi.advanceTimersByTimeAsync(10000); await flushPromises();
     expect(wrapper.find('textarea').exists()).toBe(false);
     expect(save()).toBeUndefined();
     expect(patch).not.toHaveBeenCalled();

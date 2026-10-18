@@ -17,7 +17,22 @@ vi.mock('../src/api/client', () => ({
   registerAuthSessionInvalidator: vi.fn(),
   getHttpStatus: vi.fn(),
   AUTH_SESSION_INVALIDATED_EVENT: 'fixhome:auth-session-invalidated',
+  apiUrl: (path: string) => `https://api.example.test/api/v1${path}`,
 }));
+const prepareVideo = vi.hoisted(() => vi.fn());
+vi.mock('../src/lib/video-prep', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/video-prep')>();
+  return { ...actual, prepareVideo };
+});
+// One attempt per upload here; retrying is tested on its own (upload-retry.spec.ts).
+vi.mock('../src/lib/upload-retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/upload-retry')>();
+  return {
+    ...actual,
+    uploadWithRetry: (send: (a: { onProgress: (f: number) => void; signal: AbortSignal }) => Promise<unknown>, opts: { onProgress?: (f: number) => void; signal?: AbortSignal }) =>
+      send({ onProgress: opts.onProgress ?? (() => undefined), signal: opts.signal ?? new AbortController().signal }),
+  };
+});
 const socket = vi.hoisted(() => ({
   connected: false, connect: vi.fn(), disconnect: vi.fn(), subscribe: vi.fn(() => () => {}),
   joinConversation: vi.fn(), leaveConversation: vi.fn(), sendTyping: vi.fn(), updateToken: vi.fn(),
@@ -68,14 +83,17 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:local'), revokeObjectURL: vi.fn() }));
+  prepareVideo.mockReset().mockImplementation(async (picked: File) => ({ file: picked, shrunk: false, trimmed: false }));
 });
 
 describe('chat photos and videos', () => {
   it('accepts photos up to 10 MB and videos up to 50 MB, nothing else', () => {
     expect(chatAttachmentProblem(file('a.jpg', 'image/jpeg', 1024))).toBeNull();
     expect(chatAttachmentProblem(file('a.mov', 'video/quicktime', 49 * 1024 * 1024))).toBeNull();
+    // A heavy phone clip is made light on the device before it goes up.
+    expect(chatAttachmentProblem(file('b.mov', 'video/quicktime', 200 * 1024 * 1024))).toBeNull();
     expect(chatAttachmentProblem(file('a.png', 'image/png', 10 * 1024 * 1024 + 1))).toContain('10 MB');
-    expect(chatAttachmentProblem(file('a.mp4', 'video/mp4', 50 * 1024 * 1024 + 1))).toContain('50 MB');
+    expect(chatAttachmentProblem(file('a.mp4', 'video/mp4', 600 * 1024 * 1024 + 1))).toContain('50 MB');
     expect(chatAttachmentProblem(file('a.pdf', 'application/pdf', 10))).toContain('Chỉ gửi được ảnh');
     expect(chatAttachmentProblem(file('a.gif', 'image/gif', 10))).toContain('Chỉ gửi được ảnh');
   });
@@ -93,24 +111,126 @@ describe('chat photos and videos', () => {
     expect(config.timeout).toBeGreaterThanOrEqual(120000);
   });
 
-  it('picks a file from the composer, sends it with what is typed and shows a clear line when it cannot go', async () => {
+  it('picks a file from the composer, sends it with what is typed, and keeps the composer free while it goes', async () => {
     const { store, wrapper } = mountThread();
-    const send = vi.spyOn(store, 'sendAttachment').mockResolvedValue(undefined);
+    const send = vi.spyOn(store, 'sendAttachment').mockReturnValue(new Promise(() => undefined));
     await wrapper.get('textarea').setValue('Đây ạ');
     await pick(wrapper, file('a.jpg', 'image/jpeg', 2048));
     expect(send).toHaveBeenCalledWith(expect.any(File), 'Đây ạ');
     expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('');
+    // Still sending, and the customer can already type and pick the next one.
+    expect(wrapper.get('textarea').attributes('disabled')).toBeUndefined();
+    await pick(wrapper, file('big.mov', 'video/quicktime', 200 * 1024 * 1024));
+    expect(send).toHaveBeenCalledTimes(2);
 
-    await pick(wrapper, file('big.mp4', 'video/mp4', 60 * 1024 * 1024));
-    expect(send).toHaveBeenCalledTimes(1);
+    await pick(wrapper, file('huge.mp4', 'video/mp4', 700 * 1024 * 1024));
+    expect(send).toHaveBeenCalledTimes(2);
     expect(wrapper.get('[data-testid="chat-attach-error"]').text()).toContain('50 MB');
 
-    send.mockRejectedValueOnce(new Error('network'));
-    await wrapper.get('textarea').setValue('clip');
+    // Only a thread that closed meanwhile is refused outright; anything else shows on the bubble.
+    send.mockRejectedValueOnce(new Error('closed'));
     await pick(wrapper, file('ok.mp4', 'video/mp4', 1024));
-    expect(wrapper.get('[data-testid="chat-attach-error"]').text()).toBe('Chưa gửi được video, vui lòng thử lại.');
-    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('clip');
-    expect(wrapper.text()).not.toMatch(/network|Error|409/);
+    expect(wrapper.get('[data-testid="chat-attach-error"]').text()).toBe('Cuộc trò chuyện đã khoá nên chưa gửi được.');
+    expect(wrapper.text()).not.toMatch(/closed|Error|409/);
+  });
+
+  it('keeps a failed send on screen with Thử lại and Bỏ, and never stores it twice', async () => {
+    const store = useChatStore();
+    store.activeConversationId = 'conv-1';
+    store.conversations = [conversation] as never;
+    store.messages = { 'conv-1': [] } as never;
+    apiClientMock.post.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { response: undefined }));
+    await store.sendAttachment(file('a.png', 'image/png', 10), 'Xem giúp');
+    const [bubble] = store.messages['conv-1'];
+    expect(bubble.upload).toEqual({ state: 'failed', progress: 0, error: 'Mạng yếu nên chưa gửi được. Bấm Thử lại khi mạng ổn hơn.' });
+
+    const item = mount(ChatMessageItem, { props: { message: bubble, isMe: true } });
+    expect(item.get('[data-testid="chat-attachment-upload"]').text()).toContain('Mạng yếu nên chưa gửi được');
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: { id: 'm9', conversationId: 'conv-1', senderId: 'cust-1', content: 'Xem giúp', createdAt: '2030-01-01T00:00:00Z', clientMessageId: bubble.clientMessageId, attachment: { kind: 'image', mimeType: 'image/png', sizeBytes: 10 } } } });
+    await item.get('[data-testid="chat-attachment-retry"]').trigger('click');
+    await flushPromises();
+    expect(store.messages['conv-1']).toHaveLength(1);
+    expect(store.messages['conv-1'][0]).toMatchObject({ id: 'm9', localPreviewUrl: 'blob:local' });
+    expect(store.messages['conv-1'][0].upload).toBeUndefined();
+    const forms = apiClientMock.post.mock.calls.map((call) => call[1] as FormData);
+    expect(forms.map((form) => form.get('clientMessageId'))).toEqual([bubble.clientMessageId, bubble.clientMessageId]);
+
+    // A failed one can also be dropped.
+    apiClientMock.post.mockRejectedValueOnce({ response: { status: 500 } });
+    await store.sendAttachment(file('b.png', 'image/png', 10), '');
+    const failed = store.messages['conv-1'][1];
+    expect(failed.upload?.state).toBe('failed');
+    store.discardAttachment(failed.clientMessageId!);
+    expect(store.messages['conv-1']).toHaveLength(1);
+  });
+
+  it('makes a video light first and shows how far it is', async () => {
+    const store = useChatStore();
+    store.activeConversationId = 'conv-1';
+    store.conversations = [conversation] as never;
+    store.messages = { 'conv-1': [] } as never;
+    const light = file('clip.mp4', 'video/mp4', 3 * 1024 * 1024);
+    let finishPrep!: (value: unknown) => void;
+    prepareVideo.mockImplementationOnce((_f: File, opts: { onProgress: (n: number) => void }) => {
+      opts.onProgress(0.25);
+      return new Promise((resolve) => { finishPrep = resolve; });
+    });
+    let progress!: (event: { loaded: number; total: number }) => void;
+    let finishUpload!: (value: unknown) => void;
+    apiClientMock.post.mockImplementationOnce((_url: string, _form: FormData, config: { onUploadProgress: typeof progress }) => {
+      progress = config.onUploadProgress;
+      return new Promise((resolve) => { finishUpload = resolve; });
+    });
+    const sending = store.sendAttachment(file('IMG_1.MOV', 'video/quicktime', 90 * 1024 * 1024), '');
+    await flushPromises();
+    expect(store.messages['conv-1'][0].upload).toEqual({ state: 'preparing', progress: 0.25 });
+    finishPrep({ file: light, shrunk: true, trimmed: false });
+    await flushPromises();
+    progress({ loaded: 1, total: 4 });
+    expect(store.messages['conv-1'][0].upload).toEqual({ state: 'uploading', progress: 0.25 });
+    // The light file goes up, not the 90 MB original.
+    expect((apiClientMock.post.mock.calls[0][1] as FormData).get('file')).toBe(light);
+    finishUpload({ data: { data: { id: 'm5', conversationId: 'conv-1', senderId: 'cust-1', content: '', createdAt: '2030-01-01T00:00:00Z', clientMessageId: store.messages['conv-1'][0].clientMessageId, attachment: { kind: 'video', mimeType: 'video/mp4', sizeBytes: 3 } } } });
+    await sending;
+    expect(store.messages['conv-1'][0]).toMatchObject({ id: 'm5' });
+    expect(store.conversations[0].lastMessagePreview).toBe('Đã gửi một video');
+  });
+
+  it('streams a stored video through its viewing link, downloading nothing before play', async () => {
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: { url: '/messages/attachment/stream/tok.sig', posterUrl: '/messages/attachment/stream/tok.sig/poster', expiresAt: '2030-01-01T00:15:00Z' } } });
+    const message = { id: 'm7', conversationId: 'conv-1', senderId: 'tech-2', content: '', createdAt: '2030-01-01T00:00:00Z', editedAt: null, isDeleted: false, clientMessageId: null, attachment: { kind: 'video', mimeType: 'video/quicktime', sizeBytes: 3 } };
+    const item = mount(ChatMessageItem, { props: { message, isMe: false } });
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/messages/m7/attachment/stream');
+    const video = item.get('[data-testid="chat-attachment-video"]');
+    expect(video.attributes('src')).toBe('https://api.example.test/api/v1/messages/attachment/stream/tok.sig');
+    expect(video.attributes('poster')).toBe('https://api.example.test/api/v1/messages/attachment/stream/tok.sig/poster');
+    expect(video.attributes('preload')).toBe('none');
+
+    // A link that stopped working is renewed once.
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: { url: '/messages/attachment/stream/new.sig', posterUrl: '/messages/attachment/stream/new.sig/poster', expiresAt: '2030-01-01T00:30:00Z' } } });
+    await video.trigger('error');
+    await flushPromises();
+    expect(item.get('[data-testid="chat-attachment-video"]').attributes('src')).toContain('new.sig');
+    // Failing again after that: said plainly, without asking for links in a loop.
+    const asked = apiClientMock.get.mock.calls.length;
+    await item.get('[data-testid="chat-attachment-video"]').trigger('error');
+    await flushPromises();
+    expect(item.text()).toContain('Chưa tải được video');
+    expect(apiClientMock.get.mock.calls.length).toBe(asked);
+
+    // Review 18/10/2026: the customer can try again by hand (the playable copy may have been still in the making).
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: { url: '/messages/attachment/stream/third.sig', posterUrl: '/messages/attachment/stream/third.sig/poster', expiresAt: '2030-01-01T00:45:00Z' } } });
+    await item.get('[data-testid="chat-attachment-video-retry"]').trigger('click');
+    await flushPromises();
+    const again = item.get('[data-testid="chat-attachment-video"]');
+    expect(again.attributes('src')).toContain('third.sig');
+    // Once it plays, a later expiry is renewed again by itself.
+    await again.trigger('loadeddata');
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: { url: '/messages/attachment/stream/fourth.sig', posterUrl: '/messages/attachment/stream/fourth.sig/poster', expiresAt: '2030-01-01T01:00:00Z' } } });
+    await again.trigger('error');
+    await flushPromises();
+    expect(item.get('[data-testid="chat-attachment-video"]').attributes('src')).toContain('fourth.sig');
   });
 
   it('shows the bubble at once from the local file and swaps in the stored message', async () => {

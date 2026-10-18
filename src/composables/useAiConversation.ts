@@ -19,6 +19,9 @@ import {
   type RecommendedService,
 } from '../api/ai.api';
 import { prepareForAi, shrinkForRetry, type PickedImage } from '../utils/image-for-ai';
+import { mediaApi } from '../api/media.api';
+import { prepareVideo, VideoPrepError, videoProblemText, VIDEO_SOURCE_MAX_BYTES, VIDEO_TYPES } from '../lib/video-prep';
+import { uploadErrorText, uploadWithRetry, UploadCancelledError } from '../lib/upload-retry';
 
 /** The assistant's first line, before the customer says anything. */
 export const ASSISTANT_GREETING =
@@ -56,26 +59,67 @@ export interface AiChatMessage {
   images?: string[];
   /** Local object URLs of the videos sent with this message; the AI never receives them. */
   videos?: string[];
+  /** The attachments of this message, to show how far each is on its way to the technician. */
+  attachmentIds?: string[];
   reply?: AiReply;
   isAcknowledgement?: boolean;
 }
 
 /**
- * PO 18/10/2026: the customer may send a short video in the chat with the
- * assistant. It is not analysed; it is kept, with the photos and the words,
- * and goes with the booking for the technician to watch.
+ * PO 18/10/2026: the customer may send photos and short videos in the chat with
+ * the assistant - at most three photos and two videos in the whole conversation.
+ * Videos are not analysed; photos and videos go up in the background as soon as
+ * they are sent, for the technician to see with the booking, so booking never
+ * waits on a weak connection longer than it has to.
  */
+export type AttachmentState = 'preparing' | 'ready' | 'uploading' | 'done' | 'failed';
+
 export interface AttachedVideo {
   id: string;
+  /** The picked file, previewed in the thread. */
   file: File;
   url: string;
+  /** What goes up: converted on the device when the browser can. */
+  prepared?: File;
+  shrunk?: boolean;
+  /** Longer than a minute: only the first minute goes. */
+  trimmed?: boolean;
+  state: AttachmentState;
+  /** 0..1 of the conversion while preparing. */
+  progress: number;
 }
+
+/** A photo or video sent in the thread, on its way to the technician. */
+export interface ChatAttachment {
+  id: string;
+  kind: 'image' | 'video';
+  /** The photo as sent to the assistant. */
+  dataUrl?: string;
+  video?: AttachedVideo;
+  state: AttachmentState;
+  /** 0..1 of the upload. */
+  progress: number;
+  uploadId?: string;
+  error?: string;
+  /** The connection dropped and it is being sent again. */
+  retrying?: boolean;
+}
+
 export const AI_MAX_VIDEOS = 2;
-export const AI_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
-export const AI_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
-/** At most this many chat photos go with the booking, besides the ones of the form. */
-export const AI_KEPT_IMAGES = 5;
+/** Photos in the whole conversation (the assistant also takes at most three per message). */
+export const AI_CHAT_MAX_IMAGES = 3;
+export const AI_VIDEO_TYPES = VIDEO_TYPES;
 export const VIDEO_NOT_ANALYSED = 'Video được gửi kèm cho kỹ thuật viên xem, trợ lý AI không xem video.';
+export { uploadErrorText };
+export const ATTACHMENT_LIMIT_TEXT = `Mỗi cuộc trò chuyện gửi được tối đa ${AI_CHAT_MAX_IMAGES} ảnh và ${AI_MAX_VIDEOS} video.`;
+
+function dataUrlToFile(dataUrl: string, name: string): File {
+  const [head, body = ''] = dataUrl.split(',');
+  const mime = /data:([^;]+)/.exec(head)?.[1] || 'image/jpeg';
+  const bytes = Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0));
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+  return new File([bytes], `${name}.${ext}`, { type: mime });
+}
 
 const objectUrl = (file: File) => (typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '');
 const revokeUrl = (url: string) => {
@@ -158,12 +202,27 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   const messages = ref<AiChatMessage[]>(greetingMessage());
   const input = ref('');
   const pending = ref<PickedImage[]>([]);
-  /** Videos waiting in the composer, sent with the next message. */
+  /** Videos waiting in the composer (being converted, or ready), sent with the next message. */
   const pendingVideos = ref<AttachedVideo[]>([]);
-  /** Videos already in the thread; they go with the booking. */
-  const sentVideos = ref<AttachedVideo[]>([]);
-  /** Photos the customer sent in the thread (not the form's own), for the booking. */
-  const sentImages = ref<string[]>([]);
+  /** Photos and videos sent in the thread (not the form's own), going up for the booking. */
+  const attachments = ref<ChatAttachment[]>([]);
+  /** Cancels a video's conversion or an attachment's upload when it is removed. */
+  const controllers = new Map<string, AbortController>();
+  const imagesUsed = computed(() => pending.value.length + attachments.value.filter((item) => item.kind === 'image').length);
+  const videosUsed = computed(() => pendingVideos.value.length + attachments.value.filter((item) => item.kind === 'video').length);
+  /** Where the photos and videos for the technician are: for the booking step to wait on or offer a retry. */
+  const uploads = computed(() => {
+    const items = attachments.value;
+    const busy = items.filter((item) => item.state === 'preparing' || item.state === 'ready' || item.state === 'uploading');
+    return {
+      total: items.length,
+      done: items.filter((item) => item.state === 'done').length,
+      failed: items.filter((item) => item.state === 'failed').length,
+      busy: busy.length,
+      /** Upload progress of what is still on its way, 0..1. */
+      progress: busy.length ? busy.reduce((sum, item) => sum + (item.state === 'uploading' ? item.progress : 0), 0) / busy.length : 1,
+    };
+  });
   /** True from Send until the reply is fully on screen: nothing to act on before then. */
   const isThinking = ref(false);
   /** The reply is being written out; the typing dots give way to it. */
@@ -214,39 +273,73 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     pinnedService.value = null;
     lastReply.value = null;
     pending.value = [];
-    for (const video of [...pendingVideos.value, ...sentVideos.value]) revokeUrl(video.url);
+    for (const controller of controllers.values()) controller.abort();
+    controllers.clear();
+    for (const video of pendingVideos.value) revokeUrl(video.url);
+    for (const item of attachments.value) if (item.video) revokeUrl(item.video.url);
     pendingVideos.value = [];
-    sentVideos.value = [];
-    sentImages.value = [];
+    attachments.value = [];
     input.value = '';
     turnCount.value = 0;
     problem.value = '';
     messages.value = greetingMessage();
   }
 
-  /** Add picked files: photos wait to be sent to the assistant (at most three), videos only travel with the booking. */
+  /** Converts a picked video in the background; a video that cannot go is taken out with the reason. */
+  function prepare(video: AttachedVideo) {
+    const controller = new AbortController();
+    controllers.set(video.id, controller);
+    prepareVideo(video.file, { signal: controller.signal, onProgress: (fraction) => { video.progress = fraction; } })
+      .then((prepared) => {
+        if (controller.signal.aborted) return;
+        video.prepared = prepared.file;
+        video.shrunk = prepared.shrunk;
+        video.trimmed = prepared.trimmed;
+        video.state = 'ready';
+        video.progress = 1;
+        const sent = attachments.value.find((item) => item.video?.id === video.id);
+        if (sent && sent.state === 'preparing') sent.state = 'ready';
+        void pump();
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof VideoPrepError) problem.value = videoProblemText(error.problem);
+        dropVideo(video.id);
+      })
+      .finally(() => {
+        if (controllers.get(video.id) === controller) controllers.delete(video.id);
+      });
+  }
+
+  /** Add picked files: photos wait to be sent to the assistant, videos only travel with the booking (3 photos, 2 videos per conversation). */
   async function addFiles(files: File[]) {
     if (files.length === 0) return;
     const videos = files.filter((file) => (file.type || '').toLowerCase().startsWith('video/'));
     const images = files.filter((file) => !videos.includes(file));
     let videoProblem = '';
     for (const file of videos) {
-      if (!AI_VIDEO_TYPES.includes(file.type.toLowerCase())) {
-        videoProblem = 'Chỉ gửi được video MP4, MOV hoặc WebM.';
-      } else if (file.size > AI_VIDEO_MAX_BYTES) {
-        videoProblem = 'Video lớn hơn 50 MB, vui lòng quay ngắn hơn.';
-      } else if (pendingVideos.value.length + sentVideos.value.length >= AI_MAX_VIDEOS) {
-        videoProblem = `Gửi được tối đa ${AI_MAX_VIDEOS} video.`;
+      if (videosUsed.value >= AI_MAX_VIDEOS) {
+        videoProblem = ATTACHMENT_LIMIT_TEXT;
+      } else if (!AI_VIDEO_TYPES.includes(file.type.toLowerCase())) {
+        videoProblem = videoProblemText('type');
+      } else if (file.size > VIDEO_SOURCE_MAX_BYTES) {
+        videoProblem = videoProblemText('too_big');
       } else {
-        pendingVideos.value = [...pendingVideos.value, { id: nextId(), file, url: objectUrl(file) }];
+        pendingVideos.value = [...pendingVideos.value, { id: nextId(), file, url: objectUrl(file), state: 'preparing', progress: 0 }];
+        prepare(pendingVideos.value[pendingVideos.value.length - 1]);
       }
     }
     if (images.length === 0) {
       problem.value = videoProblem;
       return;
     }
-    const result = await prepareForAi(images, pending.value.length);
-    problem.value = result.problemVi || videoProblem;
+    if (imagesUsed.value >= AI_CHAT_MAX_IMAGES) {
+      problem.value = ATTACHMENT_LIMIT_TEXT;
+      return;
+    }
+    const room = AI_CHAT_MAX_IMAGES - imagesUsed.value;
+    const result = await prepareForAi(images, imagesUsed.value);
+    problem.value = result.problemVi || (images.length > room ? ATTACHMENT_LIMIT_TEXT : videoProblem);
     if (result.images.length > 0) {
       pending.value = [...pending.value, ...result.images].slice(0, AI_MAX_IMAGES);
     }
@@ -256,26 +349,120 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     pending.value = pending.value.filter((_, i) => i !== index);
   }
 
+  /** Takes a video out of the composer and out of what goes with the booking. */
+  function dropVideo(id: string) {
+    controllers.get(id)?.abort();
+    controllers.delete(id);
+    const waiting = pendingVideos.value.find((video) => video.id === id);
+    if (waiting) {
+      revokeUrl(waiting.url);
+      pendingVideos.value = pendingVideos.value.filter((video) => video.id !== id);
+    }
+    const sent = attachments.value.find((item) => item.video?.id === id);
+    if (sent) removeAttachment(sent.id);
+  }
+
   function removePendingVideo(index: number) {
     const video = pendingVideos.value[index];
-    if (video) revokeUrl(video.url);
-    pendingVideos.value = pendingVideos.value.filter((_, i) => i !== index);
+    if (video) dropVideo(video.id);
   }
 
-  /** Drop a video already in the thread from what goes with the booking. */
-  function removeSentVideo(id: string) {
-    const video = sentVideos.value.find((item) => item.id === id);
-    if (!video) return;
-    sentVideos.value = sentVideos.value.filter((item) => item.id !== id);
-    for (const message of messages.value) {
-      if (message.videos?.includes(video.url)) message.videos = message.videos.filter((url) => url !== video.url);
+  /** Leaves a sent photo or video out of the booking; a video also leaves the thread. */
+  function removeAttachment(id: string) {
+    const item = attachments.value.find((entry) => entry.id === id);
+    if (!item) return;
+    controllers.get(id)?.abort();
+    controllers.delete(id);
+    const video = item.video;
+    if (video) {
+      controllers.get(video.id)?.abort();
+      controllers.delete(video.id);
+      for (const message of messages.value) {
+        if (message.videos?.includes(video.url)) message.videos = message.videos.filter((url) => url !== video.url);
+      }
+      revokeUrl(video.url);
     }
-    revokeUrl(video.url);
+    attachments.value = attachments.value.filter((entry) => entry.id !== id);
   }
 
-  /** What the booking takes from this conversation for the technician: the photos and videos sent in it. */
-  function bookingAttachments(): { images: string[]; videos: File[] } {
-    return { images: [...sentImages.value], videos: sentVideos.value.map((video) => video.file) };
+  /** Same as removeAttachment, by the video's own id (kept for the booking step). */
+  function removeSentVideo(id: string) {
+    const item = attachments.value.find((entry) => entry.video?.id === id || entry.id === id);
+    if (item) removeAttachment(item.id);
+  }
+
+  let pumping = false;
+  /** Sends what is ready, one at a time, so a weak connection is not split between files. */
+  async function pump(): Promise<void> {
+    if (pumping) return;
+    pumping = true;
+    try {
+      for (;;) {
+        const next = attachments.value.find((item) => item.state === 'ready');
+        if (!next) break;
+        await uploadOne(next);
+      }
+    } finally {
+      pumping = false;
+    }
+  }
+
+  async function uploadOne(item: ChatAttachment): Promise<void> {
+    item.state = 'uploading';
+    item.progress = 0;
+    item.error = undefined;
+    item.retrying = false;
+    const controller = new AbortController();
+    controllers.set(item.id, controller);
+    const track = {
+      signal: controller.signal,
+      onProgress: (fraction: number) => { item.progress = Math.max(item.progress, fraction); },
+      onRetry: () => { item.retrying = true; },
+    };
+    try {
+      const video = item.video;
+      const result = video
+        ? await uploadWithRetry(({ onProgress, signal }) => mediaApi.uploadBookingVideo(video.prepared ?? video.file, { onProgress, signal }), track)
+        : await uploadWithRetry(({ onProgress, signal }) => mediaApi.uploadBookingPhoto(dataUrlToFile(item.dataUrl ?? '', 'tro-ly'), { onProgress, signal }), track);
+      item.uploadId = result.uploadId;
+      item.state = 'done';
+      item.progress = 1;
+    } catch (error) {
+      if (error instanceof UploadCancelledError || controller.signal.aborted) return;
+      item.state = 'failed';
+      item.error = uploadErrorText(error);
+    } finally {
+      item.retrying = false;
+      if (controllers.get(item.id) === controller) controllers.delete(item.id);
+    }
+  }
+
+  /** Sends a failed photo or video again. */
+  function retryUpload(id: string) {
+    const item = attachments.value.find((entry) => entry.id === id);
+    if (!item || item.state !== 'failed') return;
+    item.state = item.video && item.video.state !== 'ready' ? 'preparing' : 'ready';
+    item.progress = 0;
+    item.error = undefined;
+    void pump();
+  }
+
+  /** Sends every failed one again (the booking step does this when it opens). */
+  function retryFailed() {
+    for (const item of attachments.value) if (item.state === 'failed') retryUpload(item.id);
+  }
+
+  /** The upload ids of what has reached the server, for the booking. */
+  function bookingUploadIds(): string[] {
+    return attachments.value.flatMap((item) => (item.state === 'done' && item.uploadId ? [item.uploadId] : []));
+  }
+
+  /** The photos and videos that go with the booking, for the confirm step. */
+  function bookingAttachments(): { images: string[]; videos: AttachedVideo[] } {
+    return {
+      images: attachments.value.flatMap((item) => (item.kind === 'image' && item.dataUrl ? [item.dataUrl] : [])),
+      videos: attachments.value.flatMap((item) => (item.video ? [item.video] : [])),
+    };
   }
 
   /**
@@ -293,11 +480,16 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     if (!text.trim()) return;
     if (isThinking.value) return;
     const videos = opts.videos ?? [];
-    // The form's own photos are uploaded by the form; only the chat's are kept here.
-    if (opts.keepImagesForBooking !== false && images.length) {
-      sentImages.value = [...sentImages.value, ...images.map((image) => image.dataUrl)].slice(0, AI_KEPT_IMAGES);
+    // The form's own photos are uploaded by the form; only the chat's go up from here, at once, in the background.
+    const sentNow: ChatAttachment[] = [];
+    if (opts.keepImagesForBooking !== false) {
+      for (const image of images) sentNow.push({ id: nextId(), kind: 'image', dataUrl: image.dataUrl, state: 'ready', progress: 0 });
     }
-    if (videos.length) sentVideos.value = [...sentVideos.value, ...videos];
+    for (const video of videos) sentNow.push({ id: nextId(), kind: 'video', video, state: video.state === 'ready' ? 'ready' : 'preparing', progress: 0 });
+    if (sentNow.length) {
+      attachments.value = [...attachments.value, ...sentNow];
+      void pump();
+    }
 
     const isQuestion = images.length === 0 && looksLikeAQuestion(text);
     const situation =
@@ -315,6 +507,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
       text,
       images: images.map((i) => i.dataUrl),
       ...(videos.length ? { videos: videos.map((video) => video.url) } : {}),
+      ...(sentNow.length ? { attachmentIds: sentNow.map((item) => item.id) } : {}),
     });
     messages.value.push({ id: nextId(), sender: 'bot', text: holdingLineFor(situation), isAcknowledgement: true });
     isThinking.value = true;
@@ -410,8 +603,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     input,
     pending,
     pendingVideos,
-    sentVideos,
-    sentImages,
+    attachments,
+    imagesUsed,
+    videosUsed,
+    uploads,
     isThinking,
     turnCount,
     problem,
@@ -427,6 +622,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     removePending,
     removePendingVideo,
     removeSentVideo,
+    removeAttachment,
+    retryUpload,
+    retryFailed,
+    bookingUploadIds,
     bookingAttachments,
     sendTurn,
     send,

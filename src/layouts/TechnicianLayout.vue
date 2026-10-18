@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onOrderListsChange, whileOffline } from '../services/live-updates';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { userFacingError } from '../utils/user-facing-error';
@@ -60,10 +61,22 @@ const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
 
 // The badge, the switch and the banners read the same cached data as the pages:
-// one request serves both, and the 30-second poll keeps the pages fresh too.
+// one request serves both. Invitations follow the server live (PO 18/10/2026);
+// they are polled every 30 s only while the socket is down.
 const invitationsQuery = useCachedQuery(sharedQueries.technicianInvitations);
 const invitationCount = computed(() => invitationsQuery.data.value?.length ?? 0);
 const refreshInvitationCount = () => invitationsQuery.refetch();
+
+async function countActiveJobs() {
+  try {
+    const jobs = await ordersApi.getTechnicianJobs();
+    activeJobs.value = jobs.filter((j) =>
+      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase()),
+    ).length;
+  } catch {
+    // ignore
+  }
+}
 
 const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
 watch(
@@ -97,7 +110,8 @@ const needsDeposit = computed(
 
 const formatVnd = (amount: number) => `${Number(amount).toLocaleString('vi-VN')}\u00A0₫`;
 
-let invitationPoll: ReturnType<typeof setInterval> | null = null;
+let invitationPoll: (() => void) | null = null;
+let stopJobCount: (() => void) | null = null;
 let locationPing: ReturnType<typeof setInterval> | null = null;
 
 // Urgent jobs are offered by a GPS position younger than 15 minutes (PO 08/10/2026),
@@ -117,16 +131,10 @@ onMounted(async () => {
   chatStore.initSocket();
   // A technician must be reachable by voice from any screen, not only the chat.
   callStore.initCallSignalling();
-  try {
-    const jobs = await ordersApi.getTechnicianJobs();
-    const active = jobs.filter((j) =>
-      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase())
-    );
-    activeJobs.value = active.length;
-  } catch {
-    // ignore
-  }
-  invitationPoll = setInterval(() => void refreshInvitationCount(), 30000);
+  await countActiveJobs();
+  // The count follows a job that starts, finishes or changes hands, as it happens.
+  stopJobCount = onOrderListsChange(() => void countActiveJobs());
+  invitationPoll = whileOffline(() => void refreshInvitationCount(), 30000);
   // Location is reported only while taking jobs: wait for the switch's state.
   await profileQuery.query.suspense();
   pingLocation();
@@ -134,7 +142,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (invitationPoll) clearInterval(invitationPoll);
+  invitationPoll?.();
+  stopJobCount?.();
   if (locationPing) clearInterval(locationPing);
 });
 

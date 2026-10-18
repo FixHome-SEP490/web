@@ -176,7 +176,7 @@ describe('customer one-time matching extension', () => {
       .mockResolvedValueOnce(refreshed);
     const wrapper = mount(BookingDetailPage, { global });
     await flushPromises();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(10000);
     expect(mocks.getBooking).toHaveBeenCalledTimes(2);
 
     await openExtension(wrapper);

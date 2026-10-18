@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Image as ImageIcon, LockKeyhole, Play, ShieldAlert } from 'lucide-vue-next';
-import { AUTH_SESSION_INVALIDATED_EVENT } from '../api/client';
+import { AUTH_SESSION_INVALIDATED_EVENT, apiUrl } from '../api/client';
 import { mediaApi } from '../api/media.api';
 import type { BookingMedia } from '../api/bookings.api';
 
 interface MediaItemState {
   status: 'loading' | 'ready' | 'error' | 'unsupported';
+  /** A photo's object URL, or a video's streaming link. */
   objectUrl?: string;
+  /** A video's poster still; hidden if not ready yet. */
+  posterUrl?: string;
+  posterFailed?: boolean;
+  /** The streaming link was renewed once after it stopped working. */
+  renewed?: boolean;
 }
 
 /** Short videos sit beside the photos (PO 18/10/2026); they play here and go to no AI. */
@@ -64,6 +70,17 @@ const loadPrivateMedia = async (media: BookingMedia, requestGeneration: number) 
   const state = getMediaState(media);
   if (authorizationBlocked.value || !mounted.value) return;
   try {
+    // PO 18/10/2026: a video streams through a short-lived link, so it starts at
+    // once and can be skipped through instead of downloading in full first.
+    if (isVideo(media)) {
+      const link = await mediaApi.getBookingVideoLink(props.bookingId, media.id);
+      if (!mounted.value || requestGeneration !== generation.value || authorizationBlocked.value) return;
+      state.objectUrl = apiUrl(link.url);
+      state.posterUrl = apiUrl(link.posterUrl);
+      state.status = 'ready';
+      selectedMediaId.value ??= media.id;
+      return;
+    }
     const blob = await mediaApi.getBookingMediaContent(props.bookingId, media.id);
     const blobMimeType = blob.type || media.mimeType;
     if (!/^(image|video)\//i.test(blobMimeType)) throw new Error('Unsupported private Booking media type');
@@ -107,6 +124,39 @@ const currentSource = computed(() => {
 });
 
 const hasVideo = computed(() => props.media.some(isVideo));
+
+/**
+ * The viewing link lasts fifteen minutes: when the player stops on it, a new one
+ * is asked for once. Once a video plays again it may be renewed again later (a
+ * page left open for an hour), and a video that still fails can be retried by
+ * hand, for one whose playable copy was still being made.
+ */
+const videoPlayed = (media: BookingMedia) => {
+  getMediaState(media).renewed = false;
+};
+const retryVideo = (media: BookingMedia) => {
+  const state = getMediaState(media);
+  state.renewed = false;
+  state.status = 'loading';
+  void loadPrivateMedia(media, generation.value);
+};
+const renewVideoLink = async (media: BookingMedia) => {
+  const state = getMediaState(media);
+  if (state.renewed || authorizationBlocked.value) {
+    state.status = 'error';
+    return;
+  }
+  state.renewed = true;
+  const requestGeneration = generation.value;
+  try {
+    const link = await mediaApi.getBookingVideoLink(props.bookingId, media.id);
+    if (!mounted.value || requestGeneration !== generation.value) return;
+    state.objectUrl = apiUrl(link.url);
+    state.posterUrl = apiUrl(link.posterUrl);
+  } catch {
+    if (mounted.value && requestGeneration === generation.value) state.status = 'error';
+  }
+};
 const privateLabel = (media: BookingMedia) => (isVideo(media) ? 'Video riêng tư' : 'Ảnh riêng tư');
 
 const selectMedia = (media: BookingMedia) => {
@@ -154,14 +204,18 @@ onUnmounted(() => {
     </div>
 
     <div v-if="currentSource" class="overflow-hidden rounded-xl border border-ink-200 bg-ink-50">
+      <!-- Nothing is downloaded until play is pressed: a weak connection is spent only on what is watched. -->
       <video
         v-if="currentMedia && isVideo(currentMedia)"
         data-testid="booking-media-selected-video"
         :src="currentSource"
+        :poster="currentState?.posterFailed ? undefined : currentState?.posterUrl"
         controls
         playsinline
-        preload="metadata"
+        preload="none"
         class="max-h-72 w-full bg-ink-900"
+        @error="renewVideoLink(currentMedia)"
+        @loadeddata="videoPlayed(currentMedia)"
       ></video>
       <img
         v-else
@@ -187,14 +241,15 @@ onUnmounted(() => {
           @click="selectMedia(mediaItem)"
         >
           <span v-if="isVideo(mediaItem)" class="relative block h-28 w-full bg-ink-900">
-            <video
-              :src="getMediaState(mediaItem).objectUrl"
-              muted
-              playsinline
-              preload="metadata"
+            <!-- The poster still, a few KB, instead of loading the video for a thumbnail. -->
+            <img
+              v-if="getMediaState(mediaItem).posterUrl && !getMediaState(mediaItem).posterFailed"
+              :src="getMediaState(mediaItem).posterUrl"
+              alt=""
               class="h-28 w-full object-cover opacity-90"
               aria-hidden="true"
-            ></video>
+              @error="getMediaState(mediaItem).posterFailed = true"
+            >
             <span class="absolute inset-0 flex items-center justify-center">
               <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow">
                 <Play :size="16" class="ml-0.5" aria-hidden="true" />
@@ -216,6 +271,15 @@ onUnmounted(() => {
           <div v-else-if="getMediaState(mediaItem).status === 'error'" class="space-y-1 text-[11px] text-danger-700">
             <ShieldAlert :size="16" class="mx-auto" aria-hidden="true" />
             <p>{{ isVideo(mediaItem) ? 'Video không khả dụng' : 'Ảnh riêng tư không khả dụng' }}</p>
+            <button
+              v-if="isVideo(mediaItem) && !authorizationBlocked"
+              type="button"
+              class="font-semibold text-brand-700 hover:underline"
+              data-testid="booking-media-video-retry"
+              @click="retryVideo(mediaItem)"
+            >
+              Thử lại
+            </button>
           </div>
           <div v-else class="space-y-1 text-[11px] text-ink-500">
             <ShieldAlert :size="16" class="mx-auto" aria-hidden="true" />

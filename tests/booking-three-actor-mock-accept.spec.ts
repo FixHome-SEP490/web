@@ -183,7 +183,7 @@ describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only
     await expect(bookingsApi.getBooking(bookingId)).rejects.toThrow('Synthetic 403');
     await expect(bookingsApi.respondInvitation('invite-tech-b', 'ACCEPT')).rejects.toThrow('Synthetic 403');
     fake.setActor('customer');
-    await vi.advanceTimersByTimeAsync(5000); await flushPromises();
+    await vi.advanceTimersByTimeAsync(10000); await flushPromises();
     await customerPage.find('[data-testid="booking-open-service-order"]').trigger('click');
     expect(push).toHaveBeenCalledWith({ name: 'customer-order-detail', params: { id: orderId } });
     technicianA.unmount(); technicianB.unmount(); customerPage.unmount();

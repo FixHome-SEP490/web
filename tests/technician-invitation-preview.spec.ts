@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const { mockGet, push } = vi.hoisted(() => ({ mockGet: vi.fn(), push: vi.fn() }));
-vi.mock('../src/api/client', () => ({ default: { get: mockGet, post: vi.fn() }, AUTH_SESSION_INVALIDATED_EVENT: 'auth-invalidated' }));
+vi.mock('../src/api/client', () => ({ default: { get: mockGet, post: vi.fn() }, AUTH_SESSION_INVALIDATED_EVENT: 'auth-invalidated', apiUrl: (path: string) => `https://api.example.test/api/v1${path}` }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }));
 
 import { bookingsApi } from '../src/api/bookings.api';
@@ -38,6 +38,8 @@ beforeEach(() => {
   mockGet.mockReset();
   push.mockReset();
   mockGet.mockImplementation(async (url: string) => {
+    // PO 18/10/2026: a video streams through a short viewing link instead of a download.
+    if (url.endsWith('/stream')) return { data: { data: { url: '/bookings/media/stream/tok.sig', posterUrl: '/bookings/media/stream/tok.sig/poster', expiresAt: '2030-01-01T08:15:00.000Z' } } };
     if (url.includes('/media/')) return { data: new Blob(['clip'], { type: 'video/mp4' }) };
     if (url === '/invitations/my') return { data: { data: [invitation] } };
     return { data: { data: null } };
@@ -85,8 +87,13 @@ describe('WEB technician invitation preview (PO 18/10/2026)', () => {
     expect(wrapper.get('[data-testid="invitation-detail-distance"]').text()).toBe('Cách bạn khoảng 3-5 km');
     expect(wrapper.get('[data-testid="invitation-detail-price"]').text()).toMatch(/Giá niêm yết\s*250\.000\s*₫\s*× 2/);
     expect(wrapper.get('[data-testid="booking-media-viewer"]').text()).toContain('Ảnh và video hiện trường');
-    expect(wrapper.find('video').exists()).toBe(true);
-    expect(mockGet).toHaveBeenCalledWith('/bookings/booking-synthetic/media/media-video/content', { responseType: 'blob' });
+    const video = wrapper.get('[data-testid="booking-media-selected-video"]');
+    expect(video.attributes('src')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig');
+    expect(video.attributes('poster')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig/poster');
+    // Nothing downloads before play, and the whole video is never fetched as a file.
+    expect(video.attributes('preload')).toBe('none');
+    expect(mockGet).toHaveBeenCalledWith('/bookings/booking-synthetic/media/media-video/stream');
+    expect(mockGet).not.toHaveBeenCalledWith('/bookings/booking-synthetic/media/media-video/content', expect.anything());
     expect(wrapper.get('[data-testid="invitation-detail-privacy"]').text()).toBe('Địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách hiện sau khi bạn nhận đơn.');
 
     await wrapper.get('[data-testid="invitation-detail-ai-summary"]').trigger('click');
