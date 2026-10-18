@@ -72,6 +72,8 @@ export interface ServiceOrderItem {
   fixedUnitPrice?: number | null;
   quantity?: number;
   scopeDescription?: string;
+  /** What the customer wrote when booking (the problem), as opposed to what the service covers. */
+  bookingDescription?: string | null;
   id: string;
   code: string;
   bookingId: string;

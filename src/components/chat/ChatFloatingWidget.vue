@@ -43,6 +43,7 @@ const filteredConversations = computed(() => {
     (c) =>
       c.counterpart.fullName.toLowerCase().includes(query) ||
       (c.serviceName && c.serviceName.toLowerCase().includes(query)) ||
+      (c.orderCode && c.orderCode.toLowerCase().includes(query)) ||
       (c.lastMessagePreview && c.lastMessagePreview.toLowerCase().includes(query)),
   );
 });
@@ -264,8 +265,9 @@ function handleToggleWidget() {
                     </div>
 
                     <!-- Service tag -->
-                    <div v-if="conv.serviceName" class="text-[11px] text-brand-600 font-medium truncate mb-0.5">
-                      {{ conv.serviceName }}
+                    <div v-if="conv.serviceName || conv.orderCode" class="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-xs">
+                      <span v-if="conv.serviceName" class="font-medium text-brand-600 truncate">{{ conv.serviceName }}</span>
+                      <span v-if="conv.orderCode" class="shrink-0 text-ink-500 font-num">{{ conv.orderCode }}</span>
                     </div>
 
                     <!-- Preview text -->
@@ -309,7 +311,7 @@ function handleToggleWidget() {
     >
       <button
         type="button"
-        class="relative w-13 h-13 rounded-full text-white flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
+        class="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full text-white flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
         :class="[
           chatStore.isWidgetOpen && !isMinimized
             ? 'bg-brand-700 ring-4 ring-brand-100'
@@ -319,7 +321,7 @@ function handleToggleWidget() {
         @click="handleToggleWidget"
         :title="chatStore.isWidgetOpen ? (isMinimized ? 'Mở lại khung chat' : 'Đóng / Thu gọn chat') : 'Mở tin nhắn hỗ trợ'"
       >
-        <MessageSquare :size="24" class="transition-transform duration-300" :class="chatStore.isWidgetOpen ? 'scale-90' : 'scale-100'" />
+        <MessageSquare :size="22" class="transition-transform duration-300" :class="chatStore.isWidgetOpen ? 'scale-90' : 'scale-100'" />
 
         <!-- Total Unread Badge -->
         <span

@@ -306,6 +306,7 @@ function handleHeaderClick() {
               {{ conversation.serviceName }}
             </span>
             <span v-else>Cuộc trò chuyện theo đơn</span>
+            <span v-if="conversation?.orderCode" class="font-num" data-testid="chat-thread-order-code"> · {{ conversation.orderCode }}</span>
           </p>
         </div>
       </div>

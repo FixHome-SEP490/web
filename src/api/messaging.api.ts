@@ -54,6 +54,8 @@ export interface ConversationItem {
   serviceOrderId: string | null;
   status: ConversationStatus;
   serviceName: string | null;
+  /** The order's code (FH-...), to tell apart threads with the same person and service (PO 18/10/2026). Older servers send nothing. */
+  orderCode?: string | null;
   counterpart: ConversationParticipant;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;

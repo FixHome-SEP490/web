@@ -27,6 +27,8 @@ import { vnDateString } from '../utils/vn-time';
 import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 const router = useRouter();
+/** The full chat page fills the screen: no room kept for the floating buttons it does not show. */
+const onChatPage = computed(() => router.currentRoute?.value?.name === 'customer-messages');
 const authStore = useAuthStore();
 const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
@@ -313,7 +315,7 @@ const handleLogout = async () => {
       </p>
     </div>
 
-    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 lg:pb-10">
+    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-44 sm:pb-48 lg:pb-10'">
       <router-view v-slot="{ Component, route: current }">
         <component :is="Component" :key="bookingFormKey(current)" />
       </router-view>
@@ -323,6 +325,7 @@ const handleLogout = async () => {
     <nav
       class="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]"
       aria-label="Điều hướng chính"
+      data-fh-bottom-dock
     >
       <div ref="mobileNavRef" class="relative grid grid-cols-5 h-16">
         <!-- Sliding active indicator bar for mobile -->
