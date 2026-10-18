@@ -22,13 +22,13 @@ import {
   Zap,
   Utensils,
   Lock,
-  Flame,
   Check,
   Search,
   X,
   Minus,
   RotateCcw,
   ChevronDown,
+  Play,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -71,7 +71,9 @@ const selectedCategoryId = ref('');
 const services = ref<ServiceItem[]>([]);
 const selectedServiceId = ref('');
 const description = ref('');
-const urgency = ref<'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
+// The urgency slider left the form (PO 18/10/2026): "Tới ngay" in the time step says it.
+// The booking keeps the standard level the API defaults to, as the mobile app sends.
+const urgency = 'NORMAL' as const;
 const quantity = ref(1);
 
 // UX Enhancements: Search, Filter, Sync
@@ -207,8 +209,63 @@ async function startAiConversation() {
   void aiConversation.loadHoldingLines();
   const files = uploadedPhotos.value.map((photo) => photo.file).slice(0, AI_MAX_IMAGES);
   const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
-  await aiConversation.sendTurn(description.value.trim(), prepared.images);
+  // These photos are the form's own and are uploaded with it; only the chat's are kept for the booking.
+  await aiConversation.sendTurn(description.value.trim(), prepared.images, { keepImagesForBooking: false });
 }
+
+/**
+ * PO 18/10/2026: the photos and videos the customer sent in the chat with the
+ * assistant go with the booking for the technician (the videos were never
+ * shown to the AI). They went up in the background as soon as they were sent;
+ * the booking takes those that arrived, and the confirm step says where each
+ * one is, with a retry or a way to leave it out, so a weak connection never
+ * blocks booking without the customer knowing why.
+ */
+const chatItems = computed(() => (isAiFlow ? aiConversation.attachments.value : []));
+const chatUploads = computed(() =>
+  isAiFlow ? aiConversation.uploads.value : { total: 0, done: 0, failed: 0, busy: 0, progress: 1 },
+);
+/** A booking holds five photos, the form's own first: the chat's beyond that stay out (said on the confirm step). */
+const chatPhotoRoom = computed(() => Math.max(0, 5 - uploadedPhotos.value.length));
+const chatPhotosLeftOut = computed(() => Math.max(0, chatItems.value.filter((item) => item.kind === 'image').length - chatPhotoRoom.value));
+const chatAttachmentSummary = computed(() => {
+  const parts: string[] = [];
+  const photos = uploadedPhotos.value.length + Math.min(chatPhotoRoom.value, chatItems.value.filter((item) => item.kind === 'image').length);
+  const videos = chatItems.value.filter((item) => item.kind === 'video').length;
+  if (photos) parts.push(`${photos} ảnh`);
+  if (videos) parts.push(`${videos} video`);
+  return parts.join(', ');
+});
+
+/** A booking holds five photos, the form's own first, and two videos. */
+function chatUploadIdsForBooking(): string[] {
+  const done = chatItems.value.filter((item) => item.state === 'done' && item.uploadId);
+  const images = done.filter((item) => item.kind === 'image').slice(0, chatPhotoRoom.value);
+  const videos = done.filter((item) => item.kind === 'video').slice(0, 2);
+  return [...images, ...videos].map((item) => item.uploadId as string);
+}
+
+/** "Ảnh 2", "Video 1": numbered within their own kind. */
+function chatItemLabel(item: (typeof chatItems.value)[number]): string {
+  const sameKind = chatItems.value.filter((entry) => entry.kind === item.kind);
+  return `${item.kind === 'video' ? 'Video' : 'Ảnh'} ${sameKind.indexOf(item) + 1}`;
+}
+
+const chatPercent = (fraction: number) => `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+
+/** Where one of the chat's photos or videos is, for the confirm step. */
+function chatItemStatus(item: (typeof chatItems.value)[number]): string {
+  if (item.state === 'preparing') return `Đang nén ${chatPercent(item.video?.progress ?? 0)}`;
+  if (item.state === 'ready') return 'Chờ gửi';
+  if (item.state === 'uploading') return item.retrying ? 'Mạng chập chờn, đang gửi lại' : `Đang gửi ${chatPercent(item.progress)}`;
+  if (item.state === 'done') return 'Đã gửi';
+  return item.error || 'Chưa gửi được';
+}
+
+// Anything that failed while the customer was away (signed out, offline) is tried again here.
+onMounted(() => {
+  if (isAiFlow) aiConversation.retryFailed();
+});
 
 /** Start again from the current description and photos, e.g. after editing step 1. */
 async function restartAiConversation() {
@@ -467,146 +524,6 @@ function toggleSymptom(symptom: string) {
     return;
   }
   description.value = `${description.value.trim().replace(/,\s*$/, '')}, ${symptom.toLocaleLowerCase('vi')}`;
-}
-
-const urgencyList = [
-  {
-    key: 'LOW',
-    label: 'Bình thường',
-    hint: 'Trong 24–48h',
-    badge: 'Tiết kiệm',
-    icon: ShieldCheck,
-  },
-  {
-    key: 'NORMAL',
-    label: 'Tiêu chuẩn',
-    hint: 'Trong ngày',
-    badge: 'Phổ biến',
-    icon: Clock,
-  },
-  {
-    key: 'HIGH',
-    label: 'Khẩn cấp',
-    hint: 'Trong 1–2h',
-    badge: 'Ưu tiên',
-    icon: Zap,
-  },
-  {
-    key: 'EMERGENCY',
-    label: 'Cực khẩn',
-    hint: 'Dưới 30 phút',
-    badge: 'Hỏa tốc',
-    icon: Flame,
-  },
-] as const;
-
-/** Track colour per level, from calm to alarming. */
-const URGENCY_COLORS: Record<(typeof urgencyList)[number]['key'], string> = {
-  LOW: '#16a34a',
-  NORMAL: '#2563eb',
-  HIGH: '#f59e0b',
-  EMERGENCY: '#dc2626',
-};
-
-/** Continuous slider position: follows pointer continuously when dragging, snaps on release. */
-const sliderValue = ref<number>(Math.max(0, urgencyList.findIndex((lvl) => lvl.key === urgency.value)));
-const isDraggingSlider = ref(false);
-const urgencyTrackRef = ref<HTMLElement | null>(null);
-
-watch(
-  () => urgency.value,
-  (val) => {
-    const idx = urgencyList.findIndex((lvl) => lvl.key === val);
-    if (idx >= 0 && !isDraggingSlider.value && Math.round(sliderValue.value) !== idx) {
-      sliderValue.value = idx;
-    }
-  },
-);
-
-const activeUrgencyIndex = computed(() => {
-  return Math.min(urgencyList.length - 1, Math.max(0, Math.round(sliderValue.value)));
-});
-const currentUrgency = computed(() => urgencyList[activeUrgencyIndex.value]);
-const urgencyColor = computed(() => URGENCY_COLORS[currentUrgency.value.key]);
-const urgencyFillPercent = computed(() => {
-  return Math.min(100, Math.max(0, (sliderValue.value / (urgencyList.length - 1)) * 100));
-});
-
-function setUrgencyIndex(idx: number) {
-  isDraggingSlider.value = false;
-  const clamped = Math.min(urgencyList.length - 1, Math.max(0, idx));
-  sliderValue.value = clamped;
-  urgency.value = urgencyList[clamped].key;
-}
-
-function updateSliderFromClientX(clientX: number) {
-  const track = urgencyTrackRef.value;
-  if (!track) return;
-  const rect = track.getBoundingClientRect();
-  if (rect.width <= 0) return;
-  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  sliderValue.value = ratio * (urgencyList.length - 1);
-  urgency.value = urgencyList[activeUrgencyIndex.value].key;
-}
-
-function onSliderTrackPointerDown(event: PointerEvent) {
-  const track = urgencyTrackRef.value;
-  if (track && 'setPointerCapture' in track) {
-    try {
-      track.setPointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
-  }
-  isDraggingSlider.value = true;
-  updateSliderFromClientX(event.clientX);
-}
-
-function onSliderTrackPointerMove(event: PointerEvent) {
-  if (!isDraggingSlider.value) return;
-  updateSliderFromClientX(event.clientX);
-}
-
-function onSliderTrackPointerUp(event: PointerEvent) {
-  if (!isDraggingSlider.value) return;
-  const track = urgencyTrackRef.value;
-  if (track && 'releasePointerCapture' in track && track.hasPointerCapture(event.pointerId)) {
-    try {
-      track.releasePointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
-  }
-  isDraggingSlider.value = false;
-  setUrgencyIndex(Math.round(sliderValue.value));
-}
-
-function onSliderNativeInput(event: Event) {
-  const val = Number((event.target as HTMLInputElement).value);
-  if (!Number.isNaN(val)) {
-    sliderValue.value = val;
-    urgency.value = urgencyList[activeUrgencyIndex.value].key;
-  }
-}
-
-function onSliderNativeChange() {
-  setUrgencyIndex(Math.round(sliderValue.value));
-}
-
-function onSliderKeyDown(e: KeyboardEvent) {
-  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    setUrgencyIndex(Math.min(urgencyList.length - 1, activeUrgencyIndex.value + 1));
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-    e.preventDefault();
-    setUrgencyIndex(Math.max(0, activeUrgencyIndex.value - 1));
-  } else if (e.key === 'Home') {
-    e.preventDefault();
-    setUrgencyIndex(0);
-  } else if (e.key === 'End') {
-    e.preventDefault();
-    setUrgencyIndex(urgencyList.length - 1);
-  }
 }
 
 // Services and saved addresses: skeletons until they arrive, a retry line if they do not.
@@ -875,6 +792,16 @@ const createAndFindTech = async () => {
     return;
   }
 
+  // Photos and videos from the chat went up in the background; booking only waits for, or skips, what has not.
+  if (chatUploads.value.busy > 0) {
+    toast.warning('Ảnh, video trong cuộc trò chuyện vẫn đang gửi cho thợ. Chờ một chút, hoặc bấm Bỏ ở mục Gửi kèm cho kỹ thuật viên.');
+    return;
+  }
+  if (chatUploads.value.failed > 0) {
+    toast.warning('Có ảnh hoặc video chưa gửi được. Bấm Thử lại, hoặc Bỏ để đặt thợ không kèm.');
+    return;
+  }
+  const chatUploadIds = chatUploadIdsForBooking();
   loading.value = true;
   try {
     if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
@@ -885,8 +812,8 @@ const createAndFindTech = async () => {
       ...schedule,
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       quantity: isFixedPrice.value ? quantity.value : 1,
-      urgency: urgency.value,
-      photoUploadIds,
+      urgency,
+      photoUploadIds: [...photoUploadIds, ...chatUploadIds],
       ...(aiSessionId.value ? { aiSessionId: aiSessionId.value } : {}),
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
@@ -1420,159 +1347,6 @@ const createAndFindTech = async () => {
             ></textarea>
           </div>
 
-          <!-- 6. Urgency Level Selector -->
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between">
-              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>{{ isAiFlow ? 3 : 5 }}. Mức độ khẩn cấp</span>
-              </label>
-              <span class="text-[11px] text-ink-500">Chọn mức độ mong muốn thợ có mặt</span>
-            </div>
-
-            <div
-              class="p-4 rounded-2xl border transition-all duration-350 ease-out space-y-4 shadow-2xs"
-              :style="{
-                borderColor: `${urgencyColor}40`,
-                backgroundColor: `${urgencyColor}0a`
-              }"
-              data-testid="urgency-slider"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <div
-                    class="w-9 h-9 rounded-xl flex items-center justify-center bg-white border shadow-xs shrink-0 transition-all duration-350 ease-out"
-                    :style="{
-                      color: urgencyColor,
-                      borderColor: `${urgencyColor}30`,
-                      boxShadow: `0 2px 8px ${urgencyColor}20`
-                    }"
-                  >
-                    <Transition name="urgency-icon" mode="out-in">
-                      <component :is="currentUrgency.icon" :key="currentUrgency.key" :size="18" />
-                    </Transition>
-                  </div>
-                  <div class="min-w-0 overflow-hidden">
-                    <Transition name="urgency-text" mode="out-in">
-                      <div :key="currentUrgency.key">
-                        <div class="text-xs sm:text-[13px] font-bold text-ink-900 truncate">
-                          {{ currentUrgency.label }}
-                        </div>
-                        <div class="text-[11px] text-ink-500 truncate">
-                          Thợ có mặt {{ currentUrgency.hint.toLowerCase() }}
-                        </div>
-                      </div>
-                    </Transition>
-                  </div>
-                </div>
-
-                <Transition name="urgency-badge" mode="out-in">
-                  <span
-                    :key="currentUrgency.key"
-                    class="text-[11px] font-bold px-2.5 py-0.5 rounded-full text-white transition-all duration-350 shadow-2xs shrink-0"
-                    :style="{
-                      backgroundColor: urgencyColor,
-                      boxShadow: `0 2px 6px ${urgencyColor}40`
-                    }"
-                  >
-                    {{ currentUrgency.badge }}
-                  </span>
-                </Transition>
-              </div>
-
-              <!-- Smooth Custom Track with Realtime Dragging & Spring Snap -->
-              <div
-                ref="urgencyTrackRef"
-                class="relative py-3 flex items-center select-none group cursor-pointer touch-none"
-                data-testid="urgency-slider-track"
-                @pointerdown="onSliderTrackPointerDown"
-                @pointermove="onSliderTrackPointerMove"
-                @pointerup="onSliderTrackPointerUp"
-                @pointercancel="onSliderTrackPointerUp"
-              >
-                <!-- Track Base -->
-                <div class="w-full h-2 rounded-full bg-ink-200/80 overflow-hidden relative pointer-events-none">
-                  <!-- Continuous Fill Bar -->
-                  <div
-                    class="h-full rounded-full"
-                    :class="isDraggingSlider ? '' : 'transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]'"
-                    :style="{
-                      width: `${urgencyFillPercent}%`,
-                      backgroundColor: urgencyColor
-                    }"
-                  ></div>
-                </div>
-
-                <!-- Step notch dots -->
-                <div class="absolute inset-x-0 flex justify-between px-0.5 pointer-events-none">
-                  <span
-                    v-for="(lvl, i) in urgencyList"
-                    :key="lvl.key"
-                    class="w-2.5 h-2.5 rounded-full transition-all duration-300 ease-out"
-                    :class="i <= activeUrgencyIndex ? 'bg-white shadow-2xs scale-100 ring-2 ring-white/60' : 'bg-ink-300/80 scale-90'"
-                    :style="i <= activeUrgencyIndex ? { backgroundColor: '#ffffff' } : {}"
-                  ></span>
-                </div>
-
-                <!-- Floating Thumb Knob follows cursor directly when dragging, springs on snap -->
-                <div
-                  class="urgency-thumb-knob absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-[3px] pointer-events-none flex items-center justify-center shadow-md"
-                  :class="[
-                    isDraggingSlider ? 'scale-110' : 'transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-hover:scale-110 active:scale-95'
-                  ]"
-                  :style="{
-                    left: `${urgencyFillPercent}%`,
-                    borderColor: urgencyColor,
-                    boxShadow: `0 3px 10px ${urgencyColor}4d`,
-                  }"
-                >
-                  <div
-                    class="w-1.5 h-1.5 rounded-full transition-colors duration-300"
-                    :style="{ backgroundColor: urgencyColor }"
-                  ></div>
-                </div>
-
-                <!-- Native Range Input (Accessible, Keyboard Focus, Testable) -->
-                <input
-                  id="urgency-range"
-                  type="range"
-                  min="0"
-                  :max="urgencyList.length - 1"
-                  step="0.001"
-                  :value="sliderValue"
-                  class="sr-only"
-                  aria-label="Mức độ khẩn cấp"
-                  :aria-valuetext="`${currentUrgency.label} – ${currentUrgency.hint}`"
-                  @keydown="onSliderKeyDown"
-                  @input="onSliderNativeInput"
-                  @change="onSliderNativeChange"
-                />
-              </div>
-
-              <!-- Step labels below with active state & subtle elevation -->
-              <div class="grid grid-cols-4 gap-1 text-[11px] select-none -mt-1 pt-0.5">
-                <button
-                  v-for="(lvl, i) in urgencyList"
-                  :key="lvl.key"
-                  type="button"
-                  class="py-1 px-1 rounded-lg text-center transition-all duration-300 cursor-pointer flex flex-col items-center justify-center relative hover:bg-white/60"
-                  :class="activeUrgencyIndex === i ? 'font-bold' : 'text-ink-500 hover:text-ink-800'"
-                  :style="activeUrgencyIndex === i ? { color: urgencyColor } : {}"
-                  @click="setUrgencyIndex(i)"
-                >
-                  <span class="block transition-transform duration-300 truncate w-full" :class="activeUrgencyIndex === i ? '-translate-y-0.5' : ''">
-                    {{ lvl.label }}
-                  </span>
-                  <span
-                    class="w-1.5 h-1.5 rounded-full mt-1 transition-all duration-300"
-                    :style="{
-                      backgroundColor: activeUrgencyIndex === i ? urgencyColor : 'transparent',
-                      transform: activeUrgencyIndex === i ? 'scale(1)' : 'scale(0)'
-                    }"
-                  ></span>
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Step 1 Footer Action Bar -->
@@ -2007,10 +1781,52 @@ const createAndFindTech = async () => {
               <span class="text-ink-500">Thời gian hẹn:</span>
               <span class="font-bold text-ink-900 text-right">{{ formattedScheduleDisplay }}</span>
             </div>
-
-            <div class="flex items-center justify-between pt-2">
-              <span class="text-ink-500">Mức độ khẩn cấp:</span>
-              <span class="font-bold" :style="{ color: urgencyColor }">{{ currentUrgency.label }} · {{ currentUrgency.hint }}</span>
+            <div v-if="chatAttachmentSummary" class="py-2 border-t border-ink-100 space-y-2" data-testid="confirm-attachments">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-ink-500">Gửi kèm cho kỹ thuật viên:</span>
+                <span class="font-bold text-ink-900 text-right whitespace-nowrap">{{ chatAttachmentSummary }}</span>
+              </div>
+              <ul v-if="chatItems.length" class="space-y-1.5">
+                <li
+                  v-for="item in chatItems"
+                  :key="item.id"
+                  class="flex items-center gap-3 rounded-xl border px-3 py-2 text-xs"
+                  :class="item.state === 'failed' ? 'border-danger-200 bg-danger-50' : 'border-ink-200 bg-ink-50'"
+                  :data-testid="item.kind === 'video' ? 'confirm-video' : 'confirm-photo'"
+                  :data-state="item.state"
+                >
+                  <img v-if="item.kind === 'image' && item.dataUrl" :src="item.dataUrl" alt="" class="h-9 w-9 shrink-0 rounded-lg object-cover" />
+                  <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-900 text-white"><Play :size="14" /></span>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-semibold text-ink-800">{{ chatItemLabel(item) }}</p>
+                    <p :class="item.state === 'failed' ? 'text-danger-700' : item.state === 'done' ? 'text-success-700' : 'text-ink-500'">
+                      {{ chatItemStatus(item) }}
+                    </p>
+                    <div v-if="item.state === 'uploading' || item.state === 'preparing'" class="mt-1 h-1 overflow-hidden rounded-full bg-ink-200">
+                      <div class="h-full bg-brand-500 transition-[width] duration-300" :style="{ width: chatPercent(item.state === 'preparing' ? item.video?.progress ?? 0 : item.progress) }"></div>
+                    </div>
+                  </div>
+                  <button
+                    v-if="item.state === 'failed'"
+                    type="button"
+                    class="shrink-0 rounded-lg px-2 py-1 font-semibold text-brand-700 hover:bg-brand-50"
+                    data-testid="confirm-attachment-retry"
+                    @click="aiConversation.retryUpload(item.id)"
+                  >
+                    Thử lại
+                  </button>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-lg px-2 py-1 font-semibold text-danger-700 hover:bg-danger-50"
+                    data-testid="confirm-attachment-remove"
+                    @click="aiConversation.removeAttachment(item.id)"
+                  >
+                    Bỏ
+                  </button>
+                </li>
+              </ul>
+              <p v-if="chatPhotosLeftOut > 0" class="text-xs text-warning-700" data-testid="confirm-photos-left-out">Đã đủ 5 ảnh nên {{ chatPhotosLeftOut }} ảnh gửi trong trò chuyện không kèm theo.</p>
+              <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, anh/chị có thể bấm Bỏ để đặt thợ không kèm.</p>
             </div>
           </div>
 
@@ -2045,9 +1861,12 @@ const createAndFindTech = async () => {
             size="lg"
             class="w-full sm:w-auto"
             :loading="loading"
+            :disabled="chatUploads.busy > 0 || chatUploads.failed > 0"
+            data-testid="booking-submit"
             @click="createAndFindTech"
           >
-            Tìm kỹ thuật viên ngay <Wrench :size="16" class="ml-1.5" />
+            <template v-if="chatUploads.busy > 0">Đang gửi ảnh, video cho thợ {{ Math.round(chatUploads.progress * 100) }}%</template>
+            <template v-else>Tìm kỹ thuật viên ngay <Wrench :size="16" class="ml-1.5" /></template>
           </FhButton>
         </div>
       </div>
@@ -2078,49 +1897,5 @@ const createAndFindTech = async () => {
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-6px);
-}
-
-/* Urgency slider transitions & animations */
-.urgency-icon-enter-active,
-.urgency-icon-leave-active {
-  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.urgency-icon-enter-from {
-  opacity: 0;
-  transform: scale(0.6) rotate(-20deg);
-}
-.urgency-icon-leave-to {
-  opacity: 0;
-  transform: scale(0.6) rotate(20deg);
-}
-
-.urgency-text-enter-active,
-.urgency-text-leave-active {
-  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.urgency-text-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
-}
-.urgency-text-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-.urgency-badge-enter-active,
-.urgency-badge-leave-active {
-  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.urgency-badge-enter-from {
-  opacity: 0;
-  transform: scale(0.8);
-}
-.urgency-badge-leave-to {
-  opacity: 0;
-  transform: scale(0.8);
-}
-
-.urgency-thumb-knob {
-  will-change: left, transform;
 }
 </style>

@@ -143,6 +143,19 @@ export interface InvitationBookingPreview {
   /** Session the technician commits to by accepting (PO 08/10/2026). */
   bookingMode?: BookingMode;
   slot?: BookingSlot | null;
+  /**
+   * PO 18/10/2026: what the technician needs to decide before accepting. The
+   * customer's words, the assistant's summary, the private photos and videos, the
+   * price basis and an estimated distance; never the address or the phone number.
+   */
+  description: string | null;
+  aiSummary: AiBookingSummary | null;
+  media: BookingMedia[];
+  /** `fixed_price` (listed price) or `inspection_required` (quote after checking). */
+  pricingMode: string | null;
+  fixedUnitPrice: number | null;
+  /** A coarse band, never an exact distance (it could locate the customer): {0,1}, {1,3} ... {40,null}. */
+  distanceBand: { minKm: number; maxKm: number | null } | null;
 }
 
 export interface InvitationItem {
@@ -173,8 +186,41 @@ interface BackendInvitationPreview {
     preferredEndAt: string | null;
     bookingMode?: BookingMode;
     slot?: BookingSlot | null;
+    description?: string | null;
+    aiSummary?: AiBookingSummary | null;
+    media?: unknown;
+    pricingMode?: string | null;
+    fixedUnitPrice?: number | string | null;
+    distanceBand?: { minKm?: unknown; maxKm?: unknown } | null;
   };
 }
+
+function previewBand(value: { minKm?: unknown; maxKm?: unknown } | null | undefined): InvitationBookingPreview['distanceBand'] {
+  if (!value || typeof value !== 'object') return null;
+  const minKm = finiteOrNull(value.minKm);
+  const maxKm = value.maxKm === null ? null : finiteOrNull(value.maxKm);
+  if (minKm == null || minKm < 0 || (maxKm != null && maxKm <= minKm) || (value.maxKm !== null && maxKm == null)) return null;
+  return { minKm, maxKm };
+}
+
+/** Media of an invitation preview, kept only when every field has the shape the viewer relies on. */
+function previewMedia(value: unknown): BookingMedia[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is BookingMedia => !!item && typeof item === 'object'
+    && typeof (item as BookingMedia).id === 'string' && (item as BookingMedia).id.trim().length > 0
+    && typeof (item as BookingMedia).isPrivate === 'boolean'
+    && typeof (item as BookingMedia).legacyInsecure === 'boolean'
+    && typeof (item as BookingMedia).mimeType === 'string'
+    && ((item as BookingMedia).url === null || typeof (item as BookingMedia).url === 'string')
+    && (!(item as BookingMedia).isPrivate || (item as BookingMedia).url === null))
+    .map((item) => ({ ...item, sizeBytes: typeof item.sizeBytes === 'number' ? item.sizeBytes : null }));
+}
+
+const finiteOrNull = (value: unknown): number | null => {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
 
 function normalizeInvitationPreview(invitation: BackendInvitationPreview): InvitationItem {
   const booking = invitation.booking;
@@ -198,6 +244,12 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
       preferredEndAt: booking.preferredEndAt,
       bookingMode: booking.bookingMode,
       slot: booking.slot ?? null,
+      description: typeof booking.description === 'string' && booking.description.trim() ? booking.description : null,
+      aiSummary: booking.aiSummary && typeof booking.aiSummary === 'object' ? booking.aiSummary : null,
+      media: previewMedia(booking.media),
+      pricingMode: booking.pricingMode ?? null,
+      fixedUnitPrice: finiteOrNull(booking.fixedUnitPrice),
+      distanceBand: previewBand(booking.distanceBand),
     },
   };
 }

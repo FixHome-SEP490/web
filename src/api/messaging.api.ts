@@ -1,5 +1,7 @@
 // src/api/messaging.api.ts
 import apiClient from './client';
+import { toVideoLink, type UploadProgressOptions, type VideoLink } from './media.api';
+import { VIDEO_SOURCE_MAX_BYTES } from '../lib/video-prep';
 
 /**
  * Backend TransformInterceptor wraps responses in `{ data }`.
@@ -57,6 +59,33 @@ export interface ConversationItem {
   lastMessagePreview: string | null;
   unreadCount: number;
   canSend: boolean;
+  /**
+   * `order_completed`: the order is done, so the chat is closed; a warranty claim
+   * opens it again while the claim is in progress (PO 18/10/2026). Older servers send nothing.
+   */
+  closedReason?: 'order_completed' | null;
+}
+
+/** A photo or short video sent in the chat (PO 18/10/2026); the bytes come from getAttachment. */
+export interface ChatAttachment {
+  kind: 'image' | 'video';
+  mimeType: string;
+  sizeBytes: number | null;
+}
+
+/** What the chat accepts, as the server checks it: photos up to 10 MB, videos up to 50 MB. */
+export const CHAT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const CHAT_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+export const CHAT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const CHAT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
+/** Null when the file can go, otherwise what to tell the person. */
+export function chatAttachmentProblem(file: Pick<File, 'type' | 'size'>): string | null {
+  const type = (file.type || '').toLowerCase();
+  if (CHAT_IMAGE_TYPES.includes(type)) return file.size > CHAT_IMAGE_MAX_BYTES ? 'Ảnh lớn hơn 10 MB, vui lòng chọn ảnh nhỏ hơn.' : null;
+  // A heavy video is converted on the device before it goes up (lib/video-prep), which then checks the final size.
+  if (CHAT_VIDEO_TYPES.includes(type)) return file.size > VIDEO_SOURCE_MAX_BYTES ? 'Video lớn hơn 50 MB, vui lòng quay ngắn hơn.' : null;
+  return 'Chỉ gửi được ảnh (JPG, PNG, WebP) hoặc video (MP4, MOV, WebM).';
 }
 
 export interface ChatMessage {
@@ -70,6 +99,17 @@ export interface ChatMessage {
   clientMessageId: string | null;
   /** Sent by FixHome on the sender's behalf, e.g. the technician's greeting on accepting a job. */
   isAutomated?: boolean;
+  attachment?: ChatAttachment | null;
+  /** Client only: the picked file, shown while it uploads and right after. */
+  localPreviewUrl?: string;
+  /** This tab is still sending the photo or video (PO 18/10/2026: weak connections). */
+  upload?: { state: 'preparing' | 'uploading' | 'failed'; progress: number; error?: string };
+}
+
+/** The send was refused because the order completed and no warranty claim is open. */
+export function isConversationClosedError(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { error?: { code?: string } } } })?.response;
+  return response?.status === 409 && response.data?.error?.code === 'CONVERSATION_CLOSED';
 }
 
 export interface MessagePage {
@@ -113,6 +153,46 @@ export const messagingApi = {
       ...(clientMessageId ? { clientMessageId } : {}),
     });
     return unwrap<ChatMessage>(res.data);
+  },
+
+  /** One photo or video with an optional caption, as multipart. */
+  async sendAttachment(
+    conversationId: string,
+    file: File,
+    content?: string,
+    clientMessageId?: string,
+    opts: UploadProgressOptions = {},
+  ): Promise<ChatMessage> {
+    const form = new FormData();
+    form.append('file', file);
+    if (content?.trim()) form.append('content', content.trim());
+    if (clientMessageId) form.append('clientMessageId', clientMessageId);
+    const res = await apiClient.post(`/conversations/${conversationId}/attachments`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      // No fixed timeout with progress: the caller watches for a stall instead (weak connections).
+      timeout: opts.onProgress ? 0 : 180000,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.onProgress
+        ? { onUploadProgress: (event: { loaded: number; total?: number }) => { if (event.total) opts.onProgress?.(event.loaded / event.total); } }
+        : {}),
+    });
+    return unwrap<ChatMessage>(res.data);
+  },
+
+  /** A viewing link for a chat video: the player streams it instead of downloading it whole (PO 18/10/2026). */
+  async getAttachmentVideoLink(messageId: string): Promise<VideoLink> {
+    const res = await apiClient.get(`/messages/${encodeURIComponent(messageId)}/attachment/stream`);
+    return toVideoLink(unwrap<VideoLink>(res.data), '/messages/attachment/stream/');
+  },
+
+  /** The photo or video bytes, through the authenticated proxy (no public link exists). */
+  async getAttachment(messageId: string): Promise<Blob> {
+    const res = await apiClient.get<Blob>(`/messages/${encodeURIComponent(messageId)}/attachment`, {
+      responseType: 'blob',
+      timeout: 120000,
+    });
+    if (!(res.data instanceof Blob)) throw new Error('Unexpected attachment response');
+    return res.data;
   },
 
   async editMessage(messageId: string, content: string): Promise<ChatMessage> {

@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import {
+  isConversationClosedError,
   messagingApi,
   type ConversationItem,
   type ChatMessage,
@@ -9,6 +10,8 @@ import {
 import { chatSocketService, type TypingEvent } from '../services/chat-socket.service';
 import { registerTokenRefreshed } from '../api/client';
 import { useAuthStore } from './auth.store';
+import { prepareVideo, VideoPrepError, videoProblemText } from '../lib/video-prep';
+import { uploadErrorText, uploadWithRetry, UploadCancelledError } from '../lib/upload-retry';
 
 export const useChatStore = defineStore('chat', () => {
   const authStore = useAuthStore();
@@ -311,8 +314,124 @@ export const useChatStore = defineStore('chat', () => {
       messages.value[convId] = (messages.value[convId] || []).filter(
         (m) => m.clientMessageId !== clientMessageId,
       );
+      // The order completed meanwhile: reload the thread so the composer locks.
+      if (isConversationClosedError(err)) void handleConversationUpdated(convId);
       throw err;
     }
+  }
+
+  /**
+   * A photo or short video, with an optional caption (PO 18/10/2026). The bubble
+   * shows the local file at once and turns into the stored one when the upload ends.
+   */
+  /** What a bubble still sending needs to be sent again, by its client id. */
+  const outgoing = new Map<string, { convId: string; file: File; caption: string; prepared?: File; controller?: AbortController }>();
+
+  function patchOutgoing(convId: string, clientMessageId: string, change: Partial<ChatMessage>) {
+    messages.value[convId] = (messages.value[convId] || []).map((m) =>
+      m.clientMessageId === clientMessageId && m.id === clientMessageId ? { ...m, ...change } : m,
+    );
+  }
+
+  /**
+   * Sends a photo or short video (PO 18/10/2026: weak connections). The bubble
+   * shows the local file at once with how far it is: a video is first made light
+   * on the device, then goes up with progress and is retried when the connection
+   * drops. If it still fails, the bubble stays with Thử lại / Bỏ instead of
+   * vanishing; sending again uses the same client id, so it is never stored twice.
+   * The composer stays free meanwhile.
+   */
+  async function sendAttachment(file: File, caption = '') {
+    const convId = activeConversationId.value;
+    if (!convId) return;
+    const clientMessageId = `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const kind: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const localPreviewUrl = URL.createObjectURL(file);
+    const optimisticMsg: ChatMessage = {
+      id: clientMessageId,
+      conversationId: convId,
+      senderId: authStore.user?.id || '',
+      content: caption.trim(),
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+      isDeleted: false,
+      clientMessageId,
+      attachment: { kind, mimeType: file.type, sizeBytes: file.size },
+      localPreviewUrl,
+      upload: { state: kind === 'video' ? 'preparing' : 'uploading', progress: 0 },
+    };
+    messages.value[convId] = [...(messages.value[convId] || []), optimisticMsg];
+    sendTyping(false);
+    outgoing.set(clientMessageId, { convId, file, caption });
+    await deliverAttachment(clientMessageId);
+  }
+
+  async function deliverAttachment(clientMessageId: string) {
+    const job = outgoing.get(clientMessageId);
+    if (!job) return;
+    const { convId, caption } = job;
+    const kind: 'image' | 'video' = job.file.type.startsWith('video/') ? 'video' : 'image';
+    const controller = new AbortController();
+    job.controller = controller;
+    try {
+      if (kind === 'video' && !job.prepared) {
+        patchOutgoing(convId, clientMessageId, { upload: { state: 'preparing', progress: 0 } });
+        const prepared = await prepareVideo(job.file, {
+          signal: controller.signal,
+          onProgress: (progress) => patchOutgoing(convId, clientMessageId, { upload: { state: 'preparing', progress } }),
+        });
+        job.prepared = prepared.file;
+      }
+      if (controller.signal.aborted) return;
+      patchOutgoing(convId, clientMessageId, { upload: { state: 'uploading', progress: 0 } });
+      let shown = 0;
+      const persisted = await uploadWithRetry(
+        ({ onProgress, signal }) => messagingApi.sendAttachment(convId, job.prepared ?? job.file, caption, clientMessageId, { onProgress, signal }),
+        {
+          signal: controller.signal,
+          onProgress: (progress) => {
+            shown = Math.max(shown, progress);
+            patchOutgoing(convId, clientMessageId, { upload: { state: 'uploading', progress: shown } });
+          },
+        },
+      );
+      outgoing.delete(clientMessageId);
+      const localPreviewUrl = (messages.value[convId] || []).find((m) => m.clientMessageId === clientMessageId)?.localPreviewUrl;
+      // Keep showing the local file until this bubble unmounts; the stored copy loads on the next visit.
+      messages.value[convId] = (messages.value[convId] || []).map((m) =>
+        m.clientMessageId === clientMessageId ? { ...persisted, localPreviewUrl } : m,
+      );
+      const conv = conversations.value.find((c) => c.id === convId);
+      if (conv) {
+        conv.lastMessageAt = persisted.createdAt;
+        conv.lastMessagePreview = persisted.content || (kind === 'video' ? 'Đã gửi một video' : 'Đã gửi một ảnh');
+      }
+    } catch (err) {
+      if (controller.signal.aborted || err instanceof UploadCancelledError) return;
+      if (isConversationClosedError(err)) {
+        discardAttachment(clientMessageId);
+        void handleConversationUpdated(convId);
+        throw err;
+      }
+      const error = err instanceof VideoPrepError ? videoProblemText(err.problem) : uploadErrorText(err);
+      patchOutgoing(convId, clientMessageId, { upload: { state: 'failed', progress: 0, error } });
+    }
+  }
+
+  /** Sends a failed photo or video again (same client id: stored once). */
+  function retryAttachment(clientMessageId: string) {
+    return deliverAttachment(clientMessageId);
+  }
+
+  /** Drops a photo or video that is still sending or failed. */
+  function discardAttachment(clientMessageId: string) {
+    const job = outgoing.get(clientMessageId);
+    if (!job) return;
+    job.controller?.abort();
+    outgoing.delete(clientMessageId);
+    const bubble = (messages.value[job.convId] || []).find((m) => m.clientMessageId === clientMessageId && m.id === clientMessageId);
+    if (bubble?.localPreviewUrl) URL.revokeObjectURL(bubble.localPreviewUrl);
+    messages.value[job.convId] = (messages.value[job.convId] || []).filter((m) => !(m.clientMessageId === clientMessageId && m.id === clientMessageId));
   }
 
   async function editMessage(messageId: string, content: string) {
@@ -404,6 +523,9 @@ export const useChatStore = defineStore('chat', () => {
     loadMessages,
     loadOlderMessages,
     sendMessage,
+    sendAttachment,
+    retryAttachment,
+    discardAttachment,
     editMessage,
     deleteMessage,
     markAsRead,

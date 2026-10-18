@@ -116,8 +116,48 @@ describe('Session picker', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[{ date: '2030-01-04', slot: 'afternoon' }]]);
   });
 
-  it('labels the days in short Vietnamese', () => {
+  it('lays the days out as a Monday-first calendar and names each day in Vietnamese (PO 18/10/2026)', () => {
     const wrapper = mount(BookingSessionPicker, { props: { sessions: twoDays, modelValue: null } });
-    expect(wrapper.get('[data-testid="session-day-2030-01-03"]').text()).toBe('T503/01');
+    const calendar = wrapper.get('[data-testid="session-calendar"]');
+    expect(calendar.text().startsWith('T2T3T4T5T6T7CN')).toBe(true);
+    // 3/1/2030 is a Thursday: the week starts on Monday 31/12, shown but not pickable.
+    const cells = calendar.findAll('[role="gridcell"]');
+    expect(cells).toHaveLength(7);
+    expect(cells.map((c) => c.text())).toEqual(['31', '1', '2', '3', '4', '5', '6']);
+    expect(cells[0].element.tagName).toBe('SPAN');
+    const day = wrapper.get('[data-testid="session-day-2030-01-03"]');
+    expect(day.text()).toBe('3');
+    expect(day.attributes('aria-label')).toBe('Thứ 5, 03/01, đã kín');
+    expect(wrapper.get('[data-testid="session-day-2030-01-04"]').attributes('aria-label')).toBe('Thứ 6, 04/01');
+    expect(wrapper.text()).toContain('Tháng 1/2030');
+  });
+
+  it('asks for the day first, then the time, and ticks both once chosen', async () => {
+    const wrapper = mount(BookingSessionPicker, { props: { sessions: twoDays, modelValue: null } });
+    const steps = wrapper.findAll('h4').map((h) => h.text());
+    expect(steps).toEqual(['Chọn ngày', 'Chọn giờ']);
+    expect(wrapper.get('[data-testid="session-active-day"]').text()).toBe('Thứ 6, 04/01');
+    expect(wrapper.find('[data-testid="session-day-tick"]').exists()).toBe(false);
+
+    await wrapper.setProps({ modelValue: { date: '2030-01-04', slot: 'afternoon' } });
+    expect(wrapper.get('[data-testid="session-day-2030-01-04"]').find('[data-testid="session-day-tick"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="session-2030-01-04-afternoon"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[data-testid="session-2030-01-04-morning"]').attributes('aria-pressed')).toBe('false');
+    // Looking at another day keeps the choice ticked where it is.
+    await wrapper.get('[data-testid="session-day-2030-01-03"]').trigger('click');
+    expect(wrapper.get('[data-testid="session-active-day"]').text()).toBe('Thứ 5, 03/01');
+    expect(wrapper.get('[data-testid="session-day-2030-01-04"]').find('[data-testid="session-day-tick"]').exists()).toBe(true);
+  });
+
+  it('spans a month boundary and greys days outside the bookable window', () => {
+    const across = [
+      { date: '2030-01-30', slot: 'morning', available: true, reason: null },
+      { date: '2030-02-02', slot: 'afternoon', available: true, reason: null },
+    ];
+    const wrapper = mount(BookingSessionPicker, { props: { sessions: across, modelValue: null } });
+    expect(wrapper.text()).toContain('Tháng 1 - 2/2030');
+    // 31/01 and 01/02 have no session in the list: plain text, not a button.
+    expect(wrapper.find('[data-testid="session-day-2030-01-31"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid^="session-day-2030"]')).toHaveLength(2);
   });
 });

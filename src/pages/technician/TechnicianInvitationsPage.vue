@@ -2,12 +2,15 @@
 import { computed, ref, onUnmounted, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { useRouter } from 'vue-router';
-import { Mail, Clock, MapPin, Check, ChevronRight, X } from 'lucide-vue-next';
+import { Mail, Clock, MapPin, Check, ChevronRight, X, Sparkles, Navigation } from 'lucide-vue-next';
 import {
+  BookingMediaViewer,
   FhButton,
   FhCountdown,
+  FhMoney,
   FhSkeleton,
 } from '../../components';
+import AiSummaryDialog from '../../components/technician/AiSummaryDialog.vue';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { technicianProfileApi } from '../../api/technician-profile.api';
 import { sessionLabel } from '../../utils/booking-session';
@@ -63,13 +66,29 @@ const toggleAutoAccept = async () => {
 const detailInvitation = ref<InvitationItem | null>(null);
 
 const onKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && detailInvitation.value && !responding.value) detailInvitation.value = null;
+  if (event.key !== 'Escape' || !detailInvitation.value || responding.value) return;
+  // The AI summary opens over the detail; Escape closes it first.
+  if (aiSummaryOpen.value) aiSummaryOpen.value = false;
+  else detailInvitation.value = null;
 };
 watch(detailInvitation, (open) => {
   if (open) window.addEventListener('keydown', onKeydown);
   else window.removeEventListener('keydown', onKeydown);
 });
 onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+
+// PO 18/10/2026: how far the job is, never where exactly. The server measures from the
+// technician's work address (or a fresh GPS fix for come-now jobs) and sends only a band.
+const distanceText = (inv: InvitationItem): string => {
+  const band = inv.booking?.distanceBand;
+  if (!band) return '';
+  if (band.minKm === 0 && band.maxKm != null) return `Cách bạn dưới ${band.maxKm} km`;
+  if (band.maxKm == null) return `Cách bạn hơn ${band.minKm} km`;
+  return `Cách bạn khoảng ${band.minKm}-${band.maxKm} km`;
+};
+const isFixedPrice = (inv: InvitationItem) => String(inv.booking?.pricingMode ?? '').toLowerCase() === 'fixed_price';
+const aiSummaryOpen = ref(false);
+watch(detailInvitation, () => { aiSummaryOpen.value = false; });
 
 const urgencyLabel = (urgency?: string) => {
   switch (String(urgency).toLowerCase()) {
@@ -197,7 +216,12 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
             </span>
             <span class="text-sm text-ink-600 flex items-start gap-1.5">
               <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
-              <span class="text-pretty">{{ inv.booking?.addressSummary }}</span>
+              <span class="text-pretty">
+                {{ inv.booking?.addressSummary }}<template v-if="distanceText(inv)"> · <span class="whitespace-nowrap" data-testid="invitation-distance">{{ distanceText(inv) }}</span></template>
+              </span>
+            </span>
+            <span v-if="inv.booking?.description" class="block text-sm text-ink-700 line-clamp-2 text-pretty" data-testid="invitation-description">
+              {{ inv.booking.description }}
             </span>
             <span class="text-sm text-ink-600 flex items-center gap-1.5" data-testid="invitation-session">
               <Clock :size="15" class="text-ink-400 shrink-0" />
@@ -265,14 +289,46 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
             <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
             <span class="text-pretty">{{ detailInvitation.booking?.addressSummary }}</span>
           </p>
+          <p v-if="distanceText(detailInvitation)" class="text-ink-700 flex items-center gap-1.5" data-testid="invitation-detail-distance">
+            <Navigation :size="15" class="text-ink-400 shrink-0" />
+            <span>{{ distanceText(detailInvitation) }}</span>
+          </p>
           <p class="text-ink-700 flex items-center gap-1.5" data-testid="invitation-detail-session">
             <Clock :size="15" class="text-ink-400 shrink-0" />
             <strong class="font-semibold text-ink-900">{{ invitationSession(detailInvitation) }}</strong>
           </p>
         </div>
 
+        <section class="space-y-2 border-t border-ink-100 pt-4" data-testid="invitation-detail-problem">
+          <h4 class="text-sm font-semibold text-ink-900">Khách mô tả</h4>
+          <p v-if="detailInvitation.booking?.description" class="text-sm text-ink-800 whitespace-pre-line text-pretty" data-testid="invitation-detail-description">{{ detailInvitation.booking.description }}</p>
+          <p v-else class="text-sm text-ink-500">Khách chưa ghi mô tả.</p>
+          <p class="text-sm text-ink-700" data-testid="invitation-detail-price">
+            <template v-if="isFixedPrice(detailInvitation) && detailInvitation.booking?.fixedUnitPrice != null">
+              Giá niêm yết <strong class="font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="detailInvitation.booking.fixedUnitPrice" /></strong><span v-if="(detailInvitation.booking?.quantity ?? 1) > 1" class="whitespace-nowrap"> × {{ detailInvitation.booking?.quantity }}</span>
+            </template>
+            <template v-else>Báo giá sau khi kiểm tra tại nhà khách</template>
+          </p>
+          <button
+            v-if="detailInvitation.booking?.aiSummary"
+            type="button"
+            class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800"
+            :class="focusRing"
+            data-testid="invitation-detail-ai-summary"
+            @click="aiSummaryOpen = true"
+          >
+            <Sparkles :size="15" /> Xem tóm tắt vấn đề từ AI
+          </button>
+        </section>
+
+        <BookingMediaViewer
+          v-if="detailInvitation.booking?.media?.length"
+          :booking-id="detailInvitation.bookingId"
+          :media="detailInvitation.booking.media"
+        />
+
         <p class="rounded-xl bg-warning-50 border border-warning-200 px-3 py-2 text-sm text-warning-800 text-pretty" data-testid="invitation-detail-privacy">
-          Mô tả, ảnh và địa chỉ chính xác hiện sau khi bạn nhận đơn.
+          Địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách hiện sau khi bạn nhận đơn.
         </p>
 
         <div class="grid grid-cols-2 gap-2.5 pt-4 border-t border-ink-100">
@@ -285,5 +341,15 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </div>
       </div>
     </div>
+
+    <AiSummaryDialog
+      v-if="detailInvitation?.booking?.aiSummary"
+      :open="aiSummaryOpen"
+      :summary="detailInvitation.booking.aiSummary"
+      :description="detailInvitation.booking.description"
+      :booking-id="detailInvitation.bookingId"
+      :media="detailInvitation.booking.media"
+      @close="aiSummaryOpen = false"
+    />
   </div>
 </template>

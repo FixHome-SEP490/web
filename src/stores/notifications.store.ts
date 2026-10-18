@@ -3,6 +3,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { notificationsApi, type NotificationItem } from '../api/notifications.api';
 import { useAuthStore } from './auth';
+import { chatSocketService, type NotificationNewEvent } from '../services/chat-socket.service';
+import { whileOffline } from '../services/live-updates';
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const notifications = ref<NotificationItem[]>([]);
@@ -11,7 +13,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const loading = ref(false);
   const authStore = useAuthStore();
 
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let stopFollowing: (() => void) | null = null;
 
   const unreadNotifications = computed(() => {
     return notifications.value.filter((n) => !n.isRead);
@@ -75,24 +77,41 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
   };
 
+  /** A notification pushed by the server (PO 18/10/2026): shown at once, counted once. */
+  const receive = (event: NotificationNewEvent) => {
+    if (notifications.value.some((n) => n.id === event.id)) return;
+    notifications.value = [{ ...event, userId: authStore.user?.id ?? '' }, ...notifications.value];
+    total.value += 1;
+    if (!event.isRead) unreadCount.value += 1;
+  };
+
+  /**
+   * Follows new notifications live; the count is polled (every `intervalMs`,
+   * while the tab is visible) only while the socket is down, and read once when
+   * it is back. Kept under its old name for the callers.
+   */
   const startPolling = (intervalMs = 30000) => {
     stopPolling();
     void fetchUnreadCount();
-    pollInterval = setInterval(() => {
+    const stopOffline = whileOffline(() => {
       if (authStore.isAuthenticated && document.visibilityState === 'visible') {
         void fetchUnreadCount();
       }
     }, intervalMs);
+    const unsubscribe = chatSocketService.subscribe({ onNotificationNew: receive });
+    stopFollowing = () => {
+      stopOffline();
+      unsubscribe();
+    };
   };
 
   const stopPolling = () => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
+    stopFollowing?.();
+    stopFollowing = null;
   };
 
   return {
+    receive,
     notifications,
     total,
     unreadCount,

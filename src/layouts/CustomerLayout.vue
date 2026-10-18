@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { whileOffline } from '../services/live-updates';
 import { bookingFormKey } from '../utils/booking-form-key';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -36,7 +37,7 @@ const callStore = useCallStore();
 // floating chat buttons lifted above it.
 const hasActionBar = computed(() => router.currentRoute?.value?.meta?.actionBar === true);
 
-let chatPoll: ReturnType<typeof setInterval> | null = null;
+let chatPoll: (() => void) | null = null;
 
 // ── Tab sliding indicator animation (Desktop & Mobile) ──
 const desktopNavRef = ref<HTMLElement | null>(null);
@@ -129,8 +130,9 @@ onMounted(async () => {
     void notifStore.fetchUnreadCount?.();
   }
 
-  // Periodic polling to guarantee accurate total unread counts across sessions
-  chatPoll = setInterval(() => {
+  // Unread counts follow the socket (new messages, new notifications, PO 18/10/2026);
+  // they are read every 20 s only while it is down, and once when it is back.
+  chatPoll = whileOffline(() => {
     if (authStore.isAuthenticated) {
       void chatStore.fetchConversations?.();
       void notifStore.fetchUnreadCount?.();
@@ -148,7 +150,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (chatPoll) {
-    clearInterval(chatPoll);
+    chatPoll();
     chatPoll = null;
   }
   if (typeof window !== 'undefined') {

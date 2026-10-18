@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Image as ImageIcon, LockKeyhole, ShieldAlert } from 'lucide-vue-next';
-import { AUTH_SESSION_INVALIDATED_EVENT } from '../api/client';
+import { Image as ImageIcon, LockKeyhole, Play, ShieldAlert } from 'lucide-vue-next';
+import { AUTH_SESSION_INVALIDATED_EVENT, apiUrl } from '../api/client';
 import { mediaApi } from '../api/media.api';
 import type { BookingMedia } from '../api/bookings.api';
 
 interface MediaItemState {
   status: 'loading' | 'ready' | 'error' | 'unsupported';
+  /** A photo's object URL, or a video's streaming link. */
   objectUrl?: string;
+  /** A video's poster still; hidden if not ready yet. */
+  posterUrl?: string;
+  posterFailed?: boolean;
+  /** The streaming link was renewed once after it stopped working. */
+  renewed?: boolean;
 }
+
+/** Short videos sit beside the photos (PO 18/10/2026); they play here and go to no AI. */
+const isVideo = (media: BookingMedia) => /^video\//i.test(media.mimeType);
 
 const props = defineProps<{
   bookingId: string;
@@ -61,9 +70,20 @@ const loadPrivateMedia = async (media: BookingMedia, requestGeneration: number) 
   const state = getMediaState(media);
   if (authorizationBlocked.value || !mounted.value) return;
   try {
+    // PO 18/10/2026: a video streams through a short-lived link, so it starts at
+    // once and can be skipped through instead of downloading in full first.
+    if (isVideo(media)) {
+      const link = await mediaApi.getBookingVideoLink(props.bookingId, media.id);
+      if (!mounted.value || requestGeneration !== generation.value || authorizationBlocked.value) return;
+      state.objectUrl = apiUrl(link.url);
+      state.posterUrl = apiUrl(link.posterUrl);
+      state.status = 'ready';
+      selectedMediaId.value ??= media.id;
+      return;
+    }
     const blob = await mediaApi.getBookingMediaContent(props.bookingId, media.id);
     const blobMimeType = blob.type || media.mimeType;
-    if (!/^image\//i.test(blobMimeType)) throw new Error('Unsupported private Booking media type');
+    if (!/^(image|video)\//i.test(blobMimeType)) throw new Error('Unsupported private Booking media type');
 
     const objectUrl = URL.createObjectURL(blob);
     ownedObjectUrls.add(objectUrl);
@@ -102,6 +122,42 @@ const currentSource = computed(() => {
   if (!media || !state || state.status !== 'ready') return null;
   return media.isPrivate ? state.objectUrl ?? null : isHttpsPublicUrl(media.url) ? media.url : null;
 });
+
+const hasVideo = computed(() => props.media.some(isVideo));
+
+/**
+ * The viewing link lasts fifteen minutes: when the player stops on it, a new one
+ * is asked for once. Once a video plays again it may be renewed again later (a
+ * page left open for an hour), and a video that still fails can be retried by
+ * hand, for one whose playable copy was still being made.
+ */
+const videoPlayed = (media: BookingMedia) => {
+  getMediaState(media).renewed = false;
+};
+const retryVideo = (media: BookingMedia) => {
+  const state = getMediaState(media);
+  state.renewed = false;
+  state.status = 'loading';
+  void loadPrivateMedia(media, generation.value);
+};
+const renewVideoLink = async (media: BookingMedia) => {
+  const state = getMediaState(media);
+  if (state.renewed || authorizationBlocked.value) {
+    state.status = 'error';
+    return;
+  }
+  state.renewed = true;
+  const requestGeneration = generation.value;
+  try {
+    const link = await mediaApi.getBookingVideoLink(props.bookingId, media.id);
+    if (!mounted.value || requestGeneration !== generation.value) return;
+    state.objectUrl = apiUrl(link.url);
+    state.posterUrl = apiUrl(link.posterUrl);
+  } catch {
+    if (mounted.value && requestGeneration === generation.value) state.status = 'error';
+  }
+};
+const privateLabel = (media: BookingMedia) => (isVideo(media) ? 'Video riêng tư' : 'Ảnh riêng tư');
 
 const selectMedia = (media: BookingMedia) => {
   const state = getMediaState(media);
@@ -144,11 +200,25 @@ onUnmounted(() => {
   <section v-if="media.length" data-testid="booking-media-viewer" class="space-y-3 border-t border-ink-100 pt-4">
     <div class="flex items-center gap-2">
       <ImageIcon :size="16" class="text-brand-600" aria-hidden="true" />
-      <h2 class="text-sm font-bold text-ink-900">Ảnh hiện trường</h2>
+      <h2 class="text-sm font-bold text-ink-900">{{ hasVideo ? 'Ảnh và video hiện trường' : 'Ảnh hiện trường' }}</h2>
     </div>
 
     <div v-if="currentSource" class="overflow-hidden rounded-xl border border-ink-200 bg-ink-50">
+      <!-- Nothing is downloaded until play is pressed: a weak connection is spent only on what is watched. -->
+      <video
+        v-if="currentMedia && isVideo(currentMedia)"
+        data-testid="booking-media-selected-video"
+        :src="currentSource"
+        :poster="currentState?.posterFailed ? undefined : currentState?.posterUrl"
+        controls
+        playsinline
+        preload="none"
+        class="max-h-72 w-full bg-ink-900"
+        @error="renewVideoLink(currentMedia)"
+        @loadeddata="videoPlayed(currentMedia)"
+      ></video>
       <img
+        v-else
         data-testid="booking-media-selected"
         :src="currentSource"
         alt="Ảnh hiện trường của yêu cầu đặt lịch"
@@ -167,10 +237,27 @@ onUnmounted(() => {
           v-if="getMediaState(mediaItem).status === 'ready'"
           type="button"
           class="block min-h-28 w-full cursor-pointer bg-ink-50 text-left focus:outline-none focus:ring-2 focus:ring-brand-600 focus:ring-inset"
-          :aria-label="mediaItem.isPrivate ? 'Xem ảnh riêng tư' : 'Xem ảnh cũ công khai'"
+          :aria-label="isVideo(mediaItem) ? 'Xem video' : mediaItem.isPrivate ? 'Xem ảnh riêng tư' : 'Xem ảnh cũ công khai'"
           @click="selectMedia(mediaItem)"
         >
+          <span v-if="isVideo(mediaItem)" class="relative block h-28 w-full bg-ink-900">
+            <!-- The poster still, a few KB, instead of loading the video for a thumbnail. -->
+            <img
+              v-if="getMediaState(mediaItem).posterUrl && !getMediaState(mediaItem).posterFailed"
+              :src="getMediaState(mediaItem).posterUrl"
+              alt=""
+              class="h-28 w-full object-cover opacity-90"
+              aria-hidden="true"
+              @error="getMediaState(mediaItem).posterFailed = true"
+            >
+            <span class="absolute inset-0 flex items-center justify-center">
+              <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow">
+                <Play :size="16" class="ml-0.5" aria-hidden="true" />
+              </span>
+            </span>
+          </span>
           <img
+            v-else
             :src="mediaItem.isPrivate ? getMediaState(mediaItem).objectUrl : mediaItem.url ?? undefined"
             :alt="mediaItem.isPrivate ? 'Ảnh riêng tư' : 'Ảnh cũ / liên kết công khai'"
             class="h-28 w-full object-cover transition-opacity hover:opacity-90"
@@ -179,11 +266,20 @@ onUnmounted(() => {
         <div v-else class="flex min-h-28 items-center justify-center bg-ink-50 px-3 text-center">
           <div v-if="getMediaState(mediaItem).status === 'loading'" class="space-y-1 text-[11px] text-ink-500">
             <LockKeyhole :size="16" class="mx-auto text-brand-600" aria-hidden="true" />
-            <p>Đang tải ảnh riêng tư...</p>
+            <p>{{ isVideo(mediaItem) ? 'Đang tải video...' : 'Đang tải ảnh riêng tư...' }}</p>
           </div>
           <div v-else-if="getMediaState(mediaItem).status === 'error'" class="space-y-1 text-[11px] text-danger-700">
             <ShieldAlert :size="16" class="mx-auto" aria-hidden="true" />
-            <p>Ảnh riêng tư không khả dụng</p>
+            <p>{{ isVideo(mediaItem) ? 'Video không khả dụng' : 'Ảnh riêng tư không khả dụng' }}</p>
+            <button
+              v-if="isVideo(mediaItem) && !authorizationBlocked"
+              type="button"
+              class="font-semibold text-brand-700 hover:underline"
+              data-testid="booking-media-video-retry"
+              @click="retryVideo(mediaItem)"
+            >
+              Thử lại
+            </button>
           </div>
           <div v-else class="space-y-1 text-[11px] text-ink-500">
             <ShieldAlert :size="16" class="mx-auto" aria-hidden="true" />
@@ -191,7 +287,7 @@ onUnmounted(() => {
           </div>
         </div>
         <p class="border-t border-ink-100 px-2.5 py-2 text-[11px] font-semibold text-ink-600">
-          {{ mediaItem.isPrivate ? 'Ảnh riêng tư' : 'Ảnh cũ / liên kết công khai' }}
+          {{ mediaItem.isPrivate ? privateLabel(mediaItem) : 'Ảnh cũ / liên kết công khai' }}
         </p>
       </article>
     </div>

@@ -4,10 +4,24 @@
 // the conversation (useAiConversation) and puts its own action in the
 // `pinned` slot - "Đặt thợ" in the assistant, "Đổi dịch vụ" in the form.
 import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { Bot, X, Image as ImageIcon, Send, AlertTriangle } from 'lucide-vue-next';
+import { Bot, X, Image as ImageIcon, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
-import { AI_MAX_IMAGES, aiApi } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, priceLabel, quickReplies, type AiChatMessage, type AiConversation } from '../../composables/useAiConversation';
+import { aiApi } from '../../api/ai.api';
+import {
+  AI_CHAT_MAX_IMAGES,
+  AI_MAX_VIDEOS,
+  AI_VIDEO_TYPES,
+  DESCRIBE_BEFORE_SEND,
+  VIDEO_NOT_ANALYSED,
+  priceLabel,
+  quickReplies,
+  type AiChatMessage,
+  type AiConversation,
+  type ChatAttachment,
+} from '../../composables/useAiConversation';
+
+/** Photos for the assistant, and short videos that only travel with the booking (PO 18/10/2026). */
+const ACCEPT = ['image/*', '.heic', '.heif', ...AI_VIDEO_TYPES].join(',');
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +33,50 @@ const props = withDefaults(
 
 // reactive() unwraps the refs, so the template reads c.messages, not .value.
 const c = reactive(props.conversation);
+// Videos (PO 18/10/2026); a conversation built without them shows none.
+const pendingVideos = computed(() => c.pendingVideos ?? []);
+/** At most three photos and two videos in the whole conversation (PO 18/10/2026). */
+const imagesUsed = computed(() => c.imagesUsed ?? c.pending.length);
+const videosUsed = computed(() => c.videosUsed ?? pendingVideos.value.length);
+const attachmentsById = computed(() => new Map((c.attachments ?? []).map((item: ChatAttachment) => [item.id, item])));
+
+function attachmentsOf(message: AiChatMessage): ChatAttachment[] {
+  return (message.attachmentIds ?? []).flatMap((id) => {
+    const item = attachmentsById.value.get(id);
+    return item ? [item] : [];
+  });
+}
+
+const percent = (fraction: number) => `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+
+/** Where a sent photo or video is on its way to the technician, in plain words. */
+function attachmentStatus(item: ChatAttachment): string {
+  const what = item.kind === 'video' ? 'Video' : 'Ảnh';
+  if (item.state === 'preparing') return item.kind === 'video' ? `Đang nén video ${percent(item.video?.progress ?? 0)}` : 'Đang chuẩn bị ảnh';
+  if (item.state === 'ready') return `${what} chờ gửi cho thợ`;
+  if (item.state === 'uploading') return item.retrying ? 'Mạng chập chờn, đang gửi lại' : `Đang gửi ${what.toLowerCase()} cho thợ ${percent(item.progress)}`;
+  if (item.state === 'done') return `${what} đã gửi kèm cho thợ`;
+  return item.error || 'Chưa gửi được';
+}
+
+const ACTIVE = new Set(['preparing', 'ready', 'uploading']);
+
+/**
+ * Found in the browser 18/10/2026: the thread scrolls to the newest reply, so
+ * the status under the customer's own message is out of sight while a video is
+ * still going up. One line above the composer says it the whole time, with the
+ * retry, until everything has arrived.
+ */
+const uploadSummary = computed(() => {
+  const uploads = c.uploads;
+  if (!uploads?.total) return null;
+  if (uploads.failed) return { failed: true, text: `${uploads.failed} ảnh/video chưa gửi được cho thợ` };
+  if ((c.attachments ?? []).some((item: ChatAttachment) => item.state === 'uploading' && item.retrying)) {
+    return { failed: false, text: 'Mạng chập chờn, đang gửi lại ảnh, video cho thợ' };
+  }
+  if (uploads.busy) return { failed: false, text: `Đang gửi ảnh, video cho thợ ${percent(uploads.progress)}` };
+  return null;
+});
 const thread = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -93,9 +151,63 @@ defineExpose({ scrollToEnd });
             <div v-if="message.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
               <img v-for="(src, index) in message.images" :key="index" :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
             </div>
+            <div v-if="message.videos?.length" class="flex flex-wrap gap-1.5 mb-1.5" data-testid="ai-message-videos">
+              <video
+                v-for="(src, index) in message.videos"
+                :key="index"
+                :src="src"
+                controls
+                playsinline
+                preload="metadata"
+                class="w-44 max-w-full rounded-lg bg-ink-900"
+              ></video>
+            </div>
             <p v-if="message.text" class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ message.text }}</p>
           </div>
         </div>
+        <template v-if="message.sender === 'user'">
+          <p v-if="message.videos?.length" class="mt-1 text-right text-xs text-ink-500" data-testid="ai-video-note">
+            {{ VIDEO_NOT_ANALYSED }}
+          </p>
+          <!-- PO 18/10/2026: what goes with the booking is sent now, in the background; each says how far it is. -->
+          <ul v-if="attachmentsOf(message).length" class="mt-1 flex flex-col items-end gap-1" data-testid="ai-attachment-status">
+            <li
+              v-for="item in attachmentsOf(message)"
+              :key="item.id"
+              class="flex items-center gap-1.5 text-xs"
+              :class="item.state === 'failed' ? 'text-danger-700' : item.state === 'done' ? 'text-success-700' : 'text-ink-500'"
+              :data-state="item.state"
+            >
+              <Check v-if="item.state === 'done'" :size="13" aria-hidden="true" />
+              <AlertTriangle v-else-if="item.state === 'failed'" :size="13" aria-hidden="true" />
+              <Film v-else-if="item.kind === 'video'" :size="13" aria-hidden="true" />
+              <ImageIcon v-else :size="13" aria-hidden="true" />
+              <span>{{ attachmentStatus(item) }}</span>
+              <span
+                v-if="ACTIVE.has(item.state)"
+                class="h-1 w-14 overflow-hidden rounded-full bg-ink-100"
+                role="progressbar"
+                :aria-valuenow="Math.round((item.state === 'preparing' ? item.video?.progress ?? 0 : item.progress) * 100)"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <span class="block h-full bg-brand-500 transition-[width] duration-300" :style="{ width: percent(item.state === 'preparing' ? item.video?.progress ?? 0 : item.progress) }"></span>
+              </span>
+              <button
+                v-if="item.state === 'failed'"
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold text-brand-700 hover:bg-brand-50"
+                data-testid="ai-attachment-retry"
+                @click="c.retryUpload(item.id)"
+              >
+                <RotateCw :size="12" aria-hidden="true" /> Thử lại
+              </button>
+            </li>
+            <li v-for="item in attachmentsOf(message).filter((entry) => entry.video?.trimmed)" :key="`${item.id}-trim`" class="text-xs text-warning-700">
+              Video dài hơn 60 giây nên chỉ gửi 60 giây đầu.
+            </li>
+          </ul>
+        </template>
 
         <div v-else class="flex gap-2">
           <div class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center shrink-0 mt-0.5">
@@ -197,8 +309,30 @@ defineExpose({ scrollToEnd });
 
     <slot name="pinned" />
 
-    <!-- Picked images -->
-    <div v-if="c.pending.length" class="flex items-center gap-2 px-3.5 py-2 border-t border-ink-100">
+    <div
+      v-if="uploadSummary"
+      class="flex items-center gap-2 border-t border-ink-100 px-3.5 py-1.5 text-xs"
+      :class="uploadSummary.failed ? 'bg-danger-50 text-danger-700' : 'bg-white text-ink-600'"
+      data-testid="ai-upload-summary"
+      role="status"
+    >
+      <AlertTriangle v-if="uploadSummary.failed" :size="13" class="shrink-0" aria-hidden="true" />
+      <Film v-else :size="13" class="shrink-0" aria-hidden="true" />
+      <span class="min-w-0 flex-1 truncate">{{ uploadSummary.text }}</span>
+      <span class="shrink-0 text-ink-500">Ảnh {{ imagesUsed }}/{{ AI_CHAT_MAX_IMAGES }} · Video {{ videosUsed }}/{{ AI_MAX_VIDEOS }}</span>
+      <button
+        v-if="uploadSummary.failed"
+        type="button"
+        class="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold text-brand-700 hover:bg-brand-50"
+        data-testid="ai-upload-summary-retry"
+        @click="c.retryFailed()"
+      >
+        <RotateCw :size="12" aria-hidden="true" /> Thử lại
+      </button>
+    </div>
+
+    <!-- Picked images and videos -->
+    <div v-if="c.pending.length || pendingVideos.length" class="flex flex-wrap items-center gap-2 px-3.5 py-2 border-t border-ink-100">
       <div v-for="(image, index) in c.pending" :key="index" class="relative">
         <img :src="image.dataUrl" alt="" class="w-14 h-14 object-cover rounded-lg" />
         <button
@@ -211,15 +345,37 @@ defineExpose({ scrollToEnd });
           <X :size="11" />
         </button>
       </div>
-      <span class="text-xs text-ink-500 whitespace-nowrap">{{ c.pending.length }}/{{ AI_MAX_IMAGES }} ảnh</span>
+      <div v-for="(video, index) in pendingVideos" :key="video.id" class="relative" data-testid="ai-pending-video" :data-state="video.state">
+        <video :src="video.url" muted playsinline preload="metadata" class="w-14 h-14 object-cover rounded-lg bg-ink-900" aria-hidden="true"></video>
+        <span v-if="video.state === 'preparing'" class="absolute inset-0 flex items-center justify-center rounded-lg bg-ink-900/60 text-[11px] font-semibold text-white" :aria-label="`Đang nén video ${percent(video.progress)}`">
+          {{ percent(video.progress) }}
+        </span>
+        <span v-else class="absolute inset-0 flex items-center justify-center text-white"><Play :size="16" /></span>
+        <button
+          type="button"
+          class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-ink-900 text-white flex items-center justify-center"
+          title="Bỏ video này"
+          aria-label="Bỏ video này"
+          @click="c.removePendingVideo(index)"
+        >
+          <X :size="11" />
+        </button>
+      </div>
+      <span class="text-xs text-ink-500 whitespace-nowrap" data-testid="ai-attachment-count">
+        Ảnh {{ imagesUsed }}/{{ AI_CHAT_MAX_IMAGES }} · Video {{ videosUsed }}/{{ AI_MAX_VIDEOS }}
+      </span>
+      <p v-if="pendingVideos.some((video) => video.state === 'preparing')" class="basis-full text-xs text-ink-500">
+        Đang nén video cho nhẹ trước khi gửi, anh/chị cứ nhắn tiếp ạ.
+      </p>
+      <p v-if="pendingVideos.length" class="basis-full text-xs text-ink-500">{{ VIDEO_NOT_ANALYSED }}</p>
     </div>
     <p v-if="c.problem" class="px-3.5 pb-1 text-xs text-danger-600">{{ c.problem }}</p>
     <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-xs text-warning-700" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
 
     <!-- Composer -->
     <div class="flex items-end gap-2 px-3 py-2.5 border-t border-ink-100 bg-white">
-      <input ref="fileInput" type="file" accept="image/*,.heic,.heif" multiple class="hidden" @change="onFiles" />
-      <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh thiết bị" aria-label="Gửi ảnh thiết bị" @click="fileInput?.click()">
+      <input ref="fileInput" type="file" :accept="ACCEPT" multiple class="hidden" data-testid="ai-file-input" @change="onFiles" />
+      <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
         <ImageIcon :size="19" />
       </button>
       <textarea
