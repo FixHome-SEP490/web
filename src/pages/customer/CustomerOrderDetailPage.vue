@@ -690,7 +690,9 @@ const additionalCostLabels: Record<AdditionalCostRecord['status'], string> = {
   CANCELLED: 'Đã huỷ',
 };
 /** What the customer described when booking, shown once in the summary. */
-const problemText = computed(() => order.value?.scopeDescription || bookingDetails.value?.description || '');
+// PO 18/10/2026: what the customer said is wrong, and what the service covers, are two different things.
+const problemText = computed(() => order.value?.bookingDescription || bookingDetails.value?.description || '');
+const scopeText = computed(() => order.value?.scopeDescription || '');
 const evidenceTypeLabel = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'Trước khi sửa';
@@ -861,8 +863,12 @@ const parsedReview = computed(() => {
           <dt class="text-ink-500">Địa chỉ</dt>
           <dd class="text-ink-900 text-pretty">{{ order.addressSummary }}</dd>
           <template v-if="problemText">
-            <dt class="text-ink-500">Mô tả</dt>
-            <dd class="text-ink-900 text-pretty">{{ problemText }}</dd>
+            <dt class="text-ink-500">Sự cố bạn mô tả</dt>
+            <dd class="text-ink-900 text-pretty whitespace-pre-line" data-testid="order-problem">{{ problemText }}</dd>
+          </template>
+          <template v-if="scopeText">
+            <dt class="text-ink-500">Dịch vụ gồm</dt>
+            <dd class="text-ink-600 text-pretty" data-testid="order-scope">{{ scopeText }}</dd>
           </template>
           <template v-if="bookingDetails?.diagnosis?.possibleIssues?.length">
             <dt class="text-ink-500">Chẩn đoán gợi ý</dt>

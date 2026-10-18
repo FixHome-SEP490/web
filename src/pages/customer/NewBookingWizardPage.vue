@@ -848,9 +848,19 @@ const createAndFindTech = async () => {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-6 pb-16">
-    <!-- Stepper: Pill shaped, centered, matching user image design -->
-    <div class="bg-white rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-xs" data-testid="booking-stepper">
-      <div class="flex items-center justify-between sm:justify-center overflow-x-auto no-scrollbar gap-2 sm:gap-6">
+    <!-- Stepper. On a phone (PO 18/10/2026) four labels do not fit and were cut after the second:
+         there it is "Bước 2/4" with the step's name and a progress bar; wider screens show every step. -->
+    <div class="bg-white rounded-2xl sm:rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-xs" data-testid="booking-stepper">
+      <div class="sm:hidden space-y-2" data-testid="booking-stepper-compact">
+        <p class="flex items-baseline justify-between gap-3 text-sm">
+          <span class="font-semibold text-ink-900 truncate">{{ stepItems[stepIndex]?.label }}</span>
+          <span class="shrink-0 text-xs text-ink-500 font-num">Bước {{ stepIndex + 1 }}/{{ stepItems.length }}</span>
+        </p>
+        <div class="h-1.5 rounded-full bg-ink-100 overflow-hidden" role="progressbar" :aria-valuenow="stepIndex + 1" aria-valuemin="1" :aria-valuemax="stepItems.length">
+          <div class="h-full rounded-full bg-brand-600 transition-[width] duration-300" :style="{ width: `${((stepIndex + 1) / stepItems.length) * 100}%` }"></div>
+        </div>
+      </div>
+      <div class="hidden sm:flex items-center justify-center overflow-x-auto no-scrollbar gap-6">
         <template v-for="(item, index) in stepItems" :key="item.id">
           <!-- Step pill item -->
           <div

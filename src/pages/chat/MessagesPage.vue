@@ -19,11 +19,16 @@ import {
   Briefcase,
 } from 'lucide-vue-next';
 import { isSameVnDay, vnDateString, vnTimeString } from '../../utils/vn-time';
+import { useFillViewport } from '../../composables/useFillViewport';
 
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
 const authStore = useAuthStore();
+
+/** The chat fills the screen below whatever is above it, so the composer is always in view. */
+const pageRoot = ref<HTMLElement | null>(null);
+const fillHeight = useFillViewport(pageRoot);
 
 const searchQuery = ref('');
 type FilterType = 'all' | 'unread';
@@ -94,6 +99,7 @@ const filteredConversations = computed(() => {
     (c) =>
       c.counterpart?.fullName?.toLowerCase().includes(query) ||
       (c.serviceName && c.serviceName.toLowerCase().includes(query)) ||
+      (c.orderCode && c.orderCode.toLowerCase().includes(query)) ||
       (c.lastMessagePreview && c.lastMessagePreview.toLowerCase().includes(query)),
   );
 });
@@ -182,7 +188,7 @@ watch(
 </script>
 
 <template>
-  <div class="h-[calc(100vh-5.5rem)] min-h-[580px]">
+  <div ref="pageRoot" :class="fillHeight === null ? 'h-[calc(100dvh-9rem)] min-h-[420px]' : ''" :style="fillHeight === null ? undefined : { height: `${fillHeight}px` }" data-testid="messages-page">
     <!-- Main Messenger Interface Surface -->
     <div class="h-full rounded-3xl bg-white border border-ink-200/90 shadow-(--shadow-e1) overflow-hidden flex flex-col md:flex-row">
       <!-- Left Panel: Conversation List -->
@@ -399,10 +405,10 @@ watch(
               </div>
 
               <!-- Service chip / label -->
-              <div v-if="conv.serviceName" class="mt-0.5 truncate">
-                <span class="inline-block text-[11px] font-medium text-brand-600 truncate max-w-full">
-                  {{ conv.serviceName }}
-                </span>
+              <!-- Service and order code: several threads with one person about one service are told apart (PO 18/10/2026). -->
+              <div v-if="conv.serviceName || conv.orderCode" class="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-xs" data-testid="conversation-order">
+                <span v-if="conv.serviceName" class="font-medium text-brand-600 truncate">{{ conv.serviceName }}</span>
+                <span v-if="conv.orderCode" class="shrink-0 text-ink-500 font-num">{{ conv.orderCode }}</span>
               </div>
 
               <!-- Last Message Preview & Unread Pill -->
