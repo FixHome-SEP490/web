@@ -332,8 +332,8 @@ const chooseTechnicians = () => {
 /** The session to save: the one picked, else the booking's own when only the description changed. */
 const sessionForSave = (item: BookingItem): { date: string; slot: BookingSlot } => {
   if (selectedSession.value) return selectedSession.value;
-  if (item.slot === 'morning' || item.slot === 'afternoon') return { date: vnDayKey(item.preferredAt), slot: item.slot };
-  throw new Error('Vui lòng chọn ngày và buổi (sáng hoặc chiều).');
+  if (item.slot === 'morning' || item.slot === 'afternoon' || item.slot === 'evening') return { date: vnDayKey(item.preferredAt), slot: item.slot };
+  throw new Error('Vui lòng chọn ngày và buổi (sáng, chiều hoặc tối).');
 };
 
 // Rare and destructive actions sit in the "⋯" menu (PO 10/10/2026).

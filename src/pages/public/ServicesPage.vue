@@ -104,7 +104,7 @@ const {
 });
 
 const categoryNames = computed(() => new Map(categories.value.map((category) => [category.id, category.name])));
-const spotlightCategories = computed(() => categories.value.slice(0, 5));
+const spotlightCategories = computed(() => categories.value);
 const categoryHaloTargets = computed(() => [
   ...(!selectedCategoryId.value ? [] : ['all']),
   ...spotlightCategories.value
@@ -376,53 +376,6 @@ onBeforeUnmount(() => {
         }"
         data-testid="search-spotlight"
       >
-        <div
-          class="category-cloud"
-          role="group"
-          aria-label="Gợi ý danh mục dịch vụ"
-          data-testid="spotlight-categories"
-          @mouseenter="categoryPointerInside = true"
-          @mouseleave="categoryPointerInside = false"
-          @focusin="pauseCategoryHaloForFocus"
-          @focusout="releaseCategoryHaloFocus"
-          @keydown="pauseCategoryHaloForFocus"
-        >
-          <button
-            type="button"
-            class="category-suggestion"
-            :class="{
-              'category-suggestion--selected': !selectedCategoryId,
-              'category-suggestion--halo': categoryHaloTarget === 'all',
-            }"
-            :aria-pressed="!selectedCategoryId"
-            data-testid="category-all"
-            @mouseenter="categoryPointerInside = true"
-            @mouseleave="categoryPointerInside = false"
-            @click="selectCategory('')"
-          >
-            <LayoutGrid :size="15" :stroke-width="1.8" aria-hidden="true" />
-            <span>Tất cả dịch vụ</span>
-          </button>
-          <button
-            v-for="category in spotlightCategories"
-            :key="category.id"
-            type="button"
-            class="category-suggestion"
-            :class="{
-              'category-suggestion--selected': selectedCategoryId === category.id,
-              'category-suggestion--halo': categoryHaloTarget === category.id,
-            }"
-            :aria-pressed="selectedCategoryId === category.id"
-            :data-testid="`category-${category.id}`"
-            @mouseenter="categoryPointerInside = true"
-            @mouseleave="categoryPointerInside = false"
-            @click="selectCategory(category.id)"
-          >
-            <component :is="categoryIcon(category)" :size="15" :stroke-width="1.8" aria-hidden="true" />
-            <span>{{ category.name }}</span>
-          </button>
-        </div>
-
         <div class="services-search-panel">
           <label for="service-search">Tìm kiếm dịch vụ</label>
           <div class="services-search-field">
@@ -492,6 +445,52 @@ onBeforeUnmount(() => {
           <p v-if="suggestionsOpen && categoriesLoading" class="search-suggestion-status" role="status">
             Đang tải danh mục…
           </p>
+        </div>
+        <div
+          class="category-cloud"
+          role="group"
+          aria-label="Gợi ý danh mục dịch vụ"
+          data-testid="spotlight-categories"
+          @mouseenter="categoryPointerInside = true"
+          @mouseleave="categoryPointerInside = false"
+          @focusin="pauseCategoryHaloForFocus"
+          @focusout="releaseCategoryHaloFocus"
+          @keydown="pauseCategoryHaloForFocus"
+        >
+          <button
+            type="button"
+            class="category-suggestion"
+            :class="{
+              'category-suggestion--selected': !selectedCategoryId,
+              'category-suggestion--halo': categoryHaloTarget === 'all',
+            }"
+            :aria-pressed="!selectedCategoryId"
+            data-testid="category-all"
+            @mouseenter="categoryPointerInside = true"
+            @mouseleave="categoryPointerInside = false"
+            @click="selectCategory('')"
+          >
+            <LayoutGrid :size="15" :stroke-width="1.8" aria-hidden="true" />
+            <span>Tất cả dịch vụ</span>
+          </button>
+          <button
+            v-for="category in spotlightCategories"
+            :key="category.id"
+            type="button"
+            class="category-suggestion"
+            :class="{
+              'category-suggestion--selected': selectedCategoryId === category.id,
+              'category-suggestion--halo': categoryHaloTarget === category.id,
+            }"
+            :aria-pressed="selectedCategoryId === category.id"
+            :data-testid="`category-${category.id}`"
+            @mouseenter="categoryPointerInside = true"
+            @mouseleave="categoryPointerInside = false"
+            @click="selectCategory(category.id)"
+          >
+            <component :is="categoryIcon(category)" :size="15" :stroke-width="1.8" aria-hidden="true" />
+            <span>{{ category.name }}</span>
+          </button>
         </div>
       </div>
 
@@ -688,16 +687,22 @@ onBeforeUnmount(() => {
   isolation: isolate;
   display: grid;
   width: min(100%, 1120px);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 720px) minmax(0, 1fr);
-  grid-template-rows: 48px 136px 48px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   column-gap: 12px;
-  row-gap: 4px;
+  row-gap: 20px;
   margin: 1px auto 0;
 }
 .services-search-stage--active { z-index: 4; }
 
-.category-cloud { display: contents; }
+.category-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+}
 .category-suggestion {
   position: relative;
   z-index: 1;
@@ -720,7 +725,6 @@ onBeforeUnmount(() => {
   font-weight: 550;
   white-space: nowrap;
   cursor: pointer;
-  animation: category-float 7s ease-in-out infinite;
   transition: border-color 220ms var(--service-ease), background-color 220ms var(--service-ease), color 220ms var(--service-ease), box-shadow 220ms var(--service-ease);
 }
 .category-suggestion::after {
@@ -738,14 +742,7 @@ onBeforeUnmount(() => {
 .category-suggestion > * { position: relative; z-index: 1; }
 .category-suggestion svg { flex: 0 0 auto; color: var(--color-brand-700); }
 .category-suggestion span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.category-suggestion:nth-child(1) { grid-column: 1; grid-row: 1; justify-self: start; margin-left: 7px; animation-delay: -1.2s; animation-duration: 6.5s; }
-.category-suggestion:nth-child(2) { grid-column: 1; grid-row: 2; justify-self: end; margin-right: 2px; animation-delay: -3.5s; animation-duration: 7.4s; }
-.category-suggestion:nth-child(3) { grid-column: 1; grid-row: 3; justify-self: start; margin-left: 31px; animation-delay: -5.2s; animation-duration: 7.8s; }
-.category-suggestion:nth-child(4) { grid-column: 3; grid-row: 1; justify-self: end; margin-right: 14px; animation-delay: -2.3s; animation-duration: 6.9s; }
-.category-suggestion:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: start; margin-left: 11px; animation-delay: -4.4s; animation-duration: 7.2s; }
-.category-suggestion:nth-child(6) { grid-column: 3; grid-row: 3; justify-self: end; margin-right: 29px; animation-delay: -6.1s; animation-duration: 7.7s; }
 .category-suggestion--halo:not(.category-suggestion--selected)::after { opacity: 1; }
-.category-halo-paused .category-suggestion { animation-play-state: paused; }
 .category-halo-paused .category-suggestion::after { transition-duration: 220ms; }
 .category-suggestion:hover {
   border-color: var(--color-brand-300);
@@ -761,8 +758,6 @@ onBeforeUnmount(() => {
 .services-search-panel {
   position: relative;
   z-index: 2;
-  grid-column: 2;
-  grid-row: 2;
   justify-self: center;
   width: min(100%, 760px);
   padding: 0;
@@ -998,35 +993,11 @@ onBeforeUnmount(() => {
   from { opacity: 0; transform: translateY(9px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-@keyframes category-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
-
 .public-services :is(a, button, input):focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 3px;
 }
 .public-services .services-search-field input:focus-visible { outline: 0; outline-offset: 0; }
-
-@media (max-width: 1160px) {
-  .services-search-stage {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto auto auto;
-    column-gap: 10px;
-    row-gap: 10px;
-  }
-  .category-suggestion { justify-self: center !important; margin: 0 !important; }
-  .category-suggestion:nth-child(1) { grid-column: 1; grid-row: 2; }
-  .category-suggestion:nth-child(2) { grid-column: 2; grid-row: 2; }
-  .category-suggestion:nth-child(3) { grid-column: 3; grid-row: 2; }
-  .category-suggestion:nth-child(4) { grid-column: 1; grid-row: 3; }
-  .category-suggestion:nth-child(5) { grid-column: 2; grid-row: 3; }
-  .category-suggestion:nth-child(6) { grid-column: 3; grid-row: 3; }
-  .services-search-panel { grid-column: 1 / -1; grid-row: 1; width: min(100%, 760px); }
-  .services-search-stage--active .search-suggestions { z-index: 5; }
-}
 
 @media (max-width: 900px) {
   .public-services { width: min(100% - 40px, 1120px); padding-top: 43px; }
@@ -1046,14 +1017,9 @@ onBeforeUnmount(() => {
   .services-search-field { min-height: 52px; gap: 9px; padding-inline: 12px; }
   .services-search-field input { font-size: 13px; }
   .services-search-panel > p { margin-top: 8px; font-size: 11px; }
-  .services-search-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; row-gap: 8px; }
-  .category-suggestion { min-height: 40px; gap: 6px; padding-inline: 8px; font-size: 11px; }
-  .category-suggestion:nth-child(1) { grid-column: 1; grid-row: 2; }
-  .category-suggestion:nth-child(2) { grid-column: 2; grid-row: 2; }
-  .category-suggestion:nth-child(3) { grid-column: 1; grid-row: 3; }
-  .category-suggestion:nth-child(4) { grid-column: 2; grid-row: 3; }
-  .category-suggestion:nth-child(5) { grid-column: 1; grid-row: 4; }
-  .category-suggestion:nth-child(6) { grid-column: 2; grid-row: 4; }
+  .services-search-stage { row-gap: 14px; }
+  .category-cloud { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding: 5px 4px 10px; scrollbar-width: thin; }
+  .category-suggestion { flex: 0 0 auto; min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 11px; }
   .search-suggestions { top: calc(100% + 7px); max-height: 38vh; padding: 5px; border-radius: 15px; }
   .search-suggestion { min-height: 50px; padding-inline: 10px; }
   .results-heading-row h2 { font-size: 21px; }

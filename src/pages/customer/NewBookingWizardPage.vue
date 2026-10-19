@@ -54,9 +54,8 @@ import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConve
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
-import { SLOT_SHORT, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
+import { SLOT_SHORT, isSessionUpcoming, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
-import { vnKeyAndClockToDate } from '../../utils/vn-time';
 
 const route = useRoute();
 const router = useRouter();
@@ -175,7 +174,7 @@ const selectAddress = (id: string) => {
   isAddressDropdownOpen.value = false;
 };
 const selectedAddress = computed(() => addresses.value.find((a) => a.id === selectedAddressId.value));
-// Sessions (PO 08/10/2026): morning 8-12 or afternoon 13-18 of one day, Vietnam
+// Sessions: morning 8-12, afternoon 13-18 or evening 18-23 of one day, Vietnam
 // time, at most one booking per technician per session; or "come now".
 const bookingMode = ref<BookingMode>('scheduled');
 const selectedSession = ref<{ date: string; slot: BookingSlot } | null>(null);
@@ -192,10 +191,9 @@ const formattedScheduleDisplay = computed(() => {
 function scheduleForBooking(): { mode: BookingMode; date?: string; slot?: BookingSlot } | { error: string } {
   if (bookingMode.value === 'urgent') return { mode: 'urgent' };
   const chosen = selectedSession.value;
-  if (!chosen) return { error: 'Vui lòng chọn ngày và buổi (sáng hoặc chiều).' };
-  const startHour = chosen.slot === 'morning' ? 8 : 13;
-  if (vnKeyAndClockToDate(chosen.date, startHour, 0).getTime() <= Date.now()) {
-    return { error: 'Buổi bạn chọn đã bắt đầu. Vui lòng chọn buổi khác.' };
+  if (!chosen) return { error: 'Vui lòng chọn ngày và buổi (sáng, chiều hoặc tối).' };
+  if (!isSessionUpcoming(chosen.date, chosen.slot)) {
+    return { error: 'Buổi bạn chọn đã hết thời gian nhận đặt lịch. Vui lòng chọn buổi khác.' };
   }
   return { mode: 'scheduled', date: chosen.date, slot: chosen.slot };
 }

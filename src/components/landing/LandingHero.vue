@@ -101,7 +101,7 @@ const router = useRouter();
           </div>
           <div>
             <span class="block text-sm font-semibold text-ink-900">Chủ động thời gian</span>
-            <span class="block text-xs text-ink-600">Hẹn buổi sáng, chiều hoặc tới ngay</span>
+            <span class="block text-xs text-ink-600">Hẹn buổi sáng, chiều, tối hoặc tới ngay</span>
           </div>
         </div>
       </div>

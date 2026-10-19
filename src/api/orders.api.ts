@@ -2,6 +2,7 @@
 import apiClient from './client';
 import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 import type { WarrantyClaimStatus } from '../utils/warranty-claim';
+import type { BookingSlot } from '../utils/booking-session';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -56,9 +57,9 @@ export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
 export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
   isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
 export interface ServiceOrderItem {
-  /** scheduled = one morning/afternoon session; urgent = come now (PO 08/10/2026). */
+  /** scheduled = one morning/afternoon/evening session; urgent = come now. */
   bookingMode?: 'scheduled' | 'urgent';
-  slot?: 'morning' | 'afternoon' | null;
+  slot?: BookingSlot | null;
   /** Note the customer left for the technician, apart from the problem description. */
   customerNote?: string | null;
   /** The technician may set out from this instant (one hour before the appointment). */

@@ -211,8 +211,8 @@ export interface JobBlock extends TimeBlock {
   completed: boolean;
 }
 
-/** Session ends (backend `booking-slots.ts`): morning 08:00-12:00, afternoon 13:00-18:00. */
-const SLOT_END_HOUR: Record<string, number> = { morning: 12, afternoon: 18 };
+/** Session ends (backend `booking-slots.ts`), Vietnam time. */
+const SLOT_END_HOUR: Record<string, number> = { morning: 12, afternoon: 18, evening: 23 };
 /** Height given to a job whose end is not known (urgent or older bookings): one hour. */
 export const OPEN_JOB_MINUTES = 60;
 

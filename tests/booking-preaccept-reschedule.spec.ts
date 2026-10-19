@@ -94,6 +94,15 @@ describe('Reschedule by session (mock HTTP only)', () => {
     expect(push).not.toHaveBeenCalledWith('/app/bookings/booking-w1/candidates');
   });
 
+  it('preserves an evening booking when saving only its description', async () => {
+    await render(booking({ slot: 'evening', preferredAt: '2030-01-02T11:00:00Z', preferredEndAt: '2030-01-02T16:00:00Z' }));
+    expect(wrapper.get('[data-testid="booking-current-session"]').text()).toContain('Buổi tối (18:00 - 23:00)');
+    await wrapper.get('textarea').setValue('Evening description');
+    await save()!.trigger('click');
+    await flushPromises();
+    expect(patch).toHaveBeenCalledWith('/bookings/booking-w1/schedule', { mode: 'scheduled', description: 'Evening description', date: '2030-01-02', slot: 'evening' });
+  });
+
   it('routes a server-confirmed pre-Accept SUBMITTED save to this Booking candidates', async () => {
     await render();
     patch.mockResolvedValue(envelope(booking({ status: 'SUBMITTED' })));

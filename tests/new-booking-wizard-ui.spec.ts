@@ -136,6 +136,54 @@ async function renderWizard(options: { provide?: Record<string, unknown> } = {})
 }
 
 describe('NewBookingWizardPage A+ service finder', () => {
+  it('rechecks evening at submit and refuses it when the clock reaches 23:00', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-12T15:59:00Z'));
+    let wrapper: Awaited<ReturnType<typeof renderWizard>> | undefined;
+    try {
+      wrapper = await renderWizard();
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="step1-next"]').trigger('click');
+      await wrapper.get('[data-testid="session-2026-10-12-evening"]').trigger('click');
+      await wrapper.get('[data-testid="step2-next"]').trigger('click');
+      vi.setSystemTime(new Date('2026-10-12T16:00:00Z'));
+      await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+      await flushPromises();
+      expect(createBooking).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="session-2026-10-12-evening"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="mode-urgent"]').exists()).toBe(true);
+    } finally { wrapper?.unmount(); vi.useRealTimers(); }
+  });
+  it.each([
+    ['2026-10-12T11:30:00Z', 'scheduled'],
+    ['2026-10-12T16:00:00Z', 'urgent'],
+  ])('submits %s with mode %s and never offers 23:00 as a start', async (now, mode) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(now));
+    let wrapper: Awaited<ReturnType<typeof renderWizard>> | undefined;
+    try {
+      wrapper = await renderWizard();
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="step1-next"]').trigger('click');
+      await flushPromises();
+      if (mode === 'scheduled') {
+        await wrapper.get('[data-testid="session-2026-10-12-evening"]').trigger('click');
+      } else {
+        expect(wrapper.find('[data-testid="session-2026-10-12-evening"]').exists()).toBe(false);
+        await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+      }
+      await wrapper.get('[data-testid="step2-next"]').trigger('click');
+      await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+      await flushPromises();
+      expect(createBooking).toHaveBeenCalledWith(expect.objectContaining(mode === 'scheduled'
+        ? { mode: 'scheduled', date: '2026-10-12', slot: 'evening' }
+        : { mode: 'urgent' }));
+      const payload = createBooking.mock.calls[0][0];
+      expect(payload).not.toHaveProperty('preferredStartAt');
+      if (mode === 'urgent') expect(payload).not.toHaveProperty('slot');
+    } finally { wrapper?.unmount(); vi.useRealTimers(); }
+  });
   it('labels the unit price and the quantity total separately in the mini summary', () => {
     const wrapper = mount(SelectedServiceMiniSummary, {
       props: { service: sampleCategories[0].services[0] as never, quantity: 3 }, global: { stubs },

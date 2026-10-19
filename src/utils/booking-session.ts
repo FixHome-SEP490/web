@@ -2,15 +2,17 @@ import { addDaysToKey, vnDateString, vnDayKey, vnKeyAndClockToDate, vnTimeString
 
 /**
  * Booking sessions (PO 08/10/2026): a scheduled booking takes the morning
- * (08:00-12:00) or the afternoon (13:00-18:00) of one day, Vietnam time; an
+ * (08:00-12:00), afternoon (13:00-18:00) or evening (18:00-23:00), Vietnam time; an
  * urgent booking means "come now".
  */
-export type BookingSlot = 'morning' | 'afternoon';
+export const BOOKING_SLOTS = ['morning', 'afternoon', 'evening'] as const;
+export type BookingSlot = typeof BOOKING_SLOTS[number];
 export type BookingMode = 'scheduled' | 'urgent';
 
 export const SLOT_LABELS: Record<BookingSlot, string> = {
   morning: 'Buổi sáng (8:00 - 12:00)',
   afternoon: 'Buổi chiều (13:00 - 18:00)',
+  evening: 'Buổi tối (18:00 - 23:00)',
 };
 
 /** "Buổi sáng (8:00 - 12:00), 12/10/2026", "Tới ngay", or the plain start time for older bookings. */
@@ -18,7 +20,7 @@ export function sessionLabel(input: { bookingMode?: string | null; slot?: string
   if (input.bookingMode === 'urgent') return 'Tới ngay';
   const start = input.start ? new Date(input.start) : null;
   const day = start && Number.isFinite(start.getTime()) ? vnDateString(start) : '';
-  if (input.slot === 'morning' || input.slot === 'afternoon') return day ? `${SLOT_LABELS[input.slot]}, ${day}` : SLOT_LABELS[input.slot];
+  if (input.slot === 'morning' || input.slot === 'afternoon' || input.slot === 'evening') return day ? `${SLOT_LABELS[input.slot]}, ${day}` : SLOT_LABELS[input.slot];
   if (!start || !Number.isFinite(start.getTime())) return 'Chưa có lịch hẹn';
   return `${vnTimeString(start)} ${day}`;
 }
@@ -31,17 +33,22 @@ export interface SessionOption {
   reason: string | null;
 }
 
-export const SLOT_SHORT: Record<BookingSlot, string> = { morning: 'Sáng 8:00 - 12:00', afternoon: 'Chiều 13:00 - 18:00' };
-const SLOT_START_HOUR: Record<BookingSlot, number> = { morning: 8, afternoon: 13 };
+export const SLOT_SHORT: Record<BookingSlot, string> = { morning: 'Sáng 8:00 - 12:00', afternoon: 'Chiều 13:00 - 18:00', evening: 'Tối 18:00 - 23:00' };
+// Morning/afternoon close at their start as before; evening stays open until 23:00.
+const SLOT_CUTOFF_HOUR: Record<BookingSlot, number> = { morning: 8, afternoon: 13, evening: 23 };
 
-/** Sessions of the next days that have not started yet, Vietnam time; nobody's availability is known here. */
+export function isSessionUpcoming(date: string, slot: BookingSlot, now: Date = new Date()): boolean {
+  return vnKeyAndClockToDate(date, SLOT_CUTOFF_HOUR[slot], 0).getTime() > now.getTime();
+}
+
+/** Sessions still accepting bookings, Vietnam time; technician availability is not known here. */
 export function upcomingSessions(days = 14, now: Date = new Date()): SessionOption[] {
   const today = vnDayKey(now);
   const sessions: SessionOption[] = [];
   for (let i = 0; i < days; i++) {
     const date = addDaysToKey(today, i);
-    for (const slot of ['morning', 'afternoon'] as BookingSlot[]) {
-      if (vnKeyAndClockToDate(date, SLOT_START_HOUR[slot], 0).getTime() <= now.getTime()) continue;
+    for (const slot of BOOKING_SLOTS) {
+      if (!isSessionUpcoming(date, slot, now)) continue;
       sessions.push({ date, slot, available: true, reason: null });
     }
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A day and a session (morning 8-12, afternoon 13-18, Vietnam time) for a
+// A day and a session (morning 8-12, afternoon 13-18, evening 18-23, Vietnam time) for a
 // booking, a reschedule or a rebooking (PO 08/10/2026). PO 18/10/2026: pick the
 // day on a calendar first, then the time; both choices carry a tick. Sessions
 // the technician cannot take are shown with the reason and cannot be picked,

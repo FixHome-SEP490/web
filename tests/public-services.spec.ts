@@ -133,6 +133,21 @@ describe('Public service discovery', () => {
     mockPublicCatalog();
   });
 
+  it('shows all 13 category chips and filters by the final category while keeping search', async () => {
+    const categories = Array.from({ length: 13 }, (_, i) => category(`cat-${i}`, `Danh mục ${i + 1}`));
+    mockPublicCatalog({ categories });
+    const context = await setup('/services?q=may');
+    const wrapper = mount(ServicesPage, context);
+    await flushPromises();
+    const chips = wrapper.get('[data-testid="spotlight-categories"]');
+    expect(chips.findAll('button')).toHaveLength(14);
+    await chips.get('[data-testid="category-cat-12"]').trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-12', q: 'may' });
+    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12, categoryId: 'cat-12', search: 'may' } });
+    wrapper.unmount();
+  });
+
   it.each([
     ['fixed_range', 199000, 449000, '199.000 – 449.000đ', 'Giá công theo thiết bị/phạm vi'],
     ['fixed_range', 349000, 349000, '349.000đ', 'Giá công theo thiết bị/phạm vi'],
