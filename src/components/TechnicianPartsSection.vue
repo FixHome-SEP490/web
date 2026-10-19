@@ -32,7 +32,8 @@ import {
   type PartCustodyReturnRecord,
   type FulfillmentMethod,
 } from '../api/part-requests.api';
-import { partsCatalogApi } from '../api/parts-catalog.api';
+import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
+import { onOrderChange, whileOffline } from '../services/live-updates';
 import type { FixHomePart } from '../api/admin-parts.api';
 import { vnDateTimeString } from '../utils/vn-time';
 
@@ -46,6 +47,8 @@ const emit = defineEmits<{
   (e: 'parts-updated'): void;
   /** How many requests exist and whether one waits for the technician (QR handover, used/returned). */
   (e: 'summary', value: { count: number; needsAction: boolean }): void;
+  (e: 'pending-usage', count: number): void;
+  (e: 'pending-returns', count: number): void;
 }>();
 
 const loading = ref(true);
@@ -54,10 +57,9 @@ const actionError = ref<string | null>(null);
 const actionSuccess = ref<string | null>(null);
 
 const partRequests = ref<PartRequest[]>([]);
-const catalogParts = ref<FixHomePart[]>([]);
-const searchResults = ref<FixHomePart[]>([]);
-const partsMap = ref<Map<string, FixHomePart>>(new Map());
-
+const picker = usePartsCatalogPicker();
+const { items: searchResults, total: catalogTotal, loading: isSearchingCatalog, error: catalogError,
+  query: searchQuery, category: activeCategory, partsMap, hasMore: catalogHasMore } = picker;
 // Form state for creating pre-repair parts request
 const showCreateForm = ref(false);
 const fulfillmentMethod = ref<FulfillmentMethod>('pickup');
@@ -77,9 +79,6 @@ export interface SelectedPartItem {
 const selectedItems = ref<SelectedPartItem[]>([]);
 
 // Search & Part Picker state
-const searchQuery = ref('');
-const activeCategory = ref('ALL');
-const isSearchingCatalog = ref(false);
 const showSearchDropdown = ref(false);
 const selectedPart = ref<FixHomePart | null>(null);
 const selectedQuantity = ref(1);
@@ -155,6 +154,11 @@ const needsAction = computed(() =>
       (isUnderRepair.value && pr.status === 'received' && pr.items.some((item) => !item.usageStatus || item.usageStatus === 'pending')),
   ),
 );
+const pendingUsage = computed(() => partRequests.value
+  .filter(pr => pr.status === 'received')
+  .reduce((count, pr) => count + pr.items.filter(item => !item.usageStatus || item.usageStatus === 'pending').length, 0));
+watch(pendingUsage, count => emit('pending-usage', count), { immediate: true });
+watch(returnRecords, records => emit('pending-returns', records.reduce((sum, record) => sum + record.outstandingQty, 0)));
 watch(
   () => [partRequests.value.length, needsAction.value] as const,
   ([count, action]) => emit('summary', { count, needsAction: action }),
@@ -208,15 +212,20 @@ const getPartWarrantyFromHistory = (item: { partCatalogId?: string | null }) => 
 };
 
 // Data loading
+let requestsLoadVersion = 0;
 const loadPartRequests = async () => {
+  const version = ++requestsLoadVersion;
   try {
     loading.value = true;
-    partRequests.value = await partRequestsApi.getByOrderId(props.orderId);
+    const records = await partRequestsApi.getByOrderId(props.orderId);
+    if (version !== requestsLoadVersion) return;
+    partRequests.value = records;
   } catch (err: unknown) {
+    if (version !== requestsLoadVersion) return;
     actionError.value =
       userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
   } finally {
-    loading.value = false;
+    if (version === requestsLoadVersion) loading.value = false;
   }
 };
 
@@ -240,79 +249,17 @@ const loadReturns = async () => {
     }
   } catch (err: unknown) {
     if (version !== returnsLoadVersion) return;
-    returnRecords.value = [];
     declareTarget.value = null;
     // Feature flag off or no access to the route: hide the return UI and keep
     // the existing QR / usage / part-request flow untouched.
     returnsLoadError.value = !isPartReturnsUnavailableError(err);
+    if (!returnsLoadError.value) returnRecords.value = [];
   }
 };
 
-const loadCatalog = async () => {
-  try {
-    const res = await partsCatalogApi.getCatalog({ limit: 100 });
-    catalogParts.value = res.data;
-    searchResults.value = res.data;
-    for (const p of res.data) {
-      partsMap.value.set(p.id, p);
-    }
-  } catch {
-    // Ignore catalog load errors
-  }
-};
-
-// Search handling with debouncing
-let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-const onSearchInput = () => {
-  showSearchDropdown.value = true;
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = setTimeout(() => {
-    void executeSearch();
-  }, 250);
-};
-
-const selectCategory = (categoryVal: string) => {
-  activeCategory.value = categoryVal;
-  showSearchDropdown.value = true;
-  void executeSearch();
-};
-
-const clearSearch = () => {
-  searchQuery.value = '';
-  activeCategory.value = 'ALL';
-  searchResults.value = catalogParts.value;
-};
-
-const executeSearch = async () => {
-  const query = searchQuery.value.trim();
-  const cat = activeCategory.value !== 'ALL' ? activeCategory.value : '';
-  const effectiveSearch = query || cat;
-
-  if (!effectiveSearch) {
-    searchResults.value = catalogParts.value;
-    return;
-  }
-
-  try {
-    isSearchingCatalog.value = true;
-    const res = await partsCatalogApi.getCatalog({ search: effectiveSearch, limit: 50 });
-    searchResults.value = res.data;
-    for (const p of res.data) {
-      partsMap.value.set(p.id, p);
-    }
-  } catch {
-    // Local fallback search
-    searchResults.value = catalogParts.value.filter(
-      (p) =>
-        p.name.toLowerCase().includes(effectiveSearch.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(effectiveSearch.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(effectiveSearch.toLowerCase())),
-    );
-  } finally {
-    isSearchingCatalog.value = false;
-  }
-};
+const onSearchInput = () => { showSearchDropdown.value = true; picker.searchSoon(); };
+const selectCategory = (value: string) => { showSearchDropdown.value = true; picker.selectCategory(value); };
+const clearSearch = () => { showSearchDropdown.value = true; picker.clear(); };
 
 const selectPartForForm = (part: FixHomePart) => {
   selectedPart.value = part;
@@ -374,7 +321,9 @@ const decreaseQuantity = (index: number) => {
 };
 
 const handleClickOutside = (e: MouseEvent) => {
-  if (searchContainerRef.value && !searchContainerRef.value.contains(e.target as Node)) {
+  // Loading can remove the clicked result/load-more button before bubbling ends.
+  // The event path still records that the click originated inside this picker.
+  if (searchContainerRef.value && !e.composedPath().includes(searchContainerRef.value)) {
     showSearchDropdown.value = false;
   }
 };
@@ -383,12 +332,47 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside);
   void loadPartRequests();
   void loadReturns();
-  void loadCatalog();
+  void picker.load();
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  stopLiveParts();
+  stopOfflineParts();
+  ++returnsLoadVersion;
+  ++requestsLoadVersion;
+});
+
+let refreshRunning = false;
+let refreshQueued = false;
+async function refreshParts() {
+  if (refreshRunning) { refreshQueued = true; return; }
+  refreshRunning = true;
+  do {
+    refreshQueued = false;
+    await Promise.all([loadPartRequests(), loadReturns()]);
+  } while (refreshQueued);
+  refreshRunning = false;
+}
+let stopLiveParts = onOrderChange(props.orderId, event => {
+  if (!event.kinds || event.kinds.some(kind => ['part', 'quotation', 'invoice', 'cash', 'status', 'additional_cost'].includes(kind))) void refreshParts();
+});
+const stopOfflineParts = whileOffline(() => void refreshParts(), 20_000);
+watch(() => props.orderId, id => {
+  stopLiveParts();
+  ++requestsLoadVersion;
+  ++returnsLoadVersion;
+  partRequests.value = [];
+  returnRecords.value = [];
+  declareTarget.value = null;
+  selectedItems.value = [];
+  showCreateForm.value = false;
+  actionError.value = null;
+  actionSuccess.value = null;
+  stopLiveParts = onOrderChange(id, event => {
+    if (!event.kinds || event.kinds.some(kind => ['part', 'quotation', 'invoice', 'cash', 'status', 'additional_cost'].includes(kind))) void refreshParts();
+  });
+  void refreshParts();
 });
 
 const submitPreRepairRequest = async () => {
@@ -655,7 +639,7 @@ const getStatusBadgeClass = (status: string) => {
                 </h5>
               </div>
               <span class="text-[11px] font-medium text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-full">
-                {{ catalogParts.length > 0 ? `${catalogParts.length}+ linh kiện` : 'Đang tải…' }}
+                {{ isSearchingCatalog ? 'Đang tải…' : `${catalogTotal} linh kiện` }}
               </span>
             </div>
 
@@ -706,24 +690,27 @@ const getStatusBadgeClass = (status: string) => {
               <!-- Search results popover -->
               <div
                 v-if="showSearchDropdown"
-                class="absolute left-0 right-0 top-full mt-1.5 z-30 bg-white rounded-xl shadow-xl border border-ink-200 max-h-72 overflow-y-auto divide-y divide-ink-100"
+                class="mt-1.5 bg-white rounded-xl border border-ink-200 max-h-72 overflow-y-auto overscroll-contain divide-y divide-ink-100"
+                @keydown.esc="showSearchDropdown = false"
               >
                 <div v-if="isSearchingCatalog" class="p-3 text-center text-ink-400 text-xs">
                   <Loader2 :size="15" class="animate-spin inline mr-1 text-brand-600" /> Đang tìm kiếm trong kho linh kiện...
                 </div>
 
                 <div
-                  v-else-if="searchResults.length === 0"
+                  v-else-if="!catalogError && searchResults.length === 0"
                   class="p-4 text-center text-ink-500 text-xs space-y-1"
                 >
                   <Package :size="20" class="mx-auto text-ink-300" />
                   <p class="font-medium text-ink-700">Không tìm thấy linh kiện phù hợp</p>
                 </div>
 
-                <div
-                  v-for="part in searchResults"
+                <button
+                  v-for="part in (catalogError || isSearchingCatalog ? [] : searchResults)"
+                  type="button"
+                  data-testid="catalog-result"
                   :key="part.id"
-                  class="p-2.5 hover:bg-brand-50/70 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  class="w-full text-left p-2.5 hover:bg-brand-50/70 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
                   @click="selectPartForForm(part)"
                 >
                   <div class="min-w-0 flex-1">
@@ -757,6 +744,14 @@ const getStatusBadgeClass = (status: string) => {
                       {{ getWarrantyBadge(part.warrantyDays) }}
                     </span>
                   </div>
+                </button>
+                <div v-if="catalogError" class="p-3 text-xs text-danger-700" role="alert">
+                  Chưa tải được danh mục linh kiện.
+                  <button type="button" data-testid="catalog-retry" class="ml-2 underline" @click="picker.retry">Thử lại</button>
+                </div>
+                <div v-else-if="!isSearchingCatalog" class="p-2 text-center text-xs text-ink-600">
+                  {{ searchResults.length }} / {{ catalogTotal }} linh kiện
+                  <button v-if="catalogHasMore" type="button" data-testid="catalog-load-more" class="ml-2 text-brand-700 underline" @click="picker.loadMore">Tải thêm</button>
                 </div>
               </div>
             </div>
@@ -1221,7 +1216,7 @@ const getStatusBadgeClass = (status: string) => {
                             type="button"
                             data-testid="open-declare-return"
                             class="whitespace-nowrap rounded border border-brand-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
-                            :disabled="declareSubmitting"
+                            :disabled="declareSubmitting || returnsLoadError"
                             @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"
                           >
                             <Undo2 :size="11" class="mr-1 inline" />Khai trả

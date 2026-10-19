@@ -4,6 +4,13 @@ import { flushPromises, mount } from '@vue/test-utils';
 // PO 10/10/2026: the order takes the technician's default labor warranty when they accept it;
 // the quote starts from it and the technician can change it for this job.
 const { mockGet, mockPost } = vi.hoisted(() => ({ mockGet: vi.fn(), mockPost: vi.fn() }));
+const live = vi.hoisted(() => ({ listeners: new Map<string, (event: { kinds?: string[] }) => void>() }));
+vi.mock('../src/services/live-updates', () => ({
+  afterRunningRead: async () => undefined,
+  onOrderChange: (id: string, fn: (event: { kinds?: string[] }) => void) => { live.listeners.set(id, fn); return () => live.listeners.delete(id); },
+  onResync: () => () => undefined,
+  whileOffline: () => () => undefined,
+}));
 vi.mock('../src/api/client', () => ({ default: { get: mockGet, post: mockPost, patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'job-1' } }), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ openConversationForBooking: vi.fn(), toggleWidget: vi.fn(), conversations: [] }) }));
@@ -17,7 +24,7 @@ const stubs = {
   FhMoney: { props: ['amount'], template: '<span>{{ amount }} đ</span>' },
   FhCostBreakdown: { template: '<div />' },
   BookingMediaViewer: { template: '<div />' },
-  TechnicianPartsSection: { template: '<div />' },
+  TechnicianPartsSection: { name: 'TechnicianPartsSection', template: '<div />' },
 };
 
 const base = {
@@ -57,6 +64,7 @@ describe('Technician labor warranty on the job page', () => {
     const days = form.get('[data-testid="quote-labor-warranty"] input');
     expect((days.element as HTMLInputElement).value).toBe('90');
 
+    await form.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
     const [description, price] = form.findAll('input').slice(0, 2);
     await description.setValue('Thay bạc đạn');
     await price.setValue(150000);
@@ -75,7 +83,7 @@ describe('Technician labor warranty on the job page', () => {
     await submitQuote(w);
 
     expect(mockPost.mock.calls.some(([p]) => p === '/service-orders/job-1/quotations')).toBe(false);
-    expect(w.text()).toContain('Bảo hành công từ 0 đến 365 ngày.');
+    expect(w.get('[data-testid="quote-labor-warranty"] input').classes()).toContain('border-danger-500');
     w.unmount();
   });
 
@@ -84,6 +92,120 @@ describe('Technician labor warranty on the job page', () => {
     await w.get('[data-testid="steps-toggle"]').trigger('click');
     await w.get('[data-testid="step-row-3"]').trigger('click');
     expect(w.get('[data-testid="fixed-labor-warranty"]').text()).toContain('Bảo hành công 45');
+    w.unmount();
+  });
+
+  it('keeps empty, canceled and removed quotations neutral without a POST', async () => {
+    const w = await mountPage(base);
+    const send = () => w.findAll('button').find(b => b.text().includes('Gửi báo giá cho khách duyệt'))!;
+    expect(send().attributes('disabled')).toBeDefined();
+    await submitQuote(w);
+    await w.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
+    await w.get('input[aria-label="Mô tả công việc"]').setValue('Kiểm tra máy');
+    await w.get('input[aria-label="Đơn giá"]').setValue(100000);
+    expect(send().attributes('disabled')).toBeUndefined();
+    await w.get('button[aria-label="Xoá dòng này"]').trigger('click');
+    expect(w.find('[data-testid="quotation-form"]').exists()).toBe(false);
+    await w.findAll('button').find(b => b.text() === 'Tạo báo giá')!.trigger('click');
+    expect(send().attributes('disabled')).toBeDefined();
+    await w.findAll('button').find(b => b.text() === 'Thêm linh kiện')!.trigger('click');
+    expect(send().attributes('disabled')).toBeDefined();
+    await w.findAll('button').find(b => b.text() === 'Hủy báo giá')!.trigger('click');
+    expect(w.find('[aria-label="Nguồn linh kiện"]').exists()).toBe(false);
+    expect(w.find('[data-testid="quotation-form"]').exists()).toBe(false);
+    await w.findAll('button').find(b => b.text() === 'Tạo báo giá')!.trigger('click');
+    expect(send().attributes('disabled')).toBeDefined();
+    expect(mockPost).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('uses the shared FixHome picker for the first EN_ROUTE quote and locks the catalog price', async () => {
+    const w = await mountPage(base);
+    const previous = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation(async (path, config) => path === '/parts/catalog'
+      ? { data: { data: [{ id: 'part-792', name: 'Van xả', sku: 'VAN', sellingPrice: 65000, warrantyDays: 30 }], meta: { total: 792 } } }
+      : previous(path, config));
+    await w.findAll('button').find(b => b.text() === 'Thêm linh kiện')!.trigger('click');
+    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('fixhome');
+    await flushPromises();
+    expect(mockGet).toHaveBeenCalledWith('/parts/catalog', { params: { page: 1, limit: 50 } });
+    expect(w.get('[role="dialog"]').text()).toContain('792 linh kiện');
+    await w.get('[role="dialog"] li button').trigger('click');
+    await w.get('input[aria-label="Số lượng linh kiện"]').setValue(2);
+    expect(w.get('input[aria-label="Đơn giá"]').attributes('disabled')).toBeDefined();
+    await submitQuote(w);
+    const body = mockPost.mock.calls.find(([path]) => path.endsWith('/quotations'))![1];
+    expect(body.items[0]).toMatchObject({ type: 'parts_equipment', partSource: 'fixhome', partCatalogId: 'part-792', unitPrice: 65000, quantity: 2 });
+    w.unmount();
+  });
+
+  it('clears the catalog identity and price when switching to technician-owned parts', async () => {
+    const w = await mountPage(base);
+    const previous = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation(async (path, config) => path === '/parts/catalog'
+      ? { data: { data: [{ id: 'part-1', name: 'Van xả', sellingPrice: 65000 }], meta: { total: 1 } } }
+      : previous(path, config));
+    await w.findAll('button').find(b => b.text() === 'Thêm linh kiện')!.trigger('click');
+    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('fixhome');
+    await flushPromises();
+    await w.get('[role="dialog"] li button').trigger('click');
+    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('technician');
+    expect(w.get('input[aria-label="Đơn giá"]').attributes('disabled')).toBeUndefined();
+    expect((w.get('input[aria-label="Đơn giá"]').element as HTMLInputElement).value).toBe('0');
+    await w.get('input[aria-label="Tên linh kiện"]').setValue('Van tự có');
+    await w.get('input[aria-label="Đơn giá"]').setValue(45000);
+    await submitQuote(w);
+    const body = mockPost.mock.calls.find(([path]) => path.endsWith('/quotations'))![1];
+    expect(body.items[0]).toMatchObject({ partSource: 'technician', description: 'Van tự có', unitPrice: 45000 });
+    expect(body.items[0].partCatalogId).toBeUndefined();
+    w.unmount();
+  });
+
+  it('refreshes customer quote approval and payment without reloading the page', async () => {
+    const order = { ...base, quotation: { id: 'q1', status: 'sent', items: [] } };
+    const w = await mountPage(order);
+    expect(w.get('[data-testid="job-now"]').text()).toContain('Chờ khách duyệt báo giá');
+    Object.assign(order, { status: 'UNDER_REPAIR', quotation: { id: 'q1', status: 'approved', items: [] } });
+    live.listeners.get('job-1')!({ kinds: ['quotation', 'status'] });
+    await flushPromises();
+    expect(w.get('[data-testid="job-now"]').text()).toContain('Đang sửa chữa');
+    Object.assign(order, { status: 'COMPLETED', paymentStatus: 'PAID' });
+    live.listeners.get('job-1')!({ kinds: ['invoice', 'status'] });
+    await flushPromises();
+    expect(w.get('[data-testid="job-now"]').text()).toContain('Đơn đã hoàn thành');
+    expect(mockPost).not.toHaveBeenCalled();
+    w.unmount();
+    expect(live.listeners.size).toBe(0);
+  });
+
+  it('shows actionable pending usage only during repair and does not block the first quote', async () => {
+    const w = await mountPage(base);
+    const parts = w.findComponent({ name: 'TechnicianPartsSection' });
+    parts.vm.$emit('pending-usage', 1);
+    await flushPromises();
+    expect(w.find('[data-testid="pending-parts-usage"]').exists()).toBe(false);
+    await w.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
+    await w.get('input[aria-label="Mô tả công việc"]').setValue('Sửa máy');
+    await w.get('input[aria-label="Đơn giá"]').setValue(100000);
+    expect(w.findAll('button').find(b => b.text().includes('Gửi báo giá cho khách duyệt'))!.attributes('disabled')).toBeUndefined();
+    Object.assign(base, { status: 'UNDER_REPAIR' });
+    live.listeners.get('job-1')!({ kinds: ['status'] });
+    await flushPromises();
+    expect(w.get('[data-testid="pending-parts-usage"]').text()).toContain('Ghi nhận đã dùng hoặc hoàn trả');
+    base.status = 'EN_ROUTE';
+    w.unmount();
+  });
+
+  it('keeps the paid completed job visible while waiting for a physical return, and clears the banner on acceptance', async () => {
+    const w = await mountPage({ ...base, status: 'COMPLETED', paymentStatus: 'PAID' });
+    const parts = w.findComponent({ name: 'TechnicianPartsSection' });
+    parts.vm.$emit('pending-returns', 2);
+    await flushPromises();
+    expect(w.get('[data-testid="pending-parts-returns"]').text()).toContain('Chờ hoàn trả linh kiện');
+    expect(w.get('[data-testid="job-now"]').text()).toContain('Đơn đã hoàn thành');
+    parts.vm.$emit('pending-returns', 0);
+    await flushPromises();
+    expect(w.find('[data-testid="pending-parts-returns"]').exists()).toBe(false);
     w.unmount();
   });
 

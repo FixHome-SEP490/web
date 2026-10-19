@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+const live = vi.hoisted(() => ({
+  listeners: new Map<string, (event: { kinds?: string[] }) => void>(),
+  stopOffline: vi.fn(),
+  whileOffline: vi.fn(),
+}));
+vi.mock('../src/services/live-updates', () => ({
+  onOrderChange: (id: string, fn: (event: { kinds?: string[] }) => void) => { live.listeners.set(id, fn); return () => live.listeners.delete(id); },
+  whileOffline: live.whileOffline,
+}));
 
 const { partRequestsApi, partsCatalogApi } = vi.hoisted(() => ({
   partRequestsApi: {
@@ -38,9 +47,40 @@ const stubs = { FhButton: { template: '<button><slot /></button>' }, FhMoney: { 
 describe('TechnicianPartsSection inside the job page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    live.listeners.clear();
+    live.whileOffline.mockReturnValue(live.stopOffline);
     partsCatalogApi.getCatalog.mockResolvedValue({ data: [] });
     // P1 return feature idle by default in these tests.
     partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
+  });
+
+  it('pages the real catalog and retries server search without a partial local fallback', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([]);
+    const part = (id: string) => ({ id, name: `Linh kiện ${id}`, sku: id, sellingPrice: 50000 });
+    partsCatalogApi.getCatalog.mockResolvedValueOnce({ data: [part('first')], meta: { total: 792 } })
+      .mockResolvedValueOnce({ data: [part('last')], meta: { total: 792 } });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find(b => b.text().includes('Tạo yêu cầu linh kiện'))!.trigger('click');
+    const input = wrapper.get('input[placeholder="Tên linh kiện, mã hoặc hãng"]');
+    await input.trigger('focus');
+    expect(wrapper.text()).toContain('792 linh kiện');
+    await wrapper.get('[data-testid="catalog-load-more"]').trigger('click');
+    await flushPromises();
+    expect(partsCatalogApi.getCatalog).toHaveBeenLastCalledWith({ page: 2, limit: 50 });
+    expect(wrapper.text()).toContain('Linh kiện last');
+    partsCatalogApi.getCatalog.mockRejectedValueOnce(new Error('offline'));
+    await input.setValue('last');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await flushPromises();
+    expect(wrapper.text()).toContain('Chưa tải được danh mục linh kiện.');
+    expect(wrapper.find('[data-testid="catalog-result"]').exists()).toBe(false);
+    partsCatalogApi.getCatalog.mockResolvedValueOnce({ data: [part('last')], meta: { total: 1 } });
+    await wrapper.get('[data-testid="catalog-retry"]').trigger('click');
+    await flushPromises();
+    expect(partsCatalogApi.getCatalog).toHaveBeenLastCalledWith({ page: 1, limit: 50, search: 'last' });
+    expect(wrapper.text()).toContain('1 linh kiện');
+    wrapper.unmount();
   });
 
   it('tells the page when a request waits for the technician (parts ready to pick up)', async () => {
@@ -51,6 +91,49 @@ describe('TechnicianPartsSection inside the job page', () => {
     expect(wrapper.emitted('summary')?.at(-1)).toEqual([{ count: 1, needsAction: true }]);
     // No rule banner and no card chrome: the page gives the heading.
     expect(wrapper.text()).not.toContain('Quy tắc quản lý linh kiện');
+    wrapper.unmount();
+  });
+
+  it('refreshes only relevant order changes, follows the new order, and unsubscribes on leave', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('requested')]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'EN_ROUTE' }, global: { stubs } });
+    await flushPromises();
+    expect(live.whileOffline).toHaveBeenCalledWith(expect.any(Function), 20000);
+    live.listeners.get('so-1')!({ kinds: ['evidence'] });
+    await flushPromises();
+    expect(partRequestsApi.getByOrderId).toHaveBeenCalledTimes(1);
+    partRequestsApi.getByOrderId.mockResolvedValue([request('ready')]);
+    live.listeners.get('so-1')!({ kinds: ['part'] });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Linh kiện đã sẵn sàng bàn giao!');
+    partRequestsApi.getByOrderId.mockResolvedValue([request('received', 'used')]);
+    live.listeners.get('so-1')!({ kinds: ['quotation', 'invoice'] });
+    await flushPromises();
+    expect(wrapper.emitted('pending-usage')?.at(-1)).toEqual([0]);
+    await wrapper.setProps({ orderId: 'so-2' });
+    await flushPromises();
+    expect(live.listeners.has('so-1')).toBe(false);
+    expect(partRequestsApi.getByOrderId).toHaveBeenLastCalledWith('so-2');
+    wrapper.unmount();
+    expect(live.listeners.size).toBe(0);
+    expect(live.stopOffline).toHaveBeenCalledOnce();
+  });
+
+  it('discards old catalog search replies after a new search', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([]);
+    let resolveOld!: (value: unknown) => void;
+    partsCatalogApi.getCatalog.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs }, attachTo: document.body });
+    await wrapper.findAll('button').find(b => b.text().includes('Tạo yêu cầu linh kiện'))!.trigger('click');
+    partsCatalogApi.getCatalog.mockResolvedValueOnce({ data: [{ id: 'new', name: 'Kết quả mới', sellingPrice: 1 }], meta: { total: 1 } });
+    await wrapper.get('input[placeholder="Tên linh kiện, mã hoặc hãng"]').setValue('mới');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await flushPromises();
+    resolveOld({ data: [{ id: 'old', name: 'Kết quả cũ', sellingPrice: 1 }], meta: { total: 792 } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Kết quả mới');
+    expect(wrapper.text()).not.toContain('Kết quả cũ');
+    expect(wrapper.text()).not.toContain('792 linh kiện');
     wrapper.unmount();
   });
 

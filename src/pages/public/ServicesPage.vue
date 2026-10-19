@@ -5,7 +5,6 @@ import { ArrowRight, LayoutGrid, Search, X } from 'lucide-vue-next';
 import { FhButton, FhEmptyState, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { categoryIcon } from '../../components/booking/service-icons';
-import CategoryMorePopover from '../../components/booking/CategoryMorePopover.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { useQuerySearch, useQueryState } from '../../composables/useQueryState';
 import { useReferenceData } from '../../composables/useCachedQuery';
@@ -39,11 +38,6 @@ const motionPreference = typeof window !== 'undefined' && typeof window.matchMed
   : null;
 const reduceMotion = ref(motionPreference?.matches ?? false);
 if (!reduceMotion.value) useSmoothScroll();
-const categoryPointerInside = ref(false);
-const categoryFocusInside = ref(false);
-const categoryHaloPaused = computed(() => categoryPointerInside.value || categoryFocusInside.value);
-const categoryHaloIndex = ref(0);
-let categoryHaloTimer: ReturnType<typeof setInterval> | null = null;
 const syncMotionPreference = (event: MediaQueryListEvent) => { reduceMotion.value = event.matches; };
 
 // Temporary metadata path: GET /categories also returns nested services.
@@ -105,21 +99,13 @@ const {
 });
 
 const categoryNames = computed(() => new Map(categories.value.map((category) => [category.id, category.name])));
-const spotlightCategories = computed(() => {
-  const featured = categories.value.slice(0, 4);
-  const selectedExtra = categories.value.slice(4).find((category) => category.id === selectedCategoryId.value);
-  return selectedExtra ? [...featured.slice(0, 3), selectedExtra] : featured;
+const spotlightCategories = computed(() => categories.value);
+const categoryRows = computed(() => {
+  const chips = [{ id: '', name: 'Tất cả', icon: LayoutGrid }, ...categories.value.map(category => ({
+    id: category.id, name: category.name, icon: categoryIcon(category),
+  }))];
+  return [chips.slice(0, 8), chips.slice(8)].filter(row => row.length);
 });
-const extraCategories = computed(() => categories.value.filter((category) => !spotlightCategories.value.some((featured) => featured.id === category.id)));
-const categoryHaloTargets = computed(() => [
-  ...(!selectedCategoryId.value ? [] : ['all']),
-  ...spotlightCategories.value
-    .map((category) => category.id)
-    .filter((categoryId) => categoryId !== selectedCategoryId.value),
-]);
-const categoryHaloTarget = computed(() => !reduceMotion.value && categoryHaloTargets.value.length
-  ? categoryHaloTargets.value[categoryHaloIndex.value % categoryHaloTargets.value.length]
-  : '');
 const hasFilters = computed(() => Boolean(selectedCategoryId.value || search.value));
 const busy = computed(() => categoriesLoading.value || loading.value || refreshing.value || changingPage.value);
 const searchSuggestions = computed<SearchSuggestion[]>(() => {
@@ -175,30 +161,6 @@ const pageAnnouncement = computed(() => {
   const last = Math.min(page.value * 12, total.value);
   return `Đang hiển thị ${first} đến ${last} trong ${total.value} dịch vụ.`;
 });
-
-function syncCategoryHaloTimer() {
-  if (categoryHaloTimer) {
-    clearInterval(categoryHaloTimer);
-    categoryHaloTimer = null;
-  }
-  if (reduceMotion.value || categoryHaloPaused.value || categoryHaloTargets.value.length < 2) return;
-  categoryHaloTimer = setInterval(() => {
-    categoryHaloIndex.value = (categoryHaloIndex.value + 1) % categoryHaloTargets.value.length;
-  }, 1250);
-}
-
-watch([reduceMotion, categoryHaloPaused, categoryHaloTargets], syncCategoryHaloTimer, { immediate: true });
-
-function pauseCategoryHaloForFocus() {
-  categoryFocusInside.value = true;
-}
-
-function releaseCategoryHaloFocus(event: FocusEvent) {
-  const group = event.currentTarget as HTMLElement;
-  const nextTarget = event.relatedTarget as Node | null;
-  if (nextTarget && group.contains(nextTarget)) return;
-  categoryFocusInside.value = false;
-}
 
 function selectCategory(id: string) {
   replaceFilters(id, searchInput.value);
@@ -358,7 +320,6 @@ watch(page, async () => {
 onBeforeUnmount(() => {
   focusResultsAfterPageChange.value = false;
   motionPreference?.removeEventListener('change', syncMotionPreference);
-  if (categoryHaloTimer) clearInterval(categoryHaloTimer);
 });
 </script>
 
@@ -378,7 +339,6 @@ onBeforeUnmount(() => {
         :class="{
           'services-search-stage--active': suggestionsOpen,
           'search-spotlight--reduced-motion': reduceMotion,
-          'category-halo-paused': categoryHaloPaused,
         }"
         data-testid="search-spotlight"
       >
@@ -457,47 +417,17 @@ onBeforeUnmount(() => {
           role="group"
           aria-label="Gợi ý danh mục dịch vụ"
           data-testid="spotlight-categories"
-          @mouseenter="categoryPointerInside = true"
-          @mouseleave="categoryPointerInside = false"
-          @focusin="pauseCategoryHaloForFocus"
-          @focusout="releaseCategoryHaloFocus"
-          @keydown="pauseCategoryHaloForFocus"
         >
-          <button
-            type="button"
-            class="category-suggestion category-orbit-item"
-            :class="{
-              'category-suggestion--selected': !selectedCategoryId,
-              'category-suggestion--halo': categoryHaloTarget === 'all',
-            }"
-            :aria-pressed="!selectedCategoryId"
-            data-testid="category-all"
-            @mouseenter="categoryPointerInside = true"
-            @mouseleave="categoryPointerInside = false"
-            @click="selectCategory('')"
-          >
-            <LayoutGrid :size="15" :stroke-width="1.8" aria-hidden="true" />
-            <span>Tất cả dịch vụ</span>
-          </button>
-          <button
-            v-for="category in spotlightCategories"
-            :key="category.id"
-            type="button"
-            class="category-suggestion category-orbit-item"
-            :class="{
-              'category-suggestion--selected': selectedCategoryId === category.id,
-              'category-suggestion--halo': categoryHaloTarget === category.id,
-            }"
-            :aria-pressed="selectedCategoryId === category.id"
-            :data-testid="`category-${category.id}`"
-            @mouseenter="categoryPointerInside = true"
-            @mouseleave="categoryPointerInside = false"
-            @click="selectCategory(category.id)"
-          >
-            <component :is="categoryIcon(category)" :size="15" :stroke-width="1.8" aria-hidden="true" />
-            <span>{{ category.name }}</span>
-          </button>
-          <CategoryMorePopover v-if="extraCategories.length" class="category-orbit-item category-more-orbit" :categories="extraCategories" :model-value="selectedCategoryId" @select="selectCategory" />
+          <div v-for="(row, rowIndex) in categoryRows" :key="rowIndex" class="category-row" :style="{ '--category-count': row.length }">
+            <button v-for="category in row" :key="category.id" type="button" class="category-suggestion" :title="category.name"
+              :class="{ 'category-suggestion--selected': selectedCategoryId === category.id }"
+              :aria-pressed="selectedCategoryId === category.id"
+              :data-testid="`category-${category.id || 'all'}`"
+              @click="selectCategory(category.id)">
+              <component :is="category.icon" :size="14" :stroke-width="1.8" aria-hidden="true" />
+              <span>{{ category.name }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -680,30 +610,19 @@ onBeforeUnmount(() => {
 .services-search-stage {
   position: relative;
   isolation: isolate;
-  display: grid;
-  width: min(100%, 1120px);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 720px) minmax(0, 1fr);
-  grid-template-rows: 48px 136px 48px;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 1240px);
   align-items: center;
   column-gap: 12px;
-  row-gap: 4px;
+  row-gap: 20px;
   margin: 1px auto 0;
 }
 .services-search-stage--active { z-index: 4; }
 
-.category-cloud { display: contents; }
-.category-orbit-item { z-index: 1; min-width: 0; max-width: 100%; animation: category-float 7s ease-in-out infinite; }
-.category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 1; justify-self: start; margin-left: 7px; animation-delay: -1.2s; animation-duration: 6.5s; }
-.category-orbit-item:nth-child(2) { grid-column: 1; grid-row: 2; justify-self: end; margin-right: 2px; animation-delay: -3.5s; animation-duration: 7.4s; }
-.category-orbit-item:nth-child(3) { grid-column: 1; grid-row: 3; justify-self: start; margin-left: 31px; animation-delay: -5.2s; animation-duration: 7.8s; }
-.category-orbit-item:nth-child(4) { grid-column: 3; grid-row: 1; justify-self: end; margin-right: 14px; animation-delay: -2.3s; animation-duration: 6.9s; }
-.category-orbit-item:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: start; margin-left: 11px; animation-delay: -4.4s; animation-duration: 7.2s; }
-.category-orbit-item:nth-child(6) { grid-column: 3; grid-row: 3; justify-self: end; margin-right: 29px; animation-delay: -6.1s; animation-duration: 7.7s; }
-.category-halo-paused .category-orbit-item { animation-play-state: paused; }
-.category-more-orbit:focus-within { z-index: 3; }
-.category-more-orbit :deep([role="dialog"]) { top: auto; bottom: calc(100% + 8px); }
-.category-more-orbit :deep([data-testid="category-more-toggle"]) { max-width: 100%; border-radius: 999px; background: var(--color-ink-25); box-shadow: var(--shadow-e1); font-weight: 500; }
-.category-more-orbit :deep([data-testid="category-more-toggle"] svg) { flex-shrink: 0; }
+.category-cloud { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.category-row { display: grid; grid-template-columns: repeat(var(--category-count), minmax(0, 1fr)); gap: 8px; width: calc(var(--category-count) * 12.5%); max-width: 100%; }
+.category-row .category-suggestion { width: 100%; justify-content: center; padding-inline: 8px; }
 .category-suggestion {
   position: relative;
   z-index: 1;
@@ -728,23 +647,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: border-color 220ms var(--service-ease), background-color 220ms var(--service-ease), color 220ms var(--service-ease), box-shadow 220ms var(--service-ease);
 }
-.category-suggestion::after {
-  position: absolute;
-  z-index: 0;
-  inset: -4px;
-  border: 1px solid rgb(59 130 246 / 35%);
-  border-radius: inherit;
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 9%), 0 7px 20px rgb(37 99 235 / 13%);
-  content: '';
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 420ms ease;
-}
 .category-suggestion > * { position: relative; z-index: 1; }
 .category-suggestion svg { flex: 0 0 auto; color: var(--color-brand-700); }
 .category-suggestion span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.category-suggestion--halo:not(.category-suggestion--selected)::after { opacity: 1; }
-.category-halo-paused .category-suggestion::after { transition-duration: 220ms; }
 .category-suggestion:hover {
   border-color: var(--color-brand-300);
   background: var(--color-brand-50);
@@ -759,9 +664,6 @@ onBeforeUnmount(() => {
 .services-search-panel {
   position: relative;
   z-index: 2;
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: center;
   width: min(100%, 760px);
   padding: 0;
 }
@@ -995,10 +897,7 @@ onBeforeUnmount(() => {
   from { opacity: 0; transform: translateY(9px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes category-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
+
 .public-services :is(a, button, input):focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 3px;
@@ -1006,15 +905,9 @@ onBeforeUnmount(() => {
 .public-services .services-search-field input:focus-visible { outline: 0; outline-offset: 0; }
 
 @media (max-width: 1160px) {
-  .services-search-stage { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto auto auto; gap: 10px; }
-  .category-orbit-item { justify-self: center !important; margin: 0 !important; }
-  .category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 2; }
-  .category-orbit-item:nth-child(2) { grid-column: 2; grid-row: 2; }
-  .category-orbit-item:nth-child(3) { grid-column: 3; grid-row: 2; }
-  .category-orbit-item:nth-child(4) { grid-column: 1; grid-row: 3; }
-  .category-orbit-item:nth-child(5) { grid-column: 2; grid-row: 3; }
-  .category-orbit-item:nth-child(6) { grid-column: 3; grid-row: 3; }
-  .services-search-panel { grid-column: 1 / -1; grid-row: 1; }
+  .category-cloud { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  .category-row { display: contents; }
+  .category-row .category-suggestion { width: auto; padding-inline: 10px; }
 }
 
 @media (max-width: 900px) {
@@ -1036,15 +929,7 @@ onBeforeUnmount(() => {
   .services-search-field { min-height: 52px; gap: 9px; padding-inline: 12px; }
   .services-search-field input { font-size: 13px; }
   .services-search-panel > p { margin-top: 8px; font-size: 11px; }
-  .services-search-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 2; }
-  .category-orbit-item:nth-child(2) { grid-column: 2; grid-row: 2; }
-  .category-orbit-item:nth-child(3) { grid-column: 1; grid-row: 3; }
-  .category-orbit-item:nth-child(4) { grid-column: 2; grid-row: 3; }
-  .category-orbit-item:nth-child(5) { grid-column: 1; grid-row: 4; }
-  .category-orbit-item:nth-child(6) { grid-column: 2; grid-row: 4; }
   .category-suggestion { min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 11px; }
-  .category-more-orbit :deep([data-testid="category-more-toggle"]) { gap: 4px; padding-inline: 8px; font-size: 11px; }
   .search-suggestions { top: calc(100% + 7px); max-height: 38vh; padding: 5px; border-radius: 15px; }
   .search-suggestion { min-height: 50px; padding-inline: 10px; }
   .results-heading-row h2 { font-size: 21px; }
@@ -1061,8 +946,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .category-orbit-item { animation: none !important; }
-  .category-suggestion::after { transition: none !important; }
   .public-services *, .public-services *::before, .public-services *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
