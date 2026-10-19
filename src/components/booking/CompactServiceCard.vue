@@ -1,14 +1,11 @@
 <script setup lang="ts">
-// A compact service card for the booking finder: icon tile, short Vietnamese
-// name, the authoritative price mode, price and duration. The owner lock keeps
-// the card to title + price mode + duration + a `Chi tiết` button, so no
-// description text is printed here; the full scope lives in the details dialog
-// and opening it never changes the selection.
+// Compact discovery price and duration; full scope lives in the details dialog.
 // The select surface and the details button are two separate buttons (never
 // nested), so a card click selects while `Chi tiết` only opens the dialog.
 import { computed } from 'vue';
 import { Check, Clock, Info } from 'lucide-vue-next';
 import FhMoney from '../FhMoney.vue';
+import { getServicePriceSummaryDisplay } from '../../utils/public-service-pricing';
 import { categoryIcon } from './service-icons';
 import { fixedPriceValue, normalizePricingMode, type BookingCatalogService } from './booking-service-catalog';
 
@@ -30,23 +27,7 @@ const mode = computed(() => normalizePricingMode(props.service.pricingMode));
 const price = computed(() => fixedPriceValue(props.service));
 const unit = computed(() => props.service.unit?.trim() || 'thiết bị');
 const icon = computed(() => categoryIcon({ name: props.service.categoryName }));
-
-/** Fixed mode without a valid price says so instead of showing a fake 0 ₫. */
-const modeLabel = computed(() => {
-  if (mode.value === 'fixed_price') return price.value === null ? 'Chưa có giá niêm yết' : 'Giá niêm yết';
-  if (mode.value === 'inspection_required') return 'Khảo sát tận nơi';
-  return 'Chưa xác định cách tính giá';
-});
-
-const modeClasses = computed(() => {
-  if (mode.value === 'fixed_price' && price.value !== null) {
-    return 'border-brand-200 bg-brand-50 text-brand-700';
-  }
-  if (mode.value === 'inspection_required') {
-    return 'border-ink-200 bg-ink-100 text-ink-700';
-  }
-  return 'border-warning-200 bg-warning-50 text-warning-800';
-});
+const summaryPrice = computed(() => getServicePriceSummaryDisplay(props.service));
 </script>
 
 <template>
@@ -75,17 +56,19 @@ const modeClasses = computed(() => {
       <span class="min-w-0 flex-1 space-y-1.5">
         <span v-if="showCategory" class="block text-xs text-ink-600">{{ service.categoryName }}</span>
         <span class="block text-sm font-semibold leading-snug text-ink-900 text-pretty">{{ service.name }}</span>
-        <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="modeClasses">{{ modeLabel }}</span>
-          <span class="inline-flex items-center gap-1 text-xs text-ink-600"><Clock :size="12" aria-hidden="true" /> ~{{ service.estimatedMinutes }} phút</span>
-        </span>
-        <span class="block text-xs text-ink-600">
-          <template v-if="mode === 'fixed_price' && price !== null">
+        <span class="block text-xs text-ink-600" data-testid="booking-service-price">
+          <template v-if="summaryPrice">
+            <span class="block text-sm font-bold leading-5 text-brand-700">{{ summaryPrice.label }}</span>
+            <span v-if="summaryPrice.caption" class="mt-0.5 block text-xs leading-4">{{ summaryPrice.caption }}</span>
+          </template>
+          <template v-else-if="mode === 'fixed_price' && price !== null">
+            <span class="block text-xs">Giá niêm yết</span>
             <span class="font-num text-sm font-bold text-brand-700"><FhMoney :amount="price" /></span> / {{ unit }}
           </template>
-          <template v-else-if="mode === 'inspection_required'">Báo giá trước khi sửa</template>
-          <span v-else class="text-warning-800">Tạm chưa đặt được</span>
+          <span v-else-if="mode === 'inspection_required'" class="block text-sm font-bold text-brand-700">Khảo sát &amp; báo giá</span>
+          <span v-else class="text-warning-800">{{ mode === 'fixed_price' ? 'Chưa có giá niêm yết' : 'Chưa xác định cách tính giá' }} · Tạm chưa đặt được</span>
         </span>
+        <span class="inline-flex items-center gap-1 text-xs text-ink-600"><Clock :size="12" aria-hidden="true" /> ~{{ service.estimatedMinutes }} phút</span>
       </span>
     </button>
     <div class="flex items-center pr-2">

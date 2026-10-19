@@ -15,8 +15,6 @@ defineProps<{
   query: string;
   priceFilter: BookingPriceFilter;
   counts: PriceModeCounts;
-  resultCount: number;
-  totalCount: number;
 }>();
 
 const emit = defineEmits<{
@@ -52,9 +50,8 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-2">
+    <div v-if="(counts.fixed > 0 && counts.inspection > 0) || priceFilter !== 'all'" class="flex flex-wrap items-center gap-2">
       <div
-        v-if="(counts.fixed > 0 && counts.inspection > 0) || priceFilter !== 'all'"
         class="flex flex-wrap items-center gap-1 rounded-[var(--radius-sm)] bg-ink-100/80 p-1 text-[11px]"
         role="group"
         aria-label="Lọc theo cách tính giá"
@@ -93,7 +90,6 @@ const emit = defineEmits<{
         </button>
       </div>
 
-      <p class="text-xs text-ink-600" role="status">{{ resultCount }} / {{ totalCount }} dịch vụ</p>
     </div>
   </div>
 </template>

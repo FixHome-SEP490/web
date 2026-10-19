@@ -287,7 +287,11 @@ describe('NewBookingWizardPage A+ service finder', () => {
     const wrapper = await renderWizard();
     expect(wrapper.find('[aria-label="Lọc theo cách tính giá"]').exists()).toBe(false);
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(1);
-    expect(wrapper.text()).toContain('1 / 1 dịch vụ');
+    expect(wrapper.get('[data-testid="booking-service-result-count"]').text()).toBe('Đã hiển thị 1 dịch vụ');
+    expect(wrapper.text()).not.toContain('1 / 1 dịch vụ');
+    const list = wrapper.get('[data-testid="booking-service-list"]').element;
+    const count = wrapper.get('[data-testid="booking-service-result-count"]').element;
+    expect(list.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('uses the long-list picker without losing selection or custom description', async () => {
@@ -353,7 +357,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     const wrapper = await renderWizard();
 
     const card = cardByText(wrapper, 'Sửa chữa điều hòa mất lạnh');
-    expect(card.text()).toContain('Khảo sát tận nơi');
+    expect(card.text()).toContain('Khảo sát & báo giá');
     expect(card.find('[data-money]').exists()).toBe(false);
 
     await card.trigger('click');

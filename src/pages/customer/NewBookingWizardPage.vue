@@ -1274,8 +1274,6 @@ async function createAndFindTech() {
                 :query="searchQuery"
                 :price-filter="priceFilter"
                 :counts="priceFilterCounts"
-                :result-count="visibleServices.length"
-                :total-count="allServices.length"
                 @update:query="searchQuery = $event"
                 @update:price-filter="priceFilter = $event"
               />
@@ -1350,6 +1348,9 @@ async function createAndFindTech() {
 
               <p v-else-if="!catalogLoadFailed" class="rounded-[var(--radius-md)] border border-dashed border-ink-300 bg-ink-50 p-6 text-center text-xs text-ink-500" data-testid="booking-catalog-empty">
                 Hiện chưa có dịch vụ nào khả dụng. Vui lòng thử lại sau.
+              </p>
+              <p v-if="!catalogLoading && !catalogLoadFailed && categories.length > 0" class="text-xs text-ink-600" role="status" data-testid="booking-service-result-count">
+                Đã hiển thị {{ visibleServices.length }} dịch vụ
               </p>
             </template>
           </div>

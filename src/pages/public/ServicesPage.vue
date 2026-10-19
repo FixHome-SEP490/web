@@ -10,7 +10,7 @@ import { useQuerySearch, useQueryState } from '../../composables/useQueryState';
 import { useReferenceData } from '../../composables/useCachedQuery';
 import { queryKeys } from '../../lib/query-keys';
 import { readPage } from '../../api/paging';
-import { getPublicServicePricing } from '../../utils/public-service-pricing';
+import { getPublicServicePricing, getServicePriceSummaryDisplay } from '../../utils/public-service-pricing';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
 
 const router = useRouter();
@@ -561,9 +561,9 @@ onBeforeUnmount(() => {
               <span v-if="categoryName(service)" class="service-category">{{ categoryName(service) }}</span>
             </div>
 
-            <div class="service-card__mode" :class="`service-card__mode--${pricing(service).kind}`">
+            <div class="service-card__mode" :class="`service-card__mode--${service.priceSummary?.kind === 'fixed_range' ? 'fixed' : pricing(service).kind}`">
               <span class="mode-dot" aria-hidden="true"></span>
-              {{ pricing(service).kind === 'fixed' ? 'Giá cố định' : pricing(service).kind === 'inspection' ? 'Báo giá sau khảo sát' : 'Chưa xác định giá' }}
+              {{ service.priceSummary?.kind === 'fixed_range' ? 'Có bảng giá công' : service.priceSummary?.kind === 'inspection_reference' ? 'Giá tham khảo' : pricing(service).kind === 'fixed' ? 'Giá cố định' : pricing(service).kind === 'inspection' ? 'Báo giá sau khảo sát' : 'Chưa xác định giá' }}
             </div>
 
             <h3 class="service-card__title">
@@ -580,7 +580,11 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="service-price">
-              <template v-if="pricing(service).kind === 'fixed'">
+              <template v-if="getServicePriceSummaryDisplay(service)">
+                <strong>{{ getServicePriceSummaryDisplay(service)!.label }}</strong>
+                <span v-if="getServicePriceSummaryDisplay(service)!.caption" class="service-price__range">{{ getServicePriceSummaryDisplay(service)!.caption }}</span>
+              </template>
+              <template v-else-if="pricing(service).kind === 'fixed'">
                 <span class="service-price__label">Giá niêm yết</span>
                 <strong><FhMoney :amount="fixedAmount(service)" /> <small v-if="service.unit">/ {{ service.unit }}</small></strong>
               </template>

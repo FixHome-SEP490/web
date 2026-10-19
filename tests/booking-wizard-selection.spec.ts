@@ -394,7 +394,7 @@ describe('booking service selection & pricing contracts', () => {
     expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
 
     const inspectionCard = cardByText(wrapper, 'Dịch vụ khảo sát');
-    expect(inspectionCard.text()).toContain('Khảo sát tận nơi');
+    expect(inspectionCard.text()).toContain('Khảo sát & báo giá');
     expect(inspectionCard.find('[data-money]').exists()).toBe(false);
 
     const legacyCard = cardByText(wrapper, 'Dịch vụ giá cũ');

@@ -23,6 +23,13 @@ export interface ServiceItem {
   slug?: string | null;
   description?: string | null;
   pricingMode?: 'FIXED_PRICE' | 'INSPECTION_REQUIRED' | 'fixed_price' | 'inspection_required';
+  priceSummary?: {
+    kind: 'fixed_range' | 'inspection_reference' | 'inspection_only';
+    minLaborVnd: number | null;
+    maxLaborVnd: number | null;
+    /** Reference for survey-only services, not an approved minimum. */
+    suggestedLaborVnd?: number;
+  };
   unit?: string | null;
   fixedPrice?: number | null;
   scopeDescription?: string | null;

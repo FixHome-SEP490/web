@@ -133,6 +133,26 @@ describe('Public service discovery', () => {
     mockPublicCatalog();
   });
 
+  it.each([
+    ['fixed_range', 199000, 449000, '199.000 – 449.000đ', 'Giá công theo thiết bị/phạm vi'],
+    ['fixed_range', 349000, 349000, '349.000đ', 'Giá công theo thiết bị/phạm vi'],
+    ['inspection_reference', 249000, null, 'Tham khảo 249.000đ', 'Thợ khảo sát, báo giá để khách duyệt'],
+    ['inspection_only', null, null, 'Khảo sát & báo giá', ''],
+  ])('prioritizes API priceSummary %s in the public card', async (kind, minLaborVnd, maxLaborVnd, label, caption) => {
+    mockPublicCatalog({ services: [service({
+      pricingMode: 'inspection_required',
+      priceSummary: { kind, minLaborVnd, maxLaborVnd },
+    })] });
+    const wrapper = mount(ServicesPage, await setup());
+    await flushPromises();
+    const price = wrapper.get('.service-price');
+    expect(price.text()).toContain(label);
+    if (caption) expect(price.text()).toContain(caption);
+    expect(price.text()).not.toContain('Từ ');
+    expect(price.text()).not.toContain('Giá niêm yết');
+    wrapper.unmount();
+  });
+
   it('requests the exact 12-row server page from the category, query, and page in the URL', async () => {
     const pageThreeService = service({ id: 'page-three-service', name: 'Kết quả từ trang thứ ba' });
     mockPublicCatalog({ services: [pageThreeService], total: 37 });
