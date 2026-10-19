@@ -47,6 +47,7 @@ async function setup(path = '/') {
     routes: [
       { path: '/', component: { template: '<div />' } },
       { path: '/services', name: 'services', component: { template: '<div />' } },
+      { path: '/services/:slug', name: 'service-detail', component: { template: '<div />' } },
       {
         path: '/app/bookings/new',
         component: { template: '<div />' },
@@ -140,7 +141,36 @@ describe('Public landing page', () => {
   });
 
   it('applies category deep links and falls back for an invalid category', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(response([category('one'), category('two')]));
+    const categories = [category('one'), category('two')];
+    const serviceRows = ['one', 'two'].map((id) => ({
+      id: `service-${id}`,
+      categoryId: id,
+      category: categories.find((entry) => entry.id === id),
+      name: `Dịch vụ kiểm thử ${id}`,
+      code: id,
+      isActive: true,
+      estimatedMinutes: 30,
+    }));
+    vi.mocked(apiClient.get).mockImplementation(async (url, config) => {
+      if (url === '/categories') return response(categories) as never;
+      if (url === '/services') {
+        const params = (config?.params ?? {}) as { categoryId?: string; page?: number; limit?: number };
+        const rows = params.categoryId
+          ? serviceRows.filter((service) => service.categoryId === params.categoryId)
+          : serviceRows;
+        const limit = params.limit ?? 12;
+        return {
+          data: {
+            success: true,
+            statusCode: 200,
+            message: 'OK',
+            data: rows,
+            meta: { page: params.page ?? 1, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) },
+          },
+        } as never;
+      }
+      throw new Error(`Unexpected request: ${String(url)}`);
+    });
     const context = await setup('/services?category=two');
     const wrapper = mount(ServicesPage, context);
     await flushPromises();

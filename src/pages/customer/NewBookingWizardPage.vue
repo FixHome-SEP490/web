@@ -2,41 +2,49 @@
 import { tidyAddressText } from '../../utils/address-text';
 import { toast } from 'vue-sonner';
 // src/pages/customer/NewBookingWizardPage.vue
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  Wrench,
-  MapPin,
-  Sparkles,
-  ArrowRight,
+  AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
-  Camera,
-  ShieldCheck,
-  Plus,
-  Trash2,
+  ArrowRight,
   Calendar as CalendarIcon,
-  Clock,
-  Snowflake,
-  Droplets,
-  Zap,
-  Utensils,
-  Lock,
-  Check,
-  Search,
-  X,
-  Minus,
-  RotateCcw,
+  Camera,
+  CheckCircle2,
   ChevronDown,
+  Clock,
+  LoaderCircle,
+  MapPin,
+  Plus,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Wrench,
+  Zap,
   Play,
 } from 'lucide-vue-next';
+import { FhButton, FhMoney, FhSkeleton } from '../../components';
+import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
+import BookingStepDock from '../../components/booking/BookingStepDock.vue';
+import CompactServiceCard from '../../components/booking/CompactServiceCard.vue';
+import SelectedServiceRecap from '../../components/booking/SelectedServiceRecap.vue';
+import ServiceCategoryFilters from '../../components/booking/ServiceCategoryFilters.vue';
+import ServiceDetailsDialog from '../../components/booking/ServiceDetailsDialog.vue';
+import ServiceSearch from '../../components/booking/ServiceSearch.vue';
 import {
-  FhButton,
-  FhMoney,
-  FhSkeleton,
-} from '../../components';
+  filterCatalogServices,
+  fixedPriceValue,
+  flattenServiceCatalog,
+  isServiceBookable,
+  normalizePricingMode,
+  type BookingCatalogService,
+  type BookingPriceFilter,
+} from '../../components/booking/booking-service-catalog';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import type { BookingDeviceAttributes, CatalogPricingPreview } from '../../api/catalog-pricing.api';
 import { useReferenceData } from '../../composables/useCachedQuery';
 import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
@@ -50,9 +58,9 @@ import { SLOT_SHORT, sessionDayLabel, upcomingSessions, type BookingMode, type B
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnKeyAndClockToDate } from '../../utils/vn-time';
 
-
 const route = useRoute();
 const router = useRouter();
+const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-layout-width', () => {});
 
 /**
  * Two forms on one page. /app/bookings/new: the customer knows what they need
@@ -61,26 +69,62 @@ const router = useRouter();
  * and only then can the customer change it.
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
-
 const step = ref(1);
+watch(step, (currentStep) => {
+  setBookingLayoutWidth(!isAiFlow && currentStep === 1);
+}, { immediate: true });
 const loading = ref(false);
+/**
+ * The create request could have reached the server (network error, timeout)
+ * but no answer came back. The server may have committed, so the client never
+ * sends that booking again by itself; the customer checks their orders first.
+ */
+const submitOutcomeUnknown = ref(false);
 
-// Form State
+// Form state
 const categories = ref<ServiceCategory[]>([]);
 const selectedCategoryId = ref('');
-const services = ref<ServiceItem[]>([]);
-const selectedServiceId = ref('');
+const searchQuery = ref('');
+const priceFilter = ref<BookingPriceFilter>('all');
+const selectedServiceId = ref<string | null>(null);
+/** A service fetched by id for a deep link, kept even when not inside the loaded pages. */
+const hydratedService = ref<ServiceItem | null>(null);
+const deepLinkError = ref<string | null>(null);
+const deepLinkLoading = ref(false);
+/** Bumped on every explicit choice or link change so a stale link reply can never win. */
+let linkRequestToken = 0;
+let initialLinkPending = true;
+let explicitServiceIntent = false;
 const description = ref('');
 // The urgency slider left the form (PO 18/10/2026): "Tới ngay" in the time step says it.
 // The booking keeps the standard level the API defaults to, as the mobile app sends.
 const urgency = 'NORMAL' as const;
 const quantity = ref(1);
-
-// UX Enhancements: Search, Filter, Sync
-const searchQuery = ref('');
-const serviceFilter = ref<'ALL' | 'FIXED' | 'INSPECTION'>('ALL');
 const userModifiedDescription = ref(false);
 const isDraggingPhoto = ref(false);
+
+// P012: facts the customer reported for the selected catalog service and the
+// variant code the server confirmed. Both are cleared whenever the service
+// changes; a variant code is only ever submitted after GET
+// /services/:id/catalog-v2-pricing answered FIXED_PRICE for it.
+const deviceAttributes = ref<BookingDeviceAttributes>({});
+const selectedVariantCode = ref<string | null>(null);
+// The latest server answer for the selected service. Later steps (the step-4
+// recap) repeat only what the server said: a confirmed tier with its scope, or
+// a grounded nonbinding range; never a locally computed price.
+const catalogPricingPreview = ref<CatalogPricingPreview | null>(null);
+const catalogPricingConfirmed = computed(() => (
+  catalogPricingPreview.value?.status === 'FIXED_PRICE' ? catalogPricingPreview.value.selectedVariant : null
+));
+const catalogLaborRange = computed(() => (
+  catalogPricingPreview.value?.status === 'INSPECTION_REQUIRED' ? catalogPricingPreview.value.priceRange : null
+));
+
+function resetCatalogV2Pricing() {
+  deviceAttributes.value = {};
+  selectedVariantCode.value = null;
+  catalogPricingPreview.value = null;
+}
 
 /** Originals above this are refused; anything under it is shrunk before upload. */
 const MAX_ORIGINAL_PHOTO_BYTES = 30 * 1024 * 1024;
@@ -97,6 +141,7 @@ const uploadedPhotos = ref<BookingPhotoDraft[]>([]);
 const uploadingPhoto = ref(false);
 const photoInput = ref<HTMLInputElement | null>(null);
 const isPhotoFlowDisposed = ref(false);
+const isPageDisposed = ref(false);
 const activePhotoPreviewUrls = new Set<string>();
 let nextPhotoLocalId = 0;
 
@@ -155,6 +200,110 @@ function scheduleForBooking(): { mode: BookingMode; date?: string; slot?: Bookin
   return { mode: 'scheduled', date: chosen.date, slot: chosen.slot };
 }
 
+// ── Service catalog: the one loaded catalog, filtered locally ──────────────
+// `GET /categories` returns the nested catalog. Search and the price/category
+// chips filter that loaded set (no server paging is claimed); the selection is
+// independent of any filter and of the page the service would be on.
+const allServices = computed<BookingCatalogService[]>(() => flattenServiceCatalog(categories.value));
+
+const categoryFilters = computed(() =>
+  categories.value.map((cat) => ({ id: cat.id, name: cat.name, count: cat.services?.length ?? 0 })),
+);
+
+const priceFilterCounts = computed(() => {
+  let fixed = 0;
+  let inspection = 0;
+  for (const service of allServices.value) {
+    const mode = normalizePricingMode(service.pricingMode);
+    if (mode === 'fixed_price') fixed += 1;
+    else if (mode === 'inspection_required') inspection += 1;
+  }
+  return { all: allServices.value.length, fixed, inspection };
+});
+
+const visibleServices = computed(() =>
+  filterCatalogServices(allServices.value, {
+    categoryId: selectedCategoryId.value,
+    query: searchQuery.value,
+    priceFilter: priceFilter.value,
+  }),
+);
+
+/**
+ * The one loaded service with this id, whether it came from the catalog or was
+ * hydrated by a deep link. The selection and the details dialog both look up
+ * whatever they show through here, so they can never disagree.
+ */
+function findServiceById(id: string | null): BookingCatalogService | ServiceItem | null {
+  if (!id) return null;
+  const loaded = allServices.value.find((service) => service.id === id);
+  if (loaded) return loaded;
+  if (hydratedService.value?.id === id) return hydratedService.value;
+  return null;
+}
+
+const selectedService = computed<BookingCatalogService | ServiceItem | null>(() => findServiceById(selectedServiceId.value));
+
+/** V2 service codes are owner-approved catalog codes, distinct from legacy IDs. */
+const isCatalogV2Selection = computed(() => /^[A-Z]{2}-\d{2}$/.test(selectedService.value?.code ?? ''));
+/** A customer must see a current server-confirmed S or inspection result BEFORE moving on. */
+const isCatalogV2PreviewReady = computed(() => {
+  if (isAiFlow) return true; // Toàn's separate AI flow submits no self-confirmed V2 tier.
+  if (!isCatalogV2Selection.value) return true; // Preserve legacy Booking without a V2 endpoint.
+  const service = selectedService.value;
+  const preview = catalogPricingPreview.value;
+  if (!service || !preview || preview.serviceId !== service.id || preview.serviceCode !== service.code) return false;
+  if (preview.status === 'FIXED_PRICE') {
+    return preview.bindingReady && !!preview.selectedVariant
+      && preview.selectedVariant.variantCode === selectedVariantCode.value;
+  }
+  return preview.status === 'INSPECTION_REQUIRED'
+    && !preview.bindingReady && selectedVariantCode.value === null;
+});
+
+function requireCatalogV2Preview(): boolean {
+  if (isCatalogV2PreviewReady.value) return true;
+  toast.warning('Vui lòng chờ hệ thống xác nhận giá hoặc chọn Thử lại trước khi tiếp tục.');
+  return false;
+}
+
+/** The category label of whatever service was handed in, wherever it came from. */
+function categoryNameOf(service: BookingCatalogService | ServiceItem | null): string | null {
+  if (!service) return null;
+  if ('categoryName' in service && service.categoryName) return service.categoryName;
+  return categories.value.find((cat) => cat.id === service.categoryId)?.name ?? null;
+}
+
+const selectedCategoryName = computed(() => categoryNameOf(selectedService.value));
+
+const selectedPriceMode = computed(() => normalizePricingMode(selectedService.value?.pricingMode));
+const selectedFixedPrice = computed(() => fixedPriceValue(selectedService.value));
+const isFixedPrice = computed(() => selectedPriceMode.value === 'fixed_price');
+const totalFixedAmount = computed(() => (selectedFixedPrice.value ?? 0) * quantity.value);
+
+/** The selection lives outside the current filters: keep it, explain it, never drop it. */
+const selectedOutsideFilter = computed(() => {
+  const service = selectedService.value;
+  if (!service || !selectedServiceId.value) return false;
+  return !visibleServices.value.some((item) => item.id === service.id);
+});
+
+const stepItems = computed(() =>
+  isAiFlow
+    ? [
+        { id: 1, label: 'Mô tả sự cố' },
+        { id: 3, label: 'Trò chuyện với AI' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ]
+    : [
+        { id: 1, label: isFixedPrice.value ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Mô tả' },
+        { id: 2, label: 'Địa chỉ & Giờ' },
+        { id: 4, label: 'Xác nhận' },
+      ],
+);
+const stepIndex = computed(() => stepItems.value.findIndex((item) => item.id === step.value));
+
 /**
  * The assistant conversation this booking continues, when the customer came
  * from the assistant. Step 3 adds to the same conversation, and the booking
@@ -198,7 +347,7 @@ const aiSuggestsOtherService = computed(
   () => !!aiSuggested.value?.serviceId && aiSuggested.value.serviceId !== selectedServiceId.value,
 );
 const aiSuggestedServiceExists = computed(() =>
-  categories.value.some((cat) => cat.services?.some((srv) => srv.id === aiSuggested.value?.serviceId)),
+  allServices.value.some((service) => service.id === aiSuggested.value?.serviceId),
 );
 
 /** Open the conversation with what the customer already gave: description and photos. */
@@ -273,46 +422,23 @@ async function restartAiConversation() {
   await startAiConversation();
 }
 
-/** In the AI form the assistant chooses the service: its first pick is applied. */
+/**
+ * In the AI form the assistant chooses the service: its first pick is applied,
+ * but only when the customer has not chosen one. A later or late suggestion is
+ * a proposal and never overwrites an explicit customer choice.
+ */
 watch(
   () => aiConversation.pinnedService.value,
   (suggested) => {
-    if (!isAiFlow || !suggested?.serviceId || selectedServiceId.value) return;
-    if (aiSuggestedServiceExists.value) useSuggestedService();
+    if (!isAiFlow || !suggested?.serviceId || selectedServiceId.value || explicitServiceIntent || deepLinkLoading.value || deepLinkError.value) return;
+    if (aiSuggestedServiceExists.value) selectServiceById(suggested.serviceId, { syncCategoryFilter: true });
   },
 );
 
 /** After the diagnosis, the customer may still pick another service themselves. */
-const allServices = computed(() =>
-  categories.value.flatMap((cat) => (cat.services ?? []).map((srv) => ({ ...srv, categoryName: cat.name, categoryId: cat.id }))),
-);
 function chooseService(id: string) {
-  for (const cat of categories.value) {
-    if (cat.services?.some((srv) => srv.id === id)) {
-      selectedCategoryId.value = cat.id;
-      services.value = cat.services ?? [];
-      selectedServiceId.value = id;
-      return;
-    }
-  }
+  selectServiceById(id, { syncCategoryFilter: true });
 }
-
-/** Steps in the order each form walks them; numbers are the step ids below. */
-const stepItems = computed(() =>
-  isAiFlow
-    ? [
-        { id: 1, label: 'Mô tả sự cố' },
-        { id: 3, label: 'Trò chuyện với AI' },
-        { id: 2, label: 'Địa chỉ & Giờ' },
-        { id: 4, label: 'Xác nhận' },
-      ]
-    : [
-        { id: 1, label: isFixedPrice.value ? 'Dịch vụ & Số lượng' : 'Dịch vụ & Mô tả' },
-        { id: 2, label: 'Địa chỉ & Giờ' },
-        { id: 4, label: 'Xác nhận' },
-      ],
-);
-const stepIndex = computed(() => stepItems.value.findIndex((item) => item.id === step.value));
 
 /** AI form, step 1 -> the conversation. */
 function startAiStep() {
@@ -337,289 +463,363 @@ function leaveAiStep() {
 function useSuggestedService() {
   const wanted = aiSuggested.value?.serviceId;
   if (!wanted) return;
-  for (const cat of categories.value) {
-    if (cat.services?.some((srv) => srv.id === wanted)) {
-      selectedCategoryId.value = cat.id;
-      services.value = cat.services ?? [];
-      selectedServiceId.value = wanted;
-      return;
-    }
-  }
+  selectServiceById(wanted, { syncCategoryFilter: true });
 }
 
-const selectedService = computed(() => {
-  for (const cat of categories.value) {
-    const found = cat.services?.find((s) => s.id === selectedServiceId.value);
-    if (found) return found;
-  }
-  return services.value.find((s) => s.id === selectedServiceId.value);
-});
-
-const isFixedPrice = computed(() => {
-  const s = selectedService.value;
-  if (!s) return route.query.fixed === 'true';
-  const mode = s.pricingMode?.toLowerCase();
-  return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0) || route.query.fixed === 'true';
-});
-
-const totalFixedAmount = computed(() => {
-  const price = selectedService.value?.fixedPrice || selectedService.value?.basePrice || 0;
-  return price * quantity.value;
-});
-
-// Category Icon resolution with smart keywords
-function getCategoryIcon(cat?: ServiceCategory | null) {
-  if (!cat) return Wrench;
-  const key = (cat.iconKey || cat.code || cat.name || '').toLowerCase();
-  if (key.includes('lanh') || key.includes('lạnh') || key.includes('điều hòa') || key.includes('refriger')) return Snowflake;
-  if (key.includes('nước') || key.includes('nuoc') || key.includes('plumb') || key.includes('lavabo')) return Droplets;
-  if (key.includes('điện') || key.includes('dien') || key.includes('electr')) return Zap;
-  if (key.includes('bếp') || key.includes('bep') || key.includes('kitchen') || key.includes('nấu')) return Utensils;
-  if (key.includes('khóa') || key.includes('khoa') || key.includes('cửa') || key.includes('lock')) return Lock;
-  return Wrench;
-}
-
-// Current services for selected category
-const currentCategoryServices = computed(() => {
-  const cat = categories.value.find((c) => c.id === selectedCategoryId.value);
-  return cat?.services ?? services.value ?? [];
-});
-
-const fixedServicesCount = computed(() => {
-  return currentCategoryServices.value.filter((s) => {
-    const mode = s.pricingMode?.toLowerCase();
-    return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
-  }).length;
-});
-
-const inspectionServicesCount = computed(() => {
-  return currentCategoryServices.value.length - fixedServicesCount.value;
-});
-
-const filteredServices = computed(() => {
-  let list = currentCategoryServices.value;
-
-  if (serviceFilter.value === 'FIXED') {
-    list = list.filter((s) => {
-      const mode = s.pricingMode?.toLowerCase();
-      return mode === 'fixed_price' || (s.fixedPrice != null && s.fixedPrice > 0);
-    });
-  } else if (serviceFilter.value === 'INSPECTION') {
-    list = list.filter((s) => {
-      const mode = s.pricingMode?.toLowerCase();
-      return mode !== 'fixed_price' && (s.fixedPrice == null || s.fixedPrice === 0);
-    });
-  }
-
-  const q = searchQuery.value.trim().toLowerCase();
-  if (q) {
-    list = list.filter((s) =>
-      s.name.toLowerCase().includes(q) ||
-      (s.description && s.description.toLowerCase().includes(q)) ||
-      (s.scopeDescription && s.scopeDescription.toLowerCase().includes(q))
-    );
-  }
-
-  return list;
-});
-
-const syncDefaultDescription = () => {
-  const svc = selectedService.value;
-  if (!svc) return;
-  const isFixed = svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0);
-  if (isFixed) {
-    description.value = `Yêu cầu dịch vụ niêm yết: ${svc.name}${quantity.value > 1 ? ` (${quantity.value} ${svc.unit || 'thiết bị'})` : ''}`;
-  } else {
-    description.value = `Yêu cầu dịch vụ: ${svc.name}`;
-  }
-};
-
-const selectService = (svc: ServiceItem) => {
-  selectedServiceId.value = svc.id;
-  if (!userModifiedDescription.value) {
-    syncDefaultDescription();
-  }
-};
-
-const updateQuantity = (delta: number) => {
-  quantity.value = Math.max(1, Math.min(99, quantity.value + delta));
-  if (!userModifiedDescription.value && isFixedPrice.value) {
-    syncDefaultDescription();
-  }
-};
-
-const categorySymptoms = computed<string[]>(() => {
-  const cat = categories.value.find((c) => c.id === selectedCategoryId.value);
-  const name = (cat?.name || '').toLowerCase();
-  if (name.includes('lạnh') || name.includes('điều hòa')) {
-    return [
-      'Máy không mát / kém lạnh',
-      'Chảy nước dàn lạnh',
-      'Kêu to / rung lắc mạnh',
-      'Mùi hôi ẩm mốc',
-      'Không nhận điều khiển',
-      'Bám tuyết ống đồng',
-    ];
-  }
-  if (name.includes('nước') || name.includes('điện')) {
-    return [
-      'Rò rỉ lavabo / bồn rửa',
-      'Nghẹt cống / thoát sàn chậm',
-      'Mất nước / áp lực nước yếu',
-      'Chập điện / nhảy aptomat',
-      'Hỏng van vòi xịt / vòi sen',
-    ];
-  }
-  if (name.includes('bếp')) {
-    return [
-      'Bếp từ báo lỗi không nóng',
-      'Hút mùi kêu to / hút yếu',
-      'Bếp mất nguồn',
-      'Rò điện khi chạm vỏ',
-      'Nứt mặt kính / kẹt cảm ứng',
-    ];
-  }
-  if (name.includes('cửa') || name.includes('khóa')) {
-    return [
-      'Khóa vân tay không nhận',
-      'Hết pin / mất nguồn khóa',
-      'Kẹt chốt / khó đóng mở',
-      'Xệ bản lề / kêu cót két',
-      'Cần đổi mã số / thẻ từ',
-    ];
-  }
-  return [
-    'Thiết bị không lên nguồn',
-    'Phát ra tiếng ồn lạ',
-    'Cần bảo dưỡng vệ sinh',
-    'Hỏng linh kiện / cần thay mới',
-  ];
-});
+// ── Selecting the one service ──────────────────────────────────────────────
 
 /**
- * Symptoms are written into the description as comma-separated parts. Only the
- * first one keeps its capital letter, so every comparison ignores case;
- * comparing case-sensitively let the later chips be appended again and again.
+ * Apply a selection. `syncCategoryFilter` is used for choices that arrive from
+ * outside the finder (deep link, AI) so the selected service is visible in
+ * context; a card click never moves the filter.
  */
-const descriptionParts = () => description.value.split(',').map((part) => part.trim()).filter(Boolean);
-const sameSymptom = (a: string, b: string) => a.toLocaleLowerCase('vi') === b.toLocaleLowerCase('vi');
-
-function hasSymptom(symptom: string) {
-  return descriptionParts().some((part) => sameSymptom(part, symptom));
+function selectServiceById(id: string, options: { syncCategoryFilter?: boolean; fromLink?: boolean } = {}) {
+  if (!options.fromLink) {
+    invalidatePendingLink();
+    explicitServiceIntent = true;
+  }
+  const fromCatalog = allServices.value.find((service) => service.id === id);
+  const fromLink = hydratedService.value?.id === id ? hydratedService.value : null;
+  const service: ServiceItem | null = fromCatalog ?? fromLink;
+  if (selectedServiceId.value !== id) resetCatalogV2Pricing();
+  selectedServiceId.value = id;
+  deepLinkError.value = null;
+  if (!service) return;
+  if (options.syncCategoryFilter) {
+    const categoryId = service.categoryId || '';
+    if (categoryId && categories.value.some((cat) => cat.id === categoryId)) {
+      selectedCategoryId.value = categoryId;
+      searchQuery.value = '';
+      priceFilter.value = 'all';
+    }
+  }
+  if (!userModifiedDescription.value) syncDefaultDescription(service);
 }
 
-/** A chip toggles: first click adds the symptom, a second click takes it out. */
-function toggleSymptom(symptom: string) {
-  userModifiedDescription.value = true;
-  const isTemplate =
-    description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:');
-  if (!description.value.trim() || isTemplate) {
-    description.value = symptom;
-    return;
+/** A card click: an explicit customer choice outruns any pending link lookup. */
+async function onServiceSelected(id: string) {
+  selectServiceById(id);
+  await nextTick();
+  if (!isAiFlow && !isPageDisposed.value && step.value === 1 && selectedServiceId.value === id
+    && window.matchMedia('(max-width: 1099px)').matches) {
+    scrollToRequirements();
   }
-  const parts = descriptionParts();
-  if (parts.some((part) => sameSymptom(part, symptom))) {
-    const rest = parts.filter((part) => !sameSymptom(part, symptom)).join(', ');
-    description.value = rest ? rest.charAt(0).toLocaleUpperCase('vi') + rest.slice(1) : '';
-    return;
-  }
-  description.value = `${description.value.trim().replace(/,\s*$/, '')}, ${symptom.toLocaleLowerCase('vi')}`;
 }
 
-// Services and saved addresses: skeletons until they arrive, a retry line if they do not.
-// The catalog is reference data, cached for the next form.
+function invalidatePendingLink() {
+  linkRequestToken += 1;
+  initialLinkPending = false;
+  deepLinkLoading.value = false;
+}
+
+function clearServiceSelection() {
+  invalidatePendingLink();
+  explicitServiceIntent = true;
+  resetCatalogV2Pricing();
+  selectedServiceId.value = null;
+  hydratedService.value = null;
+  deepLinkError.value = null;
+  if (!userModifiedDescription.value) description.value = '';
+}
+
+async function revealSelectedService() {
+  selectedCategoryId.value = '';
+  searchQuery.value = '';
+  priceFilter.value = 'all';
+  await nextTick();
+  if (isPageDisposed.value || step.value !== 1) return;
+  const selectedRow = finderRef.value?.querySelector<HTMLElement>('[data-testid="booking-service-card"][aria-pressed="true"]');
+  const target = selectedRow ?? finderRef.value?.parentElement?.querySelector<HTMLElement>('[data-testid="selected-service-recap"]');
+  target?.focus({ preventScroll: true });
+  target?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+}
+
+function changeService() {
+  const search = finderRef.value?.querySelector<HTMLInputElement>('[data-testid="booking-service-search"]');
+  search?.focus({ preventScroll: true });
+  search?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+}
+
+/** Category chips and the price chips are filters only — never a selection. */
+function onCategoryFilterChange(id: string) {
+  selectedCategoryId.value = id;
+}
+
+// ── Service details dialog ─────────────────────────────────────────────────
+// `Chi tiết` on a card opens the full description of that service; opening it
+// never changes the selection. Only the dialog's explicit confirm button picks
+// the service, exactly like a card click does.
+const detailsServiceId = ref<string | null>(null);
+const detailsService = computed(() => findServiceById(detailsServiceId.value));
+const detailsCategoryName = computed(() => categoryNameOf(detailsService.value));
+const isDetailsSelected = computed(() => !!detailsServiceId.value && detailsServiceId.value === selectedServiceId.value);
+
+function openServiceDetails(id: string) {
+  detailsServiceId.value = id;
+}
+
+function closeServiceDetails() {
+  detailsServiceId.value = null;
+}
+
+/** An explicit choice from inside the dialog: same path as a card click. */
+function chooseServiceFromDetails(id: string) {
+  closeServiceDetails();
+  onServiceSelected(id);
+}
+
+// ── Smart step-1 dock ──────────────────────────────────────────────────────
+// While the customer scrolls the finder, the Previous/Next dock floats over the
+// page; as soon as the real footer is on screen, the dock leaves and the footer
+// becomes the one action set again. Without an observer there is no dock at
+// all, and the footer is always there.
+const stepFooterRef = ref<HTMLElement | null>(null);
+const showStepDock = ref(false);
+let stepFooterObserver: IntersectionObserver | null = null;
+
+function armStepFooterObserver() {
+  stepFooterObserver?.disconnect();
+  stepFooterObserver = null;
+  showStepDock.value = false;
+  const target = stepFooterRef.value;
+  if (!target || typeof IntersectionObserver === 'undefined') return;
+  stepFooterObserver = new IntersectionObserver((entries) => {
+    const entry = entries.find((item) => item.target === stepFooterRef.value);
+    if (!entry) return;
+    // Only a footer that is below the viewport calls for the dock: it is the
+    // scrolled-away case, never a second action set next to the real one.
+    showStepDock.value = entry.intersectionRatio < 1 && entry.boundingClientRect.top > 0;
+  }, { threshold: [0, 1] });
+  stepFooterObserver.observe(target);
+}
+
+watch(stepFooterRef, () => armStepFooterObserver());
+
+// Move focus with the action, only when the customer was already using it.
+watch(showStepDock, async (show) => {
+  const active = document.activeElement as HTMLElement | null;
+  const source = show ? stepFooterRef.value : document.querySelector('[data-testid="booking-step-dock"]');
+  if (!active || !source?.contains(active)) return;
+  const action = active.dataset.testid?.endsWith('next') ? 'next' : 'back';
+  await nextTick();
+  if (isPageDisposed.value || step.value !== 1) return;
+  const target = show
+    ? document.querySelector<HTMLElement>(`[data-testid="booking-step-dock-${action}"]`)
+    : stepFooterRef.value?.querySelector<HTMLElement>(`[data-testid="step1-${action}"]`);
+  target?.focus({ preventScroll: true });
+}, { flush: 'pre' });
+
+watch(step, (next) => {
+  if (next === 1) return;
+  detailsServiceId.value = null;
+  showStepDock.value = false;
+});
+
+/** What the dock tells the customer about the decision still ahead. */
+const dockHint = computed(() => {
+  if (isAiFlow) {
+    return description.value.trim() ? 'Trợ lý sẽ phân tích mô tả của bạn' : 'Mô tả sự cố để trợ lý phân tích';
+  }
+  return selectedService.value?.name ?? 'Chọn một dịch vụ để tiếp tục';
+});
+
+// ── Mobile shortcut to the real request form ───────────────────────────────
+const requirementsRef = ref<HTMLElement | null>(null);
+const finderRef = ref<HTMLElement | null>(null);
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/** Only an explicit mobile service choice guides the customer to device facts. */
+function scrollToRequirements() {
+  const target = requirementsRef.value;
+  if (!target || typeof target.scrollIntoView !== 'function') return;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+}
+
+function resetServiceFilters() {
+  selectedCategoryId.value = '';
+  searchQuery.value = '';
+  priceFilter.value = 'all';
+}
+
+function syncDefaultDescription(service: ServiceItem) {
+  const unit = service.unit?.trim() || 'thiết bị';
+  if (normalizePricingMode(service.pricingMode) === 'fixed_price') {
+    description.value = `Yêu cầu dịch vụ niêm yết: ${service.name}${quantity.value > 1 ? ` (${quantity.value} ${unit})` : ''}`;
+  } else {
+    description.value = `Yêu cầu dịch vụ: ${service.name}`;
+  }
+}
+
+function setQuantity(value: number) {
+  quantity.value = Math.max(1, Math.min(99, Math.round(value)));
+  const service = selectedService.value;
+  if (service && !userModifiedDescription.value && normalizePricingMode(service.pricingMode) === 'fixed_price') {
+    syncDefaultDescription(service);
+  }
+}
+
+// ── Deep link: ?serviceId= hydrates the exact service, never a fallback ───
+const DEEP_LINK_ERROR_MESSAGE = 'Dịch vụ trong liên kết không còn khả dụng. Bạn vui lòng chọn một dịch vụ bên dưới.';
+
+function readServiceIdFromQuery(): string {
+  const raw = route.query.serviceId;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+/**
+ * A valid `?serviceId=` selects exactly that service. When the loaded catalog
+ * does not contain it, the service is read by id independently of the list.
+ * A stale reply (a previous id, or after an explicit choice) is dropped.
+ */
+async function hydrateServiceFromLink(rawId?: string) {
+  const id = (rawId ?? readServiceIdFromQuery()).trim();
+  invalidatePendingLink();
+  const token = linkRequestToken;
+  explicitServiceIntent = false;
+  selectedServiceId.value = null;
+  hydratedService.value = null;
+  deepLinkError.value = null;
+  if (!userModifiedDescription.value) description.value = '';
+  if (step.value === 2 || step.value === 4) step.value = isAiFlow ? 3 : 1;
+  if (!id) return;
+
+  const inCatalog = allServices.value.find((service) => service.id === id);
+  if (inCatalog) {
+    if (inCatalog.isActive === false) {
+      deepLinkError.value = DEEP_LINK_ERROR_MESSAGE;
+      return;
+    }
+    selectServiceById(id, { syncCategoryFilter: true, fromLink: true });
+    return;
+  }
+
+  deepLinkLoading.value = true;
+  try {
+    const service = await catalogApi.getService(id);
+    if (token !== linkRequestToken || isPageDisposed.value) return;
+    if (!service || service.id !== id || service.isActive === false) {
+      deepLinkError.value = DEEP_LINK_ERROR_MESSAGE;
+      return;
+    }
+    hydratedService.value = service;
+    selectServiceById(id, { syncCategoryFilter: true, fromLink: true });
+  } catch {
+    if (token !== linkRequestToken || isPageDisposed.value) return;
+    hydratedService.value = null;
+    deepLinkError.value = DEEP_LINK_ERROR_MESSAGE;
+  } finally {
+    if (token === linkRequestToken && !isPageDisposed.value) deepLinkLoading.value = false;
+  }
+}
+
+watch(
+  () => route.query.serviceId,
+  (next, prev) => {
+    const nextId = typeof next === 'string' ? next : '';
+    const prevId = typeof prev === 'string' ? prev : '';
+    if (nextId === prevId) return;
+    void hydrateServiceFromLink(nextId);
+  },
+  { flush: 'sync' },
+);
+
+// ── Catalog and addresses: independent loads with their own retry ─────────
 const reference = useReferenceData();
 const catalogLoading = ref(true);
 const catalogLoadFailed = ref(false);
+const addressesLoading = ref(true);
+const addressesLoadFailed = ref(false);
+const queryFiltersApplied = ref(false);
+let catalogRequestId = 0;
 
-async function loadCatalog() {
-  catalogLoading.value = true;
-  catalogLoadFailed.value = false;
-  try {
-    const [cats, addrs] = await Promise.all([
-      reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true)),
-      profileApi.getAddresses(),
-    ]);
-    categories.value = cats;
-    if (cats.length > 0) {
-      // If query param matches category or service
-      const q = route.query.q ? String(route.query.q).toLowerCase() : '';
-      let matchedCat = cats[0];
-      let matchedSvc: ServiceItem | undefined;
-
-      const wantedId = route.query.serviceId ? String(route.query.serviceId) : '';
-      if (wantedId) {
-        for (const c of cats) {
-          const s = c.services?.find((srv) => srv.id === wantedId);
-          if (s) {
-            matchedCat = c;
-            matchedSvc = s;
-            break;
-          }
-        }
-      }
-
-      if (!matchedSvc && q) {
-        for (const c of cats) {
-          const sFixed = c.services?.find((srv) =>
-            srv.name.toLowerCase().includes(q) &&
-            (srv.pricingMode?.toLowerCase() === 'fixed_price' || (srv.fixedPrice != null && srv.fixedPrice > 0))
-          );
-          if (sFixed) {
-            matchedCat = c;
-            matchedSvc = sFixed;
-            break;
-          }
-          const s = c.services?.find((srv) => srv.name.toLowerCase().includes(q));
-          if (s) {
-            matchedCat = c;
-            matchedSvc = s;
-            break;
-          }
-        }
-      }
-
-      selectedCategoryId.value = matchedCat.id;
-      services.value = matchedCat.services ?? [];
-      if (matchedSvc) {
-        selectedServiceId.value = matchedSvc.id;
-        if (!isAiFlow && matchedSvc.pricingMode?.toLowerCase() === 'fixed_price' || (matchedSvc.fixedPrice != null && matchedSvc.fixedPrice > 0)) {
-          description.value = `Yêu cầu dịch vụ niêm yết: ${matchedSvc.name}`;
-        }
-      } else if (!isAiFlow && services.value.length > 0) {
-        selectedServiceId.value = services.value[0].id;
-        const first = services.value[0];
-        if (first.pricingMode?.toLowerCase() === 'fixed_price' || (first.fixedPrice != null && first.fixedPrice > 0)) {
-          description.value = `Yêu cầu dịch vụ niêm yết: ${first.name}`;
-        }
-      }
-    }
-    // What the customer already told the assistant is their description; it
-    // counts as typed by them, so picking another service does not replace it.
-    const fromChat = typeof route.query.desc === 'string' ? route.query.desc.trim().slice(0, 1000) : '';
-    if (fromChat) {
-      description.value = fromChat;
-      userModifiedDescription.value = true;
-    }
-    addresses.value = addrs;
-    const defAddr = addrs.find((a) => a.isDefault);
-    if (defAddr) selectedAddressId.value = defAddr.id;
-    else if (addrs.length > 0) selectedAddressId.value = addrs[0].id;
-    // From the floating assistant: diagnosis done and service chosen, so the
-    // customer goes straight to address and time (back shows the conversation).
-    if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
-
-  } catch {
-    catalogLoadFailed.value = true;
-  } finally {
-    catalogLoading.value = false;
+/** Optional ?q=/?category= links only fill the filters; they never select a service. */
+function applyIncomingQueryFilters(cats: ServiceCategory[]) {
+  if (queryFiltersApplied.value) return;
+  queryFiltersApplied.value = true;
+  const query = typeof route.query.q === 'string' ? route.query.q.trim() : '';
+  if (query) searchQuery.value = query;
+  const category = typeof route.query.category === 'string' ? route.query.category.trim() : '';
+  if (category) {
+    const match = cats.find((cat) => cat.id === category || cat.slug === category || cat.code === category);
+    if (match) selectedCategoryId.value = match.id;
   }
 }
 
-onMounted(loadCatalog);
+/** What the customer already told the assistant is their description and counts as typed. */
+function applyIncomingDescription() {
+  const fromChat = typeof route.query.desc === 'string' ? route.query.desc.trim().slice(0, 1000) : '';
+  if (fromChat) {
+    description.value = fromChat;
+    userModifiedDescription.value = true;
+  }
+}
+
+/** From the floating assistant: diagnosis done, so the customer goes straight to address and time. */
+function maybeJumpToSchedule() {
+  if (isAiFlow && continuesAssistant && selectedServiceId.value && description.value.trim()) step.value = 2;
+}
+
+async function loadCategories() {
+  const requestId = ++catalogRequestId;
+  const intent = linkRequestToken;
+  catalogLoading.value = true;
+  catalogLoadFailed.value = false;
+  try {
+    const cats = await reference(queryKeys.reference.categories({ activeOnly: true }), () => catalogApi.getCategories(true));
+    if (isPageDisposed.value || requestId !== catalogRequestId) return;
+    categories.value = cats;
+    applyIncomingQueryFilters(cats);
+    if (initialLinkPending && intent === linkRequestToken) {
+      await hydrateServiceFromLink();
+      if (requestId === catalogRequestId && !isPageDisposed.value) maybeJumpToSchedule();
+    }
+  } catch {
+    if (!isPageDisposed.value && requestId === catalogRequestId) catalogLoadFailed.value = true;
+  } finally {
+    if (!isPageDisposed.value && requestId === catalogRequestId) catalogLoading.value = false;
+  }
+}
+
+async function loadAddresses() {
+  addressesLoading.value = true;
+  addressesLoadFailed.value = false;
+  try {
+    const loaded = await profileApi.getAddresses();
+    if (isPageDisposed.value) return;
+    addresses.value = loaded;
+    // Retry keeps the customer's choice when that address still exists.
+    if (!loaded.some((address) => address.id === selectedAddressId.value)) {
+      const preferred = loaded.find((address) => address.isDefault) ?? loaded[0];
+      selectedAddressId.value = preferred?.id ?? '';
+    }
+  } catch {
+    if (!isPageDisposed.value) addressesLoadFailed.value = true;
+  } finally {
+    if (!isPageDisposed.value) addressesLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  applyIncomingDescription();
+  void loadCategories();
+  void loadAddresses();
+  armStepFooterObserver();
+});
 
 onBeforeUnmount(() => {
+  setBookingLayoutWidth(false);
+  isPageDisposed.value = true;
   isPhotoFlowDisposed.value = true;
+  stepFooterObserver?.disconnect();
+  stepFooterObserver = null;
   for (const previewUrl of activePhotoPreviewUrls) {
     URL.revokeObjectURL(previewUrl);
   }
@@ -627,22 +827,7 @@ onBeforeUnmount(() => {
   uploadedPhotos.value = [];
 });
 
-const onCategorySelect = (catId: string) => {
-  selectedCategoryId.value = catId;
-  searchQuery.value = '';
-  serviceFilter.value = 'ALL';
-  const cat = categories.value.find((c) => c.id === catId);
-  services.value = cat?.services ?? [];
-  if (services.value.length > 0) {
-    selectedServiceId.value = services.value[0].id;
-    if (!userModifiedDescription.value) {
-      syncDefaultDescription();
-    }
-  } else {
-    selectedServiceId.value = '';
-  }
-};
-
+// ── Photos ─────────────────────────────────────────────────────────────────
 const openPhotoPicker = () => {
   if (uploadingPhoto.value) return;
   if (uploadedPhotos.value.length >= 5) {
@@ -736,24 +921,127 @@ const removePhoto = (idx: number) => {
   if (photo) removePhotoByLocalId(photo.localId);
 };
 
+/**
+ * Symptom suggestions follow the selected service's category, falling back to
+ * the active category filter, then to a generic list. Symptom chips never
+ * change the filters or the selection.
+ */
+const symptomCategoryName = computed(() => {
+  const service = selectedService.value;
+  if (service) {
+    const fromCatalog = 'categoryName' in service ? service.categoryName : '';
+    if (fromCatalog) return fromCatalog;
+    return categories.value.find((cat) => cat.id === service.categoryId)?.name ?? '';
+  }
+  return categories.value.find((cat) => cat.id === selectedCategoryId.value)?.name ?? '';
+});
 
-const goToStep2 = () => {
-  if (!selectedServiceId.value) {
+const categorySymptoms = computed<string[]>(() => {
+  const name = symptomCategoryName.value.toLowerCase();
+  if (name.includes('lạnh') || name.includes('điều hòa')) {
+    return [
+      'Máy không mát / kém lạnh',
+      'Chảy nước dàn lạnh',
+      'Kêu to / rung lắc mạnh',
+      'Mùi hôi ẩm mốc',
+      'Không nhận điều khiển',
+      'Bám tuyết ống đồng',
+    ];
+  }
+  if (name.includes('nước') || name.includes('điện')) {
+    return [
+      'Rò rỉ lavabo / bồn rửa',
+      'Nghẹt cống / thoát sàn chậm',
+      'Mất nước / áp lực nước yếu',
+      'Chập điện / nhảy aptomat',
+      'Hỏng van vòi xịt / vòi sen',
+    ];
+  }
+  if (name.includes('bếp')) {
+    return [
+      'Bếp từ báo lỗi không nóng',
+      'Hút mùi kêu to / hút yếu',
+      'Bếp mất nguồn',
+      'Rò điện khi chạm vỏ',
+      'Nứt mặt kính / kẹt cảm ứng',
+    ];
+  }
+  if (name.includes('cửa') || name.includes('khóa')) {
+    return [
+      'Khóa vân tay không nhận',
+      'Hết pin / mất nguồn khóa',
+      'Kẹt chốt / khó đóng mở',
+      'Xệ bản lề / kêu cót két',
+      'Cần đổi mã số / thẻ từ',
+    ];
+  }
+  return [
+    'Thiết bị không lên nguồn',
+    'Phát ra tiếng ồn lạ',
+    'Cần bảo dưỡng vệ sinh',
+    'Hỏng linh kiện / cần thay mới',
+  ];
+});
+
+/**
+ * Symptoms are written into the description as comma-separated parts. Only the
+ * first one keeps its capital letter, so every comparison ignores case;
+ * comparing case-sensitively let the later chips be appended again and again.
+ */
+const descriptionParts = () => description.value.split(',').map((part) => part.trim()).filter(Boolean);
+const sameSymptom = (a: string, b: string) => a.toLocaleLowerCase('vi') === b.toLocaleLowerCase('vi');
+
+function hasSymptom(symptom: string) {
+  return descriptionParts().some((part) => sameSymptom(part, symptom));
+}
+
+/** A chip toggles: first click adds the symptom, a second click takes it out. */
+function toggleSymptom(symptom: string) {
+  userModifiedDescription.value = true;
+  const isTemplate =
+    description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:');
+  if (!description.value.trim() || isTemplate) {
+    description.value = symptom;
+    return;
+  }
+  const parts = descriptionParts();
+  if (parts.some((part) => sameSymptom(part, symptom))) {
+    const rest = parts.filter((part) => !sameSymptom(part, symptom)).join(', ');
+    description.value = rest ? rest.charAt(0).toLocaleUpperCase('vi') + rest.slice(1) : '';
+    return;
+  }
+  description.value = `${description.value.trim().replace(/,\s*$/, '')}, ${symptom.toLocaleLowerCase('vi')}`;
+}
+
+// ── Moving through the wizard ──────────────────────────────────────────────
+function goToStep2() {
+  if (!requireCatalogV2Preview()) return;
+  const service = selectedService.value;
+  if (!service || !selectedServiceId.value) {
     toast.warning('Vui lòng chọn một dịch vụ cụ thể.');
     return;
   }
+  const mode = normalizePricingMode(service.pricingMode);
+  if (mode === null) {
+    toast.warning('Dịch vụ này chưa xác định được cách tính giá. Vui lòng chọn dịch vụ khác.');
+    return;
+  }
+  if (mode === 'fixed_price' && fixedPriceValue(service) === null) {
+    toast.warning('Dịch vụ này chưa có giá niêm yết. Vui lòng chọn dịch vụ khác.');
+    return;
+  }
   if (!description.value.trim()) {
-    if (isFixedPrice.value && selectedService.value) {
-      description.value = `Yêu cầu dịch vụ niêm yết: ${selectedService.value.name} (${quantity.value} ${selectedService.value.unit || 'thiết bị'})`;
+    if (mode === 'fixed_price') {
+      syncDefaultDescription(service);
     } else {
       toast.warning('Vui lòng mô tả sơ bộ tình trạng lỗi của thiết bị.');
       return;
     }
   }
   step.value = 2;
-};
+}
 
-const goToNextStepFrom2 = async () => {
+async function goToNextStepFrom2() {
   if (!selectedAddressId.value && addresses.value.length > 0) {
     toast.warning('Vui lòng chọn địa chỉ sửa chữa.');
     return;
@@ -770,9 +1058,16 @@ const goToNextStepFrom2 = async () => {
   }
 
   step.value = 4;
-};
+}
 
-const createAndFindTech = async () => {
+/**
+ * The synchronous guard is the first statement: a second click while the first
+ * request is in flight can never create a second booking. When no answer came
+ * back at all, the outcome is unknown (the server may have committed), so the
+ * booking is not posted again and the customer checks their orders first.
+ */
+async function createAndFindTech() {
+  if (loading.value || submitOutcomeUnknown.value) return;
   if (uploadingPhoto.value) {
     toast.warning('Vui lòng chờ ảnh tải lên hoàn tất trước khi đặt lịch.');
     return;
@@ -802,9 +1097,27 @@ const createAndFindTech = async () => {
     return;
   }
   const chatUploadIds = chatUploadIdsForBooking();
+
+  const service = selectedService.value;
+  if (!service || !selectedServiceId.value) {
+    toast.warning('Vui lòng chọn một dịch vụ cụ thể.');
+    return;
+  }
+  if (!isServiceBookable(service)) {
+    toast.warning('Dịch vụ đã chọn chưa thể đặt. Vui lòng chọn dịch vụ khác.');
+    return;
+  }
+  if (!requireCatalogV2Preview()) {
+    step.value = 1;
+    return;
+  }
+  if (!selectedAddressId.value) {
+    toast.warning('Vui lòng thêm địa chỉ trước khi đặt lịch.');
+    return;
+  }
+
   loading.value = true;
   try {
-    if (!selectedAddressId.value) throw new Error('Vui lòng thêm địa chỉ trước khi đặt lịch.');
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
@@ -815,14 +1128,29 @@ const createAndFindTech = async () => {
       urgency,
       photoUploadIds: [...photoUploadIds, ...chatUploadIds],
       ...(aiSessionId.value ? { aiSessionId: aiSessionId.value } : {}),
+      // P012: only customer-reported facts and a server-confirmed variant code
+      // ever travel; the booking transaction re-validates both.
+      ...(Object.keys(deviceAttributes.value).length > 0 ? { deviceAttributes: { ...deviceAttributes.value } } : {}),
+      ...(selectedVariantCode.value ? { selectedVariantCode: selectedVariantCode.value } : {}),
     });
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch (error: unknown) {
     console.error('[NewBookingWizardPage] createBooking failed:', error);
-    const errObj = error as { response?: { data?: { error?: { message?: string }; message?: string } } } | undefined;
+    const errObj = error as {
+      response?: { data?: { error?: { message?: string }; message?: string } };
+    } | undefined;
+
+    // No HTTP answer: the request may still have reached the server. Freeze
+    // the button instead of blindly POSTing a possible duplicate.
+    if (!errObj?.response) {
+      submitOutcomeUnknown.value = true;
+      toast.warning('Chưa xác nhận được kết quả gửi yêu cầu. Vui lòng kiểm tra Đơn của tôi trước khi gửi lại.');
+      return;
+    }
+
     const backendMessage =
-      errObj?.response?.data?.error?.message ||
-      errObj?.response?.data?.message;
+      errObj.response.data?.error?.message ||
+      errObj.response.data?.message;
 
     let friendlyMessage = userFacingError(error, 'Không thể tạo yêu cầu đặt thợ. Vui lòng thử lại.');
     if (typeof backendMessage === 'string') {
@@ -843,14 +1171,17 @@ const createAndFindTech = async () => {
   } finally {
     loading.value = false;
   }
-};
+}
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-6 pb-16">
+  <div
+    class="w-full space-y-5 sm:space-y-6"
+    :class="step === 1 && !isAiFlow ? 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-16'"
+  >
     <!-- Stepper. On a phone (PO 18/10/2026) four labels do not fit and were cut after the second:
          there it is "Bước 2/4" with the step's name and a progress bar; wider screens show every step. -->
-    <div class="bg-white rounded-2xl sm:rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-xs" data-testid="booking-stepper">
+    <div class="bg-white rounded-2xl sm:rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-[var(--shadow-e1)]" data-testid="booking-stepper">
       <div class="sm:hidden space-y-2" data-testid="booking-stepper-compact">
         <p class="flex items-baseline justify-between gap-3 text-sm">
           <span class="font-semibold text-ink-900 truncate">{{ stepItems[stepIndex]?.label }}</span>
@@ -862,934 +1193,831 @@ const createAndFindTech = async () => {
       </div>
       <div class="hidden sm:flex items-center justify-center overflow-x-auto no-scrollbar gap-6">
         <template v-for="(item, index) in stepItems" :key="item.id">
-          <!-- Step pill item -->
           <div
-            class="flex items-center gap-2 sm:gap-2.5 shrink-0 transition-colors duration-200"
-            :class="stepIndex >= index ? 'text-brand-600 font-bold' : 'text-ink-400 font-medium'"
+            class="flex shrink-0 items-center gap-2 transition-colors duration-200 sm:gap-2.5"
+            :class="stepIndex >= index ? 'font-bold text-brand-600' : 'font-medium text-ink-400'"
           >
             <span
-              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-num font-bold transition-all duration-300 shadow-2xs"
+              class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold font-num shadow-[var(--shadow-e1)] transition-all duration-300 sm:h-8 sm:w-8 sm:text-sm"
               :class="stepIndex >= index ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-500'"
             >
               {{ index + 1 }}
             </span>
-            <span class="text-xs sm:text-sm whitespace-nowrap">{{ item.label }}</span>
+            <span class="whitespace-nowrap text-xs sm:text-sm">{{ item.label }}</span>
           </div>
 
-          <!-- Connector bar between steps -->
           <div
             v-if="index < stepItems.length - 1"
-            class="w-8 sm:w-16 h-[2px] rounded-full shrink-0 transition-colors duration-300"
+            class="h-[2px] w-8 shrink-0 rounded-full transition-colors duration-300 sm:w-16"
             :class="stepIndex > index ? 'bg-brand-600' : 'bg-ink-200'"
           ></div>
         </template>
       </div>
     </div>
 
-    <!-- Animated Step Containers -->
+    <!-- Catalog failed: its own retry; addresses are loaded separately below. -->
+    <div
+      v-if="catalogLoadFailed"
+      role="alert"
+      class="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-danger-200 bg-danger-50 p-3.5 text-sm text-danger-700"
+      data-testid="booking-catalog-error"
+    >
+      <span>Chưa tải được dịch vụ, vui lòng thử lại.</span>
+      <FhButton variant="secondary" size="sm" @click="loadCategories">Thử lại</FhButton>
+    </div>
+
+    <!-- A deep link that no longer points at a bookable service: guided, never a silent fallback. -->
+    <div
+      v-if="deepLinkError"
+      role="alert"
+      class="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 p-3.5 text-sm text-warning-900"
+      data-testid="booking-deeplink-error"
+    >
+      <AlertTriangle :size="17" class="mt-0.5 shrink-0 text-warning-600" />
+      <span>{{ deepLinkError }}</span>
+    </div>
+    <p v-if="deepLinkLoading && !deepLinkError" class="text-xs text-ink-500">Đang tải dịch vụ từ liên kết…</p>
+
+    <!-- Animated step containers -->
     <Transition name="wizard-step" mode="out-in">
-      <!-- Step 1: Service & Issue Description -->
-      <div v-if="step === 1" key="step-1" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-7">
-        <!-- Title & Subtitle + Trust banner -->
-        <div class="space-y-3">
+      <!-- Step 1: service choice and request details -->
+      <div v-if="step === 1" key="step-1" class="space-y-5" :class="isAiFlow ? 'mx-auto w-full max-w-3xl' : ''">
+        <div class="space-y-3 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-[var(--shadow-e1)] sm:p-6">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-              {{ isAiFlow ? 'Mô tả sự cố để trợ lý AI phân tích' : 'Nhà mình đang gặp vấn đề gì?' }}
+            <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+              {{ isAiFlow ? 'Mô tả sự cố để trợ lý AI phân tích' : 'Chọn dịch vụ sửa chữa' }}
             </h2>
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200">
+            <span class="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
               <ShieldCheck :size="14" class="text-brand-600" />
               <span>Thợ tay nghề chuẩn • Báo giá minh bạch</span>
             </span>
           </div>
-          <p class="text-xs sm:text-sm text-ink-500 leading-relaxed">
+          <p class="text-xs leading-relaxed text-ink-500 sm:text-sm">
             <template v-if="isAiFlow">
               Kể tình trạng thiết bị và gửi ảnh nếu có. Trợ lý sẽ phân tích, hỏi thêm nếu cần và chọn dịch vụ phù hợp; bạn không cần tự chọn dịch vụ.
             </template>
             <template v-else>
-              Chọn nhóm thiết bị, dịch vụ cần xử lý và mô tả tình trạng để FixHome điều phối đúng kỹ thuật viên chuyên trách mang đủ trang thiết bị.
+              Tìm theo tên hoặc lỗi rồi chọn đúng một dịch vụ chính. Giá hiển thị theo đúng dữ liệu dịch vụ; dịch vụ khảo sát sẽ được thợ báo giá trước khi sửa.
             </template>
           </p>
         </div>
 
         <div
-          v-if="catalogLoadFailed"
-          role="alert"
-          class="p-3.5 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3"
-          data-testid="booking-catalog-error"
+          class="booking-step1-grid"
+          :class="!isAiFlow ? 'booking-step1-grid--catalog' : 'space-y-5'"
         >
-          <span>Chưa tải được dịch vụ và địa chỉ, vui lòng thử lại.</span>
-          <FhButton variant="secondary" size="sm" @click="loadCatalog">Thử lại</FhButton>
-        </div>
-
-        <div class="space-y-7 text-xs sm:text-sm">
-          <!-- Choosing the service is the plain form's job; the AI form leaves it to the assistant. -->
-          <template v-if="!isAiFlow">
-          <!-- 1. Categories Pills with Icons & Count -->
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between">
-              <label class="font-bold text-ink-900 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>1. Chọn nhóm thiết bị / dịch vụ</span>
-                <span class="text-danger-600 font-bold">*</span>
-              </label>
-              <span class="text-[11px] text-ink-500">{{ categories.length }} nhóm khả dụng</span>
-            </div>
-
-            <div
-              v-if="catalogLoading"
-              class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
-              aria-busy="true"
-              aria-label="Đang tải nhóm dịch vụ"
-              data-testid="booking-categories-skeleton"
-            >
-              <FhSkeleton v-for="i in 4" :key="i" height="88px" rounded="lg" />
-            </div>
-            <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <button
-                v-for="cat in categories"
-                :key="cat.id"
-                type="button"
-                class="group p-3 sm:p-3.5 rounded-2xl border text-left transition-all duration-200 active:scale-95 flex flex-col justify-between gap-2 relative overflow-hidden"
-                :class="selectedCategoryId === cat.id
-                  ? 'border-brand-600 bg-brand-600 text-white shadow-md shadow-brand-600/20 ring-2 ring-brand-500/20'
-                  : 'border-ink-200 bg-ink-50/60 hover:bg-white hover:border-brand-300 text-ink-800 hover:shadow-xs'"
-                @click="onCategorySelect(cat.id)"
-              >
-                <div class="flex items-center justify-between w-full">
-                  <div
-                    class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                    :class="selectedCategoryId === cat.id ? 'bg-white/20 text-white' : 'bg-white text-brand-600 shadow-xs border border-ink-100 group-hover:text-brand-700'"
-                  >
-                    <component :is="getCategoryIcon(cat)" :size="17" />
-                  </div>
-                  <span
-                    class="text-xs font-bold px-2 py-0.5 rounded-full"
-                    :class="selectedCategoryId === cat.id ? 'bg-white/20 text-white' : 'bg-ink-200/70 text-ink-600'"
-                  >
-                    {{ cat.services?.length || 0 }} dịch vụ
-                  </span>
-                </div>
-                <div>
-                  <div class="font-bold text-xs sm:text-[13px] leading-snug line-clamp-1">
-                    {{ cat.name }}
-                  </div>
-                  <div
-                    class="text-xs mt-0.5 line-clamp-1"
-                    :class="selectedCategoryId === cat.id ? 'text-brand-100' : 'text-ink-500'"
-                  >
-                    {{ cat.description || 'Sửa chữa & bảo dưỡng' }}
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <!-- 2. Specific Services Explorer (The Core Focus!) -->
-          <div class="space-y-3 pt-2">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <label class="font-bold text-ink-900 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>2. Dịch vụ cụ thể trong nhóm</span>
-                <span class="text-danger-600 font-bold">*</span>
-                <span class="text-[11px] font-normal text-ink-500">
-                  ({{ filteredServices.length }} / {{ currentCategoryServices.length }} dịch vụ)
-                </span>
-              </label>
-
-              <!-- Filter mode pills -->
-              <div class="flex items-center gap-1.5 bg-ink-100/80 p-1 rounded-xl self-start sm:self-auto text-[11px]">
-                <button
-                  type="button"
-                  class="whitespace-nowrap px-2.5 py-1 rounded-lg font-semibold transition-all"
-                  :class="serviceFilter === 'ALL' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
-                  @click="serviceFilter = 'ALL'"
-                >
-                  Tất cả ({{ currentCategoryServices.length }})
-                </button>
-                <button
-                  v-if="fixedServicesCount > 0"
-                  type="button"
-                  class="px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1"
-                  :class="serviceFilter === 'FIXED' ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
-                  @click="serviceFilter = 'FIXED'"
-                >
-                  <Zap :size="14" /><span>Giá niêm yết</span>
-                  <span class="text-xs opacity-80">({{ fixedServicesCount }})</span>
-                </button>
-                <button
-                  v-if="inspectionServicesCount > 0"
-                  type="button"
-                  class="px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1"
-                  :class="serviceFilter === 'INSPECTION' ? 'bg-white text-ink-900 shadow-xs font-bold' : 'text-ink-600 hover:text-ink-900'"
-                  @click="serviceFilter = 'INSPECTION'"
-                >
-                  <Search :size="14" /><span>Khảo sát</span>
-                  <span class="text-xs opacity-80">({{ inspectionServicesCount }})</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Search input bar -->
-            <div class="relative">
-              <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input
-                v-model="searchQuery"
-                type="text"
-                placeholder="Tìm dịch vụ theo tên, lỗi hoặc từ khóa (ví dụ: siphon, lavabo, máy lạnh, vệ sinh...)"
-                class="w-full h-11 pl-10 pr-9 bg-ink-50/80 border border-ink-200 rounded-xl text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:bg-white transition-all"
+          <!-- Search and named categories share one compact service finder. -->
+          <div ref="finderRef" class="min-w-0 space-y-4 booking-services-column">
+            <template v-if="!isAiFlow">
+              <ServiceSearch
+                v-if="!catalogLoading && categories.length > 0"
+                :query="searchQuery"
+                :price-filter="priceFilter"
+                :counts="priceFilterCounts"
+                @update:query="searchQuery = $event"
+                @update:price-filter="priceFilter = $event"
               />
-              <button
-                v-if="searchQuery"
-                type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-0.5"
-                @click="searchQuery = ''"
-              >
-                <X :size="15" />
-              </button>
-            </div>
 
-            <!-- Service Cards Grid -->
-            <div v-if="catalogLoading" class="grid grid-cols-1 md:grid-cols-2 gap-3" aria-busy="true" aria-label="Đang tải dịch vụ">
-              <div v-for="i in 4" :key="i" class="p-4 rounded-2xl border border-ink-200 bg-white space-y-3">
-                <FhSkeleton width="45%" height="14px" />
-                <FhSkeleton width="80%" height="16px" />
-                <FhSkeleton width="35%" height="14px" />
-              </div>
-            </div>
-            <div v-else-if="filteredServices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
+              <ServiceCategoryFilters
+                v-if="catalogLoading || categories.length > 0"
+                :categories="categoryFilters"
+                :model-value="selectedCategoryId"
+                :loading="catalogLoading"
+                @update:model-value="onCategoryFilterChange"
+              />
+
+              <!-- The chosen service stays chosen when a filter hides it -->
               <div
-                v-for="svc in filteredServices"
-                :key="svc.id"
-                class="group p-4 rounded-2xl border cursor-pointer transition-all duration-200 relative flex flex-col justify-between gap-3 text-left"
-                :class="selectedServiceId === svc.id
-                  ? 'border-brand-600 bg-brand-50/40 ring-2 ring-brand-500/20 shadow-xs'
-                  : 'border-ink-200 bg-white hover:border-brand-300 hover:bg-ink-50/40 shadow-xs'"
-                @click="selectService(svc)"
+                v-if="selectedOutsideFilter"
+                class="flex flex-wrap items-center justify-between gap-x-3 rounded-[var(--radius-md)] border border-ink-200 bg-ink-50 px-3 text-xs text-ink-700"
+                data-testid="selected-outside-filter"
+                role="status"
               >
-                <!-- Card Header: Mode badge + duration + radio -->
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <span
-                      v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-success-50 text-success-700 border border-success-200"
-                    >
-                      <Zap :size="12" /> Giá niêm yết
-                    </span>
-                    <span
-                      v-else
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-ink-100 text-ink-700 border border-ink-200"
-                    >
-                      <Search :size="12" /> Khảo sát tận nơi
-                    </span>
-                    <span class="text-[11px] text-ink-500 inline-flex items-center gap-1 font-medium">
-                      <Clock :size="12" class="text-ink-400" />
-                      ~{{ svc.estimatedMinutes }} phút
-                    </span>
-                  </div>
+                <span class="py-2">Dịch vụ đã chọn vẫn được giữ.</span>
+                <button type="button" class="min-h-11 rounded-[var(--radius-sm)] font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-brand-600" data-testid="selected-outside-filter-show" @click="revealSelectedService">
+                  Xem dịch vụ đã chọn
+                </button>
+              </div>
 
-                  <!-- Radio circle indicator -->
-                  <div
-                    class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all"
-                    :class="selectedServiceId === svc.id ? 'bg-brand-600 text-white shadow-xs' : 'border-2 border-ink-300 bg-white group-hover:border-brand-400'"
-                  >
-                    <Check v-if="selectedServiceId === svc.id" :size="12" stroke-width="3" />
+              <div
+                v-if="catalogLoading"
+                class="grid grid-cols-1 gap-2"
+                aria-busy="true"
+                aria-label="Đang tải dịch vụ"
+              >
+                <div v-for="i in 3" :key="i" class="space-y-3 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5">
+                  <div class="flex items-center gap-2">
+                    <FhSkeleton width="36px" height="36px" rounded="md" />
+                    <FhSkeleton width="60%" height="16px" />
                   </div>
-                </div>
-
-                <!-- Card Body: Name & Scope -->
-                <div class="space-y-1">
-                  <div class="font-bold text-xs sm:text-[14px] text-ink-900 group-hover:text-brand-600 transition-colors leading-snug">
-                    {{ svc.name }}
-                  </div>
-                  <div class="text-[11px] text-ink-500 line-clamp-2 leading-relaxed">
-                    {{ svc.scopeDescription || svc.description || 'Dịch vụ sửa chữa, bảo dưỡng chuyên nghiệp bởi kỹ thuật viên FixHome.' }}
-                  </div>
-                </div>
-
-                <!-- Card Footer: Price Display -->
-                <div class="pt-2 border-t border-ink-100 flex items-center justify-between">
-                  <div v-if="svc.pricingMode?.toLowerCase() === 'fixed_price' || (svc.fixedPrice != null && svc.fixedPrice > 0)" class="flex items-baseline gap-1">
-                    <span class="text-xs font-bold text-brand-700 font-num">
-                      <FhMoney :amount="svc.fixedPrice || svc.basePrice || 0" />
-                    </span>
-                    <span class="text-[11px] text-ink-500 font-normal">
-                      / {{ svc.unit || 'thiết bị' }}
-                    </span>
-                  </div>
-                  <div v-else class="text-[11px] font-semibold text-ink-600 bg-ink-100/80 px-2 py-0.5 rounded-lg">
-                    Báo giá trước khi sửa
-                  </div>
-
-                  <span
-                    v-if="selectedServiceId === svc.id"
-                    class="text-[11px] font-bold text-brand-600 flex items-center gap-1"
-                  >
-                    Đã chọn
-                  </span>
-                  <span
-                    v-else
-                    class="text-[11px] font-medium text-ink-400 group-hover:text-brand-600"
-                  >
-                    Chọn dịch vụ
-                  </span>
+                  <FhSkeleton width="85%" height="12px" />
+                  <FhSkeleton width="45%" height="12px" />
                 </div>
               </div>
-            </div>
 
-            <!-- Empty Search State -->
-            <div
-              v-else
-              class="p-8 rounded-2xl bg-ink-50 border border-dashed border-ink-300 text-center space-y-2"
-            >
-              <div class="w-10 h-10 rounded-full bg-white text-ink-400 flex items-center justify-center mx-auto shadow-xs">
-                <Search :size="18" />
+              <div v-else-if="visibleServices.length > 0" class="grid grid-cols-1 gap-2" role="group" aria-label="Danh sách dịch vụ" data-testid="booking-service-list">
+                <CompactServiceCard
+                  v-for="svc in visibleServices"
+                  :key="svc.id"
+                  :service="svc"
+                  :selected="svc.id === selectedServiceId"
+                  :show-category="!selectedCategoryId"
+                  @select="onServiceSelected"
+                  @details="openServiceDetails"
+                />
               </div>
-              <p class="text-xs font-bold text-ink-800">Không tìm thấy dịch vụ phù hợp</p>
-              <p class="text-[11px] text-ink-500">
-                Thử tìm với từ khóa khác hoặc chuyển sang nhóm thiết bị khác.
+
+              <div
+                v-else-if="categories.length > 0"
+                class="space-y-2 rounded-[var(--radius-lg)] border border-dashed border-ink-300 bg-ink-50 p-8 text-center"
+                data-testid="booking-services-empty"
+              >
+                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white text-ink-400 shadow-[var(--shadow-e1)]">
+                  <Search :size="18" />
+                </div>
+                <p class="text-xs font-bold text-ink-800">Không tìm thấy dịch vụ phù hợp</p>
+                <p class="text-[11px] text-ink-500">Thử từ khóa khác, hoặc bỏ bộ lọc để xem toàn bộ dịch vụ.</p>
+                <button
+                  type="button"
+                  class="inline-flex min-h-11 items-center gap-1 rounded-[var(--radius-sm)] border border-brand-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-600"
+                  @click="resetServiceFilters"
+                >
+                  Xóa bộ lọc
+                </button>
+              </div>
+
+              <p v-else-if="!catalogLoadFailed" class="rounded-[var(--radius-md)] border border-dashed border-ink-300 bg-ink-50 p-6 text-center text-xs text-ink-500" data-testid="booking-catalog-empty">
+                Hiện chưa có dịch vụ nào khả dụng. Vui lòng thử lại sau.
               </p>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-brand-600 bg-white border border-brand-200 rounded-xl hover:bg-brand-50"
-                @click="searchQuery = ''; serviceFilter = 'ALL'"
-              >
-                Xóa bộ lọc tìm kiếm
-              </button>
-            </div>
+              <p v-if="!catalogLoading && !catalogLoadFailed && categories.length > 0" class="text-xs text-ink-600" role="status" data-testid="booking-service-result-count">
+                Đã hiển thị {{ visibleServices.length }} dịch vụ
+              </p>
+            </template>
           </div>
 
-          <!-- 3. Fixed Price Package Detail & Quantity Configurator -->
-          <div
-            v-if="isFixedPrice"
-            class="p-5 rounded-2xl bg-brand-50 border border-brand-200 space-y-4"
-          >
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">
-                    Gói trọn gói chuẩn
-                  </span>
-                  <span class="font-bold text-xs sm:text-sm text-brand-900">
-                    {{ selectedService?.name }}
-                  </span>
-                </div>
-                <p class="text-[11px] text-brand-800">
-                  Đã bao gồm toàn bộ tiền công kỹ thuật viên chuẩn quy trình FixHome.
-                </p>
-              </div>
-
-              <div class="text-right">
-                <div class="text-[11px] text-ink-500">Đơn giá niêm yết</div>
-                <div class="text-sm sm:text-base font-bold text-brand-700 font-num">
-                  <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" />
-                  <span class="text-xs text-ink-500 font-normal"> / {{ selectedService?.unit || 'thiết bị' }}</span>
-                </div>
-              </div>
+          <!-- Request panel: recap, description and private photo dropzone. -->
+          <div class="min-w-0 space-y-5 booking-request-column">
+            <div v-if="!isAiFlow">
+              <SelectedServiceRecap
+                :service="selectedService"
+                :category-name="selectedCategoryName"
+                :quantity="quantity"
+                @clear="clearServiceSelection"
+                @change="changeService"
+                @update:quantity="setQuantity"
+              />
             </div>
 
-            <!-- Quantity Counter with tactile stepper -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-brand-200/80 gap-3">
-              <div>
-                <label class="font-bold text-ink-800 text-xs">Số lượng thiết bị cần làm:</label>
-                <div class="text-[11px] text-ink-500">
-                  Tăng số lượng nếu nhà mình cần xử lý nhiều thiết bị cùng lúc.
-                </div>
-              </div>
-
-              <div class="flex items-center gap-3">
-                <div class="flex items-center bg-white border border-ink-200 rounded-xl p-1 shadow-xs">
-                  <button
-                    type="button"
-                    class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-ink-100 active:scale-95 text-ink-800"
-                    :disabled="quantity <= 1"
-                    @click="updateQuantity(-1)"
-                  >
-                    <Minus :size="14" />
-                  </button>
-                  <span class="w-10 text-center font-bold font-num text-sm text-ink-900">{{ quantity }}</span>
-                  <button
-                    type="button"
-                    class="w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-all hover:bg-ink-100 active:scale-95 text-ink-800"
-                    @click="updateQuantity(1)"
-                  >
-                    <Plus :size="14" />
-                  </button>
-                </div>
-
-                <div class="text-right pl-2">
-                  <div class="text-xs text-ink-500 font-medium">Tổng tiền trọn gói:</div>
-                  <div class="font-bold text-base text-brand-700 font-num">
-                    <FhMoney :amount="totalFixedAmount" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Transparency Reassurance -->
-            <div class="pt-2 border-t border-brand-200/60 flex items-center gap-2 text-[11px] text-brand-900 font-medium">
-              <CheckCircle2 :size="15" class="text-success-600 shrink-0" />
-              <span>Chỉ thanh toán khi kỹ thuật viên hoàn thành và gửi ảnh sau sửa. Không phát sinh phụ phí ẩn.</span>
-            </div>
-          </div>
-
-          </template>
-
-          <!-- 4. Photo Upload Area (Drag & Drop + Dotted Box) -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <Camera :size="15" class="text-brand-600" />
-                <span>{{ isAiFlow ? 1 : 3 }}. Ảnh hiện trạng thiết bị (khuyên dùng)</span>
-              </label>
-              <span class="text-[11px] text-ink-500 font-medium">
-                {{ uploadedPhotos.length }}/5 ảnh
-              </span>
-            </div>
-
-            <input
-              ref="photoInput"
-              type="file"
-              accept="image/*,.heic,.heif"
-              multiple
-              class="hidden"
-              @change="handlePhotoSelected"
+            <div ref="requirementsRef" class="booking-request-configuration space-y-5" :tabindex="!isAiFlow ? -1 : undefined" :aria-label="!isAiFlow ? 'Thông tin yêu cầu' : undefined" data-testid="booking-request-configuration">
+            <!-- P012: device facts and the server's own scope/price preview for
+                 the selected service. Remounts (= refetch, no stale facts) on
+                 every service change through its key. -->
+            <BookingDeviceDetails
+              v-if="!isAiFlow && selectedServiceId"
+              :key="selectedServiceId"
+              :service-id="selectedServiceId"
+              :device-attributes="deviceAttributes"
+              :selected-variant-code="selectedVariantCode"
+              @update:device-attributes="deviceAttributes = $event"
+              @update:selected-variant-code="selectedVariantCode = $event"
+              @update:preview="catalogPricingPreview = $event"
             />
 
-            <div
-              class="p-6 rounded-2xl border-2 border-dashed transition-all duration-200 text-center cursor-pointer flex flex-col items-center justify-center space-y-2"
-              :class="[
-                isDraggingPhoto
-                  ? 'border-brand-600 bg-brand-50 ring-4 ring-brand-500/20'
-                  : 'border-brand-300 bg-brand-50/30 hover:bg-brand-50/70',
-                uploadingPhoto ? 'opacity-60 pointer-events-none' : ''
-              ]"
-              @click="openPhotoPicker"
-              @dragover.prevent="isDraggingPhoto = true"
-              @dragleave.prevent="isDraggingPhoto = false"
-              @drop.prevent="onPhotoDrop"
-            >
-              <div class="w-12 h-12 rounded-2xl bg-white text-brand-600 flex items-center justify-center shadow-xs border border-brand-100">
-                <Camera :size="22" />
-              </div>
-              <div>
-                <p class="text-xs sm:text-sm font-bold text-brand-700">
-                  {{ uploadingPhoto ? 'Đang tải ảnh lên...' : 'Bấm để chọn ảnh hoặc kéo thả vào đây' }}
-                </p>
-                <p class="text-[11px] text-ink-500 mt-0.5">
-                  Chụp toàn cảnh thiết bị hoặc vị trí đang gặp sự cố (Tối đa 5 ảnh · JPG, PNG, WebP · Dưới 10 MB)
-                </p>
-              </div>
-            </div>
-
-            <!-- Image previews -->
-            <div v-if="uploadedPhotos.length > 0" class="flex flex-wrap gap-3 mt-3">
-              <div
-                v-for="(photo, idx) in uploadedPhotos"
-                :key="photo.localId"
-                class="relative w-20 h-20 rounded-2xl overflow-hidden border border-ink-200 shadow-xs group bg-ink-100"
-              >
-                <img :src="photo.previewUrl" alt="Ảnh thiết bị đã chọn" class="w-full h-full object-cover" />
-
-                <!-- Uploading spinner overlay -->
-                <div
-                  v-if="!photo.uploadId"
-                  class="absolute inset-0 bg-black/40 flex items-center justify-center text-white"
+            <!-- Description & quick symptom chips -->
+            <section id="booking-requirements" class="scroll-mt-20 space-y-3 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-[var(--shadow-e1)] sm:p-6">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <label for="booking-description" class="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  <Sparkles :size="15" class="text-brand-600" />
+                  <span>{{ isAiFlow ? 'Mô tả sự cố' : 'Mô tả tình trạng' }}</span>
+                  <span v-if="!isAiFlow && !isFixedPrice" class="font-bold text-danger-600">*</span>
+                </label>
+                <span
+                  v-if="!isAiFlow && isFixedPrice"
+                  class="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700"
                 >
-                  <Sparkles class="animate-spin" :size="16" />
+                  <Zap :size="12" /> Giá niêm yết (không bắt buộc mô tả lỗi)
+                </span>
+                <span v-else class="text-[11px] text-ink-500">
+                  {{ isAiFlow ? 'Trợ lý đọc mô tả để chẩn đoán' : 'Mô tả càng rõ, thợ chuẩn bị linh kiện càng sát' }}
+                </span>
+              </div>
+
+              <div v-if="!isAiFlow" class="space-y-1.5">
+                <div class="flex items-center gap-1 text-[11px] text-ink-500">
+                  <Sparkles :size="12" class="text-brand-600" />
+                  <span>Gợi ý triệu chứng phổ biến (bấm để thêm nhanh vào mô tả):</span>
                 </div>
-
-                <button
-                  type="button"
-                  class="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white rounded-full hover:bg-danger-600 transition-colors shadow-xs"
-                  @click.stop="removePhoto(idx)"
-                >
-                  <Trash2 :size="12" />
-                </button>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="sym in categorySymptoms"
+                    :key="sym"
+                    type="button"
+                    class="min-h-11 rounded-[var(--radius-sm)] border px-2.5 py-1 text-[11px] font-medium transition-colors active:scale-95 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
+                    :class="hasSymptom(sym)
+                      ? 'border-brand-300 bg-brand-50 font-bold text-brand-700'
+                      : 'border-ink-200 bg-ink-50 text-ink-700 hover:border-brand-200 hover:bg-white'"
+                    :aria-pressed="hasSymptom(sym)"
+                    @click="toggleSymptom(sym)"
+                  >
+                    {{ hasSymptom(sym) ? '✓' : '+' }} {{ sym }}
+                  </button>
+                </div>
               </div>
+
+              <p v-if="isAiFlow && !description.trim()" class="text-xs text-warning-700" data-testid="ai-needs-description">
+                {{ DESCRIBE_BEFORE_SEND }}
+              </p>
+
+              <textarea
+                id="booking-description"
+                v-model="description"
+                rows="3"
+                class="w-full rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5 leading-relaxed text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-600 focus:outline-none"
+                :class="isAiFlow ? 'text-xs sm:text-sm' : 'text-base sm:text-sm'"
+                :placeholder="isFixedPrice
+                  ? 'Ghi chú thêm cho thợ (ví dụ: vị trí đặt thiết bị, lưu ý lúc tới nhà, tầng lầu...)'
+                  : 'Mô tả hiện tượng hư hỏng (ví dụ: máy lạnh chảy nước ở dàn lạnh trong nhà, quạt kêu to và không mát...)'"
+                data-testid="booking-description"
+                @input="userModifiedDescription = true"
+              ></textarea>
+            </section>
+
+            <!-- One private, keyboard-operable dropzone; uploaded previews retain individual removal. -->
+            <section class="space-y-3" aria-label="Ảnh hiện trạng">
+              <input
+                ref="photoInput"
+                type="file"
+                accept="image/*,.heic,.heif"
+                multiple
+                class="hidden"
+                @change="handlePhotoSelected"
+              />
+
+              <div
+                role="button"
+                tabindex="0"
+                class="flex min-h-[100px] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed px-3 py-3 text-center transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 motion-reduce:transition-none"
+                :class="[
+                  isDraggingPhoto
+                    ? 'border-brand-600 bg-brand-50 ring-4 ring-brand-500/20'
+                    : 'border-brand-300 bg-brand-50/30 hover:bg-brand-50/70',
+                  uploadingPhoto ? 'pointer-events-none opacity-60' : '',
+                ]"
+                :aria-label="uploadingPhoto ? 'Đang tải ảnh hiện trạng' : `Tải ảnh hiện trạng, ${uploadedPhotos.length} trên 5 ảnh đã chọn`"
+                :aria-disabled="uploadingPhoto"
+                data-testid="booking-photo-picker"
+                @click="openPhotoPicker"
+                @keydown.enter.prevent="openPhotoPicker"
+                @keydown.space.prevent="openPhotoPicker"
+                @dragover.prevent="isDraggingPhoto = true"
+                @dragleave.prevent="isDraggingPhoto = false"
+                @drop.prevent="onPhotoDrop"
+              >
+                <LoaderCircle v-if="uploadingPhoto" :size="22" class="animate-spin text-brand-600" aria-hidden="true" />
+                <Camera v-else :size="22" class="text-brand-600" aria-hidden="true" />
+                <span class="text-xs font-medium text-ink-700">Thêm ảnh hoặc kéo thả vào đây</span>
+              </div>
+              <span v-if="uploadingPhoto" class="sr-only" role="status" aria-live="polite">Đang tải ảnh hiện trạng…</span>
+
+              <div v-if="uploadedPhotos.length > 0" class="mt-3 flex flex-wrap gap-3">
+                <div
+                  v-for="(photo, idx) in uploadedPhotos"
+                  :key="photo.localId"
+                  class="group relative h-20 w-20 overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-ink-100 shadow-[var(--shadow-e1)]"
+                >
+                  <img :src="photo.previewUrl" alt="Ảnh thiết bị đã chọn" class="h-full w-full object-cover" />
+
+                  <div v-if="!photo.uploadId" class="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                    <Sparkles class="animate-spin" :size="16" />
+                  </div>
+
+                  <button
+                    type="button"
+                    class="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-danger-600"
+                    aria-label="Xóa ảnh"
+                    @click.stop="removePhoto(idx)"
+                  >
+                    <Trash2 :size="12" />
+                  </button>
+                </div>
+              </div>
+            </section>
+
             </div>
           </div>
-
-          <!-- 5. Issue Description & Symptom Suggestion Chips -->
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between flex-wrap gap-1">
-              <label class="font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>{{ isAiFlow ? 2 : 4 }}. Mô tả chi tiết yêu cầu</span>
-                <span v-if="!isFixedPrice" class="text-danger-600 font-bold">*</span>
-              </label>
-              <span v-if="isFixedPrice" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200">
-                <Zap :size="12" class="inline -mt-0.5" /> Giá niêm yết (Không bắt buộc mô tả lỗi)
-              </span>
-              <span v-else class="text-[11px] text-ink-500">
-                Mô tả chi tiết để thợ chuẩn bị linh kiện sát nhất
-              </span>
-            </div>
-
-            <!-- Quick symptom chips for faster input -->
-            <div v-if="!isAiFlow" class="space-y-1.5">
-              <div class="text-[11px] text-ink-500 flex items-center gap-1">
-                <Sparkles :size="12" class="text-brand-600" />
-                <span>Gợi ý triệu chứng phổ biến (bấm để thêm nhanh vào mô tả):</span>
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="sym in categorySymptoms"
-                  :key="sym"
-                  type="button"
-                  class="px-2.5 py-1 rounded-xl text-[11px] font-medium transition-all active:scale-95 border"
-                  :class="hasSymptom(sym)
-                    ? 'bg-brand-50 text-brand-700 border-brand-300 font-bold'
-                    : 'bg-ink-50 text-ink-700 border-ink-200 hover:bg-white hover:border-brand-200'"
-                  :aria-pressed="hasSymptom(sym)"
-                  @click="toggleSymptom(sym)"
-                >
-                  {{ hasSymptom(sym) ? '✓' : '+' }} {{ sym }}
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              v-model="description"
-              rows="3"
-              class="w-full p-3.5 bg-ink-50/80 border border-ink-200 rounded-2xl text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:bg-white transition-all leading-relaxed"
-              :placeholder="isFixedPrice
-                ? 'Ghi chú thêm cho thợ (ví dụ: Vị trí đặt thiết bị, lưu ý lúc tới nhà, tầng lầu...)'
-                : 'Mô tả hiện tượng hư hỏng (ví dụ: Máy lạnh chảy nước ở dàn lạnh trong nhà, quạt kêu to rè rè và không mát...)'"
-              @input="userModifiedDescription = true"
-            ></textarea>
-          </div>
-
         </div>
 
-        <!-- Step 1 Footer Action Bar -->
-        <p
-          v-if="isAiFlow && !description.trim()"
-          class="text-xs text-warning-700 sm:text-right"
-          data-testid="ai-needs-description"
+        <!-- Step 1 footer: the real action set. While the dock floats over the
+             page this footer is inert, so only one set of actions is ever
+             reachable by keyboard or screen reader. -->
+        <div
+          ref="stepFooterRef"
+          :inert="showStepDock ? true : undefined"
+          class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
+          data-testid="booking-step1-footer"
         >
-          {{ DESCRIBE_BEFORE_SEND }}
-        </p>
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="router.back()" class="w-full sm:w-auto">
+          <FhButton
+            variant="ghost"
+            size="md"
+            class="w-full sm:w-auto"
+            :tabindex="showStepDock ? -1 : undefined"
+            data-testid="step1-back"
+            @click="router.back()"
+          >
             <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
           </FhButton>
 
-          <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
-            <!-- Selected summary on desktop -->
-            <div v-if="selectedService && !isAiFlow" class="text-right hidden sm:block">
-              <div class="text-[11px] text-ink-500">Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span></div>
-              <div v-if="isFixedPrice" class="text-xs font-bold text-brand-700 font-num">
-                Tổng: <FhMoney :amount="totalFixedAmount" />
-              </div>
-              <div v-else class="text-[11px] font-semibold text-brand-600">Khảo sát & Báo giá tận nơi</div>
+          <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-4">
+            <div v-if="selectedService && !isAiFlow" class="min-w-0 text-left sm:text-right">
+              <p class="truncate text-[11px] text-ink-500">
+                Đã chọn: <span class="font-bold text-ink-800">{{ selectedService.name }}</span>
+              </p>
+              <p v-if="isFixedPrice && selectedFixedPrice !== null" class="text-xs font-bold text-brand-700 font-num">
+                Tạm tính: <FhMoney :amount="totalFixedAmount" />
+              </p>
+              <p v-else-if="isFixedPrice" class="text-[11px] font-semibold text-warning-800">Chưa có giá niêm yết</p>
+              <p v-else class="text-[11px] font-semibold text-brand-600">Khảo sát &amp; Báo giá tận nơi</p>
             </div>
+            <p
+              v-if="!isAiFlow && !selectedServiceId"
+              class="text-[11px] text-ink-500 sm:max-w-[14rem] sm:text-right"
+              data-testid="booking-select-service-hint"
+            >
+              Chọn một dịch vụ ở danh sách để tiếp tục.
+            </p>
 
             <FhButton
               variant="primary"
               size="lg"
-              class="w-full sm:w-auto px-7 shadow-xs"
-              :disabled="isAiFlow ? !description.trim() : !selectedServiceId"
+              class="w-full px-7 shadow-[var(--shadow-e1)] sm:w-auto"
+              :disabled="isAiFlow ? !description.trim() : !selectedServiceId || !isCatalogV2PreviewReady"
+              :tabindex="showStepDock ? -1 : undefined"
               data-testid="step1-next"
               @click="isAiFlow ? startAiStep() : goToStep2()"
             >
               <template v-if="isAiFlow">Phân tích cùng AI <Sparkles :size="15" class="ml-1.5" /></template>
-              <template v-else>Tiếp tục: Địa chỉ & Giờ <ArrowRight :size="15" class="ml-1.5" /></template>
+              <template v-else>Tiếp tục: Địa chỉ &amp; Giờ <ArrowRight :size="15" class="ml-1.5" /></template>
+            </FhButton>
+          </div>
+        </div>
+
+        <!-- The floating Previous/Next dock for the scrolled-away state. -->
+        <BookingStepDock
+          :show="showStepDock"
+          :next-label="isAiFlow ? 'Phân tích cùng AI' : 'Tiếp tục'"
+          :next-disabled="isAiFlow ? !description.trim() : !selectedServiceId || !isCatalogV2PreviewReady"
+          :hint="dockHint"
+          @back="router.back()"
+          @next="isAiFlow ? startAiStep() : goToStep2()"
+        />
+      </div>
+
+      <!-- Step 2: address and schedule -->
+      <div v-else-if="step === 2" key="step-2" class="mx-auto w-full max-w-3xl space-y-6">
+        <div class="space-y-6 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-6 shadow-[var(--shadow-e1)] sm:p-8">
+          <div>
+            <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+              Thông tin lịch hẹn &amp; Địa chỉ
+            </h2>
+            <p class="mt-1 text-xs text-ink-500">
+              Chọn địa chỉ nơi thợ sẽ tới sửa chữa và khung giờ thuận tiện nhất cho bạn.
+            </p>
+          </div>
+
+          <div class="space-y-5 text-xs sm:text-sm">
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <label class="block text-xs font-bold text-ink-800 sm:text-sm">
+                  Địa chỉ sửa chữa <span class="font-bold text-danger-600">*</span>
+                </label>
+                <span v-if="!addressesLoading && addresses.length > 0" class="text-[11px] font-medium text-ink-500">
+                  {{ addresses.length }} địa chỉ đã lưu
+                </span>
+              </div>
+
+              <div v-if="addressesLoading" class="space-y-2.5" aria-busy="true" aria-label="Đang tải địa chỉ">
+                <FhSkeleton v-for="i in 2" :key="i" height="64px" rounded="lg" />
+              </div>
+
+              <div
+                v-else-if="addressesLoadFailed"
+                role="alert"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-danger-200 bg-danger-50 p-3.5 text-sm text-danger-700"
+                data-testid="booking-addresses-error"
+              >
+                <span>Chưa tải được địa chỉ, vui lòng thử lại.</span>
+                <FhButton variant="secondary" size="sm" @click="loadAddresses">Thử lại</FhButton>
+              </div>
+
+              <!-- Custom select box for addresses -->
+              <div v-else-if="addresses.length > 0" class="space-y-2">
+                <div
+                  role="button"
+                  tabindex="0"
+                  class="flex cursor-pointer select-none items-center justify-between gap-3 rounded-[var(--radius-md)] border bg-white p-4 shadow-[var(--shadow-e1)] transition-colors duration-200"
+                  :class="isAddressDropdownOpen
+                    ? 'border-brand-600 ring-2 ring-brand-500/20'
+                    : 'border-ink-200 hover:border-brand-300 hover:bg-ink-50/40'"
+                  @click="toggleAddressDropdown"
+                  @keydown.enter.prevent="toggleAddressDropdown"
+                  @keydown.space.prevent="toggleAddressDropdown"
+                >
+                  <div class="flex min-w-0 flex-1 items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-brand-100 bg-brand-50 text-brand-600">
+                      <MapPin :size="18" />
+                    </div>
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-ink-900 sm:text-sm">
+                          {{ selectedAddress?.label || 'Địa chỉ tiếp nhận' }}
+                        </span>
+                        <span v-if="selectedAddress?.isDefault" class="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">
+                          Mặc định
+                        </span>
+                      </div>
+                      <div class="truncate text-xs font-medium text-ink-700">
+                        {{ selectedAddress?.line1 ? tidyAddressText(selectedAddress.line1) : 'Vui lòng chọn địa chỉ' }}
+                      </div>
+                      <div v-if="selectedAddress" class="truncate text-[11px] text-ink-400">
+                        {{ selectedAddress.district }}, {{ selectedAddress.province }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex shrink-0 items-center gap-2 pl-2">
+                    <span class="hidden text-xs font-semibold text-brand-600 sm:inline">
+                      {{ isAddressDropdownOpen ? 'Thu gọn' : 'Thay đổi' }}
+                    </span>
+                    <div
+                      class="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] bg-ink-100/80 text-ink-600 transition-transform duration-200"
+                      :class="{ 'rotate-180 bg-brand-50 text-brand-600': isAddressDropdownOpen }"
+                    >
+                      <ChevronDown :size="15" />
+                    </div>
+                  </div>
+                </div>
+
+                <Transition name="fade-slide">
+                  <div v-if="isAddressDropdownOpen" class="space-y-1.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-2.5 shadow-[var(--shadow-e2)]">
+                    <div class="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-400">
+                      Chọn địa chỉ trong sổ địa chỉ
+                    </div>
+
+                    <div class="max-h-60 space-y-1.5 overflow-y-auto pr-1">
+                      <div
+                        v-for="addr in addresses"
+                        :key="addr.id"
+                        role="option"
+                        :aria-selected="selectedAddressId === addr.id"
+                        class="flex cursor-pointer items-center justify-between gap-3 rounded-[var(--radius-sm)] border p-3 transition-colors duration-150"
+                        :class="selectedAddressId === addr.id
+                          ? 'border-brand-600 bg-brand-50/70 ring-1 ring-brand-500/20'
+                          : 'border-ink-100 bg-white hover:border-ink-200 hover:bg-ink-50'"
+                        @click="selectAddress(addr.id)"
+                      >
+                        <div class="flex min-w-0 flex-1 items-start gap-2.5">
+                          <div class="shrink-0 pt-0.5">
+                            <div
+                              class="flex h-4 w-4 items-center justify-center rounded-full border transition-colors"
+                              :class="selectedAddressId === addr.id
+                                ? 'border-brand-600 bg-brand-600 text-white'
+                                : 'border-ink-300 bg-white'"
+                            >
+                              <div v-if="selectedAddressId === addr.id" class="h-1.5 w-1.5 rounded-full bg-white"></div>
+                            </div>
+                          </div>
+
+                          <div class="min-w-0 flex-1 space-y-0.5">
+                            <div class="flex items-center gap-1.5">
+                              <span class="text-xs font-bold text-ink-900">{{ addr.label || 'Địa chỉ' }}</span>
+                              <span v-if="addr.isDefault" class="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+                                Mặc định
+                              </span>
+                            </div>
+                            <div class="truncate text-xs font-medium text-ink-700">{{ tidyAddressText(addr.line1) }}</div>
+                            <div class="truncate text-[11px] text-ink-400">{{ addr.district }}, {{ addr.province }}</div>
+                          </div>
+                        </div>
+
+                        <CheckCircle2 v-if="selectedAddressId === addr.id" :size="16" class="shrink-0 text-brand-600" />
+                      </div>
+                    </div>
+
+                    <div class="border-t border-ink-100 pt-1.5">
+                      <router-link
+                        to="/app/profile"
+                        class="flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-sm)] py-2 text-xs font-bold text-brand-600 transition-colors hover:bg-brand-50"
+                      >
+                        <Plus :size="14" /> Thêm địa chỉ mới vào sổ địa chỉ
+                      </router-link>
+                    </div>
+                  </div>
+                </Transition>
+              </div>
+
+              <!-- Empty address state -->
+              <div v-else class="space-y-3 rounded-[var(--radius-md)] border border-dashed border-ink-300 bg-ink-50/70 p-6 text-center">
+                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-ink-100 bg-white text-ink-400 shadow-[var(--shadow-e1)]">
+                  <MapPin :size="18" />
+                </div>
+                <div>
+                  <p class="text-xs font-bold text-ink-800 sm:text-sm">Bạn chưa có địa chỉ nào được lưu</p>
+                  <p class="mt-0.5 text-[11px] text-ink-500">Vui lòng thêm địa chỉ nhà để thợ có thể tới sửa chữa.</p>
+                </div>
+                <router-link
+                  to="/app/profile"
+                  class="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-brand-600 px-4 py-2 text-xs font-bold text-white shadow-[var(--shadow-e1)] transition-colors hover:bg-brand-700"
+                >
+                  <Plus :size="14" /> Thêm địa chỉ mới
+                </router-link>
+              </div>
+            </div>
+
+            <div class="space-y-3 border-t border-ink-100 pt-4">
+              <label class="flex items-center gap-1.5 text-xs font-bold text-ink-800 sm:text-sm">
+                <CalendarIcon :size="15" class="text-brand-600" />
+                <span>Thời gian thợ tới</span>
+              </label>
+              <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Kiểu đặt lịch">
+                <button
+                  type="button"
+                  class="rounded-[var(--radius-sm)] border px-3 py-2.5 text-left text-xs"
+                  :class="bookingMode === 'scheduled' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
+                  role="radio"
+                  :aria-checked="bookingMode === 'scheduled'"
+                  data-testid="mode-scheduled"
+                  @click="bookingMode = 'scheduled'"
+                >
+                  <span class="block font-bold text-ink-900">Đặt trước theo buổi</span>
+                  <span class="block text-ink-500">Chọn ngày và buổi sáng hoặc chiều</span>
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[var(--radius-sm)] border px-3 py-2.5 text-left text-xs"
+                  :class="bookingMode === 'urgent' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
+                  role="radio"
+                  :aria-checked="bookingMode === 'urgent'"
+                  data-testid="mode-urgent"
+                  @click="bookingMode = 'urgent'"
+                >
+                  <span class="flex items-center gap-1 font-bold text-ink-900"><Clock :size="13" /> Tới ngay</span>
+                  <span class="block text-ink-500">Thợ gần bạn đang rảnh tới trong khoảng 2 giờ</span>
+                </button>
+              </div>
+              <BookingSessionPicker v-if="bookingMode === 'scheduled'" v-model="selectedSession" :sessions="sessions" compact />
+            </div>
+
+            <div class="space-y-1.5 border-t border-ink-100 pt-4">
+              <label for="customer-note" class="block text-xs font-bold text-ink-800 sm:text-sm">
+                Ghi chú cho thợ <span class="font-normal text-ink-400">(không bắt buộc)</span>
+              </label>
+              <textarea
+                id="customer-note"
+                v-model="customerNote"
+                rows="2"
+                maxlength="1000"
+                placeholder="Ví dụ: gọi trước khi tới, nhà trong hẻm, gửi xe ở đâu..."
+                class="w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+                data-testid="customer-note"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
+              <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
+            </FhButton>
+            <FhButton variant="primary" size="md" class="w-full sm:w-auto" data-testid="step2-next" @click="goToNextStepFrom2">
+              Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
             </FhButton>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Step 2: Address & Schedule -->
-    <div v-else-if="step === 2" key="step-2" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div>
-          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-            Thông tin lịch hẹn & Địa chỉ
-          </h2>
-          <p class="text-xs text-ink-500 mt-1">
-            Chọn địa chỉ nơi thợ sẽ tới sửa chữa và khung giờ thuận tiện nhất cho bạn.
-          </p>
-        </div>
-
-        <div class="space-y-5 text-xs sm:text-sm">
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="block font-bold text-ink-800 text-xs sm:text-sm">
-                Địa chỉ sửa chữa <span class="text-danger-600 font-bold">*</span>
-              </label>
-              <span v-if="!catalogLoading && addresses.length > 0" class="text-[11px] text-ink-500 font-medium">
-                {{ addresses.length }} địa chỉ đã lưu
-              </span>
+      <!-- Step 3: conversation with the assistant before booking -->
+      <div v-else-if="step === 3" key="step-3" class="mx-auto w-full max-w-3xl space-y-6">
+        <div class="space-y-5 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-[var(--shadow-e1)] sm:p-8">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Trò chuyện với trợ lý AI</h2>
+              <p class="mt-1 text-sm text-ink-500 text-pretty">
+                Trợ lý có thể hỏi thêm để chẩn đoán sát hơn. Bạn trả lời, hỏi thêm, gửi thêm ảnh hoặc nhờ đổi dịch vụ ngay tại đây, xong rồi mới đặt thợ.
+              </p>
             </div>
-
-            <div v-if="catalogLoading" class="space-y-2.5" aria-busy="true" aria-label="Đang tải địa chỉ">
-              <FhSkeleton v-for="i in 2" :key="i" height="64px" rounded="lg" />
-            </div>
-
-            <!-- Custom Select Box for Addresses -->
-            <div v-else-if="addresses.length > 0" class="space-y-2">
-              <!-- Selected Address Display (Select Trigger) -->
-              <div
-                role="button"
-                tabindex="0"
-                class="p-4 rounded-2xl border bg-white transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 shadow-xs select-none"
-                :class="isAddressDropdownOpen
-                  ? 'border-brand-600 ring-2 ring-brand-500/20'
-                  : 'border-ink-200 hover:border-brand-300 hover:bg-ink-50/40'"
-                @click="toggleAddressDropdown"
-                @keydown.enter.prevent="toggleAddressDropdown"
-                @keydown.space.prevent="toggleAddressDropdown"
-              >
-                <div class="flex items-start gap-3 min-w-0 flex-1">
-                  <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-100 shadow-2xs">
-                    <MapPin :size="18" />
-                  </div>
-                  <div class="space-y-0.5 min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                      <span class="font-bold text-xs sm:text-sm text-ink-900">
-                        {{ selectedAddress?.label || 'Địa chỉ tiếp nhận' }}
-                      </span>
-                      <span
-                        v-if="selectedAddress?.isDefault"
-                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200"
-                      >
-                        Mặc định
-                      </span>
-                    </div>
-                    <div class="text-xs text-ink-700 font-medium truncate">
-                      {{ selectedAddress?.line1 ? tidyAddressText(selectedAddress.line1) : 'Vui lòng chọn địa chỉ' }}
-                    </div>
-                    <div v-if="selectedAddress" class="text-[11px] text-ink-400 truncate">
-                      {{ selectedAddress.district }}, {{ selectedAddress.province }}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2 shrink-0 pl-2">
-                  <span class="text-xs font-semibold text-brand-600 hidden sm:inline">
-                    {{ isAddressDropdownOpen ? 'Thu gọn' : 'Thay đổi' }}
-                  </span>
-                  <div
-                    class="w-7 h-7 rounded-lg bg-ink-100/80 flex items-center justify-center text-ink-600 transition-transform duration-200"
-                    :class="{ 'rotate-180 bg-brand-50 text-brand-600': isAddressDropdownOpen }"
-                  >
-                    <ChevronDown :size="15" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Dropdown Options Menu -->
-              <Transition name="fade-slide">
-                <div
-                  v-if="isAddressDropdownOpen"
-                  class="rounded-2xl border border-ink-200 bg-white p-2.5 shadow-md space-y-1.5"
-                >
-                  <div class="px-2 py-1 text-[11px] font-bold text-ink-400 uppercase tracking-wider">
-                    Chọn địa chỉ trong sổ địa chỉ
-                  </div>
-
-                  <div class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    <div
-                      v-for="addr in addresses"
-                      :key="addr.id"
-                      role="option"
-                      :aria-selected="selectedAddressId === addr.id"
-                      class="p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-3 transition-all duration-150"
-                      :class="selectedAddressId === addr.id
-                        ? 'border-brand-600 bg-brand-50/70 ring-1 ring-brand-500/20'
-                        : 'border-ink-100 bg-white hover:bg-ink-50 hover:border-ink-200'"
-                      @click="selectAddress(addr.id)"
-                    >
-                      <div class="flex items-start gap-2.5 min-w-0 flex-1">
-                        <!-- Custom Radio Dot -->
-                        <div class="pt-0.5 shrink-0">
-                          <div
-                            class="w-4 h-4 rounded-full border flex items-center justify-center transition-colors"
-                            :class="selectedAddressId === addr.id
-                              ? 'border-brand-600 bg-brand-600 text-white'
-                              : 'border-ink-300 bg-white'"
-                          >
-                            <div v-if="selectedAddressId === addr.id" class="w-1.5 h-1.5 rounded-full bg-white"></div>
-                          </div>
-                        </div>
-
-                        <div class="space-y-0.5 min-w-0 flex-1">
-                          <div class="flex items-center gap-1.5">
-                            <span class="font-bold text-xs text-ink-900">
-                              {{ addr.label || 'Địa chỉ' }}
-                            </span>
-                            <span
-                              v-if="addr.isDefault"
-                              class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-50 text-brand-700"
-                            >
-                              Mặc định
-                            </span>
-                          </div>
-                          <div class="text-xs text-ink-700 font-medium truncate">{{ tidyAddressText(addr.line1) }}</div>
-                          <div class="text-[11px] text-ink-400 truncate">{{ addr.district }}, {{ addr.province }}</div>
-                        </div>
-                      </div>
-
-                      <CheckCircle2 v-if="selectedAddressId === addr.id" :size="16" class="text-brand-600 shrink-0" />
-                    </div>
-                  </div>
-
-                  <!-- Add new address action link -->
-                  <div class="pt-1.5 border-t border-ink-100">
-                    <router-link
-                      to="/app/profile"
-                      class="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold text-brand-600 hover:bg-brand-50 transition-colors"
-                    >
-                      <Plus :size="14" /> Thêm địa chỉ mới vào sổ địa chỉ
-                    </router-link>
-                  </div>
-                </div>
-              </Transition>
-            </div>
-
-            <!-- Empty address state -->
-            <div
-              v-else
-              class="p-6 rounded-2xl border border-dashed border-ink-300 bg-ink-50/70 text-center space-y-3"
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-ink-600 hover:bg-ink-50 disabled:opacity-40"
+              :disabled="aiConversation.isThinking.value || aiConversation.turnCount.value === 0"
+              data-testid="ai-restart"
+              @click="restartAiConversation"
             >
-              <div class="w-10 h-10 rounded-full bg-white text-ink-400 flex items-center justify-center mx-auto shadow-xs border border-ink-100">
-                <MapPin :size="18" />
-              </div>
-              <div>
-                <p class="text-xs sm:text-sm font-bold text-ink-800">Bạn chưa có địa chỉ nào được lưu</p>
-                <p class="text-[11px] text-ink-500 mt-0.5">Vui lòng thêm địa chỉ nhà để thợ có thể tới sửa chữa.</p>
-              </div>
-              <router-link
-                to="/app/profile"
-                class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors shadow-xs"
-              >
-                <Plus :size="14" /> Thêm địa chỉ mới
-              </router-link>
-            </div>
+              <RotateCcw :size="15" />
+              <span class="hidden whitespace-nowrap sm:inline">Hỏi lại từ đầu</span>
+            </button>
           </div>
 
-          <div class="space-y-3 pt-4 border-t border-ink-100">
-            <label class="block font-bold text-ink-800 text-xs sm:text-sm flex items-center gap-1.5">
-              <CalendarIcon :size="15" class="text-brand-600" />
-              <span>Thời gian thợ tới</span>
-            </label>
-            <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Kiểu đặt lịch">
-              <button
-                type="button"
-                class="rounded-xl border px-3 py-2.5 text-left text-xs"
-                :class="bookingMode === 'scheduled' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
-                role="radio"
-                :aria-checked="bookingMode === 'scheduled'"
-                data-testid="mode-scheduled"
-                @click="bookingMode = 'scheduled'"
-              >
-                <span class="block font-bold text-ink-900">Đặt trước theo buổi</span>
-                <span class="block text-ink-500">Chọn ngày và buổi sáng hoặc chiều</span>
-              </button>
-              <button
-                type="button"
-                class="rounded-xl border px-3 py-2.5 text-left text-xs"
-                :class="bookingMode === 'urgent' ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500' : 'border-ink-200 bg-white'"
-                role="radio"
-                :aria-checked="bookingMode === 'urgent'"
-                data-testid="mode-urgent"
-                @click="bookingMode = 'urgent'"
-              >
-                <span class="block font-bold text-ink-900 flex items-center gap-1"><Clock :size="13" /> Tới ngay</span>
-                <span class="block text-ink-500">Thợ gần bạn đang rảnh tới trong khoảng 2 giờ</span>
-              </button>
-            </div>
-            <BookingSessionPicker v-if="bookingMode === 'scheduled'" v-model="selectedSession" :sessions="sessions" />
+          <div class="h-[30rem] max-h-[65dvh] overflow-hidden rounded-[var(--radius-md)] border border-ink-200">
+            <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
+              <template #pinned>
+                <div
+                  v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
+                  class="flex flex-wrap items-center gap-3 border-t border-brand-100 bg-brand-50 px-3.5 py-2.5"
+                  data-testid="ai-suggested-service"
+                >
+                  <div class="min-w-0 flex-1">
+                    <p class="text-xs font-semibold text-brand-700">Trợ lý gợi ý dịch vụ</p>
+                    <p class="text-sm font-semibold text-ink-900">{{ aiSuggested.nameVi }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="whitespace-nowrap rounded-[var(--radius-sm)] bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                    data-testid="ai-use-suggested"
+                    @click="useSuggestedService"
+                  >
+                    Đổi sang dịch vụ này
+                  </button>
+                </div>
+                <div class="space-y-2 border-t border-ink-100 bg-ink-50 px-3.5 py-2.5 text-sm" data-testid="ai-current-service">
+                  <div v-if="selectedService" class="flex min-w-0 items-center gap-2">
+                    <span class="whitespace-nowrap text-ink-500">Dịch vụ sẽ đặt:</span>
+                    <span class="min-w-0 truncate font-semibold text-ink-900">{{ selectedService.name }}</span>
+                  </div>
+                  <p v-else-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value" class="text-warning-800" data-testid="ai-pick-service-hint">Chọn dịch vụ ở ô bên dưới để đặt thợ.</p>
+                  <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
+                  <label
+                    v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
+                    class="flex items-center gap-2 text-ink-600"
+                  >
+                    <span class="whitespace-nowrap">Đổi dịch vụ khác:</span>
+                    <select
+                      class="h-9 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-900"
+                      data-testid="ai-manual-service"
+                      :value="selectedServiceId"
+                      @change="chooseService(($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="" disabled>Chọn dịch vụ</option>
+                      <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
+                    </select>
+                  </label>
+                </div>
+              </template>
+            </AiConversationThread>
           </div>
 
-          <div class="space-y-1.5 pt-4 border-t border-ink-100">
-            <label for="customer-note" class="block font-bold text-ink-800 text-xs sm:text-sm">
-              Ghi chú cho thợ <span class="font-normal text-ink-400">(không bắt buộc)</span>
-            </label>
-            <textarea
-              id="customer-note"
-              v-model="customerNote"
-              rows="2"
-              maxlength="1000"
-              placeholder="Ví dụ: gọi trước khi tới, nhà trong hẻm, gửi xe ở đâu..."
-              class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
-              data-testid="customer-note"
-            />
+          <div class="flex items-center justify-between gap-3 border-t border-ink-100 pt-5">
+            <FhButton variant="ghost" size="md" @click="step = 1">
+              <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
+            </FhButton>
+            <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || !selectedServiceId" data-testid="ai-continue" @click="leaveAiStep">
+              Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
+            </FhButton>
           </div>
-
-        </div>
-
-        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = isAiFlow ? 3 : 1">
-            <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
-          </FhButton>
-          <FhButton variant="primary" size="md" class="w-full sm:w-auto" data-testid="step2-next" @click="goToNextStepFrom2">
-            Tiếp tục: Xác nhận đơn <ArrowRight :size="15" class="ml-1.5" />
-          </FhButton>
-
         </div>
       </div>
-    </div>
 
-    <!-- Step 3: conversation with the assistant before booking -->
-    <div v-else-if="step === 3" key="step-3" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-5 sm:p-8 shadow-xs space-y-5">
-        <div class="flex items-start justify-between gap-3">
+      <!-- Step 4: final summary & launch matching -->
+      <div v-else-if="step === 4" key="step-4" class="mx-auto w-full max-w-3xl space-y-6">
+        <div class="space-y-6 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-6 shadow-[var(--shadow-e1)] sm:p-8">
           <div>
-            <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">Trò chuyện với trợ lý AI</h2>
-            <p class="text-sm text-ink-500 mt-1 text-pretty">
-              Trợ lý có thể hỏi thêm để chẩn đoán sát hơn. Bạn trả lời, hỏi thêm, gửi thêm ảnh hoặc nhờ đổi dịch vụ ngay tại đây, xong rồi mới đặt thợ.
+            <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+              Xác nhận yêu cầu sửa chữa
+            </h2>
+            <p class="mt-1 text-xs text-ink-500">
+              Kiểm tra lại thông tin trước khi kích hoạt hệ thống ghép thợ FixHome.
             </p>
           </div>
-          <button
-            type="button"
-            class="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-ink-600 hover:bg-ink-50 disabled:opacity-40"
-            :disabled="aiConversation.isThinking.value || aiConversation.turnCount.value === 0"
-            data-testid="ai-restart"
-            @click="restartAiConversation"
-          >
-            <RotateCcw :size="15" />
-            <span class="hidden sm:inline whitespace-nowrap">Hỏi lại từ đầu</span>
-          </button>
-        </div>
 
-        <div class="h-[30rem] max-h-[65dvh] rounded-2xl border border-ink-200 overflow-hidden">
-          <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
-            <template #pinned>
-              <div
-                v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
-                class="flex flex-wrap items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100"
-                data-testid="ai-suggested-service"
-              >
-                <div class="flex-1 min-w-0">
-                  <p class="text-xs font-semibold text-brand-700">Trợ lý gợi ý dịch vụ</p>
-                  <p class="text-sm font-semibold text-ink-900">{{ aiSuggested.nameVi }}</p>
-                </div>
-                <button
-                  type="button"
-                  class="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 whitespace-nowrap"
-                  data-testid="ai-use-suggested"
-                  @click="useSuggestedService"
-                >
-                  Đổi sang dịch vụ này
-                </button>
+          <div v-if="aiSessionId" class="space-y-3">
+            <dl
+              v-if="aiRecap"
+              data-testid="ai-recap"
+              class="space-y-2 rounded-[var(--radius-md)] border border-ink-200 bg-ink-50 p-4 text-sm"
+            >
+              <div v-if="aiRecap.device" class="flex gap-3">
+                <dt class="w-28 shrink-0 text-ink-500">Thiết bị</dt>
+                <dd class="text-ink-900">{{ aiRecap.device }}</dd>
               </div>
-              <div class="px-3.5 py-2.5 bg-ink-50 border-t border-ink-100 text-sm space-y-2" data-testid="ai-current-service">
-                <div v-if="selectedService" class="flex items-center gap-2 min-w-0">
-                  <span class="text-ink-500 whitespace-nowrap">Dịch vụ sẽ đặt:</span>
-                  <span class="font-semibold text-ink-900 min-w-0 truncate">{{ selectedService.name }}</span>
-                </div>
-                <p v-else-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value" class="text-warning-800" data-testid="ai-pick-service-hint">Chọn dịch vụ ở ô bên dưới để đặt thợ.</p>
-                <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
-                <label
-                  v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
-                  class="flex items-center gap-2 text-ink-600"
-                >
-                  <span class="whitespace-nowrap">Đổi dịch vụ khác:</span>
-                  <select
-                    class="min-w-0 flex-1 h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm text-ink-900"
-                    data-testid="ai-manual-service"
-                    :value="selectedServiceId"
-                    @change="chooseService(($event.target as HTMLSelectElement).value)"
-                  >
-                    <option value="" disabled>Chọn dịch vụ</option>
-                    <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
-                  </select>
-                </label>
+              <div v-if="aiRecap.faults.length" class="flex gap-3">
+                <dt class="w-28 shrink-0 text-ink-500">Có thể là</dt>
+                <dd class="text-ink-900">{{ aiRecap.faults.join(', ') }}</dd>
               </div>
-            </template>
-          </AiConversationThread>
-        </div>
+              <div v-if="aiRecap.told.length" class="flex gap-3">
+                <dt class="w-28 shrink-0 text-ink-500">Bạn đã cho biết</dt>
+                <dd class="text-ink-900">
+                  <ul class="space-y-0.5" data-testid="ai-recap-told">
+                    <li v-for="line in aiRecap.told" :key="line" class="text-pretty">{{ line }}</li>
+                  </ul>
+                </dd>
+              </div>
+            </dl>
+            <p
+              data-testid="ai-summary-note"
+              class="rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 p-3.5 text-sm text-warning-900 text-pretty"
+            >
+              Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
+            </p>
+          </div>
 
-        <div class="flex items-center justify-between gap-3 pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 1">
-            <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
-          </FhButton>
-          <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || !selectedServiceId" data-testid="ai-continue" @click="leaveAiStep">
-            Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
-          </FhButton>
-        </div>
-      </div>
-    </div>
+          <div class="space-y-4 text-xs sm:text-sm">
+            <div class="space-y-3 divide-y divide-ink-200/60 rounded-[var(--radius-md)] border border-ink-200 bg-ink-50 p-5">
+              <div class="flex items-center justify-between pb-2">
+                <span class="text-ink-500">Dịch vụ yêu cầu:</span>
+                <span class="font-bold text-ink-900">{{ selectedService?.name }}</span>
+              </div>
 
-    <!-- Step 4: Final Summary & Launch Matching -->
-    <div v-else-if="step === 4" key="step-4" class="space-y-6">
-      <div class="bg-white rounded-3xl border border-ink-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div>
-          <h2 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
-            Xác nhận yêu cầu sửa chữa
-          </h2>
-          <p class="text-xs text-ink-500 mt-1">
-            Kiểm tra lại thông tin trước khi kích hoạt hệ thống ghép thợ FixHome.
-          </p>
-        </div>
+              <template v-if="isFixedPrice && selectedFixedPrice !== null">
+                <div class="flex items-center justify-between py-2">
+                  <span class="text-ink-500">Đơn giá niêm yết:</span>
+                  <span class="font-semibold text-ink-800 font-num">
+                    <FhMoney :amount="selectedFixedPrice" /> / {{ selectedService?.unit || 'thiết bị' }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                  <span class="text-ink-500">Số lượng:</span>
+                  <span class="font-bold text-ink-900 font-num">{{ quantity }} {{ selectedService?.unit || 'thiết bị' }}</span>
+                </div>
+                <div class="flex items-center justify-between border-y border-brand-200 bg-brand-50/70 -mx-5 px-5 py-3">
+                  <span class="font-bold text-brand-900">Tổng thanh toán niêm yết:</span>
+                  <span class="text-base font-bold text-brand-700 font-num">
+                    <FhMoney :amount="totalFixedAmount" />
+                  </span>
+                </div>
+              </template>
 
-        <div v-if="aiSessionId" class="space-y-3">
-          <dl
-            v-if="aiRecap"
-            data-testid="ai-recap"
-            class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2 text-sm"
-          >
-            <div v-if="aiRecap.device" class="flex gap-3">
-              <dt class="w-28 shrink-0 text-ink-500">Thiết bị</dt>
-              <dd class="text-ink-900">{{ aiRecap.device }}</dd>
-            </div>
-            <div v-if="aiRecap.faults.length" class="flex gap-3">
-              <dt class="w-28 shrink-0 text-ink-500">Có thể là</dt>
-              <dd class="text-ink-900">{{ aiRecap.faults.join(', ') }}</dd>
-            </div>
-            <div v-if="aiRecap.told.length" class="flex gap-3">
-              <dt class="w-28 shrink-0 text-ink-500">Bạn đã cho biết</dt>
-              <dd class="text-ink-900">
-                <ul class="space-y-0.5" data-testid="ai-recap-told">
-                  <li v-for="line in aiRecap.told" :key="line" class="text-pretty">{{ line }}</li>
-                </ul>
-              </dd>
-            </div>
-          </dl>
-          <p
-            data-testid="ai-summary-note"
-            class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-sm text-warning-900 text-pretty"
-          >
-            Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
-          </p>
-        </div>
+              <!-- P012: the tier the server confirmed for the reported device
+                   facts; the binding snapshot is created by POST /bookings. -->
+              <template v-else-if="catalogPricingConfirmed">
+                <div class="flex items-center justify-between py-2" data-testid="confirm-v2-scope">
+                  <span class="text-ink-500">Phạm vi tiền công:</span>
+                  <span class="max-w-xs text-right font-semibold text-ink-900 text-pretty">{{ catalogPricingConfirmed.scopeVi }}</span>
+                </div>
+                <div class="flex items-center justify-between py-2" data-testid="confirm-v2-price">
+                  <span class="text-ink-500">Tiền công theo phạm vi:</span>
+                  <span class="font-bold text-brand-700 font-num">
+                    <FhMoney :amount="catalogPricingConfirmed.laborPriceVnd" />
+                  </span>
+                </div>
+              </template>
+              <template v-else-if="catalogLaborRange">
+                <div class="flex items-center justify-between py-2" data-testid="confirm-v2-range">
+                  <span class="text-ink-500">Tiền công tham khảo:</span>
+                  <span class="font-semibold text-warning-800 font-num">
+                    <FhMoney :amount="catalogLaborRange.minLaborVnd" /> – <FhMoney :amount="catalogLaborRange.maxLaborVnd" />
+                  </span>
+                </div>
+              </template>
 
-        <div class="space-y-4 text-xs sm:text-sm">
-          <div class="p-5 rounded-2xl bg-ink-50 border border-ink-200 space-y-3 divide-y divide-ink-200/60">
-            <div class="flex items-center justify-between pb-2">
-              <span class="text-ink-500">Dịch vụ yêu cầu:</span>
-              <span class="font-bold text-ink-900">{{ services.find((s) => s.id === selectedServiceId)?.name }}</span>
-            </div>
-
-            <!-- Fixed Price Breakdown -->
-            <template v-if="isFixedPrice">
               <div class="flex items-center justify-between py-2">
-                <span class="text-ink-500">Đơn giá niêm yết:</span>
-                <span class="font-semibold text-ink-800 font-num">
-                  <FhMoney :amount="selectedService?.fixedPrice || selectedService?.basePrice || 0" /> / {{ selectedService?.unit || 'thiết bị' }}
+                <span class="text-ink-500">Địa chỉ thực hiện:</span>
+                <span class="max-w-xs text-right font-semibold text-ink-900">
+                  {{ tidyAddressText(addresses.find((a) => a.id === selectedAddressId)?.line1) }}
                 </span>
               </div>
               <div class="flex items-center justify-between py-2">
-                <span class="text-ink-500">Số lượng:</span>
-                <span class="font-bold text-ink-900 font-num">{{ quantity }} {{ selectedService?.unit || 'thiết bị' }}</span>
+                <span class="text-ink-500">Thời gian hẹn:</span>
+                <span class="text-right font-bold text-ink-900">{{ formattedScheduleDisplay }}</span>
               </div>
-              <div class="flex items-center justify-between py-2 bg-brand-50/70 -mx-5 px-5 py-3 border-y border-brand-200">
-                <span class="font-bold text-brand-900">Tổng thanh toán niêm yết:</span>
-                <span class="font-bold text-brand-700 text-base font-num">
-                  <FhMoney :amount="totalFixedAmount" />
-                </span>
-              </div>
-            </template>
 
-            <div class="flex items-center justify-between py-2">
-              <span class="text-ink-500">Địa chỉ thực hiện:</span>
-              <span class="font-semibold text-ink-900 text-right max-w-xs">
-                {{ tidyAddressText(addresses.find((a) => a.id === selectedAddressId)?.line1) }}
-              </span>
             </div>
-            <div class="flex items-center justify-between py-2">
-              <span class="text-ink-500">Thời gian hẹn:</span>
-              <span class="font-bold text-ink-900 text-right">{{ formattedScheduleDisplay }}</span>
+
+            <div
+              v-if="isFixedPrice && selectedFixedPrice !== null"
+              class="flex items-start gap-3 rounded-[var(--radius-md)] border border-success-200 bg-success-50 p-4 text-success-900"
+            >
+              <CheckCircle2 :size="18" class="mt-0.5 shrink-0 text-success-600" />
+              <p class="text-xs leading-relaxed">
+                <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi kỹ thuật viên hoàn thành, không phát sinh chi phí khảo sát.
+              </p>
+            </div>
+            <div
+              v-else-if="catalogPricingConfirmed"
+              data-testid="confirm-v2-price-note"
+              class="flex items-start gap-3 rounded-[var(--radius-md)] border border-success-200 bg-success-50 p-4 text-success-900"
+            >
+              <CheckCircle2 :size="18" class="mt-0.5 shrink-0 text-success-600" />
+              <p class="text-xs leading-relaxed">
+                <strong>Tiền công theo phạm vi đã chọn:</strong> Mức tiền công trên do hệ thống ghi nhận theo đúng phạm vi bạn đã chọn, chưa gồm linh kiện và vật tư. Hệ thống chốt đúng phạm vi và mức này khi bạn xác nhận tìm thợ; thợ kiểm tra lại đúng phạm vi tại nhà.
+              </p>
+            </div>
+            <div
+              v-else-if="catalogLaborRange"
+              data-testid="confirm-v2-range-note"
+              class="flex items-start gap-3 rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 p-4 text-warning-900"
+            >
+              <AlertTriangle :size="18" class="mt-0.5 shrink-0 text-warning-600" />
+              <p class="text-xs leading-relaxed">
+                <strong>Giá tham khảo — thợ khảo sát và báo giá, khách duyệt.</strong>
+                Khoảng tiền công trên chưa gồm linh kiện và vật tư; thợ sẽ kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.
+              </p>
+            </div>
+            <div
+              v-else
+              class="flex items-start gap-3 rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-4 text-brand-900"
+            >
+              <ShieldCheck :size="18" class="mt-0.5 shrink-0 text-brand-600" />
+              <p class="text-xs leading-relaxed">
+                <strong>Cam kết giá minh bạch:</strong> Thợ FixHome sẽ liên hệ và có mặt tận nơi để khảo sát. Thợ chỉ bắt đầu sửa chữa khi bạn đã đồng ý với báo giá chi tiết.
+              </p>
             </div>
             <div v-if="chatAttachmentSummary" class="py-2 border-t border-ink-100 space-y-2" data-testid="confirm-attachments">
               <div class="flex items-center justify-between gap-3">
@@ -1838,74 +2066,73 @@ const createAndFindTech = async () => {
               <p v-if="chatPhotosLeftOut > 0" class="text-xs text-warning-700" data-testid="confirm-photos-left-out">Đã đủ 5 ảnh nên {{ chatPhotosLeftOut }} ảnh gửi trong trò chuyện không kèm theo.</p>
               <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, anh/chị có thể bấm Bỏ để đặt thợ không kèm.</p>
             </div>
+
+            <!-- The request may have reached the server: never send it again blindly -->
+            <div
+              v-if="submitOutcomeUnknown"
+              role="alert"
+              class="flex items-start gap-3 rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900"
+              data-testid="booking-submit-unknown"
+            >
+              <AlertTriangle :size="18" class="mt-0.5 shrink-0 text-warning-600" />
+              <p>
+                Chưa xác nhận được kết quả gửi yêu cầu. Vì hệ thống có thể đã ghi nhận, FixHome không tự gửi lại.
+                Bạn kiểm tra mục <router-link to="/app/orders" class="font-bold underline">Đơn của tôi</router-link> trước; nếu chưa có, tải lại trang rồi đặt lại.
+              </p>
+            </div>
           </div>
 
-          <!-- Trust guarantee -->
-          <div
-            v-if="isFixedPrice"
-            class="p-4 rounded-2xl bg-success-50 border border-success-200 text-success-900 flex items-start gap-3"
-          >
-            <CheckCircle2 :size="18" class="text-success-600 shrink-0 mt-0.5" />
-            <p class="text-xs leading-relaxed">
-              <strong>Giá niêm yết trọn gói:</strong> Kỹ thuật viên sẽ có mặt theo đúng giờ hẹn và hoàn thành dịch vụ theo mức giá cố định niêm yết. Quý khách chỉ thanh toán đúng số tiền trên sau khi kỹ thuật viên hoàn thành, không phát sinh chi phí khảo sát.
-            </p>
-          </div>
-          <div
-            v-else
-            class="p-4 rounded-2xl bg-brand-50 border border-brand-200 text-brand-900 flex items-start gap-3"
-          >
-            <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
-            <p class="text-xs leading-relaxed">
-              <strong>Cam kết giá minh bạch:</strong> Thợ FixHome sẽ liên hệ và có mặt tận nơi để khảo sát. Thợ chỉ bắt đầu sửa chữa khi bạn đã đồng ý với báo giá chi tiết.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-5 border-t border-ink-100">
-          <FhButton variant="ghost" size="md" @click="step = 2">
-            <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
-          </FhButton>
+          <div class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <FhButton variant="ghost" size="md" @click="step = 2">
+              <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
+            </FhButton>
 
           <FhButton
             variant="primary"
             size="lg"
             class="w-full sm:w-auto"
             :loading="loading"
-            :disabled="chatUploads.busy > 0 || chatUploads.failed > 0"
+            :disabled="loading || submitOutcomeUnknown || chatUploads.busy > 0 || chatUploads.failed > 0 || !isCatalogV2PreviewReady"
             data-testid="booking-submit"
             @click="createAndFindTech"
           >
             <template v-if="chatUploads.busy > 0">Đang gửi ảnh, video cho thợ {{ Math.round(chatUploads.progress * 100) }}%</template>
             <template v-else>Tìm kỹ thuật viên ngay <Wrench :size="16" class="ml-1.5" /></template>
           </FhButton>
+          </div>
         </div>
       </div>
-    </div>
-  </Transition>
-</div>
+    </Transition>
+
+    <!-- Full service description. Teleported, so it is never nested inside the
+         card button that opened it; opening it never changes the selection. -->
+    <ServiceDetailsDialog
+      :open="!!detailsServiceId"
+      :service="detailsService"
+      :selected="isDetailsSelected"
+      :category-name="detailsCategoryName"
+      @close="closeServiceDetails"
+      @confirm="chooseServiceFromDetails"
+    />
+  </div>
 </template>
 
 <style scoped>
 .wizard-step-enter-active,
-.wizard-step-leave-active {
-  transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.wizard-step-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
-.wizard-step-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
+.wizard-step-leave-active { transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1); }
+.wizard-step-enter-from { opacity: 0; transform: translateY(6px); }
+.wizard-step-leave-to { opacity: 0; transform: translateY(-6px); }
 .fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-}
+.fade-slide-leave-active { transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
 .fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
+.fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
+.booking-step1-grid--catalog { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.booking-request-configuration { scroll-margin-top: 6rem; }
+.booking-step1-grid--catalog :deep([data-testid="booking-device-details"] label > span) { min-height: 44px; }
+@media (min-width: 1100px) {
+  .booking-step1-grid--catalog { grid-template-columns: minmax(0, 42fr) minmax(0, 58fr); align-items: start; gap: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wizard-step-enter-active, .wizard-step-leave-active, .fade-slide-enter-active, .fade-slide-leave-active { transition: none; }
 }
 </style>

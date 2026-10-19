@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { whileOffline } from '../services/live-updates';
 import { bookingFormKey } from '../utils/booking-form-key';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useChatStore } from '../stores/chat.store';
@@ -34,6 +34,10 @@ const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
 const notifStore = useNotificationsStore();
 const callStore = useCallStore();
+const bookingStep1Wide = ref(false);
+provide('customer-booking-layout-width', (wide: boolean) => {
+  bookingStep1Wide.value = wide;
+});
 
 // Pages with a fixed action bar at the bottom (route meta actionBar) need the
 // floating chat buttons lifted above it.
@@ -315,7 +319,12 @@ const handleLogout = async () => {
       </p>
     </div>
 
-    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-44 sm:pb-48 lg:pb-10'">
+    <main
+      class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6"
+      :class="[onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-44 sm:pb-48 lg:pb-10', { 'customer-main--booking-wide': bookingStep1Wide }]"
+      :style="bookingStep1Wide ? { maxWidth: '1120px' } : undefined"
+      data-testid="customer-layout-main"
+    >
       <router-view v-slot="{ Component, route: current }">
         <component :is="Component" :key="bookingFormKey(current)" />
       </router-view>

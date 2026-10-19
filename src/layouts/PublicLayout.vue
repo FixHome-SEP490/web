@@ -70,11 +70,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="public-shell flex min-h-screen flex-col bg-white text-ink-900">
+  <div class="public-shell flex min-h-screen min-w-0 flex-col bg-white text-ink-900">
     <a href="#main-content" class="skip-link">Đến nội dung chính</a>
     <header
       ref="header"
-      class="sticky top-0 z-40 border-b transition-all duration-300"
+      class="public-header sticky top-0 z-40 min-w-0 border-b transition-all duration-300"
       :class="isScrolled ? 'border-ink-200/80 bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200 bg-white'"
     >
       <div
@@ -87,7 +87,7 @@ onUnmounted(() => {
             <span class="text-brand-600">Fix</span><span class="text-green-600">Home</span>
           </span>
         </router-link>
-        <nav aria-label="Điều hướng chính" class="hidden items-center gap-7 xl:flex">
+        <nav aria-label="Điều hướng chính" class="public-desktop-nav items-center gap-7">
           <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="public-nav-link">
             {{ item.label }}
           </router-link>
@@ -105,7 +105,7 @@ onUnmounted(() => {
             <AccountMenu context="public" @logout="logout" />
           </template>
           <template v-else>
-            <div class="hidden xl:block">
+            <div class="public-desktop-login">
               <router-link to="/login" class="public-nav-link">Đăng nhập</router-link>
             </div>
             <div class="hidden sm:block">
@@ -118,7 +118,7 @@ onUnmounted(() => {
           <button
             ref="menuTrigger"
             type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-sm border border-ink-200 xl:hidden"
+            class="public-menu-trigger h-12 w-12 shrink-0 items-center justify-center rounded-sm border border-ink-200"
             :aria-label="mobileMenuOpen ? 'Đóng menu' : 'Mở menu'"
             :aria-expanded="mobileMenuOpen"
             aria-controls="public-mobile-menu"
@@ -134,7 +134,7 @@ onUnmounted(() => {
         v-if="mobileMenuOpen"
         id="public-mobile-menu"
         aria-label="Điều hướng trên di động"
-        class="absolute inset-x-0 top-full flex max-h-[calc(100dvh-80px)] flex-col overflow-y-auto border-b border-ink-200 bg-white px-4 pb-6 shadow-(--shadow-e2) xl:hidden"
+        class="public-mobile-menu absolute inset-x-0 top-full flex max-h-[calc(100dvh-80px)] flex-col overflow-y-auto border-b border-ink-200 bg-white px-4 pb-6 shadow-(--shadow-e2)"
       >
         <router-link
           v-for="item in navigation"
@@ -285,6 +285,24 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.public-header {
+  container: public-header / inline-size;
+}
+.public-desktop-nav,
+.public-desktop-login {
+  display: none;
+}
+.public-menu-trigger {
+  display: flex;
+}
+/* Use the header's available width, including CSS zoom, rather than only the
+   viewport media query. Keep every action available through the compact menu. */
+@container public-header (min-width: 72rem) {
+  .public-desktop-nav { display: flex; }
+  .public-desktop-login { display: block; }
+  .public-menu-trigger,
+  .public-mobile-menu { display: none; }
+}
 .public-container {
   width: 100%;
   max-width: 1280px;
@@ -295,6 +313,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 500;
   color: var(--color-ink-700);

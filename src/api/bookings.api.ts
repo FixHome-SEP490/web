@@ -1,5 +1,6 @@
 // src/api/bookings.api.ts
 import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
+import type { BookingDeviceAttributes } from './catalog-pricing.api';
 import apiClient from './client';
 import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 
@@ -93,6 +94,17 @@ export interface CreateBookingDto {
   photoUploadIds?: string[];
   /** Session id from the assistant; the technician receives a summary of it. */
   aiSessionId?: string;
+  /**
+   * P012: customer-reported Catalog V2 device facts. The server validates them
+   * against the chosen service and derives the pricing snapshot itself; the
+   * browser never computes or sends money.
+   */
+  deviceAttributes?: BookingDeviceAttributes;
+  /**
+   * P012: approved variant code, sent only after GET catalog-v2-pricing
+   * confirmed it with FIXED_PRICE. The booking transaction re-validates it.
+   */
+  selectedVariantCode?: string;
 }
 
 export interface MatchingExtensionResult {

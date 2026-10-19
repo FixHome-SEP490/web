@@ -1,5 +1,5 @@
 // src/api/part-requests.api.ts
-import apiClient from './client';
+import apiClient, { getHttpStatus } from './client';
 
 export type PartRequestStatus =
   | 'requested'
@@ -87,6 +87,65 @@ export interface QueryPartRequestsParams {
   technicianId?: string;
   page?: number;
   pageSize?: number;
+}
+
+/**
+ * P1 parts custody (owner lock 19/10/2026): the return obligation of one
+ * FixHome part line the technician received through QR handover.
+ *
+ * `outstandingQty` is what is still owed after the Service Manager physically
+ * accepted everything received so far. A technician declaration only marks the
+ * intent to hand parts back; the obligation ends when the manager accepts the
+ * parts at the counter, never when the technician clicks.
+ */
+export interface PartCustodyReturnRecord {
+  partRequestId: string;
+  partRequestItemId: string;
+  partNameSnapshot: string;
+  issuedQty: number;
+  usedQty: number;
+  declaredQty: number;
+  managerAcceptedQty: number;
+  outstandingQty: number;
+  version: number;
+  /** References the Backend may attach (P1 lock contract, still being wired). */
+  id?: string;
+  orderId?: string;
+  technicianId?: string;
+  technicianName?: string | null;
+}
+
+export interface DeclareReturnPayload {
+  quantity: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+}
+
+export interface AcceptReturnPayload {
+  quantity: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+}
+
+/**
+ * One key per user action, reused only when the same action is retried after a
+ * failure; the Backend rejects a key reused with a different request.
+ */
+export function createIdempotencyKey(prefix: string): string {
+  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return `${prefix}-${random}`;
+}
+
+/**
+ * The return feature is gated: with the flag off the routes are absent (404),
+ * the role may not read them (403) or the environment has not enabled them
+ * (501), or activation is not yet available (503). Screens then hide the return UI and keep QR/usage working.
+ */
+export function isPartReturnsUnavailableError(err: unknown): boolean {
+  const status = getHttpStatus(err);
+  return status === 403 || status === 404 || status === 501 || status === 503;
 }
 
 export const partRequestsApi = {
@@ -210,5 +269,59 @@ export const partRequestsApi = {
       payload || {},
     );
     return res.data.data;
+  },
+
+  /**
+   * P1: FixHome part-return obligations of one service order (technician owner
+   * or Service Manager). Absent while the feature flag is off.
+   */
+  async getReturnsByOrderId(orderId: string): Promise<PartCustodyReturnRecord[]> {
+    const res = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(
+      `/service-orders/${orderId}/part-returns`,
+    );
+    return res.data.data || [];
+  },
+
+  /**
+   * P1: manager queue of technician declarations waiting for the physical
+   * check at the counter; oldest first.
+   */
+  async getPendingReturns(): Promise<PartCustodyReturnRecord[]> {
+    const res = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(
+      '/part-returns/pending',
+    );
+    return res.data.data || [];
+  },
+
+  /**
+   * P1: the technician declares unused quantity. This is never a completed
+   * return: the Service Manager still has to accept the parts physically.
+   */
+  async declareReturn(
+    requestId: string,
+    itemId: string,
+    payload: DeclareReturnPayload,
+  ): Promise<PartCustodyReturnRecord | null> {
+    const res = await apiClient.post<{ data?: PartCustodyReturnRecord | null }>(
+      `/part-requests/${requestId}/items/${itemId}/declare-return`,
+      payload,
+    );
+    return res.data.data ?? null;
+  },
+
+  /**
+   * P1: the Service Manager records the quantity physically received. A
+   * quantity smaller than declared leaves the remainder outstanding.
+   */
+  async acceptReturn(
+    requestId: string,
+    itemId: string,
+    payload: AcceptReturnPayload,
+  ): Promise<PartCustodyReturnRecord | null> {
+    const res = await apiClient.post<{ data?: PartCustodyReturnRecord | null }>(
+      `/part-requests/${requestId}/items/${itemId}/accept-return`,
+      payload,
+    );
+    return res.data.data ?? null;
   },
 };
