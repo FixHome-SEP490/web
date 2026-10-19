@@ -133,19 +133,38 @@ describe('Public service discovery', () => {
     mockPublicCatalog();
   });
 
-  it('shows all 13 category chips and filters by the final category while keeping search', async () => {
+  it('shows four featured chips and an extra category popover and filters by the final category while keeping search', async () => {
     const categories = Array.from({ length: 13 }, (_, i) => category(`cat-${i}`, `Danh mục ${i + 1}`));
     mockPublicCatalog({ categories });
     const context = await setup('/services?q=may');
     const wrapper = mount(ServicesPage, context);
     await flushPromises();
     const chips = wrapper.get('[data-testid="spotlight-categories"]');
-    expect(chips.findAll('button')).toHaveLength(14);
-    await chips.get('[data-testid="category-cat-12"]').trigger('click');
+    expect(chips.findAll('button')).toHaveLength(6);
+    await chips.get('[data-testid="category-more-toggle"]').trigger('click');
+    await chips.get('[role="dialog"] [data-category-id="cat-12"]').trigger('click');
     await flushPromises();
+    expect(chips.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
+    expect(chips.find('[role="dialog"]').exists()).toBe(false);
     expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-12', q: 'may' });
     expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12, categoryId: 'cat-12', search: 'may' } });
     wrapper.unmount();
+  });
+
+  it('keeps technical scope in detail and uses a human description on the public card', async () => {
+    const scope = 'PHẠM VI CẦN XÁC MINH: S1, S2, S3 theo thiết bị';
+    mockPublicCatalog({ services: [service({ scopeDescription: scope })], detail: service({ scopeDescription: scope }) });
+    const context = await setup();
+    const wrapper = mount(ServicesPage, context);
+    await flushPromises();
+    expect(wrapper.get('.service-card__description').text()).toBe(service().description);
+    expect(wrapper.get('.service-card').text()).not.toContain(scope);
+    wrapper.unmount();
+    await context.router.push('/services/ve-sinh-may-lanh');
+    const detail = mount(ServiceDetailPage, context);
+    await flushPromises();
+    expect(detail.text()).toContain(scope);
+    detail.unmount();
   });
 
   it.each([

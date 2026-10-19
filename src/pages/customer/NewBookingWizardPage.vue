@@ -219,13 +219,18 @@ const priceFilterCounts = computed(() => {
   return { all: allServices.value.length, fixed, inspection };
 });
 
-const visibleServices = computed(() =>
+const matchingServices = computed(() =>
   filterCatalogServices(allServices.value, {
     categoryId: selectedCategoryId.value,
     query: searchQuery.value,
     priceFilter: priceFilter.value,
   }),
 );
+const servicesExpanded = ref(false);
+const isDefaultCatalog = computed(() => !selectedCategoryId.value && !searchQuery.value.trim() && priceFilter.value === 'all');
+const visibleServices = computed(() => isDefaultCatalog.value && !servicesExpanded.value
+  ? matchingServices.value.slice(0, 8) : matchingServices.value);
+watch([selectedCategoryId, searchQuery, priceFilter], () => { servicesExpanded.value = false; });
 
 /**
  * The one loaded service with this id, whether it came from the catalog or was
@@ -524,6 +529,8 @@ async function revealSelectedService() {
   selectedCategoryId.value = '';
   searchQuery.value = '';
   priceFilter.value = 'all';
+  await nextTick();
+  servicesExpanded.value = true;
   await nextTick();
   if (isPageDisposed.value || step.value !== 1) return;
   const selectedRow = finderRef.value?.querySelector<HTMLElement>('[data-testid="booking-service-card"][aria-pressed="true"]');
@@ -1313,7 +1320,7 @@ async function createAndFindTech() {
                 </div>
               </div>
 
-              <div v-else-if="visibleServices.length > 0" class="grid grid-cols-1 gap-2" role="group" aria-label="Danh sách dịch vụ" data-testid="booking-service-list">
+              <div v-else-if="visibleServices.length > 0" id="booking-service-list" class="grid grid-cols-1 gap-2" role="group" aria-label="Danh sách dịch vụ" data-testid="booking-service-list">
                 <CompactServiceCard
                   v-for="svc in visibleServices"
                   :key="svc.id"
@@ -1347,6 +1354,15 @@ async function createAndFindTech() {
               <p v-else-if="!catalogLoadFailed" class="rounded-[var(--radius-md)] border border-dashed border-ink-300 bg-ink-50 p-6 text-center text-xs text-ink-500" data-testid="booking-catalog-empty">
                 Hiện chưa có dịch vụ nào khả dụng. Vui lòng thử lại sau.
               </p>
+              <button
+                v-if="!catalogLoading && isDefaultCatalog && matchingServices.length > 8"
+                type="button"
+                class="min-h-11 rounded-[var(--radius-md)] border border-ink-200 bg-white px-4 text-xs font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-600"
+                :aria-expanded="servicesExpanded"
+                aria-controls="booking-service-list"
+                data-testid="booking-services-expand"
+                @click="servicesExpanded = !servicesExpanded"
+              >{{ servicesExpanded ? 'Thu gọn dịch vụ' : 'Xem thêm dịch vụ' }}</button>
               <p v-if="!catalogLoading && !catalogLoadFailed && categories.length > 0" class="text-xs text-ink-600" role="status" data-testid="booking-service-result-count">
                 Đã hiển thị {{ visibleServices.length }} dịch vụ
               </p>

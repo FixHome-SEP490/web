@@ -53,7 +53,8 @@ describe('Rebook dialog', () => {
     rebook.mockResolvedValue({ booking: { id: 'evening-booking' }, previousTechnicianInvited: true });
     const wrapper = await mountDialog();
     const evening = wrapper.get('[data-testid="session-2030-01-03-evening"]');
-    expect(evening.text()).toContain('Tối 18:00 - 23:00');
+    expect(evening.attributes('aria-label')).toBe('Tối 18:00 - 23:00');
+    expect(evening.text()).toContain('18:00–23:00');
     await evening.trigger('click');
     await confirm(wrapper).trigger('click');
     await flushPromises();

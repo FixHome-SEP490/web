@@ -5,6 +5,7 @@ import { ArrowRight, Clock, LayoutGrid, Search, X } from 'lucide-vue-next';
 import { FhButton, FhEmptyState, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { categoryIcon } from '../../components/booking/service-icons';
+import CategoryMorePopover from '../../components/booking/CategoryMorePopover.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { useQuerySearch, useQueryState } from '../../composables/useQueryState';
 import { useReferenceData } from '../../composables/useCachedQuery';
@@ -104,7 +105,11 @@ const {
 });
 
 const categoryNames = computed(() => new Map(categories.value.map((category) => [category.id, category.name])));
-const spotlightCategories = computed(() => categories.value);
+const extraCategories = computed(() => categories.value.slice(4));
+const spotlightCategories = computed(() => [
+  ...categories.value.slice(0, 4),
+  ...extraCategories.value.filter((category) => category.id === selectedCategoryId.value),
+]);
 const categoryHaloTargets = computed(() => [
   ...(!selectedCategoryId.value ? [] : ['all']),
   ...spotlightCategories.value
@@ -491,6 +496,7 @@ onBeforeUnmount(() => {
             <component :is="categoryIcon(category)" :size="15" :stroke-width="1.8" aria-hidden="true" />
             <span>{{ category.name }}</span>
           </button>
+          <CategoryMorePopover v-if="extraCategories.length" :categories="extraCategories" :model-value="selectedCategoryId" @select="selectCategory" />
         </div>
       </div>
 
@@ -568,8 +574,8 @@ onBeforeUnmount(() => {
             <h3 class="service-card__title">
               <RouterLink :to="detailTarget(service)">{{ service.name }}</RouterLink>
             </h3>
-            <p v-if="service.scopeDescription || service.description" class="service-card__description">
-              {{ service.scopeDescription || service.description }}
+            <p v-if="service.description" class="service-card__description">
+              {{ service.description }}
             </p>
 
             <div v-if="service.estimatedMinutes > 0" class="service-duration">
@@ -965,7 +971,7 @@ onBeforeUnmount(() => {
 .service-card__title { margin: 0; font-size: 17px; line-height: 1.38; letter-spacing: -0.018em; font-weight: 600; text-wrap: balance; }
 .service-card__title a { color: var(--color-ink-900); text-decoration: none; }
 .service-card__title a:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 3px; }
-.service-card__description { display: -webkit-box; min-height: 42px; overflow: hidden; margin: 9px 0 0; color: var(--color-ink-600); font-size: 12px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.service-card__description { overflow: hidden; margin: 9px 0 0; color: var(--color-ink-600); font-size: 12px; line-height: 1.55; white-space: nowrap; text-overflow: ellipsis; }
 .service-duration { display: flex; align-items: center; gap: 7px; margin-top: 15px; color: var(--color-ink-600); font-size: 11px; }
 .service-duration svg { color: var(--color-ink-500); }
 .service-duration strong { margin-left: auto; color: var(--color-ink-700); font-weight: 600; white-space: nowrap; }
@@ -1018,7 +1024,7 @@ onBeforeUnmount(() => {
   .services-search-field input { font-size: 13px; }
   .services-search-panel > p { margin-top: 8px; font-size: 11px; }
   .services-search-stage { row-gap: 14px; }
-  .category-cloud { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding: 5px 4px 10px; scrollbar-width: thin; }
+  .category-cloud { flex-wrap: wrap; justify-content: flex-start; padding: 5px 4px 10px; }
   .category-suggestion { flex: 0 0 auto; min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 11px; }
   .search-suggestions { top: calc(100% + 7px); max-height: 38vh; padding: 5px; border-radius: 15px; }
   .search-suggestion { min-height: 50px; padding-inline: 10px; }
