@@ -43,6 +43,9 @@ import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-tim
 import { toTimelineSteps } from '../../utils/order-timeline';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
+import { useQueryClient } from '@tanstack/vue-query';
+import { afterRunningRead, onOrderChange, onOrderLocation, onResync, whileOffline } from '../../services/live-updates';
+import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { formatRating } from '../../utils/formatters';
 
 const route = useRoute();
@@ -51,6 +54,7 @@ const router = useRouter();
 const chatStore = useChatStore();
 const orderId = route.params.id as string;
 const cache = useCacheUpdates();
+const queryClient = useQueryClient();
 
 const actionLoading = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
@@ -228,11 +232,14 @@ const trackingMarkers = computed<MapMarker[]>(() => {
   return markers;
 });
 
-let trackingPoll: ReturnType<typeof setInterval> | null = null;
-const stopTrackingPoll = () => { if (trackingPoll) { clearInterval(trackingPoll); trackingPoll = null; } };
+// PO 18/10/2026: the technician's position arrives live over the socket and
+// moves the marker directly; the order is read every 15 s only while the socket
+// is down.
+let trackingPoll: (() => void) | null = null;
+const stopTrackingPoll = () => { trackingPoll?.(); trackingPoll = null; };
 const startTrackingPoll = () => {
   stopTrackingPoll();
-  trackingPoll = setInterval(async () => {
+  trackingPoll = whileOffline(async () => {
     try {
       const fresh = await ordersApi.getOrder(orderId);
       if (order.value) Object.assign(order.value, fresh);
@@ -241,6 +248,10 @@ const startTrackingPoll = () => {
     }
   }, 15000);
 };
+const stopLiveLocation = onOrderLocation(orderId, (event) => {
+  if (!order.value) return;
+  order.value.technicianLocation = { ...(order.value.technicianLocation ?? {}), lat: event.lat, lng: event.lng, updatedAt: event.updatedAt } as typeof order.value.technicianLocation;
+});
 
 watch(() => order.value?.status, (status) => {
   if (status === 'EN_ROUTE' || status === 'en_route') startTrackingPoll();
@@ -251,7 +262,10 @@ watch(() => order.value?.arrivalVerified, (verified) => {
   if (verified) showTrackingModal.value = false;
 });
 
-onUnmounted(stopTrackingPoll);
+onUnmounted(() => {
+  stopTrackingPoll();
+  stopLiveLocation();
+});
 
 // Everything the order page reads, in one cached answer. Each part that cannot be
 // read is left as it was (undefined), as before the cache.
@@ -277,31 +291,42 @@ const optional = async <T,>(read: () => Promise<T>): Promise<T | undefined> => {
   }
 };
 
-async function fetchOrderBundle(): Promise<CustomerOrderBundle> {
+/**
+ * Reads the order page. With `kinds` (a live update, PO 18/10/2026) only the
+ * parts that change touched are read again and the rest is kept, so a photo the
+ * technician adds does not read the invoice, the booking and the warranties
+ * again; a status change, or no kinds, reads everything.
+ */
+async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrderBundle> {
+  const previous = kinds ? queryClient.getQueryData<CustomerOrderBundle>(queryKeys.orders.customerDetail(orderId)) : undefined;
+  const all = !previous || !kinds || kinds.some((kind) => kind === 'status' || kind === 'order' || kind === 'assignment');
+  const touched = (...names: OrderChangeKind[]) => all || names.some((name) => kinds!.includes(name));
   const data = await ordersApi.getOrder(orderId);
   const completed = data.status === 'COMPLETED' || (data.status as string) === 'completed';
-  const invoice = await optional(() => ordersApi.getInvoice(orderId));
-  const settlement = await optional(() => ordersApi.getCashSettlement(orderId));
+  const invoice = touched('invoice', 'cash', 'quotation', 'additional_cost', 'part') ? await optional(() => ordersApi.getInvoice(orderId)) : previous?.invoice;
+  const settlement = touched('cash', 'invoice') ? await optional(() => ordersApi.getCashSettlement(orderId)) : previous?.settlement;
   // Before and after photos from the technician.
-  let evidences: OrderEvidence[] = [];
-  try {
-    evidences = await ordersApi.getEvidence(orderId);
-  } catch {
-    evidences = [];
+  let evidences: OrderEvidence[] = previous?.evidences ?? [];
+  if (touched('evidence', 'arrival')) {
+    try {
+      evidences = await ordersApi.getEvidence(orderId);
+    } catch {
+      evidences = [];
+    }
   }
-  // The original booking, for the description and the diagnosis.
+  // The original booking, for the description and the diagnosis: it does not change once the order exists.
   const bookingId = data.bookingId;
-  const booking = bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined;
-  const review = data.status === 'COMPLETED' ? await optional(() => reviewsApi.getByOrder(orderId)) : undefined;
+  const booking = previous?.booking ?? (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
+  const review = data.status === 'COMPLETED' ? (all || previous?.review === undefined ? await optional(() => reviewsApi.getByOrder(orderId)) : previous.review) : undefined;
   // Additional costs exist only once the repair started.
   const costs =
     data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
-      ? await optional(() => ordersApi.getAdditionalCosts(orderId))
+      ? touched('additional_cost', 'part') ? await optional(() => ordersApi.getAdditionalCosts(orderId)) : previous?.costs
       : undefined;
   const warranties = completed
-    ? await optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[])
+    ? touched('warranty') ? await optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[]) : previous?.warranties
     : undefined;
-  const claims = completed ? await optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : undefined;
+  const claims = completed ? (touched('warranty') ? await optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : previous?.claims) : undefined;
   return {
     order: data,
     invoice,
@@ -317,7 +342,7 @@ async function fetchOrderBundle(): Promise<CustomerOrderBundle> {
 
 const orderQuery = useCachedQuery({
   key: queryKeys.orders.customerDetail(orderId),
-  fetch: fetchOrderBundle,
+  fetch: () => fetchOrderBundle(),
   // Status and money change from the other side too: the cached copy shows at
   // once, and every visit reads it again.
   staleTime: 0,
@@ -342,6 +367,42 @@ function applyOrderBundle(bundle: CustomerOrderBundle) {
 let mounted = false;
 onUnmounted(() => {
   mounted = false;
+});
+
+/**
+ * PO 18/10/2026: what the technician or the manager does shows here as it
+ * happens. Each change reads only what it touched; changes that arrive while a
+ * read is running are merged and read right after it.
+ */
+let liveReading: Promise<void> | null = null;
+let liveQueued: OrderChangeKind[] | undefined | null = null;
+async function liveRefresh(kinds: OrderChangeKind[] | undefined) {
+  if (liveReading) {
+    liveQueued = liveQueued === null ? kinds : liveQueued && kinds ? [...new Set([...liveQueued, ...kinds])] : undefined;
+    return liveReading;
+  }
+  liveReading = (async () => {
+    try {
+      await afterRunningRead(queryClient, queryKeys.orders.customerDetail(orderId));
+      const bundle = await fetchOrderBundle(kinds);
+      if (mounted) queryClient.setQueryData(queryKeys.orders.customerDetail(orderId), bundle);
+    } catch {
+      // The next change, or the next visit, reads it again.
+    }
+  })();
+  await liveReading;
+  liveReading = null;
+  if (liveQueued !== null) {
+    const next = liveQueued;
+    liveQueued = null;
+    await liveRefresh(next);
+  }
+}
+const stopLiveOrder = onOrderChange(orderId, (event) => void liveRefresh(event.kinds));
+const stopResync = onResync(() => void liveRefresh(undefined));
+onUnmounted(() => {
+  stopLiveOrder();
+  stopResync();
 });
 watch(
   () => [orderQuery.query.data.value, orderQuery.query.dataUpdatedAt.value] as const,
@@ -629,7 +690,9 @@ const additionalCostLabels: Record<AdditionalCostRecord['status'], string> = {
   CANCELLED: 'Đã huỷ',
 };
 /** What the customer described when booking, shown once in the summary. */
-const problemText = computed(() => order.value?.scopeDescription || bookingDetails.value?.description || '');
+// PO 18/10/2026: what the customer said is wrong, and what the service covers, are two different things.
+const problemText = computed(() => order.value?.bookingDescription || bookingDetails.value?.description || '');
+const scopeText = computed(() => order.value?.scopeDescription || '');
 const evidenceTypeLabel = (type?: string) => {
   const t = type?.toLowerCase();
   if (t === 'before') return 'Trước khi sửa';
@@ -800,8 +863,12 @@ const parsedReview = computed(() => {
           <dt class="text-ink-500">Địa chỉ</dt>
           <dd class="text-ink-900 text-pretty">{{ order.addressSummary }}</dd>
           <template v-if="problemText">
-            <dt class="text-ink-500">Mô tả</dt>
-            <dd class="text-ink-900 text-pretty">{{ problemText }}</dd>
+            <dt class="text-ink-500">Sự cố bạn mô tả</dt>
+            <dd class="text-ink-900 text-pretty whitespace-pre-line" data-testid="order-problem">{{ problemText }}</dd>
+          </template>
+          <template v-if="scopeText">
+            <dt class="text-ink-500">Dịch vụ gồm</dt>
+            <dd class="text-ink-600 text-pretty" data-testid="order-scope">{{ scopeText }}</dd>
           </template>
           <template v-if="bookingDetails?.diagnosis?.possibleIssues?.length">
             <dt class="text-ink-500">Chẩn đoán gợi ý</dt>

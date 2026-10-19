@@ -8,6 +8,7 @@ import BookingSessionPicker from '../../components/customer/BookingSessionPicker
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { ordersApi } from '../../api/orders.api';
+import { onBookingChange, whileOffline } from '../../services/live-updates';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString, vnDayKey } from '../../utils/vn-time';
 import { SLOT_SHORT, sessionDayLabel, sessionLabel, type BookingSlot, type SessionOption } from '../../utils/booking-session';
@@ -103,40 +104,59 @@ const applyBookingState = (nextBooking: BookingItem) => {
 
 // Only owner-authorized Booking details can establish a match or linked ServiceOrder.
 // Never poll indefinitely after navigation, race an edit/cancel, or overlap requests.
-let matchingTimer: ReturnType<typeof setInterval> | null = null;
+// PO 18/10/2026: the booking is read again when the server says it changed (an
+// invitation accepted, declined or expired); it is polled only while the socket
+// is down, and read once when it comes back.
+let stopMatchingWatch: (() => void) | null = null;
 let matchingRequestInFlight = false;
+/** A change arrived while the page could not read it (a read in flight, a dialog open): read once it can. */
+let matchingRecheck = false;
 let matchingPollGeneration = 0;
 const invalidateMatchingPoll = () => { matchingPollGeneration += 1; };
 let detailMounted = true;
 const waitingForMatch = () => !!booking.value && !serviceOrderId.value &&
   ['MATCHING', 'MATCHED'].includes(booking.value.status);
 const stopMatchingPoll = () => {
-  if (matchingTimer) clearInterval(matchingTimer);
-  matchingTimer = null;
+  stopMatchingWatch?.();
+  stopMatchingWatch = null;
+};
+const matchingBlocked = () => loading.value || saving.value || cancelling.value ||
+  checkingOrderLink.value || showCancelModal.value || showExtensionModal.value || extending.value;
+const checkMatching = async () => {
+  if (!detailMounted || !waitingForMatch()) { stopMatchingPoll(); return; }
+  // An event is sent once (PO 18/10/2026): a change that cannot be read now is read as soon as the page is free.
+  if (matchingRequestInFlight || matchingBlocked()) { matchingRecheck = true; return; }
+  matchingRecheck = false;
+  matchingRequestInFlight = true;
+  const polledBookingId = bookingId;
+  const pollGeneration = matchingPollGeneration;
+  try {
+    const latest = await bookingsApi.getBooking(polledBookingId);
+    if (detailMounted && polledBookingId === bookingId && pollGeneration === matchingPollGeneration &&
+        !saving.value && !cancelling.value && !showCancelModal.value && !checkingOrderLink.value &&
+        !showExtensionModal.value && !extending.value) {
+      applyBookingState(latest);
+      if (!waitingForMatch()) stopMatchingPoll();
+    } else if (detailMounted && polledBookingId === bookingId && pollGeneration === matchingPollGeneration) {
+      // A dialog opened while reading: what was read is set aside and read again when it closes.
+      // (A newer flow, such as an extension, superseded this read: that flow owns the state, nothing to redo.)
+      matchingRecheck = true;
+    }
+  } catch {
+    // A failed read cannot be treated as accepted, expired, or cancelled; the next change reads again.
+  } finally {
+    matchingRequestInFlight = false;
+  }
+  if (matchingRecheck && !matchingBlocked()) void checkMatching();
 };
 const startMatchingPoll = () => {
-  if (matchingTimer || !waitingForMatch()) return;
-  matchingTimer = setInterval(async () => {
-    if (!detailMounted || !waitingForMatch()) { stopMatchingPoll(); return; }
-    if (matchingRequestInFlight || loading.value || saving.value || cancelling.value ||
-        checkingOrderLink.value || showCancelModal.value || showExtensionModal.value || extending.value) return;
-    matchingRequestInFlight = true;
-    const polledBookingId = bookingId;
-    const pollGeneration = matchingPollGeneration;
-    try {
-      const latest = await bookingsApi.getBooking(polledBookingId);
-      if (detailMounted && polledBookingId === bookingId && pollGeneration === matchingPollGeneration &&
-          !saving.value && !cancelling.value && !showCancelModal.value && !checkingOrderLink.value &&
-          !showExtensionModal.value && !extending.value) {
-        applyBookingState(latest);
-        if (!waitingForMatch()) stopMatchingPoll();
-      }
-    } catch {
-      // A failed poll cannot be treated as accepted, expired, or cancelled; retry later.
-    } finally {
-      matchingRequestInFlight = false;
-    }
-  }, 5000);
+  if (stopMatchingWatch || !waitingForMatch()) return;
+  const stopLive = onBookingChange(bookingId, () => void checkMatching());
+  const stopOffline = whileOffline(() => void checkMatching(), 10000);
+  stopMatchingWatch = () => {
+    stopLive();
+    stopOffline();
+  };
 };
 onUnmounted(() => {
   detailMounted = false;
@@ -152,6 +172,10 @@ const cancelReason = ref('');
 const cancelError = ref('');
 const cancelNotice = ref('');
 const cancelling = ref(false);
+// Declared after every flag it reads (a watch reads them at once).
+watch(matchingBlocked, (blocked) => {
+  if (!blocked && matchingRecheck && stopMatchingWatch) void checkMatching();
+});
 
 const openBookingCancel = () => {
   if (!canCancelBooking.value || saving.value || cancelling.value || loading.value || checkingOrderLink.value || showExtensionModal.value || extending.value) return;

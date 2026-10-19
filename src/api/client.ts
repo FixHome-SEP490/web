@@ -4,6 +4,9 @@ import { transportMessage } from '../utils/user-facing-error';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
+/** An absolute URL for a path relative to the API base, for links the browser opens itself (video players). */
+export const apiUrl = (path: string) => `${API_BASE_URL.replace(/\/+$/, '')}${path}`;
+
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onOrderListsChange, whileOffline } from '../services/live-updates';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { userFacingError } from '../utils/user-facing-error';
@@ -36,6 +37,8 @@ import { sharedQueries } from '../lib/queries';
 
 const authStore = useAuthStore();
 const route = useRoute();
+/** The full chat page needs the height: notices above it shrink to one line there. */
+const onChatPage = computed(() => route.name === 'tech-messages');
 const router = useRouter();
 const pageTitle = computed(() => (route.meta?.title as string) || '');
 
@@ -60,10 +63,22 @@ const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
 
 // The badge, the switch and the banners read the same cached data as the pages:
-// one request serves both, and the 30-second poll keeps the pages fresh too.
+// one request serves both. Invitations follow the server live (PO 18/10/2026);
+// they are polled every 30 s only while the socket is down.
 const invitationsQuery = useCachedQuery(sharedQueries.technicianInvitations);
 const invitationCount = computed(() => invitationsQuery.data.value?.length ?? 0);
 const refreshInvitationCount = () => invitationsQuery.refetch();
+
+async function countActiveJobs() {
+  try {
+    const jobs = await ordersApi.getTechnicianJobs();
+    activeJobs.value = jobs.filter((j) =>
+      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase()),
+    ).length;
+  } catch {
+    // ignore
+  }
+}
 
 const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
 watch(
@@ -97,7 +112,8 @@ const needsDeposit = computed(
 
 const formatVnd = (amount: number) => `${Number(amount).toLocaleString('vi-VN')}\u00A0₫`;
 
-let invitationPoll: ReturnType<typeof setInterval> | null = null;
+let invitationPoll: (() => void) | null = null;
+let stopJobCount: (() => void) | null = null;
 let locationPing: ReturnType<typeof setInterval> | null = null;
 
 // Urgent jobs are offered by a GPS position younger than 15 minutes (PO 08/10/2026),
@@ -117,16 +133,10 @@ onMounted(async () => {
   chatStore.initSocket();
   // A technician must be reachable by voice from any screen, not only the chat.
   callStore.initCallSignalling();
-  try {
-    const jobs = await ordersApi.getTechnicianJobs();
-    const active = jobs.filter((j) =>
-      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase())
-    );
-    activeJobs.value = active.length;
-  } catch {
-    // ignore
-  }
-  invitationPoll = setInterval(() => void refreshInvitationCount(), 30000);
+  await countActiveJobs();
+  // The count follows a job that starts, finishes or changes hands, as it happens.
+  stopJobCount = onOrderListsChange(() => void countActiveJobs());
+  invitationPoll = whileOffline(() => void refreshInvitationCount(), 30000);
   // Location is reported only while taking jobs: wait for the switch's state.
   await profileQuery.query.suspense();
   pingLocation();
@@ -134,7 +144,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (invitationPoll) clearInterval(invitationPoll);
+  invitationPoll?.();
+  stopJobCount?.();
   if (locationPing) clearInterval(locationPing);
 });
 
@@ -405,6 +416,23 @@ const tabItems: TabNavItem[] = [
 
       <!-- Approved but below the deposit floor: no new jobs, so an alert (red). -->
       <div
+        v-else-if="needsDeposit && walletSummary && onChatPage"
+        class="border-b bg-danger-50 border-danger-200 px-4 sm:px-6 lg:px-8 py-1.5"
+        role="alert"
+        data-testid="wallet-notice-compact"
+      >
+        <div class="max-w-6xl mx-auto flex items-center justify-between gap-3 text-xs">
+          <p class="flex min-w-0 items-center gap-2 text-danger-700">
+            <Wallet :size="14" class="shrink-0 text-danger-600" />
+            <span class="truncate">Ví dưới mức ký quỹ <strong class="font-semibold">{{ formatVnd(walletSummary.minimumBalance) }}</strong></span>
+          </p>
+          <router-link to="/tech/wallet" class="shrink-0 inline-flex items-center gap-0.5 font-semibold text-danger-700 hover:underline whitespace-nowrap">
+            Nạp tiền
+            <ChevronRight :size="14" />
+          </router-link>
+        </div>
+      </div>
+      <div
         v-else-if="needsDeposit && walletSummary"
         class="border-b bg-danger-50 border-danger-200 px-4 sm:px-6 lg:px-8 py-3"
         role="alert"
@@ -430,7 +458,7 @@ const tabItems: TabNavItem[] = [
         </div>
       </div>
 
-      <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-28 lg:pb-10">
+      <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-36 lg:pb-10'">
         <router-view />
       </main>
     </div>
@@ -439,6 +467,7 @@ const tabItems: TabNavItem[] = [
     <nav
       class="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-ink-200 pb-[env(safe-area-inset-bottom)]"
       aria-label="Điều hướng chính"
+      data-fh-bottom-dock
     >
       <div class="grid grid-cols-5">
         <router-link

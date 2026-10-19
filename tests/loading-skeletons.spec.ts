@@ -86,6 +86,23 @@ describe('Messages', () => {
     expect(wrapper.find('[data-testid="conversations-skeleton"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Đang tải');
   });
+
+  // PO 18/10/2026: two threads with the same technician about the same service are told apart by the order code.
+  it('names the order code next to the service in each thread', async () => {
+    const thread = (id: string, orderCode: string | null) => ({
+      id, bookingId: 'b', serviceOrderId: orderCode ? `o-${id}` : null, status: 'active', serviceName: 'Sửa máy giặt', orderCode,
+      counterpart: { id: 't', fullName: 'Thợ A', avatarUrl: null, role: 'technician' }, lastMessageAt: null, lastMessagePreview: null, unreadCount: 0, canSend: true,
+    });
+    chat.value = reactive({
+      conversations: [thread('c1', 'FH-20261018-AAAA'), thread('c2', 'FH-20261018-BBBB'), thread('c3', null)],
+      loadingConversations: false, activeConversationId: null, isSocketConnected: true,
+      fetchConversations: vi.fn(async () => undefined), selectConversation: vi.fn(), openConversationForBooking: vi.fn(),
+    });
+    const wrapper = mount(MessagesPage, { global: { stubs } });
+    await flushPromises();
+    const rows = wrapper.findAll('[data-testid="conversation-order"]').map((row) => row.text());
+    expect(rows).toEqual([expect.stringContaining('FH-20261018-AAAA'), expect.stringContaining('FH-20261018-BBBB'), 'Sửa máy giặt']);
+  });
 });
 
 describe('Order lookup', () => {

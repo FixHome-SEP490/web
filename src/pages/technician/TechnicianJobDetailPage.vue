@@ -67,6 +67,8 @@ import { getBestPosition } from '../../utils/best-position';
 import { useQueryClient } from '@tanstack/vue-query';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
+import { afterRunningRead, onOrderChange, onResync } from '../../services/live-updates';
+import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -605,20 +607,30 @@ interface TechnicianJobBundle {
 // same job reuse it, as the page did before the cache.
 let bookingReadThisVisit = false;
 
-async function fetchJobBundle(id: string): Promise<TechnicianJobBundle> {
+/**
+ * Reads the job. With `kinds` (a live update, PO 18/10/2026) only what that
+ * change touched is read again and the rest kept; a status change, a change of
+ * technician, or no kinds reads everything.
+ */
+async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<TechnicianJobBundle> {
+  const kept = kinds ? queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(id)) : undefined;
+  const all = !kept?.job || !kinds || kinds.some((kind) => kind === 'status' || kind === 'order' || kind === 'assignment');
+  const touched = (...names: OrderChangeKind[]) => all || names.some((name) => kinds!.includes(name));
   const data = await ordersApi.getTechnicianOrder(id);
   if (isHistoricalOrder(data)) {
     // No private data or workspace API calls for old technicians.
     return { historical: data, job: null, booking: null, settlement: null };
   }
-  let evidences: EvidenceRecord[] | undefined;
-  try {
-    if (typeof ordersApi.getEvidence === 'function') {
-      const evList = await ordersApi.getEvidence(id);
-      evidences = Array.isArray(evList) ? evList : [];
+  let evidences: EvidenceRecord[] | undefined = kept?.evidences;
+  if (touched('evidence', 'arrival')) {
+    try {
+      if (typeof ordersApi.getEvidence === 'function') {
+        const evList = await ordersApi.getEvidence(id);
+        evidences = Array.isArray(evList) ? evList : [];
+      }
+    } catch {
+      evidences = [];
     }
-  } catch {
-    evidences = [];
   }
 
   let booking: TechnicianJobBundle['booking'] = null;
@@ -636,11 +648,13 @@ async function fetchJobBundle(id: string): Promise<TechnicianJobBundle> {
   }
   bookingReadThisVisit = true;
 
-  const settlement = await ordersApi.getCashSettlement(id);
+  const settlement = touched('cash', 'invoice') ? await ordersApi.getCashSettlement(id) : (kept?.settlement ?? null);
   const costs =
-    data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED' ? await ordersApi.getAdditionalCosts(id) : undefined;
-  let review: Review | null | undefined;
-  if (data.status === 'COMPLETED') {
+    data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
+      ? touched('additional_cost', 'part') ? await ordersApi.getAdditionalCosts(id) : kept?.costs
+      : undefined;
+  let review: Review | null | undefined = all ? undefined : kept?.review;
+  if (data.status === 'COMPLETED' && (all || review === undefined)) {
     try {
       review = await reviewsApi.getByOrder(id);
     } catch {
@@ -717,6 +731,47 @@ watch(
     }
   },
 );
+
+/**
+ * PO 18/10/2026: what the customer or the manager does (approving the quote, an
+ * extra cost, paying, a warranty claim) shows here as it happens. Each change
+ * reads only what it touched; changes during a read are merged into the next.
+ */
+let liveReading: Promise<void> | null = null;
+let liveQueued: OrderChangeKind[] | undefined | null = null;
+async function liveRefresh(id: string, kinds: OrderChangeKind[] | undefined) {
+  if (liveReading) {
+    liveQueued = liveQueued === null ? kinds : liveQueued && kinds ? [...new Set([...liveQueued, ...kinds])] : undefined;
+    return liveReading;
+  }
+  liveReading = (async () => {
+    try {
+      await afterRunningRead(queryClient, queryKeys.orders.technicianDetail(id));
+      const bundle = await fetchJobBundle(id, kinds);
+      if (mounted && id === jobIdRef.value) queryClient.setQueryData(queryKeys.orders.technicianDetail(id), bundle);
+    } catch {
+      // The next change, or the next visit, reads it again.
+    }
+  })();
+  await liveReading;
+  liveReading = null;
+  if (liveQueued !== null) {
+    const next = liveQueued;
+    liveQueued = null;
+    // The job on screen now: the technician may have opened another one during the read.
+    await liveRefresh(jobIdRef.value, next);
+  }
+}
+let stopLiveOrder = onOrderChange(jobIdRef.value, (event) => void liveRefresh(jobIdRef.value, event.kinds));
+watch(jobIdRef, (id) => {
+  stopLiveOrder();
+  stopLiveOrder = onOrderChange(id, (event) => void liveRefresh(id, event.kinds));
+});
+const stopResync = onResync(() => void liveRefresh(jobIdRef.value, undefined));
+onUnmounted(() => {
+  stopLiveOrder();
+  stopResync();
+});
 
 onMounted(() => {
   mounted = true;

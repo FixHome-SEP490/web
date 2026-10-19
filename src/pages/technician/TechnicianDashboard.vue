@@ -222,7 +222,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2 flex-wrap">
-            <p class="text-xs font-semibold text-ink-500 uppercase tracking-wider">{{ currentDateFormatted }}</p>
+            <p class="text-[13px] font-medium text-ink-500">{{ currentDateFormatted }}</p>
             <span
               v-if="identityVerified"
               class="inline-flex items-center gap-1 h-5 px-2 rounded-md bg-brand-50 text-brand-700 text-[11px] font-semibold"
@@ -287,7 +287,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     >
       <div class="min-w-0 flex-1 space-y-2.5">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-bold uppercase tracking-wide">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-semibold">
             <span class="w-2 h-2 rounded-full bg-brand-600 animate-ping"></span>
             Lời mời nhận việc mới
           </span>
@@ -351,7 +351,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         @click="router.push('/tech/wallet')"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Số dư ví</span>
+          <span class="text-[13px] font-medium text-ink-500">Số dư ví</span>
           <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
             Chi tiết
             <span aria-hidden="true">&rarr;</span>
@@ -389,7 +389,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         class="p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs flex flex-col justify-between min-h-[136px]"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Đang làm</span>
+          <span class="text-[13px] font-medium text-ink-500">Đang làm</span>
           <span
             v-if="activeJobs.length > 0"
             class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-ink-100 text-ink-800 font-num"
@@ -431,7 +431,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         @click="router.push('/tech/earnings')"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Hoàn thành tuần này</span>
+          <span class="text-[13px] font-medium text-ink-500">Hoàn thành tuần này</span>
           <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
             Bảng kê
             <span aria-hidden="true">&rarr;</span>
@@ -531,7 +531,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
               <!-- Timeline Progress Tracker -->
               <div class="py-3.5 px-4 bg-ink-25/80 rounded-xl border border-ink-100/90">
                 <div class="flex items-center justify-between mb-3 text-xs">
-                  <span class="font-semibold text-ink-500 uppercase tracking-wider">Tiến độ thực hiện</span>
+                  <span class="font-medium text-ink-500">Tiến độ thực hiện</span>
                   <span class="font-medium text-ink-700">
                     {{
                       isOneOf(job, ['COMPLETED'])
@@ -582,7 +582,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                       <span v-else class="text-[10px]">1</span>
                     </div>
                     <span
-                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      class="mt-1.5 px-0.5 text-xs font-medium leading-tight text-balance"
                       :class="[
                         (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS', 'COMPLETED']))
                           ? 'text-ink-900 font-semibold'
@@ -612,7 +612,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                       <span v-else class="text-[10px]">2</span>
                     </div>
                     <span
-                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      class="mt-1.5 px-0.5 text-xs font-medium leading-tight text-balance"
                       :class="[
                         ((job.beforeEvidenceCount ?? 0) > 0 || isOneOf(job, ['COMPLETED']))
                           ? 'text-ink-900 font-semibold'
@@ -642,7 +642,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                       <span v-else class="text-[10px]">3</span>
                     </div>
                     <span
-                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      class="mt-1.5 px-0.5 text-xs font-medium leading-tight text-balance"
                       :class="[
                         (isOneOf(job, ['COMPLETED']) || !!job.completionRequestedAt)
                           ? 'text-ink-900 font-semibold'
@@ -672,7 +672,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                       <span v-else class="text-[10px]">4</span>
                     </div>
                     <span
-                      class="mt-1.5 text-xs font-medium whitespace-nowrap"
+                      class="mt-1.5 px-0.5 text-xs font-medium leading-tight text-balance"
                       :class="[
                         isOneOf(job, ['COMPLETED'])
                           ? 'text-ink-900 font-semibold'
@@ -693,7 +693,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                   :href="getMapUrl(job.addressSummary)"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs"
+                  class="flex-1 sm:flex-none h-14 sm:h-10 px-2 sm:px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-xs sm:text-sm font-semibold text-ink-800 inline-flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 whitespace-nowrap transition-colors shadow-2xs"
                   :class="focusRing"
                   @click.stop
                 >
@@ -703,7 +703,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 <a
                   v-if="job.customerPhone"
                   :href="`tel:${job.customerPhone}`"
-                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs"
+                  class="flex-1 sm:flex-none h-14 sm:h-10 px-2 sm:px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-xs sm:text-sm font-semibold text-ink-800 inline-flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 whitespace-nowrap transition-colors shadow-2xs"
                   :class="focusRing"
                   @click.stop
                 >
@@ -712,7 +712,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 </a>
                 <button
                   type="button"
-                  class="flex-1 sm:flex-none h-10 px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-sm font-semibold text-ink-800 inline-flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                  class="flex-1 sm:flex-none h-14 sm:h-10 px-2 sm:px-4 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:bg-ink-100 text-xs sm:text-sm font-semibold text-ink-800 inline-flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 whitespace-nowrap transition-colors shadow-2xs cursor-pointer"
                   :class="focusRing"
                   @click.stop="handleChatWithCustomer(job)"
                 >

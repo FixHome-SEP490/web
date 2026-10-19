@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // src/components/chat/CallOverlay.vue
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Wrench, UserCheck } from 'lucide-vue-next';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Wrench, UserCheck, Volume1, Volume2 } from 'lucide-vue-next';
 import { useCallStore } from '../../stores/call.store';
 
 /**
@@ -29,6 +29,27 @@ watch(
     }
   },
 );
+
+/**
+ * "Loa to" / "Loa nhỏ" (PO 18/10/2026). A browser cannot switch a phone to its
+ * earpiece, so on the web the switch is the volume of the other person's voice:
+ * full, or quiet for a call held close in a quiet room. Each call starts loud.
+ */
+const QUIET_VOLUME = 0.35;
+const loudSpeaker = ref(true);
+const applyVolume = () => {
+  if (remoteAudio.value) remoteAudio.value.volume = loudSpeaker.value ? 1 : QUIET_VOLUME;
+};
+watch(loudSpeaker, applyVolume);
+watch(
+  () => callStore.status,
+  (status, previous) => {
+    // Back to idle, or a new call starting from idle: loud again.
+    if (status === 'idle' || previous === 'idle') loudSpeaker.value = true;
+    applyVolume();
+  },
+);
+watch(() => callStore.remoteStream, applyVolume);
 
 /** Escape declines a ringing call, hangs up a live one, or closes the end screen. */
 function onKeydown(event: KeyboardEvent) {
@@ -180,6 +201,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             </button>
             <button
               type="button"
+              class="w-14 h-14 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-ink-400 focus:ring-offset-2"
+              :class="loudSpeaker ? 'bg-brand-600 text-white hover:bg-brand-700' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'"
+              :aria-pressed="loudSpeaker"
+              :aria-label="loudSpeaker ? 'Đang bật loa to, bấm để chuyển loa nhỏ' : 'Đang bật loa nhỏ, bấm để chuyển loa to'"
+              data-testid="call-speaker-toggle"
+              @click="loudSpeaker = !loudSpeaker"
+            >
+              <component :is="loudSpeaker ? Volume2 : Volume1" :size="22" />
+            </button>
+            <button
+              type="button"
               class="w-14 h-14 rounded-full bg-danger-600 text-white flex items-center justify-center hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-danger-600 focus:ring-offset-2"
               aria-label="Kết thúc cuộc gọi"
               @click="callStore.hangUp()"
@@ -187,6 +219,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
               <PhoneOff :size="22" />
             </button>
           </div>
+          <p v-if="callStore.status !== 'ended' && callStore.status !== 'incoming'" class="mt-3 text-xs text-ink-500" data-testid="call-speaker-label">
+            {{ loudSpeaker ? 'Loa to' : 'Loa nhỏ' }}
+          </p>
 
           <p v-if="callStore.isMuted" class="mt-4 text-xs text-ink-500">
             Micro đang tắt

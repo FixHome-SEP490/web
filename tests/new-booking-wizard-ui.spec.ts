@@ -203,19 +203,13 @@ describe('NewBookingWizardPage UI & UX enhancements', () => {
     expect((textarea.element as HTMLTextAreaElement).value).toContain('Chảy nước dàn lạnh');
   });
 
-  it('allows selecting urgency level with visual feedback', async () => {
+  it('has no urgency slider in the first step (PO 18/10/2026)', async () => {
     const wrapper = mount(NewBookingWizardPage, { global: { stubs } });
     await flushPromises();
 
-    const slider = wrapper.find('[data-testid="urgency-slider"]');
-    expect(slider.exists()).toBe(true);
-
-    const urgentBtn = wrapper.findAll('button').find((b) => b.text().includes('Khẩn cấp'));
-    expect(urgentBtn).toBeDefined();
-    await urgentBtn?.trigger('click');
-
-    const rangeInput = wrapper.find('#urgency-range');
-    expect((rangeInput.element as HTMLInputElement).value).toBe('2');
-    expect(wrapper.text()).toContain('Ưu tiên');
+    expect(wrapper.find('[data-testid="urgency-slider"]').exists()).toBe(false);
+    expect(wrapper.find('#urgency-range').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Mức độ khẩn cấp');
+    expect(wrapper.text()).not.toContain('Cực khẩn');
   });
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { whileOffline } from '../services/live-updates';
 import { bookingFormKey } from '../utils/booking-form-key';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -26,6 +27,8 @@ import { vnDateString } from '../utils/vn-time';
 import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 const router = useRouter();
+/** The full chat page fills the screen: no room kept for the floating buttons it does not show. */
+const onChatPage = computed(() => router.currentRoute?.value?.name === 'customer-messages');
 const authStore = useAuthStore();
 const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
@@ -36,7 +39,7 @@ const callStore = useCallStore();
 // floating chat buttons lifted above it.
 const hasActionBar = computed(() => router.currentRoute?.value?.meta?.actionBar === true);
 
-let chatPoll: ReturnType<typeof setInterval> | null = null;
+let chatPoll: (() => void) | null = null;
 
 // ── Tab sliding indicator animation (Desktop & Mobile) ──
 const desktopNavRef = ref<HTMLElement | null>(null);
@@ -129,8 +132,9 @@ onMounted(async () => {
     void notifStore.fetchUnreadCount?.();
   }
 
-  // Periodic polling to guarantee accurate total unread counts across sessions
-  chatPoll = setInterval(() => {
+  // Unread counts follow the socket (new messages, new notifications, PO 18/10/2026);
+  // they are read every 20 s only while it is down, and once when it is back.
+  chatPoll = whileOffline(() => {
     if (authStore.isAuthenticated) {
       void chatStore.fetchConversations?.();
       void notifStore.fetchUnreadCount?.();
@@ -148,7 +152,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (chatPoll) {
-    clearInterval(chatPoll);
+    chatPoll();
     chatPoll = null;
   }
   if (typeof window !== 'undefined') {
@@ -311,7 +315,7 @@ const handleLogout = async () => {
       </p>
     </div>
 
-    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 lg:pb-10">
+    <main class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-44 sm:pb-48 lg:pb-10'">
       <router-view v-slot="{ Component, route: current }">
         <component :is="Component" :key="bookingFormKey(current)" />
       </router-view>
@@ -321,6 +325,7 @@ const handleLogout = async () => {
     <nav
       class="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]"
       aria-label="Điều hướng chính"
+      data-fh-bottom-dock
     >
       <div ref="mobileNavRef" class="relative grid grid-cols-5 h-16">
         <!-- Sliding active indicator bar for mobile -->

@@ -197,11 +197,11 @@ function goToBooking() {
     <!-- Floating Action Button for AI (always fixed above the chat FAB) -->
     <div
       class="fixed right-4 sm:right-5 z-40"
-      :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
+      :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_3.25rem)] sm:bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
     >
       <button
         type="button"
-        class="w-13 h-13 rounded-full border flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
+        class="w-11 h-11 sm:w-13 sm:h-13 rounded-full border flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
         :class="[
           isOpen
             ? 'bg-brand-50 border-brand-400 text-brand-700 ring-4 ring-brand-100 shadow-xl'
@@ -212,7 +212,7 @@ function goToBooking() {
         @click="toggle"
       >
         <X v-if="isOpen" :size="24" />
-        <Bot v-else :size="24" />
+        <Bot v-else :size="22" />
       </button>
     </div>
   </div>
