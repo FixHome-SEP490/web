@@ -17,10 +17,10 @@ const props = withDefaults(defineProps<{
 }>(), { loading: false });
 const emit = defineEmits<{ (e: 'update:modelValue', id: string): void }>();
 const totalCount = computed(() => props.categories.reduce((sum, cat) => sum + cat.count, 0));
-const extraCategories = computed(() => props.categories.slice(4));
+const extraCategories = computed(() => props.categories.slice(3));
 const options = computed(() => [
   { id: '', name: 'Tất cả', count: totalCount.value },
-  ...props.categories.slice(0, 4),
+  ...props.categories.slice(0, 3),
   ...extraCategories.value.filter((cat) => cat.id === props.modelValue),
 ]);
 </script>
@@ -42,7 +42,7 @@ const options = computed(() => [
         :data-category-id="cat.id"
         data-testid="booking-category-filter"
         @click="emit('update:modelValue', cat.id)"
-      >{{ cat.name }} ({{ cat.count }})</button>
+      >{{ cat.name }}</button>
       <CategoryMorePopover v-if="extraCategories.length" compact :categories="extraCategories" :model-value="modelValue" @select="emit('update:modelValue', $event)" />
     </div>
   </div>

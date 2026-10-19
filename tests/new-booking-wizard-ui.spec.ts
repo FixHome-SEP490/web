@@ -226,11 +226,11 @@ describe('NewBookingWizardPage A+ service finder', () => {
     route.query = {};
   });
 
-  it('shows the loaded catalog with per-category counts and selects nothing by default', async () => {
+  it('shows compact categories and selects nothing by default', async () => {
     const wrapper = await renderWizard();
 
-    expect(categoryChip(wrapper, 'Điện lạnh').text()).toContain('2');
-    expect(categoryChip(wrapper, 'Điện & Nước').text()).toContain('1');
+    expect(categoryChip(wrapper, 'Điện lạnh').text()).toBe('Điện lạnh');
+    expect(categoryChip(wrapper, 'Điện & Nước').text()).toBe('Điện & Nước');
 
     const cards = wrapper.findAll('[data-testid="booking-service-card"]');
     expect(cards).toHaveLength(3);
@@ -271,23 +271,23 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(setCustomerBookingWidth).toHaveBeenLastCalledWith(false);
   });
 
-  it('shows four featured categories and keeps a selected extra chip visible', async () => {
+  it('shows three featured categories and keeps a selected extra chip visible', async () => {
     const categories = Array.from({ length: 13 }, (_, i) => ({ id: `cat-${i}`, name: `Nhóm ${i + 1}`, count: i % 3 + 1 }));
     const wrapper = mount(ServiceCategoryFilters, { props: { categories, modelValue: 'cat-1' } });
     expect(wrapper.find('select').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(5);
+    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(4);
     await wrapper.get('[data-testid="category-more-toggle"]').trigger('click');
     const dialog = wrapper.get('[role="dialog"]');
-    expect(dialog.findAll('button')).toHaveLength(9);
+    expect(dialog.findAll('button')).toHaveLength(10);
     await dialog.get('[data-category-id="cat-12"]').trigger('click');
     expect(wrapper.emitted('update:modelValue')).toEqual([['cat-12']]);
     await wrapper.setProps({ modelValue: 'cat-12' });
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="booking-category-filter"][data-category-id="cat-12"]').attributes('aria-pressed')).toBe('true');
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(6);
+    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(5);
     await wrapper.setProps({ modelValue: 'cat-11' });
     expect(wrapper.find('[data-testid="booking-category-filter"][data-category-id="cat-12"]').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(6);
+    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(5);
   });
 
   it('limits the default catalog to eight, expands it, and shows every match when filtering', async () => {
@@ -309,7 +309,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(12);
   });
 
-  it('keeps short category lists visibly named with pressed state and counts', async () => {
+  it('keeps short category lists named and selected without noisy counts', async () => {
     const wrapper = mount(ServiceCategoryFilters, {
       props: { categories: [{ id: 'a', name: 'Điện lạnh', count: 2 }, { id: 'b', name: 'Điện & Nước', count: 1 }], modelValue: 'a' },
     });
@@ -317,7 +317,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.find('label').exists()).toBe(false);
     expect(wrapper.get('[role="group"]').attributes('aria-label')).toBe('Lọc theo nhóm dịch vụ');
     const buttons = wrapper.findAll('button');
-    expect(buttons.map((button) => button.text())).toEqual(['Tất cả (3)', 'Điện lạnh (2)', 'Điện & Nước (1)']);
+    expect(buttons.map((button) => button.text())).toEqual(['Tất cả', 'Điện lạnh', 'Điện & Nước']);
     expect(buttons[1].attributes('aria-pressed')).toBe('true');
     await buttons[2].trigger('click');
     expect(wrapper.emitted('update:modelValue')).toEqual([['b']]);

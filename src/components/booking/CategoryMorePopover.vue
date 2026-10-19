@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
       :aria-controls="panelId"
       data-testid="category-more-toggle"
       @click="toggleOpen"
-    >Xem thêm danh mục <ChevronDown :size="14" aria-hidden="true" /></button>
+    >Danh mục khác <ChevronDown :size="14" aria-hidden="true" /></button>
     <div
       v-if="open"
       :id="panelId"
