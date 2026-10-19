@@ -7,6 +7,8 @@ const props = withDefaults(
   defineProps<{
     modelValue: string;
     minDate?: Date;
+    /** Restricts selection and month navigation to dates supplied by the caller. */
+    allowedDates?: string[];
   }>(),
   {
     minDate: () => new Date(),
@@ -40,6 +42,13 @@ const resolvedSelectedIso = computed(() => {
   if (props.modelValue === 'WEEKEND') return weekendIso;
   return props.modelValue || todayIso;
 });
+const allowedDateKeys = computed(() => props.allowedDates ? new Set(props.allowedDates) : null);
+const monthKey = (year: number, month: number) => year * 12 + month;
+const dateMonthKey = (iso: string) => {
+  const [year, month] = iso.split('-').map(Number);
+  return monthKey(year, month - 1);
+};
+const isDateAllowed = (iso: string) => !allowedDateKeys.value || allowedDateKeys.value.has(iso);
 
 // Sync calendar view to selected date when changed externally
 watch(
@@ -62,10 +71,13 @@ const monthNamesVi = [
 
 const dayNamesVi = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
-const canGoPrevMonth = computed(() => {
-  if (currentYear.value > todayYear) return true;
-  return currentMonth.value > todayMonth;
-});
+const currentMonthKey = computed(() => monthKey(currentYear.value, currentMonth.value));
+const canGoPrevMonth = computed(() => allowedDateKeys.value
+  ? [...allowedDateKeys.value].some((date) => dateMonthKey(date) < currentMonthKey.value)
+  : currentYear.value > todayYear || currentMonth.value > todayMonth);
+const canGoNextMonth = computed(() => allowedDateKeys.value
+  ? [...allowedDateKeys.value].some((date) => dateMonthKey(date) > currentMonthKey.value)
+  : true);
 
 const prevMonth = () => {
   if (!canGoPrevMonth.value) return;
@@ -78,6 +90,7 @@ const prevMonth = () => {
 };
 
 const nextMonth = () => {
+  if (!canGoNextMonth.value) return;
   if (currentMonth.value === 11) {
     currentMonth.value = 0;
     currentYear.value++;
@@ -93,6 +106,7 @@ interface CalendarCell {
   isPast: boolean;
   isToday: boolean;
   isSelected: boolean;
+  isAllowed: boolean;
 }
 
 const calendarDays = computed(() => {
@@ -124,6 +138,7 @@ const calendarDays = computed(() => {
       isPast: true, // Past or out-of-month is disabled
       isToday: false,
       isSelected: false,
+      isAllowed: false,
     });
   }
 
@@ -143,6 +158,7 @@ const calendarDays = computed(() => {
       isPast,
       isToday,
       isSelected,
+      isAllowed: isDateAllowed(iso),
     });
   }
 
@@ -159,6 +175,7 @@ const calendarDays = computed(() => {
       isPast: false,
       isToday: false,
       isSelected: false,
+      isAllowed: false,
     });
   }
 
@@ -166,14 +183,13 @@ const calendarDays = computed(() => {
 });
 
 const selectDate = (iso: string, isPast: boolean, isCurrentMonth: boolean) => {
-  if (isPast || !isCurrentMonth) return;
+  if (isPast || !isCurrentMonth || !isDateAllowed(iso)) return;
   emit('update:modelValue', iso);
 };
 
 const selectQuick = (type: 'TODAY' | 'TOMORROW' | 'WEEKEND') => {
-  if (type === 'TODAY') emit('update:modelValue', todayIso);
-  else if (type === 'TOMORROW') emit('update:modelValue', tomorrowIso);
-  else if (type === 'WEEKEND') emit('update:modelValue', weekendIso);
+  const date = type === 'TODAY' ? todayIso : type === 'TOMORROW' ? tomorrowIso : weekendIso;
+  if (isDateAllowed(date)) emit('update:modelValue', date);
 };
 
 // Formatted display in Vietnamese
@@ -193,6 +209,11 @@ const selectedFormatted = computed(() => {
 
   return `${dayName}, ${pad(d)}/${pad(m)}/${y}${suffix}`;
 });
+const dateAriaLabel = (iso: string) => {
+  const [year, month, day] = iso.split('-').map(Number);
+  const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+  return `${dayNames[new Date(year, month - 1, day).getDay()]}, ${pad(day)}/${pad(month)}/${year}`;
+};
 </script>
 
 <template>
@@ -202,6 +223,7 @@ const selectedFormatted = computed(() => {
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+        :disabled="!isDateAllowed(todayIso)"
         :class="resolvedSelectedIso === todayIso ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'"
         @click="selectQuick('TODAY')"
       >
@@ -210,6 +232,7 @@ const selectedFormatted = computed(() => {
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+        :disabled="!isDateAllowed(tomorrowIso)"
         :class="resolvedSelectedIso === tomorrowIso ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'"
         @click="selectQuick('TOMORROW')"
       >
@@ -218,6 +241,7 @@ const selectedFormatted = computed(() => {
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+        :disabled="!isDateAllowed(weekendIso)"
         :class="resolvedSelectedIso === weekendIso ? 'bg-brand-600 text-white shadow-xs' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'"
         @click="selectQuick('WEEKEND')"
       >
@@ -237,14 +261,17 @@ const selectedFormatted = computed(() => {
           :disabled="!canGoPrevMonth"
           class="w-7 h-7 flex items-center justify-center rounded-lg border border-ink-200 text-ink-600 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="Tháng trước"
+          aria-label="Tháng trước"
           @click="prevMonth"
         >
           <ChevronLeft :size="15" />
         </button>
         <button
           type="button"
+          :disabled="!canGoNextMonth"
           class="w-7 h-7 flex items-center justify-center rounded-lg border border-ink-200 text-ink-600 hover:bg-ink-100 transition-colors"
           title="Tháng sau"
+          aria-label="Tháng sau"
           @click="nextMonth"
         >
           <ChevronRight :size="15" />
@@ -265,14 +292,17 @@ const selectedFormatted = computed(() => {
         v-for="(cell, idx) in calendarDays"
         :key="idx"
         type="button"
-        :disabled="cell.isPast || !cell.isCurrentMonth"
+        :disabled="cell.isPast || !cell.isCurrentMonth || !cell.isAllowed"
+        :aria-label="dateAriaLabel(cell.iso)"
+        :aria-pressed="cell.isSelected"
+        :data-testid="`fh-date-${cell.iso}`"
         class="h-8 sm:h-9 flex flex-col items-center justify-center rounded-xl text-xs font-semibold relative transition-all"
         :class="[
           !cell.isCurrentMonth ? 'opacity-20 cursor-default pointer-events-none' : '',
           cell.isPast && cell.isCurrentMonth ? 'text-ink-300 cursor-not-allowed line-through decoration-ink-300/60' : '',
           cell.isSelected
             ? 'bg-brand-600 text-white shadow-xs font-bold ring-2 ring-brand-300 scale-105 z-10'
-            : !cell.isPast && cell.isCurrentMonth
+            : !cell.isPast && cell.isCurrentMonth && cell.isAllowed
               ? 'text-ink-800 hover:bg-brand-50 hover:text-brand-700 active:scale-95'
               : '',
         ]"

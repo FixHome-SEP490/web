@@ -20,7 +20,7 @@ const {
   getCategories: vi.fn(),
   getAddresses: vi.fn(),
   push: vi.fn(),
-  route: { query: { fixed: 'true' } },
+  route: { query: { serviceId: 'service-id' } },
   alert: vi.fn(),
 }));
 
@@ -39,6 +39,12 @@ vi.mock('../src/api/bookings.api', () => ({
   bookingsApi: { createBooking },
 }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getCategories } }));
+// P012: the plain form asks the catalog-v2 pricing preview per selected
+// service; this media suite keeps it feature-off so no test reaches a backend.
+vi.mock('../src/api/catalog-pricing.api', () => ({
+  catalogPricingApi: { getPreview: vi.fn().mockRejectedValue(Object.assign(new Error('not found'), { response: { status: 404 } })) },
+  isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
+}));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
 
@@ -143,6 +149,38 @@ afterEach(() => {
 });
 
 describe('customer New Booking private photo flow', () => {
+  it('uses one compact dashed dropzone with screen-reader naming, keyboard activation, and drag-and-drop', async () => {
+    const file = new File(['photo'], 'unit.jpg', { type: 'image/jpeg' });
+    uploadBookingPhoto.mockResolvedValue({ uploadId: 'opaque-upload-id', mimeType: file.type, sizeBytes: file.size });
+    const wrapper = await renderWizard();
+    const dropzone = wrapper.get('[data-testid="booking-photo-picker"]');
+
+    expect(dropzone.attributes('role')).toBe('button');
+    expect(dropzone.attributes('tabindex')).toBe('0');
+    expect(dropzone.attributes('aria-label')).toContain('Tải ảnh hiện trạng');
+    expect(dropzone.classes()).toContain('border-dashed');
+    expect(dropzone.classes()).toContain('min-h-[100px]');
+    expect(dropzone.find('svg[aria-hidden="true"]').exists()).toBe(true);
+    expect(dropzone.text().trim()).toBe('Thêm ảnh hoặc kéo thả vào đây');
+    expect(wrapper.text()).not.toContain('Ảnh hiện trạng thiết bị');
+    expect(wrapper.text()).not.toContain('Bấm để chọn ảnh');
+    expect(wrapper.findAll('[data-testid="booking-photo-picker"]')).toHaveLength(1);
+    expect(dropzone.find('button').exists()).toBe(false);
+
+    const inputClick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    await dropzone.trigger('keydown', { key: 'Enter' });
+    await dropzone.trigger('keydown', { key: ' ' });
+    expect(inputClick).toHaveBeenCalledTimes(2);
+    inputClick.mockRestore();
+
+    await dropzone.trigger('dragover');
+    expect(dropzone.classes()).toContain('border-brand-600');
+    await dropzone.trigger('drop', { dataTransfer: { files: [file] } });
+    await flushPromises();
+    expect(uploadBookingPhoto).toHaveBeenCalledWith(file);
+    wrapper.unmount();
+  });
+
   it('uses the private upload and submits upload IDs without invoking the public upload or mediaUrls', async () => {
     const file = new File(['photo'], 'unit.jpg', { type: 'image/jpeg' });
     uploadBookingPhoto.mockResolvedValue({ uploadId: 'opaque-upload-id', mimeType: file.type, sizeBytes: file.size });

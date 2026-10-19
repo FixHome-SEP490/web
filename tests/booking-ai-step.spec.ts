@@ -23,6 +23,13 @@ vi.mock('../src/api/media.api', () => ({
 }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { createBooking } }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getCategories } }));
+// P012: the plain form asks the catalog-v2 pricing preview per selected
+// service; the AI form hides the section, and this suite keeps the preview
+// feature-off so no test reaches a backend.
+vi.mock('../src/api/catalog-pricing.api', () => ({
+  catalogPricingApi: { getPreview: vi.fn().mockRejectedValue(Object.assign(new Error('not found'), { response: { status: 404 } })) },
+  isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
+}));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
 vi.mock('../src/api/ai.api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/api/ai.api')>();

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
+import { defineComponent, h, inject, onMounted, type Component } from 'vue';
 
 // PO 09/10/2026: one header pattern on public pages and in the customer area.
 // The avatar opens account items only (never a list of services), repair history
@@ -34,11 +35,20 @@ import { accountMenuLinks, roleAreaLink, roleHeaderAction } from '../src/utils/a
 
 const SERVICE_WORDS = /Điện lạnh|Điện nước|Máy giặt|Dịch vụ|Cách hoạt động|Phân tích sự cố/;
 
-async function mountAs(layout: 'public' | 'customer', role: UserRole | null) {
+const BookingWidthProbe = defineComponent({
+  setup() {
+    const setWide = inject<(wide: boolean) => void>('customer-booking-layout-width');
+    onMounted(() => setWide?.(true));
+    return () => h('div');
+  },
+});
+
+async function mountAs(layout: 'public' | 'customer', role: UserRole | null, page: Component = { template: '<div />' }) {
+  localStorage.clear();
   setActivePinia(createPinia());
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/:p(.*)*', component: { template: '<div />' } }],
+    routes: [{ path: '/:p(.*)*', component: page }],
   });
   await router.push(layout === 'public' ? '/' : '/app');
   await router.isReady();
@@ -109,6 +119,27 @@ describe('account menu items', () => {
     // Warranties is in the wide top bar already; the menu only carries it on narrow screens.
     expect(inApp.find((l) => l.to === '/app/warranties')?.hiddenOnWide).toBe(true);
     expect(inApp.find((l) => l.to === '/app/history')?.hiddenOnWide).toBeFalsy();
+  });
+});
+
+describe('customer layout booking width', () => {
+  beforeEach(() => document.body.replaceChildren());
+
+  it('keeps ordinary customer pages at their existing content width', async () => {
+    const { wrapper } = await mountAs('customer', UserRole.CUSTOMER);
+    const main = wrapper.get('[data-testid="customer-layout-main"]');
+
+    expect(main.classes()).toContain('max-w-280');
+    expect(main.classes()).not.toContain('customer-main--booking-wide');
+    wrapper.unmount();
+  });
+
+  it('widens the customer container only when the booking step requests it', async () => {
+    const { wrapper } = await mountAs('customer', UserRole.CUSTOMER, BookingWidthProbe);
+    const main = wrapper.get('[data-testid="customer-layout-main"]');
+
+    expect(main.classes()).toContain('customer-main--booking-wide');
+    wrapper.unmount();
   });
 });
 
