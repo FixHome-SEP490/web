@@ -31,19 +31,19 @@ const options = computed(() => [
   </div>
   <div v-else class="space-y-2">
     <p class="text-xs font-semibold text-ink-700">Nhóm dịch vụ</p>
-    <div class="flex flex-wrap gap-2" role="group" aria-label="Lọc theo nhóm dịch vụ">
+    <div class="flex flex-wrap gap-1.5" role="group" aria-label="Lọc theo nhóm dịch vụ">
       <button
         v-for="cat in options"
         :key="cat.id"
         type="button"
-        class="min-h-11 whitespace-nowrap rounded-[var(--radius-md)] border px-3 text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        class="min-h-8 pointer-coarse:min-h-11 whitespace-nowrap rounded-[var(--radius-sm)] border px-2.5 text-[11px] font-medium transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         :class="modelValue === cat.id ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:border-brand-300 hover:bg-white'"
         :aria-pressed="modelValue === cat.id"
         :data-category-id="cat.id"
         data-testid="booking-category-filter"
         @click="emit('update:modelValue', cat.id)"
       >{{ cat.name }} ({{ cat.count }})</button>
-      <CategoryMorePopover v-if="extraCategories.length" :categories="extraCategories" :model-value="modelValue" @select="emit('update:modelValue', $event)" />
+      <CategoryMorePopover v-if="extraCategories.length" compact :categories="extraCategories" :model-value="modelValue" @select="emit('update:modelValue', $event)" />
     </div>
   </div>
 </template>

@@ -145,9 +145,17 @@ describe('Public service discovery', () => {
     await chips.get('[role="dialog"] [data-category-id="cat-12"]').trigger('click');
     await flushPromises();
     expect(chips.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
+    expect(chips.findAll('button')).toHaveLength(6);
     expect(chips.find('[role="dialog"]').exists()).toBe(false);
     expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-12', q: 'may' });
     expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12, categoryId: 'cat-12', search: 'may' } });
+    // Keep the six orbit positions stable without hiding the displaced category.
+    await chips.get('[data-testid="category-more-toggle"]').trigger('click');
+    await chips.get('[role="dialog"] [data-category-id="cat-3"]').trigger('click');
+    await flushPromises();
+    expect(chips.findAll('button')).toHaveLength(6);
+    expect(chips.get('[data-testid="category-cat-3"]').attributes('aria-pressed')).toBe('true');
+    expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-3', q: 'may' });
     wrapper.unmount();
   });
 
@@ -157,7 +165,8 @@ describe('Public service discovery', () => {
     const context = await setup();
     const wrapper = mount(ServicesPage, context);
     await flushPromises();
-    expect(wrapper.get('.service-card__description').text()).toBe(service().description);
+    expect(wrapper.find('.service-card__description').exists()).toBe(false);
+    expect(wrapper.get('.service-card').text()).not.toContain('Catalog V2 staging');
     expect(wrapper.get('.service-card').text()).not.toContain(scope);
     wrapper.unmount();
     await context.router.push('/services/ve-sinh-may-lanh');

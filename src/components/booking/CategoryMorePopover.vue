@@ -2,10 +2,11 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import { ChevronDown } from 'lucide-vue-next';
 
-defineProps<{
+withDefaults(defineProps<{
   categories: { id: string; name: string; count?: number }[];
   modelValue: string;
-}>();
+  compact?: boolean;
+}>(), { compact: false });
 const emit = defineEmits<{ (e: 'select', id: string): void }>();
 const panelId = useId();
 const open = ref(false);
@@ -59,7 +60,8 @@ onBeforeUnmount(() => {
     <button
       ref="toggle"
       type="button"
-      class="inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-[var(--radius-md)] border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      class="inline-flex items-center gap-1 whitespace-nowrap border border-ink-200 bg-white text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      :class="compact ? 'min-h-8 pointer-coarse:min-h-11 rounded-[var(--radius-sm)] px-2.5 text-[11px] font-medium' : 'min-h-11 rounded-[var(--radius-md)] px-3 text-xs font-semibold'"
       aria-haspopup="dialog"
       :aria-expanded="open"
       :aria-controls="panelId"

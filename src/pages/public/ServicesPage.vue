@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ArrowRight, Clock, LayoutGrid, Search, X } from 'lucide-vue-next';
+import { ArrowRight, LayoutGrid, Search, X } from 'lucide-vue-next';
 import { FhButton, FhEmptyState, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import { categoryIcon } from '../../components/booking/service-icons';
@@ -105,11 +105,12 @@ const {
 });
 
 const categoryNames = computed(() => new Map(categories.value.map((category) => [category.id, category.name])));
-const extraCategories = computed(() => categories.value.slice(4));
-const spotlightCategories = computed(() => [
-  ...categories.value.slice(0, 4),
-  ...extraCategories.value.filter((category) => category.id === selectedCategoryId.value),
-]);
+const spotlightCategories = computed(() => {
+  const featured = categories.value.slice(0, 4);
+  const selectedExtra = categories.value.slice(4).find((category) => category.id === selectedCategoryId.value);
+  return selectedExtra ? [...featured.slice(0, 3), selectedExtra] : featured;
+});
+const extraCategories = computed(() => categories.value.filter((category) => !spotlightCategories.value.some((featured) => featured.id === category.id)));
 const categoryHaloTargets = computed(() => [
   ...(!selectedCategoryId.value ? [] : ['all']),
   ...spotlightCategories.value
@@ -464,7 +465,7 @@ onBeforeUnmount(() => {
         >
           <button
             type="button"
-            class="category-suggestion"
+            class="category-suggestion category-orbit-item"
             :class="{
               'category-suggestion--selected': !selectedCategoryId,
               'category-suggestion--halo': categoryHaloTarget === 'all',
@@ -482,7 +483,7 @@ onBeforeUnmount(() => {
             v-for="category in spotlightCategories"
             :key="category.id"
             type="button"
-            class="category-suggestion"
+            class="category-suggestion category-orbit-item"
             :class="{
               'category-suggestion--selected': selectedCategoryId === category.id,
               'category-suggestion--halo': categoryHaloTarget === category.id,
@@ -496,7 +497,7 @@ onBeforeUnmount(() => {
             <component :is="categoryIcon(category)" :size="15" :stroke-width="1.8" aria-hidden="true" />
             <span>{{ category.name }}</span>
           </button>
-          <CategoryMorePopover v-if="extraCategories.length" :categories="extraCategories" :model-value="selectedCategoryId" @select="selectCategory" />
+          <CategoryMorePopover v-if="extraCategories.length" class="category-orbit-item category-more-orbit" :categories="extraCategories" :model-value="selectedCategoryId" @select="selectCategory" />
         </div>
       </div>
 
@@ -563,26 +564,14 @@ onBeforeUnmount(() => {
               <div class="service-mark" aria-hidden="true">
                 <component :is="categoryIcon(categoryFor(service))" :size="20" :stroke-width="1.75" />
               </div>
-              <span v-if="categoryName(service)" class="service-category">{{ categoryName(service) }}</span>
-            </div>
-
-            <div class="service-card__mode" :class="`service-card__mode--${service.priceSummary?.kind === 'fixed_range' ? 'fixed' : pricing(service).kind}`">
-              <span class="mode-dot" aria-hidden="true"></span>
-              {{ service.priceSummary?.kind === 'fixed_range' ? 'Có bảng giá công' : service.priceSummary?.kind === 'inspection_reference' ? 'Giá tham khảo' : pricing(service).kind === 'fixed' ? 'Giá cố định' : pricing(service).kind === 'inspection' ? 'Báo giá sau khảo sát' : 'Chưa xác định giá' }}
+              <div class="service-card__meta">
+                <span v-if="categoryName(service)" class="service-category">{{ categoryName(service) }}</span>
+              </div>
             </div>
 
             <h3 class="service-card__title">
               <RouterLink :to="detailTarget(service)">{{ service.name }}</RouterLink>
             </h3>
-            <p v-if="service.description" class="service-card__description">
-              {{ service.description }}
-            </p>
-
-            <div v-if="service.estimatedMinutes > 0" class="service-duration">
-              <Clock :size="15" :stroke-width="1.8" aria-hidden="true" />
-              <span>Thời lượng dự kiến</span>
-              <strong>~{{ service.estimatedMinutes }} phút</strong>
-            </div>
 
             <div class="service-price">
               <template v-if="getServicePriceSummaryDisplay(service)">
@@ -693,22 +682,28 @@ onBeforeUnmount(() => {
   isolation: isolate;
   display: grid;
   width: min(100%, 1120px);
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 720px) minmax(0, 1fr);
+  grid-template-rows: 48px 136px 48px;
   align-items: center;
   column-gap: 12px;
-  row-gap: 20px;
+  row-gap: 4px;
   margin: 1px auto 0;
 }
 .services-search-stage--active { z-index: 4; }
 
-.category-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 4px;
-}
+.category-cloud { display: contents; }
+.category-orbit-item { z-index: 1; min-width: 0; max-width: 100%; animation: category-float 7s ease-in-out infinite; }
+.category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 1; justify-self: start; margin-left: 7px; animation-delay: -1.2s; animation-duration: 6.5s; }
+.category-orbit-item:nth-child(2) { grid-column: 1; grid-row: 2; justify-self: end; margin-right: 2px; animation-delay: -3.5s; animation-duration: 7.4s; }
+.category-orbit-item:nth-child(3) { grid-column: 1; grid-row: 3; justify-self: start; margin-left: 31px; animation-delay: -5.2s; animation-duration: 7.8s; }
+.category-orbit-item:nth-child(4) { grid-column: 3; grid-row: 1; justify-self: end; margin-right: 14px; animation-delay: -2.3s; animation-duration: 6.9s; }
+.category-orbit-item:nth-child(5) { grid-column: 3; grid-row: 2; justify-self: start; margin-left: 11px; animation-delay: -4.4s; animation-duration: 7.2s; }
+.category-orbit-item:nth-child(6) { grid-column: 3; grid-row: 3; justify-self: end; margin-right: 29px; animation-delay: -6.1s; animation-duration: 7.7s; }
+.category-halo-paused .category-orbit-item { animation-play-state: paused; }
+.category-more-orbit:focus-within { z-index: 3; }
+.category-more-orbit :deep([role="dialog"]) { top: auto; bottom: calc(100% + 8px); }
+.category-more-orbit :deep([data-testid="category-more-toggle"]) { max-width: 100%; border-radius: 999px; background: var(--color-ink-25); box-shadow: var(--shadow-e1); font-weight: 500; }
+.category-more-orbit :deep([data-testid="category-more-toggle"] svg) { flex-shrink: 0; }
 .category-suggestion {
   position: relative;
   z-index: 1;
@@ -764,6 +759,8 @@ onBeforeUnmount(() => {
 .services-search-panel {
   position: relative;
   z-index: 2;
+  grid-column: 2;
+  grid-row: 2;
   justify-self: center;
   width: min(100%, 760px);
   padding: 0;
@@ -920,9 +917,9 @@ onBeforeUnmount(() => {
 
 .service-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-  gap: 17px;
+  gap: 16px;
   transition: opacity 180ms var(--service-ease);
 }
 .service-grid--busy { opacity: 0.68; }
@@ -930,7 +927,7 @@ onBeforeUnmount(() => {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 21px;
+  padding: 24px;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-lg);
   background: var(--color-ink-25);
@@ -939,26 +936,25 @@ onBeforeUnmount(() => {
   transition: border-color 180ms var(--service-ease), box-shadow 180ms var(--service-ease), transform 180ms var(--service-ease);
 }
 .service-card:hover { border-color: var(--color-ink-300); box-shadow: var(--shadow-e2); transform: translateY(-2px); }
-.service-card__top { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 17px; }
+.service-card__top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.service-card__meta { display: grid; min-width: 0; gap: 4px; }
 .service-mark {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--color-brand-100);
-  border-radius: 15px;
+  border-radius: var(--radius-md);
   background: var(--color-brand-50);
   color: var(--color-brand-700);
 }
-.service-category { max-width: 65%; color: var(--color-ink-600); font-size: 11px; font-weight: 500; text-align: right; }
+.service-category { color: var(--color-ink-600); font-size: 12px; font-weight: 500; }
 .service-card__mode {
   display: inline-flex;
-  min-height: 25px;
   align-items: center;
   gap: 7px;
   align-self: flex-start;
-  margin-bottom: 8px;
   color: var(--color-ink-700);
   font-size: 11px;
   font-weight: 600;
@@ -968,20 +964,20 @@ onBeforeUnmount(() => {
 .service-card__mode--fixed .mode-dot { background: var(--color-brand-600); }
 .service-card__mode--inspection { color: var(--color-warning-800); }
 .service-card__mode--inspection .mode-dot { background: var(--color-warning-600); }
-.service-card__title { margin: 0; font-size: 17px; line-height: 1.38; letter-spacing: -0.018em; font-weight: 600; text-wrap: balance; }
+.service-card__title { min-height: 2.9em; margin: 0; font-size: 18px; line-height: 1.45; letter-spacing: -0.018em; font-weight: 600; text-wrap: balance; }
 .service-card__title a { color: var(--color-ink-900); text-decoration: none; }
 .service-card__title a:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 3px; }
-.service-card__description { overflow: hidden; margin: 9px 0 0; color: var(--color-ink-600); font-size: 12px; line-height: 1.55; white-space: nowrap; text-overflow: ellipsis; }
-.service-duration { display: flex; align-items: center; gap: 7px; margin-top: 15px; color: var(--color-ink-600); font-size: 11px; }
+.service-card__description { display: -webkit-box; overflow: hidden; margin: 8px 0 0; color: var(--color-ink-600); font-size: 13px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.service-duration { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 16px 0 4px; color: var(--color-ink-600); font-size: 12px; }
 .service-duration svg { color: var(--color-ink-500); }
 .service-duration strong { margin-left: auto; color: var(--color-ink-700); font-weight: 600; white-space: nowrap; }
-.service-price { display: flex; min-height: 73px; flex-direction: column; justify-content: center; gap: 5px; margin-top: auto; padding: 17px 0 14px; border-bottom: 1px solid var(--color-ink-200); }
+.service-price { display: flex; min-height: 80px; flex-direction: column; justify-content: center; gap: 6px; margin-top: auto; padding: 16px 0; border-bottom: 1px solid var(--color-ink-200); }
 .service-price__label { color: var(--color-ink-600); font-size: 11px; }
-.service-price > strong { display: flex; align-items: baseline; gap: 4px; color: var(--color-ink-900); font-size: 15px; line-height: 1.4; font-weight: 600; }
+.service-price > strong { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; color: var(--color-ink-900); font-size: 18px; line-height: 1.4; font-weight: 600; }
 .service-price > strong small { color: var(--color-ink-600); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .service-price__range { color: var(--color-ink-700); font-size: 12px; }
 .service-price__unknown { font-size: 12px !important; }
-.service-card__actions { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 9px; padding-top: 13px; }
+.service-card__actions { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding-top: 16px; }
 .service-details-link { display: inline-flex; min-height: 44px; align-items: center; gap: 5px; color: var(--color-brand-700); font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .service-details-link svg { transition: transform 180ms var(--service-ease); }
 .service-details-link:hover svg { transform: translateX(3px); }
@@ -999,16 +995,33 @@ onBeforeUnmount(() => {
   from { opacity: 0; transform: translateY(9px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes category-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
 .public-services :is(a, button, input):focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 3px;
 }
 .public-services .services-search-field input:focus-visible { outline: 0; outline-offset: 0; }
 
+@media (max-width: 1160px) {
+  .services-search-stage { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto auto auto; gap: 10px; }
+  .category-orbit-item { justify-self: center !important; margin: 0 !important; }
+  .category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 2; }
+  .category-orbit-item:nth-child(2) { grid-column: 2; grid-row: 2; }
+  .category-orbit-item:nth-child(3) { grid-column: 3; grid-row: 2; }
+  .category-orbit-item:nth-child(4) { grid-column: 1; grid-row: 3; }
+  .category-orbit-item:nth-child(5) { grid-column: 2; grid-row: 3; }
+  .category-orbit-item:nth-child(6) { grid-column: 3; grid-row: 3; }
+  .services-search-panel { grid-column: 1 / -1; grid-row: 1; }
+}
+
 @media (max-width: 900px) {
   .public-services { width: min(100% - 40px, 1120px); padding-top: 43px; }
   .services-hero { align-items: center; gap: 24px; padding-bottom: 36px; }
   .services-hero h1 { max-width: 700px; font-size: clamp(36px, 6.5vw, 52px); }
+  .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -1023,9 +1036,15 @@ onBeforeUnmount(() => {
   .services-search-field { min-height: 52px; gap: 9px; padding-inline: 12px; }
   .services-search-field input { font-size: 13px; }
   .services-search-panel > p { margin-top: 8px; font-size: 11px; }
-  .services-search-stage { row-gap: 14px; }
-  .category-cloud { flex-wrap: wrap; justify-content: flex-start; padding: 5px 4px 10px; }
-  .category-suggestion { flex: 0 0 auto; min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 11px; }
+  .services-search-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .category-orbit-item:nth-child(1) { grid-column: 1; grid-row: 2; }
+  .category-orbit-item:nth-child(2) { grid-column: 2; grid-row: 2; }
+  .category-orbit-item:nth-child(3) { grid-column: 1; grid-row: 3; }
+  .category-orbit-item:nth-child(4) { grid-column: 2; grid-row: 3; }
+  .category-orbit-item:nth-child(5) { grid-column: 1; grid-row: 4; }
+  .category-orbit-item:nth-child(6) { grid-column: 2; grid-row: 4; }
+  .category-suggestion { min-height: 44px; gap: 6px; padding-inline: 8px; font-size: 11px; }
+  .category-more-orbit :deep([data-testid="category-more-toggle"]) { gap: 4px; padding-inline: 8px; font-size: 11px; }
   .search-suggestions { top: calc(100% + 7px); max-height: 38vh; padding: 5px; border-radius: 15px; }
   .search-suggestion { min-height: 50px; padding-inline: 10px; }
   .results-heading-row h2 { font-size: 21px; }
@@ -1035,14 +1054,14 @@ onBeforeUnmount(() => {
   .results-count { padding-top: 20px; font-size: 12px; }
   .service-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .service-card { padding: 18px; }
-  .service-card__title { font-size: 16px; }
+  .service-card__title { min-height: 0; font-size: 17px; }
   .service-card__description { min-height: 0; }
   .service-pagination__viewport { margin-top: 22px; }
   .service-grid--loading .service-card { min-height: 248px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .category-suggestion { animation: none !important; }
+  .category-orbit-item { animation: none !important; }
   .category-suggestion::after { transition: none !important; }
   .public-services *, .public-services *::before, .public-services *::after {
     scroll-behavior: auto !important;

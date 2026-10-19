@@ -50,7 +50,7 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <div v-if="(counts.fixed > 0 && counts.inspection > 0) || priceFilter !== 'all'" class="flex flex-wrap items-center gap-2">
+    <div v-if="(counts.fixed > 0 && counts.inspection > 0) || priceFilter !== 'all'" class="flex flex-wrap items-center gap-1.5">
       <div
         class="flex flex-wrap items-center gap-1 rounded-[var(--radius-sm)] bg-ink-100/80 p-1 text-[11px]"
         role="group"
@@ -58,7 +58,7 @@ const emit = defineEmits<{
       >
         <button
           type="button"
-          class="whitespace-nowrap min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
+          class="whitespace-nowrap min-h-8 pointer-coarse:min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-medium transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
           :class="priceFilter === 'all' ? 'bg-white font-bold text-ink-900 shadow-[var(--shadow-e1)]' : 'text-ink-600 hover:text-ink-900'"
           :aria-pressed="priceFilter === 'all'"
           data-testid="booking-price-filter-all"
@@ -69,7 +69,7 @@ const emit = defineEmits<{
         <button
           v-if="counts.fixed > 0"
           type="button"
-          class="inline-flex items-center gap-1 whitespace-nowrap min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
+          class="inline-flex items-center gap-1 whitespace-nowrap min-h-8 pointer-coarse:min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-medium transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
           :class="priceFilter === 'fixed_price' ? 'bg-white font-bold text-brand-700 shadow-[var(--shadow-e1)]' : 'text-ink-600 hover:text-ink-900'"
           :aria-pressed="priceFilter === 'fixed_price'"
           data-testid="booking-price-filter-fixed"
@@ -80,7 +80,7 @@ const emit = defineEmits<{
         <button
           v-if="counts.inspection > 0"
           type="button"
-          class="inline-flex items-center gap-1 whitespace-nowrap min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
+          class="inline-flex items-center gap-1 whitespace-nowrap min-h-8 pointer-coarse:min-h-11 rounded-[var(--radius-sm)] px-2.5 py-1 font-medium transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-600"
           :class="priceFilter === 'inspection_required' ? 'bg-white font-bold text-brand-700 shadow-[var(--shadow-e1)]' : 'text-ink-600 hover:text-ink-900'"
           :aria-pressed="priceFilter === 'inspection_required'"
           data-testid="booking-price-filter-inspection"
