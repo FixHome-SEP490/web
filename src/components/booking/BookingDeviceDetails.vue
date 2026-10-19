@@ -178,7 +178,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    v-if="!isUnavailable"
+    v-if="!isUnavailable && (showFacts || showScopeOptions || loadState === 'failed')"
     class="space-y-4 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-[var(--shadow-e1)] sm:p-6"
     data-testid="booking-device-details"
     aria-labelledby="booking-device-details-title"
