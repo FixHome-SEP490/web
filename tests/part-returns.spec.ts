@@ -105,7 +105,7 @@ beforeEach(() => {
 
 describe('Technician khai trả linh kiện (P1 custody)', () => {
   it('shows issued / used / still-to-return and declares a return that waits for the manager', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId
       .mockResolvedValueOnce([returnRecord()])
       .mockResolvedValueOnce([returnRecord({ declaredQty: 2, version: 5 })]);
@@ -140,7 +140,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('never lets a double click send the declaration twice', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId.mockResolvedValue([returnRecord()]);
     const pending = deferred<{ data: { data: null } }>();
     partRequestsApi.declareReturn.mockReturnValue(pending.promise);
@@ -165,7 +165,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('offers only the quantity not declared yet', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId.mockResolvedValue([
       returnRecord({ declaredQty: 2, outstandingQty: 2 }),
     ]);
@@ -182,7 +182,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it.each([1, 2])('refreshes the open declaration after 409 and permits an explicit retry (draft %i)', async (draftQty) => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId
       .mockResolvedValueOnce([returnRecord()])
       .mockResolvedValue([returnRecord({ usedQty: 2, outstandingQty: 1, version: 5 })]);
@@ -218,7 +218,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('removes the stale declaration form when a 409 refresh leaves nothing to declare', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId
       .mockResolvedValueOnce([returnRecord()])
       .mockResolvedValue([returnRecord({ declaredQty: 2, version: 5 })]);
@@ -238,7 +238,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('prevents a stale declaration retry when the 409 refresh fails', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId
       .mockResolvedValueOnce([returnRecord()])
       .mockRejectedValue(new Error('network unavailable'));
@@ -258,7 +258,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('hides the return UI when the feature is off (404) and keeps usage working', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId.mockRejectedValue({ response: { status: 404 } });
 
     const wrapper = mount(TechnicianPartsSection, {
@@ -290,7 +290,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
   });
 
   it('shows a retry line on a real load failure without blocking the parts list', async () => {
-    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received')]);
+    partRequestsApi.getByOrderId.mockResolvedValue([partRequest('received', 'returned')]);
     partRequestsApi.getReturnsByOrderId.mockRejectedValue(new Error('mạng lỗi'));
 
     const wrapper = mount(TechnicianPartsSection, {

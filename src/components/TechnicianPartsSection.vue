@@ -45,6 +45,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'parts-updated'): void;
+  (e: 'requests', requests: PartRequest[]): void;
+  (e: 'requests-loading'): void;
+  (e: 'requests-error'): void;
   /** How many requests exist and whether one waits for the technician (QR handover, used/returned). */
   (e: 'summary', value: { count: number; needsAction: boolean }): void;
   (e: 'pending-usage', count: number): void;
@@ -132,6 +135,11 @@ const pendingDeclaredQty = (record: PartCustodyReturnRecord) =>
 const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
   Math.max(0, record.outstandingQty - pendingDeclaredQty(record));
 
+// Usage RETURNED is a decision during repair; warehouse acceptance is physical.
+const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) =>
+  item.partSource === 'fixhome' && (item.usageStatus === 'returned' ||
+    ['COMPLETED', 'CANCELLED'].includes(props.orderStatus.toUpperCase()));
+
 const declareValid = computed(() => {
   const target = declareTarget.value;
   const quantity = Number(declareQty.value);
@@ -217,11 +225,14 @@ const loadPartRequests = async () => {
   const version = ++requestsLoadVersion;
   try {
     loading.value = true;
+    emit('requests-loading');
     const records = await partRequestsApi.getByOrderId(props.orderId);
     if (version !== requestsLoadVersion) return;
     partRequests.value = records;
+    emit('requests', records);
   } catch (err: unknown) {
     if (version !== requestsLoadVersion) return;
+    emit('requests-error');
     actionError.value =
       userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
   } finally {
@@ -444,6 +455,8 @@ const handleUpdateUsage = async (
   itemId: string,
   status: 'used' | 'returned',
 ) => {
+  const request = partRequests.value.find(row => row.id === requestId);
+  if (!isUnderRepair.value || request?.status !== 'received' || props.disabled || actionLoading.value) return;
   try {
     actionLoading.value = true;
     actionError.value = null;
@@ -470,6 +483,9 @@ const openDeclareReturn = (
   itemName: string,
   record: PartCustodyReturnRecord,
 ) => {
+  const request = partRequests.value.find(row => row.id === requestId);
+  const item = request?.items.find(row => row.id === itemId);
+  if (!request || !item || !canDeclareReturn(request, item) || props.disabled) return;
   const maxQty = canDeclareMoreQty(record);
   if (maxQty < 1 || declareSubmitting.value) return;
   declareTarget.value = { requestId, itemId, itemName, maxQty, version: record.version };
@@ -480,7 +496,10 @@ const openDeclareReturn = (
 
 const submitDeclareReturn = async () => {
   const target = declareTarget.value;
-  if (!target || declareSubmitting.value) return;
+  if (!target || declareSubmitting.value || props.disabled || returnsLoadError.value) return;
+  const request = partRequests.value.find(row => row.id === target.requestId);
+  const item = request?.items.find(row => row.id === target.itemId);
+  if (!request || !item || !canDeclareReturn(request, item)) { declareTarget.value = null; return; }
   const quantity = Number(declareQty.value);
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > target.maxQty) {
     actionError.value = `Số lượng trả phải là số nguyên từ 1 đến ${target.maxQty}.`;
@@ -1039,7 +1058,7 @@ const getStatusBadgeClass = (status: string) => {
                 v-else
                 class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
               >
-                Phát sinh khi sửa
+                {{ pr.requestType === 'quotation' ? 'Theo báo giá đã duyệt' : 'Phát sinh khi sửa' }}
               </span>
 
               <span class="text-ink-500 text-[11px] flex items-center gap-1">
@@ -1132,8 +1151,9 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- Items list in this request -->
           <div class="space-y-1">
-            <h5 class="font-semibold text-ink-800 text-[11px]">Chi tiết linh kiện:</h5>
-            <div class="border border-ink-200 rounded-lg overflow-hidden">
+            <h5 class="font-semibold text-ink-800 text-[11px]">Thực tế đã dùng/không dùng</h5>
+            <p v-if="requestHasReturns(pr)" class="text-ink-600">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý dịch vụ nhận thực tế.</p>
+            <div class="border border-ink-200 rounded-lg overflow-x-auto">
               <table class="w-full text-left text-xs">
                 <thead class="bg-ink-50 text-ink-600 font-semibold">
                   <tr>
@@ -1212,11 +1232,11 @@ const getStatusBadgeClass = (status: string) => {
                             Đã nhận
                           </div>
                           <button
-                            v-if="canDeclareMoreQty(record) > 0"
+                            v-if="canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)"
                             type="button"
                             data-testid="open-declare-return"
                             class="whitespace-nowrap rounded border border-brand-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
-                            :disabled="declareSubmitting || returnsLoadError"
+                            :disabled="declareSubmitting || returnsLoadError || disabled"
                             @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"
                           >
                             <Undo2 :size="11" class="mr-1 inline" />Khai trả
@@ -1235,7 +1255,7 @@ const getStatusBadgeClass = (status: string) => {
                             ? 'bg-success-600 text-white'
                             : 'bg-success-50 text-success-700 hover:bg-success-100 border border-success-300'
                         "
-                        :disabled="actionLoading"
+                        :disabled="actionLoading || disabled"
                         @click="handleUpdateUsage(pr.id, item.id, 'used')"
                       >
                         Đã dùng
@@ -1248,7 +1268,7 @@ const getStatusBadgeClass = (status: string) => {
                             ? 'bg-warning-600 text-white'
                             : 'bg-warning-50 text-warning-700 hover:bg-warning-100 border border-warning-300'
                         "
-                        :disabled="actionLoading"
+                        :disabled="actionLoading || disabled"
                         @click="handleUpdateUsage(pr.id, item.id, 'returned')"
                       >
                         Hoàn trả
@@ -1266,7 +1286,7 @@ const getStatusBadgeClass = (status: string) => {
             class="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3"
           >
             <p class="text-xs font-semibold text-ink-900">
-              Khai trả linh kiện: {{ declareTarget.itemName }}
+              Khai trả kho: {{ declareTarget.itemName }}
               <span class="font-normal text-ink-500">(tối đa {{ declareTarget.maxQty }})</span>
             </p>
             <div class="flex flex-wrap items-end gap-2">

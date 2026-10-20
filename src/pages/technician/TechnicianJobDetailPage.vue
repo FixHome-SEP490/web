@@ -69,6 +69,10 @@ import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuer
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { afterRunningRead, onOrderChange, onResync, whileOffline } from '../../services/live-updates';
 import type { OrderChangeKind } from '../../services/chat-socket.service';
+import { billingAmount, orderBilling } from '../../utils/order-billing';
+import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { partsCatalogApi } from '../../api/parts-catalog.api';
+import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -147,6 +151,45 @@ const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
 // Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([]);
+const receivedRequests = ref<PartRequest[]>([]);
+const jobInvoice = ref<Record<string, unknown> | null>(null);
+const stockCatalog = ref(new Map<string, FixHomePart>());
+const suggestedStockIds = new Set<string>();
+const quoteStockError = ref('');
+const quoteStockLoading = ref(false);
+let stockReadVersion = 0;
+const onPartRequests = async (requests: PartRequest[]) => {
+  const version = ++stockReadVersion;
+  const id = jobIdRef.value;
+  receivedRequests.value = requests;
+  quoteStockLoading.value = true;
+  const ids = [...new Set(requests.filter(request => request.requestType === 'pre_repair' && request.status === 'received' && request.receivedAt)
+    .flatMap(request => request.items.filter(item => item.partSource === 'fixhome').map(item => item.partCatalogId)).filter((id): id is string => !!id))];
+  const catalog = new Map(stockCatalog.value);
+  await Promise.all(ids.map(async catalogId => {
+    if (catalog.get(catalogId)?.warrantyDays != null) return;
+    try { catalog.set(catalogId, await partsCatalogApi.getPartById(catalogId)); } catch { /* Do not invent warranty or price. The picker remains available. */ }
+  }));
+  if (version !== stockReadVersion || id !== jobIdRef.value) return;
+  stockCatalog.value = catalog;
+  quoteStockLoading.value = false;
+  const missing = requests.filter(request => request.requestType === 'pre_repair' && request.status === 'received' && request.receivedAt)
+    .flatMap(request => request.items).filter(item => item.partSource === 'fixhome' && item.usageStatus !== 'returned' &&
+      (!item.partCatalogId || !catalog.has(item.partCatalogId) || catalog.get(item.partCatalogId)?.warrantyDays == null || billingAmount(item.unitPriceSnapshot) === null));
+  quoteStockError.value = missing.length ? 'Chưa đọc đủ đơn giá hoặc bảo hành của linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.' : '';
+};
+const retryQuoteStock = async () => {
+  const id = jobIdRef.value;
+  quoteStockLoading.value = true;
+  try {
+    const requests = await partRequestsApi.getByOrderId(id);
+    if (id === jobIdRef.value) await onPartRequests(requests);
+  } catch {
+    if (id === jobIdRef.value) quoteStockError.value = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.';
+  } finally {
+    if (id === jobIdRef.value) quoteStockLoading.value = false;
+  }
+};
 // Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
 const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
@@ -627,6 +670,7 @@ interface TechnicianJobBundle {
   settlement: CashSettlementRecord;
   /** Read only once the repair started; undefined keeps what is shown. */
   costs?: AdditionalCostRecord[];
+  invoice?: Record<string, unknown> | null;
   /** Read only for a completed job; undefined keeps what is shown. */
   review?: Review | null;
 }
@@ -689,7 +733,11 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
       review = null;
     }
   }
-  return { historical: null, job: data, evidences, booking, settlement, costs, review };
+  let invoice = kept?.invoice;
+  if (touched('invoice', 'cash', 'status')) {
+    try { invoice = await ordersApi.getInvoice(id); } catch { /* Keep the last confirmed invoice; no fabricated final total. */ }
+  }
+  return { historical: null, job: data, evidences, booking, settlement, costs, review, invoice };
 }
 
 const jobQuery = useCachedQuery({
@@ -715,6 +763,7 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   if (!data) return;
   historicalJob.value = null;
   job.value = data;
+  if (bundle.invoice !== undefined) jobInvoice.value = bundle.invoice;
   isEnRoute.value = data.status !== 'ACCEPTED';
   gpsCheckedIn.value = !!data.arrivalVerified;
   if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
@@ -827,6 +876,13 @@ watch(
   (nextId, previousId) => {
     if (!nextId || nextId === previousId) return;
     quotationItems.value = [];
+    receivedRequests.value = [];
+    jobInvoice.value = null;
+    stockCatalog.value = new Map();
+    quoteStockError.value = '';
+    quoteStockLoading.value = false;
+    suggestedStockIds.clear();
+    ++stockReadVersion;
     actionLoading.value = false;
     editingQuotation.value = false;
     quoteEditorDismissed.value = false;
@@ -1059,7 +1115,23 @@ const quoteLaborWarrantyValid = computed(() => {
   return days === '' || (Number.isInteger(days) && days >= 0 && days <= 365);
 });
 
-const quotationValid = computed(() => quotationItems.value.length > 0 && quotationItems.value.every(item =>
+watch([showQuotationForm, stockCatalog, receivedRequests], () => {
+  if (!showQuotationForm.value || String(job.value?.quotation?.status).toLowerCase() === 'approved') return;
+  const requests = receivedRequests.value.map(request => ({ ...request, items: request.items.filter(item => !suggestedStockIds.has(item.partCatalogId ?? '')) }));
+  quotationItems.value = suggestReceivedStock(quotationItems.value, requests, stockCatalog.value);
+  for (const request of requests) for (const item of request.items) {
+    if (quotationItems.value.some(line => line.partSource === 'fixhome' && line.partCatalogId === item.partCatalogId)) suggestedStockIds.add(item.partCatalogId!);
+  }
+});
+const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
+const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
+  : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
+const proposedParts = computed(() => [
+  ...(job.value?.quotation?.items ?? []).filter(item => item.type === 'PARTS'),
+  ...additionalCosts.value.filter(cost => cost.status === 'APPROVED').flatMap(cost => cost.items.filter(item => item.type !== 'LABOR')),
+]);
+
+const quotationValid = computed(() => !quoteStockError.value && !quoteStockLoading.value && quotationItems.value.length > 0 && quotationItems.value.every(item =>
   !!item.description.trim() && item.description.length <= 2000 && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 1000 &&
   Number.isInteger(item.unitPrice) && item.unitPrice >= 0 && item.unitPrice <= 999999999 &&
   (item.type !== 'PARTS' || item.partSource !== 'fixhome' || !!item.partCatalogId),
@@ -1067,6 +1139,7 @@ const quotationValid = computed(() => quotationItems.value.length > 0 && quotati
 const cancelQuotation = () => {
   quoteEditorDismissed.value = true;
   quotationItems.value = [];
+  suggestedStockIds.clear();
   quoteLaborWarranty.value = job.value?.laborWarrantyDays ?? '';
   editingQuotation.value = false;
   showAcPartPicker.value = false;
@@ -1085,7 +1158,7 @@ const openQuotationPartPicker = (index: number | null = null) => {
 };
 
 const handleSubmitQuotation = async () => {
-  if (actionLoading.value || !quotationValid.value) return;
+  if (actionLoading.value || !quotationValid.value || String(job.value?.quotation?.status).toLowerCase() === 'approved') return;
   const submittedJobId = jobIdRef.value;
   actionLoading.value = true;
   try {
@@ -1535,6 +1608,34 @@ const toggleMore = async () => {
 
 
 
+      <section data-testid="job-cost-summary" class="rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
+        <h2 class="font-semibold text-ink-900">{{ financialStage }}</h2>
+        <dl class="flex flex-wrap gap-x-6 gap-y-2">
+          <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
+          <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
+          <div><dt class="text-ink-600">Tổng cộng</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
+        </dl>
+        <div v-if="proposedParts.length" data-testid="approved-parts" class="border-t border-ink-100 pt-3">
+          <h3 class="font-medium text-ink-800">Dự kiến/đã duyệt</h3>
+          <ul class="mt-1 space-y-1 text-ink-700">
+            <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2">
+              <span>{{ item.description }} · {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
+              <FhMoney :amount="item.lineTotal" />
+            </li>
+          </ul>
+        </div>
+        <div v-if="receivedRequests.length" data-testid="actual-parts" class="border-t border-ink-100 pt-3">
+          <h3 class="font-medium text-ink-800">Thực tế đã dùng/không dùng</h3>
+          <ul class="mt-1 space-y-1 text-ink-700">
+            <li v-for="request in receivedRequests" :key="request.id">
+              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
+              <ul class="pl-3"><li v-for="item in request.items" :key="item.id">{{ item.partNameSnapshot }} × {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}</li></ul>
+            </li>
+          </ul>
+          <button type="button" class="mt-2 text-brand-700 underline" @click="revealParts">Xem yêu cầu kho và ghi nhận sử dụng</button>
+        </div>
+      </section>
+
       <!-- Result of the last action -->
       <div
         v-if="actionMessage"
@@ -1569,6 +1670,11 @@ const toggleMore = async () => {
 
         <!-- Quotation form (inspection jobs, after check-in with a photo) -->
         <div v-if="showQuotationForm" class="mt-4 space-y-3" data-testid="quotation-form">
+          <p v-if="quoteStockLoading" role="status" class="text-sm text-ink-600">Đang đối chiếu linh kiện đã nhận…</p>
+          <p v-if="quoteStockError" data-testid="quote-stock-error" role="alert" class="text-sm text-danger-700">
+            {{ quoteStockError }} <button type="button" class="font-semibold underline" @click="retryQuoteStock">Thử lại</button>
+          </p>
+          <p class="text-sm text-ink-600">Linh kiện FixHome đã nhận được gợi ý theo đơn giá kho và bảo hành danh mục. Chỉnh số lượng hoặc bỏ dòng trước khi gửi. Linh kiện FixHome cần nhận từ kho qua QR; linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận đã dùng sau khi bắt đầu sửa.</p>
           <div
             v-for="(item, idx) in quotationItems"
             :key="idx"
@@ -1590,6 +1696,7 @@ const toggleMore = async () => {
               :aria-label="item.type === 'LABOR' ? 'Mô tả công việc' : 'Tên linh kiện'"
               class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
             />
+            <span v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs text-ink-600">Bảo hành {{ item.warrantyDays }} ngày</span>
             <input
               v-if="item.type === 'PARTS'"
               v-model.number="item.quantity"
@@ -2058,6 +2165,9 @@ const toggleMore = async () => {
                 :order-status="job.status"
                 @parts-updated="loadJob(jobId, { silent: true })"
                 @summary="onPartsSummary"
+                @requests="onPartRequests"
+                @requests-loading="quoteStockLoading = true"
+                @requests-error="quoteStockLoading = false; quoteStockError = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.'"
                 @pending-usage="pendingPartsUsage = $event"
                 @pending-returns="pendingPartsReturns = $event"
               />

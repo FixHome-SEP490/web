@@ -177,7 +177,8 @@ describe('TechnicianPartsSection inside the job page', () => {
 
     expect(partRequestsApi.receiveByQr).toHaveBeenCalledWith('pr-1', { qrToken: 'qr-test-only' });
     expect(wrapper.text().replace(/\s+/g, ' ')).toContain('Cấp 1 · Dùng 0 · Cần trả 1');
-    expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.text() === 'Đã dùng')).toBe(false);
     wrapper.unmount();
   });
 
@@ -209,6 +210,21 @@ describe('TechnicianPartsSection inside the job page', () => {
     expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', { usageStatus: status });
     expect(wrapper.text().replace(/\s+/g, ' ')).toContain(expected);
     expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('only allows physical return declaration after unused decision or end of logistics', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('received', 'returned')]);
+    partRequestsApi.getReturnsByOrderId.mockResolvedValue([{
+      partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả', issuedQty: 1,
+      usedQty: 0, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 1, version: 1,
+    }]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(true);
+    await wrapper.setProps({ orderStatus: 'COMPLETED' });
+    expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(true);
+    expect(wrapper.findAll('button').some(button => button.text() === 'Đã dùng')).toBe(false);
     wrapper.unmount();
   });
 

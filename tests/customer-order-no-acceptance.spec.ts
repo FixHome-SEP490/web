@@ -10,6 +10,7 @@ vi.mock('../src/api/orders.api', () => ({
     get: (target, key: string) => target[key] ?? vi.fn().mockRejectedValue(new Error('not needed')),
   }),
 }));
+vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: vi.fn().mockRejectedValue(new Error('x')) } }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: vi.fn().mockResolvedValue(null) } }));
 vi.mock('vue-router', () => ({

@@ -9,7 +9,7 @@ export type PartRequestStatus =
   | 'completed'
   | 'cancelled';
 
-export type PartRequestType = 'pre_repair' | 'additional';
+export type PartRequestType = 'pre_repair' | 'additional' | 'quotation';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type PartUsageStatus = 'pending' | 'used' | 'returned';
 export type PartSource = 'fixhome' | 'technician' | 'external';
@@ -38,6 +38,7 @@ export interface PartRequest {
   reason?: string | null;
   shippingFee: number;
   additionalCostId?: string | null;
+  quotationId?: string | null;
   qrToken?: string | null;
   qrGeneratedAt?: string | null;
   receivedAt?: string | null;

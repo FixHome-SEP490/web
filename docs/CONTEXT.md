@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-19 22:20 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p012-integration-20261019
+> Cập nhật lần cuối: 2026-10-20 14:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p013-quote-billing-20261020
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -264,6 +264,13 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Catalog V2 discovery: hàng dịch vụ đặt lịch và thẻ `/services` ưu tiên `priceSummary` từ API: khoảng/giá công theo thiết bị và phạm vi, giá tham khảo kèm yêu cầu khách duyệt, hoặc khảo sát và báo giá. Số dịch vụ đã hiển thị nằm cuối danh sách đặt lịch; bộ lọc vẫn xử lý toàn bộ catalog đã tải, không thêm phân trang. Không dùng summary cho tổng tiền, điều kiện đặt hay payload booking; AI giữ nguyên. Runtime với Backend mới và Mobile CHƯA KIỂM CHỨNG.
 - Catalog public (owner 19/10/2026): `/services` hiện toàn bộ danh mục đang hoạt động (catalog hiện có 13) thành chip xuống hàng dưới ô tìm kiếm trên desktop, cuộn ngang trên điện thoại; giữ lọc `category/q/page`, bàn phím và giảm chuyển động. Landing giữ 6 danh mục đầu đang hoạt động, ẩn mô tả chứa `Catalog V2` hoặc `chưa kích hoạt` bằng mô tả dự phòng ngắn, icon dự phòng theo `category.code`, link xem tất cả có số danh mục thực tế. Browser fixture 13 danh mục đã kiểm tra tại 360/390/768/1440; Backend thật và Mobile NOT VERIFIED.
 
+### Báo giá, linh kiện và thanh toán P013 (20/10/2026)
+
+- Thợ: linh kiện `pre_repair` đã nhận qua QR được gợi ý vào báo giá khi soạn; đọc từng SKU qua `GET /parts/catalog/:id`, không phụ thuộc trang đầu của danh mục. Giữ đơn giá kho, bảo hành danh mục, lựa chọn/số lượng đã sửa và linh kiện tự có; thiếu giá/bảo hành thì cảnh báo và khóa gửi để thử lại. Không tự ghi nhận sử dụng. Tóm tắt tiền và danh sách dự kiến/đã duyệt cùng trạng thái kho, thực tế đã dùng/không dùng vẫn hiện ngoài các bước thu gọn.
+- `Đã dùng/Hoàn trả` chỉ thao tác khi `UNDER_REPAIR` và yêu cầu đã nhận. `Khai trả kho` là khai báo để quản lý dịch vụ nhận thực tế, chỉ hiện khi linh kiện FixHome đã ghi không dùng hoặc đơn kết thúc/hủy; không thay đổi chính sách P1 sau thanh toán.
+- Khách: trước hóa đơn hiển thị tạm tính theo báo giá và phát sinh đã duyệt (báo giá `sent` vẫn hiện để duyệt). Có hóa đơn thì chỉ dùng dòng và tổng của hóa đơn, giữ đúng số 0. Hóa đơn 0 có tiền đã duyệt thiếu chứng cứ trả đúng SKU/nguồn/số lượng, dữ liệu không hợp lệ hoặc chưa đọc đủ thông tin thì khóa thanh toán và cảnh báo; Backend vẫn quyết định đối chiếu có thẩm quyền.
+- Hóa đơn 0 hợp lệ có `Hoàn tất miễn phí`; 1–4.999 ₫ chỉ ví/tiền mặt (thợ khai tiền mặt như cũ), từ 5.000 ₫ mới hiện VNPay. Không đổi mức nạp ví. Chỉ báo hoàn tất miễn phí khi API trả xác nhận đúng hóa đơn.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -280,6 +287,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết thường của `backend` sang viết hoa.
 
 ## 5. Hợp đồng với repo khác
+
+- P013: `POST /invoices/:id/no-charge` gửi `{}`, trả envelope `data: {invoiceId, paymentStatus: 'paid', settlementMethod: 'NO_CHARGE'}`. Đã đối chiếu route và response trong source Backend P013; runtime CHƯA KIỂM CHỨNG. Backend chịu ownership, idempotency, đối chiếu hóa đơn 0, hoàn tất đơn và giới hạn VNPay. `PartRequest.requestType` bổ sung `quotation`, có `quotationId`; khách dùng API đọc yêu cầu linh kiện hiện có để trình bày chứng cứ hoàn trả. Web không sửa Backend/DB.
 
 - Booking `slot`: `morning|afternoon|evening`; ca tối 18:00–23:00 giờ Việt Nam, hôm nay nhận đặt tới trước 23:00. Backend bổ sung API và migration song song; tích hợp runtime ca tối và Mobile CHƯA KIỂM CHỨNG.
 - REST tới `backend` qua `VITE_API_BASE_URL` (mặc định `http://localhost:3000/api/v1`), JWT trong `localStorage` (`access_token`, `refresh_token`), refresh qua `POST /auth/refresh`.
@@ -322,6 +331,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- P013: browser fixture cục bộ đã kiểm 360/768/1440 px cho ranh giới 0/4.999/5.000 và khóa lệch báo giá; không phải bằng chứng tích hợp tài chính. Backend thật, QR/kho thật và Web–Mobile parity CHƯA KIỂM CHỨNG. Không tự sửa hóa đơn cũ, không thanh toán thật. Cần Backend P013 triển khai trước Web và hard-refresh khi QA.
+
 - Thông báo nhận đẩy qua socket (`notification:new`); chưa có push lên điện thoại.
 - Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (migration 037 và 038): với backend cũ, video, link xem và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có sự kiện realtime (các màn chỉ cập nhật bằng polling dự phòng khi socket rớt, còn khi socket nối thì chờ sự kiện). Nén video trên máy chạy theo tốc độ phần cứng, máy yếu có thể mất cả phút cho một clip 60 giây (khách vẫn nhắn tiếp được); CHƯA đo trên điện thoại thật. Chunk `video-shrink` khoảng 137 KB gzip, `mediabunny-aac-encoder` khoảng 260 KB gzip, chỉ tải khi cần.
 - Hoàn trả linh kiện FixHome (P1) có test Web (`tests/part-returns.spec.ts`); CHƯA KIỂM CHỨNG runtime với Backend tích hợp và Mobile; cờ custody chưa được phép kích hoạt trên môi trường dùng chung.
@@ -340,6 +351,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 14:16 (UTC+7) | foxonworld | foxonworld/fixhome-p013-quote-billing-20261020 | P013: gợi ý linh kiện QR theo ID, phân biệt dự kiến/sử dụng/khai trả kho, hóa đơn authoritative và khóa 0 lệch duyệt, API miễn phí và ngưỡng VNPay; Backend thật/Mobile chưa kiểm chứng
 - 2026-10-19 22:20 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Bổ sung ca tối 18–23 giờ VN, nhận đặt hôm nay trước 23:00; public đủ 13 chip danh mục, landing 6 nhóm với mô tả và icon phù hợp; browser fixture đã kiểm tra, Backend thật/Mobile NOT VERIFIED; AI giữ nguyên
 - 2026-10-19 18:45 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Catalog V2 ưu tiên priceSummary từ API trên card đặt lịch và Services; giá tham khảo có nhãn duyệt báo giá, số kết quả nằm cuối danh sách; không đổi AI hoặc booking submission
 - 2026-10-19 15:18 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Owner duyệt tinh chỉnh UI bước 1: tìm kiếm + danh mục có tên, hàng dịch vụ gọn, hai cột 42/58, giữ selection/cấu hình qua bộ lọc, cuộn có giảm chuyển động; browser component harness chỉ đọc tại 360/390/430/768/1024/1100/1440 đã kiểm tra, Booking có đăng nhập và Web–Mobile runtime NOT VERIFIED; không đổi API/giá/DB/AI
@@ -379,4 +391,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
 - 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
 - 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.
-- 2026-10-12 00:23 (UTC+7) | ToanAltF4 | feat/tech-service-areas | Gợi ý địa chỉ gửi kèm vị trí để ưu tiên nơi gần (hồ sơ thợ: vị trí ghim; hồ sơ khách: địa chỉ mặc định), server mặc định TP HCM

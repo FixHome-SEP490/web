@@ -121,6 +121,8 @@ export interface ServiceOrderItem {
       lineTotal: number;
       warrantyDays?: number;
       warrantyDaysSnapshot?: number;
+      partSource?: 'fixhome' | 'technician' | 'external' | null;
+      partCatalogId?: string | null;
     }[];
   };
   cashSettlement?: {
@@ -691,6 +693,14 @@ export const ordersApi = {
     const paymentUrl = (res.data?.data as { paymentUrl?: string } | undefined)?.paymentUrl;
     if (!paymentUrl) throw new Error('Không nhận được liên kết thanh toán VNPay.');
     return paymentUrl;
+  },
+
+  async completeNoCharge(invoiceId: string): Promise<void> {
+    const res = await apiClient.post<ApiResponse<{ invoiceId: string; paymentStatus: string; settlementMethod: string }>>(`/invoices/${invoiceId}/no-charge`, {});
+    const result = res.data?.data;
+    if (result?.invoiceId !== invoiceId || result.paymentStatus?.toLowerCase() !== 'paid' || result.settlementMethod !== 'NO_CHARGE') {
+      throw new Error('Chưa xác nhận được kết quả. Vui lòng kiểm tra trạng thái đơn trước khi thử lại.');
+    }
   },
 
   async getWarranties(): Promise<WarrantyItem[]> {
