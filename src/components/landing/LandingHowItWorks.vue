@@ -20,25 +20,25 @@ const steps = [
     stepNum: '01',
     icon: Smartphone,
     tag: 'Bước 1',
-    title: 'Mở ứng dụng & Chọn dịch vụ',
-    description: 'Chọn dịch vụ trong danh mục, có giá tham khảo.',
+    title: 'Chọn dịch vụ & loại máy',
+    description: 'Tìm theo tên thiết bị, chọn loại máy và công suất để thấy tiền công.',
     image: '/images/steps/step-1-select-service.png',
-    badge: 'Khám phá dịch vụ & Đặt thợ',
+    badge: 'Giá theo loại máy',
   },
   {
     stepNum: '02',
     icon: Camera,
     tag: 'Bước 2',
-    title: 'Gửi ảnh & Nhờ AI chẩn đoán',
-    description: 'Mô tả sự cố, gửi thêm ảnh nếu có.',
+    title: 'Mô tả sự cố & gửi ảnh',
+    description: 'Viết vài dòng, gửi tối đa 5 ảnh. Chưa rõ lỗi thì nhờ AI phân tích.',
     image: '/images/steps/step-2-ai-diagnosis.png',
-    badge: 'Tối đa 3 ảnh',
+    badge: 'Tối đa 5 ảnh',
   },
   {
     stepNum: '03',
     icon: Sparkles,
     tag: 'Bước 3',
-    title: 'AI phân tích & Đưa kết quả',
+    title: 'AI gợi ý dịch vụ phù hợp',
     description: 'AI gợi ý nguyên nhân và dịch vụ. Kết quả chỉ để tham khảo.',
     image: '/images/steps/step-3-ai-result.png',
     badge: 'Chỉ để tham khảo',
@@ -47,8 +47,8 @@ const steps = [
     stepNum: '04',
     icon: CalendarDays,
     tag: 'Bước 4',
-    title: 'Chọn lịch & Tìm kiếm thợ',
-    description: 'Chọn buổi sáng, chiều hoặc tới ngay, rồi chọn 1 đến 2 kỹ thuật viên.',
+    title: 'Chọn lịch & kỹ thuật viên',
+    description: 'Hẹn buổi sáng, chiều, tối hoặc tới ngay, rồi chọn 1 đến 2 kỹ thuật viên theo thứ tự ưu tiên.',
     image: '/images/steps/step-4-find-technician.png',
     badge: 'Chọn 1 đến 2 thợ',
   },
@@ -56,10 +56,10 @@ const steps = [
     stepNum: '05',
     icon: CircleCheck,
     tag: 'Bước 5',
-    title: 'Duyệt báo giá & Hoàn tất',
-    description: 'Bạn duyệt báo giá rồi thợ mới sửa. Xong thì thanh toán, có bảo hành.',
+    title: 'Duyệt chi phí & thanh toán',
+    description: 'Linh kiện và phát sinh đều chờ bạn duyệt. Xong việc trả bằng ví, VNPay hoặc tiền mặt, có bảo hành.',
     image: '/images/steps/step-5-quote-complete.png',
-    badge: 'Báo giá trước, thanh toán sau',
+    badge: 'Duyệt trước, trả sau',
   },
 ];
 
@@ -170,7 +170,7 @@ onUnmounted(() => {
           </div>
           <h2 id="steps-title" class="steps-title">Sửa chữa đơn giản, từng bước rõ ràng</h2>
           <p class="landing-description mt-1 text-ink-600 text-sm sm:text-base max-w-xl">
-            Từ lúc chọn dịch vụ đến khi đơn hoàn tất, bạn duyệt từng bước.
+            Từ lúc chọn dịch vụ đến khi đơn hoàn tất, mọi khoản tiền đều chờ bạn duyệt.
           </p>
         </div>
 
@@ -237,7 +237,7 @@ onUnmounted(() => {
 
             <!-- ACTION BUTTONS -->
             <div class="pt-4 sm:pt-5 pl-4 sm:pl-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <FhButton size="md" class="shadow-sm hover:shadow-md transition-shadow" @click="router.push('/services')">
+              <FhButton size="md" class="shadow-sm hover:shadow-md transition-shadow" @click="router.push('/app/bookings/new')">
                 Bắt đầu đặt lịch ngay
                 <ArrowRight :size="16" aria-hidden="true" class="ml-1" />
               </FhButton>

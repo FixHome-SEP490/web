@@ -64,11 +64,11 @@ onMounted(loadCategories);
           <p class="landing-eyebrow">Bắt đầu từ điều bạn cần</p>
           <h2 id="services-title" class="services-title">Dịch vụ cho ngôi nhà của bạn</h2>
           <p class="landing-description">
-            Chọn nhóm thiết bị để xem dịch vụ và giá tham khảo.
+            Tiền công niêm yết theo loại máy và công suất. Việc cần kiểm tra thì thợ khảo sát và báo giá tại nhà.
           </p>
         </div>
         <router-link to="/services" class="landing-text-link shrink-0">
-          Xem tất cả {{ activeCategories.length || '' }} danh mục
+          Xem tất cả dịch vụ
           <ArrowRight :size="18" aria-hidden="true" />
         </router-link>
       </div>
