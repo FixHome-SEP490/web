@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-21 00:30 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/landing-anchors-content
+> Cập nhật lần cuối: 2026-10-21 00:44 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/booking-media-grid
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -364,6 +364,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
 - 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch
 - 2026-10-21 00:21 (UTC+7) | ToanAltF4 | feat/customer-payment-methods | Hộp Thanh toán đơn của khách: ví/VNPay/tiền mặt gom thành một danh sách chọn một, ví hiện số dư nhỏ (tự chuyển VNPay khi không đủ), VNPay có logo nhỏ, một nút chính đổi theo lựa chọn
 - 2026-10-21 00:07 (UTC+7) | ToanAltF4 | fix/booking-back-steps | Nút Quay lại và back của trình duyệt/điện thoại đi lùi từng bước đặt lịch (mỗi bước một mục lịch sử ?step=N, use-step-history.ts), bước 1 bỏ nút Quay lại
@@ -403,4 +404,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
 - 2026-10-16 01:01 (UTC+7) | ToanAltF4 | chore/payout-page-title | Trang /console/wallets đổi tên thành Chi hộ và rút tiền (menu SM/Admin, tiêu đề trang, title route); tab Ví đổi thành Ví kỹ thuật viên
 - 2026-10-16 00:21 (UTC+7) | ToanAltF4 | feat/staff-customer-withdrawals | Quản lý dịch vụ và admin xem lệnh rút của khách ở tab Khách hàng trong Yêu cầu rút tiền của /console/wallets, tách khỏi kỹ thuật viên (danh sách, tổng, tìm, lọc, Kiểm tra lại), ví nguồn payOS chung hiện một lần
-- 2026-10-14 23:46 (UTC+7) | ToanAltF4 | feat/customer-withdrawal-kyc | Khách rút ví về ngân hàng sau một lần xác minh danh tính bằng ảnh hai mặt CCCD (trang /app/kyc, phần Rút tiền ở ví, lịch sử rút), hồ sơ khoá họ tên và ngày sinh đã xác minh, admin duyệt xác minh của khách ở tab Khách hàng của trang Duyệt xác minh danh tính, nhãn withdrawal và withdrawal_refund

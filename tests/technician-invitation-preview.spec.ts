@@ -86,12 +86,14 @@ describe('WEB technician invitation preview (PO 18/10/2026)', () => {
     expect(wrapper.get('[data-testid="invitation-detail-description"]').text()).toBe('Vòi rửa chén rỉ nước dưới chân');
     expect(wrapper.get('[data-testid="invitation-detail-distance"]').text()).toBe('Cách bạn khoảng 3-5 km');
     expect(wrapper.get('[data-testid="invitation-detail-price"]').text()).toMatch(/Giá niêm yết\s*250\.000\s*₫\s*× 2/);
-    expect(wrapper.get('[data-testid="booking-media-viewer"]').text()).toContain('Ảnh và video hiện trường');
-    const video = wrapper.get('[data-testid="booking-media-selected-video"]');
-    expect(video.attributes('src')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig');
-    expect(video.attributes('poster')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig/poster');
+    expect(wrapper.get('[data-testid="booking-media-viewer"]').text()).toContain('Ảnh và video mô tả');
+    // The video opens large on tap (PO 21/10/2026).
+    await wrapper.get('[aria-label^="Xem video mô tả"]').trigger('click');
+    const video = document.body.querySelector('[data-testid="booking-media-selected-video"]')!;
+    expect(video.getAttribute('src')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig');
+    expect(video.getAttribute('poster')).toBe('https://api.example.test/api/v1/bookings/media/stream/tok.sig/poster');
     // Nothing downloads before play, and the whole video is never fetched as a file.
-    expect(video.attributes('preload')).toBe('none');
+    expect(video.getAttribute('preload')).toBe('none');
     expect(mockGet).toHaveBeenCalledWith('/bookings/booking-synthetic/media/media-video/stream');
     expect(mockGet).not.toHaveBeenCalledWith('/bookings/booking-synthetic/media/media-video/content', expect.anything());
     expect(wrapper.get('[data-testid="invitation-detail-privacy"]').text()).toBe('Địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách hiện sau khi bạn nhận đơn.');

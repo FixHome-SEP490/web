@@ -39,11 +39,9 @@ function booking(): BookingItem {
 beforeEach(() => {
   getBooking.mockReset().mockResolvedValue(booking());
   getBookingMediaContent.mockReset().mockResolvedValue(new Blob(['private'], { type: 'image/jpeg' }));
-  vi.stubGlobal('URL', {
-    ...URL,
-    createObjectURL: vi.fn(() => 'blob:booking-detail-preview'),
-    revokeObjectURL: vi.fn(),
-  });
+  // Only the two blob helpers are replaced; `new URL()` must keep working for the legacy link check.
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:booking-detail-preview') });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
 });
 
 afterEach(() => {
