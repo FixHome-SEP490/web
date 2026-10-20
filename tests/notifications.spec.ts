@@ -136,6 +136,11 @@ describe('Departure warning and matching exhausted notifications', () => {
     expect(customerNotificationPath(item)).toBe('/app/bookings/booking-1/candidates');
   });
 
+  it('sends the customer to choose another technician when theirs could not make it (PO 20/10/2026)', () => {
+    const item: NotificationItem = { ...base, id: 'n-released', type: 'TECHNICIAN_RELEASED', referenceType: 'BOOKING', referenceId: 'booking-9' };
+    expect(customerNotificationPath(item)).toBe('/app/bookings/booking-9/candidates?released=1');
+  });
+
   it('keeps the usual destinations for other notifications', () => {
     const booking = { ...base, id: 'n3', title: 'x', message: 'x', type: 'BOOKING_CREATED', referenceId: 'b2', referenceType: 'BOOKING' };
     const order = { ...base, id: 'n4', title: 'x', message: 'x', type: 'ORDER_COMPLETED', referenceId: 'o2', referenceType: 'SERVICE_ORDER' };

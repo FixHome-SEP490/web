@@ -268,6 +268,8 @@ export function customerNotificationPath(item: NotificationItem): string | null 
   const type = (item.type || '').toUpperCase();
   const refType = (item.referenceType || '').toUpperCase();
   if (type === 'BOOKING_MATCHING_EXHAUSTED') return `/app/bookings/${item.referenceId}/candidates`;
+  // The technician could not make it (PO 20/10/2026): straight to choosing another one.
+  if (type === 'TECHNICIAN_RELEASED') return `/app/bookings/${item.referenceId}/candidates?released=1`;
   if (refType.includes('BOOKING')) return `/app/bookings/${item.referenceId}`;
   return `/app/orders/${item.referenceId}`;
 }

@@ -307,11 +307,48 @@ const WITHDRAW_REASONS = [
   'Lý do khác (tự nhập)',
 ];
 
+// Still on another job and this one starts soon (PO 20/10/2026): release it, no points lost, the customer picks another technician.
+const overrun = ref<{ eligible: boolean; currentOrderCode: string | null } | null>(null);
+const showOverrunModal = ref(false);
+const releasing = ref(false);
+const releaseError = ref('');
+const handleReleaseForOverrun = async () => {
+  if (releasing.value) return;
+  releasing.value = true;
+  releaseError.value = '';
+  try {
+    await ordersApi.releaseForOverrun(jobId);
+    void cache.refresh(affectedBy.orderChange);
+    showOverrunModal.value = false;
+    toast.success('Đã nhả đơn. Khách sẽ chọn thợ khác.');
+    await router.push('/tech/jobs');
+  } catch (err: unknown) {
+    releaseError.value = userFacingError(err, 'Chưa nhả được đơn. Vui lòng thử lại.');
+  } finally {
+    releasing.value = false;
+  }
+};
+
 const canWithdraw = computed(() => {
   if (!job.value) return false;
   const s = String(job.value.status).toUpperCase();
   return s === 'ACCEPTED' || (s === 'EN_ROUTE' && !gpsCheckedIn.value);
 });
+// Asked only while the order can still be left; the server decides.
+watch(
+  () => [jobIdRef.value, canWithdraw.value] as const,
+  async ([id, can]) => {
+    overrun.value = null;
+    if (!can || !id) return;
+    try {
+      const status = await ordersApi.overrunReleaseStatus(String(id));
+      if (id === jobIdRef.value) overrun.value = status;
+    } catch {
+      overrun.value = null;
+    }
+  },
+  { immediate: true },
+);
 
 const openWithdraw = () => {
   moreOpen.value = false;
@@ -1794,6 +1831,17 @@ const toggleMore = async () => {
               <Flag :size="16" class="text-ink-500" />
               Báo cáo vấn đề
             </button>
+            <button
+              v-if="overrun?.eligible"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              data-testid="overrun-release-menu"
+              @click="moreOpen = false; showOverrunModal = true"
+            >
+              <Calendar :size="16" class="text-ink-500" />
+              Không kịp tới, nhả đơn
+            </button>
             <template v-if="canWithdraw">
               <div class="my-1.5 border-t border-ink-100" />
               <button
@@ -1811,6 +1859,18 @@ const toggleMore = async () => {
       </div>
 
 
+
+      <section
+        v-if="overrun?.eligible"
+        class="rounded-2xl bg-white border border-brand-200 p-4 flex flex-wrap items-center gap-3"
+        data-testid="overrun-release-card"
+      >
+        <div class="min-w-0 flex-[1_1_16rem]">
+          <p class="font-semibold text-ink-900">Đơn #{{ overrun.currentOrderCode }} chưa xong?</p>
+          <p class="text-sm text-ink-600 mt-1">Bạn có thể nhả đơn này để khách chọn thợ khác. Không bị trừ điểm uy tín.</p>
+        </div>
+        <FhButton variant="secondary" @click="showOverrunModal = true">Nhả đơn</FhButton>
+      </section>
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
       <section data-testid="job-cost-summary" class="order-2 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
@@ -2758,6 +2818,31 @@ const toggleMore = async () => {
         <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <FhButton variant="secondary" :disabled="withdrawing" @click="showWithdrawModal = false">Giữ lại đơn</FhButton>
           <FhButton variant="danger" :loading="withdrawing" :disabled="withdrawing" @click="handleWithdrawOrder">Huỷ đơn sửa chữa</FhButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dialog: release an upcoming order while still on another job -->
+    <div
+      v-if="showOverrunModal"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      @click.self="!releasing && (showOverrunModal = false)"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="overrun-release-title"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+        data-testid="overrun-release-dialog"
+      >
+        <div>
+          <h3 id="overrun-release-title" class="text-lg font-bold text-ink-900">Nhả đơn này?</h3>
+          <p class="mt-1 text-sm text-ink-600">Bạn đang làm đơn #{{ overrun?.currentOrderCode }} chưa xong. Khách được báo và chọn thợ khác, giá và lịch hẹn giữ nguyên. Không trừ điểm uy tín.</p>
+        </div>
+        <p v-if="releaseError" role="alert" class="text-sm text-danger-700">{{ releaseError }}</p>
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" :disabled="releasing" @click="showOverrunModal = false">Giữ lại đơn</FhButton>
+          <FhButton :loading="releasing" :disabled="releasing" data-testid="overrun-release-confirm" @click="handleReleaseForOverrun">Nhả đơn</FhButton>
         </div>
       </div>
     </div>

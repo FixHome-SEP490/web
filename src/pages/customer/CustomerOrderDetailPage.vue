@@ -61,6 +61,11 @@ const queryClient = useQueryClient();
 const actionLoading = ref(false);
 const financialReadReady = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
+// The technician stepped off before arriving (PO 20/10/2026): the customer picks another one for the same order.
+const awaitingTechnician = computed(() => !!order.value && !order.value.technician
+  && ['ACCEPTED', 'EN_ROUTE'].includes(String(order.value.status).toUpperCase()));
+const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?? [])
+  .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -335,9 +340,13 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
       evidences = [];
     }
   }
-  // The original booking, for the description and the diagnosis: it does not change once the order exists.
+  // The original booking, for the description and the diagnosis: it does not change once the order exists,
+  // except its invitations while the order waits for a new technician.
   const bookingId = data.bookingId;
-  const booking = previous?.booking ?? (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
+  const waitingForTechnician = ['ACCEPTED', 'EN_ROUTE'].includes(String(data.status).toUpperCase()) && !data.technician;
+  const booking = previous?.booking && !waitingForTechnician
+    ? previous.booking
+    : (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
   const review = data.status === 'COMPLETED' ? (all || previous?.review === undefined ? await optional(() => reviewsApi.getByOrder(orderId)) : previous.review) : undefined;
   // Additional costs exist only once the repair started.
   const costs =
@@ -885,6 +894,22 @@ const parsedReview = computed(() => {
     </section>
 
     <div v-else-if="order" class="flex flex-col gap-6">
+      <section
+        v-if="awaitingTechnician"
+        role="status"
+        data-testid="order-awaiting-technician"
+        class="rounded-2xl bg-white border border-brand-200 p-4 sm:p-5 flex flex-wrap items-center gap-3"
+      >
+        <div class="min-w-0 flex-[1_1_18rem]">
+          <p class="font-semibold text-ink-900">{{ newTechnicianInvited ? 'Đang chờ thợ mới nhận đơn' : 'Thợ không kịp tới buổi hẹn' }}</p>
+          <p class="text-sm text-ink-600 mt-1">{{ newTechnicianInvited ? 'Bạn đã mời thợ khác, giá và lịch hẹn giữ nguyên.' : 'Bạn chọn thợ khác, giá và lịch hẹn giữ nguyên.' }}</p>
+        </div>
+        <FhButton
+          v-if="!newTechnicianInvited"
+          data-testid="order-choose-another-technician"
+          @click="router.push(`/app/bookings/${order.bookingId}/candidates?released=1`)"
+        >Chọn thợ khác</FhButton>
+      </section>
       <!-- 1. Summary: what, where, when, who -->
       <section class="order-0 rounded-2xl bg-white border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5">
         <div class="flex flex-wrap items-start justify-between gap-3">
