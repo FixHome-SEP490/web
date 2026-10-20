@@ -31,7 +31,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
@@ -465,7 +465,8 @@ describe('booking service selection & pricing contracts', () => {
     await wrapper.get('[data-testid="booking-submit"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="booking-submit-unknown"]').exists()).toBe(true);
-    expect(push).not.toHaveBeenCalled();
+    // Steps push their own history entries (PO 21/10/2026); the page never goes on to the candidates.
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/candidates'));
 
     await wrapper.get('[data-testid="booking-submit"]').trigger('click');
     await flushPromises();

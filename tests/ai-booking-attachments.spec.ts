@@ -25,7 +25,7 @@ vi.mock('../src/api/media.api', () => ({
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { createBooking } }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getCategories } }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('../src/api/ai.api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/api/ai.api')>();
   return { ...actual, aiApi: { analyze, ask: analyze, acknowledgements: vi.fn().mockResolvedValue({}), feedback: vi.fn() } };
