@@ -17,9 +17,7 @@ import {
   ShieldCheck,
   X,
   Wrench,
-  Tag,
   Clock,
-  Layers,
   Undo2,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
@@ -52,15 +50,20 @@ const emit = defineEmits<{
   (e: 'summary', value: { count: number; needsAction: boolean }): void;
   (e: 'pending-usage', count: number): void;
   (e: 'pending-returns', count: number): void;
+  (e: 'return-summary', value: { needDeclare: number; awaitingManager: number }): void;
 }>();
 
 const loading = ref(true);
 const actionLoading = ref(false);
 const actionError = ref<string | null>(null);
+const backgroundSyncError = ref(false);
 const actionSuccess = ref<string | null>(null);
 
 const partRequests = ref<PartRequest[]>([]);
 const partRequestsLoaded = ref(false);
+const requestDetailOverrides = ref<Record<string, boolean>>({});
+const isRequestExpanded = (id: string, group: string) => requestDetailOverrides.value[id] ?? group === 'action';
+const toggleRequestExpanded = (id: string, group: string) => { requestDetailOverrides.value[id] = !isRequestExpanded(id, group); };
 const picker = usePartsCatalogPicker();
 const { items: searchResults, total: catalogTotal, loading: isSearchingCatalog, error: catalogError,
   query: searchQuery, category: activeCategory, partsMap, hasMore: catalogHasMore } = picker;
@@ -180,9 +183,18 @@ const requestGroups = computed(() => {
     const handoverReady = (request.fulfillmentMethod === 'pickup' && request.status === 'ready') ||
       (request.fulfillmentMethod === 'delivery' && request.status === 'delivering');
     const usagePending = request.items.some(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending'));
+    const returnNeedsDeclaration = request.items.some(item => {
+      const record = returnFor(item.id);
+      return !!record && canDeclareMoreQty(record) > 0 && canDeclareReturn(request, item);
+    });
+    const waitingForManager = request.items.some(item => {
+      const record = returnFor(item.id);
+      return !!record && pendingDeclaredQty(record) > 0;
+    });
     const resolved = request.status === 'cancelled' || request.status === 'completed' ||
       (request.status === 'received' && !usagePending);
-    const group = resolved ? groups[2] : handoverReady || (isUnderRepair.value && request.status === 'received' && usagePending)
+    const group = returnNeedsDeclaration ? groups[0] : waitingForManager ? groups[1]
+      : resolved ? groups[2] : handoverReady || (isUnderRepair.value && request.status === 'received' && usagePending)
       ? groups[0] : groups[1];
     group.requests.push(request);
   }
@@ -193,7 +205,16 @@ const pendingUsage = computed(() => partRequests.value
   .filter(pr => pr.status === 'received')
   .reduce((count, pr) => count + pr.items.filter(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending')).length, 0));
 watch(pendingUsage, count => emit('pending-usage', count), { immediate: true });
-watch(returnRecords, records => emit('pending-returns', records.reduce((sum, record) => sum + record.outstandingQty, 0)));
+const returnSummary = computed(() => returnRecords.value.reduce((totals, record) => {
+  const declaredWaiting = Math.max(0, record.declaredQty - record.managerAcceptedQty);
+  totals.needDeclare += Math.max(0, record.outstandingQty - declaredWaiting);
+  totals.awaitingManager += Math.min(record.outstandingQty, declaredWaiting);
+  return totals;
+}, { needDeclare: 0, awaitingManager: 0 }));
+watch(returnSummary, totals => {
+  emit('pending-returns', totals.needDeclare + totals.awaitingManager);
+  emit('return-summary', totals);
+}, { immediate: true });
 watch(
   () => [partRequests.value.length, needsAction.value] as const,
   ([count, action]) => emit('summary', { count, needsAction: action }),
@@ -248,23 +269,28 @@ const getPartWarrantyFromHistory = (item: { partCatalogId?: string | null }) => 
 
 // Data loading
 let requestsLoadVersion = 0;
-const loadPartRequests = async () => {
+const loadPartRequests = async (quiet = false) => {
   const version = ++requestsLoadVersion;
   try {
-    loading.value = true;
-    emit('requests-loading');
+    if (!quiet) {
+      loading.value = true;
+      emit('requests-loading');
+    }
     const records = await partRequestsApi.getByOrderId(props.orderId);
     if (version !== requestsLoadVersion) return;
     partRequests.value = records;
     partRequestsLoaded.value = true;
+    backgroundSyncError.value = false;
     emit('requests', records);
   } catch (err: unknown) {
     if (version !== requestsLoadVersion) return;
-    emit('requests-error');
-    actionError.value =
-      userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
+    if (quiet) backgroundSyncError.value = true;
+    else {
+      emit('requests-error');
+      actionError.value = userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
+    }
   } finally {
-    if (version === requestsLoadVersion) loading.value = false;
+    if (version === requestsLoadVersion && !quiet) loading.value = false;
   }
 };
 
@@ -389,7 +415,7 @@ async function refreshParts() {
   refreshRunning = true;
   do {
     refreshQueued = false;
-    await Promise.all([loadPartRequests(), loadReturns()]);
+    await Promise.all([loadPartRequests(partRequestsLoaded.value), loadReturns()]);
   } while (refreshQueued);
   refreshRunning = false;
 }
@@ -404,11 +430,13 @@ watch(() => props.orderId, id => {
     partRequests.value = [];
     partRequestsLoaded.value = false;
     returnRecords.value = [];
+    requestDetailOverrides.value = {};
   declareTarget.value = null;
   selectedItems.value = [];
   showCreateForm.value = false;
   actionError.value = null;
   actionSuccess.value = null;
+  backgroundSyncError.value = false;
   stopLiveParts = onOrderChange(id, event => {
     if (!event.kinds || event.kinds.some(kind => ['part', 'quotation', 'invoice', 'cash', 'status', 'additional_cost'].includes(kind))) void refreshParts();
   });
@@ -490,14 +518,19 @@ const handleUpdateUsage = async (
     actionLoading.value = true;
     actionError.value = null;
 
-    await partRequestsApi.updateItemUsage(requestId, itemId, {
+    const saved = await partRequestsApi.updateItemUsage(requestId, itemId, {
       usageStatus: status,
     });
-
+    // Update only the confirmed row; don't replace the list with skeletons,
+    // refetch the entire order, or move the technician back to the page top.
+    partRequests.value = partRequests.value.map(row => row.id === requestId
+      ? { ...row, items: row.items.map(item => item.id === itemId ? { ...item, ...(saved || {}), usageStatus: saved?.usageStatus ?? status } : item) }
+      : row);
+    emit('requests', partRequests.value);
     actionSuccess.value =
-      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện hoàn trả.';
-    await Promise.all([loadPartRequests(), loadReturns()]);
-    emit('parts-updated');
+      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện không sử dụng.';
+    // Warehouse return quantities are separate, refreshed without hiding rows.
+    void loadReturns();
   } catch (err: unknown) {
     actionError.value =
       userFacingError(err, 'Không thể cập nhật trạng thái linh kiện.');
@@ -547,8 +580,9 @@ const submitDeclareReturn = async () => {
     declareTarget.value = null;
     actionSuccess.value =
       'Đã gửi khai trả linh kiện. Quản lý dịch vụ sẽ nhận và xác nhận số lượng thực tế.';
-    await Promise.all([loadPartRequests(), loadReturns()]);
-    emit('parts-updated');
+    // A declaration only changes custody records, not the part request or invoice.
+    // Avoid a full page refresh and retain the open declaration context.
+    await loadReturns();
   } catch (err: unknown) {
     actionError.value = userFacingError(
       err,
@@ -620,6 +654,7 @@ const getStatusBadgeClass = (status: string) => {
         <span>{{ actionError }}</span>
       </div>
 
+      <p v-if="backgroundSyncError" role="status" class="text-xs text-ink-500">Chưa đồng bộ được linh kiện mới nhất. <button type="button" class="font-semibold text-brand-700 underline" @click="refreshParts">Thử lại</button></p>
       <div
         v-if="returnsLoadError"
         class="p-2.5 rounded-lg bg-ink-50 border border-ink-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-600"
@@ -827,9 +862,6 @@ const getStatusBadgeClass = (status: string) => {
                         SKU: {{ selectedPart.sku }}
                       </span>
                     </div>
-                    <p v-if="selectedPart.description" class="text-[11px] text-ink-600 mt-0.5 line-clamp-1">
-                      {{ selectedPart.description }}
-                    </p>
                   </div>
                 </div>
 
@@ -842,40 +874,17 @@ const getStatusBadgeClass = (status: string) => {
                 </button>
               </div>
 
-              <!-- Price & Warranty Spotlight Metrics -->
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <!-- Price block -->
-                <div class="bg-white p-2.5 rounded-lg border border-brand-200/60 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
-                    <Tag :size="12" class="text-brand-600" /> Giá niêm yết FixHome
-                  </span>
-                  <div class="text-base font-bold text-brand-700 font-num">
-                    <FhMoney :amount="selectedPart.sellingPrice" />
-                  </div>
-                </div>
-
-                <!-- Warranty duration block -->
-                <div class="bg-white p-2.5 rounded-lg border border-success-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-success-800 flex items-center gap-1">
-                    <ShieldCheck :size="12" class="text-success-600" /> Thời hạn bảo hành
-                  </span>
-                  <div class="text-xs font-bold text-success-700 flex items-center gap-1">
-                    <span class="whitespace-nowrap text-sm font-bold">
-                      {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Warranty policy block -->
-                <div class="bg-white p-2.5 rounded-lg border border-ink-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
-                    <Clock :size="12" class="text-ink-500" /> Chính sách bảo hành
-                  </span>
-                  <p class="text-[11px] text-ink-700 font-medium line-clamp-2">
-                    {{ selectedPart.warrantyPolicy || 'Bảo hành chính hãng theo chính sách FixHome' }}
-                  </p>
-                </div>
+              <!-- The technician needs price and quantity now. Warranty remains in details. -->
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-brand-200/60 px-3 py-2">
+                <span class="text-xs text-ink-500">Đơn giá</span>
+                <strong class="text-base text-brand-700 font-num"><FhMoney :amount="selectedPart.sellingPrice" /></strong>
               </div>
+              <details class="rounded-lg bg-white px-3 py-2 text-xs text-ink-600 border border-ink-200">
+                <summary class="cursor-pointer font-semibold text-brand-700"><span aria-hidden="true">ⓘ</span> Chi tiết linh kiện</summary>
+                <p v-if="selectedPart.description" class="mt-2">{{ selectedPart.description }}</p>
+                <p class="mt-1">Bảo hành: {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</p>
+                <p v-if="selectedPart.warrantyPolicy" class="mt-1">{{ selectedPart.warrantyPolicy }}</p>
+              </details>
 
               <!-- Add to Request Action Controls -->
               <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
@@ -935,104 +944,36 @@ const getStatusBadgeClass = (status: string) => {
             </div>
           </div>
 
-          <!-- Selected Items Table -->
+          <!-- Compact selected parts: no dense seven-column table on mobile. -->
           <div v-if="selectedItems.length > 0" class="space-y-2">
-            <div class="flex items-center justify-between">
-              <h5 class="font-bold text-ink-900 text-xs flex items-center gap-1.5">
-                <Layers :size="14" class="text-brand-600" />
-                Danh sách linh kiện dự kiến mang theo ({{ selectedItems.length }} loại)
-              </h5>
-              <span class="text-[11px] text-ink-500">
-                Tổng số lượng: <strong class="text-brand-700">{{ selectedTotalQuantity }}</strong>
-              </span>
+            <div class="flex items-center justify-between gap-2 text-sm">
+              <strong class="text-ink-900">Đã chọn {{ selectedItems.length }} loại · {{ selectedTotalQuantity }} cái</strong>
+              <strong class="font-num text-brand-700"><FhMoney :amount="selectedTotalPrice" /></strong>
             </div>
-
-            <div class="border border-ink-200 rounded-xl overflow-hidden shadow-xs bg-white">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-ink-100 text-ink-700 font-semibold border-b border-ink-200">
-                  <tr>
-                    <th class="p-2.5">Linh kiện & Mã SKU</th>
-                    <th class="p-2.5 text-center">Bảo hành</th>
-                    <th class="p-2.5 text-right">Đơn giá niêm yết</th>
-                    <th class="p-2.5 text-center">Số lượng</th>
-                    <th class="p-2.5 text-right">Thành tiền tạm tính</th>
-                    <th class="p-2.5">Ghi chú</th>
-                    <th class="p-2.5 text-center w-10"></th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-ink-100">
-                  <tr v-for="(item, idx) in selectedItems" :key="idx" class="hover:bg-ink-50/70 transition-colors">
-                    <td class="p-2.5">
-                      <div class="font-semibold text-ink-900">{{ item.partName }}</div>
-                      <span v-if="item.sku" class="font-mono text-[10px] text-ink-500">
-                        {{ item.sku }}
-                      </span>
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <span
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
-                        :title="item.warrantyPolicy || undefined"
-                      >
-                        <ShieldCheck :size="11" />
-                        {{ getWarrantyBadge(item.warrantyDays) }}
-                      </span>
-                    </td>
-                    <td class="p-2.5 text-right font-num text-ink-700">
-                      <FhMoney :amount="item.price" />
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <div class="inline-flex items-center gap-1 bg-ink-50 px-1 py-0.5 rounded border border-ink-200">
-                        <button
-                          type="button"
-                          class="p-0.5 hover:bg-ink-200 rounded text-ink-600"
-                          @click="decreaseQuantity(idx)"
-                        >
-                          <Minus :size="11" />
-                        </button>
-                        <span class="w-6 text-center font-bold font-num text-xs">{{ item.quantity }}</span>
-                        <button
-                          type="button"
-                          class="p-0.5 hover:bg-ink-200 rounded text-ink-600"
-                          @click="increaseQuantity(idx)"
-                        >
-                          <Plus :size="11" />
-                        </button>
-                      </div>
-                    </td>
-                    <td class="p-2.5 text-right font-num font-bold text-brand-700">
-                      <FhMoney :amount="item.price * item.quantity" />
-                    </td>
-                    <td class="p-2.5 text-ink-500">
-                      {{ item.note || '-' }}
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <button
-                        type="button"
-                        class="text-danger-600 hover:text-danger-800 p-1 rounded hover:bg-danger-50 transition-colors"
-                        title="Xoá linh kiện"
-                        @click="removeItemFromForm(idx)"
-                      >
-                        <Trash2 :size="14" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-                <!-- Table Footer Summary -->
-                <tfoot class="bg-brand-50/50 border-t border-brand-200 text-xs">
-                  <tr>
-                    <td colspan="4" class="p-2.5 font-bold text-brand-900 text-right">
-                      Tổng giá trị linh kiện dự kiến mang theo:
-                    </td>
-                    <td class="p-2.5 text-right font-num font-bold text-brand-700 text-sm">
-                      <FhMoney :amount="selectedTotalPrice" />
-                    </td>
-                    <td colspan="2" class="p-2.5 text-[11px] text-ink-500 italic">
-                      * Chưa tính vào hoá đơn khách
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            <div class="space-y-2">
+              <div v-for="(item, idx) in selectedItems" :key="item.partCatalogId" class="rounded-xl border border-ink-200 bg-white px-3 py-2.5 space-y-2">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-ink-900">{{ item.partName }}</p>
+                    <p v-if="item.sku" class="text-[11px] text-ink-500 font-mono">{{ item.sku }}</p>
+                  </div>
+                  <button type="button" class="shrink-0 w-10 h-10 inline-flex items-center justify-center text-danger-600 rounded-lg hover:bg-danger-50" aria-label="Xoá linh kiện" @click="removeItemFromForm(idx)"><Trash2 :size="16" /></button>
+                </div>
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                  <div class="inline-flex items-center rounded-lg border border-ink-200 bg-ink-50">
+                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Giảm số lượng ${item.partName}`" @click="decreaseQuantity(idx)"><Minus :size="14" /></button>
+                    <span class="w-7 text-center font-num font-semibold">{{ item.quantity }}</span>
+                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Tăng số lượng ${item.partName}`" @click="increaseQuantity(idx)"><Plus :size="14" /></button>
+                  </div>
+                  <div class="text-right text-xs text-ink-600">
+                    <p><FhMoney :amount="item.price" />/cái</p>
+                    <strong class="font-num text-sm text-brand-700"><FhMoney :amount="item.price * item.quantity" /></strong>
+                  </div>
+                </div>
+                <p v-if="item.note" class="text-xs text-ink-500">{{ item.note }}</p>
+              </div>
             </div>
+            <p class="text-xs text-ink-500">Giá dự kiến · chưa tính vào hóa đơn khách.</p>
           </div>
 
           <!-- Bottom Action Buttons -->
@@ -1099,11 +1040,12 @@ const getStatusBadgeClass = (status: string) => {
               </span>
             </div>
 
-            <span class="text-[11px] text-ink-400 font-num">
-              {{ vnDateTimeString(pr.createdAt) }}
-            </span>
+            <button type="button" class="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-brand-700" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
+              {{ isRequestExpanded(pr.id, group.key) ? 'Thu gọn' : 'Chi tiết' }}
+              <span aria-hidden="true">{{ isRequestExpanded(pr.id, group.key) ? '⌃' : '⌄' }}</span>
+            </button>
           </div>
-
+          <div v-show="isRequestExpanded(pr.id, group.key)" class="space-y-3">
           <!-- Reason & Notes -->
           <p v-if="pr.reason" class="text-xs text-ink-700">
             <strong>Lý do:</strong> {{ pr.reason }}
@@ -1275,6 +1217,7 @@ const getStatusBadgeClass = (status: string) => {
             <p class="text-[11px] text-ink-500">
               Quản lý dịch vụ sẽ nhận linh kiện và xác nhận số lượng thực tế. Khai trả chưa phải là đã trả xong.
             </p>
+          </div>
           </div>
         </div>
       </div>

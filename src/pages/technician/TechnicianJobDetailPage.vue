@@ -164,6 +164,11 @@ const onPartRequests = async (requests: PartRequest[]) => {
   const version = ++stockReadVersion;
   const id = jobIdRef.value;
   receivedRequests.value = requests;
+  // Update local completion blockers without a full order/cache refresh.
+  if (isRepairing.value) {
+    completionPartRequests.value = requests;
+    completionPartsReadFailed.value = false;
+  }
   quoteStockLoading.value = true;
   const ids = [...new Set(requests.filter(request => request.requestType === 'pre_repair' && request.status === 'received' && request.receivedAt)
     .flatMap(request => request.items.filter(item => item.partSource === 'fixhome').map(item => item.partCatalogId)).filter((id): id is string => !!id))];
@@ -262,9 +267,22 @@ const openCamera = (purpose: CameraPurpose) => {
 };
 const departureChoiceOpen = ref(false);
 const partsSection = ref<{ openPreRepairForm?: () => void } | null>(null);
-const openDepartureChoice = () => {
+// An existing valid pre-repair request already answered the parts question.
+const openDepartureChoice = async () => {
   if (actionLoading.value || statusUpper.value !== 'ACCEPTED') return;
-  departureChoiceOpen.value = true;
+  actionLoading.value = true;
+  try {
+    const requests = await partRequestsApi.getByOrderId(jobId);
+    if (requests.some(request => request.requestType === 'pre_repair' && request.status !== 'cancelled')) {
+      await handleEnRoute();
+    } else {
+      departureChoiceOpen.value = true;
+    }
+  } catch (err) {
+    notifyError(userFacingError(err, 'Chưa kiểm tra được yêu cầu linh kiện. Vui lòng thử lại.'));
+  } finally {
+    actionLoading.value = false;
+  }
 };
 const choosePreRepairParts = async () => {
   departureChoiceOpen.value = false;
@@ -280,6 +298,8 @@ const complaintPanel = ref<{ openForm: () => void } | null>(null);
 const sections = reactive({ photos: false, parts: false, extra: false });
 const pendingPartsUsage = ref(0);
 const pendingPartsReturns = ref(0);
+const returnsToDeclare = ref(0);
+const returnsAwaitingManager = ref(0);
 const revealParts = async () => {
   sections.parts = true;
   await nextTick();
@@ -938,15 +958,8 @@ const loading = computed(() => jobQuery.query.data.value === undefined && jobQue
 const loadFailed = computed(
   () => !!jobQuery.error.value && jobQuery.query.data.value === undefined && !job.value && !historicalJob.value,
 );
-// A failed re-read keeps the job on screen with a short line.
-watch(
-  () => jobQuery.query.errorUpdatedAt.value,
-  () => {
-    if (jobQuery.query.error.value && (job.value || historicalJob.value)) {
-      notifyError('Chưa cập nhật được công việc. Vui lòng thử lại.');
-    }
-  },
-);
+// Background cached reads can fail without invalidating the last verified job.
+// Only explicitly initiated mutations report their own errors, at their source.
 
 /**
  * PO 18/10/2026: what the customer or the manager does (approving the quote, an
@@ -1745,7 +1758,7 @@ const toggleMore = async () => {
       <!-- 1. Header: title, code, status, one overflow menu -->
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">Chi tiết công việc</h1>
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
             <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
             <FhStatusPill :status="job.status" />
@@ -1820,7 +1833,9 @@ const toggleMore = async () => {
           <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
           <div><dt class="text-ink-600">Tổng cộng</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
         </dl>
-        <div v-if="proposedParts.length" data-testid="approved-parts" class="border-t border-ink-100 pt-3">
+        <details v-if="proposedParts.length || receivedRequests.length" class="border-t border-ink-100 pt-3 text-xs">
+          <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
+        <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
           <h3 class="font-medium text-ink-800">Dự kiến/đã duyệt</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2">
@@ -1837,8 +1852,9 @@ const toggleMore = async () => {
               <ul class="pl-3"><li v-for="item in request.items" :key="item.id">{{ item.partNameSnapshot }} × {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}</li></ul>
             </li>
           </ul>
-          <button type="button" class="mt-2 text-brand-700 underline" @click="revealParts">Xem yêu cầu kho và ghi nhận sử dụng</button>
+          <button type="button" class="mt-2 min-h-10 text-brand-700 underline" @click="revealParts">Mở quản lý linh kiện</button>
         </div>
+        </details>
       </section>
 
       <!-- Result of the last action -->
@@ -1857,10 +1873,11 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="isCompleted && isPaid && pendingPartsReturns > 0" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800" role="status">
-        <p class="font-semibold">Chờ hoàn trả linh kiện</p>
-        <p>Đơn đã hoàn thành và khách đã thanh toán. Còn {{ pendingPartsReturns }} linh kiện chờ quản lý nhận lại.</p>
-        <button type="button" class="mt-2 font-semibold underline" @click="revealParts">Xem và khai trả linh kiện</button>
+      <div v-if="isCompleted && isPaid && pendingPartsReturns > 0" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
+        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : 'Chờ quản lý xác nhận nhận trả' }}</p>
+        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện cần khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đang chờ quản lý nhận</span>.</p>
+        <p v-else>Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ quản lý nhận và xác nhận thực tế.</p>
+        <button type="button" class="mt-2 font-semibold underline" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
@@ -1894,7 +1911,10 @@ const toggleMore = async () => {
           <p v-if="quoteStockError" data-testid="quote-stock-error" role="alert" class="text-sm text-danger-700">
             {{ quoteStockError }} <button type="button" class="font-semibold underline" @click="retryQuoteStock">Thử lại</button>
           </p>
-          <p class="text-sm text-ink-600">Linh kiện FixHome đã nhận được gợi ý theo đơn giá kho và bảo hành danh mục. Chỉnh số lượng hoặc bỏ dòng trước khi gửi. Linh kiện FixHome cần nhận từ kho qua QR; linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận đã dùng sau khi bắt đầu sửa.</p>
+          <details class="text-xs text-ink-600 rounded-lg bg-ink-50 px-3 py-2">
+            <summary class="cursor-pointer font-medium text-brand-700"><span aria-hidden="true">ⓘ</span> Thông tin báo giá</summary>
+            <p class="mt-2">Linh kiện FixHome theo đơn giá và bảo hành danh mục. Điều chỉnh số lượng trước khi gửi. Linh kiện FixHome nhận qua QR, linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
+          </details>
           <div
             v-for="(item, idx) in quotationItems"
             :key="idx"
@@ -1916,7 +1936,11 @@ const toggleMore = async () => {
               :aria-label="item.type === 'LABOR' ? 'Mô tả công việc' : 'Tên linh kiện'"
               class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
             />
-            <span v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs text-ink-600">Bảo hành {{ item.warrantyDays }} ngày</span>
+
+            <details v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs shrink-0">
+              <summary class="cursor-pointer text-brand-700 font-semibold min-h-10 inline-flex items-center" aria-label="Chi tiết bảo hành linh kiện">ⓘ</summary>
+              <p>Bảo hành {{ item.warrantyDays }} ngày</p>
+            </details>
             <input
               v-if="item.type === 'PARTS'"
               v-model.number="item.quantity"
@@ -2385,6 +2409,7 @@ const toggleMore = async () => {
                 :order-id="job.id"
                 :order-status="job.status"
                 @parts-updated="loadJob(jobId, { silent: true })"
+                @return-summary="returnsToDeclare = $event.needDeclare; returnsAwaitingManager = $event.awaitingManager"
                 @summary="onPartsSummary"
                 @requests="onPartRequests"
                 @requests-loading="quoteStockLoading = true"
@@ -2478,9 +2503,7 @@ const toggleMore = async () => {
                       class="flex-1 min-w-0 flex items-center justify-between gap-2"
                     >
                       <span class="min-w-0 truncate font-medium text-ink-900" :title="item.warrantyPolicy || item.description">{{ item.description }}</span>
-                      <span class="shrink-0 inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap">
-                        <ShieldCheck :size="12" /> {{ formatAcWarrantyBadge(item.warrantyDays) }}
-                      </span>
+
                       <button type="button" class="shrink-0 h-10 px-2 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap" @click="openAcPartPicker(idx)">
                         Đổi
                       </button>

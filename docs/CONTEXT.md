@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 18:47 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-job-v3-web-20261020
+> Cập nhật lần cuối: 2026-10-20 21:42 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-job-v31-simplify-20261020
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -278,6 +278,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Chụp nhiều ảnh trước và sau sửa chỉ bằng camera. Đơn giá cố định giữ `EN_ROUTE` trong các ảnh BEFORE trung gian và tự bắt đầu sửa ở ảnh cuối; nếu không còn ảnh chờ tải, thợ có thể dùng action khôi phục gọi API `startRepair` trong đúng trạng thái check-in và có ảnh BEFORE. Ảnh AFTER không tự gửi hoàn thành; thợ phải bấm `Gửi hoàn thành`. Trình duyệt khóa thao tác khi chưa đọc đủ báo giá, chi phí và trạng thái linh kiện; Backend vẫn là nơi quyết định cuối.
 - Hành vi trong code có test tập trung; browser, Backend tích hợp và tương đương với Mobile CHƯA KIỂM CHỨNG.
 
+**UX Technician V3.1 (20/10/2026):** Màn ServiceOrder chỉ hỏi đặt linh kiện trước khi di chuyển nếu chưa có PRE_REPAIR hợp lệ; linh kiện đã USED/RETURNED được cập nhật cục bộ theo phản hồi API và đồng bộ nền, tránh reload toàn trang. Nghĩa vụ khai trả kho được tách rõ chưa khai và đã khai đang chờ Service Manager nhận. Form PRE_REPAIR, báo giá đầu và phát sinh ẩn bảo hành/giải thích dài sau disclosure thông tin, list linh kiện gọn và request cũ thu gọn; giá và thông tin bảo hành vẫn bảo toàn trong dữ liệu. Thay đổi Web UX, không thay đổi API/Backend, hóa đơn, custody hoặc logic thanh toán.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -360,6 +362,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 - 2026-10-20 18:47 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Thêm action khôi phục bắt đầu sửa đơn giá cố định sau ảnh BEFORE bị gián đoạn; chỉ hiện khi đã check-in, có ảnh và không còn upload chờ
 - 2026-10-20 17:55 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | ServiceOrder theo bước, blocker báo giá đối chiếu PRE_REPAIR theo SKU, ảnh camera theo batch; Backend/browser/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-20 17:51 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Bố cục ServiceOrder theo bước, nhóm linh kiện, hoàn thành có blocker và batch ảnh camera; Backend/browser/Mobile CHƯA KIỂM CHỨNG
@@ -399,4 +402,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
 - 2026-10-12 16:48 (UTC+7) | ToanAltF4 | feat/schedule-calendar | Tab Lịch làm việc của thợ có lịch tuần kiểu Google Calendar (ngày là cột, giờ là hàng, giờ Việt Nam): giờ nhận việc theo bản đang sửa, ngày nghỉ, lịch hẹn của tuần và vạch giờ hiện tại; điện thoại xem từng ngày.
 - 2026-10-12 12:02 (UTC+7) | Lạc Vỹ | LacVy | Tinh chỉnh CustomerDashboard: làm gọn Order in progress, danh sách đơn gần đây và catalogue dịch vụ, loại bỏ các chi tiết thừa
-- 2026-10-12 10:20 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX trang chi tiết đơn và bảo hành: accordion mượt, tab indicator, bộ lọc và thống kê
