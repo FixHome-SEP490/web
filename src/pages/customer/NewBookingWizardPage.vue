@@ -26,6 +26,7 @@ import { FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
 import BookingStepDock from '../../components/booking/BookingStepDock.vue';
 import BookingSummary, { type SummaryPrice } from '../../components/booking/BookingSummary.vue';
+import { useStepHistory } from '../../components/booking/use-step-history';
 import { catalogPriceLabel, deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import CompactServiceCard from '../../components/booking/CompactServiceCard.vue';
 import ServiceDetailsDialog from '../../components/booking/ServiceDetailsDialog.vue';
@@ -65,6 +66,7 @@ const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
 const step = ref(1);
+useStepHistory(step, router, route);
 watch(step, (currentStep, previous) => {
   setBookingLayoutWidth(currentStep === 2 || (!isAiFlow && currentStep === 1));
   // A new step starts at its top, never mid-page under the header (PO 20/10/2026).
@@ -1623,9 +1625,7 @@ async function createAndFindTech() {
           cta-label="Tiếp tục"
           cta-testid="step1-next"
           :cta-disabled="!selectedServiceId || !isCatalogV2PreviewReady"
-          back-label="Quay lại"
           @next="goToStep2"
-          @back="router.back()"
         />
       </div>
       <!-- Step 2: address and time, the summary beside it. -->

@@ -13,7 +13,7 @@ const { route, getCategories, getAddresses, trackOrder, getOrder, chat } = vi.ho
   chat: { value: null as unknown },
 }));
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getCategories } }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
 vi.mock('../src/api/media.api', () => ({

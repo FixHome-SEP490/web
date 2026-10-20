@@ -39,7 +39,7 @@ vi.mock('../src/utils/image-for-ai', () => ({
   prepareForAi: vi.fn(async (files: File[]) => ({ images: files.map((f) => ({ dataUrl: `data:${f.name}`, bytes: 1 })) })),
   shrinkForRetry: vi.fn(async () => []),
 }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
 import { useSharedAiConversation, resetSharedAiConversation } from '../src/composables/useAiConversation';

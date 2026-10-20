@@ -36,7 +36,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
 
@@ -206,6 +206,8 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
     expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toBe('Chưa chọn');
+    // Step 1 has no step before it, so no "Quay lại" that would leave the form (PO 21/10/2026).
+    expect(wrapper.find('[data-testid="booking-summary-back"]').exists()).toBe(false);
     // The fault description belongs to a chosen service; nothing is asked before that.
     expect(wrapper.find('textarea').exists()).toBe(false);
   });

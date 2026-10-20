@@ -32,7 +32,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) =>
     [403, 404, 501, 503].includes((error as { response?: { status?: number } } | undefined)?.response?.status ?? 0),
 }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
