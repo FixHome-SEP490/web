@@ -155,6 +155,36 @@ describe('TechnicianPartsSection inside the job page', () => {
     wrapper.unmount();
   });
 
+  it('updates only the saved usage row without reloading the full request list or parent order', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('received')]);
+    partRequestsApi.updateItemUsage.mockResolvedValue({ ...request('received', 'used').items[0] });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+    expect(partRequestsApi.getByOrderId).toHaveBeenCalledTimes(1);
+    const button = wrapper.findAll('button').find(b => b.text() === 'Đã dùng');
+    expect(button).toBeDefined();
+    await button!.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', { usageStatus: 'used' });
+    expect(partRequestsApi.getByOrderId).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('parts-updated')).toBeUndefined();
+    expect(wrapper.emitted('requests')?.at(-1)?.[0][0].items[0].usageStatus).toBe('used');
+    wrapper.unmount();
+  });
+
+  it('separates pending return declaration from manager acceptance', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('completed', 'returned')]);
+    partRequestsApi.getReturnsByOrderId.mockResolvedValue([{
+      partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả',
+      issuedQty: 3, usedQty: 0, declaredQty: 2, managerAcceptedQty: 0, outstandingQty: 3, version: 3,
+    }]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'COMPLETED' }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.emitted('return-summary')?.at(-1)).toEqual([{ needDeclare: 1, awaitingManager: 2 }]);
+    expect(wrapper.get('[data-testid="parts-group-action"]').text()).toContain('Cần thao tác');
+    wrapper.unmount();
+  });
+
   it('groups requests by the next technician action and renders compact part cards', async () => {
     const ready = { ...request('ready'), id: 'pr-ready' };
     const waiting = { ...request('requested'), id: 'pr-waiting' };
