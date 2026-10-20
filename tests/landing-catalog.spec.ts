@@ -35,7 +35,8 @@ describe('landing catalog highlights', () => {
     expect(wrapper.text()).not.toMatch(/chưa kích hoạt|catalog v2/i);
     expect(cards[3].text()).toContain('Chăm sóc thiết bị tại nhà.');
     const all = wrapper.findAll('a').find((a) => a.text().includes('Xem tất cả'))!;
-    expect(all.text()).toContain('Xem tất cả 13 danh mục');
+    // The one way off the landing into the full catalog (PO 21/10/2026).
+    expect(all.text()).toContain('Xem tất cả dịch vụ');
     expect(all.attributes('href')).toBe('/services');
     expect(cards[5].attributes('href')).toBe('/services?category=cat-5');
     wrapper.unmount();
