@@ -61,17 +61,33 @@ export function normalizeCatalogSearch(value: string): string {
     .trim();
 }
 
-/** Name, description and scope carry the searchable text, matching the public list's fields. */
+/**
+ * Everyday names for the same device (PO 20/10/2026): customers in the south say
+ * "máy lạnh" for an air conditioner and "máy nước nóng" for a water heater. Applied
+ * to both sides on the folded text, so either name finds the service.
+ */
+const SEARCH_SYNONYMS: ReadonlyArray<[RegExp, string]> = [
+  [/\bmay lanh\b/g, 'dieu hoa'],
+  [/\bmay dieu hoa\b/g, 'dieu hoa'],
+  [/\bmay nuoc nong\b/g, 'binh nong lanh'],
+  [/\btv\b/g, 'tivi'],
+];
+
+function foldForSearch(value: string): string {
+  return SEARCH_SYNONYMS.reduce((text, [pattern, canonical]) => text.replace(pattern, canonical), normalizeCatalogSearch(value));
+}
+
+/** Every word of the query must appear somewhere in the service or its category, in any order. */
 export function serviceMatchesSearch(
-  service: Pick<ServiceItem, 'name' | 'description' | 'scopeDescription'>,
+  service: Pick<ServiceItem, 'name' | 'description' | 'scopeDescription'> & { categoryName?: string },
   query: string,
 ): boolean {
-  const needle = normalizeCatalogSearch(query);
-  if (!needle) return true;
-  const haystack = normalizeCatalogSearch(
-    [service.name, service.description ?? '', service.scopeDescription ?? ''].join(' '),
+  const words = foldForSearch(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = foldForSearch(
+    [service.name, service.categoryName ?? '', service.description ?? '', service.scopeDescription ?? ''].join(' '),
   );
-  return haystack.includes(needle);
+  return words.every((word) => haystack.includes(word));
 }
 
 /** A service flattened out of the nested `/categories` payload, always knowing its category. */

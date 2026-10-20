@@ -3,7 +3,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
-import { BookingMediaViewer, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
+import { BookingMediaViewer, FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
+import { deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
@@ -280,6 +281,37 @@ const selectedSession = ref<{ date: string; slot: BookingSlot } | null>(null);
 const scheduleNotice = ref('');
 // The sessions are checked against the technician only when the customer asks to move.
 const showReschedule = ref(false);
+// What was asked for, as the server froze it (PO 20/10/2026): the device, the labour
+// price and the customer's own words stay readable on every status, cancelled too.
+const requestDevice = computed(() => {
+  const value = booking.value;
+  if (!value) return null;
+  const facts = deviceFactsText(value.deviceAttributesSnapshot);
+  if (facts) return facts;
+  const scope = value.catalogV2PricingSnapshot?.selectedVariant?.scopeVi;
+  return scope ? readableScope(scope) : null;
+});
+
+type RequestPrice = { kind: 'firm'; amount: number } | { kind: 'range'; min: number; max: number } | { kind: 'survey' };
+const positiveAmount = (value: unknown): number | null => {
+  const amount = typeof value === 'string' ? Number(value) : value;
+  return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 ? amount : null;
+};
+const requestPrice = computed<RequestPrice | null>(() => {
+  const value = booking.value;
+  if (!value) return null;
+  const snapshot = value.catalogV2PricingSnapshot;
+  const tier = positiveAmount(snapshot?.selectedVariant?.laborPriceVnd);
+  if (tier !== null) return { kind: 'firm', amount: tier };
+  const min = positiveAmount(snapshot?.priceRange?.minLaborVnd);
+  const max = positiveAmount(snapshot?.priceRange?.maxLaborVnd);
+  if (min !== null && max !== null) return min < max ? { kind: 'range', min, max } : { kind: 'firm', amount: min };
+  const unit = positiveAmount(value.fixedUnitPriceSnapshot);
+  if (value.pricingModeSnapshot === 'fixed_price' && unit !== null) return { kind: 'firm', amount: unit * Math.max(1, value.quantity ?? 1) };
+  if (value.pricingModeSnapshot || snapshot) return { kind: 'survey' };
+  return null;
+});
+
 const currentSchedule = computed(() => booking.value
   ? sessionLabel({ bookingMode: booking.value.bookingMode, slot: booking.value.slot, start: booking.value.preferredAt })
   : '');
@@ -658,6 +690,31 @@ const confirmMatchingExtension = async () => {
             </div>
           </div>
         </div>
+
+        <!-- What was asked for: device, labour price, the customer's words. -->
+        <dl
+          v-if="requestDevice || requestPrice || (booking.description && !editable)"
+          class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 rounded-2xl border border-ink-200 p-4 text-sm sm:p-5"
+          data-testid="booking-request-summary"
+        >
+          <template v-if="requestDevice">
+            <dt class="text-ink-500">Thiết bị</dt>
+            <dd class="font-medium text-ink-900" data-testid="booking-request-device">{{ requestDevice }}</dd>
+          </template>
+          <template v-if="requestPrice">
+            <dt class="text-ink-500">Tiền công</dt>
+            <dd class="text-ink-900" data-testid="booking-request-price">
+              <span v-if="requestPrice.kind === 'firm'" class="font-semibold font-num"><FhMoney :amount="requestPrice.amount" /></span>
+              <span v-else-if="requestPrice.kind === 'range'" class="font-semibold font-num"><FhMoney :amount="requestPrice.min" /> – <FhMoney :amount="requestPrice.max" /></span>
+              <span v-else>Thợ báo giá tại nhà</span>
+              <span class="block text-xs text-ink-500">{{ requestPrice.kind === 'firm' ? 'Chưa gồm linh kiện, vật tư' : 'Thợ báo giá để bạn duyệt trước khi sửa' }}</span>
+            </dd>
+          </template>
+          <template v-if="booking.description && !editable">
+            <dt class="text-ink-500">Tình trạng</dt>
+            <dd class="text-ink-900 text-pretty whitespace-pre-line" data-testid="booking-request-description">{{ booking.description }}</dd>
+          </template>
+        </dl>
 
         <!-- Customer note if present -->
         <div v-if="booking.customerNote" class="rounded-2xl border border-warning-200/80 bg-warning-50/70 p-3.5 text-xs sm:text-sm text-warning-900 text-pretty flex items-start gap-2.5">

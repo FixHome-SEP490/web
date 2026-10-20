@@ -1,4 +1,5 @@
-// The step-1 action dock. While the customer scrolls the finder it floats a
+// The step-1 action dock of the assistant form (the hand-picked form has the
+// summary bar since PO 20/10/2026). While the customer scrolls it floats a
 // Previous/Next pill over the page; the moment the real footer is on screen the
 // dock leaves and the footer becomes the one action set again (and while the
 // dock is up, the footer is inert). happy-dom never fires IntersectionObserver
@@ -146,6 +147,11 @@ const dock = (wrapper: ReturnType<typeof mount>) => wrapper.get('[data-testid="b
 const dockNext = (wrapper: ReturnType<typeof mount>) => wrapper.get('[data-testid="booking-step-dock-next"]');
 const footer = (wrapper: ReturnType<typeof mount>) => wrapper.get('[data-testid="booking-step1-footer"]');
 
+async function describeFault(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('textarea').setValue('Máy lạnh chảy nước');
+  await nextTick();
+}
+
 describe('NewBookingWizardPage step-1 action dock', () => {
   beforeEach(() => {
     vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
@@ -159,11 +165,20 @@ describe('NewBookingWizardPage step-1 action dock', () => {
     push.mockReset();
     back.mockReset();
     route.query = {};
-    route.meta = {};
+    route.meta = { bookingFlow: 'ai' };
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('leaves the hand-picked form to its summary bar: no footer to watch, no dock', async () => {
+    route.meta = {};
+    const wrapper = await renderWizard();
+    expect(wrapper.find('[data-testid="booking-step1-footer"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-step-dock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-summary-bar"]').exists()).toBe(true);
+    expect(FakeIntersectionObserver.instances.filter((instance) => !instance.disconnected)).toHaveLength(0);
   });
 
   it('watches the step-1 footer and shows no dock until that footer is below the viewport', async () => {
@@ -177,15 +192,15 @@ describe('NewBookingWizardPage step-1 action dock', () => {
   });
 
   it('floats the dock once the footer is scrolled out of view, leaving one tabbable action set', async () => {
-    route.query = { serviceId: 'svc-ac-clean' };
     const wrapper = await renderWizard();
+    await describeFault(wrapper);
 
     FakeIntersectionObserver.live().reportFooter({ belowViewport: true });
     await nextTick();
 
     const dockEl = dock(wrapper);
-    expect(dockEl.find('[data-testid="booking-step-dock-hint"]').text()).toContain('Vệ sinh điều hòa treo tường');
-    expect(dockNext(wrapper).text()).toContain('Tiếp tục');
+    expect(dockEl.find('[data-testid="booking-step-dock-hint"]').text()).toContain('Trợ lý sẽ phân tích');
+    expect(dockNext(wrapper).text()).toContain('Phân tích cùng AI');
     expect(dockNext(wrapper).attributes('disabled')).toBeUndefined();
 
     // The real footer steps aside while the dock is the action set on screen.
@@ -193,17 +208,11 @@ describe('NewBookingWizardPage step-1 action dock', () => {
     expect(wrapper.get('[data-testid="step1-next"]').attributes('tabindex')).toBe('-1');
     expect(dockNext(wrapper).attributes('tabindex')).toBeUndefined();
     expect(wrapper.findAll('[data-testid="step1-next"]')).toHaveLength(1);
-
-    // Same advance as the footer button, and the dock leaves with step 1.
-    await dockNext(wrapper).trigger('click');
-    await flushPromises();
-    expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="booking-step-dock"]').exists()).toBe(false);
   });
 
   it('takes the dock away and hands the actions back when the footer is on screen again', async () => {
-    route.query = { serviceId: 'svc-ac-clean' };
     const wrapper = await renderWizard();
+    await describeFault(wrapper);
     const observer = FakeIntersectionObserver.live();
 
     observer.reportFooter({ belowViewport: true });
@@ -230,7 +239,6 @@ describe('NewBookingWizardPage step-1 action dock', () => {
   });
 
   it('offers the back action to the dock and keeps the footer reachable for the keyboard', async () => {
-    route.query = { serviceId: 'svc-ac-clean' };
     const wrapper = await renderWizard();
 
     FakeIntersectionObserver.live().reportFooter({ belowViewport: true });
@@ -266,9 +274,9 @@ describe('NewBookingWizardPage step-1 action dock', () => {
   });
 
   it('transfers keyboard focus between footer and dock when their visibility changes', async () => {
-    route.query = { serviceId: 'svc-ac-clean' };
     const wrapper = mount(NewBookingWizardPage, { attachTo: document.body, global: { stubs } });
     await flushPromises();
+    await describeFault(wrapper);
     const observer = FakeIntersectionObserver.live();
     wrapper.get('[data-testid="step1-next"]').element.focus();
     observer.reportFooter({ belowViewport: true });
@@ -281,7 +289,6 @@ describe('NewBookingWizardPage step-1 action dock', () => {
   });
 
   it('gives the AI form its own dock label and refuses to continue without a description', async () => {
-    route.meta = { bookingFlow: 'ai' };
     const wrapper = await renderWizard();
 
     FakeIntersectionObserver.live().reportFooter({ belowViewport: true });

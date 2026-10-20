@@ -159,9 +159,10 @@ describe('customer New Booking private photo flow', () => {
     expect(dropzone.attributes('tabindex')).toBe('0');
     expect(dropzone.attributes('aria-label')).toContain('Tải ảnh hiện trạng');
     expect(dropzone.classes()).toContain('border-dashed');
-    expect(dropzone.classes()).toContain('min-h-[100px]');
+    // A 72px tile beside the photos it adds (PO 20/10/2026), still one target for click, keys and drop.
+    expect(dropzone.classes()).toContain('h-[72px]');
     expect(dropzone.find('svg[aria-hidden="true"]').exists()).toBe(true);
-    expect(dropzone.text().trim()).toBe('Thêm ảnh hoặc kéo thả vào đây');
+    expect(dropzone.text().trim()).toBe('Thêm ảnh');
     expect(wrapper.text()).not.toContain('Ảnh hiện trạng thiết bị');
     expect(wrapper.text()).not.toContain('Bấm để chọn ảnh');
     expect(wrapper.findAll('[data-testid="booking-photo-picker"]')).toHaveLength(1);

@@ -16,10 +16,13 @@ import apiClient, { getHttpStatus } from './client';
  */
 export interface BookingDeviceAttributes {
   brand?: string;
-  acMounting?: 'wall' | 'ceiling';
+  /** floor = điều hòa tủ đứng (catalog V3). */
+  acMounting?: 'wall' | 'ceiling' | 'floor';
   acHorsepower?: 'up_to_1_5' | '2_to_2_5';
   washerLoadingStyle?: 'top' | 'front';
   washerCapacityKg?: number;
+  /** Máy giặt sấy (catalog V3); only sent once the customer answered. */
+  washerHasDryer?: boolean;
 }
 
 export interface CatalogPricingQuery extends BookingDeviceAttributes {
@@ -147,6 +150,7 @@ function previewParams(query: CatalogPricingQuery): Record<string, string | numb
   if (query.acHorsepower) params.acHorsepower = query.acHorsepower;
   if (query.washerLoadingStyle) params.washerLoadingStyle = query.washerLoadingStyle;
   if (typeof query.washerCapacityKg === 'number') params.washerCapacityKg = query.washerCapacityKg;
+  if (typeof query.washerHasDryer === 'boolean') params.washerHasDryer = String(query.washerHasDryer);
   if (query.brand) params.brand = query.brand;
   if (query.selectedVariantCode) params.selectedVariantCode = query.selectedVariantCode;
   return params;
