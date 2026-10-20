@@ -285,7 +285,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
     });
     await flushPromises();
 
-    expect(normalized(wrapper)).toContain('Nhận linh kiện (Quét QR)');
+    expect(normalized(wrapper)).toContain('Nhập mã bàn giao');
     wrapper.unmount();
   });
 

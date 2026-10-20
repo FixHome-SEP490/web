@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 14:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p013-quote-billing-20261020
+> Cập nhật lần cuối: 2026-10-20 18:47 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-job-v3-web-20261020
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -271,6 +271,13 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Khách: trước hóa đơn hiển thị tạm tính theo báo giá và phát sinh đã duyệt (báo giá `sent` vẫn hiện để duyệt). Có hóa đơn thì chỉ dùng dòng và tổng của hóa đơn, giữ đúng số 0. Hóa đơn 0 có tiền đã duyệt thiếu chứng cứ trả đúng SKU/nguồn/số lượng, dữ liệu không hợp lệ hoặc chưa đọc đủ thông tin thì khóa thanh toán và cảnh báo; Backend vẫn quyết định đối chiếu có thẩm quyền.
 - Hóa đơn 0 hợp lệ có `Hoàn tất miễn phí`; 1–4.999 ₫ chỉ ví/tiền mặt (thợ khai tiền mặt như cũ), từ 5.000 ₫ mới hiện VNPay. Không đổi mức nạp ví. Chỉ báo hoàn tất miễn phí khi API trả xác nhận đúng hóa đơn.
 
+### Màn công việc ServiceOrder của kỹ thuật viên (20/10/2026)
+
+- Chi tiết công việc dùng bố cục theo bước hiện tại: mobile ưu tiên hành động kế tiếp, desktop từ 1024 px dùng hai cột. Nút `Bắt đầu di chuyển` hỏi có đặt linh kiện trước hay không; đóng hộp thoại không đổi trạng thái. Mở phần linh kiện chỉ hiện form `pre_repair` nếu chưa có yêu cầu đang hoạt động.
+- Yêu cầu linh kiện chia thành `Cần thao tác`, `Đang chờ`, `Đã xử lý`; báo giá (`quotation`) và phát sinh (`additional`) giữ nhãn riêng. QR được nhập bằng mã bàn giao. Báo giá ban đầu được đối chiếu theo SKU với số lượng PRE_REPAIR và QUOTATION đã nhận, đã dùng hoặc hoàn trả; chỉ cần request QUOTATION khi còn thiếu. Phát sinh đã duyệt vẫn cần request liên kết riêng. Sử dụng chỉ được đánh dấu cả món `USED` hoặc `RETURNED` theo API hiện có; không có API số lượng dùng một phần.
+- Chụp nhiều ảnh trước và sau sửa chỉ bằng camera. Đơn giá cố định giữ `EN_ROUTE` trong các ảnh BEFORE trung gian và tự bắt đầu sửa ở ảnh cuối; nếu không còn ảnh chờ tải, thợ có thể dùng action khôi phục gọi API `startRepair` trong đúng trạng thái check-in và có ảnh BEFORE. Ảnh AFTER không tự gửi hoàn thành; thợ phải bấm `Gửi hoàn thành`. Trình duyệt khóa thao tác khi chưa đọc đủ báo giá, chi phí và trạng thái linh kiện; Backend vẫn là nơi quyết định cuối.
+- Hành vi trong code có test tập trung; browser, Backend tích hợp và tương đương với Mobile CHƯA KIỂM CHỨNG.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -289,6 +296,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 5. Hợp đồng với repo khác
 
 - P013: `POST /invoices/:id/no-charge` gửi `{}`, trả envelope `data: {invoiceId, paymentStatus: 'paid', settlementMethod: 'NO_CHARGE'}`. Đã đối chiếu route và response trong source Backend P013; runtime CHƯA KIỂM CHỨNG. Backend chịu ownership, idempotency, đối chiếu hóa đơn 0, hoàn tất đơn và giới hạn VNPay. `PartRequest.requestType` bổ sung `quotation`, có `quotationId`; khách dùng API đọc yêu cầu linh kiện hiện có để trình bày chứng cứ hoàn trả. Web không sửa Backend/DB.
+- Ảnh BEFORE nhiều tấm dùng trường multipart tùy chọn `deferAutoStart` ở `POST /service-orders/:id/evidence`: `true` cho ảnh trung gian; `false` hoặc bỏ trống ở ảnh cuối để đơn giá cố định tự chuyển sang `UNDER_REPAIR`. Các client cũ không gửi trường này vẫn giữ hành vi cũ. BEFORE vẫn cần GPS, ảnh mặt và `EN_ROUTE`; AFTER vẫn cần `UNDER_REPAIR`. Hợp đồng do Backend writer xác nhận; runtime tích hợp CHƯA KIỂM CHỨNG.
 
 - Booking `slot`: `morning|afternoon|evening`; ca tối 18:00–23:00 giờ Việt Nam, hôm nay nhận đặt tới trước 23:00. Backend bổ sung API và migration song song; tích hợp runtime ca tối và Mobile CHƯA KIỂM CHỨNG.
 - REST tới `backend` qua `VITE_API_BASE_URL` (mặc định `http://localhost:3000/api/v1`), JWT trong `localStorage` (`access_token`, `refresh_token`), refresh qua `POST /auth/refresh`.
@@ -347,10 +355,14 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Image Docker dùng Node 20 trong khi `.nvmrc` yêu cầu 22.22.2.
 - Lịch tuần của thợ chỉ đọc 100 đơn tạo gần nhất (backend chưa lọc theo ngày hẹn), nên tuần xa trong quá khứ có thể thiếu đơn đã xong; danh sách đơn không trả giờ kết thúc hẹn nên việc tới ngay chỉ vẽ một giờ.
 - Check-in trên web chỉ dùng vị trí thật của thiết bị; máy không có định vị hoặc chặn quyền vị trí sẽ không check-in được. Sai số và khoảng cách tối đa 5 km do `backend` quyết. Luồng chụp khuôn mặt check-in trên `mobile` CHƯA KIỂM CHỨNG.
+- Màn công việc kỹ thuật viên đã có test tập trung cho ảnh, blocker và nhóm linh kiện; cần browser QA tại 360/390/430/1024 px trở lên để kiểm tra bố cục và thao tác thật. Tích hợp `deferAutoStart`, action khôi phục `startRepair` với Backend và tương đương Mobile CHƯA KIỂM CHỨNG.
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 18:47 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Thêm action khôi phục bắt đầu sửa đơn giá cố định sau ảnh BEFORE bị gián đoạn; chỉ hiện khi đã check-in, có ảnh và không còn upload chờ
+- 2026-10-20 17:55 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | ServiceOrder theo bước, blocker báo giá đối chiếu PRE_REPAIR theo SKU, ảnh camera theo batch; Backend/browser/Mobile CHƯA KIỂM CHỨNG
+- 2026-10-20 17:51 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Bố cục ServiceOrder theo bước, nhóm linh kiện, hoàn thành có blocker và batch ảnh camera; Backend/browser/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-20 14:16 (UTC+7) | foxonworld | foxonworld/fixhome-p013-quote-billing-20261020 | P013: gợi ý linh kiện QR theo ID, phân biệt dự kiến/sử dụng/khai trả kho, hóa đơn authoritative và khóa 0 lệch duyệt, API miễn phí và ngưỡng VNPay; Backend thật/Mobile chưa kiểm chứng
 - 2026-10-19 22:20 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Bổ sung ca tối 18–23 giờ VN, nhận đặt hôm nay trước 23:00; public đủ 13 chip danh mục, landing 6 nhóm với mô tả và icon phù hợp; browser fixture đã kiểm tra, Backend thật/Mobile NOT VERIFIED; AI giữ nguyên
 - 2026-10-19 18:45 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Catalog V2 ưu tiên priceSummary từ API trên card đặt lịch và Services; giá tham khảo có nhãn duyệt báo giá, số kết quả nằm cuối danh sách; không đổi AI hoặc booking submission
@@ -388,6 +400,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 16:48 (UTC+7) | ToanAltF4 | feat/schedule-calendar | Tab Lịch làm việc của thợ có lịch tuần kiểu Google Calendar (ngày là cột, giờ là hàng, giờ Việt Nam): giờ nhận việc theo bản đang sửa, ngày nghỉ, lịch hẹn của tuần và vạch giờ hiện tại; điện thoại xem từng ngày.
 - 2026-10-12 12:02 (UTC+7) | Lạc Vỹ | LacVy | Tinh chỉnh CustomerDashboard: làm gọn Order in progress, danh sách đơn gần đây và catalogue dịch vụ, loại bỏ các chi tiết thừa
 - 2026-10-12 10:20 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX trang chi tiết đơn và bảo hành: accordion mượt, tab indicator, bộ lọc và thống kê
-- 2026-10-12 02:07 (UTC+7) | ToanAltF4 | feat/client-cache | Thêm bộ đệm phía trình duyệt bằng TanStack Vue Query: trang đã mở hiện ngay dữ liệu cũ rồi đọc lại ngầm, đổi trang giữ hàng cũ, hành động của người dùng làm mới đúng khoá, đăng xuất xoá bộ đệm.
-- 2026-10-12 01:09 (UTC+7) | ToanAltF4 | feat/list-pagination | Tìm kiếm và lọc nhiều trạng thái chuyển sang backend (search, statuses, overdue, sort), khôi phục tab Cần di chuyển của thợ và hai tab Cần gán thợ, Đã quá hạn của console.
-- 2026-10-12 00:47 (UTC+7) | ToanAltF4 | feat/list-pagination | Mọi danh sách dạng bảng có phân trang số (FhPagination, trang giữ trên địa chỉ), thu nhập thợ lọc theo ngày, tuần, tháng qua GET /technicians/me/earnings, và khung xám khi tải ở form đặt lịch, tin nhắn, tra cứu đơn, VNPay.

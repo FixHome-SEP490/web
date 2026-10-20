@@ -155,6 +155,24 @@ describe('TechnicianPartsSection inside the job page', () => {
     wrapper.unmount();
   });
 
+  it('groups requests by the next technician action and renders compact part cards', async () => {
+    const ready = { ...request('ready'), id: 'pr-ready' };
+    const waiting = { ...request('requested'), id: 'pr-waiting' };
+    const needsUsage = { ...request('received'), id: 'pr-usage' };
+    const resolved = { ...request('received', 'used'), id: 'pr-resolved' };
+    partRequestsApi.getByOrderId.mockResolvedValue([ready, waiting, needsUsage, resolved]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="parts-group-action"]').text()).toContain('Cần thao tác');
+    expect(wrapper.get('[data-testid="parts-group-action"]').text()).toContain('2');
+    expect(wrapper.get('[data-testid="parts-group-waiting"]').text()).toContain('Đang chờ');
+    expect(wrapper.get('[data-testid="parts-group-resolved"]').text()).toContain('Đã xử lý');
+    expect(wrapper.get('[data-testid="part-item-i-1"]').text()).toContain('Số lượng');
+    expect(wrapper.html()).not.toContain('overflow-x-auto');
+    wrapper.unmount();
+  });
+
   it('shows the new return obligation immediately after QR receipt', async () => {
     partRequestsApi.getByOrderId
       .mockResolvedValueOnce([request('ready')])
@@ -170,7 +188,7 @@ describe('TechnicianPartsSection inside the job page', () => {
     const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'EN_ROUTE' }, global: { stubs } });
     await flushPromises();
 
-    await wrapper.findAll('button').find((button) => button.text().includes('Nhận linh kiện (Quét QR)'))!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text().includes('Nhập mã bàn giao'))!.trigger('click');
     await wrapper.get('input[placeholder*="Nhập mã"]').setValue('qr-test-only');
     await wrapper.findAll('button').find((button) => button.text().includes('Xác nhận đã nhận'))!.trigger('click');
     await flushPromises();

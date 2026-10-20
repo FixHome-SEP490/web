@@ -152,6 +152,8 @@ const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 // Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([]);
 const receivedRequests = ref<PartRequest[]>([]);
+const completionPartRequests = ref<PartRequest[] | null>(null);
+const completionPartsReadFailed = ref(false);
 const jobInvoice = ref<Record<string, unknown> | null>(null);
 const stockCatalog = ref(new Map<string, FixHomePart>());
 const suggestedStockIds = new Set<string>();
@@ -231,6 +233,11 @@ const previewImage = (url: string) => {
 };
 const activePreviewEvidence = computed(() => evidences.value.find((e) => e.mediaUrl === previewModalUrl.value));
 const uploadingPhase = ref<EvidencePhase | null>(null);
+const pendingEvidenceUpload = ref<{ phase: EvidencePhase; files: File[] } | null>(null);
+const remainingEvidenceSlots = computed(() => {
+  const reported = Number(job.value?.beforeEvidenceCount ?? 0) + Number(job.value?.afterEvidenceCount ?? 0) + (hasFacePhoto.value ? 1 : 0);
+  return Math.max(0, 20 - Math.max(evidences.value.length, reported));
+});
 const checkingIn = ref(false);
 
 // Every job photo is taken with the camera, never chosen from the gallery (PO 11/10/2026).
@@ -245,9 +252,26 @@ const CAMERA_TITLES: Record<CameraPurpose, string> = {
 const cameraMode = computed<'face' | 'product'>(() =>
   cameraPurpose.value === 'checkin' || cameraPurpose.value === 'face' ? 'face' : 'product',
 );
+const cameraMultiple = computed(() => cameraPurpose.value === 'after' ||
+  cameraPurpose.value === 'before');
 const openCamera = (purpose: CameraPurpose) => {
   if (actionLoading.value) return;
+  if (purpose === 'before' && !canAddBeforePhoto.value) return;
+  if (purpose === 'after' && !canAddAfterPhoto.value) return;
   cameraPurpose.value = purpose;
+};
+const departureChoiceOpen = ref(false);
+const partsSection = ref<{ openPreRepairForm?: () => void } | null>(null);
+const openDepartureChoice = () => {
+  if (actionLoading.value || statusUpper.value !== 'ACCEPTED') return;
+  departureChoiceOpen.value = true;
+};
+const choosePreRepairParts = async () => {
+  departureChoiceOpen.value = false;
+  sections.parts = true;
+  await nextTick();
+  partsSection.value?.openPreRepairForm?.();
+  document.getElementById('job-parts')?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
 };
 
 // Rare actions live in one "Thêm" menu instead of separate cards.
@@ -340,8 +364,89 @@ const isCancelled = computed(() => statusUpper.value === 'CANCELLED');
 const isPaid = computed(() => String(job.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
 const hasBeforePhoto = computed(() => beforePhotoUploaded.value || beforeEvidences.value.length > 0);
 const hasAfterPhoto = computed(() => afterPhotoUploaded.value || afterEvidences.value.length > 0);
+const canRecoverFixedPriceRepair = computed(() => isFixedPriceOrder.value && statusUpper.value === 'EN_ROUTE' &&
+  gpsCheckedIn.value && hasBeforePhoto.value && !pendingEvidenceUpload.value && uploadingPhase.value === null);
 const quotationRejected = computed(() => String(job.value?.quotation?.status ?? '').toLowerCase() === 'rejected');
 const isRepairing = computed(() => statusUpper.value === 'UNDER_REPAIR' || statusUpper.value === 'IN_PROGRESS');
+const completionBlockers = computed(() => {
+  if (!isRepairing.value || completionRequested.value) return [] as string[];
+  const blockers: string[] = [];
+  if (completionPartsReadFailed.value || completionPartRequests.value === null) {
+    blockers.push('Chưa tải được trạng thái linh kiện. Thử tải lại trước khi hoàn thành.');
+    return blockers;
+  }
+  const quotation = job.value?.quotation;
+  const quoteStatus = String(quotation?.status ?? '').toLowerCase();
+  const quoteApproved = quoteStatus === 'approved' || quoteStatus === 'accepted';
+  if (['draft', 'pending', 'sent'].includes(quoteStatus)) blockers.push('Báo giá đang chờ khách quyết định.');
+  if (additionalCosts.value.some(cost => cost.status === 'PENDING_APPROVAL')) blockers.push('Chi phí phát sinh đang chờ khách duyệt.');
+
+  const requests = completionPartRequests.value;
+  if (requests.some(request => request.status === 'received' && request.items.some(item => item.partSource === 'fixhome' && item.usageStatus !== 'used' && item.usageStatus !== 'returned'))) {
+    blockers.push('Còn linh kiện đã nhận chưa ghi nhận đã dùng hoặc hoàn trả.');
+  }
+
+  if (quotation && quoteApproved) {
+    const quoteItems = quotation.items.filter(item => item.type === 'PARTS' && item.partSource === 'fixhome');
+    if (quoteItems.length) {
+      const approvedQuantities = new Map<string, number>();
+      let hasUnmatchedQuoteItem = false;
+      for (const item of quoteItems) {
+        if (!item.partCatalogId || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+          hasUnmatchedQuoteItem = true;
+          continue;
+        }
+        approvedQuantities.set(item.partCatalogId, (approvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+      }
+
+      // PRE_REPAIR stock and a QUOTATION request linked to this quote share the
+      // same approved quantity pool in Backend's completion check.
+      const resolvedQuantities = new Map<string, number>();
+      const usedQuantities = new Map<string, number>();
+      const quoteRequests = requests.filter(request =>
+        request.status === 'received' || request.status === 'completed'
+      ).filter(request => request.requestType === 'pre_repair' ||
+        (request.requestType === 'quotation' && request.quotationId === quotation.id && !request.additionalCostId));
+      for (const request of quoteRequests) {
+        for (const item of request.items) {
+          if (item.partSource !== 'fixhome' || !item.partCatalogId ||
+            (item.usageStatus !== 'used' && item.usageStatus !== 'returned')) continue;
+          resolvedQuantities.set(item.partCatalogId, (resolvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+          if (item.usageStatus === 'used') {
+            usedQuantities.set(item.partCatalogId, (usedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+          }
+        }
+      }
+
+      const hasUnresolvedQuantity = [...approvedQuantities].some(([catalogId, quantity]) =>
+        (resolvedQuantities.get(catalogId) ?? 0) < quantity ||
+        (usedQuantities.get(catalogId) ?? 0) > quantity
+      );
+      if (hasUnmatchedQuoteItem || hasUnresolvedQuantity) {
+        blockers.push('Lượng linh kiện FixHome đã nhận và ghi nhận dùng hoặc hoàn trả chưa khớp báo giá.');
+      }
+    }
+  }
+
+  const approvedRequests: Array<{ type: 'additional'; id: string; label: string; catalogIds: string[] }> = [];
+  for (const cost of additionalCosts.value.filter(row => row.status === 'APPROVED')) {
+    const items = cost.items.filter(item => item.type !== 'LABOR' && item.partSource === 'fixhome');
+    if (items.length) approvedRequests.push({ type: 'additional', id: cost.id, label: 'chi phí phát sinh', catalogIds: items.map(item => item.partCatalogId).filter((id): id is string => !!id) });
+  }
+  for (const approved of approvedRequests) {
+    const request = requests.find(row => row.requestType === approved.type && row.additionalCostId === approved.id);
+    const linkedItems = request?.items.filter(item => item.partSource === 'fixhome' &&
+      (approved.catalogIds.length === 0 || approved.catalogIds.includes(item.partCatalogId ?? '')));
+    if (!request || request.status !== 'received' || !request.receivedAt || !linkedItems?.length ||
+      approved.catalogIds.some(catalogId => !linkedItems.some(item => item.partCatalogId === catalogId))) {
+      blockers.push(`Linh kiện FixHome theo ${approved.label} cần được nhận bằng QR.`);
+    } else if (linkedItems.some(item => item.usageStatus !== 'used' && item.usageStatus !== 'returned')) {
+      blockers.push(`Ghi nhận đã dùng hoặc hoàn trả linh kiện FixHome theo ${approved.label}.`);
+    }
+  }
+  return [...new Set(blockers)];
+});
+const canRequestCompletion = computed(() => hasAfterPhoto.value && completionBlockers.value.length === 0 && !actionLoading.value);
 
 // Five steps; the page shows the current one and lists all of them only on "Xem thêm".
 const currentStepNumber = computed<1 | 2 | 3 | 4 | 5>(() => {
@@ -453,24 +558,24 @@ const nowStep = computed<NowStep | null>(() => {
     if (!hasAfterPhoto.value) {
       return {
         title: 'Đang sửa chữa',
-        hint: 'Sửa xong, chụp ảnh máy để hoàn thành.',
+        hint: statusUpper.value !== 'UNDER_REPAIR' ? 'Chỉ có thể gửi ảnh sau sửa khi đơn đang ở bước sửa chữa.' : remainingEvidenceSlots.value > 0 ? 'Chụp ảnh sau sửa, sau đó gửi yêu cầu hoàn thành.' : 'Đã đạt giới hạn 20 ảnh của đơn.',
         action: {
-          label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Hoàn thành (chụp ảnh sau sửa)',
+          label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Chụp ảnh sau sửa',
           run: () => openCamera('after'),
           icon: Camera,
-          disabled: actionLoading.value,
+          disabled: !canAddAfterPhoto.value,
           loading: uploadingPhase.value === 'AFTER',
         },
       };
     }
     return {
       title: 'Sẵn sàng hoàn thành',
-      hint: 'Đã có ảnh sau sửa.',
+      hint: completionBlockers.value[0] ?? 'Đã có ảnh sau sửa. Kiểm tra lại rồi gửi hoàn thành.',
       action: {
-        label: 'Hoàn thành',
+        label: 'Gửi hoàn thành',
         run: handleCompleteOrder,
         icon: ShieldCheck,
-        disabled: actionLoading.value,
+        disabled: !canRequestCompletion.value,
         loading: actionLoading.value,
       },
     };
@@ -504,13 +609,14 @@ const nowStep = computed<NowStep | null>(() => {
       };
     }
     if (isFixedPriceOrder.value) {
+      const recoveryAction = canRecoverFixedPriceRepair.value;
       return {
         title: 'Chờ chuyển sang sửa chữa',
         hint: 'Giá cố định, không cần báo giá.',
         action: {
-          label: 'Tải lại trạng thái',
-          run: () => loadJob(jobId, { silent: true }),
-          icon: RefreshCw,
+          label: recoveryAction ? 'Hoàn tất ảnh trước, bắt đầu sửa' : 'Tải lại trạng thái',
+          run: recoveryAction ? startFixedPriceRepairFromBefore : () => loadJob(jobId, { silent: true }),
+          icon: recoveryAction ? CheckCircle2 : RefreshCw,
           disabled: actionLoading.value,
           loading: actionLoading.value,
         },
@@ -574,7 +680,7 @@ const nowStep = computed<NowStep | null>(() => {
     hint: departOpen ? undefined : `Được xuất phát từ ${vnDateTimeString(job.value.departAvailableAt!)}.`,
     action: {
       label: 'Bắt đầu di chuyển',
-      run: handleEnRoute,
+      run: openDepartureChoice,
       icon: Navigation,
       disabled: actionLoading.value || !departOpen,
       loading: actionLoading.value,
@@ -594,7 +700,7 @@ const openReport = () => {
 };
 
 async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
-  if (!evidence) return;
+  if (!evidence || !canDeleteEvidence(evidence)) return;
   if (!window.confirm('Xoá ảnh này?')) return;
   actionLoading.value = true;
   try {
@@ -615,22 +721,32 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
 }
 
 async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
-  if (files.length === 0) return false;
+  if (files.length === 0 || files.length > remainingEvidenceSlots.value) return false;
+  if (phase === 'BEFORE' && (!canAddBeforePhoto.value || statusUpper.value !== 'EN_ROUTE')) return false;
+  if (phase === 'AFTER' && !canAddAfterPhoto.value) return false;
   let saved = false;
+  let uploaded = 0;
   actionLoading.value = true;
   uploadingPhase.value = phase;
   try {
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
         throw new Error('Chỉ nhận ảnh JPEG, PNG hoặc WebP dưới 10 MB.');
       }
-      await ordersApi.uploadEvidence(jobId, { phase, file });
+      const deferAutoStart = phase === 'BEFORE' ? index < files.length - 1 : undefined;
+      await ordersApi.uploadEvidence(jobId, { phase, file, ...(deferAutoStart === undefined ? {} : { deferAutoStart }) });
+      uploaded += 1;
     }
     saved = true;
+    pendingEvidenceUpload.value = null;
     if (phase === 'CHECKIN_FACE') faceUploaded.value = true;
     await loadJob(jobId, { silent: true });
     notifySuccess(files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.');
   } catch (err: unknown) {
+    if (phase !== 'CHECKIN_FACE' && uploaded < files.length) {
+      pendingEvidenceUpload.value = { phase, files: files.slice(uploaded) };
+      if (uploaded > 0) await loadJob(jobId, { silent: true });
+    }
     notifyError(userFacingError(err, 'Chưa lưu được ảnh. Vui lòng chụp lại.'));
   } finally {
     actionLoading.value = false;
@@ -653,6 +769,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
   if (showAcPartPicker.value) showAcPartPicker.value = false;
   else if (previewModalUrl.value) previewModalUrl.value = null;
   else if (moreOpen.value) moreOpen.value = false;
+  else if (departureChoiceOpen.value) departureChoiceOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
   else if (replacementOpen.value && !replacementSending.value) replacementOpen.value = false;
 };
@@ -670,6 +787,9 @@ interface TechnicianJobBundle {
   settlement: CashSettlementRecord;
   /** Read only once the repair started; undefined keeps what is shown. */
   costs?: AdditionalCostRecord[];
+  /** The full parts lifecycle is read even while its detail section is collapsed. */
+  partRequests?: PartRequest[];
+  partRequestsReadFailed?: boolean;
   invoice?: Record<string, unknown> | null;
   /** Read only for a completed job; undefined keeps what is shown. */
   review?: Review | null;
@@ -725,6 +845,22 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
     data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
       ? touched('additional_cost', 'part') ? await ordersApi.getAdditionalCosts(id) : kept?.costs
       : undefined;
+  let partRequests: PartRequest[] | undefined = kept?.partRequests;
+  let partRequestsReadFailed = kept?.partRequestsReadFailed ?? false;
+  if (data.status === 'UNDER_REPAIR' || data.status === 'IN_PROGRESS' || data.status === 'COMPLETED') {
+    if (touched('part', 'additional_cost', 'order', 'status') || partRequests === undefined || partRequestsReadFailed) {
+      try {
+        partRequests = await partRequestsApi.getByOrderId(id);
+        partRequestsReadFailed = false;
+      } catch {
+        partRequests = undefined;
+        partRequestsReadFailed = true;
+      }
+    }
+  } else {
+    partRequests = undefined;
+    partRequestsReadFailed = false;
+  }
   let review: Review | null | undefined = all ? undefined : kept?.review;
   if (data.status === 'COMPLETED' && (all || review === undefined)) {
     try {
@@ -737,7 +873,7 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
   if (touched('invoice', 'cash', 'status')) {
     try { invoice = await ordersApi.getInvoice(id); } catch { /* Keep the last confirmed invoice; no fabricated final total. */ }
   }
-  return { historical: null, job: data, evidences, booking, settlement, costs, review, invoice };
+  return { historical: null, job: data, evidences, booking, settlement, costs, partRequests, partRequestsReadFailed, review, invoice };
 }
 
 const jobQuery = useCachedQuery({
@@ -783,6 +919,9 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   cashSettlementStatus.value = (settlement?.status as typeof cashSettlementStatus.value) || null;
   if (settlement) hasCashPayment.value = 'YES';
   if (bundle.costs) additionalCosts.value = bundle.costs;
+  if (bundle.partRequests !== undefined) completionPartRequests.value = bundle.partRequests;
+  else if (bundle.partRequestsReadFailed) completionPartRequests.value = null;
+  completionPartsReadFailed.value = !!bundle.partRequestsReadFailed;
   if (bundle.review !== undefined) customerReview.value = bundle.review;
 }
 
@@ -877,6 +1016,9 @@ watch(
     if (!nextId || nextId === previousId) return;
     quotationItems.value = [];
     receivedRequests.value = [];
+    completionPartRequests.value = null;
+    completionPartsReadFailed.value = false;
+    pendingEvidenceUpload.value = null;
     jobInvoice.value = null;
     stockCatalog.value = new Map();
     quoteStockError.value = '';
@@ -1003,14 +1145,21 @@ const handleEnRoute = async () => {
     await ordersApi.enRoute(jobId);
     cache.markChanged(affectedBy.orderChange);
     isEnRoute.value = true;
-    if (job.value) job.value.status = 'EN_ROUTE';
+    if (job.value) job.value = { ...job.value, status: 'EN_ROUTE' };
     startLocationPing();
     notifySuccess('Đã báo khách là bạn đang đến.');
+    return true;
   } catch (err) {
     notifyError(userFacingError(err, 'Chưa bắt đầu di chuyển được. Vui lòng thử lại.'));
+    return false;
   } finally {
     actionLoading.value = false;
   }
+};
+
+const chooseStartTravel = async () => {
+  if (actionLoading.value) return;
+  if (await handleEnRoute()) departureChoiceOpen.value = false;
 };
 
 const KM_FORMAT = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -1085,24 +1234,37 @@ const handleCheckInWithFace = async (face: File) => {
 };
 
 /** More "before" photos: after check-in and once the face photo is stored (the server refuses earlier). */
-const canAddBeforePhoto = computed(() => gpsCheckedIn.value && hasFacePhoto.value && !actionLoading.value);
+const canAddBeforePhoto = computed(() => statusUpper.value === 'EN_ROUTE' && gpsCheckedIn.value && hasFacePhoto.value && !completionRequested.value && !isCompleted.value && !actionLoading.value && remainingEvidenceSlots.value > 0);
+const canAddAfterPhoto = computed(() => statusUpper.value === 'UNDER_REPAIR' && !completionRequested.value && !isCompleted.value && !actionLoading.value && remainingEvidenceSlots.value > 0);
 const openBeforeCamera = () => {
   if (canAddBeforePhoto.value) openCamera('before');
 };
-// "Hoàn thành": the after photo, then the completion request.
-const handleUploadAfter = async (file: File) => {
-  const hadAfter = afterEvidences.value.length > 0;
-  await uploadSelectedEvidence('AFTER', [file]);
-  if (!hadAfter && afterEvidences.value.length > 0 && !completionRequested.value) await handleCompleteOrder();
+const canDeleteEvidence = (evidence: EvidenceRecord) => {
+  if (!ordersApi.deleteEvidence || completionRequested.value || isCompleted.value || actionLoading.value) return false;
+  const type = String(evidence.type ?? '').toLowerCase();
+  return (type === 'before' && statusUpper.value === 'EN_ROUTE') || (type === 'after' && statusUpper.value === 'UNDER_REPAIR');
+};
+// Uploading evidence and requesting completion are separate actions.
+const handleUploadAfter = async (files: File[]) => {
+  if (!canAddAfterPhoto.value) return;
+  await uploadSelectedEvidence('AFTER', files);
 };
 
-const onCameraCapture = async (file: File) => {
+const onCameraCapture = async (capture: File | File[]) => {
+  const files = Array.isArray(capture) ? capture : [capture];
   const purpose = cameraPurpose.value;
   cameraPurpose.value = null;
-  if (purpose === 'checkin') await handleCheckInWithFace(file);
-  else if (purpose === 'face') await uploadSelectedEvidence('CHECKIN_FACE', [file]);
-  else if (purpose === 'before') await uploadSelectedEvidence('BEFORE', [file]);
-  else if (purpose === 'after') await handleUploadAfter(file);
+  if (purpose === 'checkin' && files[0]) await handleCheckInWithFace(files[0]);
+  else if (purpose === 'face' && files[0]) await uploadSelectedEvidence('CHECKIN_FACE', [files[0]]);
+  else if (purpose === 'before') await uploadSelectedEvidence('BEFORE', files);
+  else if (purpose === 'after') await handleUploadAfter(files);
+};
+
+const retryPendingEvidenceUpload = async () => {
+  const pending = pendingEvidenceUpload.value;
+  if (!pending || actionLoading.value) return;
+  pendingEvidenceUpload.value = null;
+  await uploadSelectedEvidence(pending.phase, pending.files);
 };
 
 watch(
@@ -1418,6 +1580,16 @@ const sendReplacement = async () => {
 };
 
 const handleCompleteOrder = async () => {
+  if (!hasAfterPhoto.value) {
+    notifyError('Chụp ít nhất một ảnh sau sửa trước khi gửi hoàn thành.');
+    return;
+  }
+  if (completionBlockers.value.length > 0) {
+    if (completionBlockers.value.some(message => message.includes('linh kiện'))) sections.parts = true;
+    notifyError(completionBlockers.value[0]);
+    return;
+  }
+  if (!canRequestCompletion.value) return;
   if (pendingPartsUsage.value > 0) {
     sections.parts = true;
     notifyError('Ghi nhận linh kiện đã dùng hoặc hoàn trả trước khi hoàn thành.');
@@ -1434,6 +1606,14 @@ const handleCompleteOrder = async () => {
     notifyError(userFacingError(err, 'Chưa hoàn thành được. Kiểm tra ảnh sau sửa và chi phí đang chờ duyệt.'));
   } finally {
     actionLoading.value = false;
+  }
+};
+
+const retryCompletionData = async () => {
+  try {
+    await loadJob(jobId, { silent: true });
+  } catch {
+    notifyError('Chưa tải lại được trạng thái báo giá, chi phí và linh kiện. Vui lòng thử lại.');
   }
 };
 
@@ -1483,6 +1663,30 @@ const refreshJobStatus = async () => {
   }
 };
 
+const startFixedPriceRepairFromBefore = async () => {
+  if (!canRecoverFixedPriceRepair.value || actionLoading.value) return;
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    try {
+      await ordersApi.startRepair(jobId);
+    } catch (err: unknown) {
+      notifyError(userFacingError(err, 'Chưa bắt đầu được sửa chữa. Vui lòng thử lại.'));
+      try { await loadJob(jobId, { silent: true }); } catch { /* Keep the start-repair error visible. */ }
+      return;
+    }
+
+    try {
+      await loadJob(jobId, { silent: true });
+      notifySuccess('Đã bắt đầu sửa chữa.');
+    } catch (err: unknown) {
+      notifyError(userFacingError(err, 'Đã gửi yêu cầu bắt đầu sửa chữa nhưng chưa tải lại được trạng thái.'));
+    }
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
 const toggleMore = async () => {
   moreOpen.value = !moreOpen.value;
   if (moreOpen.value) {
@@ -1493,7 +1697,7 @@ const toggleMore = async () => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
+  <div class="max-w-6xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
     <a
       href="/tech/jobs"
       class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
@@ -1608,7 +1812,8 @@ const toggleMore = async () => {
 
 
 
-      <section data-testid="job-cost-summary" class="rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
+      <section data-testid="job-cost-summary" class="order-2 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
         <h2 class="font-semibold text-ink-900">{{ financialStage }}</h2>
         <dl class="flex flex-wrap gap-x-6 gap-y-2">
           <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
@@ -1657,13 +1862,28 @@ const toggleMore = async () => {
         <p>Đơn đã hoàn thành và khách đã thanh toán. Còn {{ pendingPartsReturns }} linh kiện chờ quản lý nhận lại.</p>
         <button type="button" class="mt-2 font-semibold underline" @click="revealParts">Xem và khai trả linh kiện</button>
       </div>
-      <FhCard v-if="nowStep" data-testid="job-now">
+      <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
         <p v-if="nowStep.hint" class="mt-1 text-sm text-ink-600 text-pretty">{{ nowStep.hint }}</p>
         <p v-if="isRepairing && !completionRequested && pendingPartsUsage > 0" class="mt-3 text-sm text-warning-800" role="status" data-testid="pending-parts-usage">
           Còn {{ pendingPartsUsage }} hạng mục linh kiện đã nhận chưa ghi nhận sử dụng.
           <button type="button" class="font-semibold underline" @click="revealParts">Ghi nhận đã dùng hoặc hoàn trả</button>
         </p>
+        <div v-if="isRepairing && !completionRequested && completionBlockers.length" class="mt-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" role="status" data-testid="completion-blockers">
+          <p class="font-semibold">Cần xử lý trước khi gửi hoàn thành</p>
+          <ul class="mt-1 list-disc pl-5 space-y-1">
+            <li v-for="blocker in completionBlockers" :key="blocker">{{ blocker }}</li>
+          </ul>
+          <button v-if="completionPartsReadFailed" type="button" class="mt-2 h-10 font-semibold underline" :disabled="actionLoading" @click="retryCompletionData">Thử tải lại</button>
+          <button v-else-if="completionBlockers.some(message => message.includes('linh kiện'))" type="button" class="mt-2 h-10 font-semibold underline" @click="revealParts">Mở yêu cầu linh kiện</button>
+        </div>
+        <div v-if="pendingEvidenceUpload" class="mt-3 rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800" role="alert" data-testid="pending-evidence-upload">
+          <p>Chưa tải hết ảnh. Còn {{ pendingEvidenceUpload.files.length }} ảnh chưa gửi.</p>
+          <div class="mt-2 flex flex-wrap gap-3">
+            <button type="button" class="h-10 font-semibold underline" :disabled="actionLoading" @click="retryPendingEvidenceUpload">Thử gửi lại</button>
+            <button type="button" class="h-10 font-medium underline" :disabled="actionLoading" @click="pendingEvidenceUpload = null">Bỏ ảnh còn lại</button>
+          </div>
+        </div>
         <p v-if="replacementSent" class="mt-3 text-sm text-success-700" role="status">
           Đã báo quản lý dịch vụ để đổi thợ. Quản lý sẽ liên hệ bạn.
         </p>
@@ -1953,7 +2173,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 3. Customer and job: secondary actions appear once, here -->
-      <FhCard data-testid="job-summary">
+      <FhCard data-testid="job-summary" class="order-3 lg:col-start-1">
         <div class="space-y-3">
           <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p class="text-base font-semibold text-ink-900">{{ job.customerName }}</p>
@@ -2043,7 +2263,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
-      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details">
+      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details" class="order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->
           <section>
@@ -2073,7 +2293,7 @@ const toggleMore = async () => {
                       <img :src="img.mediaUrl" :alt="`Ảnh trước sửa ${idx + 1}`" class="w-full h-full object-cover" />
                     </button>
                     <button
-                      v-if="!isCompleted"
+                      v-if="canDeleteEvidence(img)"
                       type="button"
                       class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
                       aria-label="Xoá ảnh này"
@@ -2084,12 +2304,12 @@ const toggleMore = async () => {
                     </button>
                   </div>
                   <div
-                    v-if="!isCompleted"
+                    v-if="!isCompleted && !completionRequested"
                     class="w-20 h-20 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors"
                     :class="!canAddBeforePhoto ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
                     data-testid="before-evidence-picker"
                     role="button"
-                    :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : 'Chụp thêm ảnh trước khi sửa'"
+                    :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : statusUpper !== 'EN_ROUTE' ? 'Không thể thêm ảnh trước sửa ở trạng thái hiện tại' : remainingEvidenceSlots === 0 ? 'Đã đạt giới hạn 20 ảnh' : 'Chụp thêm ảnh trước khi sửa'"
                     :tabindex="canAddBeforePhoto ? 0 : -1"
                     :aria-disabled="!canAddBeforePhoto"
                     @click="openBeforeCamera"
@@ -2114,7 +2334,7 @@ const toggleMore = async () => {
                       <img :src="img.mediaUrl" :alt="`Ảnh sau sửa ${idx + 1}`" class="w-full h-full object-cover" />
                     </button>
                     <button
-                      v-if="!isCompleted"
+                      v-if="canDeleteEvidence(img)"
                       type="button"
                       class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
                       aria-label="Xoá ảnh này"
@@ -2125,17 +2345,17 @@ const toggleMore = async () => {
                     </button>
                   </div>
                   <button
-                    v-if="!isCompleted"
+                    v-if="!isCompleted && !completionRequested"
                     type="button"
                     class="w-20 h-20 rounded-xl border border-dashed border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 flex flex-col items-center justify-center gap-1 text-xs font-medium disabled:opacity-50"
                     aria-label="Chụp thêm ảnh sau khi sửa"
                     data-testid="after-evidence-picker"
-                    :disabled="actionLoading"
+                    :disabled="!canAddAfterPhoto"
                     @click="openCamera('after')"
                   >
                     <Loader2 v-if="uploadingPhase === 'AFTER'" :size="18" class="animate-spin" />
                     <Camera v-else :size="18" />
-                    Thêm
+                    {{ remainingEvidenceSlots === 0 ? 'Đủ 20 ảnh' : 'Thêm' }}
                   </button>
                 </div>
               </div>
@@ -2160,6 +2380,7 @@ const toggleMore = async () => {
             </button>
             <div v-show="sections.parts" id="job-parts" class="px-5 sm:px-6 pb-5">
               <TechnicianPartsSection
+                ref="partsSection"
                 :key="job.id"
                 :order-id="job.id"
                 :order-status="job.status"
@@ -2428,6 +2649,7 @@ const toggleMore = async () => {
         role="technician"
         inline
       />
+      </div>
     </template>
 
     <!-- Phones: the one primary action sits above the tab bar, always in reach -->
@@ -2457,6 +2679,35 @@ const toggleMore = async () => {
       :media="bookingMedia"
       @close="showAiSummary = false"
     />
+
+    <div
+      v-if="departureChoiceOpen"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      data-testid="departure-pre-repair-dialog"
+      @click.self="departureChoiceOpen = false"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="departure-choice-title"
+        aria-describedby="departure-choice-description"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="departure-choice-title" class="text-lg font-bold text-ink-900">Đặt linh kiện trước?</h2>
+            <p id="departure-choice-description" class="mt-1 text-sm text-ink-600">Bạn có thể gửi yêu cầu linh kiện FixHome trước khi bắt đầu di chuyển.</p>
+          </div>
+          <button type="button" class="h-10 w-10 -m-1 rounded-lg text-ink-500 hover:bg-ink-50" aria-label="Đóng" @click="departureChoiceOpen = false">
+            <X :size="18" class="mx-auto" />
+          </button>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" @click="choosePreRepairParts">Có, đặt linh kiện</FhButton>
+          <FhButton variant="primary" :loading="actionLoading" :disabled="actionLoading" @click="chooseStartTravel">Không, bắt đầu di chuyển</FhButton>
+        </div>
+      </section>
+    </div>
 
     <!-- Dialog: cancel the order -->
     <div
@@ -2581,6 +2832,8 @@ const toggleMore = async () => {
       v-if="cameraPurpose"
       :mode="cameraMode"
       :title="CAMERA_TITLES[cameraPurpose]"
+      :multiple="cameraMultiple"
+      :max-shots="remainingEvidenceSlots"
       @capture="onCameraCapture"
       @close="cameraPurpose = null"
     />

@@ -475,12 +475,13 @@ export const ordersApi = {
 
   async uploadEvidence(
     orderId: string,
-    body: { phase: EvidencePhase; file: File; caption?: string },
+    body: { phase: EvidencePhase; file: File; caption?: string; deferAutoStart?: boolean },
   ): Promise<Record<string, unknown>> {
     const form = new FormData();
     form.append('file', body.file);
     form.append('type', evidencePhaseToType(body.phase));
     if (body.caption) form.append('note', body.caption);
+    if (body.deferAutoStart !== undefined) form.append('deferAutoStart', String(body.deferAutoStart));
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },

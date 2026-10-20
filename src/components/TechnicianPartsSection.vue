@@ -60,11 +60,13 @@ const actionError = ref<string | null>(null);
 const actionSuccess = ref<string | null>(null);
 
 const partRequests = ref<PartRequest[]>([]);
+const partRequestsLoaded = ref(false);
 const picker = usePartsCatalogPicker();
 const { items: searchResults, total: catalogTotal, loading: isSearchingCatalog, error: catalogError,
   query: searchQuery, category: activeCategory, partsMap, hasMore: catalogHasMore } = picker;
 // Form state for creating pre-repair parts request
 const showCreateForm = ref(false);
+const preRepairFormRequested = ref(false);
 const fulfillmentMethod = ref<FulfillmentMethod>('pickup');
 const requestReason = ref('');
 
@@ -154,17 +156,42 @@ const hasActivePreRepair = computed(() =>
   ),
 );
 
-const needsAction = computed(() =>
-  partRequests.value.some(
-    (pr) =>
-      (pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') ||
-      (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering') ||
-      (isUnderRepair.value && pr.status === 'received' && pr.items.some((item) => !item.usageStatus || item.usageStatus === 'pending')),
-  ),
-);
+function openPreRepairFormWhenReady() {
+  if (!preRepairFormRequested.value || loading.value) return;
+  showCreateForm.value = partRequestsLoaded.value && isAccepted.value && !hasActivePreRepair.value;
+  preRepairFormRequested.value = false;
+}
+
+function openPreRepairForm() {
+  preRepairFormRequested.value = true;
+  openPreRepairFormWhenReady();
+}
+
+watch([loading, partRequestsLoaded, isAccepted, hasActivePreRepair], openPreRepairFormWhenReady);
+defineExpose({ openPreRepairForm });
+
+const requestGroups = computed(() => {
+  const groups = [
+    { key: 'action', label: 'Cần thao tác', requests: [] as PartRequest[] },
+    { key: 'waiting', label: 'Đang chờ', requests: [] as PartRequest[] },
+    { key: 'resolved', label: 'Đã xử lý', requests: [] as PartRequest[] },
+  ];
+  for (const request of partRequests.value) {
+    const handoverReady = (request.fulfillmentMethod === 'pickup' && request.status === 'ready') ||
+      (request.fulfillmentMethod === 'delivery' && request.status === 'delivering');
+    const usagePending = request.items.some(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending'));
+    const resolved = request.status === 'cancelled' || request.status === 'completed' ||
+      (request.status === 'received' && !usagePending);
+    const group = resolved ? groups[2] : handoverReady || (isUnderRepair.value && request.status === 'received' && usagePending)
+      ? groups[0] : groups[1];
+    group.requests.push(request);
+  }
+  return groups.filter(group => group.requests.length > 0);
+});
+const needsAction = computed(() => (requestGroups.value.find(group => group.key === 'action')?.requests.length ?? 0) > 0);
 const pendingUsage = computed(() => partRequests.value
   .filter(pr => pr.status === 'received')
-  .reduce((count, pr) => count + pr.items.filter(item => !item.usageStatus || item.usageStatus === 'pending').length, 0));
+  .reduce((count, pr) => count + pr.items.filter(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending')).length, 0));
 watch(pendingUsage, count => emit('pending-usage', count), { immediate: true });
 watch(returnRecords, records => emit('pending-returns', records.reduce((sum, record) => sum + record.outstandingQty, 0)));
 watch(
@@ -229,6 +256,7 @@ const loadPartRequests = async () => {
     const records = await partRequestsApi.getByOrderId(props.orderId);
     if (version !== requestsLoadVersion) return;
     partRequests.value = records;
+    partRequestsLoaded.value = true;
     emit('requests', records);
   } catch (err: unknown) {
     if (version !== requestsLoadVersion) return;
@@ -373,8 +401,9 @@ watch(() => props.orderId, id => {
   stopLiveParts();
   ++requestsLoadVersion;
   ++returnsLoadVersion;
-  partRequests.value = [];
-  returnRecords.value = [];
+    partRequests.value = [];
+    partRequestsLoaded.value = false;
+    returnRecords.value = [];
   declareTarget.value = null;
   selectedItems.value = [];
   showCreateForm.value = false;
@@ -424,7 +453,7 @@ const submitPreRepairRequest = async () => {
 
 const handleReceiveQr = async (requestId: string) => {
   if (!qrTokenInput.value.trim()) {
-    actionError.value = 'Vui lòng nhập hoặc quét mã QR token!';
+    actionError.value = 'Vui lòng nhập mã bàn giao.';
     return;
   }
 
@@ -542,13 +571,13 @@ const formatStatusText = (status: string) => {
     case 'delivering':
       return 'Đang giao hàng';
     case 'received':
-      return 'Đã nhận linh kiện';
+      return 'Đã nhận bàn giao qua QR';
     case 'completed':
       return 'Đã hoàn thành';
     case 'cancelled':
       return 'Đã huỷ';
     default:
-      return status;
+      return 'Trạng thái chưa xác định';
   }
 };
 
@@ -1032,9 +1061,11 @@ const getStatusBadgeClass = (status: string) => {
       </p>
 
       <div v-else class="space-y-4">
-
+        <section v-for="group in requestGroups" :key="group.key" class="space-y-2.5" :data-testid="`parts-group-${group.key}`">
+          <h4 class="text-xs font-bold uppercase tracking-wide text-ink-500">{{ group.label }} <span class="font-num">· {{ group.requests.length }}</span></h4>
+          <div class="space-y-3">
         <div
-          v-for="pr in partRequests"
+          v-for="pr in group.requests"
           :key="pr.id"
           class="border border-ink-200 rounded-xl bg-white overflow-hidden shadow-xs space-y-3 p-3.5"
         >
@@ -1114,7 +1145,7 @@ const getStatusBadgeClass = (status: string) => {
                   size="sm"
                   @click="showQrInput = pr.id"
                 >
-                  Nhận linh kiện (Quét QR)
+                  Nhập mã bàn giao
                 </FhButton>
               </div>
             </div>
@@ -1153,130 +1184,46 @@ const getStatusBadgeClass = (status: string) => {
           <div class="space-y-1">
             <h5 class="font-semibold text-ink-800 text-[11px]">Thực tế đã dùng/không dùng</h5>
             <p v-if="requestHasReturns(pr)" class="text-ink-600">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý dịch vụ nhận thực tế.</p>
-            <div class="border border-ink-200 rounded-lg overflow-x-auto">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-ink-50 text-ink-600 font-semibold">
-                  <tr>
-                    <th class="p-2">Linh kiện</th>
-                    <th class="p-2 text-center">Bảo hành</th>
-                    <th class="p-2 text-center">Số lượng</th>
-                    <th class="p-2 text-right">Đơn giá</th>
-                    <th class="p-2 text-right">Thành tiền</th>
-                    <th class="p-2 text-center">Trạng thái sử dụng</th>
-                    <th v-if="requestHasReturns(pr)" class="p-2 text-center">Hoàn trả</th>
-                    <th v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right">Thao tác sau sửa</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-ink-100">
-                  <tr v-for="item in pr.items" :key="item.id" class="hover:bg-ink-50/50">
-                    <td class="p-2 font-medium text-ink-900">
-                      {{ item.partNameSnapshot }}
-                      <span v-if="item.note" class="block text-[10px] text-ink-500 font-normal">
-                        Ghi chú: {{ item.note }}
-                      </span>
-                    </td>
-                    <td class="p-2 text-center">
-                      <span
-                        v-if="getPartWarrantyFromHistory(item)"
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
-                      >
-                        <ShieldCheck :size="11" />
-                        {{ getPartWarrantyFromHistory(item) }}
-                      </span>
-                      <span v-else class="text-[10px] text-ink-400">-</span>
-                    </td>
-                    <td class="p-2 text-center">{{ item.quantity }}</td>
-                    <td class="p-2 text-right font-num"><FhMoney :amount="item.unitPriceSnapshot" /></td>
-                    <td class="p-2 text-right font-num font-semibold text-ink-800">
-                      <FhMoney :amount="item.unitPriceSnapshot * item.quantity" />
-                    </td>
-                    <td class="p-2 text-center">
-                      <span
-                        v-if="item.usageStatus === 'used'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-50 text-success-700 border border-success-200 inline-flex items-center gap-1"
-                      >
-                        <Check :size="11" /> Đã dùng
-                      </span>
-                      <span
-                        v-else-if="item.usageStatus === 'returned'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-50 text-warning-700 border border-warning-200 inline-flex items-center gap-1"
-                      >
-                        <RotateCcw :size="11" /> Hoàn trả
-                      </span>
-                      <span
-                        v-else
-                        class="px-2 py-0.5 rounded text-[10px] font-medium bg-ink-100 text-ink-600"
-                      >
-                        Chưa ghi nhận
-                      </span>
-                    </td>
-                    <!-- P1 custody: issued / used / still to return, and Khai trả -->
-                    <td v-if="requestHasReturns(pr)" class="p-2 text-center align-top">
-                      <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
-                        <div v-if="record" class="space-y-1">
-                          <div class="whitespace-nowrap font-num text-[11px] text-ink-700">
-                            Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}
-                          </div>
-                          <div
-                            v-if="pendingDeclaredQty(record) > 0"
-                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-warning-200 bg-warning-50 px-2 py-0.5 text-[10px] font-semibold text-warning-700"
-                          >
-                            <Clock :size="10" />
-                            Đang chờ quản lý xác nhận
-                          </div>
-                          <div
-                            v-else-if="record.outstandingQty === 0"
-                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-200 bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-700"
-                          >
-                            <CheckCircle2 :size="10" />
-                            Đã nhận
-                          </div>
-                          <button
-                            v-if="canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)"
-                            type="button"
-                            data-testid="open-declare-return"
-                            class="whitespace-nowrap rounded border border-brand-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
-                            :disabled="declareSubmitting || returnsLoadError || disabled"
-                            @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"
-                          >
-                            <Undo2 :size="11" class="mr-1 inline" />Khai trả
-                          </button>
-                        </div>
-                        <span v-else class="text-[10px] text-ink-400">-</span>
-                      </template>
-                    </td>
-                    <!-- Action buttons during repair completion -->
-                    <td v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right space-x-1">
-                      <button
-                        type="button"
-                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
-                        :class="
-                          item.usageStatus === 'used'
-                            ? 'bg-success-600 text-white'
-                            : 'bg-success-50 text-success-700 hover:bg-success-100 border border-success-300'
-                        "
-                        :disabled="actionLoading || disabled"
-                        @click="handleUpdateUsage(pr.id, item.id, 'used')"
-                      >
-                        Đã dùng
-                      </button>
-                      <button
-                        type="button"
-                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
-                        :class="
-                          item.usageStatus === 'returned'
-                            ? 'bg-warning-600 text-white'
-                            : 'bg-warning-50 text-warning-700 hover:bg-warning-100 border border-warning-300'
-                        "
-                        :disabled="actionLoading || disabled"
-                        @click="handleUpdateUsage(pr.id, item.id, 'returned')"
-                      >
-                        Hoàn trả
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="space-y-2">
+              <article v-for="item in pr.items" :key="item.id" class="rounded-xl border border-ink-200 bg-white p-3 space-y-2.5" :data-testid="`part-item-${item.id}`">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <h6 class="font-semibold text-sm text-ink-900">{{ item.partNameSnapshot }}</h6>
+                    <p v-if="item.note" class="mt-0.5 text-xs text-ink-500">Ghi chú: {{ item.note }}</p>
+                    <span class="mt-1 inline-flex rounded-full bg-ink-50 px-2 py-0.5 text-[10px] text-ink-600">
+                      {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Mua ngoài' }}
+                    </span>
+                  </div>
+                  <span v-if="getPartWarrantyFromHistory(item)" class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700">
+                    <ShieldCheck :size="11" /> {{ getPartWarrantyFromHistory(item) }}
+                  </span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 rounded-lg bg-ink-25 p-2 text-xs">
+                  <p class="text-ink-600">Số lượng <span class="font-num font-semibold text-ink-900">{{ item.quantity }}</span></p>
+                  <p class="text-right text-ink-600">Đơn giá <span class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot" /></span></p>
+                  <p class="col-span-2 flex justify-between border-t border-ink-100 pt-1.5 text-ink-700"><span>Thành tiền</span><strong class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></strong></p>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span v-if="item.usageStatus === 'used'" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700"><Check :size="13" /> Đã dùng</span>
+                  <span v-else-if="item.usageStatus === 'returned'" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700"><RotateCcw :size="13" /> Hoàn trả</span>
+                  <span v-else class="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-600">Chưa ghi nhận sử dụng</span>
+                  <div v-if="isUnderRepair && pr.status === 'received'" class="flex flex-wrap gap-2">
+                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'used' ? 'border-success-600 bg-success-600 text-white' : 'border-success-300 bg-success-50 text-success-700 hover:bg-success-100'" :aria-pressed="item.usageStatus === 'used'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')">Đã dùng</button>
+                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'returned' ? 'border-warning-600 bg-warning-600 text-white' : 'border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100'" :aria-pressed="item.usageStatus === 'returned'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')">Hoàn trả</button>
+                  </div>
+                </div>
+                <div v-if="requestHasReturns(pr)" class="space-y-1 border-t border-ink-100 pt-2 text-xs">
+                  <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
+                    <div v-if="record" class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="font-num text-ink-700">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}</span>
+                      <span v-if="pendingDeclaredQty(record) > 0" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2 py-1 text-[10px] font-semibold text-warning-700"><Clock :size="11" /> Đang chờ quản lý xác nhận</span>
+                      <span v-else-if="record.outstandingQty === 0" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700"><CheckCircle2 :size="11" /> Đã nhận</span>
+                      <button v-if="canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button" data-testid="open-declare-return" class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700 hover:bg-brand-100" :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"><Undo2 :size="13" class="mr-1 inline" />Khai trả</button>
+                    </div>
+                    <span v-else class="text-xs text-ink-400">Chưa có thông tin hoàn trả</span>
+                  </template>
+                </div>
+              </article>
             </div>
           </div>
 
@@ -1330,6 +1277,8 @@ const getStatusBadgeClass = (status: string) => {
             </p>
           </div>
         </div>
+      </div>
+        </section>
       </div>
   </div>
 </template>
