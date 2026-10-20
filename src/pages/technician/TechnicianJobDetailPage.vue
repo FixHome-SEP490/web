@@ -33,6 +33,7 @@ import {
   Ban,
   FileText,
   ScanFace,
+  Info,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -1973,7 +1974,7 @@ const toggleMore = async () => {
             {{ quoteStockError }} <button type="button" class="font-semibold underline" @click="retryQuoteStock">Thử lại</button>
           </p>
           <details class="text-xs text-ink-600 rounded-lg bg-ink-50 px-3 py-2">
-            <summary class="cursor-pointer font-medium text-brand-700"><span aria-hidden="true">ⓘ</span> Thông tin báo giá</summary>
+            <summary class="cursor-pointer font-medium text-brand-700"><Info :size="15" aria-hidden="true" class="inline-block align-middle mr-1" /> Thông tin báo giá</summary>
             <p class="mt-2">Linh kiện FixHome theo đơn giá và bảo hành danh mục. Điều chỉnh số lượng trước khi gửi. Linh kiện FixHome nhận qua QR, linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
           </details>
           <div
@@ -1999,7 +2000,7 @@ const toggleMore = async () => {
             />
 
             <details v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs shrink-0">
-              <summary class="cursor-pointer text-brand-700 font-semibold min-h-10 inline-flex items-center" aria-label="Chi tiết bảo hành linh kiện">ⓘ</summary>
+              <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-brand-700 font-semibold min-h-10 inline-flex items-center" aria-label="Chi tiết bảo hành linh kiện"><Info :size="16" aria-hidden="true" /></summary>
               <p>Bảo hành {{ item.warrantyDays }} ngày</p>
             </details>
             <input

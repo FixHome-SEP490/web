@@ -19,6 +19,7 @@ import {
   Wrench,
   Clock,
   Undo2,
+  Info,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
 import { userFacingError } from '../utils/user-facing-error';
@@ -91,6 +92,9 @@ const showSearchDropdown = ref(false);
 const selectedPart = ref<FixHomePart | null>(null);
 const selectedQuantity = ref(1);
 const itemNote = ref('');
+const partialUsageDraft = ref<Record<string, number>>({});
+const partialUsageEditing = ref<Record<string, boolean>>({});
+const partialUsageSaving = ref<string | null>(null);
 const searchContainerRef = ref<HTMLElement | null>(null);
 
 const CATEGORY_TABS = [
@@ -141,9 +145,12 @@ const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
   Math.max(0, record.outstandingQty - pendingDeclaredQty(record));
 
 // Usage RETURNED is a decision during repair; warehouse acceptance is physical.
-const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) =>
-  item.partSource === 'fixhome' && (item.usageStatus === 'returned' ||
+const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) => {
+  const record = returnFor(item.id);
+  return item.partSource === 'fixhome' && (item.usageStatus === 'returned' ||
+    (item.usageStatus === 'used' && !!record?.usageRecorded && record.usedQty < record.issuedQty) ||
     ['COMPLETED', 'CANCELLED'].includes(props.orderStatus.toUpperCase()));
+};
 
 const declareValid = computed(() => {
   const target = declareTarget.value;
@@ -233,6 +240,18 @@ const activePartEstimatedPrice = computed(() => {
   return selectedPart.value.sellingPrice * Math.max(1, selectedQuantity.value);
 });
 
+// Catalog descriptions arrive as pipe-separated field snapshots, not prose.
+// Render only provided fields, with labels, instead of showing raw delimiters.
+const selectedPartDetails = computed(() => (selectedPart.value?.description ?? '')
+  .split('|').map(part => part.trim()).filter(Boolean)
+  .map(part => {
+    const separator = part.indexOf(':');
+    return separator > 0
+      ? { label: part.slice(0, separator).trim(), value: part.slice(separator + 1).trim() }
+      : { label: 'Mô tả', value: part };
+  }).filter(field => field.value && !/^bảo hành$/i.test(field.label)));
+
+
 // Format warranty helpers
 const formatWarrantyDays = (days?: number | null, policy?: string | null): string => {
   if (days && days > 0) {
@@ -290,7 +309,9 @@ const loadPartRequests = async (quiet = false) => {
       actionError.value = userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
     }
   } finally {
-    if (version === requestsLoadVersion && !quiet) loading.value = false;
+    // The latest response, including a quiet realtime update, owns the spinner.
+    // Otherwise an initial load superseded by realtime remains stuck until F5.
+    if (version === requestsLoadVersion) loading.value = false;
   }
 };
 
@@ -301,6 +322,11 @@ const loadReturns = async () => {
     if (version !== returnsLoadVersion) return;
     returnRecords.value = records;
     returnsLoadError.value = false;
+    for (const record of records) {
+      if (partialUsageDraft.value[record.partRequestItemId] === undefined) {
+        partialUsageDraft.value[record.partRequestItemId] = record.usedQty;
+      }
+    }
     // An open form must use the same fresh version and quantity limit as the list.
     const target = declareTarget.value;
     if (target) {
@@ -429,6 +455,9 @@ watch(() => props.orderId, id => {
   ++returnsLoadVersion;
     partRequests.value = [];
     partRequestsLoaded.value = false;
+    loading.value = true;
+    partialUsageDraft.value = {};
+    partialUsageEditing.value = {};
     returnRecords.value = [];
     requestDetailOverrides.value = {};
   declareTarget.value = null;
@@ -469,7 +498,7 @@ const submitPreRepairRequest = async () => {
     selectedItems.value = [];
     requestReason.value = '';
     clearSelectedPart();
-    await loadPartRequests();
+    await loadPartRequests(partRequestsLoaded.value);
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
@@ -497,7 +526,7 @@ const handleReceiveQr = async (requestId: string) => {
     actionSuccess.value = 'Xác nhận nhận linh kiện thành công! Giờ bạn có thể tiến hành sửa chữa.';
     showQrInput.value = null;
     qrTokenInput.value = '';
-    await Promise.all([loadPartRequests(), loadReturns()]);
+    await Promise.all([loadPartRequests(partRequestsLoaded.value), loadReturns()]);
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
@@ -535,6 +564,54 @@ const handleUpdateUsage = async (
     actionError.value =
       userFacingError(err, 'Không thể cập nhật trạng thái linh kiện.');
   } finally {
+    actionLoading.value = false;
+  }
+};
+
+/** Record actual used quantity for an enrolled FIXHOME custody line only.
+ * Server validates approval, version, assignment and invoice freeze. */
+const handlePartialUsage = async (requestId: string, itemId: string) => {
+  const row = partRequests.value.find(request => request.id === requestId);
+  const item = row?.items.find(record => record.id === itemId);
+  const custody = returnFor(itemId);
+  if (props.disabled || actionLoading.value || !isUnderRepair.value ||
+      row?.status !== 'received' || item?.partSource !== 'fixhome' || !custody) return;
+  const usedQty = Number(partialUsageDraft.value[itemId]);
+  if (!Number.isInteger(partialUsageDraft.value[itemId]) || usedQty < custody.usedQty ||
+      usedQty > custody.issuedQty - custody.managerAcceptedQty) {
+    actionError.value = 'Số lượng đã dùng không hợp lệ.';
+    return;
+  }
+  if (usedQty === custody.usedQty && custody.usageRecorded) return;
+  try {
+    actionLoading.value = true;
+    partialUsageSaving.value = itemId;
+    actionError.value = null;
+    actionSuccess.value = null;
+    const status = usedQty > 0 ? 'used' : 'returned';
+    const saved = await partRequestsApi.updateItemUsage(requestId, itemId, {
+      usageStatus: status,
+      usedQty,
+      expectedVersion: custody.version,
+      idempotencyKey: createIdempotencyKey('parts-used'),
+    });
+    partRequests.value = partRequests.value.map(request => request.id === requestId
+      ? { ...request, items: request.items.map(line => line.id === itemId
+        ? { ...line, ...saved, usageStatus: saved?.usageStatus ?? status } : line) }
+      : request);
+    emit('requests', partRequests.value);
+    actionSuccess.value = `Đã ghi nhận dùng ${usedQty}, cần trả ${custody.issuedQty - usedQty} linh kiện.`;
+    partialUsageEditing.value[itemId] = false;
+    delete partialUsageDraft.value[itemId];
+    await loadReturns();
+  } catch (err: unknown) {
+    // On 409 or any uncertain write, refresh the authoritative version and
+    // reset the input to the newly confirmed quantity.
+    delete partialUsageDraft.value[itemId];
+    await loadReturns();
+    actionError.value = userFacingError(err, 'Không thể lưu số lượng. Vui lòng kiểm tra và thử lại.');
+  } finally {
+    partialUsageSaving.value = null;
     actionLoading.value = false;
   }
 };
@@ -879,17 +956,26 @@ const getStatusBadgeClass = (status: string) => {
                 <span class="text-xs text-ink-500">Đơn giá</span>
                 <strong class="text-base text-brand-700 font-num"><FhMoney :amount="selectedPart.sellingPrice" /></strong>
               </div>
-              <details class="rounded-lg bg-white px-3 py-2 text-xs text-ink-600 border border-ink-200">
-                <summary class="cursor-pointer font-semibold text-brand-700"><span aria-hidden="true">ⓘ</span> Chi tiết linh kiện</summary>
-                <p v-if="selectedPart.description" class="mt-2">{{ selectedPart.description }}</p>
-                <p class="mt-1">Bảo hành: {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</p>
-                <p v-if="selectedPart.warrantyPolicy" class="mt-1">{{ selectedPart.warrantyPolicy }}</p>
+              <details class="rounded-lg bg-white border border-ink-200 text-xs text-ink-700">
+                <summary class="min-h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-3 py-2 font-semibold text-brand-700">
+                  <Info :size="16" aria-hidden="true" /> Thông tin linh kiện
+                </summary>
+                <dl class="divide-y divide-ink-100 border-t border-ink-100 px-3">
+                  <div v-for="(field, index) in selectedPartDetails" :key="index" class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                    <dt class="font-medium text-ink-500 break-words">{{ field.label }}</dt>
+                    <dd class="min-w-0 break-words text-ink-900">{{ field.value }}</dd>
+                  </div>
+                  <div class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                    <dt class="font-medium text-ink-500">Bảo hành</dt>
+                    <dd class="min-w-0 break-words text-ink-900">{{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</dd>
+                  </div>
+                </dl>
               </details>
 
               <!-- Add to Request Action Controls -->
-              <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+              <div class="flex flex-col items-stretch gap-3 pt-1 min-w-0">
                 <!-- Quantity & Total -->
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3 min-w-0">
                   <div class="flex items-center gap-1 bg-white p-1 rounded-lg border border-ink-200">
                     <span class="text-[11px] font-semibold text-ink-600 px-1.5">SL:</span>
                     <button
@@ -925,16 +1011,16 @@ const getStatusBadgeClass = (status: string) => {
                 </div>
 
                 <!-- Note and Add Button -->
-                <div class="flex items-center gap-2 flex-1 sm:max-w-md">
+                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2 w-full min-w-0">
                   <input
                     v-model="itemNote"
                     type="text"
                     placeholder="Ghi chú item (VD: mang sơ cua, thay buồng lạnh)..."
-                    class="flex-1 text-xs rounded border border-ink-300 p-1.5 bg-white text-ink-900 placeholder:text-ink-400"
+                    class="min-w-0 w-full h-10 text-xs rounded-lg border border-ink-300 px-3 bg-white text-ink-900 placeholder:text-ink-400"
                   />
                   <button
                     type="button"
-                    class="px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all shrink-0 cursor-pointer"
+                    class="w-full sm:w-auto min-w-0 min-h-11 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                     @click="addItemToForm"
                   >
                     <Plus :size="14" /> Thêm vào danh sách
@@ -1149,9 +1235,40 @@ const getStatusBadgeClass = (status: string) => {
                   <span v-if="item.usageStatus === 'used'" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700"><Check :size="13" /> Đã dùng</span>
                   <span v-else-if="item.usageStatus === 'returned'" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700"><RotateCcw :size="13" /> Hoàn trả</span>
                   <span v-else class="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-600">Chưa ghi nhận sử dụng</span>
-                  <div v-if="isUnderRepair && pr.status === 'received'" class="flex flex-wrap gap-2">
+                  <div v-if="isUnderRepair && pr.status === 'received' && !returnFor(item.id)" class="flex flex-wrap gap-2">
                     <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'used' ? 'border-success-600 bg-success-600 text-white' : 'border-success-300 bg-success-50 text-success-700 hover:bg-success-100'" :aria-pressed="item.usageStatus === 'used'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')">Đã dùng</button>
                     <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'returned' ? 'border-warning-600 bg-warning-600 text-white' : 'border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100'" :aria-pressed="item.usageStatus === 'returned'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')">Hoàn trả</button>
+                  </div>
+                  <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id)" type="button"
+                    class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700"
+                    :aria-expanded="!!partialUsageEditing[item.id]"
+                    @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
+                    {{ partialUsageEditing[item.id] ? 'Đóng nhập số lượng' : 'Ghi số lượng thực dùng' }}
+                  </button>
+                  <div v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id) && partialUsageEditing[item.id]" class="w-full rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2" data-testid="partial-usage-editor">
+                    <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
+                      <template v-if="record">
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-700">
+                          <span>Đã nhận: <strong>{{ record.issuedQty }}</strong></span>
+                          <span>Cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) }}</strong></span>
+                        </div>
+                        <div class="flex flex-wrap items-end gap-2">
+                          <label class="flex-1 min-w-[110px] text-xs font-semibold text-ink-700">
+                            Số lượng thực dùng
+                            <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" :min="record.usedQty"
+                              :max="record.issuedQty - record.managerAcceptedQty" inputmode="numeric"
+                              :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
+                              class="mt-1 h-10 w-full rounded-lg border border-ink-300 bg-white px-3 font-num text-sm" />
+                          </label>
+                          <button type="button" class="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                            :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < record.usedQty || Number(partialUsageDraft[item.id]) > record.issuedQty - record.managerAcceptedQty || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
+                            @click="handlePartialUsage(pr.id, item.id)">
+                            {{ partialUsageSaving === item.id ? 'Đang lưu…' : 'Lưu số lượng' }}
+                          </button>
+                        </div>
+                        <p class="text-[11px] text-ink-600">Hóa đơn mới chỉ tính số lượng đã dùng. Số còn lại cần khai trả và chờ quản lý xác nhận.</p>
+                      </template>
+                    </template>
                   </div>
                 </div>
                 <div v-if="requestHasReturns(pr)" class="space-y-1 border-t border-ink-100 pt-2 text-xs">

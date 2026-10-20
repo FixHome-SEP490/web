@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 21:56 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-overrun-release
+> Cập nhật lần cuối: 2026-10-20 23:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-parts-ux-v32-20261020
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -280,6 +280,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 
 **UX Technician V3.1 (20/10/2026):** Màn ServiceOrder chỉ hỏi đặt linh kiện trước khi di chuyển nếu chưa có PRE_REPAIR hợp lệ; linh kiện đã USED/RETURNED được cập nhật cục bộ theo phản hồi API và đồng bộ nền, tránh reload toàn trang. Nghĩa vụ khai trả kho được tách rõ chưa khai và đã khai đang chờ Service Manager nhận. Form PRE_REPAIR, báo giá đầu và phát sinh ẩn bảo hành/giải thích dài sau disclosure thông tin, list linh kiện gọn và request cũ thu gọn; giá và thông tin bảo hành vẫn bảo toàn trong dữ liệu. Thay đổi Web UX, không thay đổi API/Backend, hóa đơn, custody hoặc logic thanh toán.
 
+**Technician partial parts + stable UI (20/10/2026):** Technician parts V3.2: fix initial loading/realtime race which could leave a skeleton until F5, and refresh QR updates without clearing list; stack mobile Add button/note on narrow widths; render catalog detail as labeled fields with Lucide Info icons instead of raw delimited text; editable actual used quantity for QR-enrolled FixHome parts via existing versioned API, with computed return due and manager physical return kept separate. Legacy/non-custody parts keep whole-line controls. Quote info icons standardized. No change to price search, existing invoices, AI, wallet or money flags.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -362,6 +364,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
 - 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 - 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
@@ -401,4 +404,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 23:05 (UTC+7) | Lạc Vỹ | LacVy | Hợp nhất nhánh: đồng bộ TanStack Query, FhPagination, FhStatusPill và hoàn thiện giao diện khách hàng
 - 2026-10-12 20:53 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX luồng đặt lịch: NewBookingWizard, BookingCandidates, BookingDetail và TechnicianProfileModal
 - 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
-- 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn

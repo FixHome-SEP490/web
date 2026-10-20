@@ -66,6 +66,10 @@ export interface ReceivePartRequestPayload {
 
 export interface UpdateItemUsagePayload {
   usageStatus: 'used' | 'returned';
+  /** Only for parts enrolled in custody with an exact ledger version. */
+  usedQty?: number;
+  expectedVersion?: number;
+  idempotencyKey?: string;
 }
 
 export interface MarkReadyPayload {
@@ -109,6 +113,8 @@ export interface PartCustodyReturnRecord {
   managerAcceptedQty: number;
   outstandingQty: number;
   version: number;
+  trackingOnly?: boolean;
+  usageRecorded?: boolean;
   /** References the Backend may attach (P1 lock contract, still being wired). */
   id?: string;
   orderId?: string;
