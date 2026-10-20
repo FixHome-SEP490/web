@@ -2,6 +2,7 @@
 import apiClient from './client';
 import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 import type { WarrantyClaimStatus } from '../utils/warranty-claim';
+import type { BookingSlot } from '../utils/booking-session';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -56,9 +57,9 @@ export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
 export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
   isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
 export interface ServiceOrderItem {
-  /** scheduled = one morning/afternoon session; urgent = come now (PO 08/10/2026). */
+  /** scheduled = one morning/afternoon/evening session; urgent = come now. */
   bookingMode?: 'scheduled' | 'urgent';
-  slot?: 'morning' | 'afternoon' | null;
+  slot?: BookingSlot | null;
   /** Note the customer left for the technician, apart from the problem description. */
   customerNote?: string | null;
   /** The technician may set out from this instant (one hour before the appointment). */
@@ -120,6 +121,8 @@ export interface ServiceOrderItem {
       lineTotal: number;
       warrantyDays?: number;
       warrantyDaysSnapshot?: number;
+      partSource?: 'fixhome' | 'technician' | 'external' | null;
+      partCatalogId?: string | null;
     }[];
   };
   cashSettlement?: {
@@ -472,12 +475,13 @@ export const ordersApi = {
 
   async uploadEvidence(
     orderId: string,
-    body: { phase: EvidencePhase; file: File; caption?: string },
+    body: { phase: EvidencePhase; file: File; caption?: string; deferAutoStart?: boolean },
   ): Promise<Record<string, unknown>> {
     const form = new FormData();
     form.append('file', body.file);
     form.append('type', evidencePhaseToType(body.phase));
     if (body.caption) form.append('note', body.caption);
+    if (body.deferAutoStart !== undefined) form.append('deferAutoStart', String(body.deferAutoStart));
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
@@ -504,6 +508,17 @@ export const ordersApi = {
   ): Promise<Record<string, unknown>> {
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/request-completion`, body || {});
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
+  },
+
+  /** Whether the technician, still on another job, may release this upcoming order without losing points (PO 20/10/2026). */
+  async overrunReleaseStatus(orderId: string): Promise<{ eligible: boolean; currentOrderCode: string | null }> {
+    const res = await apiClient.get<ApiResponse<{ eligible?: boolean; currentOrderCode?: string | null }>>(`/service-orders/${orderId}/overrun-release`);
+    const data = (res.data?.data || {}) as { eligible?: boolean; currentOrderCode?: string | null };
+    return { eligible: data.eligible === true, currentOrderCode: data.currentOrderCode ?? null };
+  },
+
+  async releaseForOverrun(orderId: string): Promise<void> {
+    await apiClient.post(`/service-orders/${orderId}/overrun-release`);
   },
 
   async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {
@@ -690,6 +705,14 @@ export const ordersApi = {
     const paymentUrl = (res.data?.data as { paymentUrl?: string } | undefined)?.paymentUrl;
     if (!paymentUrl) throw new Error('Không nhận được liên kết thanh toán VNPay.');
     return paymentUrl;
+  },
+
+  async completeNoCharge(invoiceId: string): Promise<void> {
+    const res = await apiClient.post<ApiResponse<{ invoiceId: string; paymentStatus: string; settlementMethod: string }>>(`/invoices/${invoiceId}/no-charge`, {});
+    const result = res.data?.data;
+    if (result?.invoiceId !== invoiceId || result.paymentStatus?.toLowerCase() !== 'paid' || result.settlementMethod !== 'NO_CHARGE') {
+      throw new Error('Chưa xác nhận được kết quả. Vui lòng kiểm tra trạng thái đơn trước khi thử lại.');
+    }
   },
 
   async getWarranties(): Promise<WarrantyItem[]> {

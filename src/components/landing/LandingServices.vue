@@ -1,19 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from 'vue';
-import {
-  ArrowRight,
-  Wrench,
-  Wind,
-  Snowflake,
-  Droplets,
-  Zap,
-  Refrigerator,
-  WashingMachine,
-  Flame,
-  Utensils,
-  Lock,
-  ShieldCheck,
-} from 'lucide-vue-next';
+import { computed, onMounted, ref } from 'vue';
+import { ArrowRight } from 'lucide-vue-next';
+import { categoryIcon } from '../booking/service-icons';
 import { catalogApi, type ServiceCategory } from '../../api/catalog.api';
 import { useReferenceData } from '../../composables/useCachedQuery';
 import { queryKeys } from '../../lib/query-keys';
@@ -23,9 +11,8 @@ const categories = ref<ServiceCategory[]>([]);
 const loading = ref(true);
 const error = ref(false);
 
-const visibleCategories = computed(() =>
-  categories.value.filter((category) => category.isActive).slice(0, 6),
-);
+const activeCategories = computed(() => categories.value.filter((category) => category.isActive));
+const visibleCategories = computed(() => activeCategories.value.slice(0, 6));
 
 // Balanced grid layout: 2x2 centered grid if 4 categories, 3x2 if 6 categories
 const gridLayoutClass = computed(() => {
@@ -36,26 +23,19 @@ const gridLayoutClass = computed(() => {
   return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6';
 });
 
-// Semantic icon map supporting various key formats
-const iconMap: Record<string, Component> = {
-  snowflake: Snowflake,
-  wind: Wind,
-  droplets: Droplets,
-  zap: Zap,
-  refrigerator: Refrigerator,
-  'washing-machine': WashingMachine,
-  washingmachine: WashingMachine,
-  flame: Flame,
-  utensils: Utensils,
-  lock: Lock,
-  shield: ShieldCheck,
-  wrench: Wrench,
-};
-
-function getCategoryIcon(key?: string | null) {
-  if (!key) return Wrench;
-  const normalized = key.toLowerCase().trim();
-  return iconMap[normalized] || Wrench;
+// Do not expose catalog rollout notes in public highlights.
+function categoryDescription(category: ServiceCategory): string {
+  const description = category.description?.trim();
+  if (description && !/chưa\s+kích\s+hoạt|catalog\s*v2/i.test(description)) return description;
+  const fallback: Record<string, string> = {
+    CAT_AC: 'Vệ sinh, bảo dưỡng và sửa máy lạnh.',
+    CAT_LAUNDRY: 'Vệ sinh và sửa chữa máy giặt, máy sấy.',
+    CAT_FRIDGE: 'Kiểm tra, bảo dưỡng và sửa tủ lạnh.',
+    CAT_RO: 'Thay lõi, bảo dưỡng và sửa máy lọc nước.',
+    CAT_HEATER: 'Kiểm tra và sửa chữa bình nóng lạnh.',
+    CAT_KITCHEN: 'Bảo dưỡng và sửa chữa thiết bị nhà bếp.',
+  };
+  return fallback[category.code] || `Khám phá dịch vụ ${category.name.toLocaleLowerCase('vi-VN')} tại nhà.`;
 }
 
 const reference = useReferenceData();
@@ -88,7 +68,7 @@ onMounted(loadCategories);
           </p>
         </div>
         <router-link to="/services" class="landing-text-link shrink-0">
-          Xem tất cả dịch vụ
+          Xem tất cả {{ activeCategories.length || '' }} danh mục
           <ArrowRight :size="18" aria-hidden="true" />
         </router-link>
       </div>
@@ -144,7 +124,7 @@ onMounted(loadCategories);
                 class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-colors duration-200 group-hover:bg-brand-600 group-hover:text-white"
               >
                 <component
-                  :is="getCategoryIcon(category.iconKey)"
+                  :is="categoryIcon(category)"
                   :size="22"
                   :stroke-width="1.75"
                   aria-hidden="true"
@@ -157,7 +137,7 @@ onMounted(loadCategories);
                 {{ category.name }}
               </h3>
               <p class="mt-2 text-sm leading-6 text-ink-600 line-clamp-2">
-                {{ category.description || 'Xem dịch vụ và thông tin sửa chữa.' }}
+                {{ categoryDescription(category) }}
               </p>
             </div>
           </div>

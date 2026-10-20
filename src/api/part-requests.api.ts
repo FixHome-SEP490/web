@@ -9,7 +9,7 @@ export type PartRequestStatus =
   | 'completed'
   | 'cancelled';
 
-export type PartRequestType = 'pre_repair' | 'additional';
+export type PartRequestType = 'pre_repair' | 'additional' | 'quotation';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type PartUsageStatus = 'pending' | 'used' | 'returned';
 export type PartSource = 'fixhome' | 'technician' | 'external';
@@ -38,6 +38,7 @@ export interface PartRequest {
   reason?: string | null;
   shippingFee: number;
   additionalCostId?: string | null;
+  quotationId?: string | null;
   qrToken?: string | null;
   qrGeneratedAt?: string | null;
   receivedAt?: string | null;
@@ -65,6 +66,10 @@ export interface ReceivePartRequestPayload {
 
 export interface UpdateItemUsagePayload {
   usageStatus: 'used' | 'returned';
+  /** Only for parts enrolled in custody with an exact ledger version. */
+  usedQty?: number;
+  expectedVersion?: number;
+  idempotencyKey?: string;
 }
 
 export interface MarkReadyPayload {
@@ -108,6 +113,8 @@ export interface PartCustodyReturnRecord {
   managerAcceptedQty: number;
   outstandingQty: number;
   version: number;
+  trackingOnly?: boolean;
+  usageRecorded?: boolean;
   /** References the Backend may attach (P1 lock contract, still being wired). */
   id?: string;
   orderId?: string;

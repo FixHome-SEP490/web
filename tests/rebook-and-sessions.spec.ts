@@ -17,7 +17,7 @@ describe('upcoming sessions (Vietnam time)', () => {
     const now = new Date('2026-10-05T03:00:00Z');
     const list = upcomingSessions(2, now);
     expect(list.map((s) => `${s.date} ${s.slot}`)).toEqual([
-      '2026-10-05 afternoon', '2026-10-06 morning', '2026-10-06 afternoon',
+      '2026-10-05 afternoon', '2026-10-05 evening', '2026-10-06 morning', '2026-10-06 afternoon', '2026-10-06 evening',
     ]);
     expect(list.every((s) => s.available)).toBe(true);
   });
@@ -31,6 +31,7 @@ describe('upcoming sessions (Vietnam time)', () => {
 const sessions = [
   { date: '2030-01-03', slot: 'morning', available: false, reason: 'Thợ đã có lịch buổi này' },
   { date: '2030-01-03', slot: 'afternoon', available: true, reason: null },
+  { date: '2030-01-03', slot: 'evening', available: true, reason: null },
 ];
 const mountDialog = async () => {
   const wrapper = mount(RebookDialog, {
@@ -46,6 +47,19 @@ describe('Rebook dialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     availableSessions.mockResolvedValue({ technicianId: 'tech-1', sessions });
+  });
+
+  it('picks and submits the evening session from server availability', async () => {
+    rebook.mockResolvedValue({ booking: { id: 'evening-booking' }, previousTechnicianInvited: true });
+    const wrapper = await mountDialog();
+    const evening = wrapper.get('[data-testid="session-2030-01-03-evening"]');
+    expect(evening.attributes('aria-label')).toBe('Tối 18:00 - 23:00');
+    expect(evening.text()).toContain('18:00–23:00');
+    await evening.trigger('click');
+    await confirm(wrapper).trigger('click');
+    await flushPromises();
+    expect(rebook).toHaveBeenCalledWith('old-booking', { date: '2030-01-03', slot: 'evening' });
+    wrapper.unmount();
   });
 
   it("reads the former technician's sessions and asks for a session first", async () => {

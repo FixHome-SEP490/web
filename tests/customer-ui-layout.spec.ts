@@ -28,6 +28,7 @@ vi.mock('../src/api/orders.api', () => ({
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses: api.getAddresses } }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getServices: api.getServices } }));
+vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: vi.fn().mockRejectedValue(new Error('x')) } }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: api.getByOrder } }));
 vi.mock('vue-router', () => ({

@@ -108,6 +108,151 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     wrapper.unmount();
   });
 
+  it('offers releasing the order without losing points only when the server says the technician is on another job (PO 20/10/2026)', async () => {
+    let eligible = false;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/overrun-release') return { data: { data: { eligible, currentOrderCode: 'SO-099', block: eligible ? null : 'NO_CURRENT_JOB' } } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/bookings/booking-101') return { data: { data: { id: 'booking-101', media: [] } } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+    const plain = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(plain.find('[data-testid="overrun-release-card"]').exists()).toBe(false);
+    await openMoreMenu(plain);
+    expect(menuItems(plain)).not.toContain('Không kịp tới, nhả đơn');
+    plain.unmount();
+
+    eligible = true;
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="overrun-release-card"]').text()).toContain('SO-099');
+    await openMoreMenu(wrapper);
+    expect(menuItems(wrapper)).toContain('Không kịp tới, nhả đơn');
+    await wrapper.get('[data-testid="overrun-release-menu"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="overrun-release-dialog"]').text()).toContain('Không trừ điểm uy tín');
+    await wrapper.get('[data-testid="overrun-release-confirm"]').trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/overrun-release');
+    expect(mockPost.mock.calls.some(([path]) => String(path).endsWith('/cancel'))).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('opens a pre-repair choice and closing it leaves the accepted order unchanged', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button')
+      .find((button) => button.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+
+    const dialog = wrapper.get('[data-testid="departure-pre-repair-dialog"]');
+    expect(dialog.get('[role="dialog"]').attributes('aria-modal')).toBe('true');
+    expect(dialog.text()).toContain('Đặt linh kiện trước?');
+    await dialog.get('button[aria-label="Đóng"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Xuất phát đến nhà khách');
+    expect(mockPost).not.toHaveBeenCalledWith('/service-orders/job-test-101/en-route', expect.anything());
+    expect(wrapper.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('choosing no starts travel through the existing endpoint', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button')
+      .find((button) => button.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+    await wrapper.get('[data-testid="departure-pre-repair-dialog"]').findAll('button')
+      .find((button) => button.text().includes('Không, bắt đầu di chuyển'))!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/en-route');
+    expect(wrapper.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('opens the pre-repair form without creating a request or changing order status', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/service-orders/job-test-101/part-requests') return { data: { data: [] } };
+      return { data: { data: [] } };
+    });
+    const actualPartsStubs = { ...stubs, TechnicianPartsSection: false };
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: actualPartsStubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button')
+      .find((button) => button.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+    await wrapper.get('[data-testid="departure-pre-repair-dialog"]').findAll('button')
+      .find((button) => button.text().includes('Có, đặt linh kiện'))!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('#job-parts').text()).toContain('Chọn linh kiện FixHome');
+    expect(wrapper.get('#job-parts').text()).toContain('Gửi yêu cầu tới Quản lý');
+    expect(mockPost).not.toHaveBeenCalledWith('/service-orders/job-test-101/part-requests', expect.anything());
+    expect(mockPost).not.toHaveBeenCalledWith('/service-orders/job-test-101/en-route', expect.anything());
+    expect(wrapper.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('does not ask again and starts travel when a valid pre-repair request already exists', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/service-orders/job-test-101/part-requests') return { data: { data: [{
+        id: 'parts-1', serviceOrderId: 'job-test-101', technicianId: 'tech-1', requestType: 'pre_repair',
+        fulfillmentMethod: 'pickup', status: 'received', shippingFee: 0, createdAt: '2026-10-20T00:00:00Z', items: [],
+      }] } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button')
+      .find((button) => button.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-101/part-requests');
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/en-route');
+    expect(mockPost).not.toHaveBeenCalledWith('/service-orders/job-test-101/part-requests', expect.anything());
+    wrapper.unmount();
+  });
+
+  it('checks whether an existing parts request was cancelled before deciding to prompt', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/service-orders/job-test-101/part-requests') return { data: { data: [{
+        id: 'parts-cancel', requestType: 'pre_repair', status: 'cancelled', items: [],
+      }] } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button')
+      .find((button) => button.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(true);
+    expect(mockPost).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('updates Hero Action Bar to GPS Check-in when status is EN_ROUTE and not yet checked in', async () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') {

@@ -24,6 +24,8 @@ import { hasRating, ratingLabel } from '../../utils/formatters';
 const route = useRoute();
 // Set by "Đặt lại thợ" when the former technician is not free for the chosen session.
 const rebookedChoose = route.query?.rebooked === 'choose';
+// Set when the technician of this request could not make it in time (PO 20/10/2026).
+const technicianReleased = route.query?.released === '1';
 const router = useRouter();
 const bookingId = route.params.id as string | undefined;
 
@@ -135,6 +137,15 @@ const successMessage = computed(() => selectedCount.value === 1
       <div class="flex-1 text-pretty leading-relaxed">
         <strong>Thợ cũ không rảnh buổi bạn chọn.</strong> Vui lòng chọn kỹ thuật viên khác bên dưới cho yêu cầu mới này.
       </div>
+    </div>
+
+    <div
+      v-if="technicianReleased"
+      role="status"
+      data-testid="released-choose-notice"
+      class="rounded-2xl border border-brand-200 bg-white p-4 text-sm text-ink-700"
+    >
+      <strong class="text-ink-900">Thợ trước không kịp tới buổi hẹn.</strong> Bạn chọn thợ khác, giá và lịch hẹn giữ nguyên.
     </div>
 
     <!-- Top Navigation & Header -->

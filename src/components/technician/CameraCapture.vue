@@ -11,10 +11,12 @@ import FhButton from '../FhButton.vue';
 const props = defineProps<{
   mode: 'face' | 'product';
   title: string;
+  multiple?: boolean;
+  maxShots?: number;
 }>();
 
 const emit = defineEmits<{
-  (e: 'capture', file: File): void;
+  (e: 'capture', file: File | File[]): void;
   (e: 'close'): void;
 }>();
 
@@ -31,6 +33,10 @@ const videoEl = ref<HTMLVideoElement | null>(null);
 const dialogEl = ref<HTMLElement | null>(null);
 const stillUrl = ref<string | null>(null);
 let stillFile: File | null = null;
+const capturedShots = ref<Array<{ file: File; url: string }>>([]);
+const multiple = computed(() => props.mode === 'product' && props.multiple === true);
+const maxShots = computed(() => Math.max(1, Math.min(20, Math.floor(props.maxShots ?? 20))));
+const canCaptureMore = computed(() => !multiple.value || capturedShots.value.length < maxShots.value);
 let stream: MediaStream | null = null;
 let disposed = false;
 let previousFocus: HTMLElement | null = null;
@@ -52,7 +58,7 @@ let detectTimer: ReturnType<typeof setTimeout> | null = null;
 const detectorActive = ref(false);
 const faceInGuide = ref(false);
 const shutterEnabled = computed(
-  () => phase.value === 'live' && !busy.value && (!isFace.value || !detectorActive.value || faceInGuide.value),
+  () => phase.value === 'live' && !busy.value && canCaptureMore.value && (!isFace.value || !detectorActive.value || faceInGuide.value),
 );
 
 function stopDetection() {
@@ -122,6 +128,13 @@ function clearStill() {
   }
   stillUrl.value = null;
   stillFile = null;
+}
+
+function clearCapturedShots() {
+  for (const shot of capturedShots.value) {
+    try { URL.revokeObjectURL(shot.url); } catch { /* nothing to release */ }
+  }
+  capturedShots.value = [];
 }
 
 function cameraErrorText(error: unknown): string {
@@ -262,14 +275,47 @@ function retake() {
 function usePhoto() {
   if (!stillFile) return;
   const file = stillFile;
+  if (multiple.value) {
+    const url = stillUrl.value;
+    if (!url || !canCaptureMore.value) return;
+    capturedShots.value.push({ file, url });
+    stillFile = null;
+    stillUrl.value = null;
+    shotError.value = '';
+    phase.value = 'live';
+    void nextTick(() => {
+      if (videoEl.value && stream) {
+        videoEl.value.srcObject = stream;
+        Promise.resolve().then(() => videoEl.value?.play()).catch(() => undefined);
+      }
+      startDetection();
+      focusFirst();
+    });
+    return;
+  }
   stopStream();
   emit('capture', file);
+}
+
+function removeCapturedShot(index: number) {
+  const [removed] = capturedShots.value.splice(index, 1);
+  if (removed) {
+    try { URL.revokeObjectURL(removed.url); } catch { /* nothing to release */ }
+  }
+}
+
+function submitCapturedShots() {
+  if (!multiple.value || capturedShots.value.length === 0 || busy.value) return;
+  const files = capturedShots.value.map((shot) => shot.file);
+  stopStream();
+  emit('capture', files);
 }
 
 function close() {
   if (busy.value) return;
   stopStream();
   clearStill();
+  clearCapturedShots();
   emit('close');
 }
 
@@ -320,6 +366,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   stopStream();
   clearStill();
+  clearCapturedShots();
   previousFocus?.focus?.();
 });
 </script>
@@ -426,6 +473,17 @@ onBeforeUnmount(() => {
 
       <div class="shrink-0 px-4 py-5 sm:py-6 flex flex-col items-center gap-3">
         <p v-if="shotError" class="text-sm text-danger-200" role="alert">{{ shotError }}</p>
+        <div v-if="multiple && capturedShots.length" class="w-full space-y-2" aria-label="Ảnh đã chụp">
+          <p class="text-xs text-white/80">Đã chụp {{ capturedShots.length }}/{{ maxShots }} ảnh</p>
+          <div class="flex gap-2 overflow-x-auto pb-1">
+            <div v-for="(shot, index) in capturedShots" :key="shot.url" class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/30" data-testid="camera-thumbnail">
+              <img :src="shot.url" :alt="`Ảnh đã chụp ${index + 1}`" class="h-full w-full object-cover" />
+              <button type="button" class="absolute right-0 top-0 h-7 w-7 rounded-bl-lg bg-ink-900/80 text-white" :aria-label="`Bỏ ảnh ${index + 1}`" data-testid="camera-remove-shot" @click="removeCapturedShot(index)">
+                <X :size="14" class="mx-auto" />
+              </button>
+            </div>
+          </div>
+        </div>
         <button
           v-if="phase === 'live' || phase === 'starting'"
           type="button"
@@ -439,9 +497,19 @@ onBeforeUnmount(() => {
           <Loader2 v-if="busy" :size="26" class="animate-spin" />
           <Camera v-else :size="26" />
         </button>
+        <p v-if="multiple && !canCaptureMore" role="status" class="text-xs text-white/80">Đã đạt tối đa {{ maxShots }} ảnh.</p>
+        <FhButton
+          v-if="multiple && capturedShots.length && phase === 'live'"
+          variant="primary"
+          block
+          data-testid="camera-submit-batch"
+          @click="submitCapturedShots"
+        >
+          Gửi {{ capturedShots.length }} ảnh
+        </FhButton>
         <div v-else-if="phase === 'still'" class="w-full grid grid-cols-2 gap-2">
           <FhButton variant="secondary" data-testid="camera-retake" @click="retake">Chụp lại</FhButton>
-          <FhButton variant="primary" data-autofocus data-testid="camera-use" @click="usePhoto">Dùng ảnh này</FhButton>
+          <FhButton variant="primary" data-autofocus data-testid="camera-use" @click="usePhoto">{{ multiple ? 'Giữ ảnh, chụp tiếp' : 'Dùng ảnh này' }}</FhButton>
         </div>
       </div>
     </div>

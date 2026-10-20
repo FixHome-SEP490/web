@@ -33,6 +33,7 @@ import {
   Ban,
   FileText,
   ScanFace,
+  Info,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -54,7 +55,7 @@ import {
   type EvidencePhase,
   type EvidenceType,
 } from '../../api/orders.api';
-import { partsCatalogApi } from '../../api/parts-catalog.api';
+import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
@@ -67,8 +68,12 @@ import { getBestPosition } from '../../utils/best-position';
 import { useQueryClient } from '@tanstack/vue-query';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
-import { afterRunningRead, onOrderChange, onResync } from '../../services/live-updates';
+import { afterRunningRead, onOrderChange, onResync, whileOffline } from '../../services/live-updates';
 import type { OrderChangeKind } from '../../services/chat-socket.service';
+import { billingAmount, orderBilling } from '../../utils/order-billing';
+import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { partsCatalogApi } from '../../api/parts-catalog.api';
+import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -146,10 +151,57 @@ const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'dispute
 const hasCashPayment = ref<'YES' | 'NO' | null>(null);
 
 // Quotation items form
-const quotationItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
+const quotationItems = ref<QuotationItemPayload[]>([]);
+const receivedRequests = ref<PartRequest[]>([]);
+const completionPartRequests = ref<PartRequest[] | null>(null);
+const completionPartsReadFailed = ref(false);
+const jobInvoice = ref<Record<string, unknown> | null>(null);
+const stockCatalog = ref(new Map<string, FixHomePart>());
+const suggestedStockIds = new Set<string>();
+const quoteStockError = ref('');
+const quoteStockLoading = ref(false);
+let stockReadVersion = 0;
+const onPartRequests = async (requests: PartRequest[]) => {
+  const version = ++stockReadVersion;
+  const id = jobIdRef.value;
+  receivedRequests.value = requests;
+  // Update local completion blockers without a full order/cache refresh.
+  if (isRepairing.value) {
+    completionPartRequests.value = requests;
+    completionPartsReadFailed.value = false;
+  }
+  quoteStockLoading.value = true;
+  const ids = [...new Set(requests.filter(request => request.requestType === 'pre_repair' && request.status === 'received' && request.receivedAt)
+    .flatMap(request => request.items.filter(item => item.partSource === 'fixhome').map(item => item.partCatalogId)).filter((id): id is string => !!id))];
+  const catalog = new Map(stockCatalog.value);
+  await Promise.all(ids.map(async catalogId => {
+    if (catalog.get(catalogId)?.warrantyDays != null) return;
+    try { catalog.set(catalogId, await partsCatalogApi.getPartById(catalogId)); } catch { /* Do not invent warranty or price. The picker remains available. */ }
+  }));
+  if (version !== stockReadVersion || id !== jobIdRef.value) return;
+  stockCatalog.value = catalog;
+  quoteStockLoading.value = false;
+  const missing = requests.filter(request => request.requestType === 'pre_repair' && request.status === 'received' && request.receivedAt)
+    .flatMap(request => request.items).filter(item => item.partSource === 'fixhome' && item.usageStatus !== 'returned' &&
+      (!item.partCatalogId || !catalog.has(item.partCatalogId) || catalog.get(item.partCatalogId)?.warrantyDays == null || billingAmount(item.unitPriceSnapshot) === null));
+  quoteStockError.value = missing.length ? 'Chưa đọc đủ đơn giá hoặc bảo hành của linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.' : '';
+};
+const retryQuoteStock = async () => {
+  const id = jobIdRef.value;
+  quoteStockLoading.value = true;
+  try {
+    const requests = await partRequestsApi.getByOrderId(id);
+    if (id === jobIdRef.value) await onPartRequests(requests);
+  } catch {
+    if (id === jobIdRef.value) quoteStockError.value = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.';
+  } finally {
+    if (id === jobIdRef.value) quoteStockLoading.value = false;
+  }
+};
 // Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
 const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
+const quoteEditorDismissed = ref(false);
 
 // Additional cost (chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
@@ -187,6 +239,11 @@ const previewImage = (url: string) => {
 };
 const activePreviewEvidence = computed(() => evidences.value.find((e) => e.mediaUrl === previewModalUrl.value));
 const uploadingPhase = ref<EvidencePhase | null>(null);
+const pendingEvidenceUpload = ref<{ phase: EvidencePhase; files: File[] } | null>(null);
+const remainingEvidenceSlots = computed(() => {
+  const reported = Number(job.value?.beforeEvidenceCount ?? 0) + Number(job.value?.afterEvidenceCount ?? 0) + (hasFacePhoto.value ? 1 : 0);
+  return Math.max(0, 20 - Math.max(evidences.value.length, reported));
+});
 const checkingIn = ref(false);
 
 // Every job photo is taken with the camera, never chosen from the gallery (PO 11/10/2026).
@@ -201,15 +258,54 @@ const CAMERA_TITLES: Record<CameraPurpose, string> = {
 const cameraMode = computed<'face' | 'product'>(() =>
   cameraPurpose.value === 'checkin' || cameraPurpose.value === 'face' ? 'face' : 'product',
 );
+const cameraMultiple = computed(() => cameraPurpose.value === 'after' ||
+  cameraPurpose.value === 'before');
 const openCamera = (purpose: CameraPurpose) => {
   if (actionLoading.value) return;
+  if (purpose === 'before' && !canAddBeforePhoto.value) return;
+  if (purpose === 'after' && !canAddAfterPhoto.value) return;
   cameraPurpose.value = purpose;
+};
+const departureChoiceOpen = ref(false);
+const partsSection = ref<{ openPreRepairForm?: () => void } | null>(null);
+// An existing valid pre-repair request already answered the parts question.
+const openDepartureChoice = async () => {
+  if (actionLoading.value || statusUpper.value !== 'ACCEPTED') return;
+  actionLoading.value = true;
+  try {
+    const requests = await partRequestsApi.getByOrderId(jobId);
+    if (requests.some(request => request.requestType === 'pre_repair' && request.status !== 'cancelled')) {
+      await handleEnRoute();
+    } else {
+      departureChoiceOpen.value = true;
+    }
+  } catch (err) {
+    notifyError(userFacingError(err, 'Chưa kiểm tra được yêu cầu linh kiện. Vui lòng thử lại.'));
+  } finally {
+    actionLoading.value = false;
+  }
+};
+const choosePreRepairParts = async () => {
+  departureChoiceOpen.value = false;
+  sections.parts = true;
+  await nextTick();
+  partsSection.value?.openPreRepairForm?.();
+  document.getElementById('job-parts')?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
 };
 
 // Rare actions live in one "Thêm" menu instead of separate cards.
 const moreOpen = ref(false);
 const complaintPanel = ref<{ openForm: () => void } | null>(null);
 const sections = reactive({ photos: false, parts: false, extra: false });
+const pendingPartsUsage = ref(0);
+const pendingPartsReturns = ref(0);
+const returnsToDeclare = ref(0);
+const returnsAwaitingManager = ref(0);
+const revealParts = async () => {
+  sections.parts = true;
+  await nextTick();
+  document.getElementById('job-parts')?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+};
 const partsSummary = ref<{ count: number; needsAction: boolean }>({ count: 0, needsAction: false });
 const onPartsSummary = (value: { count: number; needsAction: boolean }) => {
   partsSummary.value = value;
@@ -232,11 +328,48 @@ const WITHDRAW_REASONS = [
   'Lý do khác (tự nhập)',
 ];
 
+// Still on another job and this one starts soon (PO 20/10/2026): release it, no points lost, the customer picks another technician.
+const overrun = ref<{ eligible: boolean; currentOrderCode: string | null } | null>(null);
+const showOverrunModal = ref(false);
+const releasing = ref(false);
+const releaseError = ref('');
+const handleReleaseForOverrun = async () => {
+  if (releasing.value) return;
+  releasing.value = true;
+  releaseError.value = '';
+  try {
+    await ordersApi.releaseForOverrun(jobId);
+    void cache.refresh(affectedBy.orderChange);
+    showOverrunModal.value = false;
+    toast.success('Đã nhả đơn. Khách sẽ chọn thợ khác.');
+    await router.push('/tech/jobs');
+  } catch (err: unknown) {
+    releaseError.value = userFacingError(err, 'Chưa nhả được đơn. Vui lòng thử lại.');
+  } finally {
+    releasing.value = false;
+  }
+};
+
 const canWithdraw = computed(() => {
   if (!job.value) return false;
   const s = String(job.value.status).toUpperCase();
   return s === 'ACCEPTED' || (s === 'EN_ROUTE' && !gpsCheckedIn.value);
 });
+// Asked only while the order can still be left; the server decides.
+watch(
+  () => [jobIdRef.value, canWithdraw.value] as const,
+  async ([id, can]) => {
+    overrun.value = null;
+    if (!can || !id) return;
+    try {
+      const status = await ordersApi.overrunReleaseStatus(String(id));
+      if (id === jobIdRef.value) overrun.value = status;
+    } catch {
+      overrun.value = null;
+    }
+  },
+  { immediate: true },
+);
 
 const openWithdraw = () => {
   moreOpen.value = false;
@@ -289,8 +422,89 @@ const isCancelled = computed(() => statusUpper.value === 'CANCELLED');
 const isPaid = computed(() => String(job.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
 const hasBeforePhoto = computed(() => beforePhotoUploaded.value || beforeEvidences.value.length > 0);
 const hasAfterPhoto = computed(() => afterPhotoUploaded.value || afterEvidences.value.length > 0);
+const canRecoverFixedPriceRepair = computed(() => isFixedPriceOrder.value && statusUpper.value === 'EN_ROUTE' &&
+  gpsCheckedIn.value && hasBeforePhoto.value && !pendingEvidenceUpload.value && uploadingPhase.value === null);
 const quotationRejected = computed(() => String(job.value?.quotation?.status ?? '').toLowerCase() === 'rejected');
 const isRepairing = computed(() => statusUpper.value === 'UNDER_REPAIR' || statusUpper.value === 'IN_PROGRESS');
+const completionBlockers = computed(() => {
+  if (!isRepairing.value || completionRequested.value) return [] as string[];
+  const blockers: string[] = [];
+  if (completionPartsReadFailed.value || completionPartRequests.value === null) {
+    blockers.push('Chưa tải được trạng thái linh kiện. Thử tải lại trước khi hoàn thành.');
+    return blockers;
+  }
+  const quotation = job.value?.quotation;
+  const quoteStatus = String(quotation?.status ?? '').toLowerCase();
+  const quoteApproved = quoteStatus === 'approved' || quoteStatus === 'accepted';
+  if (['draft', 'pending', 'sent'].includes(quoteStatus)) blockers.push('Báo giá đang chờ khách quyết định.');
+  if (additionalCosts.value.some(cost => cost.status === 'PENDING_APPROVAL')) blockers.push('Chi phí phát sinh đang chờ khách duyệt.');
+
+  const requests = completionPartRequests.value;
+  if (requests.some(request => request.status === 'received' && request.items.some(item => item.partSource === 'fixhome' && item.usageStatus !== 'used' && item.usageStatus !== 'returned'))) {
+    blockers.push('Còn linh kiện đã nhận chưa ghi nhận đã dùng hoặc hoàn trả.');
+  }
+
+  if (quotation && quoteApproved) {
+    const quoteItems = quotation.items.filter(item => item.type === 'PARTS' && item.partSource === 'fixhome');
+    if (quoteItems.length) {
+      const approvedQuantities = new Map<string, number>();
+      let hasUnmatchedQuoteItem = false;
+      for (const item of quoteItems) {
+        if (!item.partCatalogId || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+          hasUnmatchedQuoteItem = true;
+          continue;
+        }
+        approvedQuantities.set(item.partCatalogId, (approvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+      }
+
+      // PRE_REPAIR stock and a QUOTATION request linked to this quote share the
+      // same approved quantity pool in Backend's completion check.
+      const resolvedQuantities = new Map<string, number>();
+      const usedQuantities = new Map<string, number>();
+      const quoteRequests = requests.filter(request =>
+        request.status === 'received' || request.status === 'completed'
+      ).filter(request => request.requestType === 'pre_repair' ||
+        (request.requestType === 'quotation' && request.quotationId === quotation.id && !request.additionalCostId));
+      for (const request of quoteRequests) {
+        for (const item of request.items) {
+          if (item.partSource !== 'fixhome' || !item.partCatalogId ||
+            (item.usageStatus !== 'used' && item.usageStatus !== 'returned')) continue;
+          resolvedQuantities.set(item.partCatalogId, (resolvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+          if (item.usageStatus === 'used') {
+            usedQuantities.set(item.partCatalogId, (usedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+          }
+        }
+      }
+
+      const hasUnresolvedQuantity = [...approvedQuantities].some(([catalogId, quantity]) =>
+        (resolvedQuantities.get(catalogId) ?? 0) < quantity ||
+        (usedQuantities.get(catalogId) ?? 0) > quantity
+      );
+      if (hasUnmatchedQuoteItem || hasUnresolvedQuantity) {
+        blockers.push('Lượng linh kiện FixHome đã nhận và ghi nhận dùng hoặc hoàn trả chưa khớp báo giá.');
+      }
+    }
+  }
+
+  const approvedRequests: Array<{ type: 'additional'; id: string; label: string; catalogIds: string[] }> = [];
+  for (const cost of additionalCosts.value.filter(row => row.status === 'APPROVED')) {
+    const items = cost.items.filter(item => item.type !== 'LABOR' && item.partSource === 'fixhome');
+    if (items.length) approvedRequests.push({ type: 'additional', id: cost.id, label: 'chi phí phát sinh', catalogIds: items.map(item => item.partCatalogId).filter((id): id is string => !!id) });
+  }
+  for (const approved of approvedRequests) {
+    const request = requests.find(row => row.requestType === approved.type && row.additionalCostId === approved.id);
+    const linkedItems = request?.items.filter(item => item.partSource === 'fixhome' &&
+      (approved.catalogIds.length === 0 || approved.catalogIds.includes(item.partCatalogId ?? '')));
+    if (!request || request.status !== 'received' || !request.receivedAt || !linkedItems?.length ||
+      approved.catalogIds.some(catalogId => !linkedItems.some(item => item.partCatalogId === catalogId))) {
+      blockers.push(`Linh kiện FixHome theo ${approved.label} cần được nhận bằng QR.`);
+    } else if (linkedItems.some(item => item.usageStatus !== 'used' && item.usageStatus !== 'returned')) {
+      blockers.push(`Ghi nhận đã dùng hoặc hoàn trả linh kiện FixHome theo ${approved.label}.`);
+    }
+  }
+  return [...new Set(blockers)];
+});
+const canRequestCompletion = computed(() => hasAfterPhoto.value && completionBlockers.value.length === 0 && !actionLoading.value);
 
 // Five steps; the page shows the current one and lists all of them only on "Xem thêm".
 const currentStepNumber = computed<1 | 2 | 3 | 4 | 5>(() => {
@@ -329,7 +543,7 @@ const QUOTATION_STATUS: Record<string, string> = {
 
 /** Show the quotation form while there is none, it was refused, or the technician reopens it. */
 const showQuotationForm = computed(
-  () => currentStepNumber.value === 3 && !isFixedPriceOrder.value && (!quotationSubmitted.value || quotationRejected.value || editingQuotation.value),
+  () => currentStepNumber.value === 3 && !isFixedPriceOrder.value && !quoteEditorDismissed.value && (!quotationSubmitted.value || quotationRejected.value || editingQuotation.value),
 );
 /** The payment step asks how the customer pays until a cash declaration exists. */
 const showPaymentChoice = computed(
@@ -402,24 +616,24 @@ const nowStep = computed<NowStep | null>(() => {
     if (!hasAfterPhoto.value) {
       return {
         title: 'Đang sửa chữa',
-        hint: 'Sửa xong, chụp ảnh máy để hoàn thành.',
+        hint: statusUpper.value !== 'UNDER_REPAIR' ? 'Chỉ có thể gửi ảnh sau sửa khi đơn đang ở bước sửa chữa.' : remainingEvidenceSlots.value > 0 ? 'Chụp ảnh sau sửa, sau đó gửi yêu cầu hoàn thành.' : 'Đã đạt giới hạn 20 ảnh của đơn.',
         action: {
-          label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Hoàn thành (chụp ảnh sau sửa)',
+          label: uploadingPhase.value === 'AFTER' ? 'Đang tải ảnh…' : 'Chụp ảnh sau sửa',
           run: () => openCamera('after'),
           icon: Camera,
-          disabled: actionLoading.value,
+          disabled: !canAddAfterPhoto.value,
           loading: uploadingPhase.value === 'AFTER',
         },
       };
     }
     return {
       title: 'Sẵn sàng hoàn thành',
-      hint: 'Đã có ảnh sau sửa.',
+      hint: completionBlockers.value[0] ?? 'Đã có ảnh sau sửa. Kiểm tra lại rồi gửi hoàn thành.',
       action: {
-        label: 'Hoàn thành',
+        label: 'Gửi hoàn thành',
         run: handleCompleteOrder,
         icon: ShieldCheck,
-        disabled: actionLoading.value,
+        disabled: !canRequestCompletion.value,
         loading: actionLoading.value,
       },
     };
@@ -453,13 +667,14 @@ const nowStep = computed<NowStep | null>(() => {
       };
     }
     if (isFixedPriceOrder.value) {
+      const recoveryAction = canRecoverFixedPriceRepair.value;
       return {
         title: 'Chờ chuyển sang sửa chữa',
         hint: 'Giá cố định, không cần báo giá.',
         action: {
-          label: 'Tải lại trạng thái',
-          run: () => loadJob(jobId, { silent: true }),
-          icon: RefreshCw,
+          label: recoveryAction ? 'Hoàn tất ảnh trước, bắt đầu sửa' : 'Tải lại trạng thái',
+          run: recoveryAction ? startFixedPriceRepairFromBefore : () => loadJob(jobId, { silent: true }),
+          icon: recoveryAction ? CheckCircle2 : RefreshCw,
           disabled: actionLoading.value,
           loading: actionLoading.value,
         },
@@ -473,8 +688,19 @@ const nowStep = computed<NowStep | null>(() => {
           label: 'Gửi báo giá cho khách duyệt',
           run: handleSubmitQuotation,
           icon: FileText,
-          disabled: !beforePhotoUploaded.value || actionLoading.value,
+          disabled: !beforePhotoUploaded.value || actionLoading.value || !quotationValid.value,
           loading: actionLoading.value,
+        },
+      };
+    }
+    if (!quotationSubmitted.value || quotationRejected.value) {
+      return {
+        title: quotationRejected.value ? 'Khách từ chối báo giá' : 'Tạo báo giá cho khách',
+        hint: 'Có thể mở lại bản nháp khi cần.',
+        action: {
+          label: quotationRejected.value ? 'Chỉnh sửa báo giá' : 'Tạo báo giá',
+          run: () => { quoteEditorDismissed.value = false; editingQuotation.value = quotationRejected.value; },
+          icon: FileText,
         },
       };
     }
@@ -512,7 +738,7 @@ const nowStep = computed<NowStep | null>(() => {
     hint: departOpen ? undefined : `Được xuất phát từ ${vnDateTimeString(job.value.departAvailableAt!)}.`,
     action: {
       label: 'Bắt đầu di chuyển',
-      run: handleEnRoute,
+      run: openDepartureChoice,
       icon: Navigation,
       disabled: actionLoading.value || !departOpen,
       loading: actionLoading.value,
@@ -532,7 +758,7 @@ const openReport = () => {
 };
 
 async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
-  if (!evidence) return;
+  if (!evidence || !canDeleteEvidence(evidence)) return;
   if (!window.confirm('Xoá ảnh này?')) return;
   actionLoading.value = true;
   try {
@@ -553,22 +779,32 @@ async function handleDeleteEvidence(evidence?: EvidenceRecord | null) {
 }
 
 async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
-  if (files.length === 0) return false;
+  if (files.length === 0 || files.length > remainingEvidenceSlots.value) return false;
+  if (phase === 'BEFORE' && (!canAddBeforePhoto.value || statusUpper.value !== 'EN_ROUTE')) return false;
+  if (phase === 'AFTER' && !canAddAfterPhoto.value) return false;
   let saved = false;
+  let uploaded = 0;
   actionLoading.value = true;
   uploadingPhase.value = phase;
   try {
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
         throw new Error('Chỉ nhận ảnh JPEG, PNG hoặc WebP dưới 10 MB.');
       }
-      await ordersApi.uploadEvidence(jobId, { phase, file });
+      const deferAutoStart = phase === 'BEFORE' ? index < files.length - 1 : undefined;
+      await ordersApi.uploadEvidence(jobId, { phase, file, ...(deferAutoStart === undefined ? {} : { deferAutoStart }) });
+      uploaded += 1;
     }
     saved = true;
+    pendingEvidenceUpload.value = null;
     if (phase === 'CHECKIN_FACE') faceUploaded.value = true;
     await loadJob(jobId, { silent: true });
     notifySuccess(files.length > 1 ? `Đã lưu ${files.length} ảnh.` : 'Đã lưu ảnh.');
   } catch (err: unknown) {
+    if (phase !== 'CHECKIN_FACE' && uploaded < files.length) {
+      pendingEvidenceUpload.value = { phase, files: files.slice(uploaded) };
+      if (uploaded > 0) await loadJob(jobId, { silent: true });
+    }
     notifyError(userFacingError(err, 'Chưa lưu được ảnh. Vui lòng chụp lại.'));
   } finally {
     actionLoading.value = false;
@@ -578,10 +814,20 @@ async function uploadSelectedEvidence(phase: EvidencePhase, files: File[]) {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
+  if (showAcPartPicker.value && e.key === 'Tab') {
+    const controls = partPickerDialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)');
+    const first = controls?.[0];
+    const last = controls?.[controls.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (cameraPurpose.value) return; // the camera closes itself on Escape
-  if (previewModalUrl.value) previewModalUrl.value = null;
+  if (showAcPartPicker.value) showAcPartPicker.value = false;
+  else if (previewModalUrl.value) previewModalUrl.value = null;
   else if (moreOpen.value) moreOpen.value = false;
+  else if (departureChoiceOpen.value) departureChoiceOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
   else if (replacementOpen.value && !replacementSending.value) replacementOpen.value = false;
 };
@@ -599,6 +845,10 @@ interface TechnicianJobBundle {
   settlement: CashSettlementRecord;
   /** Read only once the repair started; undefined keeps what is shown. */
   costs?: AdditionalCostRecord[];
+  /** The full parts lifecycle is read even while its detail section is collapsed. */
+  partRequests?: PartRequest[];
+  partRequestsReadFailed?: boolean;
+  invoice?: Record<string, unknown> | null;
   /** Read only for a completed job; undefined keeps what is shown. */
   review?: Review | null;
 }
@@ -653,6 +903,22 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
     data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
       ? touched('additional_cost', 'part') ? await ordersApi.getAdditionalCosts(id) : kept?.costs
       : undefined;
+  let partRequests: PartRequest[] | undefined = kept?.partRequests;
+  let partRequestsReadFailed = kept?.partRequestsReadFailed ?? false;
+  if (data.status === 'UNDER_REPAIR' || data.status === 'IN_PROGRESS' || data.status === 'COMPLETED') {
+    if (touched('part', 'additional_cost', 'order', 'status') || partRequests === undefined || partRequestsReadFailed) {
+      try {
+        partRequests = await partRequestsApi.getByOrderId(id);
+        partRequestsReadFailed = false;
+      } catch {
+        partRequests = undefined;
+        partRequestsReadFailed = true;
+      }
+    }
+  } else {
+    partRequests = undefined;
+    partRequestsReadFailed = false;
+  }
   let review: Review | null | undefined = all ? undefined : kept?.review;
   if (data.status === 'COMPLETED' && (all || review === undefined)) {
     try {
@@ -661,7 +927,11 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
       review = null;
     }
   }
-  return { historical: null, job: data, evidences, booking, settlement, costs, review };
+  let invoice = kept?.invoice;
+  if (touched('invoice', 'cash', 'status')) {
+    try { invoice = await ordersApi.getInvoice(id); } catch { /* Keep the last confirmed invoice; no fabricated final total. */ }
+  }
+  return { historical: null, job: data, evidences, booking, settlement, costs, partRequests, partRequestsReadFailed, review, invoice };
 }
 
 const jobQuery = useCachedQuery({
@@ -687,6 +957,7 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   if (!data) return;
   historicalJob.value = null;
   job.value = data;
+  if (bundle.invoice !== undefined) jobInvoice.value = bundle.invoice;
   isEnRoute.value = data.status !== 'ACCEPTED';
   gpsCheckedIn.value = !!data.arrivalVerified;
   if (data.status === 'EN_ROUTE' && !data.arrivalVerified) startLocationPing();
@@ -706,6 +977,9 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   cashSettlementStatus.value = (settlement?.status as typeof cashSettlementStatus.value) || null;
   if (settlement) hasCashPayment.value = 'YES';
   if (bundle.costs) additionalCosts.value = bundle.costs;
+  if (bundle.partRequests !== undefined) completionPartRequests.value = bundle.partRequests;
+  else if (bundle.partRequestsReadFailed) completionPartRequests.value = null;
+  completionPartsReadFailed.value = !!bundle.partRequestsReadFailed;
   if (bundle.review !== undefined) customerReview.value = bundle.review;
 }
 
@@ -722,15 +996,8 @@ const loading = computed(() => jobQuery.query.data.value === undefined && jobQue
 const loadFailed = computed(
   () => !!jobQuery.error.value && jobQuery.query.data.value === undefined && !job.value && !historicalJob.value,
 );
-// A failed re-read keeps the job on screen with a short line.
-watch(
-  () => jobQuery.query.errorUpdatedAt.value,
-  () => {
-    if (jobQuery.query.error.value && (job.value || historicalJob.value)) {
-      notifyError('Chưa cập nhật được công việc. Vui lòng thử lại.');
-    }
-  },
-);
+// Background cached reads can fail without invalidating the last verified job.
+// Only explicitly initiated mutations report their own errors, at their source.
 
 /**
  * PO 18/10/2026: what the customer or the manager does (approving the quote, an
@@ -768,9 +1035,11 @@ watch(jobIdRef, (id) => {
   stopLiveOrder = onOrderChange(id, (event) => void liveRefresh(id, event.kinds));
 });
 const stopResync = onResync(() => void liveRefresh(jobIdRef.value, undefined));
+const stopOfflineOrder = whileOffline(() => void liveRefresh(jobIdRef.value, undefined), 20_000);
 onUnmounted(() => {
   stopLiveOrder();
   stopResync();
+  stopOfflineOrder();
 });
 
 onMounted(() => {
@@ -796,6 +1065,25 @@ watch(
   () => String(route.params.id ?? ''),
   (nextId, previousId) => {
     if (!nextId || nextId === previousId) return;
+    quotationItems.value = [];
+    receivedRequests.value = [];
+    completionPartRequests.value = null;
+    completionPartsReadFailed.value = false;
+    pendingEvidenceUpload.value = null;
+    jobInvoice.value = null;
+    stockCatalog.value = new Map();
+    quoteStockError.value = '';
+    quoteStockLoading.value = false;
+    suggestedStockIds.clear();
+    ++stockReadVersion;
+    actionLoading.value = false;
+    editingQuotation.value = false;
+    quoteEditorDismissed.value = false;
+    quoteLaborWarranty.value = '';
+    showAcPartPicker.value = false;
+    showAdditionalCostForm.value = false;
+    pendingPartsUsage.value = 0;
+    pendingPartsReturns.value = 0;
     jobId = nextId;
     bookingReadThisVisit = false;
     bookingForMedia.value = null;
@@ -835,7 +1123,7 @@ const partsTotal = () =>
 const addItem = (type: 'LABOR' | 'PARTS') => {
   quotationItems.value.push({
     type,
-    description: type === 'LABOR' ? 'Hạng mục công kỹ thuật' : 'Tên linh kiện thay thế',
+    description: '',
     quantity: 1,
     unitPrice: 0,
     ...(type === 'PARTS' ? { partSource: 'technician' as const, partWarrantyOption: 'no_warranty' as const } : {}),
@@ -844,6 +1132,7 @@ const addItem = (type: 'LABOR' | 'PARTS') => {
 
 const removeItem = (idx: number) => {
   quotationItems.value.splice(idx, 1);
+  if (!quotationItems.value.length) quoteEditorDismissed.value = true;
 };
 
 let locationPing: ReturnType<typeof setInterval> | null = null;
@@ -907,14 +1196,21 @@ const handleEnRoute = async () => {
     await ordersApi.enRoute(jobId);
     cache.markChanged(affectedBy.orderChange);
     isEnRoute.value = true;
-    if (job.value) job.value.status = 'EN_ROUTE';
+    if (job.value) job.value = { ...job.value, status: 'EN_ROUTE' };
     startLocationPing();
     notifySuccess('Đã báo khách là bạn đang đến.');
+    return true;
   } catch (err) {
     notifyError(userFacingError(err, 'Chưa bắt đầu di chuyển được. Vui lòng thử lại.'));
+    return false;
   } finally {
     actionLoading.value = false;
   }
+};
+
+const chooseStartTravel = async () => {
+  if (actionLoading.value) return;
+  if (await handleEnRoute()) departureChoiceOpen.value = false;
 };
 
 const KM_FORMAT = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -989,24 +1285,37 @@ const handleCheckInWithFace = async (face: File) => {
 };
 
 /** More "before" photos: after check-in and once the face photo is stored (the server refuses earlier). */
-const canAddBeforePhoto = computed(() => gpsCheckedIn.value && hasFacePhoto.value && !actionLoading.value);
+const canAddBeforePhoto = computed(() => statusUpper.value === 'EN_ROUTE' && gpsCheckedIn.value && hasFacePhoto.value && !completionRequested.value && !isCompleted.value && !actionLoading.value && remainingEvidenceSlots.value > 0);
+const canAddAfterPhoto = computed(() => statusUpper.value === 'UNDER_REPAIR' && !completionRequested.value && !isCompleted.value && !actionLoading.value && remainingEvidenceSlots.value > 0);
 const openBeforeCamera = () => {
   if (canAddBeforePhoto.value) openCamera('before');
 };
-// "Hoàn thành": the after photo, then the completion request.
-const handleUploadAfter = async (file: File) => {
-  const hadAfter = afterEvidences.value.length > 0;
-  await uploadSelectedEvidence('AFTER', [file]);
-  if (!hadAfter && afterEvidences.value.length > 0 && !completionRequested.value) await handleCompleteOrder();
+const canDeleteEvidence = (evidence: EvidenceRecord) => {
+  if (!ordersApi.deleteEvidence || completionRequested.value || isCompleted.value || actionLoading.value) return false;
+  const type = String(evidence.type ?? '').toLowerCase();
+  return (type === 'before' && statusUpper.value === 'EN_ROUTE') || (type === 'after' && statusUpper.value === 'UNDER_REPAIR');
+};
+// Uploading evidence and requesting completion are separate actions.
+const handleUploadAfter = async (files: File[]) => {
+  if (!canAddAfterPhoto.value) return;
+  await uploadSelectedEvidence('AFTER', files);
 };
 
-const onCameraCapture = async (file: File) => {
+const onCameraCapture = async (capture: File | File[]) => {
+  const files = Array.isArray(capture) ? capture : [capture];
   const purpose = cameraPurpose.value;
   cameraPurpose.value = null;
-  if (purpose === 'checkin') await handleCheckInWithFace(file);
-  else if (purpose === 'face') await uploadSelectedEvidence('CHECKIN_FACE', [file]);
-  else if (purpose === 'before') await uploadSelectedEvidence('BEFORE', [file]);
-  else if (purpose === 'after') await handleUploadAfter(file);
+  if (purpose === 'checkin' && files[0]) await handleCheckInWithFace(files[0]);
+  else if (purpose === 'face' && files[0]) await uploadSelectedEvidence('CHECKIN_FACE', [files[0]]);
+  else if (purpose === 'before') await uploadSelectedEvidence('BEFORE', files);
+  else if (purpose === 'after') await handleUploadAfter(files);
+};
+
+const retryPendingEvidenceUpload = async () => {
+  const pending = pendingEvidenceUpload.value;
+  if (!pending || actionLoading.value) return;
+  pendingEvidenceUpload.value = null;
+  await uploadSelectedEvidence(pending.phase, pending.files);
 };
 
 watch(
@@ -1019,26 +1328,70 @@ const quoteLaborWarrantyValid = computed(() => {
   return days === '' || (Number.isInteger(days) && days >= 0 && days <= 365);
 });
 
-const handleSubmitQuotation = async () => {
-  if (!quoteLaborWarrantyValid.value) {
-    notifyError('Bảo hành công từ 0 đến 365 ngày.');
-    return;
+watch([showQuotationForm, stockCatalog, receivedRequests], () => {
+  if (!showQuotationForm.value || String(job.value?.quotation?.status).toLowerCase() === 'approved') return;
+  const requests = receivedRequests.value.map(request => ({ ...request, items: request.items.filter(item => !suggestedStockIds.has(item.partCatalogId ?? '')) }));
+  quotationItems.value = suggestReceivedStock(quotationItems.value, requests, stockCatalog.value);
+  for (const request of requests) for (const item of request.items) {
+    if (quotationItems.value.some(line => line.partSource === 'fixhome' && line.partCatalogId === item.partCatalogId)) suggestedStockIds.add(item.partCatalogId!);
   }
+});
+const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
+const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
+  : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
+const proposedParts = computed(() => [
+  ...(job.value?.quotation?.items ?? []).filter(item => item.type === 'PARTS'),
+  ...additionalCosts.value.filter(cost => cost.status === 'APPROVED').flatMap(cost => cost.items.filter(item => item.type !== 'LABOR')),
+]);
+
+const quotationValid = computed(() => !quoteStockError.value && !quoteStockLoading.value && quotationItems.value.length > 0 && quotationItems.value.every(item =>
+  !!item.description.trim() && item.description.length <= 2000 && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 1000 &&
+  Number.isInteger(item.unitPrice) && item.unitPrice >= 0 && item.unitPrice <= 999999999 &&
+  (item.type !== 'PARTS' || item.partSource !== 'fixhome' || !!item.partCatalogId),
+) && quoteLaborWarrantyValid.value);
+const cancelQuotation = () => {
+  quoteEditorDismissed.value = true;
+  quotationItems.value = [];
+  suggestedStockIds.clear();
+  quoteLaborWarranty.value = job.value?.laborWarrantyDays ?? '';
+  editingQuotation.value = false;
+  showAcPartPicker.value = false;
+};
+const changeQuotePartSource = (index: number) => {
+  const item = quotationItems.value[index];
+  if (!item) return;
+  const source = item.partSource;
+  quotationItems.value[index] = { type: 'PARTS', partSource: source, description: '', quantity: item.quantity, unitPrice: 0,
+    ...(source === 'technician' ? { partWarrantyOption: 'no_warranty' as const } : {}) };
+  if (source === 'fixhome') openQuotationPartPicker(index);
+};
+const openQuotationPartPicker = (index: number | null = null) => {
+  openAcPartPicker(index);
+  partPickerPurpose.value = 'quotation';
+};
+
+const handleSubmitQuotation = async () => {
+  if (actionLoading.value || !quotationValid.value || String(job.value?.quotation?.status).toLowerCase() === 'approved') return;
+  const submittedJobId = jobIdRef.value;
   actionLoading.value = true;
   try {
     const days = quoteLaborWarranty.value;
     await ordersApi.submitQuotation(
-      jobId,
+      submittedJobId,
       quotationItems.value.map((item) => (item.type === 'LABOR' && days !== '' ? { ...item, warrantyDays: days } : item)),
     );
+    if (submittedJobId !== jobIdRef.value) return;
     quotationSubmitted.value = true;
     editingQuotation.value = false;
+    quoteEditorDismissed.value = false;
+    quotationItems.value = [];
     notifySuccess('Đã gửi báo giá, chờ khách duyệt.');
     await loadJob(jobId, { silent: true });
   } catch (err) {
+    if (submittedJobId !== jobIdRef.value) return;
     notifyError(userFacingError(err, 'Chưa gửi được báo giá. Kiểm tra nội dung và giá rồi thử lại.'));
   } finally {
-    actionLoading.value = false;
+    if (submittedJobId === jobIdRef.value) actionLoading.value = false;
   }
 };
 
@@ -1049,12 +1402,21 @@ const acPartsTotal = () =>
 
 // FixHome parts catalog picker for additional costs
 const showAcPartPicker = ref(false);
-const acPartSearchQuery = ref('');
-const acPartActiveCategory = ref('ALL');
-const isAcPartSearching = ref(false);
-const acCatalogParts = ref<FixHomePart[]>([]);
-const acPartSearchResults = ref<FixHomePart[]>([]);
-const acPartsMap = ref<Map<string, FixHomePart>>(new Map());
+const partPickerDialog = ref<HTMLElement | null>(null);
+let pickerPreviousFocus: HTMLElement | null = null;
+watch(showAcPartPicker, async open => {
+  if (open) {
+    pickerPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    partPickerDialog.value?.querySelector<HTMLInputElement>('input')?.focus();
+  } else {
+    pickerPreviousFocus?.focus();
+  }
+});
+const acPicker = usePartsCatalogPicker();
+const { query: acPartSearchQuery, category: acPartActiveCategory, loading: isAcPartSearching,
+  items: acPartSearchResults, partsMap: acPartsMap, total: acCatalogTotal, error: acCatalogError, hasMore: acHasMore } = acPicker;
+const partPickerPurpose = ref<'quotation' | 'additional'>('additional');
 const acTargetItemIndex = ref<number | null>(null);
 
 const AC_CATEGORY_TABS = [
@@ -1075,70 +1437,13 @@ const formatAcWarrantyBadge = (days?: number | null): string => {
   return 'BH chính hãng';
 };
 
-const loadAcCatalog = async () => {
-  if (acCatalogParts.value.length > 0) return;
-  try {
-    const res = await partsCatalogApi.getCatalog({ limit: 100 });
-    acCatalogParts.value = res.data;
-    acPartSearchResults.value = res.data;
-    for (const p of res.data) {
-      acPartsMap.value.set(p.id, p);
-    }
-  } catch {
-    // The picker shows its empty state; typing searches again.
-  }
-};
-
-let acSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-const onAcPartSearchInput = () => {
-  if (acSearchDebounceTimer) clearTimeout(acSearchDebounceTimer);
-  acSearchDebounceTimer = setTimeout(() => {
-    void executeAcPartSearch();
-  }, 250);
-};
-
-const selectAcCategory = (catVal: string) => {
-  acPartActiveCategory.value = catVal;
-  void executeAcPartSearch();
-};
-
-const clearAcSearch = () => {
-  acPartSearchQuery.value = '';
-  acPartActiveCategory.value = 'ALL';
-  acPartSearchResults.value = acCatalogParts.value;
-};
-
-const executeAcPartSearch = async () => {
-  const query = acPartSearchQuery.value.trim();
-  const cat = acPartActiveCategory.value !== 'ALL' ? acPartActiveCategory.value : '';
-  const effective = query || cat;
-
-  if (!effective) {
-    acPartSearchResults.value = acCatalogParts.value;
-    return;
-  }
-
-  try {
-    isAcPartSearching.value = true;
-    const res = await partsCatalogApi.getCatalog({ search: effective, limit: 50 });
-    acPartSearchResults.value = res.data;
-    for (const p of res.data) {
-      acPartsMap.value.set(p.id, p);
-    }
-  } catch {
-    acPartSearchResults.value = acCatalogParts.value.filter(
-      (p) =>
-        p.name.toLowerCase().includes(effective.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(effective.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(effective.toLowerCase())),
-    );
-  } finally {
-    isAcPartSearching.value = false;
-  }
-};
+const loadAcCatalog = () => acPicker.load();
+const onAcPartSearchInput = acPicker.searchSoon;
+const selectAcCategory = acPicker.selectCategory;
+const clearAcSearch = acPicker.clear;
 
 const openAcPartPicker = (replaceIndex: number | null = null) => {
+  partPickerPurpose.value = 'additional';
   acTargetItemIndex.value = replaceIndex;
   showAcPartPicker.value = true;
   acPartSearchQuery.value = '';
@@ -1161,16 +1466,14 @@ const selectPartForAc = (part: FixHomePart) => {
     partSku: part.sku ?? undefined,
   };
 
-  if (acItems.value.length === 1 && !acItems.value[0].description.trim() && acItems.value[0].unitPrice === 0) {
-    acItems.value = [newItem];
-  } else if (acTargetItemIndex.value !== null && acItems.value[acTargetItemIndex.value]) {
-    acItems.value[acTargetItemIndex.value] = {
-      ...acItems.value[acTargetItemIndex.value],
-      ...newItem,
-      quantity: acItems.value[acTargetItemIndex.value].quantity || 1,
-    };
+  const target = partPickerPurpose.value === 'quotation' ? quotationItems : acItems;
+  const index = acTargetItemIndex.value;
+  if (index !== null && target.value[index]) {
+    target.value[index] = { ...newItem, quantity: target.value[index].quantity || 1 };
+  } else if (target.value.length === 1 && !target.value[0].description.trim() && target.value[0].unitPrice === 0) {
+    target.value = [newItem];
   } else {
-    acItems.value.push(newItem);
+    target.value.push(newItem);
   }
 
   showAcPartPicker.value = false;
@@ -1328,6 +1631,23 @@ const sendReplacement = async () => {
 };
 
 const handleCompleteOrder = async () => {
+  if (!hasAfterPhoto.value) {
+    notifyError('Chụp ít nhất một ảnh sau sửa trước khi gửi hoàn thành.');
+    return;
+  }
+  if (completionBlockers.value.length > 0) {
+    if (completionBlockers.value.some(message => message.includes('linh kiện'))) sections.parts = true;
+    notifyError(completionBlockers.value[0]);
+    return;
+  }
+  if (!canRequestCompletion.value) return;
+  if (pendingPartsUsage.value > 0) {
+    sections.parts = true;
+    notifyError('Ghi nhận linh kiện đã dùng hoặc hoàn trả trước khi hoàn thành.');
+    await nextTick();
+    document.getElementById('job-parts')?.scrollIntoView?.({ block: 'center' });
+    return;
+  }
   actionLoading.value = true;
   try {
     await ordersApi.completeRepair(jobId, { completionNote: 'Hoàn tất công việc' });
@@ -1337,6 +1657,14 @@ const handleCompleteOrder = async () => {
     notifyError(userFacingError(err, 'Chưa hoàn thành được. Kiểm tra ảnh sau sửa và chi phí đang chờ duyệt.'));
   } finally {
     actionLoading.value = false;
+  }
+};
+
+const retryCompletionData = async () => {
+  try {
+    await loadJob(jobId, { silent: true });
+  } catch {
+    notifyError('Chưa tải lại được trạng thái báo giá, chi phí và linh kiện. Vui lòng thử lại.');
   }
 };
 
@@ -1386,6 +1714,30 @@ const refreshJobStatus = async () => {
   }
 };
 
+const startFixedPriceRepairFromBefore = async () => {
+  if (!canRecoverFixedPriceRepair.value || actionLoading.value) return;
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    try {
+      await ordersApi.startRepair(jobId);
+    } catch (err: unknown) {
+      notifyError(userFacingError(err, 'Chưa bắt đầu được sửa chữa. Vui lòng thử lại.'));
+      try { await loadJob(jobId, { silent: true }); } catch { /* Keep the start-repair error visible. */ }
+      return;
+    }
+
+    try {
+      await loadJob(jobId, { silent: true });
+      notifySuccess('Đã bắt đầu sửa chữa.');
+    } catch (err: unknown) {
+      notifyError(userFacingError(err, 'Đã gửi yêu cầu bắt đầu sửa chữa nhưng chưa tải lại được trạng thái.'));
+    }
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
 const toggleMore = async () => {
   moreOpen.value = !moreOpen.value;
   if (moreOpen.value) {
@@ -1396,7 +1748,7 @@ const toggleMore = async () => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
+  <div class="max-w-6xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
     <a
       href="/tech/jobs"
       class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
@@ -1444,7 +1796,7 @@ const toggleMore = async () => {
       <!-- 1. Header: title, code, status, one overflow menu -->
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">Chi tiết công việc</h1>
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
             <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
             <FhStatusPill :status="job.status" />
@@ -1493,6 +1845,17 @@ const toggleMore = async () => {
               <Flag :size="16" class="text-ink-500" />
               Báo cáo vấn đề
             </button>
+            <button
+              v-if="overrun?.eligible"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              data-testid="overrun-release-menu"
+              @click="moreOpen = false; showOverrunModal = true"
+            >
+              <Calendar :size="16" class="text-ink-500" />
+              Không kịp tới, nhả đơn
+            </button>
             <template v-if="canWithdraw">
               <div class="my-1.5 border-t border-ink-100" />
               <button
@@ -1511,6 +1874,50 @@ const toggleMore = async () => {
 
 
 
+      <section
+        v-if="overrun?.eligible"
+        class="rounded-2xl bg-white border border-brand-200 p-4 flex flex-wrap items-center gap-3"
+        data-testid="overrun-release-card"
+      >
+        <div class="min-w-0 flex-[1_1_16rem]">
+          <p class="font-semibold text-ink-900">Đơn #{{ overrun.currentOrderCode }} chưa xong?</p>
+          <p class="text-sm text-ink-600 mt-1">Bạn có thể nhả đơn này để khách chọn thợ khác. Không bị trừ điểm uy tín.</p>
+        </div>
+        <FhButton variant="secondary" @click="showOverrunModal = true">Nhả đơn</FhButton>
+      </section>
+
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
+      <section data-testid="job-cost-summary" class="order-2 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
+        <h2 class="font-semibold text-ink-900">{{ financialStage }}</h2>
+        <dl class="flex flex-wrap gap-x-6 gap-y-2">
+          <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
+          <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
+          <div><dt class="text-ink-600">Tổng cộng</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
+        </dl>
+        <details v-if="proposedParts.length || receivedRequests.length" class="border-t border-ink-100 pt-3 text-xs">
+          <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
+        <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
+          <h3 class="font-medium text-ink-800">Dự kiến/đã duyệt</h3>
+          <ul class="mt-1 space-y-1 text-ink-700">
+            <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2">
+              <span>{{ item.description }} · {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
+              <FhMoney :amount="item.lineTotal" />
+            </li>
+          </ul>
+        </div>
+        <div v-if="receivedRequests.length" data-testid="actual-parts" class="border-t border-ink-100 pt-3">
+          <h3 class="font-medium text-ink-800">Thực tế đã dùng/không dùng</h3>
+          <ul class="mt-1 space-y-1 text-ink-700">
+            <li v-for="request in receivedRequests" :key="request.id">
+              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
+              <ul class="pl-3"><li v-for="item in request.items" :key="item.id">{{ item.partNameSnapshot }} × {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}</li></ul>
+            </li>
+          </ul>
+          <button type="button" class="mt-2 min-h-10 text-brand-700 underline" @click="revealParts">Mở quản lý linh kiện</button>
+        </div>
+        </details>
+      </section>
+
       <!-- Result of the last action -->
       <div
         v-if="actionMessage"
@@ -1527,31 +1934,86 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <FhCard v-if="nowStep" data-testid="job-now">
+      <div v-if="isCompleted && isPaid && pendingPartsReturns > 0" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
+        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ quản lý xác nhận nhận trả' : 'Chờ hoàn trả linh kiện' }}</p>
+        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện cần khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đang chờ quản lý nhận</span>.</p>
+        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ quản lý nhận và xác nhận thực tế.</p>
+        <p v-else>Còn {{ pendingPartsReturns }} linh kiện chưa hoàn tất trả kho. Mở chi tiết để kiểm tra.</p>
+        <button type="button" class="mt-2 font-semibold underline" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
+      </div>
+      <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
         <p v-if="nowStep.hint" class="mt-1 text-sm text-ink-600 text-pretty">{{ nowStep.hint }}</p>
+        <p v-if="isRepairing && !completionRequested && pendingPartsUsage > 0" class="mt-3 text-sm text-warning-800" role="status" data-testid="pending-parts-usage">
+          Còn {{ pendingPartsUsage }} hạng mục linh kiện đã nhận chưa ghi nhận sử dụng.
+          <button type="button" class="font-semibold underline" @click="revealParts">Ghi nhận đã dùng hoặc hoàn trả</button>
+        </p>
+        <div v-if="isRepairing && !completionRequested && completionBlockers.length" class="mt-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" role="status" data-testid="completion-blockers">
+          <p class="font-semibold">Cần xử lý trước khi gửi hoàn thành</p>
+          <ul class="mt-1 list-disc pl-5 space-y-1">
+            <li v-for="blocker in completionBlockers" :key="blocker">{{ blocker }}</li>
+          </ul>
+          <button v-if="completionPartsReadFailed" type="button" class="mt-2 h-10 font-semibold underline" :disabled="actionLoading" @click="retryCompletionData">Thử tải lại</button>
+          <button v-else-if="completionBlockers.some(message => message.includes('linh kiện'))" type="button" class="mt-2 h-10 font-semibold underline" @click="revealParts">Mở yêu cầu linh kiện</button>
+        </div>
+        <div v-if="pendingEvidenceUpload" class="mt-3 rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800" role="alert" data-testid="pending-evidence-upload">
+          <p>Chưa tải hết ảnh. Còn {{ pendingEvidenceUpload.files.length }} ảnh chưa gửi.</p>
+          <div class="mt-2 flex flex-wrap gap-3">
+            <button type="button" class="h-10 font-semibold underline" :disabled="actionLoading" @click="retryPendingEvidenceUpload">Thử gửi lại</button>
+            <button type="button" class="h-10 font-medium underline" :disabled="actionLoading" @click="pendingEvidenceUpload = null">Bỏ ảnh còn lại</button>
+          </div>
+        </div>
         <p v-if="replacementSent" class="mt-3 text-sm text-success-700" role="status">
           Đã báo quản lý dịch vụ để đổi thợ. Quản lý sẽ liên hệ bạn.
         </p>
 
         <!-- Quotation form (inspection jobs, after check-in with a photo) -->
         <div v-if="showQuotationForm" class="mt-4 space-y-3" data-testid="quotation-form">
+          <p v-if="quoteStockLoading" role="status" class="text-sm text-ink-600">Đang đối chiếu linh kiện đã nhận…</p>
+          <p v-if="quoteStockError" data-testid="quote-stock-error" role="alert" class="text-sm text-danger-700">
+            {{ quoteStockError }} <button type="button" class="font-semibold underline" @click="retryQuoteStock">Thử lại</button>
+          </p>
+          <details class="text-xs text-ink-600 rounded-lg bg-ink-50 px-3 py-2">
+            <summary class="cursor-pointer font-medium text-brand-700"><Info :size="15" aria-hidden="true" class="inline-block align-middle mr-1" /> Thông tin báo giá</summary>
+            <p class="mt-2">Linh kiện FixHome theo đơn giá và bảo hành danh mục. Điều chỉnh số lượng trước khi gửi. Linh kiện FixHome nhận qua QR, linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
+          </details>
           <div
             v-for="(item, idx) in quotationItems"
             :key="idx"
-            class="flex flex-wrap sm:flex-nowrap items-center gap-2"
+            class="flex flex-wrap items-center gap-2"
           >
-            <span class="shrink-0 w-20 text-xs font-medium text-ink-500 whitespace-nowrap">{{ item.type === 'LABOR' ? 'Tiền công' : 'Linh kiện' }}</span>
+            <span v-if="item.type === 'LABOR'" class="shrink-0 w-20 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
+            <select v-else v-model="item.partSource" aria-label="Nguồn linh kiện" class="h-10 max-w-full rounded-xl border border-ink-200 text-sm" @change="changeQuotePartSource(idx)">
+              <option value="fixhome">Linh kiện FixHome</option>
+              <option value="technician">Kỹ thuật viên tự có</option>
+            </select>
+            <button v-if="item.type === 'PARTS' && item.partSource === 'fixhome'" type="button" class="min-w-0 flex-1 h-10 px-3 rounded-xl border border-ink-200 text-sm text-left truncate" @click="openQuotationPartPicker(idx)">
+              {{ item.partCatalogId ? item.description : 'Chọn linh kiện FixHome' }}
+            </button>
             <input
+              v-else
               v-model="item.description"
               type="text"
               placeholder="Mô tả công việc hoặc tên linh kiện..."
               :aria-label="item.type === 'LABOR' ? 'Mô tả công việc' : 'Tên linh kiện'"
               class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
             />
+
+            <details v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs shrink-0">
+              <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-brand-700 font-semibold min-h-10 inline-flex items-center" aria-label="Chi tiết bảo hành linh kiện"><Info :size="16" aria-hidden="true" /></summary>
+              <p>Bảo hành {{ item.warrantyDays }} ngày</p>
+            </details>
+            <input
+              v-if="item.type === 'PARTS'"
+              v-model.number="item.quantity"
+              type="number" min="1" step="1" aria-label="Số lượng linh kiện"
+              class="w-16 h-10 px-2 rounded-xl border border-ink-200 text-sm"
+            />
             <input
               v-model.number="item.unitPrice"
+              :disabled="item.type === 'PARTS' && item.partSource === 'fixhome'"
               type="number"
+              min="0"
               step="10000"
               inputmode="numeric"
               placeholder="Đơn giá"
@@ -1574,7 +2036,9 @@ const toggleMore = async () => {
             <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addItem('PARTS')">
               <Plus :size="16" /> Thêm linh kiện
             </button>
+            <button type="button" class="h-10 px-3 rounded-xl text-sm text-ink-600" @click="cancelQuotation">Hủy báo giá</button>
           </div>
+          <p v-if="!quotationItems.length" class="text-sm text-ink-500">Chưa có hạng mục báo giá. Thêm tiền công hoặc linh kiện để gửi.</p>
           <label class="flex items-center justify-between gap-3 text-sm" data-testid="quote-labor-warranty">
             <span class="font-medium text-ink-700">Bảo hành công</span>
             <span class="relative w-32 shrink-0">
@@ -1795,7 +2259,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 3. Customer and job: secondary actions appear once, here -->
-      <FhCard data-testid="job-summary">
+      <FhCard data-testid="job-summary" class="order-3 lg:col-start-1">
         <div class="space-y-3">
           <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p class="text-base font-semibold text-ink-900">{{ job.customerName }}</p>
@@ -1885,7 +2349,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
-      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details">
+      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details" class="order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->
           <section>
@@ -1915,7 +2379,7 @@ const toggleMore = async () => {
                       <img :src="img.mediaUrl" :alt="`Ảnh trước sửa ${idx + 1}`" class="w-full h-full object-cover" />
                     </button>
                     <button
-                      v-if="!isCompleted"
+                      v-if="canDeleteEvidence(img)"
                       type="button"
                       class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
                       aria-label="Xoá ảnh này"
@@ -1926,12 +2390,12 @@ const toggleMore = async () => {
                     </button>
                   </div>
                   <div
-                    v-if="!isCompleted"
+                    v-if="!isCompleted && !completionRequested"
                     class="w-20 h-20 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors"
                     :class="!canAddBeforePhoto ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
                     data-testid="before-evidence-picker"
                     role="button"
-                    :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : 'Chụp thêm ảnh trước khi sửa'"
+                    :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : statusUpper !== 'EN_ROUTE' ? 'Không thể thêm ảnh trước sửa ở trạng thái hiện tại' : remainingEvidenceSlots === 0 ? 'Đã đạt giới hạn 20 ảnh' : 'Chụp thêm ảnh trước khi sửa'"
                     :tabindex="canAddBeforePhoto ? 0 : -1"
                     :aria-disabled="!canAddBeforePhoto"
                     @click="openBeforeCamera"
@@ -1956,7 +2420,7 @@ const toggleMore = async () => {
                       <img :src="img.mediaUrl" :alt="`Ảnh sau sửa ${idx + 1}`" class="w-full h-full object-cover" />
                     </button>
                     <button
-                      v-if="!isCompleted"
+                      v-if="canDeleteEvidence(img)"
                       type="button"
                       class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
                       aria-label="Xoá ảnh này"
@@ -1967,17 +2431,17 @@ const toggleMore = async () => {
                     </button>
                   </div>
                   <button
-                    v-if="!isCompleted"
+                    v-if="!isCompleted && !completionRequested"
                     type="button"
                     class="w-20 h-20 rounded-xl border border-dashed border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 flex flex-col items-center justify-center gap-1 text-xs font-medium disabled:opacity-50"
                     aria-label="Chụp thêm ảnh sau khi sửa"
                     data-testid="after-evidence-picker"
-                    :disabled="actionLoading"
+                    :disabled="!canAddAfterPhoto"
                     @click="openCamera('after')"
                   >
                     <Loader2 v-if="uploadingPhase === 'AFTER'" :size="18" class="animate-spin" />
                     <Camera v-else :size="18" />
-                    Thêm
+                    {{ remainingEvidenceSlots === 0 ? 'Đủ 20 ảnh' : 'Thêm' }}
                   </button>
                 </div>
               </div>
@@ -2002,10 +2466,18 @@ const toggleMore = async () => {
             </button>
             <div v-show="sections.parts" id="job-parts" class="px-5 sm:px-6 pb-5">
               <TechnicianPartsSection
+                ref="partsSection"
+                :key="job.id"
                 :order-id="job.id"
                 :order-status="job.status"
                 @parts-updated="loadJob(jobId, { silent: true })"
+                @return-summary="returnsToDeclare = $event.needDeclare; returnsAwaitingManager = $event.awaitingManager"
                 @summary="onPartsSummary"
+                @requests="onPartRequests"
+                @requests-loading="quoteStockLoading = true"
+                @requests-error="quoteStockLoading = false; quoteStockError = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.'"
+                @pending-usage="pendingPartsUsage = $event"
+                @pending-returns="pendingPartsReturns = $event"
               />
             </div>
           </section>
@@ -2093,9 +2565,7 @@ const toggleMore = async () => {
                       class="flex-1 min-w-0 flex items-center justify-between gap-2"
                     >
                       <span class="min-w-0 truncate font-medium text-ink-900" :title="item.warrantyPolicy || item.description">{{ item.description }}</span>
-                      <span class="shrink-0 inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap">
-                        <ShieldCheck :size="12" /> {{ formatAcWarrantyBadge(item.warrantyDays) }}
-                      </span>
+
                       <button type="button" class="shrink-0 h-10 px-2 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap" @click="openAcPartPicker(idx)">
                         Đổi
                       </button>
@@ -2264,6 +2734,7 @@ const toggleMore = async () => {
         role="technician"
         inline
       />
+      </div>
     </template>
 
     <!-- Phones: the one primary action sits above the tab bar, always in reach -->
@@ -2293,6 +2764,35 @@ const toggleMore = async () => {
       :media="bookingMedia"
       @close="showAiSummary = false"
     />
+
+    <div
+      v-if="departureChoiceOpen"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      data-testid="departure-pre-repair-dialog"
+      @click.self="departureChoiceOpen = false"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="departure-choice-title"
+        aria-describedby="departure-choice-description"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="departure-choice-title" class="text-lg font-bold text-ink-900">Đặt linh kiện trước?</h2>
+            <p id="departure-choice-description" class="mt-1 text-sm text-ink-600">Bạn có thể gửi yêu cầu linh kiện FixHome trước khi bắt đầu di chuyển.</p>
+          </div>
+          <button type="button" class="h-10 w-10 -m-1 rounded-lg text-ink-500 hover:bg-ink-50" aria-label="Đóng" @click="departureChoiceOpen = false">
+            <X :size="18" class="mx-auto" />
+          </button>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" @click="choosePreRepairParts">Có, đặt linh kiện</FhButton>
+          <FhButton variant="primary" :loading="actionLoading" :disabled="actionLoading" @click="chooseStartTravel">Không, bắt đầu di chuyển</FhButton>
+        </div>
+      </section>
+    </div>
 
     <!-- Dialog: cancel the order -->
     <div
@@ -2343,6 +2843,31 @@ const toggleMore = async () => {
         <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <FhButton variant="secondary" :disabled="withdrawing" @click="showWithdrawModal = false">Giữ lại đơn</FhButton>
           <FhButton variant="danger" :loading="withdrawing" :disabled="withdrawing" @click="handleWithdrawOrder">Huỷ đơn sửa chữa</FhButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dialog: release an upcoming order while still on another job -->
+    <div
+      v-if="showOverrunModal"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
+      @click.self="!releasing && (showOverrunModal = false)"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="overrun-release-title"
+        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+        data-testid="overrun-release-dialog"
+      >
+        <div>
+          <h3 id="overrun-release-title" class="text-lg font-bold text-ink-900">Nhả đơn này?</h3>
+          <p class="mt-1 text-sm text-ink-600">Bạn đang làm đơn #{{ overrun?.currentOrderCode }} chưa xong. Khách được báo và chọn thợ khác, giá và lịch hẹn giữ nguyên. Không trừ điểm uy tín.</p>
+        </div>
+        <p v-if="releaseError" role="alert" class="text-sm text-danger-700">{{ releaseError }}</p>
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <FhButton variant="secondary" :disabled="releasing" @click="showOverrunModal = false">Giữ lại đơn</FhButton>
+          <FhButton :loading="releasing" :disabled="releasing" data-testid="overrun-release-confirm" @click="handleReleaseForOverrun">Nhả đơn</FhButton>
         </div>
       </div>
     </div>
@@ -2417,6 +2942,8 @@ const toggleMore = async () => {
       v-if="cameraPurpose"
       :mode="cameraMode"
       :title="CAMERA_TITLES[cameraPurpose]"
+      :multiple="cameraMultiple"
+      :max-shots="remainingEvidenceSlots"
       @capture="onCameraCapture"
       @close="cameraPurpose = null"
     />
@@ -2427,7 +2954,7 @@ const toggleMore = async () => {
       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
       @click.self="showAcPartPicker = false"
     >
-      <div role="dialog" aria-modal="true" aria-labelledby="part-picker-title" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-2xl max-h-[85dvh] flex flex-col overflow-hidden">
+      <div ref="partPickerDialog" role="dialog" aria-modal="true" aria-labelledby="part-picker-title" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-2xl max-h-[85dvh] flex flex-col overflow-hidden">
         <div class="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
           <h3 id="part-picker-title" class="text-lg font-bold text-ink-900">Chọn linh kiện FixHome</h3>
           <button type="button" class="w-10 h-10 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center" aria-label="Đóng" @click="showAcPartPicker = false">
@@ -2470,9 +2997,13 @@ const toggleMore = async () => {
           </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto border-t border-ink-100">
+        <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain border-t border-ink-100">
           <div v-if="isAcPartSearching" class="p-5 space-y-3" aria-busy="true" aria-label="Đang tìm linh kiện">
             <FhSkeleton height="48px" rounded="md" :count="3" />
+          </div>
+          <div v-else-if="acCatalogError" class="p-5 text-sm text-danger-700" role="alert">
+            Chưa tải được danh mục linh kiện.
+            <button type="button" class="ml-2 underline" @click="acPicker.retry">Thử lại</button>
           </div>
           <p v-else-if="acPartSearchResults.length === 0" class="p-8 text-center text-sm text-ink-500">
             Không tìm thấy linh kiện phù hợp.
@@ -2495,6 +3026,10 @@ const toggleMore = async () => {
               </button>
             </li>
           </ul>
+          <div v-if="!isAcPartSearching && !acCatalogError" class="p-3 text-center text-sm text-ink-600">
+            {{ acPartSearchResults.length }} / {{ acCatalogTotal }} linh kiện
+            <button v-if="acHasMore" type="button" class="ml-2 text-brand-700 underline" @click="acPicker.loadMore">Tải thêm</button>
+          </div>
         </div>
       </div>
     </div>

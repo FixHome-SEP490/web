@@ -17,10 +17,9 @@ import {
   ShieldCheck,
   X,
   Wrench,
-  Tag,
   Clock,
-  Layers,
   Undo2,
+  Info,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
 import { userFacingError } from '../utils/user-facing-error';
@@ -32,7 +31,8 @@ import {
   type PartCustodyReturnRecord,
   type FulfillmentMethod,
 } from '../api/part-requests.api';
-import { partsCatalogApi } from '../api/parts-catalog.api';
+import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
+import { onOrderChange, whileOffline } from '../services/live-updates';
 import type { FixHomePart } from '../api/admin-parts.api';
 import { vnDateTimeString } from '../utils/vn-time';
 
@@ -44,22 +44,33 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'parts-updated'): void;
+  (e: 'requests', requests: PartRequest[]): void;
+  (e: 'requests-loading'): void;
+  (e: 'requests-error'): void;
   /** How many requests exist and whether one waits for the technician (QR handover, used/returned). */
   (e: 'summary', value: { count: number; needsAction: boolean }): void;
+  (e: 'pending-usage', count: number): void;
+  (e: 'pending-returns', count: number): void;
+  (e: 'return-summary', value: { needDeclare: number; awaitingManager: number }): void;
 }>();
 
 const loading = ref(true);
 const actionLoading = ref(false);
 const actionError = ref<string | null>(null);
+const backgroundSyncError = ref(false);
 const actionSuccess = ref<string | null>(null);
 
 const partRequests = ref<PartRequest[]>([]);
-const catalogParts = ref<FixHomePart[]>([]);
-const searchResults = ref<FixHomePart[]>([]);
-const partsMap = ref<Map<string, FixHomePart>>(new Map());
-
+const partRequestsLoaded = ref(false);
+const requestDetailOverrides = ref<Record<string, boolean>>({});
+const isRequestExpanded = (id: string, group: string) => requestDetailOverrides.value[id] ?? group === 'action';
+const toggleRequestExpanded = (id: string, group: string) => { requestDetailOverrides.value[id] = !isRequestExpanded(id, group); };
+const picker = usePartsCatalogPicker();
+const { items: searchResults, total: catalogTotal, loading: isSearchingCatalog, error: catalogError,
+  query: searchQuery, category: activeCategory, partsMap, hasMore: catalogHasMore } = picker;
 // Form state for creating pre-repair parts request
 const showCreateForm = ref(false);
+const preRepairFormRequested = ref(false);
 const fulfillmentMethod = ref<FulfillmentMethod>('pickup');
 const requestReason = ref('');
 
@@ -77,13 +88,13 @@ export interface SelectedPartItem {
 const selectedItems = ref<SelectedPartItem[]>([]);
 
 // Search & Part Picker state
-const searchQuery = ref('');
-const activeCategory = ref('ALL');
-const isSearchingCatalog = ref(false);
 const showSearchDropdown = ref(false);
 const selectedPart = ref<FixHomePart | null>(null);
 const selectedQuantity = ref(1);
 const itemNote = ref('');
+const partialUsageDraft = ref<Record<string, number>>({});
+const partialUsageEditing = ref<Record<string, boolean>>({});
+const partialUsageSaving = ref<string | null>(null);
 const searchContainerRef = ref<HTMLElement | null>(null);
 
 const CATEGORY_TABS = [
@@ -133,6 +144,14 @@ const pendingDeclaredQty = (record: PartCustodyReturnRecord) =>
 const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
   Math.max(0, record.outstandingQty - pendingDeclaredQty(record));
 
+// Usage RETURNED is a decision during repair; warehouse acceptance is physical.
+const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) => {
+  const record = returnFor(item.id);
+  return item.partSource === 'fixhome' && (item.usageStatus === 'returned' ||
+    (item.usageStatus === 'used' && !!record?.usageRecorded && record.usedQty < record.issuedQty) ||
+    ['COMPLETED', 'CANCELLED'].includes(props.orderStatus.toUpperCase()));
+};
+
 const declareValid = computed(() => {
   const target = declareTarget.value;
   const quantity = Number(declareQty.value);
@@ -147,14 +166,62 @@ const hasActivePreRepair = computed(() =>
   ),
 );
 
-const needsAction = computed(() =>
-  partRequests.value.some(
-    (pr) =>
-      (pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') ||
-      (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering') ||
-      (isUnderRepair.value && pr.status === 'received' && pr.items.some((item) => !item.usageStatus || item.usageStatus === 'pending')),
-  ),
-);
+function openPreRepairFormWhenReady() {
+  if (!preRepairFormRequested.value || loading.value) return;
+  showCreateForm.value = partRequestsLoaded.value && isAccepted.value && !hasActivePreRepair.value;
+  preRepairFormRequested.value = false;
+}
+
+function openPreRepairForm() {
+  preRepairFormRequested.value = true;
+  openPreRepairFormWhenReady();
+}
+
+watch([loading, partRequestsLoaded, isAccepted, hasActivePreRepair], openPreRepairFormWhenReady);
+defineExpose({ openPreRepairForm });
+
+const requestGroups = computed(() => {
+  const groups = [
+    { key: 'action', label: 'Cần thao tác', requests: [] as PartRequest[] },
+    { key: 'waiting', label: 'Đang chờ', requests: [] as PartRequest[] },
+    { key: 'resolved', label: 'Đã xử lý', requests: [] as PartRequest[] },
+  ];
+  for (const request of partRequests.value) {
+    const handoverReady = (request.fulfillmentMethod === 'pickup' && request.status === 'ready') ||
+      (request.fulfillmentMethod === 'delivery' && request.status === 'delivering');
+    const usagePending = request.items.some(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending'));
+    const returnNeedsDeclaration = request.items.some(item => {
+      const record = returnFor(item.id);
+      return !!record && canDeclareMoreQty(record) > 0 && canDeclareReturn(request, item);
+    });
+    const waitingForManager = request.items.some(item => {
+      const record = returnFor(item.id);
+      return !!record && pendingDeclaredQty(record) > 0;
+    });
+    const resolved = request.status === 'cancelled' || request.status === 'completed' ||
+      (request.status === 'received' && !usagePending);
+    const group = returnNeedsDeclaration ? groups[0] : waitingForManager ? groups[1]
+      : resolved ? groups[2] : handoverReady || (isUnderRepair.value && request.status === 'received' && usagePending)
+      ? groups[0] : groups[1];
+    group.requests.push(request);
+  }
+  return groups.filter(group => group.requests.length > 0);
+});
+const needsAction = computed(() => (requestGroups.value.find(group => group.key === 'action')?.requests.length ?? 0) > 0);
+const pendingUsage = computed(() => partRequests.value
+  .filter(pr => pr.status === 'received')
+  .reduce((count, pr) => count + pr.items.filter(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending')).length, 0));
+watch(pendingUsage, count => emit('pending-usage', count), { immediate: true });
+const returnSummary = computed(() => returnRecords.value.reduce((totals, record) => {
+  const declaredWaiting = Math.max(0, record.declaredQty - record.managerAcceptedQty);
+  totals.needDeclare += Math.max(0, record.outstandingQty - declaredWaiting);
+  totals.awaitingManager += Math.min(record.outstandingQty, declaredWaiting);
+  return totals;
+}, { needDeclare: 0, awaitingManager: 0 }));
+watch(returnSummary, totals => {
+  emit('pending-returns', totals.needDeclare + totals.awaitingManager);
+  emit('return-summary', totals);
+}, { immediate: true });
 watch(
   () => [partRequests.value.length, needsAction.value] as const,
   ([count, action]) => emit('summary', { count, needsAction: action }),
@@ -172,6 +239,18 @@ const activePartEstimatedPrice = computed(() => {
   if (!selectedPart.value) return 0;
   return selectedPart.value.sellingPrice * Math.max(1, selectedQuantity.value);
 });
+
+// Catalog descriptions arrive as pipe-separated field snapshots, not prose.
+// Render only provided fields, with labels, instead of showing raw delimiters.
+const selectedPartDetails = computed(() => (selectedPart.value?.description ?? '')
+  .split('|').map(part => part.trim()).filter(Boolean)
+  .map(part => {
+    const separator = part.indexOf(':');
+    return separator > 0
+      ? { label: part.slice(0, separator).trim(), value: part.slice(separator + 1).trim() }
+      : { label: 'Mô tả', value: part };
+  }).filter(field => field.value && !/^bảo hành$/i.test(field.label)));
+
 
 // Format warranty helpers
 const formatWarrantyDays = (days?: number | null, policy?: string | null): string => {
@@ -208,15 +287,31 @@ const getPartWarrantyFromHistory = (item: { partCatalogId?: string | null }) => 
 };
 
 // Data loading
-const loadPartRequests = async () => {
+let requestsLoadVersion = 0;
+const loadPartRequests = async (quiet = false) => {
+  const version = ++requestsLoadVersion;
   try {
-    loading.value = true;
-    partRequests.value = await partRequestsApi.getByOrderId(props.orderId);
+    if (!quiet) {
+      loading.value = true;
+      emit('requests-loading');
+    }
+    const records = await partRequestsApi.getByOrderId(props.orderId);
+    if (version !== requestsLoadVersion) return;
+    partRequests.value = records;
+    partRequestsLoaded.value = true;
+    backgroundSyncError.value = false;
+    emit('requests', records);
   } catch (err: unknown) {
-    actionError.value =
-      userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
+    if (version !== requestsLoadVersion) return;
+    if (quiet) backgroundSyncError.value = true;
+    else {
+      emit('requests-error');
+      actionError.value = userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
+    }
   } finally {
-    loading.value = false;
+    // The latest response, including a quiet realtime update, owns the spinner.
+    // Otherwise an initial load superseded by realtime remains stuck until F5.
+    if (version === requestsLoadVersion) loading.value = false;
   }
 };
 
@@ -227,6 +322,11 @@ const loadReturns = async () => {
     if (version !== returnsLoadVersion) return;
     returnRecords.value = records;
     returnsLoadError.value = false;
+    for (const record of records) {
+      if (partialUsageDraft.value[record.partRequestItemId] === undefined) {
+        partialUsageDraft.value[record.partRequestItemId] = record.usedQty;
+      }
+    }
     // An open form must use the same fresh version and quantity limit as the list.
     const target = declareTarget.value;
     if (target) {
@@ -240,79 +340,17 @@ const loadReturns = async () => {
     }
   } catch (err: unknown) {
     if (version !== returnsLoadVersion) return;
-    returnRecords.value = [];
     declareTarget.value = null;
     // Feature flag off or no access to the route: hide the return UI and keep
     // the existing QR / usage / part-request flow untouched.
     returnsLoadError.value = !isPartReturnsUnavailableError(err);
+    if (!returnsLoadError.value) returnRecords.value = [];
   }
 };
 
-const loadCatalog = async () => {
-  try {
-    const res = await partsCatalogApi.getCatalog({ limit: 100 });
-    catalogParts.value = res.data;
-    searchResults.value = res.data;
-    for (const p of res.data) {
-      partsMap.value.set(p.id, p);
-    }
-  } catch {
-    // Ignore catalog load errors
-  }
-};
-
-// Search handling with debouncing
-let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-const onSearchInput = () => {
-  showSearchDropdown.value = true;
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = setTimeout(() => {
-    void executeSearch();
-  }, 250);
-};
-
-const selectCategory = (categoryVal: string) => {
-  activeCategory.value = categoryVal;
-  showSearchDropdown.value = true;
-  void executeSearch();
-};
-
-const clearSearch = () => {
-  searchQuery.value = '';
-  activeCategory.value = 'ALL';
-  searchResults.value = catalogParts.value;
-};
-
-const executeSearch = async () => {
-  const query = searchQuery.value.trim();
-  const cat = activeCategory.value !== 'ALL' ? activeCategory.value : '';
-  const effectiveSearch = query || cat;
-
-  if (!effectiveSearch) {
-    searchResults.value = catalogParts.value;
-    return;
-  }
-
-  try {
-    isSearchingCatalog.value = true;
-    const res = await partsCatalogApi.getCatalog({ search: effectiveSearch, limit: 50 });
-    searchResults.value = res.data;
-    for (const p of res.data) {
-      partsMap.value.set(p.id, p);
-    }
-  } catch {
-    // Local fallback search
-    searchResults.value = catalogParts.value.filter(
-      (p) =>
-        p.name.toLowerCase().includes(effectiveSearch.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(effectiveSearch.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(effectiveSearch.toLowerCase())),
-    );
-  } finally {
-    isSearchingCatalog.value = false;
-  }
-};
+const onSearchInput = () => { showSearchDropdown.value = true; picker.searchSoon(); };
+const selectCategory = (value: string) => { showSearchDropdown.value = true; picker.selectCategory(value); };
+const clearSearch = () => { showSearchDropdown.value = true; picker.clear(); };
 
 const selectPartForForm = (part: FixHomePart) => {
   selectedPart.value = part;
@@ -374,7 +412,9 @@ const decreaseQuantity = (index: number) => {
 };
 
 const handleClickOutside = (e: MouseEvent) => {
-  if (searchContainerRef.value && !searchContainerRef.value.contains(e.target as Node)) {
+  // Loading can remove the clicked result/load-more button before bubbling ends.
+  // The event path still records that the click originated inside this picker.
+  if (searchContainerRef.value && !e.composedPath().includes(searchContainerRef.value)) {
     showSearchDropdown.value = false;
   }
 };
@@ -383,12 +423,53 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside);
   void loadPartRequests();
   void loadReturns();
-  void loadCatalog();
+  void picker.load();
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  stopLiveParts();
+  stopOfflineParts();
+  ++returnsLoadVersion;
+  ++requestsLoadVersion;
+});
+
+let refreshRunning = false;
+let refreshQueued = false;
+async function refreshParts() {
+  if (refreshRunning) { refreshQueued = true; return; }
+  refreshRunning = true;
+  do {
+    refreshQueued = false;
+    await Promise.all([loadPartRequests(partRequestsLoaded.value), loadReturns()]);
+  } while (refreshQueued);
+  refreshRunning = false;
+}
+let stopLiveParts = onOrderChange(props.orderId, event => {
+  if (!event.kinds || event.kinds.some(kind => ['part', 'quotation', 'invoice', 'cash', 'status', 'additional_cost'].includes(kind))) void refreshParts();
+});
+const stopOfflineParts = whileOffline(() => void refreshParts(), 20_000);
+watch(() => props.orderId, id => {
+  stopLiveParts();
+  ++requestsLoadVersion;
+  ++returnsLoadVersion;
+    partRequests.value = [];
+    partRequestsLoaded.value = false;
+    loading.value = true;
+    partialUsageDraft.value = {};
+    partialUsageEditing.value = {};
+    returnRecords.value = [];
+    requestDetailOverrides.value = {};
+  declareTarget.value = null;
+  selectedItems.value = [];
+  showCreateForm.value = false;
+  actionError.value = null;
+  actionSuccess.value = null;
+  backgroundSyncError.value = false;
+  stopLiveParts = onOrderChange(id, event => {
+    if (!event.kinds || event.kinds.some(kind => ['part', 'quotation', 'invoice', 'cash', 'status', 'additional_cost'].includes(kind))) void refreshParts();
+  });
+  void refreshParts();
 });
 
 const submitPreRepairRequest = async () => {
@@ -417,7 +498,7 @@ const submitPreRepairRequest = async () => {
     selectedItems.value = [];
     requestReason.value = '';
     clearSelectedPart();
-    await loadPartRequests();
+    await loadPartRequests(partRequestsLoaded.value);
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
@@ -429,7 +510,7 @@ const submitPreRepairRequest = async () => {
 
 const handleReceiveQr = async (requestId: string) => {
   if (!qrTokenInput.value.trim()) {
-    actionError.value = 'Vui lòng nhập hoặc quét mã QR token!';
+    actionError.value = 'Vui lòng nhập mã bàn giao.';
     return;
   }
 
@@ -445,7 +526,7 @@ const handleReceiveQr = async (requestId: string) => {
     actionSuccess.value = 'Xác nhận nhận linh kiện thành công! Giờ bạn có thể tiến hành sửa chữa.';
     showQrInput.value = null;
     qrTokenInput.value = '';
-    await Promise.all([loadPartRequests(), loadReturns()]);
+    await Promise.all([loadPartRequests(partRequestsLoaded.value), loadReturns()]);
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
@@ -460,22 +541,77 @@ const handleUpdateUsage = async (
   itemId: string,
   status: 'used' | 'returned',
 ) => {
+  const request = partRequests.value.find(row => row.id === requestId);
+  if (!isUnderRepair.value || request?.status !== 'received' || props.disabled || actionLoading.value) return;
   try {
     actionLoading.value = true;
     actionError.value = null;
 
-    await partRequestsApi.updateItemUsage(requestId, itemId, {
+    const saved = await partRequestsApi.updateItemUsage(requestId, itemId, {
       usageStatus: status,
     });
-
+    // Update only the confirmed row; don't replace the list with skeletons,
+    // refetch the entire order, or move the technician back to the page top.
+    partRequests.value = partRequests.value.map(row => row.id === requestId
+      ? { ...row, items: row.items.map(item => item.id === itemId ? { ...item, ...(saved || {}), usageStatus: saved?.usageStatus ?? status } : item) }
+      : row);
+    emit('requests', partRequests.value);
     actionSuccess.value =
-      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện hoàn trả.';
-    await Promise.all([loadPartRequests(), loadReturns()]);
-    emit('parts-updated');
+      status === 'used' ? 'Đã ghi nhận linh kiện đã dùng.' : 'Đã ghi nhận linh kiện không sử dụng.';
+    // Warehouse return quantities are separate, refreshed without hiding rows.
+    void loadReturns();
   } catch (err: unknown) {
     actionError.value =
       userFacingError(err, 'Không thể cập nhật trạng thái linh kiện.');
   } finally {
+    actionLoading.value = false;
+  }
+};
+
+/** Record actual used quantity for an enrolled FIXHOME custody line only.
+ * Server validates approval, version, assignment and invoice freeze. */
+const handlePartialUsage = async (requestId: string, itemId: string) => {
+  const row = partRequests.value.find(request => request.id === requestId);
+  const item = row?.items.find(record => record.id === itemId);
+  const custody = returnFor(itemId);
+  if (props.disabled || actionLoading.value || !isUnderRepair.value ||
+      row?.status !== 'received' || item?.partSource !== 'fixhome' || !custody) return;
+  const usedQty = Number(partialUsageDraft.value[itemId]);
+  if (!Number.isInteger(partialUsageDraft.value[itemId]) || usedQty < custody.usedQty ||
+      usedQty > custody.issuedQty - custody.managerAcceptedQty) {
+    actionError.value = 'Số lượng đã dùng không hợp lệ.';
+    return;
+  }
+  if (usedQty === custody.usedQty && custody.usageRecorded) return;
+  try {
+    actionLoading.value = true;
+    partialUsageSaving.value = itemId;
+    actionError.value = null;
+    actionSuccess.value = null;
+    const status = usedQty > 0 ? 'used' : 'returned';
+    const saved = await partRequestsApi.updateItemUsage(requestId, itemId, {
+      usageStatus: status,
+      usedQty,
+      expectedVersion: custody.version,
+      idempotencyKey: createIdempotencyKey('parts-used'),
+    });
+    partRequests.value = partRequests.value.map(request => request.id === requestId
+      ? { ...request, items: request.items.map(line => line.id === itemId
+        ? { ...line, ...saved, usageStatus: saved?.usageStatus ?? status } : line) }
+      : request);
+    emit('requests', partRequests.value);
+    actionSuccess.value = `Đã ghi nhận dùng ${usedQty}, cần trả ${custody.issuedQty - usedQty} linh kiện.`;
+    partialUsageEditing.value[itemId] = false;
+    delete partialUsageDraft.value[itemId];
+    await loadReturns();
+  } catch (err: unknown) {
+    // On 409 or any uncertain write, refresh the authoritative version and
+    // reset the input to the newly confirmed quantity.
+    delete partialUsageDraft.value[itemId];
+    await loadReturns();
+    actionError.value = userFacingError(err, 'Không thể lưu số lượng. Vui lòng kiểm tra và thử lại.');
+  } finally {
+    partialUsageSaving.value = null;
     actionLoading.value = false;
   }
 };
@@ -486,6 +622,9 @@ const openDeclareReturn = (
   itemName: string,
   record: PartCustodyReturnRecord,
 ) => {
+  const request = partRequests.value.find(row => row.id === requestId);
+  const item = request?.items.find(row => row.id === itemId);
+  if (!request || !item || !canDeclareReturn(request, item) || props.disabled) return;
   const maxQty = canDeclareMoreQty(record);
   if (maxQty < 1 || declareSubmitting.value) return;
   declareTarget.value = { requestId, itemId, itemName, maxQty, version: record.version };
@@ -496,7 +635,10 @@ const openDeclareReturn = (
 
 const submitDeclareReturn = async () => {
   const target = declareTarget.value;
-  if (!target || declareSubmitting.value) return;
+  if (!target || declareSubmitting.value || props.disabled || returnsLoadError.value) return;
+  const request = partRequests.value.find(row => row.id === target.requestId);
+  const item = request?.items.find(row => row.id === target.itemId);
+  if (!request || !item || !canDeclareReturn(request, item)) { declareTarget.value = null; return; }
   const quantity = Number(declareQty.value);
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > target.maxQty) {
     actionError.value = `Số lượng trả phải là số nguyên từ 1 đến ${target.maxQty}.`;
@@ -515,8 +657,9 @@ const submitDeclareReturn = async () => {
     declareTarget.value = null;
     actionSuccess.value =
       'Đã gửi khai trả linh kiện. Quản lý dịch vụ sẽ nhận và xác nhận số lượng thực tế.';
-    await Promise.all([loadPartRequests(), loadReturns()]);
-    emit('parts-updated');
+    // A declaration only changes custody records, not the part request or invoice.
+    // Avoid a full page refresh and retain the open declaration context.
+    await loadReturns();
   } catch (err: unknown) {
     actionError.value = userFacingError(
       err,
@@ -539,13 +682,13 @@ const formatStatusText = (status: string) => {
     case 'delivering':
       return 'Đang giao hàng';
     case 'received':
-      return 'Đã nhận linh kiện';
+      return 'Đã nhận bàn giao qua QR';
     case 'completed':
       return 'Đã hoàn thành';
     case 'cancelled':
       return 'Đã huỷ';
     default:
-      return status;
+      return 'Trạng thái chưa xác định';
   }
 };
 
@@ -588,6 +731,7 @@ const getStatusBadgeClass = (status: string) => {
         <span>{{ actionError }}</span>
       </div>
 
+      <p v-if="backgroundSyncError" role="status" class="text-xs text-ink-500">Chưa đồng bộ được linh kiện mới nhất. <button type="button" class="font-semibold text-brand-700 underline" @click="refreshParts">Thử lại</button></p>
       <div
         v-if="returnsLoadError"
         class="p-2.5 rounded-lg bg-ink-50 border border-ink-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-600"
@@ -655,7 +799,7 @@ const getStatusBadgeClass = (status: string) => {
                 </h5>
               </div>
               <span class="text-[11px] font-medium text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-full">
-                {{ catalogParts.length > 0 ? `${catalogParts.length}+ linh kiện` : 'Đang tải…' }}
+                {{ isSearchingCatalog ? 'Đang tải…' : `${catalogTotal} linh kiện` }}
               </span>
             </div>
 
@@ -706,24 +850,27 @@ const getStatusBadgeClass = (status: string) => {
               <!-- Search results popover -->
               <div
                 v-if="showSearchDropdown"
-                class="absolute left-0 right-0 top-full mt-1.5 z-30 bg-white rounded-xl shadow-xl border border-ink-200 max-h-72 overflow-y-auto divide-y divide-ink-100"
+                class="mt-1.5 bg-white rounded-xl border border-ink-200 max-h-72 overflow-y-auto overscroll-contain divide-y divide-ink-100"
+                @keydown.esc="showSearchDropdown = false"
               >
                 <div v-if="isSearchingCatalog" class="p-3 text-center text-ink-400 text-xs">
                   <Loader2 :size="15" class="animate-spin inline mr-1 text-brand-600" /> Đang tìm kiếm trong kho linh kiện...
                 </div>
 
                 <div
-                  v-else-if="searchResults.length === 0"
+                  v-else-if="!catalogError && searchResults.length === 0"
                   class="p-4 text-center text-ink-500 text-xs space-y-1"
                 >
                   <Package :size="20" class="mx-auto text-ink-300" />
                   <p class="font-medium text-ink-700">Không tìm thấy linh kiện phù hợp</p>
                 </div>
 
-                <div
-                  v-for="part in searchResults"
+                <button
+                  v-for="part in (catalogError || isSearchingCatalog ? [] : searchResults)"
+                  type="button"
+                  data-testid="catalog-result"
                   :key="part.id"
-                  class="p-2.5 hover:bg-brand-50/70 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  class="w-full text-left p-2.5 hover:bg-brand-50/70 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
                   @click="selectPartForForm(part)"
                 >
                   <div class="min-w-0 flex-1">
@@ -757,6 +904,14 @@ const getStatusBadgeClass = (status: string) => {
                       {{ getWarrantyBadge(part.warrantyDays) }}
                     </span>
                   </div>
+                </button>
+                <div v-if="catalogError" class="p-3 text-xs text-danger-700" role="alert">
+                  Chưa tải được danh mục linh kiện.
+                  <button type="button" data-testid="catalog-retry" class="ml-2 underline" @click="picker.retry">Thử lại</button>
+                </div>
+                <div v-else-if="!isSearchingCatalog" class="p-2 text-center text-xs text-ink-600">
+                  {{ searchResults.length }} / {{ catalogTotal }} linh kiện
+                  <button v-if="catalogHasMore" type="button" data-testid="catalog-load-more" class="ml-2 text-brand-700 underline" @click="picker.loadMore">Tải thêm</button>
                 </div>
               </div>
             </div>
@@ -784,9 +939,6 @@ const getStatusBadgeClass = (status: string) => {
                         SKU: {{ selectedPart.sku }}
                       </span>
                     </div>
-                    <p v-if="selectedPart.description" class="text-[11px] text-ink-600 mt-0.5 line-clamp-1">
-                      {{ selectedPart.description }}
-                    </p>
                   </div>
                 </div>
 
@@ -799,45 +951,31 @@ const getStatusBadgeClass = (status: string) => {
                 </button>
               </div>
 
-              <!-- Price & Warranty Spotlight Metrics -->
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <!-- Price block -->
-                <div class="bg-white p-2.5 rounded-lg border border-brand-200/60 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
-                    <Tag :size="12" class="text-brand-600" /> Giá niêm yết FixHome
-                  </span>
-                  <div class="text-base font-bold text-brand-700 font-num">
-                    <FhMoney :amount="selectedPart.sellingPrice" />
-                  </div>
-                </div>
-
-                <!-- Warranty duration block -->
-                <div class="bg-white p-2.5 rounded-lg border border-success-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-success-800 flex items-center gap-1">
-                    <ShieldCheck :size="12" class="text-success-600" /> Thời hạn bảo hành
-                  </span>
-                  <div class="text-xs font-bold text-success-700 flex items-center gap-1">
-                    <span class="whitespace-nowrap text-sm font-bold">
-                      {{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Warranty policy block -->
-                <div class="bg-white p-2.5 rounded-lg border border-ink-200 shadow-xs space-y-0.5">
-                  <span class="text-[10px] font-bold text-ink-500 flex items-center gap-1">
-                    <Clock :size="12" class="text-ink-500" /> Chính sách bảo hành
-                  </span>
-                  <p class="text-[11px] text-ink-700 font-medium line-clamp-2">
-                    {{ selectedPart.warrantyPolicy || 'Bảo hành chính hãng theo chính sách FixHome' }}
-                  </p>
-                </div>
+              <!-- The technician needs price and quantity now. Warranty remains in details. -->
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-brand-200/60 px-3 py-2">
+                <span class="text-xs text-ink-500">Đơn giá</span>
+                <strong class="text-base text-brand-700 font-num"><FhMoney :amount="selectedPart.sellingPrice" /></strong>
               </div>
+              <details class="rounded-lg bg-white border border-ink-200 text-xs text-ink-700">
+                <summary class="min-h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-3 py-2 font-semibold text-brand-700">
+                  <Info :size="16" aria-hidden="true" /> Thông tin linh kiện
+                </summary>
+                <dl class="divide-y divide-ink-100 border-t border-ink-100 px-3">
+                  <div v-for="(field, index) in selectedPartDetails" :key="index" class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                    <dt class="font-medium text-ink-500 break-words">{{ field.label }}</dt>
+                    <dd class="min-w-0 break-words text-ink-900">{{ field.value }}</dd>
+                  </div>
+                  <div class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                    <dt class="font-medium text-ink-500">Bảo hành</dt>
+                    <dd class="min-w-0 break-words text-ink-900">{{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</dd>
+                  </div>
+                </dl>
+              </details>
 
               <!-- Add to Request Action Controls -->
-              <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+              <div class="flex flex-col items-stretch gap-3 pt-1 min-w-0">
                 <!-- Quantity & Total -->
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3 min-w-0">
                   <div class="flex items-center gap-1 bg-white p-1 rounded-lg border border-ink-200">
                     <span class="text-[11px] font-semibold text-ink-600 px-1.5">SL:</span>
                     <button
@@ -873,16 +1011,16 @@ const getStatusBadgeClass = (status: string) => {
                 </div>
 
                 <!-- Note and Add Button -->
-                <div class="flex items-center gap-2 flex-1 sm:max-w-md">
+                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2 w-full min-w-0">
                   <input
                     v-model="itemNote"
                     type="text"
                     placeholder="Ghi chú item (VD: mang sơ cua, thay buồng lạnh)..."
-                    class="flex-1 text-xs rounded border border-ink-300 p-1.5 bg-white text-ink-900 placeholder:text-ink-400"
+                    class="min-w-0 w-full h-10 text-xs rounded-lg border border-ink-300 px-3 bg-white text-ink-900 placeholder:text-ink-400"
                   />
                   <button
                     type="button"
-                    class="px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all shrink-0 cursor-pointer"
+                    class="w-full sm:w-auto min-w-0 min-h-11 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                     @click="addItemToForm"
                   >
                     <Plus :size="14" /> Thêm vào danh sách
@@ -892,104 +1030,36 @@ const getStatusBadgeClass = (status: string) => {
             </div>
           </div>
 
-          <!-- Selected Items Table -->
+          <!-- Compact selected parts: no dense seven-column table on mobile. -->
           <div v-if="selectedItems.length > 0" class="space-y-2">
-            <div class="flex items-center justify-between">
-              <h5 class="font-bold text-ink-900 text-xs flex items-center gap-1.5">
-                <Layers :size="14" class="text-brand-600" />
-                Danh sách linh kiện dự kiến mang theo ({{ selectedItems.length }} loại)
-              </h5>
-              <span class="text-[11px] text-ink-500">
-                Tổng số lượng: <strong class="text-brand-700">{{ selectedTotalQuantity }}</strong>
-              </span>
+            <div class="flex items-center justify-between gap-2 text-sm">
+              <strong class="text-ink-900">Đã chọn {{ selectedItems.length }} loại · {{ selectedTotalQuantity }} cái</strong>
+              <strong class="font-num text-brand-700"><FhMoney :amount="selectedTotalPrice" /></strong>
             </div>
-
-            <div class="border border-ink-200 rounded-xl overflow-hidden shadow-xs bg-white">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-ink-100 text-ink-700 font-semibold border-b border-ink-200">
-                  <tr>
-                    <th class="p-2.5">Linh kiện & Mã SKU</th>
-                    <th class="p-2.5 text-center">Bảo hành</th>
-                    <th class="p-2.5 text-right">Đơn giá niêm yết</th>
-                    <th class="p-2.5 text-center">Số lượng</th>
-                    <th class="p-2.5 text-right">Thành tiền tạm tính</th>
-                    <th class="p-2.5">Ghi chú</th>
-                    <th class="p-2.5 text-center w-10"></th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-ink-100">
-                  <tr v-for="(item, idx) in selectedItems" :key="idx" class="hover:bg-ink-50/70 transition-colors">
-                    <td class="p-2.5">
-                      <div class="font-semibold text-ink-900">{{ item.partName }}</div>
-                      <span v-if="item.sku" class="font-mono text-[10px] text-ink-500">
-                        {{ item.sku }}
-                      </span>
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <span
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
-                        :title="item.warrantyPolicy || undefined"
-                      >
-                        <ShieldCheck :size="11" />
-                        {{ getWarrantyBadge(item.warrantyDays) }}
-                      </span>
-                    </td>
-                    <td class="p-2.5 text-right font-num text-ink-700">
-                      <FhMoney :amount="item.price" />
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <div class="inline-flex items-center gap-1 bg-ink-50 px-1 py-0.5 rounded border border-ink-200">
-                        <button
-                          type="button"
-                          class="p-0.5 hover:bg-ink-200 rounded text-ink-600"
-                          @click="decreaseQuantity(idx)"
-                        >
-                          <Minus :size="11" />
-                        </button>
-                        <span class="w-6 text-center font-bold font-num text-xs">{{ item.quantity }}</span>
-                        <button
-                          type="button"
-                          class="p-0.5 hover:bg-ink-200 rounded text-ink-600"
-                          @click="increaseQuantity(idx)"
-                        >
-                          <Plus :size="11" />
-                        </button>
-                      </div>
-                    </td>
-                    <td class="p-2.5 text-right font-num font-bold text-brand-700">
-                      <FhMoney :amount="item.price * item.quantity" />
-                    </td>
-                    <td class="p-2.5 text-ink-500">
-                      {{ item.note || '-' }}
-                    </td>
-                    <td class="p-2.5 text-center">
-                      <button
-                        type="button"
-                        class="text-danger-600 hover:text-danger-800 p-1 rounded hover:bg-danger-50 transition-colors"
-                        title="Xoá linh kiện"
-                        @click="removeItemFromForm(idx)"
-                      >
-                        <Trash2 :size="14" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-                <!-- Table Footer Summary -->
-                <tfoot class="bg-brand-50/50 border-t border-brand-200 text-xs">
-                  <tr>
-                    <td colspan="4" class="p-2.5 font-bold text-brand-900 text-right">
-                      Tổng giá trị linh kiện dự kiến mang theo:
-                    </td>
-                    <td class="p-2.5 text-right font-num font-bold text-brand-700 text-sm">
-                      <FhMoney :amount="selectedTotalPrice" />
-                    </td>
-                    <td colspan="2" class="p-2.5 text-[11px] text-ink-500 italic">
-                      * Chưa tính vào hoá đơn khách
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            <div class="space-y-2">
+              <div v-for="(item, idx) in selectedItems" :key="item.partCatalogId" class="rounded-xl border border-ink-200 bg-white px-3 py-2.5 space-y-2">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-ink-900">{{ item.partName }}</p>
+                    <p v-if="item.sku" class="text-[11px] text-ink-500 font-mono">{{ item.sku }}</p>
+                  </div>
+                  <button type="button" class="shrink-0 w-10 h-10 inline-flex items-center justify-center text-danger-600 rounded-lg hover:bg-danger-50" aria-label="Xoá linh kiện" @click="removeItemFromForm(idx)"><Trash2 :size="16" /></button>
+                </div>
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                  <div class="inline-flex items-center rounded-lg border border-ink-200 bg-ink-50">
+                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Giảm số lượng ${item.partName}`" @click="decreaseQuantity(idx)"><Minus :size="14" /></button>
+                    <span class="w-7 text-center font-num font-semibold">{{ item.quantity }}</span>
+                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Tăng số lượng ${item.partName}`" @click="increaseQuantity(idx)"><Plus :size="14" /></button>
+                  </div>
+                  <div class="text-right text-xs text-ink-600">
+                    <p><FhMoney :amount="item.price" />/cái</p>
+                    <strong class="font-num text-sm text-brand-700"><FhMoney :amount="item.price * item.quantity" /></strong>
+                  </div>
+                </div>
+                <p v-if="item.note" class="text-xs text-ink-500">{{ item.note }}</p>
+              </div>
             </div>
+            <p class="text-xs text-ink-500">Giá dự kiến · chưa tính vào hóa đơn khách.</p>
           </div>
 
           <!-- Bottom Action Buttons -->
@@ -1018,9 +1088,11 @@ const getStatusBadgeClass = (status: string) => {
       </p>
 
       <div v-else class="space-y-4">
-
+        <section v-for="group in requestGroups" :key="group.key" class="space-y-2.5" :data-testid="`parts-group-${group.key}`">
+          <h4 class="text-xs font-bold uppercase tracking-wide text-ink-500">{{ group.label }} <span class="font-num">· {{ group.requests.length }}</span></h4>
+          <div class="space-y-3">
         <div
-          v-for="pr in partRequests"
+          v-for="pr in group.requests"
           :key="pr.id"
           class="border border-ink-200 rounded-xl bg-white overflow-hidden shadow-xs space-y-3 p-3.5"
         >
@@ -1044,7 +1116,7 @@ const getStatusBadgeClass = (status: string) => {
                 v-else
                 class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
               >
-                Phát sinh khi sửa
+                {{ pr.requestType === 'quotation' ? 'Theo báo giá đã duyệt' : 'Phát sinh khi sửa' }}
               </span>
 
               <span class="text-ink-500 text-[11px] flex items-center gap-1">
@@ -1054,11 +1126,12 @@ const getStatusBadgeClass = (status: string) => {
               </span>
             </div>
 
-            <span class="text-[11px] text-ink-400 font-num">
-              {{ vnDateTimeString(pr.createdAt) }}
-            </span>
+            <button type="button" class="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-brand-700" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
+              {{ isRequestExpanded(pr.id, group.key) ? 'Thu gọn' : 'Chi tiết' }}
+              <span aria-hidden="true">{{ isRequestExpanded(pr.id, group.key) ? '⌃' : '⌄' }}</span>
+            </button>
           </div>
-
+          <div v-show="isRequestExpanded(pr.id, group.key)" class="space-y-3">
           <!-- Reason & Notes -->
           <p v-if="pr.reason" class="text-xs text-ink-700">
             <strong>Lý do:</strong> {{ pr.reason }}
@@ -1100,7 +1173,7 @@ const getStatusBadgeClass = (status: string) => {
                   size="sm"
                   @click="showQrInput = pr.id"
                 >
-                  Nhận linh kiện (Quét QR)
+                  Nhập mã bàn giao
                 </FhButton>
               </div>
             </div>
@@ -1137,131 +1210,79 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- Items list in this request -->
           <div class="space-y-1">
-            <h5 class="font-semibold text-ink-800 text-[11px]">Chi tiết linh kiện:</h5>
-            <div class="border border-ink-200 rounded-lg overflow-hidden">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-ink-50 text-ink-600 font-semibold">
-                  <tr>
-                    <th class="p-2">Linh kiện</th>
-                    <th class="p-2 text-center">Bảo hành</th>
-                    <th class="p-2 text-center">Số lượng</th>
-                    <th class="p-2 text-right">Đơn giá</th>
-                    <th class="p-2 text-right">Thành tiền</th>
-                    <th class="p-2 text-center">Trạng thái sử dụng</th>
-                    <th v-if="requestHasReturns(pr)" class="p-2 text-center">Hoàn trả</th>
-                    <th v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right">Thao tác sau sửa</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-ink-100">
-                  <tr v-for="item in pr.items" :key="item.id" class="hover:bg-ink-50/50">
-                    <td class="p-2 font-medium text-ink-900">
-                      {{ item.partNameSnapshot }}
-                      <span v-if="item.note" class="block text-[10px] text-ink-500 font-normal">
-                        Ghi chú: {{ item.note }}
-                      </span>
-                    </td>
-                    <td class="p-2 text-center">
-                      <span
-                        v-if="getPartWarrantyFromHistory(item)"
-                        class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
-                      >
-                        <ShieldCheck :size="11" />
-                        {{ getPartWarrantyFromHistory(item) }}
-                      </span>
-                      <span v-else class="text-[10px] text-ink-400">-</span>
-                    </td>
-                    <td class="p-2 text-center">{{ item.quantity }}</td>
-                    <td class="p-2 text-right font-num"><FhMoney :amount="item.unitPriceSnapshot" /></td>
-                    <td class="p-2 text-right font-num font-semibold text-ink-800">
-                      <FhMoney :amount="item.unitPriceSnapshot * item.quantity" />
-                    </td>
-                    <td class="p-2 text-center">
-                      <span
-                        v-if="item.usageStatus === 'used'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-success-50 text-success-700 border border-success-200 inline-flex items-center gap-1"
-                      >
-                        <Check :size="11" /> Đã dùng
-                      </span>
-                      <span
-                        v-else-if="item.usageStatus === 'returned'"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-warning-50 text-warning-700 border border-warning-200 inline-flex items-center gap-1"
-                      >
-                        <RotateCcw :size="11" /> Hoàn trả
-                      </span>
-                      <span
-                        v-else
-                        class="px-2 py-0.5 rounded text-[10px] font-medium bg-ink-100 text-ink-600"
-                      >
-                        Chưa ghi nhận
-                      </span>
-                    </td>
-                    <!-- P1 custody: issued / used / still to return, and Khai trả -->
-                    <td v-if="requestHasReturns(pr)" class="p-2 text-center align-top">
-                      <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
-                        <div v-if="record" class="space-y-1">
-                          <div class="whitespace-nowrap font-num text-[11px] text-ink-700">
-                            Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}
-                          </div>
-                          <div
-                            v-if="pendingDeclaredQty(record) > 0"
-                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-warning-200 bg-warning-50 px-2 py-0.5 text-[10px] font-semibold text-warning-700"
-                          >
-                            <Clock :size="10" />
-                            Đang chờ quản lý xác nhận
-                          </div>
-                          <div
-                            v-else-if="record.outstandingQty === 0"
-                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-200 bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-700"
-                          >
-                            <CheckCircle2 :size="10" />
-                            Đã nhận
-                          </div>
-                          <button
-                            v-if="canDeclareMoreQty(record) > 0"
-                            type="button"
-                            data-testid="open-declare-return"
-                            class="whitespace-nowrap rounded border border-brand-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
-                            :disabled="declareSubmitting"
-                            @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"
-                          >
-                            <Undo2 :size="11" class="mr-1 inline" />Khai trả
+            <h5 class="font-semibold text-ink-800 text-[11px]">Thực tế đã dùng/không dùng</h5>
+            <p v-if="requestHasReturns(pr)" class="text-ink-600">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý dịch vụ nhận thực tế.</p>
+            <div class="space-y-2">
+              <article v-for="item in pr.items" :key="item.id" class="rounded-xl border border-ink-200 bg-white p-3 space-y-2.5" :data-testid="`part-item-${item.id}`">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <h6 class="font-semibold text-sm text-ink-900">{{ item.partNameSnapshot }}</h6>
+                    <p v-if="item.note" class="mt-0.5 text-xs text-ink-500">Ghi chú: {{ item.note }}</p>
+                    <span class="mt-1 inline-flex rounded-full bg-ink-50 px-2 py-0.5 text-[10px] text-ink-600">
+                      {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Mua ngoài' }}
+                    </span>
+                  </div>
+                  <span v-if="getPartWarrantyFromHistory(item)" class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700">
+                    <ShieldCheck :size="11" /> {{ getPartWarrantyFromHistory(item) }}
+                  </span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 rounded-lg bg-ink-25 p-2 text-xs">
+                  <p class="text-ink-600">Số lượng <span class="font-num font-semibold text-ink-900">{{ item.quantity }}</span></p>
+                  <p class="text-right text-ink-600">Đơn giá <span class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot" /></span></p>
+                  <p class="col-span-2 flex justify-between border-t border-ink-100 pt-1.5 text-ink-700"><span>Thành tiền</span><strong class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></strong></p>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span v-if="item.usageStatus === 'used'" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700"><Check :size="13" /> Đã dùng</span>
+                  <span v-else-if="item.usageStatus === 'returned'" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700"><RotateCcw :size="13" /> Hoàn trả</span>
+                  <span v-else class="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-600">Chưa ghi nhận sử dụng</span>
+                  <div v-if="isUnderRepair && pr.status === 'received' && !returnFor(item.id)" class="flex flex-wrap gap-2">
+                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'used' ? 'border-success-600 bg-success-600 text-white' : 'border-success-300 bg-success-50 text-success-700 hover:bg-success-100'" :aria-pressed="item.usageStatus === 'used'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')">Đã dùng</button>
+                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'returned' ? 'border-warning-600 bg-warning-600 text-white' : 'border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100'" :aria-pressed="item.usageStatus === 'returned'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')">Hoàn trả</button>
+                  </div>
+                  <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id)" type="button"
+                    class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700"
+                    :aria-expanded="!!partialUsageEditing[item.id]"
+                    @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
+                    {{ partialUsageEditing[item.id] ? 'Đóng nhập số lượng' : 'Ghi số lượng thực dùng' }}
+                  </button>
+                  <div v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id) && partialUsageEditing[item.id]" class="w-full rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2" data-testid="partial-usage-editor">
+                    <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
+                      <template v-if="record">
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-700">
+                          <span>Đã nhận: <strong>{{ record.issuedQty }}</strong></span>
+                          <span>Cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) }}</strong></span>
+                        </div>
+                        <div class="flex flex-wrap items-end gap-2">
+                          <label class="flex-1 min-w-[110px] text-xs font-semibold text-ink-700">
+                            Số lượng thực dùng
+                            <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" :min="record.usedQty"
+                              :max="record.issuedQty - record.managerAcceptedQty" inputmode="numeric"
+                              :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
+                              class="mt-1 h-10 w-full rounded-lg border border-ink-300 bg-white px-3 font-num text-sm" />
+                          </label>
+                          <button type="button" class="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                            :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < record.usedQty || Number(partialUsageDraft[item.id]) > record.issuedQty - record.managerAcceptedQty || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
+                            @click="handlePartialUsage(pr.id, item.id)">
+                            {{ partialUsageSaving === item.id ? 'Đang lưu…' : 'Lưu số lượng' }}
                           </button>
                         </div>
-                        <span v-else class="text-[10px] text-ink-400">-</span>
+                        <p class="text-[11px] text-ink-600">Hóa đơn mới chỉ tính số lượng đã dùng. Số còn lại cần khai trả và chờ quản lý xác nhận.</p>
                       </template>
-                    </td>
-                    <!-- Action buttons during repair completion -->
-                    <td v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right space-x-1">
-                      <button
-                        type="button"
-                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
-                        :class="
-                          item.usageStatus === 'used'
-                            ? 'bg-success-600 text-white'
-                            : 'bg-success-50 text-success-700 hover:bg-success-100 border border-success-300'
-                        "
-                        :disabled="actionLoading"
-                        @click="handleUpdateUsage(pr.id, item.id, 'used')"
-                      >
-                        Đã dùng
-                      </button>
-                      <button
-                        type="button"
-                        class="whitespace-nowrap px-2 py-1 rounded text-[11px] font-semibold transition-colors"
-                        :class="
-                          item.usageStatus === 'returned'
-                            ? 'bg-warning-600 text-white'
-                            : 'bg-warning-50 text-warning-700 hover:bg-warning-100 border border-warning-300'
-                        "
-                        :disabled="actionLoading"
-                        @click="handleUpdateUsage(pr.id, item.id, 'returned')"
-                      >
-                        Hoàn trả
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </template>
+                  </div>
+                </div>
+                <div v-if="requestHasReturns(pr)" class="space-y-1 border-t border-ink-100 pt-2 text-xs">
+                  <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
+                    <div v-if="record" class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="font-num text-ink-700">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}</span>
+                      <span v-if="pendingDeclaredQty(record) > 0" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2 py-1 text-[10px] font-semibold text-warning-700"><Clock :size="11" /> Đang chờ quản lý xác nhận</span>
+                      <span v-else-if="record.outstandingQty === 0" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700"><CheckCircle2 :size="11" /> Đã nhận</span>
+                      <button v-if="canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button" data-testid="open-declare-return" class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700 hover:bg-brand-100" :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"><Undo2 :size="13" class="mr-1 inline" />Khai trả</button>
+                    </div>
+                    <span v-else class="text-xs text-ink-400">Chưa có thông tin hoàn trả</span>
+                  </template>
+                </div>
+              </article>
             </div>
           </div>
 
@@ -1271,7 +1292,7 @@ const getStatusBadgeClass = (status: string) => {
             class="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3"
           >
             <p class="text-xs font-semibold text-ink-900">
-              Khai trả linh kiện: {{ declareTarget.itemName }}
+              Khai trả kho: {{ declareTarget.itemName }}
               <span class="font-normal text-ink-500">(tối đa {{ declareTarget.maxQty }})</span>
             </p>
             <div class="flex flex-wrap items-end gap-2">
@@ -1314,7 +1335,10 @@ const getStatusBadgeClass = (status: string) => {
               Quản lý dịch vụ sẽ nhận linh kiện và xác nhận số lượng thực tế. Khai trả chưa phải là đã trả xong.
             </p>
           </div>
+          </div>
         </div>
+      </div>
+        </section>
       </div>
   </div>
 </template>

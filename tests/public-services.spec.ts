@@ -133,6 +133,44 @@ describe('Public service discovery', () => {
     mockPublicCatalog();
   });
 
+  it('shows all 14 category chips in two rows and keeps search when selecting the last', async () => {
+    const categories = Array.from({ length: 13 }, (_, i) => category(`cat-${i}`, `Danh m?c ${i + 1}`));
+    mockPublicCatalog({ categories });
+    const context = await setup('/services?q=may');
+    const wrapper = mount(ServicesPage, context);
+    await flushPromises();
+    const chips = wrapper.get('[data-testid="spotlight-categories"]');
+    expect(chips.findAll('button')).toHaveLength(14);
+    expect(chips.findAll('.category-row').map(row => row.findAll('button').length)).toEqual([8, 6]);
+    expect(chips.find('[data-testid="category-more-toggle"]').exists()).toBe(false);
+    await chips.get('[data-testid="category-cat-12"]').trigger('click');
+    await flushPromises();
+    expect(chips.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
+    expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-12', q: 'may' });
+    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12, categoryId: 'cat-12', search: 'may' } });
+    await chips.get('[data-testid="category-all"]').trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.query).toEqual({ q: 'may' });
+    wrapper.unmount();
+  });
+
+  it('keeps technical scope in detail and uses a human description on the public card', async () => {
+    const scope = 'PHẠM VI CẦN XÁC MINH: S1, S2, S3 theo thiết bị';
+    mockPublicCatalog({ services: [service({ scopeDescription: scope })], detail: service({ scopeDescription: scope }) });
+    const context = await setup();
+    const wrapper = mount(ServicesPage, context);
+    await flushPromises();
+    expect(wrapper.find('.service-card__description').exists()).toBe(false);
+    expect(wrapper.get('.service-card').text()).not.toContain('Catalog V2 staging');
+    expect(wrapper.get('.service-card').text()).not.toContain(scope);
+    wrapper.unmount();
+    await context.router.push('/services/ve-sinh-may-lanh');
+    const detail = mount(ServiceDetailPage, context);
+    await flushPromises();
+    expect(detail.text()).toContain(scope);
+    detail.unmount();
+  });
+
   it.each([
     ['fixed_range', 199000, 449000, '199.000 – 449.000đ', 'Giá công theo thiết bị/phạm vi'],
     ['fixed_range', 349000, 349000, '349.000đ', 'Giá công theo thiết bị/phạm vi'],
@@ -191,7 +229,7 @@ describe('Public service discovery', () => {
 
     const heroChips = wrapper.get('[data-testid="spotlight-categories"]');
     expect(heroChips.findAll('button')).toHaveLength(6);
-    expect(heroChips.get('[data-testid="category-all"]').text()).toContain('Tất cả dịch vụ');
+    expect(heroChips.get('[data-testid="category-all"]').text()).toContain('Tất cả');
     expect(heroChips.get('[data-testid="category-all"]').attributes('aria-pressed')).toBe('false');
     expect(heroChips.get(`[data-testid="category-${AIR_CATEGORY_ID}"]`).attributes('aria-pressed')).toBe('true');
     expect(wrapper.find('.category-discovery').exists()).toBe(false);
@@ -367,37 +405,16 @@ describe('Public service discovery', () => {
     vi.useRealTimers();
   });
 
-  it('rotates one soft category halo and pauses while the category group is used', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(() => false),
-    }) as unknown as MediaQueryList);
+  it('keeps category chips stable during hover and keyboard focus', async () => {
     const wrapper = mount(ServicesPage, await setup('/services'));
     await flushPromises();
-
     const group = wrapper.get('[data-testid="spotlight-categories"]');
-    const firstHalo = wrapper.get('.category-suggestion--halo').attributes('data-testid');
-    expect(wrapper.findAll('.category-suggestion--halo')).toHaveLength(1);
-    expect(wrapper.get('[data-testid="category-all"]').attributes('aria-pressed')).toBe('true');
-    expect(wrapper.get('[data-testid="category-all"]').classes()).toContain('category-suggestion--selected');
-
     await group.trigger('mouseenter');
-    await vi.advanceTimersByTimeAsync(2500);
-    expect(wrapper.get('.category-suggestion--halo').attributes('data-testid')).toBe(firstHalo);
-
-    await group.trigger('mouseleave');
-    await vi.advanceTimersByTimeAsync(1300);
-    expect(wrapper.get('.category-suggestion--halo').attributes('data-testid')).not.toBe(firstHalo);
+    await group.get('button').trigger('focus');
+    expect(wrapper.find('.category-suggestion--halo').exists()).toBe(false);
+    expect(group.findAll('button')).toHaveLength(6);
+    expect(group.get('[data-testid="category-all"]').attributes('aria-pressed')).toBe('true');
     wrapper.unmount();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
   it('routes a guest service choice through the existing login redirect with the exact service ID', async () => {

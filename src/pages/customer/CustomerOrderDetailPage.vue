@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
@@ -30,6 +30,8 @@ import {
 import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType, type WarrantyCoverageRecord } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
+import { orderBilling, paymentChannels } from '../../utils/order-billing';
+import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
@@ -57,13 +59,39 @@ const cache = useCacheUpdates();
 const queryClient = useQueryClient();
 
 const actionLoading = ref(false);
+const financialReadReady = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
+// The technician stepped off before arriving (PO 20/10/2026): the customer picks another one for the same order.
+const awaitingTechnician = computed(() => !!order.value && !order.value.technician
+  && ['ACCEPTED', 'EN_ROUTE'].includes(String(order.value.status).toUpperCase()));
+const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?? [])
+  .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 // Modals
 const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
+const paymentDialog = ref<HTMLElement | null>(null);
+let paymentOpener: HTMLElement | null = null;
+watch(showPaymentModal, async open => {
+  if (open) {
+    paymentOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    paymentDialog.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  } else paymentOpener?.focus();
+});
+const onPaymentKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && !actionLoading.value && !walletPaying.value) showPaymentModal.value = false;
+  if (event.key !== 'Tab') return;
+  const controls = [...(paymentDialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], [tabindex="0"]') ?? [])];
+  const first = controls[0];
+  const last = controls.at(-1);
+  if ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first)?.focus();
+  }
+};
 const showWarrantyClaimModal = ref(false);
 const showTrackingModal = ref(false);
 // Warranty Coverages & Claims for completed order
@@ -174,18 +202,14 @@ const filteredEvidences = computed(() => {
   return evidences.value;
 });
 
-const laborItems = computed(() => {
-  return order.value?.quotation?.items?.filter((i) => i.type === 'LABOR') ?? [];
-});
-const partsItems = computed(() => {
-  return order.value?.quotation?.items?.filter((i) => i.type === 'PARTS') ?? [];
-});
-// Before the invoice exists the order totals are 0 while the quotation lines
-// are already listed; show the lines' sum then. Once invoiced, the order totals
-// also carry approved additional costs, so they win.
-const sumLines = (items: Array<{ lineTotal?: number | null }>) => items.reduce((sum, i) => sum + Number(i.lineTotal ?? 0), 0);
-const shownLaborTotal = computed(() => Number(order.value?.laborTotal ?? 0) || sumLines(laborItems.value));
-const shownPartsTotal = computed(() => Number(order.value?.partsTotal ?? 0) || sumLines(partsItems.value));
+const partRequests = ref<PartRequest[]>([]);
+const billing = computed(() => orderBilling(order.value, invoice.value, additionalCosts.value, partRequests.value));
+const laborItems = computed(() => billing.value.items.filter(item => item.type.toUpperCase() === 'LABOR'));
+const partsItems = computed(() => billing.value.items.filter(item => item.type.toUpperCase() !== 'LABOR'));
+const shownLaborTotal = computed(() => billing.value.labor);
+const shownPartsTotal = computed(() => billing.value.parts);
+const paymentOptions = computed(() => paymentChannels(billing.value.total, billing.value.mismatch || !financialReadReady.value || !invoice.value?.id || isPaid.value));
+const paymentBlocked = computed(() => paymentOptions.value.length === 0);
 
 const openLightbox = (ev: OrderEvidence) => {
   lightboxEvidence.value = ev;
@@ -278,8 +302,10 @@ interface CustomerOrderBundle {
   booking?: BookingItem | null;
   review?: Review | null;
   costs?: AdditionalCostRecord[];
+  parts?: PartRequest[];
   warranties?: OrderWarrantyRecord[];
   claims?: WarrantyClaimView[];
+  financialReadReady: boolean;
 }
 
 /** Undefined when the read fails: the page keeps what it showed. */
@@ -314,9 +340,13 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
       evidences = [];
     }
   }
-  // The original booking, for the description and the diagnosis: it does not change once the order exists.
+  // The original booking, for the description and the diagnosis: it does not change once the order exists,
+  // except its invitations while the order waits for a new technician.
   const bookingId = data.bookingId;
-  const booking = previous?.booking ?? (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
+  const waitingForTechnician = ['ACCEPTED', 'EN_ROUTE'].includes(String(data.status).toUpperCase()) && !data.technician;
+  const booking = previous?.booking && !waitingForTechnician
+    ? previous.booking
+    : (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
   const review = data.status === 'COMPLETED' ? (all || previous?.review === undefined ? await optional(() => reviewsApi.getByOrder(orderId)) : previous.review) : undefined;
   // Additional costs exist only once the repair started.
   const costs =
@@ -327,6 +357,7 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
     ? touched('warranty') ? await optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[]) : previous?.warranties
     : undefined;
   const claims = completed ? (touched('warranty') ? await optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : previous?.claims) : undefined;
+  const parts = touched('part', 'invoice', 'quotation', 'additional_cost') ? await optional(() => partRequestsApi.getByOrderId(orderId)) : previous?.parts;
   return {
     order: data,
     invoice,
@@ -335,6 +366,8 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
     booking,
     review,
     costs,
+    parts,
+    financialReadReady: invoice !== undefined && parts !== undefined && (!['UNDER_REPAIR', 'COMPLETED'].includes(data.status) || costs !== undefined),
     warranties,
     claims,
   };
@@ -351,6 +384,7 @@ const orderQuery = useCachedQuery({
 
 function applyOrderBundle(bundle: CustomerOrderBundle) {
   order.value = bundle.order;
+  financialReadReady.value = bundle.financialReadReady;
   if (bundle.invoice !== undefined) invoice.value = bundle.invoice;
   if (bundle.settlement) {
     cashSettlement.value = bundle.settlement;
@@ -360,6 +394,7 @@ function applyOrderBundle(bundle: CustomerOrderBundle) {
   if (bundle.booking) bookingDetails.value = bundle.booking;
   if (bundle.review !== undefined) existingReview.value = bundle.review;
   if (bundle.costs) additionalCosts.value = bundle.costs;
+  if (bundle.parts) partRequests.value = bundle.parts;
   if (bundle.warranties) orderWarranties.value = bundle.warranties;
   if (bundle.claims) warrantyClaims.value = bundle.claims;
 }
@@ -498,7 +533,7 @@ const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'A
 };
 
 const handleConfirmCashPayment = async () => {
-  if (!cashSettlement.value || confirmCashAmount.value === '') return;
+  if (!cashSettlement.value || confirmCashAmount.value === '' || paymentBlocked.value || actionLoading.value) return;
   const amount = Number(confirmCashAmount.value);
   const matches = amount === cashSettlement.value.declaredAmount;
   try {
@@ -554,16 +589,17 @@ const handleChatWithTech = async () => {
 // Paying from the customer wallet (PO 08/10/2026): the balance is read when the payment opens.
 const walletBalance = ref<number | null>(null);
 const walletPaying = ref(false);
-const walletCovers = computed(() => walletBalance.value !== null && !!order.value && walletBalance.value >= Number(order.value.grandTotal ?? 0));
+const walletCovers = computed(() => walletBalance.value !== null && !!order.value && paymentOptions.value.includes('wallet') && walletBalance.value >= (billing.value.total ?? Infinity));
 
 const handlePay = () => {
+  if (paymentBlocked.value || actionLoading.value) return;
   showPaymentModal.value = true;
   walletBalance.value = null;
-  customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
+  if (paymentOptions.value.includes('wallet')) customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
 };
 
 const payWithWallet = async () => {
-  if (!invoice.value?.id || walletPaying.value) return;
+  if (!invoice.value?.id || walletPaying.value || actionLoading.value || !walletCovers.value || !paymentOptions.value.includes('wallet')) return;
   walletPaying.value = true;
   try {
     const result = await customerWalletApi.payInvoice(String(invoice.value.id));
@@ -578,6 +614,7 @@ const payWithWallet = async () => {
 };
 
 const confirmPayment = async () => {
+  if (actionLoading.value || walletPaying.value || !paymentOptions.value.includes('vnpay')) return;
   try {
     actionLoading.value = true;
     if (!invoice.value?.id) throw new Error('Chưa có hóa đơn để thanh toán.');
@@ -585,6 +622,23 @@ const confirmPayment = async () => {
     window.location.href = paymentUrl;
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa mở được trang thanh toán VNPay. Vui lòng thử lại.') };
+    actionLoading.value = false;
+  }
+};
+
+const completeNoCharge = async () => {
+  if (!invoice.value?.id || actionLoading.value || walletPaying.value || !paymentOptions.value.includes('no-charge')) return;
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    await ordersApi.completeNoCharge(invoice.value.id);
+    showPaymentModal.value = false;
+    await loadOrder(true);
+    actionMessage.value = { type: 'success', text: 'Đã hoàn tất miễn phí. Trạng thái đơn đã được cập nhật.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa hoàn tất được hóa đơn miễn phí. Vui lòng kiểm tra lại trạng thái đơn.') };
+    void loadOrder(true);
+  } finally {
     actionLoading.value = false;
   }
 };
@@ -678,7 +732,7 @@ const notQuotedYet = computed(
     Number(order.value.grandTotal ?? 0) === 0 &&
     Number(order.value.laborTotal ?? 0) === 0 &&
     Number(order.value.partsTotal ?? 0) === 0 &&
-    additionalCosts.value.length === 0,
+    additionalCosts.value.length === 0 && !invoice.value,
 );
 const additionalCostTotal = (cost: AdditionalCostRecord) =>
   Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta) + Number(cost.shippingFee || 0);
@@ -840,6 +894,22 @@ const parsedReview = computed(() => {
     </section>
 
     <div v-else-if="order" class="flex flex-col gap-6">
+      <section
+        v-if="awaitingTechnician"
+        role="status"
+        data-testid="order-awaiting-technician"
+        class="rounded-2xl bg-white border border-brand-200 p-4 sm:p-5 flex flex-wrap items-center gap-3"
+      >
+        <div class="min-w-0 flex-[1_1_18rem]">
+          <p class="font-semibold text-ink-900">{{ newTechnicianInvited ? 'Đang chờ thợ mới nhận đơn' : 'Thợ không kịp tới buổi hẹn' }}</p>
+          <p class="text-sm text-ink-600 mt-1">{{ newTechnicianInvited ? 'Bạn đã mời thợ khác, giá và lịch hẹn giữ nguyên.' : 'Bạn chọn thợ khác, giá và lịch hẹn giữ nguyên.' }}</p>
+        </div>
+        <FhButton
+          v-if="!newTechnicianInvited"
+          data-testid="order-choose-another-technician"
+          @click="router.push(`/app/bookings/${order.bookingId}/candidates?released=1`)"
+        >Chọn thợ khác</FhButton>
+      </section>
       <!-- 1. Summary: what, where, when, who -->
       <section class="order-0 rounded-2xl bg-white border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -941,17 +1011,24 @@ const parsedReview = computed(() => {
             <span>Kỹ thuật viên đã hoàn thành, mời bạn thanh toán</span>
           </h2>
           <p class="text-sm text-ink-600 text-pretty">
-            Trả qua ví, VNPay hoặc tiền mặt cho kỹ thuật viên. Chưa hài lòng thì gửi khiếu nại ở cuối trang.
+            {{ billing.mismatch ? 'Thông tin hóa đơn cần được FixHome đối chiếu trước khi thanh toán.' : billing.total === 0 ? 'Hóa đơn không phát sinh phí. Vui lòng xác nhận hoàn tất.' : billing.total !== null && billing.total < 5000 ? 'Trả bằng ví hoặc tiền mặt cho kỹ thuật viên.' : 'Trả qua ví, VNPay hoặc tiền mặt cho kỹ thuật viên.' }} Chưa hài lòng thì gửi khiếu nại ở cuối trang.
           </p>
         </div>
         <div class="flex items-center gap-4 shrink-0">
-          <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
-          <FhButton v-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading" @click="handlePay">
+          <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
+          <FhButton v-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading || paymentBlocked" @click="handlePay">
             Thanh toán ngay
           </FhButton>
         </div>
       </section>
 
+      <p v-if="billing.mismatch" data-testid="billing-mismatch" role="alert" class="order-1 rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+        Hóa đơn chưa khớp với báo giá đã duyệt. Thanh toán đang bị khóa; vui lòng liên hệ FixHome để đối chiếu linh kiện đã dùng hoặc hoàn trả.
+      </p>
+
+      <p v-if="invoice && !financialReadReady" role="alert" class="order-1 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
+        Chưa tải đủ thông tin đối chiếu thanh toán. <button type="button" class="font-semibold underline" @click="loadOrder(true)">Thử lại</button>
+      </p>
       <!-- Cash: the customer confirms what they paid -->
       <section
         v-if="cashSettlement && cashSettlement.status === 'pending_confirmation'"
@@ -994,7 +1071,7 @@ const parsedReview = computed(() => {
           <FhButton
             variant="primary"
             size="md"
-            :disabled="actionLoading || confirmCashAmount === ''"
+            :disabled="actionLoading || paymentBlocked || confirmCashAmount === ''"
             @click="handleConfirmCashPayment"
           >
             Xác nhận số tiền &amp; thanh toán
@@ -1249,7 +1326,7 @@ const parsedReview = computed(() => {
           @click="isCostsExpanded = !isCostsExpanded"
         >
           <div class="flex flex-wrap items-center gap-2.5">
-            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ canDecideQuotation ? 'Báo giá chờ bạn duyệt' : 'Chi phí' }}</h2>
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ canDecideQuotation ? 'Báo giá chờ bạn duyệt' : billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h2>
             <span
               v-if="order.status !== 'CANCELLED' && !notQuotedYet"
               class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
@@ -1260,7 +1337,7 @@ const parsedReview = computed(() => {
           </div>
           <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
             <span v-if="!notQuotedYet" class="text-sm font-semibold text-ink-900 font-num hidden sm:inline">
-              <FhMoney :amount="order.grandTotal" />
+              <FhMoney v-if="(billing.total) !== null" :amount="billing.total" /><span v-else>Chưa xác định</span>
             </span>
             <span class="hidden sm:inline">{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
             <div
@@ -1286,7 +1363,7 @@ const parsedReview = computed(() => {
                 <div class="space-y-1">
                   <div class="flex items-center justify-between gap-3 text-ink-500">
                     <h3 class="font-medium">Tiền công</h3>
-                    <span class="font-num whitespace-nowrap">Tổng công: <FhMoney :amount="shownLaborTotal" /></span>
+                    <span class="font-num whitespace-nowrap">Tổng công: <FhMoney v-if="(shownLaborTotal) !== null" :amount="shownLaborTotal" /><span v-else>Chưa xác định</span></span>
                   </div>
                   <ul class="divide-y divide-ink-100">
                     <template v-if="laborItems.length > 0">
@@ -1305,11 +1382,11 @@ const parsedReview = computed(() => {
                       <span class="min-w-0 text-ink-900">
                         {{ order.serviceName }}
                         <span class="block text-ink-500 font-num whitespace-nowrap">
-                          {{ order.quantity || 1 }} × <FhMoney :amount="order.laborTotal" />
+                          {{ order.quantity || 1 }} × <FhMoney v-if="(shownLaborTotal) !== null" :amount="shownLaborTotal" /><span v-else>Chưa xác định</span>
                           <template v-if="order.laborWarrantyDays"> · Bảo hành {{ order.laborWarrantyDays }}&nbsp;ngày</template>
                         </span>
                       </span>
-                      <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney :amount="order.laborTotal" /></span>
+                      <span class="font-num font-medium text-ink-900 whitespace-nowrap"><FhMoney v-if="(shownLaborTotal) !== null" :amount="shownLaborTotal" /><span v-else>Chưa xác định</span></span>
                     </li>
                   </ul>
                 </div>
@@ -1317,7 +1394,7 @@ const parsedReview = computed(() => {
                 <div class="space-y-1">
                   <div class="flex items-center justify-between gap-3 text-ink-500">
                     <h3 class="font-medium">Linh kiện</h3>
-                    <span class="font-num whitespace-nowrap">Tổng linh kiện: <FhMoney :amount="shownPartsTotal" /></span>
+                    <span class="font-num whitespace-nowrap">Tổng linh kiện: <FhMoney v-if="(shownPartsTotal) !== null" :amount="shownPartsTotal" /><span v-else>Chưa xác định</span></span>
                   </div>
                   <ul v-if="partsItems.length > 0" class="divide-y divide-ink-100">
                     <li v-for="item in partsItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
@@ -1334,7 +1411,7 @@ const parsedReview = computed(() => {
                   <p v-else class="py-2.5 text-ink-500">Không thay linh kiện.</p>
                 </div>
 
-                <div v-if="decidedAdditionalCosts.length > 0" class="space-y-1">
+                <div v-if="!billing.final && decidedAdditionalCosts.length > 0" class="space-y-1">
                   <h3 class="font-medium text-ink-500">Phát sinh</h3>
                   <ul class="divide-y divide-ink-100">
                     <li v-for="cost in decidedAdditionalCosts" :key="cost.id" class="py-2.5 space-y-1.5">
@@ -1373,7 +1450,7 @@ const parsedReview = computed(() => {
                 <div class="pt-4 border-t border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div class="flex items-baseline gap-3">
                     <span class="text-ink-500">Tổng cộng</span>
-                    <span class="whitespace-nowrap"><FhMoney :amount="order.grandTotal" emphasis /></span>
+                    <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
                   </div>
                   <div v-if="canDecideQuotation" class="flex items-center gap-2">
                     <FhButton variant="secondary" size="md" :disabled="actionLoading" @click="handleRejectQuotation">
@@ -1549,25 +1626,29 @@ const parsedReview = computed(() => {
       v-if="showPaymentModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
     >
-      <div role="dialog" aria-modal="true" aria-label="Thanh toán đơn" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
+      <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-ink-900">Thanh toán đơn</h3>
             <p class="whitespace-nowrap mt-1">
-              <FhMoney :amount="order?.grandTotal ?? 0" emphasis />
+              <FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span>
             </p>
           </div>
           <button
             type="button"
             class="w-9 h-9 rounded-xl text-ink-500 hover:bg-ink-100 flex items-center justify-center shrink-0"
             aria-label="Đóng"
+            :disabled="actionLoading || walletPaying"
             @click="showPaymentModal = false"
           >
             <X :size="18" />
           </button>
         </div>
 
-        <div class="rounded-xl border border-ink-200 p-3 space-y-2.5" data-testid="wallet-pay-option">
+        <p v-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
+        <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
+        <p v-if="paymentOptions.includes('cash')" class="text-sm text-ink-600">Thanh toán tiền mặt: đưa tiền cho kỹ thuật viên, sau đó xác nhận số tiền kỹ thuật viên khai báo tại đơn này.</p>
+        <div v-if="paymentOptions.includes('wallet')" class="rounded-xl border border-ink-200 p-3 space-y-2.5" data-testid="wallet-pay-option">
           <div class="flex items-center justify-between gap-3 text-sm">
             <span class="font-medium text-ink-800">Ví FixHome</span>
             <span class="text-ink-500 whitespace-nowrap flex items-center gap-1">
@@ -1597,6 +1678,7 @@ const parsedReview = computed(() => {
           size="md"
           class="w-full"
           :disabled="actionLoading || walletPaying"
+          v-if="paymentOptions.includes('vnpay')"
           @click="confirmPayment"
         >
           Thanh toán qua VNPay

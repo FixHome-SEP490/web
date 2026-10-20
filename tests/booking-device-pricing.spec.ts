@@ -345,8 +345,9 @@ describe('P012 device facts and pricing scope in step 1', () => {
     route.query = { serviceId: 'plain-01' };
     const wrapper = await renderWizard();
 
-    expect(wrapper.get('[data-testid="pricing-inspection"]').text()).toContain('Cần khảo sát để báo giá');
-    expect(section(wrapper).find('[data-money]').exists()).toBe(false);
+    // Survey-only services have no selectable device facts or scope; the server
+    // preview still runs, but this redundant information card stays hidden.
+    expect(wrapper.find('[data-testid="booking-device-details"]').exists()).toBe(false);
 
     await submitBooking(wrapper);
     const payload = createBooking.mock.calls[0][0] as Record<string, unknown>;

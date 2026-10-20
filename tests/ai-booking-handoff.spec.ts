@@ -66,7 +66,7 @@ describe('Plain booking form', () => {
     await flushPromises();
     expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc', description: 'Máy lạnh kêu lạch cạch 😣', mode: 'scheduled' }));
     expect(createBooking.mock.calls[0][0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(['morning', 'afternoon']).toContain(createBooking.mock.calls[0][0].slot);
+    expect(['morning', 'afternoon', 'evening']).toContain(createBooking.mock.calls[0][0].slot);
     expect(createBooking.mock.calls[0][0]).not.toHaveProperty('preferredStartAt');
     expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
   });
