@@ -2,18 +2,20 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  ArrowLeft,
-  Phone,
-  CheckCircle2,
   AlertCircle,
-  MessageSquare,
-  Star,
-  Map as MapIcon,
   AlertTriangle,
-  X,
+  ArrowLeft,
   BadgeCheck,
-  MoreHorizontal,
+  Banknote,
+  CheckCircle2,
   ChevronDown,
+  Map as MapIcon,
+  MessageSquare,
+  MoreHorizontal,
+  Phone,
+  Star,
+  Wallet,
+  X,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -591,10 +593,29 @@ const walletBalance = ref<number | null>(null);
 const walletPaying = ref(false);
 const walletCovers = computed(() => walletBalance.value !== null && !!order.value && paymentOptions.value.includes('wallet') && walletBalance.value >= (billing.value.total ?? Infinity));
 
+// The ways to pay, as one list with one action (PO 21/10/2026). The wallet comes
+// first; when its balance turns out short and the customer has not picked yet,
+// the next way is chosen for them.
+type PayMethod = 'wallet' | 'vnpay' | 'cash';
+const PAY_ORDER: PayMethod[] = ['wallet', 'vnpay', 'cash'];
+const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) => paymentOptions.value.includes(method)));
+const payMethod = ref<PayMethod | null>(null);
+let payMethodPicked = false;
+function choosePayMethod(method: PayMethod) {
+  payMethod.value = method;
+  payMethodPicked = true;
+}
+watch(walletBalance, () => {
+  if (walletCovers.value || payMethodPicked || payMethod.value !== 'wallet' || walletBalance.value === null) return;
+  payMethod.value = payMethods.value.find((method) => method !== 'wallet') ?? 'wallet';
+});
+
 const handlePay = () => {
   if (paymentBlocked.value || actionLoading.value) return;
   showPaymentModal.value = true;
   walletBalance.value = null;
+  payMethodPicked = false;
+  payMethod.value = payMethods.value[0] ?? null;
   if (paymentOptions.value.includes('wallet')) customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
 };
 
@@ -1647,42 +1668,77 @@ const parsedReview = computed(() => {
 
         <p v-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
         <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
-        <p v-if="paymentOptions.includes('cash')" class="text-sm text-ink-600">Thanh toán tiền mặt: đưa tiền cho kỹ thuật viên, sau đó xác nhận số tiền kỹ thuật viên khai báo tại đơn này.</p>
-        <div v-if="paymentOptions.includes('wallet')" class="rounded-xl border border-ink-200 p-3 space-y-2.5" data-testid="wallet-pay-option">
-          <div class="flex items-center justify-between gap-3 text-sm">
-            <span class="font-medium text-ink-800">Ví FixHome</span>
-            <span class="text-ink-500 whitespace-nowrap flex items-center gap-1">
-              Số dư:
-              <strong v-if="walletBalance !== null" class="text-ink-900 font-num"><FhMoney :amount="walletBalance" /></strong>
-              <span v-else class="inline-block w-20"><FhSkeleton height="14px" /></span>
-            </span>
+
+        <!-- One list of the ways to pay, one action under it (PO 21/10/2026). -->
+        <template v-if="payMethods.length">
+          <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
+            <button
+              v-for="method in payMethods"
+              :key="method"
+              type="button"
+              role="radio"
+              :aria-checked="payMethod === method"
+              class="flex min-h-14 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors"
+              :class="payMethod === method ? 'bg-brand-50' : 'bg-white hover:bg-ink-50'"
+              :data-testid="`pay-method-${method}`"
+              :disabled="actionLoading || walletPaying"
+              @click="choosePayMethod(method)"
+            >
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
+                <Wallet v-if="method === 'wallet'" :size="18" />
+                <span v-else-if="method === 'vnpay'" class="text-[10px] font-extrabold leading-none tracking-tight"><span class="text-[#005BAA]">VN</span><span class="text-[#ED1C24]">PAY</span></span>
+                <Banknote v-else :size="18" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold text-ink-900">{{ method === 'wallet' ? 'Ví FixHome' : method === 'vnpay' ? 'VNPay' : 'Tiền mặt' }}</span>
+                <span v-if="method === 'wallet'" class="block text-xs" :class="walletBalance !== null && !walletCovers ? 'text-warning-800' : 'text-ink-500'" data-testid="wallet-balance">
+                  <template v-if="walletBalance === null">Đang xem số dư…</template>
+                  <template v-else>Số dư <span class="font-num"><FhMoney :amount="walletBalance" /></span><template v-if="!walletCovers"> · không đủ</template></template>
+                </span>
+                <span v-else-if="method === 'vnpay'" class="block text-xs text-ink-500">ATM, thẻ quốc tế, QR</span>
+                <span v-else class="block text-xs text-ink-500">Trả trực tiếp cho kỹ thuật viên</span>
+              </span>
+              <span
+                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2"
+                :class="payMethod === method ? 'border-brand-600' : 'border-ink-300'"
+                aria-hidden="true"
+              ><span v-if="payMethod === method" class="h-2.5 w-2.5 rounded-full bg-brand-600"></span></span>
+            </button>
           </div>
+
+          <p v-if="payMethod === 'wallet' && walletBalance !== null && !walletCovers" class="text-sm text-ink-600">
+            Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
+          </p>
+          <p v-else-if="payMethod === 'cash'" class="text-sm text-ink-600" data-testid="pay-cash-note">
+            Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.
+          </p>
+
           <FhButton
-            variant="primary"
-            size="md"
+            v-if="payMethod === 'wallet'"
             class="w-full"
+            size="lg"
             :disabled="!walletCovers || walletPaying || actionLoading"
             :loading="walletPaying"
             data-testid="pay-with-wallet"
             @click="payWithWallet"
-          >
-            Trả bằng ví
-          </FhButton>
-          <p v-if="walletBalance !== null && !walletCovers" class="text-sm text-warning-800">
-            Số dư không đủ. <router-link to="/app/wallet" class="font-semibold underline">Nạp thêm vào ví</router-link>
-          </p>
-        </div>
-
-        <FhButton
-          variant="secondary"
-          size="md"
-          class="w-full"
-          :disabled="actionLoading || walletPaying"
-          v-if="paymentOptions.includes('vnpay')"
-          @click="confirmPayment"
-        >
-          Thanh toán qua VNPay
-        </FhButton>
+          >Trả bằng ví</FhButton>
+          <FhButton
+            v-else-if="payMethod === 'vnpay'"
+            class="w-full"
+            size="lg"
+            :disabled="actionLoading || walletPaying"
+            :loading="actionLoading"
+            data-testid="pay-with-vnpay"
+            @click="confirmPayment"
+          >Thanh toán qua VNPay</FhButton>
+          <FhButton
+            v-else-if="payMethod === 'cash'"
+            class="w-full"
+            size="lg"
+            data-testid="pay-cash-ok"
+            @click="showPaymentModal = false"
+          >Đã hiểu</FhButton>
+        </template>
       </div>
     </div>
 
