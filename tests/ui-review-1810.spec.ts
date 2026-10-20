@@ -17,6 +17,7 @@ vi.mock('../src/api/orders.api', () => ({
   coverageKindLabel: vi.fn(() => ''),
   describeCoverage: vi.fn(() => ''),
 }));
+vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: api.getBooking }, isFullBookingWithMedia: () => false }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: vi.fn().mockResolvedValue(null) } }));
 vi.mock('vue-router', () => ({
