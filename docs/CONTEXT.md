@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 23:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-parts-ux-v32-20261020
+> Cập nhật lần cuối: 2026-10-20 23:44 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/customer-booking-redesign
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -364,6 +364,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 23:44 (UTC+7) | ToanAltF4 | feat/customer-booking-redesign | Làm lại giao diện đặt lịch của khách (PO duyệt 20/10): bước 1 hai cột, danh sách dịch vụ gập lại sau khi chọn, thẻ Máy của bạn, khung Yêu cầu của bạn bên phải (thanh dưới trên điện thoại), bước 2 địa chỉ + Hẹn lịch/Tới ngay, bước xác nhận có nút Sửa từng dòng; giá rút gọn (199k – 449k, Tham khảo 249k); tìm kiếm hiểu máy lạnh/máy nước nóng/TV; hộp Đặt lại thợ trung tính, chọn ngày dạng thanh như app; trang chi tiết yêu cầu hiện thiết bị, tiền công, tình trạng; bỏ 5 component cũ không còn dùng
 - 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
 - 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
@@ -403,4 +404,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 23:19 (UTC+7) | Lạc Vỹ | LacVy | Sửa Đơn của tôi theo contract backend thật: không gửi `statuses`/`search` bị từ chối, gộp trạng thái và tìm kiếm ở web
 - 2026-10-12 23:05 (UTC+7) | Lạc Vỹ | LacVy | Hợp nhất nhánh: đồng bộ TanStack Query, FhPagination, FhStatusPill và hoàn thiện giao diện khách hàng
 - 2026-10-12 20:53 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX luồng đặt lịch: NewBookingWizard, BookingCandidates, BookingDetail và TechnicianProfileModal
-- 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)

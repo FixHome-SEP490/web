@@ -26,6 +26,16 @@ export interface BookingItem {
   customerNote?: string | null;
   /** Set only when the customer booked through the AI flow. */
   aiSummary?: AiBookingSummary | null;
+  /** Device facts the customer gave, frozen at booking time (catalog V2). */
+  deviceAttributesSnapshot?: BookingDeviceAttributes | null;
+  /** The server's frozen price basis: one approved tier, or a nonbinding range. */
+  catalogV2PricingSnapshot?: {
+    selectedVariant?: { variantCode: string; scopeVi: string; laborPriceVnd: number } | null;
+    priceRange?: { minLaborVnd: number; maxLaborVnd: number } | null;
+  } | null;
+  pricingModeSnapshot?: 'fixed_price' | 'inspection_required' | null;
+  /** Postgres numeric: may arrive as a string. */
+  fixedUnitPriceSnapshot?: number | string | null;
   mediaUrls?: string[];
   media?: BookingMedia[];
   invitations?: BookingInvitation[];

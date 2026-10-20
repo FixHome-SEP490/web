@@ -13,26 +13,25 @@ describe('catalog summary prices in the booking finder', () => {
     const wrapper = mount(CompactServiceCard, {
       props: { service: { ...service, priceSummary: { kind: 'inspection_reference', minLaborVnd: null, maxLaborVnd: null, suggestedLaborVnd: 249000 } }, selected: false },
     });
-    expect(wrapper.text()).toContain('Tham khảo 249.000đ');
-    expect(wrapper.text()).toContain('Thợ khảo sát, báo giá để khách duyệt');
+    // One short label per row (PO 20/10/2026); a survey reference is never written as a floor.
+    expect(wrapper.get('[data-testid="booking-service-price"]').text()).toBe('Tham khảo 249k');
     expect(wrapper.text()).not.toContain('Từ 249');
     wrapper.unmount();
   });
   it.each([
-    ['fixed_range', 199000, 449000, '199.000 – 449.000đ', 'Giá công theo thiết bị/phạm vi'],
-    ['fixed_range', 349000, 349000, '349.000đ', 'Giá công theo thiết bị/phạm vi'],
-    ['inspection_reference', 249000, 249000, 'Tham khảo 249.000đ', 'Thợ khảo sát, báo giá để khách duyệt'],
-    ['inspection_reference', 249000, null, 'Tham khảo 249.000đ', 'Thợ khảo sát, báo giá để khách duyệt'],
-    ['inspection_only', null, null, 'Khảo sát & báo giá', ''],
-    ['fixed_range', null, null, 'Khảo sát & báo giá', ''],
-    ['fixed_range', 449000, 199000, 'Khảo sát & báo giá', ''],
-    ['inspection_reference', null, null, 'Khảo sát & báo giá', ''],
-  ] as const)('renders %s (%s–%s) ahead of the parent mode', async (kind, minLaborVnd, maxLaborVnd, label, caption) => {
+    ['fixed_range', 199000, 449000, '199k – 449k'],
+    ['fixed_range', 349000, 349000, '349k'],
+    ['inspection_reference', 249000, 249000, 'Tham khảo 249k'],
+    ['inspection_reference', 249000, null, 'Tham khảo 249k'],
+    ['inspection_only', null, null, 'Khảo sát, báo giá'],
+    ['fixed_range', null, null, 'Khảo sát, báo giá'],
+    ['fixed_range', 449000, 199000, 'Khảo sát, báo giá'],
+    ['inspection_reference', null, null, 'Khảo sát, báo giá'],
+  ] as const)('renders %s (%s–%s) ahead of the parent mode', async (kind, minLaborVnd, maxLaborVnd, label) => {
     const wrapper = mount(CompactServiceCard, {
       props: { service: { ...service, priceSummary: { kind, minLaborVnd, maxLaborVnd } }, selected: true },
     });
-    expect(wrapper.text()).toContain(label);
-    if (caption) expect(wrapper.text()).toContain(caption);
+    expect(wrapper.get('[data-testid="booking-service-price"]').text()).toBe(label);
     expect(wrapper.text()).not.toContain('Từ ');
     expect(wrapper.text()).not.toContain('Báo giá trước khi sửa');
     expect(wrapper.text()).not.toContain('Khảo sát tận nơi');
