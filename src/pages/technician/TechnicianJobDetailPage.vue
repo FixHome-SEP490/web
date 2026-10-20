@@ -1874,9 +1874,10 @@ const toggleMore = async () => {
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
       <div v-if="isCompleted && isPaid && pendingPartsReturns > 0" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
-        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : 'Chờ quản lý xác nhận nhận trả' }}</p>
+        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ quản lý xác nhận nhận trả' : 'Chờ hoàn trả linh kiện' }}</p>
         <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện cần khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đang chờ quản lý nhận</span>.</p>
-        <p v-else>Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ quản lý nhận và xác nhận thực tế.</p>
+        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ quản lý nhận và xác nhận thực tế.</p>
+        <p v-else>Còn {{ pendingPartsReturns }} linh kiện chưa hoàn tất trả kho. Mở chi tiết để kiểm tra.</p>
         <button type="button" class="mt-2 font-semibold underline" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
