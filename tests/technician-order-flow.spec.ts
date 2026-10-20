@@ -108,6 +108,39 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     wrapper.unmount();
   });
 
+  it('offers releasing the order without losing points only when the server says the technician is on another job (PO 20/10/2026)', async () => {
+    let eligible = false;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
+      if (path === '/service-orders/job-test-101/overrun-release') return { data: { data: { eligible, currentOrderCode: 'SO-099', block: eligible ? null : 'NO_CURRENT_JOB' } } };
+      if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/bookings/booking-101') return { data: { data: { id: 'booking-101', media: [] } } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+    const plain = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(plain.find('[data-testid="overrun-release-card"]').exists()).toBe(false);
+    await openMoreMenu(plain);
+    expect(menuItems(plain)).not.toContain('Không kịp tới, nhả đơn');
+    plain.unmount();
+
+    eligible = true;
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="overrun-release-card"]').text()).toContain('SO-099');
+    await openMoreMenu(wrapper);
+    expect(menuItems(wrapper)).toContain('Không kịp tới, nhả đơn');
+    await wrapper.get('[data-testid="overrun-release-menu"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="overrun-release-dialog"]').text()).toContain('Không trừ điểm uy tín');
+    await wrapper.get('[data-testid="overrun-release-confirm"]').trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/overrun-release');
+    expect(mockPost.mock.calls.some(([path]) => String(path).endsWith('/cancel'))).toBe(false);
+    wrapper.unmount();
+  });
+
   it('opens a pre-repair choice and closing it leaves the accepted order unchanged', async () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 21:42 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-job-v31-simplify-20261020
+> Cập nhật lần cuối: 2026-10-20 21:56 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/technician-overrun-release
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -362,7 +362,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
+- 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
 - 2026-10-20 18:47 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Thêm action khôi phục bắt đầu sửa đơn giá cố định sau ảnh BEFORE bị gián đoạn; chỉ hiện khi đã check-in, có ảnh và không còn upload chờ
 - 2026-10-20 17:55 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | ServiceOrder theo bước, blocker báo giá đối chiếu PRE_REPAIR theo SKU, ảnh camera theo batch; Backend/browser/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-20 17:51 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Bố cục ServiceOrder theo bước, nhóm linh kiện, hoàn thành có blocker và batch ảnh camera; Backend/browser/Mobile CHƯA KIỂM CHỨNG
@@ -400,5 +402,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-12 20:53 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX luồng đặt lịch: NewBookingWizard, BookingCandidates, BookingDetail và TechnicianProfileModal
 - 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)
 - 2026-10-12 16:49 (UTC+7) | ToanAltF4 | fix/pager-phone-width | Sửa lỗi sau đợt test bằng Playwright CLI: phân trang trên điện thoại, thông báo thay alert, kiểm họ tên/SĐT ở hồ sơ khách, địa chỉ một dòng gọn
-- 2026-10-12 16:48 (UTC+7) | ToanAltF4 | feat/schedule-calendar | Tab Lịch làm việc của thợ có lịch tuần kiểu Google Calendar (ngày là cột, giờ là hàng, giờ Việt Nam): giờ nhận việc theo bản đang sửa, ngày nghỉ, lịch hẹn của tuần và vạch giờ hiện tại; điện thoại xem từng ngày.
-- 2026-10-12 12:02 (UTC+7) | Lạc Vỹ | LacVy | Tinh chỉnh CustomerDashboard: làm gọn Order in progress, danh sách đơn gần đây và catalogue dịch vụ, loại bỏ các chi tiết thừa

@@ -510,6 +510,17 @@ export const ordersApi = {
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
   },
 
+  /** Whether the technician, still on another job, may release this upcoming order without losing points (PO 20/10/2026). */
+  async overrunReleaseStatus(orderId: string): Promise<{ eligible: boolean; currentOrderCode: string | null }> {
+    const res = await apiClient.get<ApiResponse<{ eligible?: boolean; currentOrderCode?: string | null }>>(`/service-orders/${orderId}/overrun-release`);
+    const data = (res.data?.data || {}) as { eligible?: boolean; currentOrderCode?: string | null };
+    return { eligible: data.eligible === true, currentOrderCode: data.currentOrderCode ?? null };
+  },
+
+  async releaseForOverrun(orderId: string): Promise<void> {
+    await apiClient.post(`/service-orders/${orderId}/overrun-release`);
+  },
+
   async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {
     const res = await apiClient.post<ApiResponse<Record<string, unknown>>>(`/service-orders/${orderId}/cancel`, { reason });
     return (res.data?.data || res.data || {}) as Record<string, unknown>;
