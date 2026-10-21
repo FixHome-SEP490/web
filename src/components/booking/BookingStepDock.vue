@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// The step-1 action dock: a floating Previous/Next pill that appears while the
+// The step-1 action dock: a floating pill with the next action that appears while the
 // customer scrolls the finder and slides away once the natural footer is on
 // screen (the page owns that IntersectionObserver, so only one of the two
 // action sets is ever exposed to a keyboard or a screen reader). On phones it
 // stays above the bottom tab bar, the chat bubble and the safe area; from `lg`
 // it floats centred at the bottom.
-import { ArrowLeft, ArrowRight } from 'lucide-vue-next';
+import { ArrowRight } from 'lucide-vue-next';
 
 withDefaults(
   defineProps<{
@@ -17,8 +17,8 @@ withDefaults(
   { nextLabel: 'Tiếp tục', nextDisabled: false, hint: '' },
 );
 
+// Step 1 has no step before it (PO 21/10/2026), so the dock only goes forward.
 const emit = defineEmits<{
-  (e: 'back'): void;
   (e: 'next'): void;
 }>();
 
@@ -44,18 +44,7 @@ function disableLeavingActions(element: Element) {
       <div
         class="pointer-events-auto mx-auto flex w-full max-w-lg items-center gap-2 rounded-full border border-ink-200 bg-white/95 p-1.5 shadow-[var(--shadow-e3)] backdrop-blur-md"
       >
-        <button
-          type="button"
-          class="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 motion-reduce:transition-none"
-          data-testid="booking-step-dock-back"
-          aria-label="Quay lại"
-          @click="emit('back')"
-        >
-          <ArrowLeft :size="15" />
-          <span class="hidden sm:inline">Quay lại</span>
-        </button>
-
-        <p v-if="hint" class="min-w-0 flex-1 truncate px-1 text-[11px] font-medium text-ink-500" data-testid="booking-step-dock-hint">
+        <p v-if="hint" class="min-w-0 flex-1 truncate px-3 text-[11px] font-medium text-ink-500" data-testid="booking-step-dock-hint">
           {{ hint }}
         </p>
         <span v-else class="flex-1"></span>

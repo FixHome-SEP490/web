@@ -705,13 +705,6 @@ function resetServiceFilters() {
   searchQuery.value = '';
 }
 
-/** Sent when the customer wrote nothing for a firm-priced job; the form itself starts empty. */
-function defaultDescription(service: ServiceItem): string {
-  return normalizePricingMode(service.pricingMode) === 'fixed_price'
-    ? `Yêu cầu dịch vụ niêm yết: ${service.name}${quantity.value > 1 ? ` (${quantity.value} ${service.unit?.trim() || 'thiết bị'})` : ''}`
-    : `Yêu cầu dịch vụ: ${service.name}`;
-}
-
 function setQuantity(value: number) {
   quantity.value = Math.max(1, Math.min(99, Math.round(value)));
 }
@@ -1048,9 +1041,7 @@ function hasSymptom(symptom: string) {
 /** A chip toggles: first click adds the symptom, a second click takes it out. */
 function toggleSymptom(symptom: string) {
   userModifiedDescription.value = true;
-  const isTemplate =
-    description.value.startsWith('Yêu cầu dịch vụ niêm yết:') || description.value.startsWith('Yêu cầu dịch vụ:');
-  if (!description.value.trim() || isTemplate) {
+  if (!description.value.trim()) {
     description.value = symptom;
     return;
   }
@@ -1168,7 +1159,8 @@ async function createAndFindTech() {
     const booking = await bookingsApi.createBooking({
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
-      description: isAiFlow ? (aiConversation.customerWords() || description.value) : (description.value.trim() || defaultDescription(service)),
+      // Only the customer's own words; a firm-priced job may go without (PO 21/10/2026).
+      description: isAiFlow ? (aiConversation.customerWords() || description.value) : description.value.trim(),
       ...schedule,
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       quantity: isFixedPrice.value ? quantity.value : 1,
@@ -1395,20 +1387,9 @@ async function createAndFindTech() {
         <div
           ref="stepFooterRef"
           :inert="showStepDock ? true : undefined"
-          class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
+          class="flex flex-col gap-3 border-t border-ink-100 pt-4 sm:flex-row sm:items-center sm:justify-end"
           data-testid="booking-step1-footer"
         >
-          <FhButton
-            variant="ghost"
-            size="md"
-            class="w-full sm:w-auto"
-            :tabindex="showStepDock ? -1 : undefined"
-            data-testid="step1-back"
-            @click="router.back()"
-          >
-            <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
-          </FhButton>
-
           <FhButton
             variant="primary"
             size="lg"
@@ -1428,7 +1409,6 @@ async function createAndFindTech() {
           next-label="Phân tích cùng AI"
           :next-disabled="!description.trim()"
           :hint="dockHint"
-          @back="router.back()"
           @next="startAiStep()"
         />
       </div>

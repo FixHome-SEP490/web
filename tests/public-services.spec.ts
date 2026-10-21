@@ -118,7 +118,7 @@ function mockPublicCatalog(options: {
       if (options.rejectServices) throw new Error('private backend detail');
       const params = (config?.params ?? {}) as Record<string, number | string>;
       const page = Number(params.page ?? 1);
-      const limit = Number(params.limit ?? 12);
+      const limit = Number(params.limit ?? 9);
       return envelope(services, { page, limit, total: options.total ?? services.length, totalPages: Math.ceil((options.total ?? services.length) / limit) }) as never;
     }
     if (typeof url === 'string' && url.startsWith('/services/')) return envelope(detail) as never;
@@ -147,7 +147,7 @@ describe('Public service discovery', () => {
     await flushPromises();
     expect(chips.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
     expect(context.router.currentRoute.value.query).toEqual({ category: 'cat-12', q: 'may' });
-    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12, categoryId: 'cat-12', search: 'may' } });
+    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 9, categoryId: 'cat-12', search: 'may' } });
     await chips.get('[data-testid="category-all"]').trigger('click');
     await flushPromises();
     expect(context.router.currentRoute.value.query).toEqual({ q: 'may' });
@@ -191,7 +191,7 @@ describe('Public service discovery', () => {
     wrapper.unmount();
   });
 
-  it('requests the exact 12-row server page from the category, query, and page in the URL', async () => {
+  it('requests the exact 9-row server page (three rows of three) from the category, query, and page in the URL', async () => {
     const pageThreeService = service({ id: 'page-three-service', name: 'Kết quả từ trang thứ ba' });
     mockPublicCatalog({ services: [pageThreeService], total: 37 });
     const context = await setup(`/services?category=${AIR_CATEGORY_ID}&q=may&page=3`);
@@ -199,7 +199,7 @@ describe('Public service discovery', () => {
     await flushPromises();
 
     expect(apiClient.get).toHaveBeenCalledWith('/services', {
-      params: { page: 3, limit: 12, categoryId: AIR_CATEGORY_ID, search: 'may' },
+      params: { page: 3, limit: 9, categoryId: AIR_CATEGORY_ID, search: 'may' },
     });
     expect(wrapper.text()).toContain('Kết quả từ trang thứ ba');
     expect(wrapper.text()).not.toContain('Vệ sinh máy lạnh treo tường');
@@ -217,7 +217,7 @@ describe('Public service discovery', () => {
 
     expect(context.router.currentRoute.value.query).toEqual({ category: WATER_CATEGORY_ID, q: 'may' });
     expect(apiClient.get).toHaveBeenCalledWith('/services', {
-      params: { page: 1, limit: 12, categoryId: WATER_CATEGORY_ID, search: 'may' },
+      params: { page: 1, limit: 9, categoryId: WATER_CATEGORY_ID, search: 'may' },
     });
     wrapper.unmount();
   });
@@ -239,7 +239,7 @@ describe('Public service discovery', () => {
     await flushPromises();
     expect(context.router.currentRoute.value.query).toEqual({});
     expect(heroChips.get('[data-testid="category-all"]').attributes('aria-pressed')).toBe('true');
-    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 12 } });
+    expect(apiClient.get).toHaveBeenLastCalledWith('/services', { params: { page: 1, limit: 9 } });
     wrapper.unmount();
   });
 
@@ -255,7 +255,7 @@ describe('Public service discovery', () => {
 
     expect(context.router.currentRoute.value.query).toEqual({ category: AIR_CATEGORY_ID, q: 'may lanh' });
     expect(apiClient.get).toHaveBeenCalledWith('/services', {
-      params: { page: 1, limit: 12, categoryId: AIR_CATEGORY_ID, search: 'may lanh' },
+      params: { page: 1, limit: 9, categoryId: AIR_CATEGORY_ID, search: 'may lanh' },
     });
     wrapper.unmount();
     vi.useRealTimers();
@@ -283,7 +283,7 @@ describe('Public service discovery', () => {
     expect(context.router.currentRoute.value.query).toEqual({ category: AIR_CATEGORY_ID });
     expect(document.activeElement).toBe(input.element);
     expect(apiClient.get).toHaveBeenCalledWith('/services', {
-      params: { page: 1, limit: 12, categoryId: AIR_CATEGORY_ID },
+      params: { page: 1, limit: 9, categoryId: AIR_CATEGORY_ID },
     });
     wrapper.unmount();
   });
@@ -313,7 +313,7 @@ describe('Public service discovery', () => {
 
     expect(context.router.currentRoute.value.query.q).toBe('máy lạnh');
     expect(apiClient.get).toHaveBeenLastCalledWith('/services', {
-      params: { page: 1, limit: 12, search: 'máy lạnh' },
+      params: { page: 1, limit: 9, search: 'máy lạnh' },
     });
     wrapper.unmount();
     vi.useRealTimers();
@@ -353,7 +353,7 @@ describe('Public service discovery', () => {
     expect(wrapper.get('[role="listbox"]').text()).not.toContain('Dịch vụ không có trong kết quả');
 
     expect(apiClient.get).toHaveBeenCalledWith('/services', {
-      params: { page: 3, limit: 12, categoryId: AIR_CATEGORY_ID, search: 'may' },
+      params: { page: 3, limit: 9, categoryId: AIR_CATEGORY_ID, search: 'may' },
     });
     wrapper.unmount();
   });
@@ -373,7 +373,7 @@ describe('Public service discovery', () => {
       page: '4',
     });
     expect(apiClient.get).toHaveBeenLastCalledWith('/services', {
-      params: { page: 4, limit: 12, categoryId: AIR_CATEGORY_ID, search: 'may' },
+      params: { page: 4, limit: 9, categoryId: AIR_CATEGORY_ID, search: 'may' },
     });
     expect(document.activeElement).toBe(wrapper.get('#results-heading').element);
     wrapper.unmount();

@@ -62,7 +62,9 @@ describe('BookingDetailPage request summary', () => {
     expect(summary.get('[data-testid="booking-request-device"]').text()).toBe('Treo tường · ≤ 1,5 HP');
     expect(summary.get('[data-testid="booking-request-price"]').find('[data-money="199000"]').exists()).toBe(true);
     expect(summary.get('[data-testid="booking-request-price"]').text()).toContain('Chưa gồm linh kiện');
-    expect(summary.get('[data-testid="booking-request-description"]').text()).toBe('Máy chảy nước ở dàn lạnh');
+    // The customer's words live in the "Mô tả" card, not in the price summary.
+    expect(summary.find('[data-testid="booking-request-description"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="booking-description-card"]').get('[data-testid="booking-request-description"]').text()).toBe('Máy chảy nước ở dàn lạnh');
     wrapper.unmount();
   });
 
@@ -97,10 +99,34 @@ describe('BookingDetailPage request summary', () => {
     legacy.unmount();
   });
 
-  it('leaves the description to the edit box while the booking can still be changed', async () => {
-    const wrapper = await render(booking({ status: 'SUBMITTED', pricingModeSnapshot: 'inspection_required' }));
-    expect(wrapper.find('[data-testid="booking-request-description"]').exists()).toBe(false);
-    expect((wrapper.get('#booking-description').element as HTMLTextAreaElement).value).toBe('Máy chảy nước ở dàn lạnh');
+  it('lets a booking move its session once, then greys the button out with the reason (PO 21/10/2026)', async () => {
+    const fresh = await render(booking({ status: 'SUBMITTED', rescheduleCount: 0 }));
+    expect(fresh.get('[data-testid="booking-open-reschedule"]').attributes('disabled')).toBeUndefined();
+    expect(fresh.find('[data-testid="booking-reschedule-used"]').exists()).toBe(false);
+    fresh.unmount();
+
+    const moved = await render(booking({ status: 'SUBMITTED', rescheduleCount: 1 }));
+    const button = moved.get('[data-testid="booking-open-reschedule"]');
+    expect(button.attributes('disabled')).toBeDefined();
+    await button.trigger('click');
+    expect(moved.find('[data-testid="session-picker"]').exists()).toBe(false);
+    expect(moved.get('[data-testid="booking-reschedule-used"]').text()).toContain('một lần');
+    moved.unmount();
+  });
+
+  it('shows no description card when the customer wrote nothing and sent no photo (PO 21/10/2026)', async () => {
+    const wrapper = await render(booking({ description: '', pricingModeSnapshot: 'fixed_price', fixedUnitPriceSnapshot: 200000 }));
+    expect(wrapper.find('[data-testid="booking-description-card"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Yêu cầu dịch vụ');
+    wrapper.unmount();
+  });
+
+  it('puts the photos under the words in the same card, with no second heading', async () => {
+    const wrapper = await render(booking({ description: '', media: [{ id: 'm1', url: 'https://cdn.example.test/a.jpg', isPrivate: false, legacyInsecure: true, mimeType: 'image/jpeg', sizeBytes: 1 }] }));
+    const card = wrapper.get('[data-testid="booking-description-card"]');
+    expect(card.get('h2').text()).toBe('Mô tả');
+    expect(card.find('[data-testid="booking-request-description"]').exists()).toBe(false);
+    expect(card.get('[data-testid="booking-media-viewer"]').find('h2').exists()).toBe(false);
     wrapper.unmount();
   });
 });

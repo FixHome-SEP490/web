@@ -28,6 +28,8 @@ export interface BookingItem {
   aiSummary?: AiBookingSummary | null;
   /** Device facts the customer gave, frozen at booking time (catalog V2). */
   deviceAttributesSnapshot?: BookingDeviceAttributes | null;
+  /** Times the arrival session was moved; one move per booking (PO 21/10/2026). */
+  rescheduleCount?: number;
   /** The server's frozen price basis: one approved tier, or a nonbinding range. */
   catalogV2PricingSnapshot?: {
     selectedVariant?: { variantCode: string; scopeVi: string; laborPriceVnd: number } | null;

@@ -196,6 +196,8 @@ describe('customer New Booking private photo flow', () => {
     expect(createBooking).toHaveBeenCalledTimes(1);
     const payload = createBooking.mock.calls[0][0];
     expect(payload.photoUploadIds).toEqual(['opaque-upload-id']);
+    // A fixed-price job with no words sends none; nothing is made up from the service name (PO 21/10/2026).
+    expect(payload.description).toBe('');
     expect(payload).not.toHaveProperty('mediaUrls');
     expect(push).toHaveBeenCalledWith('/app/bookings/booking-id/candidates');
     wrapper.unmount();
