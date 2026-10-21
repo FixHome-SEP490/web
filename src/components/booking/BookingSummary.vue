@@ -81,9 +81,9 @@ const barNote = computed(() => {
     </div>
     <p class="mt-1 text-right text-xs text-ink-500">{{ priceNote }}</p>
     <FhButton class="mt-5 w-full" size="lg" :disabled="ctaDisabled" :loading="ctaLoading" :data-testid="ctaTestid" @click="emit('next')">{{ ctaLabel }}</FhButton>
-    <button v-if="backLabel" type="button" class="mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-ink-600 hover:bg-ink-50" data-testid="booking-summary-back" @click="emit('back')">
-      <ArrowLeft :size="15" aria-hidden="true" /> {{ backLabel }}
-    </button>
+    <FhButton v-if="backLabel" variant="ghost" size="md" class="mt-2 w-full" data-testid="booking-summary-back" @click="emit('back')">
+      <ArrowLeft :size="15" class="mr-1.5" aria-hidden="true" /> {{ backLabel }}
+    </FhButton>
   </aside>
 
   <!-- Phones and tablets: right above the bottom tab bar; the route's actionBar meta lifts the chat button over it. -->

@@ -19,10 +19,12 @@ interface MediaItemState {
 /** Short videos sit beside the photos (PO 18/10/2026); they play here and go to no AI. */
 const isVideo = (media: BookingMedia) => /^video\//i.test(media.mimeType);
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   bookingId: string;
   media: BookingMedia[];
-}>();
+  /** Inside a card that already has its own title ("Mô tả"): no rule and no heading of its own. */
+  embedded?: boolean;
+}>(), { embedded: false });
 
 const mounted = ref(true);
 const generation = ref(0);
@@ -215,8 +217,8 @@ onUnmounted(() => {
   <!-- PO 21/10/2026: one grid of the customer's photos and videos ("Ảnh mô tả"), no
        second large copy above it. A tap opens the item large over the page; a tap
        outside it, the close button or Escape puts it back. Same for every role. -->
-  <section v-if="media.length" data-testid="booking-media-viewer" class="space-y-3 border-t border-ink-100 pt-4">
-    <div class="flex items-center gap-2">
+  <section v-if="media.length" data-testid="booking-media-viewer" class="space-y-3" :class="embedded ? '' : 'border-t border-ink-100 pt-4'">
+    <div v-if="!embedded" class="flex items-center gap-2">
       <ImageIcon :size="16" class="text-brand-600" aria-hidden="true" />
       <h2 class="text-sm font-bold text-ink-900">{{ hasVideo ? 'Ảnh và video mô tả' : 'Ảnh mô tả' }}</h2>
     </div>

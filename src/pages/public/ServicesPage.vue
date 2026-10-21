@@ -24,6 +24,8 @@ const categoriesError = ref(false);
 const resultsHeading = ref<HTMLElement | null>(null);
 const focusResultsAfterPageChange = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
+/** Three rows of three cards per page (PO 21/10/2026). */
+const SERVICES_PAGE_SIZE = 9;
 const suggestionsOpen = ref(false);
 const activeSuggestionIndex = ref(-1);
 const isComposing = ref(false);
@@ -85,12 +87,12 @@ const {
     categoryId: selectedCategoryId.value || undefined,
     search: search.value || undefined,
   }),
-  pageSize: 12,
+  pageSize: SERVICES_PAGE_SIZE,
   enabled: () => !categoriesLoading.value,
   fetch: async (requestedPage, pageSize) => {
     const response = await catalogApi.getServices({
       page: requestedPage,
-      limit: 12,
+      limit: SERVICES_PAGE_SIZE,
       ...(selectedCategoryId.value ? { categoryId: selectedCategoryId.value } : {}),
       ...(search.value ? { search: search.value } : {}),
     });
@@ -157,8 +159,8 @@ const pageAnnouncement = computed(() => {
   if (loading.value || categoriesLoading.value) return 'Đang tải dịch vụ.';
   if (changingPage.value) return `Đang tải trang ${page.value}.`;
   if (total.value === 0) return 'Không có kết quả dịch vụ.';
-  const first = (page.value - 1) * 12 + 1;
-  const last = Math.min(page.value * 12, total.value);
+  const first = (page.value - 1) * SERVICES_PAGE_SIZE + 1;
+  const last = Math.min(page.value * SERVICES_PAGE_SIZE, total.value);
   return `Đang hiển thị ${first} đến ${last} trong ${total.value} dịch vụ.`;
 });
 
@@ -454,7 +456,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-if="loading || categoriesLoading" class="service-grid service-grid--loading" aria-label="Đang tải dịch vụ">
-        <article v-for="index in 8" :key="index" class="service-card service-card--skeleton" aria-hidden="true">
+        <article v-for="index in SERVICES_PAGE_SIZE" :key="index" class="service-card service-card--skeleton" aria-hidden="true">
           <div class="skeleton-topline"><FhSkeleton width="48px" height="48px" rounded="md" /><FhSkeleton width="94px" height="26px" rounded="full" /></div>
           <FhSkeleton width="42%" height="13px" />
           <FhSkeleton width="84%" height="25px" />
@@ -548,7 +550,7 @@ onBeforeUnmount(() => {
           <FhPagination
             class="service-pagination"
             :page="page"
-            :page-size="12"
+            :page-size="SERVICES_PAGE_SIZE"
             :total="total"
             :disabled="changingPage"
             @update:page="setPage"

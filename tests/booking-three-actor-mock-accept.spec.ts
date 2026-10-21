@@ -148,6 +148,16 @@ async function sendTwoCustomerChoices() {
 }
 
 describe('WEB-ACCEPT synthetic Customer + two ranked Technicians, fake HTTP only', () => {
+  it('goes back from the technician list to the request itself, never to the emptied form (PO 21/10/2026)', async () => {
+    const page = mount(BookingCandidatesPage, { global: ui });
+    await flushPromises();
+    const back = page.get('[data-testid="back-link"]');
+    expect(back.text()).toContain('Yêu cầu của bạn');
+    await back.trigger('click');
+    expect(push).toHaveBeenCalledWith({ name: 'booking-detail', params: { id: 'booking-synthetic' } });
+    page.unmount();
+  });
+
   it('only first technician is invited; winner alone opens the one ServiceOrder and private Booking', async () => {
     const fake = scenario();
     await sendTwoCustomerChoices();

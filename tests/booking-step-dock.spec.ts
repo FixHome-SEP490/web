@@ -238,16 +238,17 @@ describe('NewBookingWizardPage step-1 action dock', () => {
     expect(wrapper.find('[data-testid="booking-step-dock"]').exists()).toBe(false);
   });
 
-  it('offers the back action to the dock and keeps the footer reachable for the keyboard', async () => {
+  it('has no back action on the first step, in the dock or the footer (PO 21/10/2026)', async () => {
     const wrapper = await renderWizard();
 
     FakeIntersectionObserver.live().reportFooter({ belowViewport: true });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="booking-step-dock-back"]').attributes('aria-label')).toBe('Quay lại');
-    await wrapper.get('[data-testid="booking-step-dock-back"]').trigger('click');
-    expect(back).toHaveBeenCalledTimes(1);
-    expect(push).not.toHaveBeenCalled();
+    // Step 1 has no step before it; leaving the form is the browser's or the menu's job.
+    expect(wrapper.find('[data-testid="booking-step-dock-back"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="step1-back"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="booking-step-dock"]').findAll('button')).toHaveLength(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it('keeps the dock until the footer actions are fully visible, not just one intersecting pixel', async () => {

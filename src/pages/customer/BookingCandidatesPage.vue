@@ -7,10 +7,10 @@ import {
   Briefcase,
   CheckCircle2,
   Send,
-  ArrowLeft,
   Eye,
 } from 'lucide-vue-next';
 import {
+  FhBackLink,
   FhButton,
   FhSkeleton,
   FhStatusPill,
@@ -150,16 +150,8 @@ const successMessage = computed(() => selectedCount.value === 1
 
     <!-- Top Navigation & Header -->
     <div class="space-y-3">
-      <button
-        type="button"
-        class="group inline-flex items-center gap-2 text-sm font-semibold text-ink-500 hover:text-brand-600 transition-colors"
-        @click="router.back()"
-      >
-        <div class="w-7 h-7 rounded-lg bg-ink-100 group-hover:bg-brand-50 flex items-center justify-center transition-colors">
-          <ArrowLeft :size="15" class="text-ink-600 group-hover:text-brand-600" />
-        </div>
-        Quay lại
-      </button>
+      <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
+      <FhBackLink label="Yêu cầu của bạn" @click="router.push({ name: 'booking-detail', params: { id: bookingId } })" />
 
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
         <div>
