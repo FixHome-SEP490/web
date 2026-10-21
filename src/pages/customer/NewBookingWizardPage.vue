@@ -45,6 +45,7 @@ import { useReferenceData } from '../../composables/useCachedQuery';
 import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
+import { VISIT_DEVICE_LIMIT, visitGroupsApi, type VisitDeviceInput } from '../../api/visit-groups.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
 import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
@@ -101,6 +102,27 @@ const description = ref('');
 const urgency = 'NORMAL' as const;
 const quantity = ref(1);
 const userModifiedDescription = ref(false);
+
+/**
+ * Several devices in one visit (PO 21/10/2026): the customer finishes one
+ * device, taps "Thêm thiết bị khác", and the next one starts with the same
+ * address and time. One technician repairs them all and the customer pays
+ * once. At most three; at the limit the button locks and says so (no hotline).
+ * Only the form where the customer picks the service, and only while the
+ * server has the feature on.
+ */
+const visitEnabled = ref(false);
+interface SavedVisitDevice {
+  key: string;
+  input: VisitDeviceInput;
+  serviceName: string;
+  priceText: string;
+}
+const extraDevices = ref<SavedVisitDevice[]>([]);
+const visitKey = `visit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const currentDeviceUnits = computed(() => (selectedServiceId.value ? (isFixedPrice.value ? quantity.value : 1) : 0));
+const visitDeviceCount = computed(() => extraDevices.value.length + currentDeviceUnits.value);
+const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
 const isDraggingPhoto = ref(false);
 
 // P012: facts the customer reported for the selected catalog service and the
@@ -706,7 +728,9 @@ function resetServiceFilters() {
 }
 
 function setQuantity(value: number) {
-  quantity.value = Math.max(1, Math.min(99, Math.round(value)));
+  // Inside a visit every unit is a device, and a visit takes at most three.
+  const max = extraDevices.value.length ? VISIT_DEVICE_LIMIT - extraDevices.value.length : 99;
+  quantity.value = Math.max(1, Math.min(max, Math.round(value)));
 }
 
 // ── Deep link: ?serviceId= hydrates the exact service, never a fallback ───
@@ -855,6 +879,9 @@ onMounted(() => {
   void loadCategories();
   void loadAddresses();
   armStepFooterObserver();
+  if (!isAiFlow) {
+    visitGroupsApi.contact().then((contact) => { visitEnabled.value = contact.enabled; }).catch(() => undefined);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -1104,7 +1131,114 @@ async function goToNextStepFrom2() {
  * back at all, the outcome is unknown (the server may have committed), so the
  * booking is not posted again and the customer checks their orders first.
  */
+/** The device being edited as visit items (one per unit), or null after telling the customer what is missing. */
+function currentDeviceInputs(): VisitDeviceInput[] | null {
+  if (uploadingPhoto.value) {
+    toast.warning('Vui lòng chờ ảnh tải lên hoàn tất.');
+    return null;
+  }
+  const photoUploadIds = uploadedPhotos.value.flatMap((photo) => photo.uploadId ? [photo.uploadId] : []);
+  if (photoUploadIds.length !== uploadedPhotos.value.length) {
+    toast.warning('Không thể xác nhận ảnh. Vui lòng chọn lại ảnh.');
+    return null;
+  }
+  const service = selectedService.value;
+  if (!service || !selectedServiceId.value) {
+    toast.warning('Vui lòng chọn một dịch vụ cụ thể.');
+    return null;
+  }
+  if (!isServiceBookable(service)) {
+    toast.warning('Dịch vụ đã chọn chưa thể đặt. Vui lòng chọn dịch vụ khác.');
+    return null;
+  }
+  if (!requireCatalogV2Preview()) {
+    step.value = 1;
+    return null;
+  }
+  const input: VisitDeviceInput = {
+    serviceId: selectedServiceId.value,
+    ...(description.value.trim() ? { description: description.value.trim() } : {}),
+    ...(photoUploadIds.length ? { photoUploadIds } : {}),
+    ...(Object.keys(deviceAttributes.value).length > 0 ? { deviceAttributes: { ...deviceAttributes.value } } : {}),
+    ...(selectedVariantCode.value ? { selectedVariantCode: selectedVariantCode.value } : {}),
+  };
+  return Array.from({ length: currentDeviceUnits.value || 1 }, () => ({ ...input }));
+}
+
+function priceTextOf(price: SummaryPrice): string {
+  if (price.kind === 'firm') return formatMoney(price.amount);
+  if (price.kind === 'range') return `${formatMoney(price.min)} – ${formatMoney(price.max)}`;
+  return 'Thợ báo giá tại nhà';
+}
+
+/** Keep this device in the visit and start the next one with the same address and time. */
+function addAnotherDevice() {
+  if (!canAddDevice.value) return;
+  const inputs = currentDeviceInputs();
+  if (!inputs) return;
+  const serviceName = selectedService.value?.name ?? 'Thiết bị';
+  const priceText = priceTextOf(summaryPrice.value);
+  const unitPrice = summaryPrice.value.kind === 'firm' && inputs.length > 1 ? formatMoney(summaryPrice.value.amount / inputs.length) : priceText;
+  for (const input of inputs) {
+    extraDevices.value.push({ key: `${Date.now()}-${extraDevices.value.length}`, input, serviceName, priceText: unitPrice });
+  }
+  clearServiceSelection();
+  description.value = '';
+  userModifiedDescription.value = false;
+  uploadedPhotos.value = [];
+  quantity.value = 1;
+  step.value = 1;
+  toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
+}
+
+function removeExtraDevice(key: string) {
+  extraDevices.value = extraDevices.value.filter((device) => device.key !== key);
+}
+
+/** One request for the whole visit; the same key makes a retried submit return the same visit. */
+async function submitVisit(current: VisitDeviceInput[]) {
+  if (loading.value || submitOutcomeUnknown.value) return;
+  const schedule = scheduleForBooking();
+  if ('error' in schedule) {
+    toast.warning(schedule.error);
+    sessions.value = upcomingSessions(14);
+    step.value = 2;
+    return;
+  }
+  if (!selectedAddressId.value) {
+    toast.warning('Vui lòng thêm địa chỉ trước khi đặt lịch.');
+    step.value = 2;
+    return;
+  }
+  loading.value = true;
+  try {
+    const visit = await visitGroupsApi.create({
+      addressId: selectedAddressId.value,
+      ...schedule,
+      ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
+      urgency,
+      idempotencyKey: visitKey,
+      items: [...extraDevices.value.map((device) => device.input), ...current],
+    });
+    router.push(`/app/visits/${visit.id}`);
+  } catch (error: unknown) {
+    if (!(error as { response?: unknown })?.response) {
+      submitOutcomeUnknown.value = true;
+      toast.warning('Chưa xác nhận được kết quả gửi yêu cầu. Vui lòng kiểm tra Đơn của tôi trước khi gửi lại.');
+      return;
+    }
+    toast.warning(userFacingError(error, 'Không thể gửi yêu cầu. Vui lòng thử lại.'));
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function createAndFindTech() {
+  if (extraDevices.value.length) {
+    const current = currentDeviceInputs();
+    if (current) await submitVisit(current);
+    return;
+  }
   if (loading.value || submitOutcomeUnknown.value) return;
   if (uploadingPhoto.value) {
     toast.warning('Vui lòng chờ ảnh tải lên hoàn tất trước khi đặt lịch.');
@@ -1416,6 +1550,22 @@ async function createAndFindTech() {
       <!-- Step 1, choosing yourself (PO 20/10/2026): one column of decisions, the summary beside it. -->
       <div v-else-if="step === 1" key="step-1" class="booking-layout">
         <div class="min-w-0 space-y-4">
+          <section
+            v-if="extraDevices.length"
+            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
+            data-testid="visit-devices-banner"
+          >
+            <p class="font-semibold text-ink-900">Thiết bị thứ {{ extraDevices.length + 1 }} trong lượt sửa</p>
+            <ul class="space-y-1 text-ink-700">
+              <li v-for="(device, index) in extraDevices" :key="device.key" class="flex justify-between gap-3">
+                <span class="min-w-0 truncate">Máy {{ index + 1 }}: {{ device.serviceName }}</span>
+                <span class="whitespace-nowrap text-ink-500">{{ device.priceText }}</span>
+              </li>
+            </ul>
+            <FhButton variant="secondary" size="md" :loading="loading" data-testid="visit-submit-saved" @click="submitVisit([])">
+              Gửi {{ extraDevices.length }} thiết bị đã chọn
+            </FhButton>
+          </section>
           <section
             v-if="!selectedService || pickerOpen"
             ref="finderRef"
@@ -1826,7 +1976,7 @@ async function createAndFindTech() {
 
         <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review">
           <div class="flex gap-4 px-5 py-4 sm:px-6">
-            <span class="w-24 shrink-0 text-ink-500 sm:w-28">Dịch vụ</span>
+            <span class="w-24 shrink-0 text-ink-500 sm:w-28">{{ extraDevices.length ? `Máy ${extraDevices.length + 1}` : 'Dịch vụ' }}</span>
             <div class="min-w-0 flex-1">
               <p class="font-medium text-ink-900">{{ selectedService?.name }}<span v-if="isFixedPrice && quantity > 1" class="text-ink-500"> × {{ quantity }}</span></p>
               <p v-if="deviceSummaryText" class="text-ink-500" data-testid="confirm-v2-scope">{{ deviceSummaryText }}</p>
@@ -1916,6 +2066,31 @@ async function createAndFindTech() {
           <p v-if="chatPhotosLeftOut > 0" class="text-xs text-warning-700" data-testid="confirm-photos-left-out">Đã đủ 5 ảnh nên {{ chatPhotosLeftOut }} ảnh gửi trong trò chuyện không kèm theo.</p>
           <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, bạn có thể bấm Bỏ để đặt thợ không kèm.</p>
         </div>
+
+        <section
+          v-if="visitEnabled && !isAiFlow"
+          class="space-y-3 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6"
+          data-testid="visit-devices"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <h3 class="font-semibold text-ink-900">Sửa thêm thiết bị khác</h3>
+            <span class="whitespace-nowrap text-ink-500">{{ visitDeviceCount }}/{{ VISIT_DEVICE_LIMIT }} thiết bị</span>
+          </div>
+          <ul v-if="extraDevices.length" class="divide-y divide-ink-100">
+            <li v-for="(device, index) in extraDevices" :key="device.key" class="flex items-center gap-3 py-2">
+              <span class="min-w-0 flex-1 truncate text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</span>
+              <span class="whitespace-nowrap text-ink-500">{{ device.priceText }}</span>
+              <button type="button" class="rounded-lg px-2 py-1 font-semibold text-danger-700 hover:bg-danger-50" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
+            </li>
+          </ul>
+          <p class="text-ink-500 text-pretty">Một thợ sửa tất cả trong cùng buổi hẹn, mỗi máy báo giá riêng và bạn trả tiền một lần cho các máy sửa được.</p>
+          <FhButton variant="secondary" size="md" :disabled="!canAddDevice || loading" data-testid="visit-add-device" @click="addAnotherDevice">
+            <Plus :size="16" class="mr-1.5" /> Thêm thiết bị khác
+          </FhButton>
+          <p v-if="!canAddDevice" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
+            Tối đa {{ VISIT_DEVICE_LIMIT }} thiết bị mỗi lần đặt.
+          </p>
+        </section>
 
         <div v-if="submitOutcomeUnknown" role="alert" class="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="booking-submit-unknown">
           <AlertTriangle :size="18" class="mt-0.5 shrink-0 text-warning-600" />
