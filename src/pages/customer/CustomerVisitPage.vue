@@ -202,8 +202,8 @@ async function answerCash(agreed: boolean) {
           :data-testid="`visit-device-${item.sequence}`"
         >
           <div class="min-w-0 flex-1">
-            <p class="font-medium text-ink-900">Máy {{ item.sequence }}: {{ item.booking?.serviceName }}<span v-if="item.deviceLabel" class="font-normal text-ink-500"> · {{ item.deviceLabel }}</span></p>
-            <p class="text-sm text-ink-500">{{ statusText(item) }}</p>
+            <p class="truncate font-medium text-ink-900">Máy {{ item.sequence }}: {{ item.booking?.serviceName }}</p>
+            <p class="text-sm text-ink-500"><template v-if="item.deviceLabel">{{ item.deviceLabel }} · </template>{{ statusText(item) }}</p>
           </div>
           <span v-if="deviceOf(item.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(item.booking?.id)!.amount" /></span>
           <ChevronRight v-if="deviceOf(item.booking?.id)?.serviceOrderId" :size="18" class="shrink-0 text-ink-400" aria-hidden="true" />
