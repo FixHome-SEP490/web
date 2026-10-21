@@ -19,6 +19,7 @@ import {
   TechnicianProfileModal,
 } from '../../components';
 import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
+import { visitGroupsApi } from '../../api/visit-groups.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
 const route = useRoute();
@@ -28,6 +29,12 @@ const rebookedChoose = route.query?.rebooked === 'choose';
 const technicianReleased = route.query?.released === '1';
 const router = useRouter();
 const bookingId = route.params.id as string | undefined;
+// The same page chooses a technician for a whole visit of several devices (PO 21/10/2026):
+// only technicians who offer every device are listed, and the invitation covers them all.
+const isVisit = route.meta?.visit === true;
+const backTarget = computed(() => isVisit
+  ? { name: 'customer-visit', params: { id: bookingId } }
+  : { name: 'booking-detail', params: { id: bookingId } });
 
 const loading = ref(true);
 const loadError = ref('');
@@ -64,7 +71,7 @@ const loadCandidates = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    const list = await bookingsApi.getCandidates(bookingId);
+    const list = isVisit ? await visitGroupsApi.candidates(bookingId) : await bookingsApi.getCandidates(bookingId);
     candidates.value = list;
     // The customer may choose one or two technicians; selection order is invitation priority.
     selectedIds.value = [];
@@ -109,7 +116,8 @@ const handleSendShortlist = async () => {
   sendError.value = '';
   sending.value = true;
   try {
-    await bookingsApi.sendShortlist(bookingId, selectedIds.value);
+    if (isVisit) await visitGroupsApi.shortlist(bookingId, selectedIds.value);
+    else await bookingsApi.sendShortlist(bookingId, selectedIds.value);
     inviteSent.value = true;
   } catch {
     sendError.value = 'Không thể gửi lời mời. Vui lòng thử lại.';
@@ -151,7 +159,7 @@ const successMessage = computed(() => selectedCount.value === 1
     <!-- Top Navigation & Header -->
     <div class="space-y-3">
       <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
-      <FhBackLink label="Yêu cầu của bạn" @click="router.push({ name: 'booking-detail', params: { id: bookingId } })" />
+      <FhBackLink :label="isVisit ? 'Lượt sửa của bạn' : 'Yêu cầu của bạn'" @click="router.push(backTarget)" />
 
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
         <div>
@@ -229,7 +237,7 @@ const successMessage = computed(() => selectedCount.value === 1
       title="Chưa có kỹ thuật viên nhận được giờ hẹn này"
       description="Kỹ thuật viên chỉ nhận đơn trong ca làm và khi còn trống lịch. Hãy đổi sang buổi khác rồi tìm lại."
       action-text="Đổi giờ hẹn"
-      @action="router.push(`/app/bookings/${bookingId}`)"
+      @action="router.push(backTarget)"
     />
 
     <!-- Candidates Cards -->
@@ -391,7 +399,7 @@ const successMessage = computed(() => selectedCount.value === 1
           variant="primary"
           size="md"
           class="w-full justify-center shadow-xs"
-          @click="router.push({ name: 'booking-detail', params: { id: bookingId } })"
+          @click="router.push(backTarget)"
         >
           Xem trạng thái yêu cầu
         </FhButton>

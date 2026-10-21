@@ -28,6 +28,8 @@ export interface BookingItem {
   aiSummary?: AiBookingSummary | null;
   /** Device facts the customer gave, frozen at booking time (catalog V2). */
   deviceAttributesSnapshot?: BookingDeviceAttributes | null;
+  /** Set when this booking is one device of a visit of several devices (PO 21/10/2026). */
+  visitGroupId?: string | null;
   /** Times the arrival session was moved; one move per booking (PO 21/10/2026). */
   rescheduleCount?: number;
   /** The server's frozen price basis: one approved tier, or a nonbinding range. */
@@ -186,11 +188,15 @@ export interface InvitationItem {
   id: string;
   bookingId: string;
   booking?: InvitationBookingPreview;
+  /** Every device of a visit of several devices, taken together on Accept (PO 21/10/2026). */
+  visitDevices?: Array<{ sequence: number; deviceLabel: string | null; booking: InvitationBookingPreview }>;
   priorityOrder: number;
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
   invitedAt: string;
   expiresAt: string;
 }
+
+type BackendBookingPreview = NonNullable<BackendInvitationPreview['booking']>;
 
 interface BackendInvitationPreview {
   id: string;
@@ -199,6 +205,7 @@ interface BackendInvitationPreview {
   status: string;
   invitedAt: string;
   expiresAt: string;
+  visitDevices?: Array<{ sequence: number; deviceLabel: string | null; booking: BackendBookingPreview }>;
   booking?: {
     id: string;
     province: string | null;
@@ -251,6 +258,9 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
   if (!invitation.expiresAt || !booking) {
     throw new Error('Unexpected API response: missing active invitation preview');
   }
+  const devices = Array.isArray(invitation.visitDevices)
+    ? invitation.visitDevices.filter((device) => device && device.booking && typeof device.sequence === 'number')
+    : [];
   return {
     id: invitation.id,
     bookingId: invitation.bookingId,
@@ -258,23 +268,28 @@ function normalizeInvitationPreview(invitation: BackendInvitationPreview): Invit
     status: invitation.status.toUpperCase() as InvitationItem['status'],
     invitedAt: invitation.invitedAt,
     expiresAt: invitation.expiresAt,
-    booking: {
-      id: booking.id,
-      serviceName: booking.serviceName ?? 'Dịch vụ sửa chữa',
-      addressSummary: [booking.district, booking.province].filter(Boolean).join(', ') || 'Chưa có khu vực',
-      quantity: booking.quantity,
-      urgency: booking.urgency,
-      preferredStartAt: booking.preferredStartAt,
-      preferredEndAt: booking.preferredEndAt,
-      bookingMode: booking.bookingMode,
-      slot: booking.slot ?? null,
-      description: typeof booking.description === 'string' && booking.description.trim() ? booking.description : null,
-      aiSummary: booking.aiSummary && typeof booking.aiSummary === 'object' ? booking.aiSummary : null,
-      media: previewMedia(booking.media),
-      pricingMode: booking.pricingMode ?? null,
-      fixedUnitPrice: finiteOrNull(booking.fixedUnitPrice),
-      distanceBand: previewBand(booking.distanceBand),
-    },
+    ...(devices.length > 1 ? { visitDevices: devices.map((device) => ({ sequence: device.sequence, deviceLabel: device.deviceLabel ?? null, booking: normalizeBookingPreview(device.booking) })) } : {}),
+    booking: normalizeBookingPreview(booking),
+  };
+}
+
+function normalizeBookingPreview(booking: BackendBookingPreview): InvitationBookingPreview {
+  return {
+    id: booking.id,
+    serviceName: booking.serviceName ?? 'Dịch vụ sửa chữa',
+    addressSummary: [booking.district, booking.province].filter(Boolean).join(', ') || 'Chưa có khu vực',
+    quantity: booking.quantity,
+    urgency: booking.urgency,
+    preferredStartAt: booking.preferredStartAt,
+    preferredEndAt: booking.preferredEndAt,
+    bookingMode: booking.bookingMode,
+    slot: booking.slot ?? null,
+    description: typeof booking.description === 'string' && booking.description.trim() ? booking.description : null,
+    aiSummary: booking.aiSummary && typeof booking.aiSummary === 'object' ? booking.aiSummary : null,
+    media: previewMedia(booking.media),
+    pricingMode: booking.pricingMode ?? null,
+    fixedUnitPrice: finiteOrNull(booking.fixedUnitPrice),
+    distanceBand: previewBand(booking.distanceBand),
   };
 }
 
@@ -305,7 +320,7 @@ function normalizeBookingInvitations(value: unknown): BookingInvitation[] | unde
   return normalized;
 }
 
-function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string }): BookingItem {
+export function normalizeBooking(booking: BookingItem & { serviceNameSnapshot?: string; addressTextSnapshot?: string; preferredStartAt?: string }): BookingItem {
   const normalized: BookingItem = { ...booking, serviceName: booking.serviceNameSnapshot ?? booking.serviceName,
     addressSummary: booking.addressTextSnapshot ?? booking.addressSummary,
     preferredAt: booking.preferredStartAt ?? booking.preferredAt,

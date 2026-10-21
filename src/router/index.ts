@@ -127,6 +127,19 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chọn kỹ thuật viên', actionBar: true },
       },
       {
+        // Several devices in one visit (PO 21/10/2026).
+        path: 'visits/:id',
+        name: 'customer-visit',
+        component: () => import('../pages/customer/CustomerVisitPage.vue'),
+        meta: { title: 'Lượt sửa nhiều thiết bị' },
+      },
+      {
+        path: 'visits/:id/candidates',
+        name: 'visit-candidates',
+        component: () => import('../pages/customer/BookingCandidatesPage.vue'),
+        meta: { title: 'Chọn kỹ thuật viên', actionBar: true, visit: true },
+      },
+      {
         path: 'bookings/:id',
         name: 'booking-detail',
         component: () => import('../pages/customer/BookingDetailPage.vue'),

@@ -75,6 +75,8 @@ export interface ServiceOrderItem {
   scopeDescription?: string;
   /** What the customer wrote when booking (the problem), as opposed to what the service covers. */
   bookingDescription?: string | null;
+  /** Set when this order is one device of a visit of several devices, paid and cancelled with the visit (PO 21/10/2026). */
+  visitGroupId?: string | null;
   id: string;
   code: string;
   bookingId: string;

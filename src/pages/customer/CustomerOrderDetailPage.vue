@@ -733,7 +733,9 @@ const isWarrantyExpanded = ref(true);
 
 const isCompleted = computed(() => String(order.value?.status ?? '').toUpperCase() === 'COMPLETED');
 const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
-const canCancel = computed(() => order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE');
+// A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
+const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
+const canCancel = computed(() => !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
 const canRebook = computed(() => order.value?.status === 'COMPLETED' || order.value?.status === 'CANCELLED');
 /** The warranty block shows its own button; the menu only offers the claim when that block is not there. */
 const claimInWarrantyBlock = computed(() => isCompleted.value && orderWarranties.value.length > 0 && hasClaimableCoverage.value);
@@ -807,6 +809,15 @@ const parsedReview = computed(() => {
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-12">
+    <router-link
+      v-if="visitGroupId"
+      :to="`/app/visits/${visitGroupId}`"
+      class="flex items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm hover:bg-ink-25"
+      data-testid="order-visit-link"
+    >
+      <span class="text-ink-700">Thiết bị này thuộc một lượt sửa nhiều máy. Đổi lịch, huỷ và thanh toán làm chung cho cả lượt.</span>
+      <span class="whitespace-nowrap font-semibold text-brand-700">Xem lượt sửa</span>
+    </router-link>
     <!-- Back, one visible action for this state, rare ones in the "⋯" menu -->
     <div class="flex items-center justify-between gap-3">
       <button
@@ -822,7 +833,7 @@ const parsedReview = computed(() => {
           v-if="order.status === 'ACCEPTED'"
           variant="secondary"
           size="sm"
-          @click="router.push(`/app/bookings/${order!.bookingId}`)"
+          @click="router.push(visitGroupId ? `/app/visits/${visitGroupId}` : `/app/bookings/${order!.bookingId}`)"
         >
           Đổi lịch hẹn
         </FhButton>
@@ -1037,7 +1048,10 @@ const parsedReview = computed(() => {
         </div>
         <div class="flex items-center gap-4 shrink-0">
           <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
-          <FhButton v-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading || paymentBlocked" @click="handlePay">
+          <FhButton v-if="visitGroupId" variant="primary" size="md" data-testid="pay-with-visit" @click="router.push(`/app/visits/${visitGroupId}`)">
+            Thanh toán cả lượt
+          </FhButton>
+          <FhButton v-else-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading || paymentBlocked" @click="handlePay">
             Thanh toán ngay
           </FhButton>
         </div>

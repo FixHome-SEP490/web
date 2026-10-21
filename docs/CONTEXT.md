@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-21 11:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/booking-back-reschedule
+> Cập nhật lần cuối: 2026-10-21 22:08 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/visit-groups-web
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -364,6 +364,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
 - 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
 - 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch
@@ -403,4 +404,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 02:55 (UTC+7) | ToanAltF4 | feat/ai-feedback-quality | Nút Đúng ý/Chưa đúng cho câu trả lời AI, câu báo khi nhắn quá nhanh, trang chất lượng trợ lý AI cho admin
 - 2026-10-16 01:37 (UTC+7) | ToanAltF4 | feat/chat-quick-replies | Nút trả lời nhanh Có/Không/Không rõ khi trợ lý AI hỏi lại
 - 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
-- 2026-10-16 01:01 (UTC+7) | ToanAltF4 | chore/payout-page-title | Trang /console/wallets đổi tên thành Chi hộ và rút tiền (menu SM/Admin, tiêu đề trang, title route); tab Ví đổi thành Ví kỹ thuật viên
