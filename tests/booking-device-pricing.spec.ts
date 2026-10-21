@@ -32,7 +32,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) =>
     [403, 404, 501, 503].includes((error as { response?: { status?: number } } | undefined)?.response?.status ?? 0),
 }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
@@ -163,6 +163,9 @@ async function renderWizard() {
 }
 
 async function reachConfirm(wrapper: ReturnType<typeof mount>) {
+  // A job without one firm price needs a few words about the fault (PO 20/10/2026).
+  const fault = wrapper.find('textarea');
+  if (fault.exists() && !(fault.element as HTMLTextAreaElement).value) await fault.setValue('Máy cần kiểm tra');
   await wrapper.get('[data-testid="step1-next"]').trigger('click');
   await flushPromises();
   const session = wrapper.find('button[data-testid^="session-2"]');
@@ -201,7 +204,7 @@ describe('P012 device facts and pricing scope in step 1', () => {
 
     // Inside step 1, not a new step.
     expect(wrapper.get('[data-testid="booking-stepper-compact"]').text()).toContain('Bước 1/3');
-    expect(section(wrapper).text()).toContain('Giá tham khảo — thợ khảo sát và báo giá, khách duyệt');
+    expect(section(wrapper).get('[data-testid="pricing-reference-range"]').text()).toContain('Giá tham khảo');
     expect(section(wrapper).find('[data-testid="pricing-confirmed"]').exists()).toBe(false);
     expect(getPreview).toHaveBeenCalledWith('ac-02', {}, expect.anything());
 
@@ -215,7 +218,7 @@ describe('P012 device facts and pricing scope in step 1', () => {
     expect(lastPreviewQuery()).toEqual({ acMounting: 'wall', acHorsepower: 'up_to_1_5' });
 
     const confirmed = wrapper.get('[data-testid="pricing-confirmed"]');
-    expect(confirmed.text()).toContain('Treo tường <=1.5 HP');
+    expect(confirmed.text()).toContain('Treo tường ≤1.5 HP');
     expect(confirmed.find('[data-money="199000"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pricing-reference-range"]').exists()).toBe(false);
 
@@ -331,8 +334,7 @@ describe('P012 device facts and pricing scope in step 1', () => {
     const options = wrapper.get('[data-testid="device-scope-options"]');
     expect(options.text()).toContain('Vệ sinh dàn lạnh và dàn nóng');
     expect(options.findAll('input').every((input) => !(input.element as HTMLInputElement).checked)).toBe(true);
-    expect(wrapper.get('[data-testid="pricing-reference-range"]').text())
-      .toContain('Giá tham khảo — thợ khảo sát và báo giá, khách duyệt');
+    expect(wrapper.get('[data-testid="pricing-reference-range"]').text()).toContain('Giá tham khảo');
     expect(wrapper.find('[data-testid="pricing-confirmed"]').exists()).toBe(false);
 
     await submitBooking(wrapper);
@@ -400,6 +402,8 @@ describe('P012 device facts and pricing scope in step 1', () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="pricing-confirmed"]').find('[data-money="199000"]').exists()).toBe(true);
 
+    await wrapper.get('[data-testid="recap-change"]').trigger('click');
+    await flushPromises();
     await cardByText(wrapper, 'Vệ sinh máy giặt').trigger('click');
     await flushPromises();
 
@@ -424,9 +428,9 @@ describe('P012 device facts and pricing scope in step 1', () => {
 
     await reachConfirm(wrapper);
 
-    expect(wrapper.get('[data-testid="confirm-v2-scope"]').text()).toContain('Treo tường <=1.5 HP');
+    expect(wrapper.get('[data-testid="confirm-v2-scope"]').text()).toBe('Treo tường · ≤ 1,5 HP');
     expect(wrapper.get('[data-testid="confirm-v2-price"]').find('[data-money="199000"]').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="confirm-v2-price-note"]').text()).toContain('Tiền công theo phạm vi đã chọn');
+    expect(wrapper.get('[data-testid="confirm-v2-price-note"]').find('[data-money="199000"]').exists()).toBe(true);
     // The legacy flat-price promise must not appear for a V2 tier.
     expect(wrapper.text()).not.toContain('Giá niêm yết trọn gói');
     expect(wrapper.find('[data-testid="confirm-v2-range"]').exists()).toBe(false);
@@ -442,8 +446,7 @@ describe('P012 device facts and pricing scope in step 1', () => {
     const rangeRow = wrapper.get('[data-testid="confirm-v2-range"]');
     expect(rangeRow.find('[data-money="399000"]').exists()).toBe(true);
     expect(rangeRow.find('[data-money="699000"]').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="confirm-v2-range-note"]').text())
-      .toContain('Giá tham khảo — thợ khảo sát và báo giá, khách duyệt');
+    expect(wrapper.get('[data-testid="confirm-v2-range-note"]').text()).toContain('báo giá để bạn duyệt trước khi sửa');
     expect(wrapper.find('[data-testid="confirm-v2-price"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="confirm-v2-price-note"]').exists()).toBe(false);
   });
@@ -457,13 +460,15 @@ describe('P012 device facts and pricing scope in step 1', () => {
     await wrapper.get('[data-testid="device-fact-ac-horsepower"] input[value="up_to_1_5"]').setValue();
     await flushPromises();
 
+    await wrapper.get('[data-testid="recap-change"]').trigger('click');
+    await flushPromises();
     await cardByText(wrapper, 'Vệ sinh máy giặt').trigger('click');
     await flushPromises();
     await reachConfirm(wrapper);
 
     expect(wrapper.find('[data-testid="confirm-v2-scope"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="confirm-v2-price"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Treo tường <=1.5 HP');
+    expect(wrapper.text()).not.toContain('Treo tường');
     // The new service's own grounded range took its place.
     expect(wrapper.get('[data-testid="confirm-v2-range"]').find('[data-money="399000"]').exists()).toBe(true);
   });

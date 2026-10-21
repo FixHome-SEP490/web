@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-20 23:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/tech-parts-ux-v32-20261020
+> Cập nhật lần cuối: 2026-10-21 11:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/booking-back-reschedule
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -364,6 +364,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
+- 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
+- 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch
+- 2026-10-21 00:21 (UTC+7) | ToanAltF4 | feat/customer-payment-methods | Hộp Thanh toán đơn của khách: ví/VNPay/tiền mặt gom thành một danh sách chọn một, ví hiện số dư nhỏ (tự chuyển VNPay khi không đủ), VNPay có logo nhỏ, một nút chính đổi theo lựa chọn
+- 2026-10-21 00:07 (UTC+7) | ToanAltF4 | fix/booking-back-steps | Nút Quay lại và back của trình duyệt/điện thoại đi lùi từng bước đặt lịch (mỗi bước một mục lịch sử ?step=N, use-step-history.ts), bước 1 bỏ nút Quay lại
+- 2026-10-20 23:44 (UTC+7) | ToanAltF4 | feat/customer-booking-redesign | Làm lại giao diện đặt lịch của khách (PO duyệt 20/10): bước 1 hai cột, danh sách dịch vụ gập lại sau khi chọn, thẻ Máy của bạn, khung Yêu cầu của bạn bên phải (thanh dưới trên điện thoại), bước 2 địa chỉ + Hẹn lịch/Tới ngay, bước xác nhận có nút Sửa từng dòng; giá rút gọn (199k – 449k, Tham khảo 249k); tìm kiếm hiểu máy lạnh/máy nước nóng/TV; hộp Đặt lại thợ trung tính, chọn ngày dạng thanh như app; trang chi tiết yêu cầu hiện thiết bị, tiền công, tình trạng; bỏ 5 component cũ không còn dùng
 - 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
 - 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
@@ -398,9 +404,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 01:37 (UTC+7) | ToanAltF4 | feat/chat-quick-replies | Nút trả lời nhanh Có/Không/Không rõ khi trợ lý AI hỏi lại
 - 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
 - 2026-10-16 01:01 (UTC+7) | ToanAltF4 | chore/payout-page-title | Trang /console/wallets đổi tên thành Chi hộ và rút tiền (menu SM/Admin, tiêu đề trang, title route); tab Ví đổi thành Ví kỹ thuật viên
-- 2026-10-16 00:21 (UTC+7) | ToanAltF4 | feat/staff-customer-withdrawals | Quản lý dịch vụ và admin xem lệnh rút của khách ở tab Khách hàng trong Yêu cầu rút tiền của /console/wallets, tách khỏi kỹ thuật viên (danh sách, tổng, tìm, lọc, Kiểm tra lại), ví nguồn payOS chung hiện một lần
-- 2026-10-14 23:46 (UTC+7) | ToanAltF4 | feat/customer-withdrawal-kyc | Khách rút ví về ngân hàng sau một lần xác minh danh tính bằng ảnh hai mặt CCCD (trang /app/kyc, phần Rút tiền ở ví, lịch sử rút), hồ sơ khoá họ tên và ngày sinh đã xác minh, admin duyệt xác minh của khách ở tab Khách hàng của trang Duyệt xác minh danh tính, nhãn withdrawal và withdrawal_refund
-- 2026-10-12 23:19 (UTC+7) | Lạc Vỹ | LacVy | Sửa Đơn của tôi theo contract backend thật: không gửi `statuses`/`search` bị từ chối, gộp trạng thái và tìm kiếm ở web
-- 2026-10-12 23:05 (UTC+7) | Lạc Vỹ | LacVy | Hợp nhất nhánh: đồng bộ TanStack Query, FhPagination, FhStatusPill và hoàn thiện giao diện khách hàng
-- 2026-10-12 20:53 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX luồng đặt lịch: NewBookingWizard, BookingCandidates, BookingDetail và TechnicianProfileModal
-- 2026-10-12 17:11 (UTC+7) | ToanAltF4 | feat/schedule-calendar-week | Lịch tuần kiểu Google Calendar ở tab Lịch làm việc của thợ (giờ nhận việc, ngày nghỉ, lịch hẹn, vạch giờ hiện tại; điện thoại xem theo ngày)

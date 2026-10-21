@@ -130,6 +130,41 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
+  it('scrolls within the landing from the header instead of opening another page (PO 21/10/2026)', async () => {
+    const context = await setup('/');
+    const scrollTo = vi.fn();
+    vi.stubGlobal('scrollTo', scrollTo);
+    const section = document.createElement('div');
+    section.id = 'services';
+    document.body.append(section);
+    try {
+      const layout = mount(PublicLayout, { ...context, attachTo: document.body });
+      const link = (label: string) => layout.get('nav[aria-label="Điều hướng chính"]').findAll('a').find((a) => a.text() === label)!;
+      await link('Dịch vụ').trigger('click');
+      await flushPromises();
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(context.router.currentRoute.value.path).toBe('/');
+      expect(context.router.currentRoute.value.hash).toBe('#services');
+
+      await link('Giới thiệu').trigger('click');
+      await flushPromises();
+      expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ top: 0 }));
+      layout.unmount();
+    } finally {
+      section.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('sends the how-it-works call to action to the booking form, not the catalog', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingHowItWorks, context);
+    await wrapper.findAll('button').find((b) => b.text().includes('Bắt đầu đặt lịch ngay'))!.trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.query.redirect).toBe('/app/bookings/new');
+    wrapper.unmount();
+  });
+
   it('preserves the booking destination for a guest CTA', async () => {
     const context = await setup();
     const wrapper = mount(LandingHero, context);
@@ -283,11 +318,11 @@ describe('Public landing page', () => {
     expect(img.exists()).toBe(true);
 
     // Verify all 5 steps exist
-    expect(wrapper.text()).toContain('Mở ứng dụng & Chọn dịch vụ');
-    expect(wrapper.text()).toContain('Gửi ảnh & Nhờ AI chẩn đoán');
-    expect(wrapper.text()).toContain('AI phân tích & Đưa kết quả');
-    expect(wrapper.text()).toContain('Chọn lịch & Tìm kiếm thợ');
-    expect(wrapper.text()).toContain('Duyệt báo giá & Hoàn tất');
+    expect(wrapper.text()).toContain('Chọn dịch vụ & loại máy');
+    expect(wrapper.text()).toContain('Mô tả sự cố & gửi ảnh');
+    expect(wrapper.text()).toContain('AI gợi ý dịch vụ phù hợp');
+    expect(wrapper.text()).toContain('Chọn lịch & kỹ thuật viên');
+    expect(wrapper.text()).toContain('Duyệt chi phí & thanh toán');
 
     // Click step 3 card to switch screen
     const stepCards = wrapper.findAll('.cursor-pointer');
@@ -301,8 +336,11 @@ describe('Public landing page', () => {
 
     // Verify CTA
     expect(wrapper.text()).toContain('Bắt đầu đặt lịch ngay');
-    // Booking takes at most three photos and the customer picks one or two technicians.
-    expect(wrapper.text()).not.toContain('5 ảnh');
+    // A booking takes up to five photos (backend: five photos, two videos), the
+    // customer picks one or two technicians, and the CTA opens the booking form.
+    expect(wrapper.text()).toContain('tối đa 5 ảnh');
+    expect(wrapper.text()).not.toContain('3 ảnh');
+    expect(wrapper.text()).toContain('sáng, chiều, tối');
     expect(wrapper.text()).not.toMatch(/1-2km|100% Thợ/);
     wrapper.unmount();
   });
@@ -312,13 +350,14 @@ describe('Public landing page', () => {
     const wrapper = mount(LandingPage, context);
     await flushPromises();
     const ids = wrapper.findAll('[id]').map((el) => el.attributes('id'));
-    const order = ['services', 'ai', 'how-it-works', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
+    const order = ['gioi-thieu', 'services', 'ai', 'how-it-works', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
 
     const layout = mount(PublicLayout, context);
     const navTargets = layout.get('nav[aria-label="Điều hướng chính"]').findAll('a').map((a) => a.attributes('href'));
-    expect(navTargets).toEqual(['/services', '/#ai', '/#how-it-works', '/#trust']);
+    // Every header item stays on the landing (PO 21/10/2026); "Giới thiệu" is its first screen.
+    expect(navTargets).toEqual(['/#gioi-thieu', '/#services', '/#ai', '/#how-it-works', '/#trust']);
     layout.unmount();
     wrapper.unmount();
   });

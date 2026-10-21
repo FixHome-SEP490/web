@@ -31,7 +31,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 vi.mock('vue-sonner', () => ({ toast: toastMock }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
@@ -126,7 +126,8 @@ describe('booking service selection & pricing contracts', () => {
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
     expect(wrapper.find('[data-testid="booking-deeplink-error"]').exists()).toBe(false);
     expect(getService).not.toHaveBeenCalled();
-    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toContain('Dịch vụ A');
+    // The description starts empty (PO 20/10/2026); no "Yêu cầu dịch vụ: …" prefill.
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('');
   });
 
   it('explains an unusable ?serviceId= instead of silently booking another service', async () => {
@@ -135,7 +136,7 @@ describe('booking service selection & pricing contracts', () => {
     const wrapper = await renderWizard();
 
     expect(wrapper.get('[data-testid="booking-deeplink-error"]').text()).toContain('không còn khả dụng');
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
     expect(wrapper.find('[data-testid="booking-service-card"][aria-pressed="true"]').exists()).toBe(false);
   });
@@ -159,15 +160,11 @@ describe('booking service selection & pricing contracts', () => {
     });
     route.query = { serviceId: 'svc-x' };
     const wrapper = await renderWizard();
-    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
-    try {
-      await wrapper.get('[data-testid="selected-outside-filter-show"]').trigger('click');
-      await flushPromises();
-      expect(scroll.mock.instances[0]).toBe(recap(wrapper).element);
-      expect(recap(wrapper).attributes('tabindex')).toBe('-1');
-      expect(recap(wrapper).text()).toContain('Dịch vụ từ liên kết');
-      expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
-    } finally { scroll.mockRestore(); }
+    // The list folds on a linked choice, so the recap is on screen without a "show" link.
+    expect(wrapper.find('[data-testid="selected-outside-filter-show"]').exists()).toBe(false);
+    expect(recap(wrapper).attributes('tabindex')).toBe('-1');
+    expect(recap(wrapper).text()).toContain('Dịch vụ từ liên kết');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
   });
 
   it('invalidates A immediately while a new invalid B link is loading and after it fails', async () => {
@@ -177,7 +174,7 @@ describe('booking service selection & pricing contracts', () => {
     getService.mockReturnValue(pending.promise);
     route.query = { serviceId: 'svc-gone' };
     await flushPromises();
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
     pending.resolve({ ...serviceB, id: 'svc-gone', isActive: false });
     await flushPromises();
@@ -195,7 +192,7 @@ describe('booking service selection & pricing contracts', () => {
     route.query = { serviceId: 'svc-gone' };
     await flushPromises();
     expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="booking-deeplink-error"]').exists()).toBe(true);
   });
 
@@ -230,7 +227,7 @@ describe('booking service selection & pricing contracts', () => {
     await wrapper.get('[data-testid="recap-clear"]').trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === 'Thử lại')!.trigger('click');
     await flushPromises();
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
   });
 
@@ -248,7 +245,7 @@ describe('booking service selection & pricing contracts', () => {
     await wrapper.get('[data-testid="recap-clear"]').trigger('click');
     retry.resolve([categoryA]);
     await flushPromises();
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
   });
 
   it('keeps the AI manual choice when a pending deep link responds later', async () => {
@@ -368,7 +365,7 @@ describe('booking service selection & pricing contracts', () => {
       pricingMode: 'inspection_required', isActive: true,
     });
     await flushPromises();
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="booking-deeplink-error"]').exists()).toBe(false);
 
     secondLink.resolve({
@@ -391,18 +388,17 @@ describe('booking service selection & pricing contracts', () => {
     const wrapper = await renderWizard();
 
     // Nothing is preselected by a query flag.
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
 
     const inspectionCard = cardByText(wrapper, 'Dịch vụ khảo sát');
-    expect(inspectionCard.text()).toContain('Khảo sát & báo giá');
+    expect(inspectionCard.text()).toContain('Khảo sát, báo giá');
     expect(inspectionCard.find('[data-money]').exists()).toBe(false);
 
     const legacyCard = cardByText(wrapper, 'Dịch vụ giá cũ');
-    expect(legacyCard.text()).toContain('Giá niêm yết');
-    expect(legacyCard.find('[data-money="250000"]').exists()).toBe(true);
+    expect(legacyCard.get('[data-testid="booking-service-price"]').text()).toBe('250k');
 
     await inspectionCard.trigger('click');
-    expect(recap(wrapper).text()).toContain('Thợ báo giá trước khi sửa');
+    expect(recap(wrapper).text()).toContain('Khảo sát, báo giá');
     expect(recap(wrapper).find('[data-money]').exists()).toBe(false);
   });
 
@@ -417,11 +413,10 @@ describe('booking service selection & pricing contracts', () => {
     const wrapper = await renderWizard();
 
     const noPriceCard = cardByText(wrapper, 'Dịch vụ thiếu giá');
-    expect(noPriceCard.text()).toContain('Chưa có giá niêm yết');
+    expect(noPriceCard.text()).toContain('Tạm chưa đặt được');
     expect(noPriceCard.find('[data-money]').exists()).toBe(false);
 
     const unknownCard = cardByText(wrapper, 'Dịch vụ chưa rõ giá');
-    expect(unknownCard.text()).toContain('Chưa xác định cách tính giá');
     expect(unknownCard.text()).toContain('Tạm chưa đặt được');
 
     await noPriceCard.trigger('click');
@@ -470,7 +465,8 @@ describe('booking service selection & pricing contracts', () => {
     await wrapper.get('[data-testid="booking-submit"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="booking-submit-unknown"]').exists()).toBe(true);
-    expect(push).not.toHaveBeenCalled();
+    // Steps push their own history entries (PO 21/10/2026); the page never goes on to the candidates.
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/candidates'));
 
     await wrapper.get('[data-testid="booking-submit"]').trigger('click');
     await flushPromises();

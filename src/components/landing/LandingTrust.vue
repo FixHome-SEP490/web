@@ -4,9 +4,9 @@ import { ArrowRight, ShieldCheck, Award, Star, History } from 'lucide-vue-next';
 const trustPillars = [
   {
     icon: ShieldCheck,
-    title: 'Xác minh danh tính & chứng chỉ (KYC)',
+    title: 'Xác minh danh tính (KYC)',
     description:
-      'FixHome duyệt giấy tờ tuỳ thân và chứng chỉ trước khi thợ được nhận việc.',
+      'FixHome duyệt giấy tờ tuỳ thân và video khuôn mặt trước khi thợ được nhận việc.',
   },
   {
     icon: Award,
@@ -22,9 +22,9 @@ const trustPillars = [
   },
   {
     icon: History,
-    title: 'Cam kết bảo hành sau sửa chữa',
+    title: 'Bảo hành sau sửa chữa',
     description:
-      'Có bảo hành sau khi đơn hoàn tất; lỗi lặp lại thì yêu cầu kiểm tra lại.',
+      'Đơn hoàn tất có bảo hành. Lỗi lặp lại trong thời hạn thì gửi yêu cầu bảo hành ngay trong đơn.',
   },
 ];
 </script>

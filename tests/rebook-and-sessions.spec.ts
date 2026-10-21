@@ -74,6 +74,7 @@ describe('Rebook dialog', () => {
     rebook.mockResolvedValue({ booking: { id: 'new-booking' }, previousTechnicianInvited: true });
     const wrapper = await mountDialog();
     await wrapper.get('[data-testid="session-2030-01-03-afternoon"]').trigger('click');
+    await wrapper.get('[data-testid="rebook-note-open"]').trigger('click');
     await wrapper.get('[data-testid="rebook-note"]').setValue('  Gọi trước  ');
     await confirm(wrapper).trigger('click');
     await flushPromises();

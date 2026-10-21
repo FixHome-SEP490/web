@@ -110,7 +110,7 @@ const routes: RouteRecordRaw[] = [
         name: 'new-booking',
         component: () => import('../pages/customer/NewBookingWizardPage.vue'),
         // Booking a service the customer chose: no AI anywhere on this form.
-        meta: { title: 'Đặt lịch sửa chữa', hidesAssistant: true },
+        meta: { title: 'Đặt lịch sửa chữa', hidesAssistant: true, actionBar: true },
       },
       {
         // Booking through the assistant: describe, let the AI diagnose and
@@ -118,7 +118,7 @@ const routes: RouteRecordRaw[] = [
         path: 'bookings/ai',
         name: 'ai-booking',
         component: () => import('../pages/customer/NewBookingWizardPage.vue'),
-        meta: { title: 'Đặt thợ nhờ AI phân tích', bookingFlow: 'ai', hidesAssistant: true },
+        meta: { title: 'Đặt thợ nhờ AI phân tích', bookingFlow: 'ai', hidesAssistant: true, actionBar: true },
       },
       {
         path: 'bookings/:id/candidates',
@@ -464,7 +464,8 @@ const router = createRouter({
   routes,
   scrollBehavior(to, _from, savedPosition) {
     if (savedPosition) return savedPosition;
-    if (to.hash) return { el: to.hash, top: 96 };
+    if (to.hash === '#gioi-thieu') return { top: 0, behavior: 'smooth' };
+    if (to.hash) return { el: to.hash, top: 80, behavior: 'smooth' };
     return { top: 0 };
   },
 });

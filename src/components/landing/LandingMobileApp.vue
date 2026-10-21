@@ -11,7 +11,7 @@ const appFeatures = [
   {
     icon: Bell,
     title: 'Thông báo theo tiến độ đơn',
-    desc: 'Biết khi thợ nhận đơn, xuất phát và gửi báo giá.',
+    desc: 'Biết khi thợ nhận đơn, lên đường, gửi báo giá hay không kịp tới.',
   },
   {
     icon: MapPin,
@@ -25,8 +25,8 @@ const appFeatures = [
   },
   {
     icon: ShieldCheck,
-    title: 'Bảo hành & hóa đơn điện tử',
-    desc: 'Lưu lịch sử sửa chữa, hoá đơn và bảo hành.',
+    title: 'Hóa đơn & bảo hành',
+    desc: 'Lưu lịch sử sửa chữa, hóa đơn và bảo hành của từng đơn.',
   },
 ];
 </script>

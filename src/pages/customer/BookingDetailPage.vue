@@ -2,8 +2,9 @@
 // src/pages/customer/BookingDetailPage.vue
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
-import { BookingMediaViewer, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
+import { Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
+import { BookingMediaViewer, FhBackLink, FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
+import { deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
@@ -280,12 +281,46 @@ const selectedSession = ref<{ date: string; slot: BookingSlot } | null>(null);
 const scheduleNotice = ref('');
 // The sessions are checked against the technician only when the customer asks to move.
 const showReschedule = ref(false);
+// What was asked for, as the server froze it (PO 20/10/2026): the device, the labour
+// price and the customer's own words stay readable on every status, cancelled too.
+const requestDevice = computed(() => {
+  const value = booking.value;
+  if (!value) return null;
+  const facts = deviceFactsText(value.deviceAttributesSnapshot);
+  if (facts) return facts;
+  const scope = value.catalogV2PricingSnapshot?.selectedVariant?.scopeVi;
+  return scope ? readableScope(scope) : null;
+});
+
+type RequestPrice = { kind: 'firm'; amount: number } | { kind: 'range'; min: number; max: number } | { kind: 'survey' };
+const positiveAmount = (value: unknown): number | null => {
+  const amount = typeof value === 'string' ? Number(value) : value;
+  return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 ? amount : null;
+};
+const requestPrice = computed<RequestPrice | null>(() => {
+  const value = booking.value;
+  if (!value) return null;
+  const snapshot = value.catalogV2PricingSnapshot;
+  const tier = positiveAmount(snapshot?.selectedVariant?.laborPriceVnd);
+  if (tier !== null) return { kind: 'firm', amount: tier };
+  const min = positiveAmount(snapshot?.priceRange?.minLaborVnd);
+  const max = positiveAmount(snapshot?.priceRange?.maxLaborVnd);
+  if (min !== null && max !== null) return min < max ? { kind: 'range', min, max } : { kind: 'firm', amount: min };
+  const unit = positiveAmount(value.fixedUnitPriceSnapshot);
+  if (value.pricingModeSnapshot === 'fixed_price' && unit !== null) return { kind: 'firm', amount: unit * Math.max(1, value.quantity ?? 1) };
+  if (value.pricingModeSnapshot || snapshot) return { kind: 'survey' };
+  return null;
+});
+
 const currentSchedule = computed(() => booking.value
   ? sessionLabel({ bookingMode: booking.value.bookingMode, slot: booking.value.slot, start: booking.value.preferredAt })
   : '');
 
+/** One move of the arrival session per booking (PO 21/10/2026); the server refuses a second. */
+const rescheduleUsed = computed(() => (booking.value?.rescheduleCount ?? 0) >= 1);
+
 const loadSessions = async () => {
-  if (!canReschedule.value) return;
+  if (!canReschedule.value || rescheduleUsed.value) return;
   sessionsLoading.value = true;
   sessionsError.value = '';
   try {
@@ -311,6 +346,7 @@ const loadOrderStatus = async () => {
 };
 
 const openReschedule = () => {
+  if (rescheduleUsed.value) return;
   showReschedule.value = true;
   void loadSessions();
 };
@@ -520,16 +556,7 @@ const confirmMatchingExtension = async () => {
   <div class="max-w-2xl mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
     <div class="flex items-center justify-between gap-3">
-      <button
-        type="button"
-        class="group inline-flex items-center gap-2 h-9 text-sm font-semibold text-ink-600 hover:text-brand-600 transition-colors"
-        @click="router.push('/app/orders')"
-      >
-        <div class="w-7 h-7 rounded-lg bg-ink-100 group-hover:bg-brand-50 flex items-center justify-center transition-colors">
-          <ArrowLeft :size="15" class="text-ink-600 group-hover:text-brand-600" />
-        </div>
-        <span>Đơn của tôi</span>
-      </button>
+      <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
       <div v-if="booking && canCancelBooking" class="relative">
         <button
@@ -659,6 +686,27 @@ const confirmMatchingExtension = async () => {
           </div>
         </div>
 
+        <!-- What was asked for: device, labour price, the customer's words. -->
+        <dl
+          v-if="requestDevice || requestPrice"
+          class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 rounded-2xl border border-ink-200 p-4 text-sm sm:p-5"
+          data-testid="booking-request-summary"
+        >
+          <template v-if="requestDevice">
+            <dt class="text-ink-500">Thiết bị</dt>
+            <dd class="font-medium text-ink-900" data-testid="booking-request-device">{{ requestDevice }}</dd>
+          </template>
+          <template v-if="requestPrice">
+            <dt class="text-ink-500">Tiền công</dt>
+            <dd class="text-ink-900" data-testid="booking-request-price">
+              <span v-if="requestPrice.kind === 'firm'" class="font-semibold font-num"><FhMoney :amount="requestPrice.amount" /></span>
+              <span v-else-if="requestPrice.kind === 'range'" class="font-semibold font-num"><FhMoney :amount="requestPrice.min" /> – <FhMoney :amount="requestPrice.max" /></span>
+              <span v-else>Thợ báo giá tại nhà</span>
+              <span class="block text-xs text-ink-500">{{ requestPrice.kind === 'firm' ? 'Chưa gồm linh kiện, vật tư' : 'Thợ báo giá để bạn duyệt trước khi sửa' }}</span>
+            </dd>
+          </template>
+        </dl>
+
         <!-- Customer note if present -->
         <div v-if="booking.customerNote" class="rounded-2xl border border-warning-200/80 bg-warning-50/70 p-3.5 text-xs sm:text-sm text-warning-900 text-pretty flex items-start gap-2.5">
           <span>Ghi chú cho thợ: {{ booking.customerNote }}</span>
@@ -753,7 +801,18 @@ const confirmMatchingExtension = async () => {
       </section>
 
       <!-- Attached Photos Viewer -->
-      <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" />
+      <!-- "Mô tả" (PO 21/10/2026): the customer's own words, then their photos, in one card like the
+           others. Nothing written and nothing sent: no card, never a line made up from the service name. -->
+      <section
+        v-if="booking.description?.trim() || bookingMedia.length"
+        class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-4"
+        aria-labelledby="booking-description-title"
+        data-testid="booking-description-card"
+      >
+        <h2 id="booking-description-title" class="text-base sm:text-lg font-bold text-ink-900">Mô tả</h2>
+        <p v-if="booking.description?.trim()" class="text-sm sm:text-[15px] leading-relaxed text-ink-800 text-pretty whitespace-pre-line" data-testid="booking-request-description">{{ booking.description.trim() }}</p>
+        <BookingMediaViewer :booking-id="booking.id" :media="bookingMedia" embedded />
+      </section>
 
       <!-- Reschedule & Request Editing Section -->
       <section v-if="canReschedule" class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-5">
@@ -770,9 +829,12 @@ const confirmMatchingExtension = async () => {
           ></textarea>
         </div>
 
-        <FhButton v-if="!showReschedule" variant="secondary" size="sm" data-testid="booking-open-reschedule" class="shadow-2xs" @click="openReschedule">
-          <CalendarIcon :size="14" /> Đổi buổi hẹn
-        </FhButton>
+        <div v-if="!showReschedule" class="space-y-1.5">
+          <FhButton variant="secondary" size="sm" data-testid="booking-open-reschedule" class="shadow-2xs" :disabled="rescheduleUsed" @click="openReschedule">
+            <CalendarIcon :size="14" /> Đổi buổi hẹn
+          </FhButton>
+          <p v-if="rescheduleUsed" class="text-xs text-ink-500" data-testid="booking-reschedule-used">Mỗi đơn chỉ đổi lịch hẹn một lần, đơn này đã đổi rồi.</p>
+        </div>
 
         <div v-else class="space-y-3 pt-2">
           <div class="space-y-1">
@@ -790,7 +852,7 @@ const confirmMatchingExtension = async () => {
             <p class="text-sm text-danger-700">{{ sessionsError }}</p>
             <FhButton variant="secondary" size="sm" @click="loadSessions">Thử lại</FhButton>
           </div>
-          <BookingSessionPicker v-else v-model="selectedSession" :sessions="sessions" />
+          <BookingSessionPicker v-else v-model="selectedSession" :sessions="sessions" compact />
         </div>
 
         <div

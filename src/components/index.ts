@@ -1,5 +1,6 @@
 // src/components/index.ts
 export { default as FhButton } from './FhButton.vue';
+export { default as FhBackLink } from './FhBackLink.vue';
 export { default as FhStatusPill } from './FhStatusPill.vue';
 export { default as FhCard } from './FhCard.vue';
 export { default as FhMoney } from './FhMoney.vue';

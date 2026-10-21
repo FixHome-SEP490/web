@@ -16,13 +16,29 @@ const menuTrigger = ref<HTMLButtonElement | null>(null);
 const header = ref<HTMLElement | null>(null);
 const isScrolled = ref(false);
 
-// Same order as the sections on the landing page.
+// Same order as the sections on the landing page (PO 21/10/2026): every item
+// scrolls within the landing; "Giới thiệu" is its first screen. The full
+// service catalog is reached from "Xem tất cả dịch vụ" in the services section.
 const navigation = [
-  { label: 'Dịch vụ', to: '/services' },
+  { label: 'Giới thiệu', to: '/#gioi-thieu' },
+  { label: 'Dịch vụ', to: '/#services' },
   { label: 'Phân tích sự cố bằng AI', to: '/#ai' },
   { label: 'Cách hoạt động', to: '/#how-it-works' },
-  { label: 'Về FixHome', to: '/#trust' },
+  { label: 'Vì sao chọn FixHome', to: '/#trust' },
 ];
+
+/** On the landing itself a click scrolls even when the hash is already in the URL. */
+function goToSection(event: MouseEvent, to: string) {
+  const hash = to.slice(to.indexOf('#'));
+  if (route.path !== '/') return;
+  event.preventDefault();
+  mobileMenuOpen.value = false;
+  const target = hash === '#gioi-thieu' ? null : document.querySelector<HTMLElement>(hash);
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const top = target ? target.getBoundingClientRect().top + window.scrollY - 80 : 0;
+  window.scrollTo({ top, behavior: reduce ? 'auto' : 'smooth' });
+  if (route.hash !== hash) void router.replace({ path: '/', hash });
+}
 
 // The page looks the same for every role; only this one button differs.
 const headerAction = computed(() => roleHeaderAction(authStore.userRole));
@@ -88,7 +104,7 @@ onUnmounted(() => {
           </span>
         </router-link>
         <nav aria-label="Điều hướng chính" class="public-desktop-nav items-center gap-7">
-          <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="public-nav-link">
+          <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="public-nav-link" @click="goToSection($event, item.to)">
             {{ item.label }}
           </router-link>
         </nav>
@@ -141,7 +157,7 @@ onUnmounted(() => {
           :key="item.to"
           :to="item.to"
           class="public-nav-link border-b border-ink-100 py-3"
-          @click="closeMenu()"
+          @click="goToSection($event, item.to); closeMenu()"
         >
           {{ item.label }}
         </router-link>

@@ -46,7 +46,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }));
@@ -159,9 +159,10 @@ describe('customer New Booking private photo flow', () => {
     expect(dropzone.attributes('tabindex')).toBe('0');
     expect(dropzone.attributes('aria-label')).toContain('Tải ảnh hiện trạng');
     expect(dropzone.classes()).toContain('border-dashed');
-    expect(dropzone.classes()).toContain('min-h-[100px]');
+    // A 72px tile beside the photos it adds (PO 20/10/2026), still one target for click, keys and drop.
+    expect(dropzone.classes()).toContain('h-[72px]');
     expect(dropzone.find('svg[aria-hidden="true"]').exists()).toBe(true);
-    expect(dropzone.text().trim()).toBe('Thêm ảnh hoặc kéo thả vào đây');
+    expect(dropzone.text().trim()).toBe('Thêm ảnh');
     expect(wrapper.text()).not.toContain('Ảnh hiện trạng thiết bị');
     expect(wrapper.text()).not.toContain('Bấm để chọn ảnh');
     expect(wrapper.findAll('[data-testid="booking-photo-picker"]')).toHaveLength(1);
@@ -195,6 +196,8 @@ describe('customer New Booking private photo flow', () => {
     expect(createBooking).toHaveBeenCalledTimes(1);
     const payload = createBooking.mock.calls[0][0];
     expect(payload.photoUploadIds).toEqual(['opaque-upload-id']);
+    // A fixed-price job with no words sends none; nothing is made up from the service name (PO 21/10/2026).
+    expect(payload.description).toBe('');
     expect(payload).not.toHaveProperty('mediaUrls');
     expect(push).toHaveBeenCalledWith('/app/bookings/booking-id/candidates');
     wrapper.unmount();

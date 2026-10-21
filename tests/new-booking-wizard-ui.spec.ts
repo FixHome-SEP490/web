@@ -36,11 +36,9 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
-import SelectedServiceMiniSummary from '../src/components/booking/SelectedServiceMiniSummary.vue';
-import ServiceCategoryFilters from '../src/components/booking/ServiceCategoryFilters.vue';
 
 const ActionButton = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -184,38 +182,6 @@ describe('NewBookingWizardPage A+ service finder', () => {
       if (mode === 'urgent') expect(payload).not.toHaveProperty('slot');
     } finally { wrapper?.unmount(); vi.useRealTimers(); }
   });
-  it('labels the unit price and the quantity total separately in the mini summary', () => {
-    const wrapper = mount(SelectedServiceMiniSummary, {
-      props: { service: sampleCategories[0].services[0] as never, quantity: 3 }, global: { stubs },
-    });
-    const unitPrice = wrapper.get('[data-testid="booking-mini-unit-price"]');
-    expect(unitPrice.find('[data-money="200000"]').exists()).toBe(true);
-    expect(unitPrice.text()).toContain('/ máy');
-    const total = wrapper.get('[data-testid="booking-mini-total"]');
-    expect(total.text()).toContain('Tạm tính');
-    expect(total.find('[data-money="600000"]').exists()).toBe(true);
-    expect(total.text()).not.toContain('/ máy');
-  });
-
-  it.each([0, '200000oops', '0x100', 'NaN', null])('shows unavailable fixed pricing honestly for %j in the mini summary', (fixedPrice) => {
-    const wrapper = mount(SelectedServiceMiniSummary, {
-      props: { service: { ...sampleCategories[0].services[0], fixedPrice } as never }, global: { stubs },
-    });
-    expect(wrapper.text()).toContain('Giá đang cập nhật');
-    expect(wrapper.text()).not.toContain('Báo giá sau khảo sát');
-    expect(wrapper.find('[data-money]').exists()).toBe(false);
-  });
-
-  it.each([
-    ['inspection_required', 'Báo giá sau khảo sát'],
-    ['unknown_mode', 'Giá chưa xác định'],
-  ])('preserves the meaning of %s in the mini summary', (pricingMode, expected) => {
-    const wrapper = mount(SelectedServiceMiniSummary, {
-      props: { service: { ...sampleCategories[0].services[0], pricingMode } as never }, global: { stubs },
-    });
-    expect(wrapper.text()).toContain(expected);
-    expect(wrapper.find('[data-money]').exists()).toBe(false);
-  });
   beforeEach(() => {
     createBooking.mockReset().mockResolvedValue({ id: 'booking-id' });
     getService.mockReset();
@@ -237,13 +203,16 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(cards.every((card) => card.attributes('aria-pressed') === 'false')).toBe(true);
 
     // No first-item auto-selection: recap empty, CTA off, description untouched.
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.get('[data-testid="booking-select-service-hint"]').text()).toContain('Chọn một dịch vụ');
-    expect(textareaValue(wrapper)).toBe('');
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toBe('Chưa chọn');
+    // Step 1 has no step before it, so no "Quay lại" that would leave the form (PO 21/10/2026).
+    expect(wrapper.find('[data-testid="booking-summary-back"]').exists()).toBe(false);
+    // The fault description belongs to a chosen service; nothing is asked before that.
+    expect(wrapper.find('textarea').exists()).toBe(false);
   });
 
-  it('reserves action-dock clearance on manual Step 1 without padding later wizard steps', async () => {
+  it('keeps clearance for the summary bar through address and time, not on the final check', async () => {
     const wrapper = await renderWizard();
     const root = wrapper.get('[data-testid="booking-stepper"]').element.parentElement as HTMLElement;
     expect(root.className).toContain('pb-[calc(8.5rem_+_env(safe-area-inset-bottom))]');
@@ -252,11 +221,16 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await wrapper.get('[data-testid="step1-next"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+    expect(root.className).toContain('pb-[calc(8.5rem_+_env(safe-area-inset-bottom))]');
+    await wrapper.get('button[data-testid^="session-2"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="booking-submit"]').exists()).toBe(true);
     expect(root.className).toContain('pb-16');
     expect(root.className).not.toContain('8.5rem');
   });
 
-  it('keeps the wide step-1 width route-scoped and releases it when leaving service selection', async () => {
+  it('keeps the wide two-column width through address and time, and releases it on leaving the page', async () => {
     const setCustomerBookingWidth = vi.fn();
     const wrapper = await renderWizard({ provide: { 'customer-booking-layout-width': setCustomerBookingWidth } });
 
@@ -266,28 +240,9 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await flushPromises();
 
     expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
-    expect(setCustomerBookingWidth).toHaveBeenLastCalledWith(false);
+    expect(setCustomerBookingWidth).toHaveBeenLastCalledWith(true);
     wrapper.unmount();
     expect(setCustomerBookingWidth).toHaveBeenLastCalledWith(false);
-  });
-
-  it('shows three featured categories and keeps a selected extra chip visible', async () => {
-    const categories = Array.from({ length: 13 }, (_, i) => ({ id: `cat-${i}`, name: `Nhóm ${i + 1}`, count: i % 3 + 1 }));
-    const wrapper = mount(ServiceCategoryFilters, { props: { categories, modelValue: 'cat-1' } });
-    expect(wrapper.find('select').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(4);
-    await wrapper.get('[data-testid="category-more-toggle"]').trigger('click');
-    const dialog = wrapper.get('[role="dialog"]');
-    expect(dialog.findAll('button')).toHaveLength(10);
-    await dialog.get('[data-category-id="cat-12"]').trigger('click');
-    expect(wrapper.emitted('update:modelValue')).toEqual([['cat-12']]);
-    await wrapper.setProps({ modelValue: 'cat-12' });
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="booking-category-filter"][data-category-id="cat-12"]').attributes('aria-pressed')).toBe('true');
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(5);
-    await wrapper.setProps({ modelValue: 'cat-11' });
-    expect(wrapper.find('[data-testid="booking-category-filter"][data-category-id="cat-12"]').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="booking-category-filter"]')).toHaveLength(5);
   });
 
   it('limits the default catalog to eight, expands it, and shows every match when filtering', async () => {
@@ -307,20 +262,6 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await wrapper.get('[data-testid="booking-service-search"]').setValue('');
     await categoryChip(wrapper, 'Điện lạnh').trigger('click');
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(12);
-  });
-
-  it('keeps short category lists named and selected without noisy counts', async () => {
-    const wrapper = mount(ServiceCategoryFilters, {
-      props: { categories: [{ id: 'a', name: 'Điện lạnh', count: 2 }, { id: 'b', name: 'Điện & Nước', count: 1 }], modelValue: 'a' },
-    });
-    expect(wrapper.get('p').text()).toBe('Nhóm dịch vụ');
-    expect(wrapper.find('label').exists()).toBe(false);
-    expect(wrapper.get('[role="group"]').attributes('aria-label')).toBe('Lọc theo nhóm dịch vụ');
-    const buttons = wrapper.findAll('button');
-    expect(buttons.map((button) => button.text())).toEqual(['Tất cả', 'Điện lạnh', 'Điện & Nước']);
-    expect(buttons[1].attributes('aria-pressed')).toBe('true');
-    await buttons[2].trigger('click');
-    expect(wrapper.emitted('update:modelValue')).toEqual([['b']]);
   });
 
   it('searches across the loaded catalog, ignores diacritics and can reset the filters', async () => {
@@ -343,16 +284,14 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(3);
   });
 
-  it('filters by pricing mode chips without inventing prices', async () => {
+  it('narrows the list with search and category only, no price-mode chips (PO 20/10/2026)', async () => {
     const wrapper = await renderWizard();
 
-    await wrapper.get('[data-testid="booking-price-filter-inspection"]').trigger('click');
+    expect(wrapper.find('[data-testid="booking-price-filter-inspection"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-price-filter-fixed"]').exists()).toBe(false);
+    await categoryChip(wrapper, 'Điện lạnh').trigger('click');
     expect(wrapper.text()).toContain('Sửa chữa điều hòa mất lạnh');
-    expect(wrapper.text()).not.toContain('Vệ sinh điều hòa treo tường');
-
-    await wrapper.get('[data-testid="booking-price-filter-fixed"]').trigger('click');
-    expect(wrapper.text()).not.toContain('Sửa chữa điều hòa mất lạnh');
-    expect(wrapper.text()).toContain('Thay siphon lavabo');
+    expect(wrapper.text()).not.toContain('Thay siphon lavabo');
   });
 
   it('avoids redundant price filters when every service has the same catalog mode', async () => {
@@ -376,10 +315,12 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(1);
     await cardByText(wrapper, 'Thay siphon lavabo').trigger('click');
     await wrapper.get('textarea').setValue('Giữ ghi chú này');
+    await wrapper.get('[data-testid="recap-change"]').trigger('click');
+    await flushPromises();
     await categoryChip(wrapper, 'Điện lạnh').trigger('click');
     await wrapper.get('[data-testid="booking-service-search"]').setValue('dieu hoa');
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(2);
-    expect(wrapper.get('[data-testid="recap-service-name"]').text()).toBe('Thay siphon lavabo');
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toBe('Thay siphon lavabo');
     expect(textareaValue(wrapper)).toBe('Giữ ghi chú này');
     await wrapper.get('[data-testid="selected-outside-filter-show"]').trigger('click');
     expect(categoryChip(wrapper, 'Tất cả').attributes('aria-pressed')).toBe('true');
@@ -392,7 +333,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     try {
       const wrapper = await renderWizard();
       expect(wrapper.get('[data-testid="selected-service-recap"]').attributes('aria-live')).toBe('polite');
-      expect(cardByText(wrapper, 'Vệ sinh điều hòa treo tường').attributes('aria-pressed')).toBe('true');
+      expect(wrapper.get('[data-testid="recap-service-name"]').text()).toBe('Vệ sinh điều hòa treo tường');
       expect(scroll).not.toHaveBeenCalled();
       wrapper.unmount();
     } finally { scroll.mockRestore(); }
@@ -404,19 +345,21 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     const recap = wrapper.get('[data-testid="selected-service-recap"]');
     expect(recap.text()).toContain('Vệ sinh điều hòa treo tường');
-    expect(recap.text()).toContain('Giá niêm yết');
+    expect(recap.text()).toContain('/ máy');
     expect(recap.find('[data-money="200000"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
 
-    // The quantity stepper updates the recap total and the synced description.
+    // The quantity stepper updates the total in the summary; the description stays the customer's.
     await recap.get('[data-testid="booking-quantity-increase"]').trigger('click');
     expect(recap.get('[data-testid="booking-quantity"]').text()).toBe('2');
-    expect(recap.find('[data-money="400000"]').exists()).toBe(true);
-    expect(textareaValue(wrapper)).toContain('(2 máy)');
+    expect(wrapper.get('[data-testid="booking-summary-price"]').find('[data-money="400000"]').exists()).toBe(true);
+    expect(textareaValue(wrapper)).toBe('');
 
     // Filtering to another category hides the card but never drops the choice.
+    await wrapper.get('[data-testid="recap-change"]').trigger('click');
+    await flushPromises();
     await categoryChip(wrapper, 'Điện & Nước').trigger('click');
-    expect(wrapper.get('[data-testid="selected-service-recap"]').text()).toContain('Vệ sinh điều hòa treo tường');
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toContain('Vệ sinh điều hòa treo tường');
     expect(wrapper.get('[data-testid="selected-outside-filter"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="booking-service-card"][aria-pressed="true"]').exists()).toBe(false);
 
@@ -429,14 +372,18 @@ describe('NewBookingWizardPage A+ service finder', () => {
     const wrapper = await renderWizard();
 
     const card = cardByText(wrapper, 'Sửa chữa điều hòa mất lạnh');
-    expect(card.text()).toContain('Khảo sát & báo giá');
+    expect(card.text()).toContain('Khảo sát, báo giá');
     expect(card.find('[data-money]').exists()).toBe(false);
 
     await card.trigger('click');
     const recap = wrapper.get('[data-testid="selected-service-recap"]');
-    expect(recap.text()).toContain('Thợ báo giá trước khi sửa');
+    expect(recap.text()).toContain('Khảo sát, báo giá');
     expect(recap.find('[data-money]').exists()).toBe(false);
 
+    // A survey visit needs a few words about the fault before going on.
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(false);
+    await wrapper.get('textarea').setValue('Máy chạy nhưng không lạnh');
     await wrapper.get('[data-testid="step1-next"]').trigger('click');
     expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
   });
@@ -444,7 +391,8 @@ describe('NewBookingWizardPage A+ service finder', () => {
   it('suggests symptoms for the chosen category and toggles them in the description', async () => {
     const wrapper = await renderWizard();
 
-    await categoryChip(wrapper, 'Điện lạnh').trigger('click');
+    await cardByText(wrapper, 'Sửa chữa điều hòa mất lạnh').trigger('click');
+    await flushPromises();
     const chip = wrapper.findAll('button').find((button) => button.text().includes('Chảy nước dàn lạnh'));
     expect(chip).toBeDefined();
     await chip?.trigger('click');
@@ -461,19 +409,18 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.text()).not.toContain('Mức độ khẩn cấp');
   });
 
-  it('keeps every card to title, price mode, duration and a Chi tiết button', async () => {
+  it('keeps every row to the name, one short price and a details button (PO 20/10/2026)', async () => {
     const wrapper = await renderWizard();
     const card = cardByText(wrapper, 'Vệ sinh điều hòa treo tường');
 
     expect(card.text()).toContain('Vệ sinh điều hòa treo tường');
-    expect(card.text()).toContain('Giá niêm yết');
-    expect(card.text()).toContain('~45 phút');
-    expect(card.find('[data-money="200000"]').exists()).toBe(true);
+    expect(card.get('[data-testid="booking-service-price"]').text()).toBe('200k');
+    expect(card.text()).not.toContain('phút');
 
-    // The description belongs to the details dialog, never to the scannable grid.
+    // The description belongs to the details dialog, never to the scannable list.
     expect(card.text()).not.toContain('Vệ sinh xịt rửa dàn nóng và dàn lạnh');
     expect(wrapper.findAll('[data-testid="booking-service-details"]')).toHaveLength(3);
-    expect(detailsButton(wrapper, 'Vệ sinh điều hòa treo tường').text()).toContain('Chi tiết');
+    expect(detailsButton(wrapper, 'Vệ sinh điều hòa treo tường').attributes('aria-label')).toContain('Xem chi tiết');
   });
 
   it('opens the full details without choosing the service, and only confirm selects it', async () => {
@@ -488,7 +435,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(dialog.text()).toContain('~45 phút');
 
     // Reading the details changes nothing: the recap is still empty and the CTA off.
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
     expect(wrapper.find('[data-testid="booking-service-card"][aria-pressed="true"]').exists()).toBe(false);
 
@@ -497,7 +444,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     expect(wrapper.find('[data-testid="booking-service-details-dialog"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="selected-service-recap"]').text()).toContain('Vệ sinh điều hòa treo tường');
-    expect(cardByText(wrapper, 'Vệ sinh điều hòa treo tường').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.find('[data-testid="booking-service-card"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
   });
 
@@ -509,14 +456,14 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await wrapper.get('[data-testid="booking-service-details-dialog"]').trigger('keydown', { key: 'Escape' });
     await flushPromises();
     expect(wrapper.find('[data-testid="booking-service-details-dialog"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
 
     await trigger.trigger('click');
     await wrapper.get('[data-testid="booking-service-details-dismiss"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="booking-service-details-dialog"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="recap-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
   });
 
@@ -535,6 +482,8 @@ describe('NewBookingWizardPage A+ service finder', () => {
       expect(scroll.mock.instances[0]).toBe(wrapper.get('[data-testid="booking-request-configuration"]').element);
       expect(wrapper.find('[data-testid="booking-mini-summary"]').exists()).toBe(false);
       expect(wrapper.get('[data-testid="recap-service-name"]').text()).toContain('Thay siphon lavabo');
+      await wrapper.get('[data-testid="recap-change"]').trigger('click');
+      await flushPromises();
       scroll.mockClear();
       await categoryChip(wrapper, 'Điện lạnh').trigger('click');
       await wrapper.get('[data-testid="booking-service-search"]').setValue('khong co');
@@ -546,17 +495,24 @@ describe('NewBookingWizardPage A+ service finder', () => {
     const wrapper = await renderWizard();
     await cardByText(wrapper, 'Thay siphon lavabo').trigger('click');
     await wrapper.get('textarea').setValue('Ghi chú riêng của khách');
-    const search = wrapper.get('[data-testid="booking-service-search"]');
-    const focus = vi.spyOn(search.element as HTMLElement, 'focus');
-    await wrapper.get('[data-testid="recap-change"]').trigger('click');
-    expect(focus).toHaveBeenCalled();
-    expect(wrapper.get('[data-testid="recap-service-name"]').text()).toContain('Thay siphon lavabo');
+    // The list folded after the choice; "Đổi" brings it back with the search focused.
+    expect(wrapper.find('[data-testid="booking-service-search"]').exists()).toBe(false);
+    const focus = vi.spyOn(HTMLInputElement.prototype, 'focus');
+    try {
+      await wrapper.get('[data-testid="recap-change"]').trigger('click');
+      await flushPromises();
+      expect(focus.mock.instances[0]).toBe(wrapper.get('[data-testid="booking-service-search"]').element);
+    } finally { focus.mockRestore(); }
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toContain('Thay siphon lavabo');
+    expect(cardByText(wrapper, 'Thay siphon lavabo').attributes('aria-pressed')).toBe('true');
     expect(textareaValue(wrapper)).toBe('Ghi chú riêng của khách');
   });
 
   it('combines category and search predictably and shows one non-warning selection hint', async () => {
     const wrapper = await renderWizard();
     await cardByText(wrapper, 'Thay siphon lavabo').trigger('click');
+    await wrapper.get('[data-testid="recap-change"]').trigger('click');
+    await flushPromises();
     await categoryChip(wrapper, 'Điện lạnh').trigger('click');
     await wrapper.get('[data-testid="booking-service-search"]').setValue('dieu hoa');
     expect(wrapper.findAll('[data-testid="booking-service-card"]')).toHaveLength(2);

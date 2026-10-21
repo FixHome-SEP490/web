@@ -7,14 +7,14 @@ const router = useRouter();
 </script>
 
 <template>
-  <section class="bg-white border-b border-ink-100/80" aria-labelledby="hero-title">
+  <section id="gioi-thieu" class="bg-white border-b border-ink-100/80" aria-labelledby="hero-title">
     <div
       class="landing-container grid items-center gap-10 pt-10 pb-16 lg:min-h-[620px] lg:grid-cols-[1fr_1.05fr] lg:gap-14 lg:py-14"
     >
       <div class="hero-left-col max-w-xl">
         <p class="landing-eyebrow hero-eyebrow-anim flex items-center gap-2">
           <span class="h-2 w-2 rounded-full bg-brand-600" aria-hidden="true"></span>
-          Chăm sóc ngôi nhà, theo cách thông minh hơn
+          Sửa thiết bị gia dụng tại nhà
         </p>
 
         <h1 id="hero-title" class="hero-title hero-title-anim">
@@ -24,7 +24,7 @@ const router = useRouter();
         </h1>
 
         <p class="hero-description hero-desc-anim mt-6 text-base sm:text-lg leading-relaxed text-ink-600">
-          Kỹ thuật viên đã xác minh sửa tận nhà. Bạn duyệt báo giá trước khi sửa.
+          Chọn dịch vụ có giá theo loại máy, hoặc kể sự cố để AI gợi ý. Kỹ thuật viên đã xác minh tới tận nhà, mọi khoản phát sinh đều chờ bạn duyệt.
         </p>
 
         <div class="hero-cta-anim mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -39,7 +39,7 @@ const router = useRouter();
         </div>
 
         <p class="hero-cta-anim mt-4 text-xs leading-5 text-ink-500">
-          Chưa rõ lỗi? Mô tả hoặc chụp ảnh để AI gợi ý.
+          Chưa rõ lỗi? Chụp ảnh hoặc mô tả, AI gợi ý dịch vụ phù hợp.
         </p>
       </div>
 
@@ -83,7 +83,7 @@ const router = useRouter();
           </div>
           <div>
             <span class="block text-sm font-semibold text-ink-900">Kỹ thuật viên xác minh</span>
-            <span class="block text-xs text-ink-600">Đã duyệt danh tính và kỹ năng</span>
+            <span class="block text-xs text-ink-600">Danh tính và kỹ năng được duyệt</span>
           </div>
         </div>
         <div class="flex items-center gap-3.5">
@@ -91,8 +91,8 @@ const router = useRouter();
             <ReceiptText :size="22" aria-hidden="true" />
           </div>
           <div>
-            <span class="block text-sm font-semibold text-ink-900">Chi phí minh bạch</span>
-            <span class="block text-xs text-ink-600">Bạn duyệt báo giá trước khi sửa</span>
+            <span class="block text-sm font-semibold text-ink-900">Giá rõ trước khi sửa</span>
+            <span class="block text-xs text-ink-600">Tiền công theo loại máy, linh kiện bạn duyệt</span>
           </div>
         </div>
         <div class="flex items-center gap-3.5">

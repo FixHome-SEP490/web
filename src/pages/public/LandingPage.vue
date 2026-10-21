@@ -21,12 +21,22 @@ const questions = [
   {
     question: 'Chưa biết thiết bị gặp lỗi gì, tôi có đặt lịch được không?',
     answer:
-      'Có. Mô tả biểu hiện và gửi ảnh để AI gợi ý sơ bộ. Nếu AI chưa gợi ý được, bạn tự chọn dịch vụ.',
+      'Có. Mô tả biểu hiện và gửi ảnh để AI gợi ý dịch vụ. Nếu AI chưa gợi ý được, bạn tự chọn dịch vụ.',
   },
   {
-    question: 'Chi phí sửa chữa được xác nhận khi nào?',
+    question: 'Giá sửa chữa được tính thế nào?',
     answer:
-      'Kỹ thuật viên kiểm tra tại nhà rồi gửi báo giá, bạn duyệt xong mới bắt đầu sửa. Chi phí phát sinh cũng phải được bạn duyệt.',
+      'Nhiều dịch vụ có tiền công niêm yết theo loại máy và công suất. Việc cần kiểm tra thì thợ khảo sát và báo giá tại nhà. Linh kiện và chi phí phát sinh đều phải được bạn duyệt trước khi sửa.',
+  },
+  {
+    question: 'Tôi thanh toán bằng cách nào?',
+    answer:
+      'Khi thợ làm xong, bạn trả bằng ví FixHome, VNPay hoặc tiền mặt cho kỹ thuật viên ngay trong đơn.',
+  },
+  {
+    question: 'Thợ không tới kịp giờ hẹn thì sao?',
+    answer:
+      'FixHome báo cho bạn ngay và bạn chọn thợ khác cho đơn đó.',
   },
   {
     question: 'Tôi có cần đăng nhập để xem thông tin dịch vụ không?',
@@ -144,7 +154,7 @@ onUnmounted(() => {
             Bắt đầu cùng FixHome.
           </h2>
           <p class="mx-auto mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-ink-600 text-balance">
-            Mô tả sự cố, chọn lịch, kỹ thuật viên đã xác minh sẽ tới tận nhà.
+            Chọn dịch vụ hoặc kể sự cố, chọn giờ, kỹ thuật viên đã xác minh tới tận nhà.
           </p>
 
           <div class="mt-8 flex flex-col justify-center gap-3.5 sm:flex-row sm:items-center">

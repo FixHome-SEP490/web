@@ -20,7 +20,7 @@ vi.mock('../src/api/media.api', () => ({
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { createBooking } }));
 vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getCategories } }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn() }), useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
 import ChatMessageItem from '../src/components/chat/ChatMessageItem.vue';

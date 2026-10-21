@@ -77,7 +77,7 @@ describe('BookingMediaViewer', () => {
     await flushPromises();
 
     expect(wrapper.find('img').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Ảnh riêng tư không khả dụng');
+    expect(wrapper.text()).toContain('Ảnh không khả dụng');
     expect(wrapper.text()).not.toContain('403 forbidden');
     expect(wrapper.html()).not.toContain('provider.example.test');
     expect(createObjectURL).not.toHaveBeenCalled();
@@ -126,15 +126,56 @@ describe('BookingMediaViewer', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:private-preview');
   });
 
-  it('renders exact Vietnamese private and legacy labels', async () => {
+  it('titles the grid "Ảnh mô tả" and keeps the public legacy warning', async () => {
     getBookingMediaContent.mockResolvedValue(new Blob(['private'], { type: 'image/jpeg' }));
     const wrapper = mountViewer([privateMedia(), legacyMedia()]);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Ảnh riêng tư');
+    // PO 21/10/2026: one grid named "Ảnh mô tả", no second large copy above it.
+    expect(wrapper.get('h2').text()).toBe('Ảnh mô tả');
+    expect(wrapper.text()).not.toContain('riêng tư');
+    expect(wrapper.find('[data-testid="booking-media-selected"]').exists()).toBe(false);
+    expect(wrapper.findAll('img')).toHaveLength(2);
     expect(wrapper.text()).toContain('Ảnh cũ / liên kết công khai');
     // No system words in front of customers and technicians (PO 10/10/2026).
     expect(wrapper.text()).not.toMatch(/Backend|xác thực quyền/);
+  });
+
+  it('opens a photo large on tap and puts it back on a tap outside, the close button or Escape', async () => {
+    getBookingMediaContent.mockResolvedValue(new Blob(['private'], { type: 'image/jpeg' }));
+    const wrapper = mountViewer([privateMedia('first'), legacyMedia()]);
+    await flushPromises();
+    const lightbox = () => document.body.querySelector<HTMLElement>('[data-testid="booking-media-lightbox"]');
+    try {
+      expect(lightbox()).toBeNull();
+      await wrapper.get('[data-testid="booking-media-first"] button').trigger('click');
+      expect(lightbox()?.querySelector('img')?.getAttribute('src')).toBe('blob:private-preview');
+
+      // The arrow moves to the next photo, wrapping around.
+      (lightbox()!.querySelector('[aria-label="Ảnh sau"]') as HTMLButtonElement).click();
+      await flushPromises();
+      expect(lightbox()?.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.test/legacy.jpg');
+
+      // A tap on the photo itself keeps it open; a tap on the dark area closes it.
+      lightbox()!.querySelector('img')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushPromises();
+      expect(lightbox()).not.toBeNull();
+      lightbox()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushPromises();
+      expect(lightbox()).toBeNull();
+
+      await wrapper.get('[data-testid="booking-media-first"] button').trigger('click');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushPromises();
+      expect(lightbox()).toBeNull();
+
+      await wrapper.get('[data-testid="booking-media-first"] button').trigger('click');
+      (lightbox()!.querySelector('[data-testid="booking-media-lightbox-close"]') as HTMLButtonElement).click();
+      await flushPromises();
+      expect(lightbox()).toBeNull();
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it('revokes a ready private preview after auth invalidation without retrying', async () => {

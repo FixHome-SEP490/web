@@ -19,17 +19,17 @@ const stages = [
   {
     id: 1,
     title: 'AI nhận diện thiết bị & phân tích',
-    desc: 'AI nhận ra loại thiết bị và dấu hiệu bất thường.',
+    desc: 'Nhận ra loại thiết bị như máy lạnh, máy giặt, tủ lạnh và dấu hiệu bất thường.',
   },
   {
     id: 2,
     title: 'Khoanh vùng nguyên nhân có thể gặp',
-    desc: 'Gợi ý vài nguyên nhân để bạn tham khảo trước khi gặp thợ.',
+    desc: 'Hỏi thêm khi cần, rồi gợi ý vài nguyên nhân để bạn tham khảo trước khi gặp thợ.',
   },
   {
     id: 3,
     title: 'Gợi ý dịch vụ phù hợp',
-    desc: 'Bạn vẫn đổi được dịch vụ trước khi đặt thợ.',
+    desc: 'Bạn xem giá và vẫn đổi được dịch vụ trước khi đặt thợ.',
   },
 ];
 </script>
