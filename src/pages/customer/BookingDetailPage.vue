@@ -403,6 +403,11 @@ const loadBooking = async (requestedBookingId = bookingId) => {
   try {
     const nextBooking = await bookingsApi.getBooking(requestedBookingId);
     if (!detailMounted || generation !== detailGeneration || requestedBookingId !== bookingId) return;
+    // One device of a visit is followed on the visit page, where it is matched, moved and cancelled (PO 21/10/2026).
+    if (nextBooking.visitGroupId) {
+      void router.replace(`/app/visits/${nextBooking.visitGroupId}`);
+      return;
+    }
     applyBookingDetail(nextBooking);
   } catch {
     if (detailMounted && generation === detailGeneration && requestedBookingId === bookingId) {

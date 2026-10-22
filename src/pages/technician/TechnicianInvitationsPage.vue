@@ -212,7 +212,10 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
               <FhCountdown :expires-at="inv.expiresAt" />
             </span>
             <span class="block font-semibold text-lg text-ink-900 text-balance">
-              {{ inv.booking?.serviceName }}
+              {{ inv.visitDevices ? `Lượt sửa ${inv.visitDevices.length} thiết bị` : inv.booking?.serviceName }}
+            </span>
+            <span v-if="inv.visitDevices" class="block text-sm text-ink-700 text-pretty" data-testid="invitation-visit-devices">
+              {{ inv.visitDevices.map((device) => device.deviceLabel || device.booking.serviceName).join(' · ') }}
             </span>
             <span class="text-sm text-ink-600 flex items-start gap-1.5">
               <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
@@ -255,7 +258,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         aria-labelledby="invitation-detail-title"
       >
         <div class="flex items-start justify-between gap-3">
-          <h3 id="invitation-detail-title" class="text-lg font-semibold text-ink-900 text-balance">{{ detailInvitation.booking?.serviceName }}</h3>
+          <h3 id="invitation-detail-title" class="text-lg font-semibold text-ink-900 text-balance">{{ detailInvitation.visitDevices ? `Lượt sửa ${detailInvitation.visitDevices.length} thiết bị` : detailInvitation.booking?.serviceName }}</h3>
           <button
             type="button"
             class="w-10 h-10 -mr-2 -mt-2 rounded-xl text-ink-500 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center shrink-0"
@@ -299,7 +302,31 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           </p>
         </div>
 
-        <section class="space-y-2 border-t border-ink-100 pt-4" data-testid="invitation-detail-problem">
+        <section v-if="detailInvitation.visitDevices" class="space-y-3 border-t border-ink-100 pt-4" data-testid="invitation-detail-visit">
+          <p class="rounded-xl bg-warning-50 border border-warning-200 px-3 py-2 text-sm text-warning-800 text-pretty">
+            Nhận lời mời là nhận cả {{ detailInvitation.visitDevices.length }} thiết bị, cùng địa chỉ và buổi hẹn. Mỗi máy báo giá riêng, khách duyệt máy nào thì sửa máy đó.
+          </p>
+          <article
+            v-for="device in detailInvitation.visitDevices"
+            :key="device.booking.id"
+            class="rounded-xl border border-ink-200 p-3 space-y-1.5"
+          >
+            <h4 class="text-sm font-semibold text-ink-900">
+              Máy {{ device.sequence }}: {{ device.booking.serviceName }}<span v-if="device.deviceLabel" class="font-normal text-ink-600"> · {{ device.deviceLabel }}</span>
+            </h4>
+            <p v-if="device.booking.description" class="text-sm text-ink-800 whitespace-pre-line text-pretty">{{ device.booking.description }}</p>
+            <p v-else class="text-sm text-ink-500">Khách chưa ghi mô tả.</p>
+            <p class="text-sm text-ink-700">
+              <template v-if="device.booking.pricingMode === 'fixed_price' && device.booking.fixedUnitPrice != null">
+                Giá niêm yết <strong class="font-semibold text-ink-900 whitespace-nowrap"><FhMoney :amount="device.booking.fixedUnitPrice" /></strong>
+              </template>
+              <template v-else>Báo giá sau khi kiểm tra</template>
+            </p>
+            <BookingMediaViewer v-if="device.booking.media?.length" :booking-id="device.booking.id" :media="device.booking.media" />
+          </article>
+        </section>
+
+        <section v-else class="space-y-2 border-t border-ink-100 pt-4" data-testid="invitation-detail-problem">
           <h4 class="text-sm font-semibold text-ink-900">Khách mô tả</h4>
           <p v-if="detailInvitation.booking?.description" class="text-sm text-ink-800 whitespace-pre-line text-pretty" data-testid="invitation-detail-description">{{ detailInvitation.booking.description }}</p>
           <p v-else class="text-sm text-ink-500">Khách chưa ghi mô tả.</p>
@@ -322,7 +349,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </section>
 
         <BookingMediaViewer
-          v-if="detailInvitation.booking?.media?.length"
+          v-if="!detailInvitation.visitDevices && detailInvitation.booking?.media?.length"
           :booking-id="detailInvitation.bookingId"
           :media="detailInvitation.booking.media"
         />
