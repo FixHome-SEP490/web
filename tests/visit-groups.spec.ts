@@ -31,7 +31,21 @@ describe('visit-groups api', () => {
   it('treats the feature as off unless the server says it is on', async () => {
     const { visitGroupsApi } = await import('../src/api/visit-groups.api');
     client.get.mockResolvedValue({ data: { data: {} } });
-    expect(await visitGroupsApi.contact()).toEqual({ enabled: false, deviceLimit: 3 });
+    expect(await visitGroupsApi.contact()).toEqual({ enabled: false, deviceLimit: 3, hotline: null });
+  });
+
+  it('keeps an unconfigured hotline empty and sends consultation only when requested', async () => {
+    const { visitGroupsApi } = await import('../src/api/visit-groups.api');
+    client.get.mockResolvedValue({ data: { data: { enabled: true, deviceLimit: 3, hotline: null } } });
+    client.post.mockResolvedValue({ data: { data: {} } });
+
+    await expect(visitGroupsApi.contact()).resolves.toEqual({ enabled: true, deviceLimit: 3, hotline: null });
+    await visitGroupsApi.consultation({ message: 'Tôi cần hỏi về thiết bị thứ tư.', devices: ['Máy lạnh'] });
+
+    expect(client.post).toHaveBeenCalledWith('/visit-groups/consultation', {
+      message: 'Tôi cần hỏi về thiết bị thứ tư.',
+      devices: ['Máy lạnh'],
+    });
   });
 
   it('reports "không sửa được" with the reason and each part received', async () => {

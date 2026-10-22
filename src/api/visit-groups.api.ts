@@ -30,6 +30,11 @@ export interface CreateVisitDto {
   items: VisitDeviceInput[];
 }
 
+export interface VisitGroupConsultationDto {
+  message: string;
+  devices?: string[];
+}
+
 export interface VisitItem {
   id: string;
   sequence: number;
@@ -86,9 +91,18 @@ function normalizeVisit(raw: Visit): Visit {
 
 export const visitGroupsApi = {
   /** Whether several devices may be booked now, and the limit. */
-  async contact(): Promise<{ enabled: boolean; deviceLimit: number }> {
-    const res = await apiClient.get<{ data: { enabled?: boolean; deviceLimit?: number } }>('/visit-groups/contact');
-    return { enabled: res.data.data?.enabled === true, deviceLimit: Number(res.data.data?.deviceLimit) || VISIT_DEVICE_LIMIT };
+  async contact(): Promise<{ enabled: boolean; deviceLimit: number; hotline: string | null }> {
+    const res = await apiClient.get<{ data: { enabled?: boolean; deviceLimit?: number; hotline?: string | null } }>('/visit-groups/contact');
+    const hotline = typeof res.data.data?.hotline === 'string' ? res.data.data.hotline.trim() : '';
+    return {
+      enabled: res.data.data?.enabled === true,
+      deviceLimit: Number(res.data.data?.deviceLimit) || VISIT_DEVICE_LIMIT,
+      hotline: hotline || null,
+    };
+  },
+
+  async consultation(dto: VisitGroupConsultationDto): Promise<void> {
+    await apiClient.post('/visit-groups/consultation', dto);
   },
 
   async create(dto: CreateVisitDto): Promise<Visit> {
