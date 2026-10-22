@@ -112,6 +112,7 @@ const userModifiedDescription = ref(false);
  * server has the feature on.
  */
 const visitEnabled = ref(false);
+const visitGrouping = ref(false);
 interface SavedVisitDevice {
   key: string;
   input: VisitDeviceInput;
@@ -120,7 +121,10 @@ interface SavedVisitDevice {
 }
 const extraDevices = ref<SavedVisitDevice[]>([]);
 const visitKey = `visit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const currentDeviceUnits = computed(() => (selectedServiceId.value ? (isFixedPrice.value ? quantity.value : 1) : 0));
+const currentDeviceUnits = computed(() => {
+  if (!selectedServiceId.value) return 0;
+  return visitGrouping.value ? 1 : isFixedPrice.value ? quantity.value : 1;
+});
 const visitDeviceCount = computed(() => extraDevices.value.length + currentDeviceUnits.value);
 const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
 const isDraggingPhoto = ref(false);
@@ -728,9 +732,15 @@ function resetServiceFilters() {
 }
 
 function setQuantity(value: number) {
+  if (visitGrouping.value) return;
   // Inside a visit every unit is a device, and a visit takes at most three.
   const max = extraDevices.value.length ? VISIT_DEVICE_LIMIT - extraDevices.value.length : 99;
   quantity.value = Math.max(1, Math.min(max, Math.round(value)));
+}
+
+function startVisitGrouping() {
+  visitGrouping.value = true;
+  quantity.value = 1;
 }
 
 // ── Deep link: ?serviceId= hydrates the exact service, never a fallback ───
@@ -1173,7 +1183,13 @@ function priceTextOf(price: SummaryPrice): string {
 
 /** Keep this device in the visit and start the next one with the same address and time. */
 function addAnotherDevice() {
+  if (!visitGrouping.value && isFixedPrice.value && quantity.value > 1) {
+    toast.warning('Trong lượt sửa, mỗi thiết bị cần có mô tả và ảnh riêng. Hãy giảm số lượng về 1 để thêm thiết bị.');
+    step.value = 1;
+    return;
+  }
   if (!canAddDevice.value) return;
+  startVisitGrouping();
   const inputs = currentDeviceInputs();
   if (!inputs) return;
   const serviceName = selectedService.value?.name ?? 'Thiết bị';
@@ -1551,6 +1567,21 @@ async function createAndFindTech() {
       <div v-else-if="step === 1" key="step-1" class="booking-layout">
         <div class="min-w-0 space-y-4">
           <section
+            v-if="visitEnabled && !isAiFlow && !visitGrouping"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm"
+            data-testid="visit-opt-in"
+          >
+            <span class="font-medium text-ink-800">Có nhiều thiết bị cần sửa?</span>
+            <FhButton variant="secondary" size="sm" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
+          </section>
+          <p
+            v-else-if="visitEnabled && !isAiFlow && visitGrouping"
+            class="rounded-xl border border-ink-200 bg-ink-50 px-4 py-3 text-sm text-ink-700 text-pretty"
+            data-testid="visit-grouping-note"
+          >
+            Mỗi thiết bị có mô tả và ảnh riêng. Số lượng dịch vụ đã chọn được chuyển về 1 thiết bị.
+          </p>
+          <section
             v-if="extraDevices.length"
             class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
             data-testid="visit-devices-banner"
@@ -1663,7 +1694,7 @@ async function createAndFindTech() {
                   <template v-else-if="isServiceBookable(selectedService)">{{ catalogPriceLabel(selectedService).text }}</template>
                 </p>
               </div>
-              <div v-if="isFixedPrice && selectedFixedPrice !== null" class="flex items-center gap-1" role="group" aria-label="Số lượng thiết bị">
+              <div v-if="isFixedPrice && selectedFixedPrice !== null && !visitGrouping" class="flex items-center gap-1" role="group" aria-label="Số lượng thiết bị">
                 <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity <= 1" aria-label="Giảm số lượng" data-testid="booking-quantity-decrease" @click="setQuantity(quantity - 1)"><Minus :size="15" aria-hidden="true" /></button>
                 <span class="w-8 text-center font-semibold font-num" data-testid="booking-quantity">{{ quantity }}</span>
                 <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity >= 99" aria-label="Tăng số lượng" data-testid="booking-quantity-increase" @click="setQuantity(quantity + 1)"><Plus :size="15" aria-hidden="true" /></button>
@@ -1744,6 +1775,26 @@ async function createAndFindTech() {
                 <span v-if="uploadedPhotos.length === 0" class="text-sm text-ink-500">Ảnh giúp thợ chuẩn bị đúng đồ nghề.</span>
                 <span v-if="uploadingPhoto" class="sr-only" role="status" aria-live="polite">Đang tải ảnh hiện trạng…</span>
               </div>
+            </section>
+            <section
+              v-if="visitEnabled && !isAiFlow && visitGrouping && selectedServiceId"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm"
+              data-testid="visit-current-device"
+            >
+              <span class="text-ink-700">Thiết bị này sẽ được thêm riêng vào lượt sửa.</span>
+              <FhButton
+                v-if="canAddDevice"
+                variant="secondary"
+                size="sm"
+                :disabled="loading || uploadingPhoto"
+                data-testid="visit-add-device-step1"
+                @click="addAnotherDevice"
+              >
+                <Plus :size="16" class="mr-1.5" /> Thêm thiết bị này vào lượt
+              </FhButton>
+              <span v-else class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
+                Tối đa {{ VISIT_DEVICE_LIMIT }} thiết bị mỗi lần đặt.
+              </span>
             </section>
           </div>
         </div>
@@ -2068,7 +2119,7 @@ async function createAndFindTech() {
         </div>
 
         <section
-          v-if="visitEnabled && !isAiFlow"
+          v-if="visitEnabled && !isAiFlow && (visitGrouping || extraDevices.length > 0)"
           class="space-y-3 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6"
           data-testid="visit-devices"
         >

@@ -9,7 +9,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Banknote, ChevronRight, Wallet, X } from 'lucide-vue-next';
-import { FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
+import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -49,12 +49,17 @@ const rescheduled = computed(() => (visit.value?.items ?? []).some((item) => (it
 const repairStarted = computed(() => (checkout.value?.devices ?? []).some((device) => device.state !== 'open'));
 const canReschedule = computed(() => !cancelled.value && !rescheduled.value && !repairStarted.value);
 const canCancel = computed(() => !cancelled.value && !repairStarted.value);
+const outcomeProgress = computed(() => {
+  if (cancelled.value || !checkout.value) return null;
+  const devices = checkout.value.devices;
+  return { resolved: devices.filter((device) => device.state !== 'open').length, total: devices.length };
+});
 
 const sessionText = computed(() => visit.value ? sessionLabel({ bookingMode: visit.value.bookingMode, slot: visit.value.slot, start: visit.value.preferredStartAt }) : '');
 
 const STATE_LABEL: Record<VisitDeviceState, string> = {
   succeeded: 'Đã sửa xong',
-  failed: 'Không sửa được, không tính tiền',
+  failed: 'Không sửa được, không tính tiền sửa',
   quote_declined: 'Bạn không duyệt báo giá, không tính tiền',
   cancelled: 'Đã huỷ',
   open: 'Đang xử lý',
@@ -182,6 +187,9 @@ async function answerCash(agreed: boolean) {
       <header class="space-y-1">
         <h1 class="text-2xl font-bold tracking-tight text-ink-900">Lượt sửa {{ visit.items.length }} thiết bị</h1>
         <p class="text-sm text-ink-600">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></p>
+        <p v-if="outcomeProgress" class="text-sm text-ink-600" data-testid="visit-outcome-progress">
+          Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
+        </p>
       </header>
 
       <p
@@ -192,22 +200,36 @@ async function answerCash(agreed: boolean) {
       >{{ message.text }}</p>
 
       <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white" data-testid="visit-device-list">
-        <component
-          :is="deviceOf(item.booking?.id)?.serviceOrderId ? 'router-link' : 'div'"
+        <div
           v-for="item in visit.items"
           :key="item.id"
-          :to="deviceOf(item.booking?.id)?.serviceOrderId ? `/app/orders/${deviceOf(item.booking?.id)?.serviceOrderId}` : undefined"
-          class="flex items-center gap-3 px-5 py-4 sm:px-6"
-          :class="deviceOf(item.booking?.id)?.serviceOrderId ? 'hover:bg-ink-25' : ''"
-          :data-testid="`visit-device-${item.sequence}`"
         >
-          <div class="min-w-0 flex-1">
-            <p class="truncate font-medium text-ink-900">Máy {{ item.sequence }}: {{ item.booking?.serviceName }}</p>
-            <p class="text-sm text-ink-500"><template v-if="item.deviceLabel">{{ item.deviceLabel }} · </template>{{ statusText(item) }}</p>
+          <component
+            :is="deviceOf(item.booking?.id)?.serviceOrderId ? 'router-link' : 'div'"
+            :to="deviceOf(item.booking?.id)?.serviceOrderId ? `/app/orders/${deviceOf(item.booking?.id)?.serviceOrderId}` : undefined"
+            class="flex items-center gap-3 px-5 py-4 sm:px-6"
+            :class="deviceOf(item.booking?.id)?.serviceOrderId ? 'hover:bg-ink-25' : ''"
+            :data-testid="`visit-device-${item.sequence}`"
+          >
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-medium text-ink-900">Máy {{ item.sequence }}: {{ item.booking?.serviceName }}</p>
+              <p class="text-sm text-ink-500"><template v-if="item.deviceLabel">{{ item.deviceLabel }} · </template>{{ statusText(item) }}</p>
+            </div>
+            <span v-if="deviceOf(item.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(item.booking?.id)!.amount" /></span>
+            <ChevronRight v-if="deviceOf(item.booking?.id)?.serviceOrderId" :size="18" class="shrink-0 text-ink-400" aria-hidden="true" />
+          </component>
+          <div v-if="item.booking && (item.booking.description?.trim() || item.booking.media?.length)" class="space-y-3 px-5 pb-4 sm:px-6">
+            <p v-if="item.booking.description?.trim()" class="whitespace-pre-line text-sm text-ink-700 text-pretty" :data-testid="`visit-device-description-${item.sequence}`">
+              {{ item.booking.description }}
+            </p>
+            <BookingMediaViewer
+              v-if="item.booking.media?.length"
+              :booking-id="item.booking.id"
+              :media="item.booking.media"
+              embedded
+            />
           </div>
-          <span v-if="deviceOf(item.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(item.booking?.id)!.amount" /></span>
-          <ChevronRight v-if="deviceOf(item.booking?.id)?.serviceOrderId" :size="18" class="shrink-0 text-ink-400" aria-hidden="true" />
-        </component>
+        </div>
       </section>
 
       <section v-if="!cancelled" class="flex flex-wrap gap-2.5">

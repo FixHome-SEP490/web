@@ -46,8 +46,8 @@ describe('customer visit page', () => {
   const visit = {
     id: 'v1', status: 'submitted', bookingMode: 'scheduled', slot: 'morning', preferredStartAt: '2030-01-01T01:00:00Z', preferredEndAt: '2030-01-01T05:00:00Z', leadBookingId: 'b1',
     items: [
-      { id: 'i1', sequence: 1, serviceId: 's1', deviceLabel: null, booking: { id: 'b1', status: 'MATCHED', serviceName: 'Máy lạnh', rescheduleCount: 0 } },
-      { id: 'i2', sequence: 2, serviceId: 's2', deviceLabel: 'Phòng khách', booking: { id: 'b2', status: 'CANCELLED', serviceName: 'Tủ lạnh', rescheduleCount: 0 } },
+      { id: 'i1', sequence: 1, serviceId: 's1', deviceLabel: null, booking: { id: 'b1', status: 'MATCHED', serviceName: 'Máy lạnh', description: 'Máy lạnh phòng khách chảy nước', media: [{ id: 'm1', url: null, isPrivate: true, legacyInsecure: false, mimeType: 'image/jpeg', sizeBytes: 12 }], rescheduleCount: 0 } },
+      { id: 'i2', sequence: 2, serviceId: 's2', deviceLabel: 'Phòng khách', booking: { id: 'b2', status: 'CANCELLED', serviceName: 'Tủ lạnh', description: 'Tủ lạnh không lạnh', media: [{ id: 'm2', url: null, isPrivate: true, legacyInsecure: false, mimeType: 'image/jpeg', sizeBytes: 14 }], rescheduleCount: 0 } },
     ],
   };
   const device = (bookingId: string, extra: object) => ({ sequence: 1, deviceLabel: null, bookingId, serviceName: null, serviceOrderId: `o-${bookingId}`, orderCode: 'FH', invoiceId: null, amount: 0, paid: false, ...extra });
@@ -63,7 +63,7 @@ describe('customer visit page', () => {
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
     vi.doMock('vue-router', () => ({ useRoute: () => ({ params: { id: 'v1' } }), useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
-    const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, 'router-link': { template: '<a><slot /></a>' } } } });
+    const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { template: '<a><slot /></a>' } } } });
     await flushPromises();
     return w;
   }
@@ -78,7 +78,13 @@ describe('customer visit page', () => {
     visitApi.checkout.mockResolvedValue(checkout());
     const w = await mountPage();
     expect(w.get('[data-testid="visit-device-1"]').text()).toContain('Đã sửa xong');
-    expect(w.get('[data-testid="visit-device-2"]').text()).toContain('Không sửa được, không tính tiền');
+    expect(w.get('[data-testid="visit-device-2"]').text()).toContain('Không sửa được, không tính tiền sửa');
+    expect(w.get('[data-testid="visit-device-2"]').text()).not.toContain('Đã huỷ');
+    expect(w.get('[data-testid="visit-outcome-progress"]').text()).toBe('Kết quả 2/2 thiết bị');
+    expect(w.get('[data-testid="visit-device-description-1"]').text()).toBe('Máy lạnh phòng khách chảy nước');
+    expect(w.get('[data-testid="visit-device-description-2"]').text()).toBe('Tủ lạnh không lạnh');
+    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b1', 'b2']);
+    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-media-count'))).toEqual(['1', '1']);
     expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
   });
 
@@ -114,8 +120,8 @@ describe('technician invitation for a visit', () => {
     const preview = (id: string, serviceName: string) => ({ id, serviceName, addressSummary: 'Quận 1', quantity: 1, urgency: 'medium', preferredStartAt: null, preferredEndAt: null, description: null, aiSummary: null, media: [], pricingMode: 'fixed_price', fixedUnitPrice: 200000, distanceBand: null });
     const invitation = {
       id: 'inv-1', bookingId: 'b-1', priorityOrder: 1, status: 'PENDING', invitedAt: '2026-10-10T01:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
-      booking: preview('b-1', 'Máy lạnh'),
-      visitDevices: [{ sequence: 1, deviceLabel: null, booking: preview('b-1', 'Máy lạnh') }, { sequence: 2, deviceLabel: 'Phòng khách', booking: preview('b-2', 'Tủ lạnh') }],
+      booking: { ...preview('b-1', 'Máy lạnh'), description: 'Mô tả riêng máy lạnh' },
+      visitDevices: [{ sequence: 1, deviceLabel: null, booking: { ...preview('b-1', 'Máy lạnh'), description: 'Mô tả riêng máy lạnh' } }, { sequence: 2, deviceLabel: 'Phòng khách', booking: { ...preview('b-2', 'Tủ lạnh'), description: 'Mô tả riêng tủ lạnh' } }],
     };
     vi.doMock('../src/api/bookings.api', () => ({ bookingsApi: { getMyInvitations: vi.fn().mockResolvedValue([invitation]), respondInvitation: vi.fn() } }));
     vi.doMock('../src/api/technician-profile.api', () => ({ technicianProfileApi: { getMyProfile: vi.fn().mockResolvedValue({ autoAcceptInvitations: false }), updateMyProfile: vi.fn() } }));
@@ -124,8 +130,12 @@ describe('technician invitation for a visit', () => {
     const w = mount(page, { global: { stubs: { FhCountdown: true, FhSkeleton: true, FhMoney: true, BookingMediaViewer: true, FhButton: { template: '<button><slot /></button>' } } } });
     await flushPromises();
     expect(w.text()).toContain('Lượt sửa 2 thiết bị');
-    expect(w.get('[data-testid="invitation-visit-devices"]').text()).toBe('Máy lạnh · Phòng khách');
+    expect(w.get('[data-testid="invitation-visit-devices"]').text()).toBe('Máy lạnh · Tủ lạnh (Phòng khách)');
+    expect(w.find('[data-testid="invitation-description"]').exists()).toBe(false);
+    expect(w.text()).not.toContain('Mô tả riêng máy lạnh');
     await w.get('[data-testid="invitation-inv-1"] button').trigger('click');
     expect(w.get('[data-testid="invitation-detail-visit"]').text()).toContain('Máy 2: Tủ lạnh');
+    expect(w.get('[data-testid="invitation-detail-visit"]').text()).toContain('Mô tả riêng máy lạnh');
+    expect(w.get('[data-testid="invitation-detail-visit"]').text()).toContain('Mô tả riêng tủ lạnh');
   });
 });

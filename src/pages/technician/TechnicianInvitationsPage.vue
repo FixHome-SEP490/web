@@ -87,6 +87,9 @@ const distanceText = (inv: InvitationItem): string => {
   return `Cách bạn khoảng ${band.minKm}-${band.maxKm} km`;
 };
 const isFixedPrice = (inv: InvitationItem) => String(inv.booking?.pricingMode ?? '').toLowerCase() === 'fixed_price';
+const visitDeviceSummary = (inv: InvitationItem): string => (inv.visitDevices ?? [])
+  .map(({ deviceLabel, booking }) => `${booking.serviceName}${deviceLabel ? ` (${deviceLabel})` : ''}`)
+  .join(' · ');
 const aiSummaryOpen = ref(false);
 watch(detailInvitation, () => { aiSummaryOpen.value = false; });
 
@@ -215,7 +218,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
               {{ inv.visitDevices ? `Lượt sửa ${inv.visitDevices.length} thiết bị` : inv.booking?.serviceName }}
             </span>
             <span v-if="inv.visitDevices" class="block text-sm text-ink-700 text-pretty" data-testid="invitation-visit-devices">
-              {{ inv.visitDevices.map((device) => device.deviceLabel || device.booking.serviceName).join(' · ') }}
+              {{ visitDeviceSummary(inv) }}
             </span>
             <span class="text-sm text-ink-600 flex items-start gap-1.5">
               <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
@@ -223,7 +226,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 {{ inv.booking?.addressSummary }}<template v-if="distanceText(inv)"> · <span class="whitespace-nowrap" data-testid="invitation-distance">{{ distanceText(inv) }}</span></template>
               </span>
             </span>
-            <span v-if="inv.booking?.description" class="block text-sm text-ink-700 line-clamp-2 text-pretty" data-testid="invitation-description">
+            <span v-if="!inv.visitDevices && inv.booking?.description" class="block text-sm text-ink-700 line-clamp-2 text-pretty" data-testid="invitation-description">
               {{ inv.booking.description }}
             </span>
             <span class="text-sm text-ink-600 flex items-center gap-1.5" data-testid="invitation-session">

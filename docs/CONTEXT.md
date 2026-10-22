@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-21 22:08 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/visit-groups-web
+> Cập nhật lần cuối: 2026-10-22 20:04 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -120,7 +120,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 
 ### Khách hàng (`/app`)
 
-- Hai form đặt lịch trên cùng trang `NewBookingWizardPage.vue`: `/app/bookings/new` khách tự chọn dịch vụ, không có AI; `/app/bookings/ai` khách mô tả và gửi tối đa 3 ảnh, trò chuyện với AI, AI gợi ý dịch vụ và khách được đổi. AI lỗi không chặn đặt lịch.
+- Hai form đặt lịch trên cùng trang `NewBookingWizardPage.vue`: `/app/bookings/new` khách tự chọn dịch vụ, không có AI; `/app/bookings/ai` khách mô tả và gửi tối đa 3 ảnh, trò chuyện với AI, AI gợi ý dịch vụ và khách được đổi. AI lỗi không chặn đặt lịch. Khi `/visit-groups/contact` báo tính năng đang bật, bước 1 của form thủ công có mục chọn đặt nhiều thiết bị; mỗi Booking trong lượt có mô tả, ảnh và số lượng riêng (quantity 1), còn địa chỉ, buổi hẹn, kỹ thuật viên và thanh toán dùng chung. Form thường, đặt qua AI và P012 vẫn giữ nguyên.
 - Chọn 1 đến 2 kỹ thuật viên ở trang ứng viên, theo dõi booking, huỷ, đổi lịch, gia hạn tìm thợ.
 - Đơn sửa chữa: duyệt hoặc từ chối báo giá và chi phí phát sinh, xem hoá đơn, thanh toán VNPay hoặc tiền mặt, xác nhận hoàn tất, xem bằng chứng, bảo hành và yêu cầu bảo hành, đánh giá kỹ thuật viên, khiếu nại.
 - Lịch sử sửa chữa (trong menu avatar), hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
@@ -345,6 +345,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - P013: browser fixture cục bộ đã kiểm 360/768/1440 px cho ranh giới 0/4.999/5.000 và khóa lệch báo giá; không phải bằng chứng tích hợp tài chính. Backend thật, QR/kho thật và Web–Mobile parity CHƯA KIỂM CHỨNG. Không tự sửa hóa đơn cũ, không thanh toán thật. Cần Backend P013 triển khai trước Web và hard-refresh khi QA.
 
+- Lượt sửa nhiều thiết bị: Web hiện mô tả/ảnh của từng Booking, tiến độ theo checkout và danh sách đủ dịch vụ ở lời mời thợ; nhóm nhiều thiết bị giữ mô tả/ảnh riêng từng máy. Test Vitest tập trung đã chạy. Mobile parity và runtime với Backend DEV CHƯA KIỂM CHỨNG; giao diện vẫn phụ thuộc feature flag do Backend trả về.
+
 - Thông báo nhận đẩy qua socket (`notification:new`); chưa có push lên điện thoại.
 - Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (migration 037 và 038): với backend cũ, video, link xem và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có sự kiện realtime (các màn chỉ cập nhật bằng polling dự phòng khi socket rớt, còn khi socket nối thì chờ sự kiện). Nén video trên máy chạy theo tốc độ phần cứng, máy yếu có thể mất cả phút cho một clip 60 giây (khách vẫn nhắn tiếp được); CHƯA đo trên điện thoại thật. Chunk `video-shrink` khoảng 137 KB gzip, `mediabunny-aac-encoder` khoảng 260 KB gzip, chỉ tải khi cần.
 - Hoàn trả linh kiện FixHome (P1) có test Web (`tests/part-returns.spec.ts`); CHƯA KIỂM CHỨNG runtime với Backend tích hợp và Mobile; cờ custody chưa được phép kích hoạt trên môi trường dùng chung.
@@ -364,6 +366,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
 - 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
@@ -403,4 +406,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 04:03 (UTC+7) | ToanAltF4 | feat/ai-notes | Bước Xác nhận hiện tóm tắt gửi thợ (thiết bị, lỗi có thể là, khách đã cho biết); hộp tóm tắt AI của thợ có dòng Đã trao đổi
 - 2026-10-16 02:55 (UTC+7) | ToanAltF4 | feat/ai-feedback-quality | Nút Đúng ý/Chưa đúng cho câu trả lời AI, câu báo khi nhắn quá nhanh, trang chất lượng trợ lý AI cho admin
 - 2026-10-16 01:37 (UTC+7) | ToanAltF4 | feat/chat-quick-replies | Nút trả lời nhanh Có/Không/Không rõ khi trợ lý AI hỏi lại
-- 2026-10-16 01:25 (UTC+7) | ToanAltF4 | feat/chat-book-after-reply | Nút Đặt thợ trong trợ lý AI chỉ hiện khi trợ lý đã trả lời xong
