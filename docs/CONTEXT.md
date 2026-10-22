@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-22 21:46 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
+> Cập nhật lần cuối: 2026-10-22 22:54 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -346,7 +346,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - P013: browser fixture cục bộ đã kiểm 360/768/1440 px cho ranh giới 0/4.999/5.000 và khóa lệch báo giá; không phải bằng chứng tích hợp tài chính. Backend thật, QR/kho thật và Web–Mobile parity CHƯA KIỂM CHỨNG. Không tự sửa hóa đơn cũ, không thanh toán thật. Cần Backend P013 triển khai trước Web và hard-refresh khi QA.
 
-- Lượt sửa nhiều thiết bị: Web giữ editor theo từng máy với mô tả/ảnh riêng, sửa/lưu/hủy sửa, bỏ/hoàn tác, review chung trước khi gửi; từ 2–3 máy tạo đúng một lượt, một máy dùng Booking thường. Ở giới hạn 3, SupportCase chỉ được yêu cầu qua cú nhấp gửi tường minh; hotline lấy từ contact API và có thể vắng mặt. `npm test` 1.409 PASS, typecheck/lint/build PASS. Browser, Backend DEV runtime và Mobile parity CHƯA KIỂM CHỨNG; UI vẫn phụ thuộc feature flag do Backend trả về.
+- Lượt sửa nhiều thiết bị: Web giữ editor theo từng máy với mô tả/ảnh riêng, sửa/lưu/hủy sửa, bỏ/hoàn tác, review chung trước khi gửi; từ 2–3 máy tạo đúng một lượt, một máy dùng Booking thường. Ở giới hạn 3, SupportCase chỉ được yêu cầu qua cú nhấp gửi tường minh; hotline lấy từ contact API và có thể vắng mặt. Trang lượt hiển thị thẻ gọn theo máy, chỉ tải `BookingMediaViewer` khi mở chi tiết; đọc tối đa 3 child ServiceOrder và chỉ hiện một CTA duyệt báo giá khi đúng child có `order.status === EN_ROUTE && quotation.status === SENT`, lỗi đọc thì không có CTA. Trạng thái `UNDER_REPAIR` thực của child khóa đổi lịch/hủy sau khi đọc xong status; checkout và nhóm thanh toán không đổi. `npm test` 1.414 PASS, typecheck/lint/build PASS; focused visit-groups 14 PASS. Browser, Backend DEV runtime và Mobile parity CHƯA KIỂM CHỨNG; UI vẫn phụ thuộc feature flag do Backend trả về.
 
 - Thông báo nhận đẩy qua socket (`notification:new`); chưa có push lên điện thoại.
 - Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (migration 037 và 038): với backend cũ, video, link xem và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có sự kiện realtime (các màn chỉ cập nhật bằng polling dự phòng khi socket rớt, còn khi socket nối thì chờ sự kiện). Nén video trên máy chạy theo tốc độ phần cứng, máy yếu có thể mất cả phút cho một clip 60 giây (khách vẫn nhắn tiếp được); CHƯA đo trên điện thoại thật. Chunk `video-shrink` khoảng 137 KB gzip, `mediabunny-aac-encoder` khoảng 260 KB gzip, chỉ tải khi cần.
@@ -367,6 +367,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-22 22:54 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Review an toàn CustomerVisit: chỉ dùng cùng gate báo giá của OrderDetail (EN_ROUTE và SENT); ẩn hành động huỷ/đổi lịch nếu chưa đọc đủ trạng thái child, không suy đoán khi API lỗi; bổ sung 2 test, focused 18 PASS, typecheck/lint PASS; xác minh full CI sau khi push.
+
+- 2026-10-22 22:51 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thẻ lượt gọn theo máy, media mở theo yêu cầu; một CTA từ child có báo giá SENT, giới hạn 3 lần đọc, ẩn đổi lịch/hủy khi đang chờ status hoặc child UNDER_REPAIR; npm test 1.414, typecheck/lint/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-22 21:46 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Editor thiết bị hỗ trợ sửa/lưu/hủy, bỏ/hoàn tác và review chung; 2–3 máy gửi một VisitGroup, một máy về Booking thường; tư vấn chỉ gửi theo thao tác; 1.409 test/typecheck/lint/build PASS; Browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt

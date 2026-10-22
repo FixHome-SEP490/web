@@ -11,10 +11,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { Banknote, ChevronRight, Wallet, X } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
+import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { sessionLabel, upcomingSessions, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
+import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 
 const route = useRoute();
 const router = useRouter();
@@ -26,12 +28,71 @@ const loading = ref(true);
 const loadError = ref('');
 const busy = ref(false);
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const childOrderStatuses = ref<Record<string, ServiceOrderItem['status']>>({});
+const quotationOrderIdsBySequence = ref<Record<number, string>>({});
+const childOrderStatusLoading = ref(false);
+const childOrderStatusUnavailable = ref(false);
+const expandedDevices = ref<Record<string, boolean>>({});
+let childOrderLookupVersion = 0;
+
+async function loadChildOrderDetails(devices: VisitCheckout['devices'], lookupVersion: number) {
+  if (lookupVersion !== childOrderLookupVersion) return;
+  const seen = new Set<string>();
+  const childOrders: Array<{ serviceOrderId: string; sequence: number }> = [];
+  for (const device of devices) {
+    const serviceOrderId = device.serviceOrderId?.trim();
+    if (!serviceOrderId || seen.has(serviceOrderId)) continue;
+    seen.add(serviceOrderId);
+    const sequence = visit.value?.items.find((item) => item.booking?.id === device.bookingId)?.sequence ?? device.sequence;
+    childOrders.push({ serviceOrderId, sequence });
+    if (childOrders.length === 3) break;
+  }
+
+  if (childOrders.length === 0) {
+    childOrderStatusLoading.value = false;
+    return;
+  }
+
+  childOrderStatusLoading.value = true;
+  const results = await Promise.allSettled(childOrders.map(({ serviceOrderId }) => ordersApi.getOrder(serviceOrderId)));
+  if (lookupVersion !== childOrderLookupVersion) return;
+
+  const nextStatuses: Record<string, ServiceOrderItem['status']> = {};
+  const nextQuotationOrderIds: Record<number, string> = {};
+  let incompleteRead = false;
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') {
+      incompleteRead = true;
+      return;
+    }
+    const childOrder = childOrders[index];
+    if (!result.value || typeof result.value.id !== 'string' || result.value.id !== childOrder.serviceOrderId) {
+      incompleteRead = true;
+      return;
+    }
+    nextStatuses[childOrder.serviceOrderId] = result.value.status;
+    // Same Backend gate as CustomerOrderDetail: EN_ROUTE + an official SENT quotation.
+    if (canDecideOfficialQuotation(result.value)) {
+      nextQuotationOrderIds[childOrder.sequence] = childOrder.serviceOrderId;
+    }
+  });
+  childOrderStatuses.value = nextStatuses;
+  quotationOrderIdsBySequence.value = nextQuotationOrderIds;
+  childOrderStatusUnavailable.value = incompleteRead;
+  childOrderStatusLoading.value = false;
+}
 
 async function load() {
+  const lookupVersion = ++childOrderLookupVersion;
+  childOrderStatuses.value = {};
+  quotationOrderIdsBySequence.value = {};
+  childOrderStatusUnavailable.value = false;
+  childOrderStatusLoading.value = false;
   loadError.value = '';
   try {
     visit.value = await visitGroupsApi.get(visitId);
     checkout.value = await visitGroupsApi.checkout(visitId).catch(() => null);
+    if (checkout.value) void loadChildOrderDetails(checkout.value.devices, lookupVersion);
   } catch (err) {
     loadError.value = userFacingError(err, 'Không tải được lượt sửa. Vui lòng thử lại.');
   } finally {
@@ -46,7 +107,10 @@ const held = computed(() => (checkout.value?.devices ?? []).some((device) => dev
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
 const canChooseTechnician = computed(() => !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
 const rescheduled = computed(() => (visit.value?.items ?? []).some((item) => (item.booking?.rescheduleCount ?? 0) >= 1));
-const repairStarted = computed(() => (checkout.value?.devices ?? []).some((device) => device.state !== 'open'));
+const repairStarted = computed(() => (checkout.value?.devices ?? []).some((device) => device.state !== 'open')
+  || childOrderStatusLoading.value
+  || childOrderStatusUnavailable.value
+  || Object.values(childOrderStatuses.value).some((status) => status === 'UNDER_REPAIR'));
 const canReschedule = computed(() => !cancelled.value && !rescheduled.value && !repairStarted.value);
 const canCancel = computed(() => !cancelled.value && !repairStarted.value);
 const outcomeProgress = computed(() => {
@@ -75,6 +139,24 @@ function statusText(item: Visit['items'][number]): string {
   if (matchingState.value === 'CLOSED') return 'Chưa có thợ nhận';
   return 'Chưa chọn thợ';
 }
+function hasDeviceDetails(item: Visit['items'][number]): boolean {
+  return Boolean(item.booking && (item.booking.description?.trim() || item.booking.media?.length));
+}
+function isDeviceExpanded(itemId: string): boolean {
+  return expandedDevices.value[itemId] === true;
+}
+function toggleDeviceDetails(itemId: string) {
+  expandedDevices.value = { ...expandedDevices.value, [itemId]: !isDeviceExpanded(itemId) };
+}
+function quotationOrderId(item: Visit['items'][number]): string | null {
+  return quotationOrderIdsBySequence.value[item.sequence] ?? null;
+}
+const priorityQuotation = computed(() => {
+  const item = visit.value?.items.find((candidate) => quotationOrderId(candidate));
+  if (!item) return null;
+  const serviceOrderId = quotationOrderId(item);
+  return serviceOrderId ? { item, serviceOrderId } : null;
+});
 
 // ── Reschedule, once for the whole visit ──
 const rescheduleOpen = ref(false);
@@ -192,6 +274,25 @@ async function answerCash(agreed: boolean) {
         </p>
       </header>
 
+      <section v-if="priorityQuotation" class="space-y-2.5 rounded-2xl border border-warning-200 bg-warning-50 p-3.5 sm:p-4" data-testid="visit-quotation-priority">
+        <div>
+          <p class="text-sm font-semibold text-ink-900">
+            Máy {{ priorityQuotation.item.sequence }}<template v-if="priorityQuotation.item.booking?.serviceName">: {{ priorityQuotation.item.booking.serviceName }}</template>
+            <template v-if="priorityQuotation.item.deviceLabel"> · {{ priorityQuotation.item.deviceLabel }}</template>
+          </p>
+          <p class="text-sm text-warning-800">Báo giá đang chờ bạn duyệt</p>
+        </div>
+        <router-link
+          :to="`/app/orders/${priorityQuotation.serviceOrderId}`"
+          :aria-label="`Duyệt báo giá cho máy ${priorityQuotation.item.sequence}${priorityQuotation.item.booking?.serviceName ? `: ${priorityQuotation.item.booking.serviceName}` : ''}`"
+          class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-medium text-white shadow-[var(--shadow-e1)] transition-colors duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          data-testid="visit-quotation-cta"
+        >
+          Duyệt báo giá
+          <ChevronRight :size="18" aria-hidden="true" />
+        </router-link>
+      </section>
+
       <p
         v-if="message"
         role="status"
@@ -199,35 +300,58 @@ async function answerCash(agreed: boolean) {
         :class="message.type === 'success' ? 'border-success-200 bg-success-50 text-success-800' : 'border-danger-200 bg-danger-50 text-danger-800'"
       >{{ message.text }}</p>
 
-      <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white" data-testid="visit-device-list">
+      <section class="space-y-2.5" data-testid="visit-device-list">
         <div
           v-for="item in visit.items"
           :key="item.id"
+          class="rounded-2xl border border-ink-200 bg-white p-3.5 sm:p-4"
         >
           <component
             :is="deviceOf(item.booking?.id)?.serviceOrderId ? 'router-link' : 'div'"
             :to="deviceOf(item.booking?.id)?.serviceOrderId ? `/app/orders/${deviceOf(item.booking?.id)?.serviceOrderId}` : undefined"
-            class="flex items-center gap-3 px-5 py-4 sm:px-6"
+            class="flex min-h-11 items-center gap-3 rounded-lg px-1 py-1"
             :class="deviceOf(item.booking?.id)?.serviceOrderId ? 'hover:bg-ink-25' : ''"
             :data-testid="`visit-device-${item.sequence}`"
           >
             <div class="min-w-0 flex-1">
-              <p class="truncate font-medium text-ink-900">Máy {{ item.sequence }}: {{ item.booking?.serviceName }}</p>
-              <p class="text-sm text-ink-500"><template v-if="item.deviceLabel">{{ item.deviceLabel }} · </template>{{ statusText(item) }}</p>
+              <p class="break-words text-sm font-medium text-ink-900 sm:text-base">
+                Máy {{ item.sequence }}<template v-if="item.booking?.serviceName">: {{ item.booking.serviceName }}</template>
+              </p>
+              <p class="break-words text-sm text-ink-600"><template v-if="item.deviceLabel">{{ item.deviceLabel }} · </template>{{ statusText(item) }}</p>
             </div>
             <span v-if="deviceOf(item.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(item.booking?.id)!.amount" /></span>
             <ChevronRight v-if="deviceOf(item.booking?.id)?.serviceOrderId" :size="18" class="shrink-0 text-ink-400" aria-hidden="true" />
           </component>
-          <div v-if="item.booking && (item.booking.description?.trim() || item.booking.media?.length)" class="space-y-3 px-5 pb-4 sm:px-6">
-            <p v-if="item.booking.description?.trim()" class="whitespace-pre-line text-sm text-ink-700 text-pretty" :data-testid="`visit-device-description-${item.sequence}`">
+          <p v-if="quotationOrderId(item)" class="mt-2 text-sm font-medium text-warning-800" :data-testid="`visit-device-quotation-status-${item.sequence}`">
+            Báo giá đang chờ bạn duyệt
+          </p>
+          <div v-if="hasDeviceDetails(item)" class="mt-2 space-y-2.5">
+            <p v-if="item.booking?.description?.trim()" class="text-pretty text-sm text-ink-700 whitespace-pre-line" :class="isDeviceExpanded(item.id) ? '' : 'line-clamp-2'" :data-testid="`visit-device-description-${item.sequence}`">
               {{ item.booking.description }}
             </p>
-            <BookingMediaViewer
-              v-if="item.booking.media?.length"
-              :booking-id="item.booking.id"
-              :media="item.booking.media"
-              embedded
-            />
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span v-if="item.booking?.media?.length" class="text-xs text-ink-600" :data-testid="`visit-device-media-count-${item.sequence}`">
+                {{ item.booking.media.length }} ảnh/video
+              </span>
+              <FhButton
+                variant="ghost"
+                size="md"
+                :aria-expanded="isDeviceExpanded(item.id)"
+                :aria-controls="isDeviceExpanded(item.id) ? `visit-device-details-${item.sequence}` : undefined"
+                :aria-label="`${isDeviceExpanded(item.id) ? 'Thu gọn' : 'Xem thêm'} chi tiết máy ${item.sequence}`"
+                class="ml-auto"
+                :data-testid="`visit-device-expand-${item.sequence}`"
+                @click="toggleDeviceDetails(item.id)"
+              >{{ isDeviceExpanded(item.id) ? 'Thu gọn' : 'Xem thêm' }}</FhButton>
+            </div>
+            <div v-if="isDeviceExpanded(item.id)" :id="`visit-device-details-${item.sequence}`" class="space-y-3">
+              <BookingMediaViewer
+                v-if="item.booking?.media?.length"
+                :booking-id="item.booking.id"
+                :media="item.booking.media"
+                embedded
+              />
+            </div>
           </div>
         </div>
       </section>
