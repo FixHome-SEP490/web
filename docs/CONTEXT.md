@@ -408,4 +408,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 11:33 (UTC+7) | ToanAltF4 | fix/technician-topup-envelope | Nạp ví thợ: đọc success/message ở envelope (backend nhấc lên ngoài data), trước đây web luôn báo Chưa mở được cổng thanh toán VNPay; thêm test với đúng phản hồi thật
 - 2026-10-16 05:16 (UTC+7) | ToanAltF4 | fix/ai-confirm-step | Bước Xác nhận: mức khẩn cấp bằng chữ, nút không tràn trên điện thoại, tóm tắt AI lấy thiết bị từ câu có nhận ra và nói Bạn từng đặt
 - 2026-10-16 04:26 (UTC+7) | ToanAltF4 | feat/ai-reveal | Câu trả lời trợ lý hiện dần từng cụm chữ, nút và chi tiết chỉ ra khi hiện xong
-- 2026-10-16 04:03 (UTC+7) | ToanAltF4 | feat/ai-notes | Bước Xác nhận hiện tóm tắt gửi thợ (thiết bị, lỗi có thể là, khách đã cho biết); hộp tóm tắt AI của thợ có dòng Đã trao đổi
