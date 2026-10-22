@@ -65,6 +65,7 @@ import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 import AiSummaryDialog from '../../components/technician/AiSummaryDialog.vue';
 import CameraCapture from '../../components/technician/CameraCapture.vue';
+import TechnicianVisitDeviceNavigator from '../../components/technician/TechnicianVisitDeviceNavigator.vue';
 import { getBestPosition } from '../../utils/best-position';
 import { useQueryClient } from '@tanstack/vue-query';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
@@ -102,6 +103,7 @@ const isFixedPriceOrder = computed(() => String(job.value?.pricingMode ?? '').to
 const visitGroupId = computed(() => job.value?.visitGroupId ?? null);
 const skipsQuote = computed(() => isFixedPriceOrder.value && !visitGroupId.value);
 const visitCheckout = ref<VisitCheckout | null>(null);
+let visitCheckoutReadVersion = 0;
 // "Không sửa được" (PO 21/10/2026): one quick step for the technician.
 const repairFailedOpen = ref(false);
 const repairFailedReason = ref<RepairFailureReason>('beyond_repair');
@@ -137,8 +139,15 @@ async function confirmRepairFailed() {
 }
 
 async function loadVisitCheckout() {
-  if (!visitGroupId.value) return;
-  visitCheckout.value = await visitGroupsApi.checkout(visitGroupId.value).catch(() => null);
+  const groupId = visitGroupId.value;
+  const orderId = jobIdRef.value;
+  const version = ++visitCheckoutReadVersion;
+  // Clear old sibling IDs on every read, including revoked permissions.
+  visitCheckout.value = null;
+  if (!groupId) return;
+  const result = await visitGroupsApi.checkout(groupId).catch(() => null);
+  if (version !== visitCheckoutReadVersion || orderId !== jobIdRef.value || groupId !== visitGroupId.value) return;
+  visitCheckout.value = result?.visitGroupId === groupId ? result : null;
   if (visitCheckout.value?.ready) declaredCashAmount.value = visitCheckout.value.total;
 }
 const fixedPriceTotal = computed(() => {
@@ -1027,6 +1036,8 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   if (bundle.historical) {
     historicalJob.value = bundle.historical;
     job.value = null;
+    ++visitCheckoutReadVersion;
+    visitCheckout.value = null;
     stopLocationPing();
     return;
   }
@@ -1047,7 +1058,8 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   completionRequested.value = !!data.completionRequestedAt;
   quotationSubmitted.value = !!data.quotation;
   declaredCashAmount.value = Number(data.grandTotal);
-  if (data.visitGroupId && data.completionRequestedAt) void loadVisitCheckout();
+  // Assigned group jobs need sibling navigation before completion too.
+  void loadVisitCheckout();
   bookingForMedia.value = bundle.booking;
 
   const settlement = bundle.settlement;
@@ -1163,6 +1175,8 @@ watch(
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
     jobId = nextId;
+    ++visitCheckoutReadVersion;
+    visitCheckout.value = null;
     bookingReadThisVisit = false;
     bookingForMedia.value = null;
     faceUploaded.value = false;
@@ -1976,7 +1990,10 @@ const toggleMore = async () => {
         class="rounded-2xl bg-white border border-ink-200 p-4 flex flex-wrap items-center gap-3 text-sm"
         data-testid="job-visit"
       >
-        <p class="flex-1 min-w-0 text-ink-700 text-pretty">Thiết bị này thuộc một lượt sửa nhiều máy: mỗi máy báo giá riêng, khách trả tiền một lần cho cả lượt.</p>
+        <div v-if="visitCheckout?.visitGroupId === visitGroupId && visitCheckout.devices.length > 1" class="min-w-0 flex-1 basis-full">
+          <TechnicianVisitDeviceNavigator :devices="visitCheckout.devices" :active-order-id="job.id" />
+        </div>
+        <p v-else class="flex-1 min-w-0 text-ink-700 text-pretty">Thiết bị này thuộc một lượt sửa nhiều máy: mỗi máy báo giá riêng, khách trả tiền một lần cho cả lượt.</p>
         <FhButton
           v-if="canReportRepairFailed"
           variant="secondary"
@@ -2570,7 +2587,7 @@ const toggleMore = async () => {
               aria-controls="job-parts"
               @click="sections.parts = !sections.parts"
             >
-              <span class="text-base font-semibold text-ink-900">Linh kiện</span>
+              <span class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Linh kiện của máy này' : 'Linh kiện' }}</span>
               <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
                 <span v-if="partsSummary.needsAction" class="px-2 py-0.5 rounded-full bg-warning-50 text-warning-800 text-xs font-medium">Cần xử lý</span>
                 <template v-else-if="partsSummary.count > 0">{{ partsSummary.count }} yêu cầu</template>

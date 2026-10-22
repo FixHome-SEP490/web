@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-22 22:54 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
+> Cập nhật lần cuối: 2026-10-22 23:59 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -346,7 +346,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - P013: browser fixture cục bộ đã kiểm 360/768/1440 px cho ranh giới 0/4.999/5.000 và khóa lệch báo giá; không phải bằng chứng tích hợp tài chính. Backend thật, QR/kho thật và Web–Mobile parity CHƯA KIỂM CHỨNG. Không tự sửa hóa đơn cũ, không thanh toán thật. Cần Backend P013 triển khai trước Web và hard-refresh khi QA.
 
-- Lượt sửa nhiều thiết bị: Web giữ editor theo từng máy với mô tả/ảnh riêng, sửa/lưu/hủy sửa, bỏ/hoàn tác, review chung trước khi gửi; từ 2–3 máy tạo đúng một lượt, một máy dùng Booking thường. Ở giới hạn 3, SupportCase chỉ được yêu cầu qua cú nhấp gửi tường minh; hotline lấy từ contact API và có thể vắng mặt. Trang lượt hiển thị thẻ gọn theo máy, chỉ tải `BookingMediaViewer` khi mở chi tiết; đọc tối đa 3 child ServiceOrder và chỉ hiện một CTA duyệt báo giá khi đúng child có `order.status === EN_ROUTE && quotation.status === SENT`, lỗi đọc thì không có CTA. Trạng thái `UNDER_REPAIR` thực của child khóa đổi lịch/hủy sau khi đọc xong status; checkout và nhóm thanh toán không đổi. `npm test` 1.414 PASS, typecheck/lint/build PASS; focused visit-groups 14 PASS. Browser, Backend DEV runtime và Mobile parity CHƯA KIỂM CHỨNG; UI vẫn phụ thuộc feature flag do Backend trả về.
+- Lượt sửa nhiều thiết bị: Web giữ editor theo từng máy với mô tả/ảnh riêng, sửa/lưu/hủy sửa, bỏ/hoàn tác, review chung trước khi gửi; từ 2–3 máy tạo đúng một lượt, một máy dùng Booking thường. Ở giới hạn 3, SupportCase chỉ được yêu cầu qua cú nhấp gửi tường minh; hotline lấy từ contact API và có thể vắng mặt. Trang lượt hiển thị thẻ gọn theo máy, chỉ tải `BookingMediaViewer` khi mở chi tiết; đọc tối đa 3 child ServiceOrder và chỉ hiện một CTA duyệt báo giá khi đúng child có `order.status === EN_ROUTE && quotation.status === SENT`, lỗi đọc thì không có CTA. Trạng thái `UNDER_REPAIR` thực của child khóa đổi lịch/hủy sau khi đọc xong status; checkout và nhóm thanh toán không đổi. `npm test` 1.414 PASS, typecheck/lint/build PASS; focused visit-groups 14 PASS. Browser, Backend DEV runtime và Mobile parity CHƯA KIỂM CHỨNG; UI vẫn phụ thuộc feature flag do Backend trả về. Trên Technician JobDetail, lượt có thanh chuyển Máy 1/2/3 từ checkout đã được cấp quyền, không tải liên kết khi thiếu quyền; linh kiện/QR vẫn thuộc từng ServiceOrder đang chọn. Lời mời thợ vốn đã liệt kê mô tả, ảnh và giá theo từng máy trước khi chấp nhận.
 
 - Thông báo nhận đẩy qua socket (`notification:new`); chưa có push lên điện thoại.
 - Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (migration 037 và 038): với backend cũ, video, link xem và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có sự kiện realtime (các màn chỉ cập nhật bằng polling dự phòng khi socket rớt, còn khi socket nối thì chờ sự kiện). Nén video trên máy chạy theo tốc độ phần cứng, máy yếu có thể mất cả phút cho một clip 60 giây (khách vẫn nhắn tiếp được); CHƯA đo trên điện thoại thật. Chunk `video-shrink` khoảng 137 KB gzip, `mediabunny-aac-encoder` khoảng 260 KB gzip, chỉ tải khi cần.
@@ -366,6 +366,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
+
+- 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
 
 - 2026-10-22 22:54 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Review an toàn CustomerVisit: chỉ dùng cùng gate báo giá của OrderDetail (EN_ROUTE và SENT); ẩn hành động huỷ/đổi lịch nếu chưa đọc đủ trạng thái child, không suy đoán khi API lỗi; bổ sung 2 test, focused 18 PASS, typecheck/lint PASS; xác minh full CI sau khi push.
 
@@ -407,4 +409,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-16 15:44 (UTC+7) | ToanAltF4 | fix/checkin-recent-fix | Check-in thợ: trình duyệt không trả vị trí mới trong lúc chờ (Chrome desktop vị trí Wi-Fi, đã có ping đang chạy) thì dùng vị trí ping trong 2 phút gần nhất; server vẫn kiểm 5 km
 - 2026-10-16 11:33 (UTC+7) | ToanAltF4 | fix/technician-topup-envelope | Nạp ví thợ: đọc success/message ở envelope (backend nhấc lên ngoài data), trước đây web luôn báo Chưa mở được cổng thanh toán VNPay; thêm test với đúng phản hồi thật
 - 2026-10-16 05:16 (UTC+7) | ToanAltF4 | fix/ai-confirm-step | Bước Xác nhận: mức khẩn cấp bằng chữ, nút không tràn trên điện thoại, tóm tắt AI lấy thiết bị từ câu có nhận ra và nói Bạn từng đặt
-- 2026-10-16 04:26 (UTC+7) | ToanAltF4 | feat/ai-reveal | Câu trả lời trợ lý hiện dần từng cụm chữ, nút và chi tiết chỉ ra khi hiện xong
