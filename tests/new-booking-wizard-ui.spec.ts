@@ -8,6 +8,9 @@ const {
   getService,
   getCategories,
   getAddresses,
+  visitContact,
+  createVisit,
+  createConsultation,
   push,
   route,
 } = vi.hoisted(() => ({
@@ -16,6 +19,9 @@ const {
   getService: vi.fn(),
   getCategories: vi.fn(),
   getAddresses: vi.fn(),
+  visitContact: vi.fn(),
+  createVisit: vi.fn(),
+  createConsultation: vi.fn(),
   push: vi.fn(),
   route: { query: {} as Record<string, string> },
 }));
@@ -36,6 +42,14 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
+vi.mock('../src/api/visit-groups.api', () => ({
+  VISIT_DEVICE_LIMIT: 3,
+  visitGroupsApi: { contact: visitContact, create: createVisit, consultation: createConsultation },
+}));
+vi.mock('../src/utils/image-for-ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/utils/image-for-ai')>();
+  return { ...actual, normalizeForUpload: vi.fn(async (file: File) => file) };
+});
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace: vi.fn(), go: vi.fn() }), useRoute: () => route }));
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
@@ -184,6 +198,10 @@ describe('NewBookingWizardPage A+ service finder', () => {
   });
   beforeEach(() => {
     createBooking.mockReset().mockResolvedValue({ id: 'booking-id' });
+    uploadBookingPhoto.mockReset();
+    visitContact.mockReset().mockResolvedValue({ enabled: false, deviceLimit: 3, hotline: null });
+    createVisit.mockReset().mockResolvedValue({ id: 'visit-id' });
+    createConsultation.mockReset().mockResolvedValue(undefined);
     getService.mockReset();
     getCategories.mockReset().mockResolvedValue(sampleCategories);
     getAddresses.mockReset().mockResolvedValue([{
@@ -201,6 +219,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     const cards = wrapper.findAll('[data-testid="booking-service-card"]');
     expect(cards).toHaveLength(3);
     expect(cards.every((card) => card.attributes('aria-pressed') === 'false')).toBe(true);
+    expect(wrapper.find('[data-testid="visit-opt-in"]').exists()).toBe(false);
 
     // No first-item auto-selection: recap empty, CTA off, description untouched.
     expect(wrapper.find('[data-testid="selected-service-recap"]').exists()).toBe(false);
@@ -210,6 +229,121 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(wrapper.find('[data-testid="booking-summary-back"]').exists()).toBe(false);
     // The fault description belongs to a chosen service; nothing is asked before that.
     expect(wrapper.find('textarea').exists()).toBe(false);
+  });
+
+  it('offers group booking early and keeps each same-service device description and photo separate', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    uploadBookingPhoto
+      .mockResolvedValueOnce({ uploadId: 'photo-living', mimeType: 'image/jpeg', sizeBytes: 3 })
+      .mockResolvedValueOnce({ uploadId: 'photo-bedroom', mimeType: 'image/jpeg', sizeBytes: 3 });
+    const wrapper = await renderWizard();
+
+    expect(wrapper.get('[data-testid="visit-opt-in"]').text()).toContain('Có nhiều thiết bị cần sửa?');
+    expect(wrapper.get('[data-testid="visit-opt-in-action"]').text()).toBe('Đặt nhiều thiết bị');
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-quantity-increase"]').trigger('click');
+    expect(wrapper.get('[data-testid="booking-quantity"]').text()).toBe('2');
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    expect(wrapper.find('[data-testid="booking-quantity"]').exists()).toBe(false);
+    const selectPhoto = async (file: File) => {
+      const input = wrapper.get('input[type="file"]');
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [file] });
+      await input.trigger('change');
+      await flushPromises();
+    };
+
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng khách chảy nước');
+    await selectPhoto(new File(['one'], 'living.png', { type: 'image/png' }));
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+
+    await wrapper.get('[data-testid="visit-device-edit-0"]').trigger('click');
+    expect(textareaValue(wrapper)).toBe('Máy lạnh phòng khách chảy nước');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Thay đổi chưa lưu');
+    await wrapper.get('[data-testid="visit-device-edit-cancel"]').trigger('click');
+    expect(wrapper.find('[data-testid="booking-description"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách chảy nước');
+
+    await wrapper.get('[data-testid="visit-device-edit-0"]').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng khách rò nước');
+    await wrapper.get('[data-testid="visit-device-edit-save"]').trigger('click');
+    expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách rò nước');
+
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng ngủ không mát');
+    await selectPhoto(new File(['two'], 'bedroom.png', { type: 'image/png' }));
+    await wrapper.get('[data-testid="visit-device-remove-0"]').trigger('click');
+    await wrapper.get('[data-testid="visit-device-undo"]').trigger('click');
+    expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách rò nước');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(createBooking).not.toHaveBeenCalled();
+    expect(createVisit).toHaveBeenCalledWith(expect.objectContaining({
+      items: [
+        { serviceId: 'svc-ac-clean', description: 'Máy lạnh phòng khách rò nước', photoUploadIds: ['photo-living'] },
+        { serviceId: 'svc-ac-clean', description: 'Máy lạnh phòng ngủ không mát', photoUploadIds: ['photo-bedroom'] },
+      ],
+    }));
+    expect(createVisit).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/app/visits/visit-id');
+    wrapper.unmount();
+  });
+
+  it('routes one saved device back through the ordinary Booking flow with its description and photo', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    uploadBookingPhoto.mockResolvedValue({ uploadId: 'photo-single', mimeType: 'image/jpeg', sizeBytes: 3 });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy phòng khách bẩn');
+    const input = wrapper.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['one'], 'single.png', { type: 'image/png' })] });
+    await input.trigger('change');
+    await flushPromises();
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toContain('Tiếp tục với 1 thiết bị đã lưu');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    expect(wrapper.find('[data-testid="visit-devices-banner"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(createVisit).not.toHaveBeenCalled();
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
+      serviceId: 'svc-ac-clean',
+      description: 'Máy phòng khách bẩn',
+      photoUploadIds: ['photo-single'],
+    }));
+    wrapper.unmount();
+  });
+
+  it('sends a max-device consultation only after the customer submits it', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    for (let index = 0; index < 3; index += 1) {
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="booking-description"]').setValue(`Máy số ${index + 1}`);
+      await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    }
+    expect(wrapper.get('[data-testid="visit-consultation"]').text()).toContain('Cần sửa thêm thiết bị?');
+    expect(wrapper.get('[data-testid="visit-consultation-submit"]').attributes('disabled')).toBeDefined();
+    expect(createConsultation).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="visit-consultation-message"]').setValue('Nhờ tư vấn lịch cho máy thứ tư.');
+    await wrapper.get('[data-testid="visit-consultation-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(createConsultation).toHaveBeenCalledTimes(1);
+    expect(createConsultation).toHaveBeenCalledWith({
+      message: 'Nhờ tư vấn lịch cho máy thứ tư.',
+      devices: ['Máy 1: Vệ sinh điều hòa treo tường', 'Máy 2: Vệ sinh điều hòa treo tường', 'Máy 3: Vệ sinh điều hòa treo tường'],
+    });
+    expect(wrapper.get('[data-testid="visit-devices-banner"]').findAll('li')).toHaveLength(3);
+    wrapper.unmount();
   });
 
   it('keeps clearance for the summary bar through address and time, not on the final check', async () => {

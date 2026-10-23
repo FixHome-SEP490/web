@@ -47,6 +47,9 @@ const keepingClient = () => {
   installQueryClient(client);
   return client;
 };
+const mountHistoryPage = () => mount(CustomerHistoryPage, {
+  global: { stubs: { 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } },
+});
 
 describe('cached pages', () => {
   beforeEach(() => {
@@ -60,13 +63,13 @@ describe('cached pages', () => {
 
   it('shows cached rows at once on a return visit, without asking the server again inside the stale time', async () => {
     getRepairHistory.mockResolvedValue({ data: [row('a'), row('b')], total: 2 });
-    const first = mount(CustomerHistoryPage);
+    const first = mountHistoryPage();
     expect(first.find('[aria-label="Đang tải lịch sử sửa chữa"]').exists()).toBe(true);
     await flushPromises();
     expect(first.text()).toContain('Dịch vụ a');
     first.unmount();
 
-    const again = mount(CustomerHistoryPage);
+    const again = mountHistoryPage();
     // Before any promise settles: no skeleton, the rows are there.
     expect(again.find('[aria-label="Đang tải lịch sử sửa chữa"]').exists()).toBe(false);
     expect(again.text()).toContain('Dịch vụ a');
@@ -77,14 +80,14 @@ describe('cached pages', () => {
   it('reads again in the background once the data is older than the stale time', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     getRepairHistory.mockResolvedValueOnce({ data: [row('old')], total: 1 });
-    const first = mount(CustomerHistoryPage);
+    const first = mountHistoryPage();
     await flushPromises();
     first.unmount();
 
     vi.setSystemTime(Date.now() + STALE_TIME + 1_000);
     let release!: (value: unknown) => void;
     getRepairHistory.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
-    const again = mount(CustomerHistoryPage);
+    const again = mountHistoryPage();
     await flushPromises();
     // The old copy stays on screen while the new one is read.
     expect(getRepairHistory).toHaveBeenCalledTimes(2);
@@ -99,14 +102,14 @@ describe('cached pages', () => {
 
   it('keeps the current rows on screen, dimmed, while the next page is read', async () => {
     getRepairHistory.mockResolvedValueOnce({ data: rows('p1-', 20), total: 45 });
-    const wrapper = mount(CustomerHistoryPage);
+    const wrapper = mountHistoryPage();
     await flushPromises();
 
     let release!: (value: unknown) => void;
     getRepairHistory.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
     await wrapper.get('[data-testid="pagination-next"]').trigger('click');
     await flushPromises();
-    expect(getRepairHistory).toHaveBeenLastCalledWith(2, 20, undefined, undefined);
+    expect(getRepairHistory).toHaveBeenLastCalledWith(2, 20, undefined, undefined, true);
     expect(wrapper.find('[aria-label="Đang tải lịch sử sửa chữa"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Dịch vụ p1-0');
     const list = wrapper.get('ul');
@@ -128,11 +131,11 @@ describe('cached pages', () => {
 
   it('reads the next page ahead when the pointer rests on its button', async () => {
     getRepairHistory.mockResolvedValue({ data: rows('p', 20), total: 45 });
-    const wrapper = mount(CustomerHistoryPage);
+    const wrapper = mountHistoryPage();
     await flushPromises();
     await wrapper.get('[data-testid="pagination-next"]').trigger('pointerenter');
     await flushPromises();
-    expect(getRepairHistory).toHaveBeenLastCalledWith(2, 20, undefined, undefined);
+    expect(getRepairHistory).toHaveBeenLastCalledWith(2, 20, undefined, undefined, true);
     expect(getRepairHistory).toHaveBeenCalledTimes(2);
 
     // Moving there now needs no request.
@@ -155,6 +158,7 @@ describe('after the user acts', () => {
         return () => h('button', { type: 'button', ...attrs, disabled: props.disabled || props.loading }, slots.default?.());
       },
     }),
+    'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' },
   };
 
   beforeEach(() => {

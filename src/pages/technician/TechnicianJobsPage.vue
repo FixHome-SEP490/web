@@ -19,13 +19,14 @@ import {
   FhStatusPill,
 } from '../../components';
 import { ordersApi, historicalPill, isHistoricalOrder, isReleasedJob, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
+import { visitGroupsApi, type VisitGroupPageDevice, type VisitGroupPageItem } from '../../api/visit-groups.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
-import { useQueryChoice } from '../../composables/useQueryState';
+import { useQueryChoice, useQueryPage } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
-import { vnDateString } from '../../utils/vn-time';
+import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -42,6 +43,7 @@ const TAB_STATES: Record<JobTab, string[]> = {
 const PAGE_SIZE = 20;
 
 const activeTab = useQueryChoice<JobTab>('tab', TAB_KEYS, 'all');
+const listView = useQueryChoice<'jobs' | 'visits'>('list', ['jobs', 'visits'], 'jobs');
 const actionLoading = ref<string | null>(null);
 const cache = useCacheUpdates();
 
@@ -57,14 +59,30 @@ const {
 } = usePagedList<TechnicianOrderItem>({
   key: () => queryKeys.orders.technicianJobs({ tab: activeTab.value }),
   pageSize: PAGE_SIZE,
-  fetch: (p, size) => ordersApi.getTechnicianJobsPage(p, size, { statuses: TAB_STATES[activeTab.value] }),
+  fetch: (p, size) => ordersApi.getTechnicianJobsPage(p, size, { statuses: TAB_STATES[activeTab.value], excludeVisitGroups: true }),
 });
+const visitGroupsList = usePagedList<VisitGroupPageItem>({
+  key: () => queryKeys.visitGroups.technicianList({ tab: 'all' }),
+  pageSize: PAGE_SIZE,
+  page: useQueryPage('visitsPage'),
+  fetch: (p, size) => visitGroupsApi.assignedPage(p, size, { tab: 'all' }),
+});
+const {
+  page: visitGroupsPage,
+  items: visitGroups,
+  total: visitGroupsTotal,
+  loading: loadingVisitGroups,
+  error: visitGroupsError,
+  load: retryVisitGroups,
+  changingPage: changingVisitGroupsPage,
+  prefetch: prefetchVisitGroups,
+} = visitGroupsList;
 
 // How many jobs each tab holds: one row per tab is enough to read its total.
 async function fetchCounts(): Promise<Partial<Record<JobTab, number>>> {
   const totals = await Promise.all(
     TAB_KEYS.map((key) =>
-      ordersApi.getTechnicianJobsPage(1, 1, { statuses: TAB_STATES[key] }).then((r) => r.total).catch(() => null),
+      ordersApi.getTechnicianJobsPage(1, 1, { statuses: TAB_STATES[key], excludeVisitGroups: true }).then((r) => r.total).catch(() => null),
     ),
   );
   const next: Partial<Record<JobTab, number>> = {};
@@ -117,6 +135,45 @@ const handleEnRoute = async (job: ServiceOrderItem) => {
   }
 };
 
+const handleVisitEnRoute = async (group: VisitGroupPageItem) => {
+  const lead = visitLead(group);
+  if (!lead?.orderId || String(lead.orderStatus).toUpperCase() !== 'ACCEPTED' || actionLoading.value) return;
+  actionLoading.value = lead.orderId;
+  try {
+    await ordersApi.enRoute(lead.orderId);
+    toast.success('Đã cập nhật: bạn đang trên đường tới nhà khách hàng.');
+    await cache.refresh(affectedBy.orderChange);
+  } catch (err: unknown) {
+    toast.error(userFacingError(err, 'Không thể cập nhật trạng thái di chuyển. Vui lòng thử lại.'));
+  } finally {
+    actionLoading.value = null;
+  }
+};
+
+const visitLead = (group: VisitGroupPageItem) => [...group.items].sort((a, b) => a.sequence - b.sequence)[0];
+
+function visitItemStatus(item: VisitGroupPageDevice) {
+  if (item.outcome === 'failed') return 'Không sửa được';
+  if (item.outcome === 'quote_declined') return 'Không đồng ý báo giá';
+  if (item.outcome === 'succeeded' || item.orderStatus?.toLowerCase() === 'completed') return 'Hoàn thành';
+  if (item.orderStatus?.toLowerCase() === 'cancelled' || item.bookingStatus.toLowerCase() === 'cancelled') return 'Đã hủy';
+  if (item.orderStatus?.toLowerCase() === 'under_repair') return 'Đang sửa chữa';
+  if (item.orderStatus?.toLowerCase() === 'en_route') return 'Đang di chuyển';
+  if (item.orderStatus?.toLowerCase() === 'accepted') return 'Đã nhận đơn';
+  if (item.bookingStatus.toLowerCase() === 'closed') return 'Chưa tìm được thợ';
+  return 'Đang tìm thợ';
+}
+
+function visitGroupStatus(status: VisitGroupPageItem['status']) {
+  const labels = {
+    submitted: 'Đang chờ xử lý', matching: 'Đang tìm thợ', no_technician: 'Chưa có thợ phù hợp',
+    accepted: 'Đã nhận lịch', en_route: 'Đang di chuyển', under_repair: 'Đang sửa chữa',
+    completed: 'Hoàn thành', cancelled: 'Đã hủy', failed: 'Có thiết bị chưa sửa',
+    quote_declined: 'Có báo giá chưa được nhận', mixed: 'Kết quả nhiều trạng thái',
+  } satisfies Record<VisitGroupPageItem['status'], string>;
+  return labels[status];
+}
+
 const handleChatWithCustomer = async (job: ServiceOrderItem) => {
   const bookingId = job.bookingId || job.id;
   await chatStore.openConversationForBooking(bookingId);
@@ -167,6 +224,9 @@ let jobTabResizeObserver: ResizeObserver | null = null;
 watch(activeTab, () => {
   void nextTick(updateJobIndicator);
 });
+watch(listView, () => {
+  void nextTick(updateJobIndicator);
+});
 
 watch(
   counts,
@@ -204,6 +264,81 @@ onUnmounted(() => {
   <div class="max-w-4xl mx-auto space-y-5">
     <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
 
+    <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại danh sách công việc">
+      <button
+        v-for="choice in [{ key: 'jobs' as const, label: 'Công việc đơn', shortLabel: 'Công việc' }, { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị' }]"
+        :key="choice.key"
+        type="button"
+        :aria-pressed="listView === choice.key"
+        :aria-label="choice.label"
+        :data-testid="`jobs-list-switch-${choice.key}`"
+        class="h-11 min-w-[10rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
+        @click="listView = choice.key"
+      >
+        <span class="sm:hidden">{{ choice.shortLabel }}</span><span class="hidden sm:inline">{{ choice.label }}</span>
+        <span v-if="choice.key === 'visits' && !loadingVisitGroups" class="ml-1 rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs">{{ visitGroupsTotal }}</span>
+      </button>
+    </div>
+
+    <template v-if="listView === 'visits'">
+      <div v-if="loadingVisitGroups" class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lượt sửa nhiều thiết bị">
+        <FhSkeleton width="45%" height="18px" />
+        <FhSkeleton width="70%" height="14px" />
+        <FhSkeleton width="55%" height="14px" />
+      </div>
+      <div v-else-if="visitGroupsError" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+        <span>{{ userFacingError(visitGroupsError, 'Không thể tải lượt sửa nhiều thiết bị. Vui lòng thử lại.') }}</span>
+        <FhButton variant="secondary" size="sm" class="h-10" :disabled="loadingVisitGroups" @click="retryVisitGroups">Thử lại</FhButton>
+      </div>
+      <div v-else-if="visitGroupsTotal === 0" data-testid="technician-visit-groups-empty" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center">
+        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400"><Briefcase :size="24" /></div>
+        <h2 class="font-semibold text-ink-900">Chưa có lượt sửa nhiều thiết bị được phân công</h2>
+        <p class="text-sm text-ink-500">Các lượt được giao trọn vẹn cho bạn sẽ hiện ở đây.</p>
+      </div>
+      <template v-else>
+        <ul class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200 bg-white transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
+          <li v-for="group in visitGroups" :key="group.id" :data-testid="`technician-visit-group-${group.id}`" class="space-y-3 p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="min-w-0">
+                <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
+                <p class="mt-1 text-sm text-ink-500">Lịch hẹn <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
+              </div>
+              <span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group.status)}`">{{ visitGroupStatus(group.status) }}</span>
+            </div>
+            <ul class="grid gap-2 sm:grid-cols-2" aria-label="Thiết bị trong lượt sửa">
+              <li v-for="item in group.items" :key="item.itemId" :data-testid="`technician-visit-device-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl bg-ink-50 px-3 py-2 text-sm">
+                <span class="block truncate font-medium text-ink-900">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+                <span class="mt-1 block truncate text-xs text-ink-500">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ visitItemStatus(item) }}</span>
+              </li>
+            </ul>
+            <div class="flex flex-wrap items-center justify-end gap-2 border-t border-ink-100 pt-3">
+              <FhButton
+                v-if="visitLead(group)?.orderId && String(visitLead(group)?.orderStatus).toUpperCase() === 'ACCEPTED'"
+                variant="primary"
+                size="sm"
+                class="h-10"
+                :loading="actionLoading === visitLead(group)?.orderId"
+                @click.stop="handleVisitEnRoute(group)"
+              >
+                <Navigation :size="16" /> Bắt đầu di chuyển
+              </FhButton>
+              <router-link
+                v-if="visitLead(group)?.orderId"
+                :to="`/tech/jobs/${visitLead(group)!.orderId}`"
+                :data-testid="`technician-visit-open-${group.id}`"
+                class="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                Mở công việc <ChevronRight :size="16" aria-hidden="true" />
+              </router-link>
+            </div>
+          </li>
+        </ul>
+        <FhPagination v-model:page="visitGroupsPage" :page-size="PAGE_SIZE" :total="visitGroupsTotal" :disabled="loadingVisitGroups" @prefetch="prefetchVisitGroups" />
+      </template>
+    </template>
+
+    <template v-else>
     <!-- Filter tabs with sliding active pill -->
     <div
       ref="jobTabListRef"
@@ -410,6 +545,7 @@ onUnmounted(() => {
       :disabled="loading"
       @prefetch="prefetch"
     />
+    </template>
     </template>
   </div>
 </template>

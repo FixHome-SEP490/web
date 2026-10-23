@@ -107,22 +107,67 @@ const userModifiedDescription = ref(false);
  * Several devices in one visit (PO 21/10/2026): the customer finishes one
  * device, taps "Thêm thiết bị khác", and the next one starts with the same
  * address and time. One technician repairs them all and the customer pays
- * once. At most three; at the limit the button locks and says so (no hotline).
+ * once. At most three; at the limit, an explicit support request is available
+ * through the existing consultation API (hotline remains server-provided/nullable).
  * Only the form where the customer picks the service, and only while the
  * server has the feature on.
  */
 const visitEnabled = ref(false);
+const visitGrouping = ref(false);
+interface BookingPhotoDraft {
+  localId: number;
+  previewUrl: string;
+  uploadId: string | null;
+  /** Saved group photos may be re-edited after their original File is released. */
+  file: File | null;
+}
 interface SavedVisitDevice {
   key: string;
   input: VisitDeviceInput;
   serviceName: string;
   priceText: string;
+  photos: BookingPhotoDraft[];
+}
+interface ActiveDeviceDraft {
+  serviceId: string | null;
+  hydratedService: ServiceItem | null;
+  deepLinkError: string | null;
+  description: string;
+  userModifiedDescription: boolean;
+  deviceAttributes: BookingDeviceAttributes;
+  selectedVariantCode: string | null;
+  catalogPricingPreview: CatalogPricingPreview | null;
+  uploadedPhotos: BookingPhotoDraft[];
+  quantity: number;
+  pickerOpen: boolean;
+  selectedCategoryId: string;
+  searchQuery: string;
+  servicesExpanded: boolean;
 }
 const extraDevices = ref<SavedVisitDevice[]>([]);
+const editingSavedDeviceKey = ref<string | null>(null);
+const savedDeviceEditorBackup = ref<ActiveDeviceDraft | null>(null);
+const recentlyRemovedDevice = ref<{ device: SavedVisitDevice; index: number } | null>(null);
+const visitHotline = ref<string | null>(null);
+const consultationMessage = ref('');
+const consultationSubmitting = ref(false);
+const consultationSent = ref(false);
+const devicePricingRevision = ref(0);
 const visitKey = `visit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const currentDeviceUnits = computed(() => (selectedServiceId.value ? (isFixedPrice.value ? quantity.value : 1) : 0));
-const visitDeviceCount = computed(() => extraDevices.value.length + currentDeviceUnits.value);
+let nextVisitDeviceKey = 0;
+const currentDeviceUnits = computed(() => {
+  if (!selectedServiceId.value) return 0;
+  return visitGrouping.value ? 1 : isFixedPrice.value ? quantity.value : 1;
+});
+const visitDeviceCount = computed(() => extraDevices.value.length
+  + (editingSavedDeviceKey.value ? 0 : currentDeviceUnits.value));
 const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
+const canContinueFromStep1 = computed(() => !editingSavedDeviceKey.value && (
+  selectedServiceId.value ? isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT : extraDevices.value.length > 0
+));
+const onlySavedDeviceFallback = computed(() => (
+  visitGrouping.value && extraDevices.value.length === 1 && !selectedServiceId.value && !editingSavedDeviceKey.value
+));
 const isDraggingPhoto = ref(false);
 
 // P012: facts the customer reported for the selected catalog service and the
@@ -151,14 +196,6 @@ function resetCatalogV2Pricing() {
 /** Originals above this are refused; anything under it is shrunk before upload. */
 const MAX_ORIGINAL_PHOTO_BYTES = 30 * 1024 * 1024;
 
-interface BookingPhotoDraft {
-  localId: number;
-  previewUrl: string;
-  uploadId: string | null;
-  /** Kept so the diagnosis step can show the same photos to the assistant. */
-  file: File;
-}
-
 const uploadedPhotos = ref<BookingPhotoDraft[]>([]);
 const uploadingPhoto = ref(false);
 const photoInput = ref<HTMLInputElement | null>(null);
@@ -174,6 +211,9 @@ const createPhotoPreviewUrl = (file: File) => {
 };
 
 const revokePhotoPreviewUrl = (previewUrl: string) => {
+  const savedOwnerExists = extraDevices.value.some((device) => device.photos.some((photo) => photo.previewUrl === previewUrl))
+    || recentlyRemovedDevice.value?.device.photos.some((photo) => photo.previewUrl === previewUrl) === true;
+  if (savedOwnerExists) return;
   if (!activePhotoPreviewUrls.delete(previewUrl)) return;
   URL.revokeObjectURL(previewUrl);
 };
@@ -424,7 +464,7 @@ async function startAiConversation() {
   // The assistant diagnoses from words; photos only go along with them (BRX-064).
   if (!description.value.trim()) return;
   void aiConversation.loadHoldingLines();
-  const files = uploadedPhotos.value.map((photo) => photo.file).slice(0, AI_MAX_IMAGES);
+  const files = uploadedPhotos.value.flatMap((photo) => photo.file ? [photo.file] : []).slice(0, AI_MAX_IMAGES);
   const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
   // These photos are the form's own and are uploaded with it; only the chat's are kept for the booking.
   await aiConversation.sendTurn(description.value.trim(), prepared.images, { keepImagesForBooking: false });
@@ -728,9 +768,139 @@ function resetServiceFilters() {
 }
 
 function setQuantity(value: number) {
+  if (visitGrouping.value) return;
   // Inside a visit every unit is a device, and a visit takes at most three.
   const max = extraDevices.value.length ? VISIT_DEVICE_LIMIT - extraDevices.value.length : 99;
   quantity.value = Math.max(1, Math.min(max, Math.round(value)));
+}
+
+function startVisitGrouping() {
+  visitGrouping.value = true;
+  quantity.value = 1;
+}
+
+function copyPhotoDrafts(photos: BookingPhotoDraft[]): BookingPhotoDraft[] {
+  return photos.map((photo) => ({ ...photo }));
+}
+
+function captureActiveDeviceDraft(): ActiveDeviceDraft {
+  return {
+    serviceId: selectedServiceId.value,
+    hydratedService: hydratedService.value,
+    deepLinkError: deepLinkError.value,
+    description: description.value,
+    userModifiedDescription: userModifiedDescription.value,
+    deviceAttributes: { ...deviceAttributes.value },
+    selectedVariantCode: selectedVariantCode.value,
+    catalogPricingPreview: catalogPricingPreview.value,
+    uploadedPhotos: copyPhotoDrafts(uploadedPhotos.value),
+    quantity: quantity.value,
+    pickerOpen: pickerOpen.value,
+    selectedCategoryId: selectedCategoryId.value,
+    searchQuery: searchQuery.value,
+    servicesExpanded: servicesExpanded.value,
+  };
+}
+
+function restoreActiveDeviceDraft(draft: ActiveDeviceDraft) {
+  selectedServiceId.value = draft.serviceId;
+  hydratedService.value = draft.hydratedService;
+  deepLinkError.value = draft.deepLinkError;
+  description.value = draft.description;
+  userModifiedDescription.value = draft.userModifiedDescription;
+  deviceAttributes.value = { ...draft.deviceAttributes };
+  selectedVariantCode.value = draft.selectedVariantCode;
+  catalogPricingPreview.value = draft.catalogPricingPreview;
+  uploadedPhotos.value = copyPhotoDrafts(draft.uploadedPhotos);
+  quantity.value = draft.quantity;
+  pickerOpen.value = draft.pickerOpen;
+  selectedCategoryId.value = draft.selectedCategoryId;
+  searchQuery.value = draft.searchQuery;
+  servicesExpanded.value = draft.servicesExpanded;
+  devicePricingRevision.value += 1;
+}
+
+function visitDevicePhotoUrls(device: SavedVisitDevice): Set<string> {
+  return new Set(device.photos.map((photo) => photo.previewUrl));
+}
+
+function photoUploadIdsAreUnique(input: VisitDeviceInput, replacingKey: string | null = null): boolean {
+  const currentIds = input.photoUploadIds ?? [];
+  if (new Set(currentIds).size !== currentIds.length) return false;
+  const savedIds = new Set(extraDevices.value
+    .filter((device) => device.key !== replacingKey)
+    .flatMap((device) => device.input.photoUploadIds ?? []));
+  return currentIds.every((id) => !savedIds.has(id));
+}
+
+function editSavedDevice(key: string) {
+  if (editingSavedDeviceKey.value) return;
+  const device = extraDevices.value.find((item) => item.key === key);
+  if (!device || !findServiceById(device.input.serviceId)) {
+    toast.warning('Dịch vụ đã lưu không còn trong danh mục. Hãy chọn dịch vụ đang được cung cấp.');
+    return;
+  }
+
+  savedDeviceEditorBackup.value = captureActiveDeviceDraft();
+  step.value = 1;
+  editingSavedDeviceKey.value = key;
+  selectServiceById(device.input.serviceId, { syncCategoryFilter: true });
+  description.value = device.input.description ?? '';
+  userModifiedDescription.value = !!device.input.description;
+  deviceAttributes.value = { ...(device.input.deviceAttributes ?? {}) };
+  selectedVariantCode.value = device.input.selectedVariantCode ?? null;
+  catalogPricingPreview.value = null;
+  uploadedPhotos.value = copyPhotoDrafts(device.photos);
+  quantity.value = 1;
+  pickerOpen.value = false;
+  devicePricingRevision.value += 1;
+}
+
+function cancelSavedDeviceEdit() {
+  if (!editingSavedDeviceKey.value) return;
+  const device = extraDevices.value.find((item) => item.key === editingSavedDeviceKey.value);
+  const originalUrls = device ? visitDevicePhotoUrls(device) : new Set<string>();
+  for (const photo of uploadedPhotos.value) {
+    if (!originalUrls.has(photo.previewUrl)) revokePhotoPreviewUrl(photo.previewUrl);
+  }
+  const backup = savedDeviceEditorBackup.value;
+  editingSavedDeviceKey.value = null;
+  savedDeviceEditorBackup.value = null;
+  if (backup) restoreActiveDeviceDraft(backup);
+}
+
+function discardRecentlyRemovedDevice() {
+  const removed = recentlyRemovedDevice.value;
+  recentlyRemovedDevice.value = null;
+  if (removed) {
+    for (const photo of removed.device.photos) revokePhotoPreviewUrl(photo.previewUrl);
+  }
+}
+
+function undoRemoveExtraDevice() {
+  const removed = recentlyRemovedDevice.value;
+  if (!removed) return;
+  extraDevices.value.splice(Math.min(removed.index, extraDevices.value.length), 0, removed.device);
+  recentlyRemovedDevice.value = null;
+}
+
+function restoreOnlySavedDeviceAsSingleBooking() {
+  if (extraDevices.value.length !== 1 || selectedServiceId.value || editingSavedDeviceKey.value) return false;
+  const [device] = extraDevices.value;
+  if (!findServiceById(device.input.serviceId)) return false;
+  extraDevices.value = [];
+  visitGrouping.value = false;
+  selectServiceById(device.input.serviceId, { syncCategoryFilter: true });
+  description.value = device.input.description ?? '';
+  userModifiedDescription.value = !!device.input.description;
+  deviceAttributes.value = { ...(device.input.deviceAttributes ?? {}) };
+  selectedVariantCode.value = device.input.selectedVariantCode ?? null;
+  catalogPricingPreview.value = null;
+  uploadedPhotos.value = copyPhotoDrafts(device.photos);
+  quantity.value = 1;
+  pickerOpen.value = false;
+  devicePricingRevision.value += 1;
+  return true;
 }
 
 // ── Deep link: ?serviceId= hydrates the exact service, never a fallback ───
@@ -880,7 +1050,10 @@ onMounted(() => {
   void loadAddresses();
   armStepFooterObserver();
   if (!isAiFlow) {
-    visitGroupsApi.contact().then((contact) => { visitEnabled.value = contact.enabled; }).catch(() => undefined);
+    visitGroupsApi.contact().then((contact) => {
+      visitEnabled.value = contact.enabled;
+      visitHotline.value = contact.hotline;
+    }).catch(() => undefined);
   }
 });
 
@@ -954,16 +1127,18 @@ const handlePhotoFiles = async (files: File[]) => {
     }));
     uploadedPhotos.value.push(...drafts);
     await Promise.all(drafts.map(async (photo) => {
+      const file = photo.file;
+      if (!file) return;
       try {
-        const uploaded = await mediaApi.uploadBookingPhoto(photo.file);
+        const uploaded = await mediaApi.uploadBookingPhoto(file);
         if (isPhotoFlowDisposed.value) return;
         const currentPhoto = uploadedPhotos.value.find((item) => item.localId === photo.localId);
         if (currentPhoto) currentPhoto.uploadId = uploaded.uploadId;
       } catch (err) {
-        console.error(`[NewBookingWizardPage] Upload booking photo failed for "${photo.file.name}":`, err);
+        console.error(`[NewBookingWizardPage] Upload booking photo failed for "${file.name}":`, err);
         const photoStillSelected = removePhotoByLocalId(photo.localId);
         if (!isPhotoFlowDisposed.value && photoStillSelected) {
-          toast.error(`Không thể tải ảnh "${photo.file.name}" lên. Vui lòng thử lại.`);
+          toast.error(`Không thể tải ảnh "${file.name}" lên. Vui lòng thử lại.`);
         }
       }
     }));
@@ -1083,6 +1258,15 @@ function toggleSymptom(symptom: string) {
 
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
+  if (editingSavedDeviceKey.value) {
+    toast.warning('Lưu hoặc hủy thay đổi của thiết bị đang sửa trước khi tiếp tục.');
+    return;
+  }
+  if (!selectedServiceId.value && visitGrouping.value && extraDevices.value.length >= 2) {
+    step.value = 2;
+    return;
+  }
+  if (onlySavedDeviceFallback.value) restoreOnlySavedDeviceAsSingleBooking();
   if (!requireCatalogV2Preview()) return;
   const service = selectedService.value;
   if (!service || !selectedServiceId.value) {
@@ -1133,6 +1317,14 @@ async function goToNextStepFrom2() {
  */
 /** The device being edited as visit items (one per unit), or null after telling the customer what is missing. */
 function currentDeviceInputs(): VisitDeviceInput[] | null {
+  if (!visitGrouping.value) {
+    toast.warning('Bật đặt nhiều thiết bị trước khi thêm máy vào lượt.');
+    return null;
+  }
+  if (visitDeviceCount.value > VISIT_DEVICE_LIMIT) {
+    toast.warning(`Mỗi lượt chỉ nhận tối đa ${VISIT_DEVICE_LIMIT} thiết bị. Bỏ bớt một thiết bị để tiếp tục.`);
+    return null;
+  }
   if (uploadingPhoto.value) {
     toast.warning('Vui lòng chờ ảnh tải lên hoàn tất.');
     return null;
@@ -1155,6 +1347,16 @@ function currentDeviceInputs(): VisitDeviceInput[] | null {
     step.value = 1;
     return null;
   }
+  const pricingMode = normalizePricingMode(service.pricingMode);
+  if (pricingMode === null || (pricingMode === 'fixed_price' && fixedPriceValue(service) === null)) {
+    toast.warning('Dịch vụ này chưa xác định được giá. Vui lòng chọn dịch vụ khác.');
+    return null;
+  }
+  if (!description.value.trim() && descriptionRequired.value) {
+    toast.warning('Vui lòng mô tả sơ bộ tình trạng của thiết bị.');
+    document.getElementById('booking-description')?.focus();
+    return null;
+  }
   const input: VisitDeviceInput = {
     serviceId: selectedServiceId.value,
     ...(description.value.trim() ? { description: description.value.trim() } : {}),
@@ -1162,7 +1364,7 @@ function currentDeviceInputs(): VisitDeviceInput[] | null {
     ...(Object.keys(deviceAttributes.value).length > 0 ? { deviceAttributes: { ...deviceAttributes.value } } : {}),
     ...(selectedVariantCode.value ? { selectedVariantCode: selectedVariantCode.value } : {}),
   };
-  return Array.from({ length: currentDeviceUnits.value || 1 }, () => ({ ...input }));
+  return [input];
 }
 
 function priceTextOf(price: SummaryPrice): string {
@@ -1173,15 +1375,54 @@ function priceTextOf(price: SummaryPrice): string {
 
 /** Keep this device in the visit and start the next one with the same address and time. */
 function addAnotherDevice() {
-  if (!canAddDevice.value) return;
+  if (!visitGrouping.value && isFixedPrice.value && quantity.value > 1) {
+    toast.warning('Trong lượt sửa, mỗi thiết bị cần có mô tả và ảnh riêng. Hãy giảm số lượng về 1 để thêm thiết bị.');
+    step.value = 1;
+    return;
+  }
+  if (!visitGrouping.value) startVisitGrouping();
+  const editingKey = editingSavedDeviceKey.value;
+  if (!editingKey && extraDevices.value.length >= VISIT_DEVICE_LIMIT) {
+    toast.warning(`Mỗi lượt chỉ nhận tối đa ${VISIT_DEVICE_LIMIT} thiết bị.`);
+    return;
+  }
   const inputs = currentDeviceInputs();
   if (!inputs) return;
+  const input = inputs[0];
+  if (!photoUploadIdsAreUnique(input, editingKey)) {
+    toast.warning('Ảnh của mỗi thiết bị phải riêng biệt. Hãy bỏ ảnh bị trùng rồi lưu lại.');
+    return;
+  }
   const serviceName = selectedService.value?.name ?? 'Thiết bị';
   const priceText = priceTextOf(summaryPrice.value);
-  const unitPrice = summaryPrice.value.kind === 'firm' && inputs.length > 1 ? formatMoney(summaryPrice.value.amount / inputs.length) : priceText;
-  for (const input of inputs) {
-    extraDevices.value.push({ key: `${Date.now()}-${extraDevices.value.length}`, input, serviceName, priceText: unitPrice });
+  const photos = copyPhotoDrafts(uploadedPhotos.value);
+  if (editingKey) {
+    const index = extraDevices.value.findIndex((device) => device.key === editingKey);
+    if (index < 0) {
+      cancelSavedDeviceEdit();
+      toast.warning('Không tìm thấy thiết bị đã lưu.');
+      return;
+    }
+    const previousPhotos = extraDevices.value[index].photos;
+    extraDevices.value.splice(index, 1, { key: editingKey, input, serviceName, priceText, photos });
+    const backup = savedDeviceEditorBackup.value;
+    editingSavedDeviceKey.value = null;
+    savedDeviceEditorBackup.value = null;
+    const retainedUrls = new Set(photos.map((photo) => photo.previewUrl));
+    for (const photo of previousPhotos) {
+      if (!retainedUrls.has(photo.previewUrl)) revokePhotoPreviewUrl(photo.previewUrl);
+    }
+    if (backup) restoreActiveDeviceDraft(backup);
+    toast.success('Đã lưu thay đổi cho thiết bị.');
+    return;
   }
+  extraDevices.value.push({
+    key: `${visitKey}-device-${nextVisitDeviceKey++}`,
+    input,
+    serviceName,
+    priceText,
+    photos,
+  });
   clearServiceSelection();
   description.value = '';
   userModifiedDescription.value = false;
@@ -1192,12 +1433,33 @@ function addAnotherDevice() {
 }
 
 function removeExtraDevice(key: string) {
-  extraDevices.value = extraDevices.value.filter((device) => device.key !== key);
+  if (editingSavedDeviceKey.value) return;
+  const index = extraDevices.value.findIndex((device) => device.key === key);
+  if (index < 0) return;
+  discardRecentlyRemovedDevice();
+  const [device] = extraDevices.value.splice(index, 1);
+  recentlyRemovedDevice.value = { device, index };
 }
 
 /** One request for the whole visit; the same key makes a retried submit return the same visit. */
 async function submitVisit(current: VisitDeviceInput[]) {
   if (loading.value || submitOutcomeUnknown.value) return;
+  if (!visitEnabled.value || !visitGrouping.value || editingSavedDeviceKey.value) {
+    toast.warning('Hãy lưu hoặc hủy thay đổi thiết bị trước khi gửi lượt sửa.');
+    return;
+  }
+  const items = [...extraDevices.value.map((device) => device.input), ...current];
+  if (items.length < 2 || items.length > VISIT_DEVICE_LIMIT) {
+    toast.warning(items.length === 1
+      ? 'Một thiết bị sẽ được gửi như yêu cầu đặt lịch thông thường.'
+      : `Lượt sửa cần từ 2 đến ${VISIT_DEVICE_LIMIT} thiết bị.`);
+    return;
+  }
+  const allPhotoIds = items.flatMap((item) => item.photoUploadIds ?? []);
+  if (new Set(allPhotoIds).size !== allPhotoIds.length) {
+    toast.warning('Ảnh của mỗi thiết bị phải riêng biệt. Hãy sửa ảnh trùng trước khi gửi.');
+    return;
+  }
   const schedule = scheduleForBooking();
   if ('error' in schedule) {
     toast.warning(schedule.error);
@@ -1218,7 +1480,7 @@ async function submitVisit(current: VisitDeviceInput[]) {
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       urgency,
       idempotencyKey: visitKey,
-      items: [...extraDevices.value.map((device) => device.input), ...current],
+      items,
     });
     router.push(`/app/visits/${visit.id}`);
   } catch (error: unknown) {
@@ -1233,8 +1495,42 @@ async function submitVisit(current: VisitDeviceInput[]) {
   }
 }
 
+async function sendVisitConsultation() {
+  const message = consultationMessage.value.trim();
+  if (!visitEnabled.value || extraDevices.value.length !== VISIT_DEVICE_LIMIT || !message || message.length > 1000) return;
+  if (consultationSubmitting.value || consultationSent.value) return;
+  consultationSubmitting.value = true;
+  try {
+    const devices = extraDevices.value.map((device, index) => `Máy ${index + 1}: ${device.serviceName}`.slice(0, 120));
+    await visitGroupsApi.consultation({ message, devices });
+    consultationSent.value = true;
+    toast.success('Đã gửi yêu cầu hỗ trợ. FixHome sẽ liên hệ với bạn.');
+  } catch (error: unknown) {
+    toast.warning(userFacingError(error, 'Chưa gửi được yêu cầu hỗ trợ. Vui lòng thử lại.'));
+  } finally {
+    consultationSubmitting.value = false;
+  }
+}
+
 async function createAndFindTech() {
+  if (editingSavedDeviceKey.value) {
+    toast.warning('Lưu hoặc hủy thay đổi thiết bị trước khi gửi yêu cầu.');
+    step.value = 1;
+    return;
+  }
+  if (onlySavedDeviceFallback.value) {
+    if (!restoreOnlySavedDeviceAsSingleBooking()) {
+      toast.warning('Dịch vụ của thiết bị đã lưu không còn khả dụng. Hãy chọn lại dịch vụ.');
+      step.value = 1;
+      return;
+    }
+  }
   if (extraDevices.value.length) {
+    if (!selectedServiceId.value) {
+      if (extraDevices.value.length >= 2) await submitVisit([]);
+      else toast.warning('Chọn thêm thiết bị thứ hai hoặc dùng thiết bị đã lưu như một yêu cầu thông thường.');
+      return;
+    }
     const current = currentDeviceInputs();
     if (current) await submitVisit(current);
     return;
@@ -1551,20 +1847,72 @@ async function createAndFindTech() {
       <div v-else-if="step === 1" key="step-1" class="booking-layout">
         <div class="min-w-0 space-y-4">
           <section
-            v-if="extraDevices.length"
+            v-if="visitEnabled && !isAiFlow && !visitGrouping"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm"
+            data-testid="visit-opt-in"
+          >
+            <span class="font-medium text-ink-800">Có nhiều thiết bị cần sửa?</span>
+            <FhButton variant="secondary" size="sm" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
+          </section>
+          <p
+            v-else-if="visitEnabled && !isAiFlow && visitGrouping"
+            class="rounded-xl border border-ink-200 bg-ink-50 px-4 py-3 text-sm text-ink-700 text-pretty"
+            data-testid="visit-grouping-note"
+          >
+            Mỗi thiết bị có mô tả và ảnh riêng. Số lượng dịch vụ đã chọn được chuyển về 1 thiết bị.
+          </p>
+          <section
+            v-if="extraDevices.length || recentlyRemovedDevice"
             class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
             data-testid="visit-devices-banner"
           >
-            <p class="font-semibold text-ink-900">Thiết bị thứ {{ extraDevices.length + 1 }} trong lượt sửa</p>
-            <ul class="space-y-1 text-ink-700">
-              <li v-for="(device, index) in extraDevices" :key="device.key" class="flex justify-between gap-3">
-                <span class="min-w-0 truncate">Máy {{ index + 1 }}: {{ device.serviceName }}</span>
-                <span class="whitespace-nowrap text-ink-500">{{ device.priceText }}</span>
+            <h2 v-if="extraDevices.length" class="font-semibold text-ink-900">Thiết bị đã lưu ({{ extraDevices.length }})</h2>
+            <ol v-if="extraDevices.length" class="divide-y divide-ink-100">
+              <li v-for="(device, index) in extraDevices" :key="device.key" class="space-y-2 py-3 first:pt-0 last:pb-0" :data-testid="`visit-device-${index}`">
+                <div class="flex items-start gap-3">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</p>
+                    <p class="text-ink-500">{{ device.priceText }}</p>
+                    <p class="mt-1 text-ink-700 text-pretty" :data-testid="`visit-device-description-${index}`">{{ device.input.description || 'Chưa có mô tả' }}</p>
+                  </div>
+                  <div class="flex shrink-0 gap-1">
+                    <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
+                    <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-40" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
+                  </div>
+                </div>
+                <div v-if="device.photos.length" class="flex flex-wrap gap-2" :aria-label="`Ảnh máy ${index + 1}`">
+                  <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
+                </div>
               </li>
-            </ul>
-            <FhButton variant="secondary" size="md" :loading="loading" data-testid="visit-submit-saved" @click="submitVisit([])">
-              Gửi {{ extraDevices.length }} thiết bị đã chọn
-            </FhButton>
+            </ol>
+            <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
+              <span>Đã bỏ một thiết bị.</span>
+              <button type="button" class="min-h-10 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+            </div>
+            <p class="text-ink-500 text-pretty">Mỗi máy giữ riêng mô tả và ảnh. Địa chỉ cùng lịch hẹn được dùng chung.</p>
+          </section>
+
+          <section
+            v-if="visitEnabled && !isAiFlow && visitGrouping && extraDevices.length === VISIT_DEVICE_LIMIT && !selectedServiceId && !editingSavedDeviceKey"
+            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
+            data-testid="visit-consultation"
+          >
+            <div>
+              <h2 class="font-semibold text-ink-900">Cần sửa thêm thiết bị?</h2>
+              <p class="mt-1 text-ink-600">Bạn có thể gửi yêu cầu để FixHome hỗ trợ sắp xếp. Ba thiết bị đã lưu vẫn được giữ lại.</p>
+              <p v-if="visitHotline" class="mt-1 text-ink-600">Hotline hỗ trợ: <a class="font-semibold text-brand-700 underline" :href="`tel:${visitHotline}`">{{ visitHotline }}</a></p>
+            </div>
+            <template v-if="consultationSent">
+              <p class="rounded-lg bg-success-50 px-3 py-2 text-success-800" role="status">Đã gửi yêu cầu hỗ trợ.</p>
+            </template>
+            <template v-else>
+              <label for="visit-consultation-message" class="block font-medium text-ink-800">Bạn cần FixHome hỗ trợ điều gì?</label>
+              <textarea id="visit-consultation-message" v-model="consultationMessage" rows="3" maxlength="1000" class="w-full rounded-xl border border-ink-300 bg-white p-3 text-base focus:border-brand-600 focus:outline-none sm:text-sm" data-testid="visit-consultation-message" />
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <span class="text-xs text-ink-500">{{ consultationMessage.trim().length }}/1000 ký tự</span>
+                <FhButton variant="secondary" size="md" :loading="consultationSubmitting" :disabled="consultationSubmitting || !consultationMessage.trim()" data-testid="visit-consultation-submit" @click="sendVisitConsultation">Gửi yêu cầu hỗ trợ</FhButton>
+              </div>
+            </template>
           </section>
           <section
             v-if="!selectedService || pickerOpen"
@@ -1663,7 +2011,7 @@ async function createAndFindTech() {
                   <template v-else-if="isServiceBookable(selectedService)">{{ catalogPriceLabel(selectedService).text }}</template>
                 </p>
               </div>
-              <div v-if="isFixedPrice && selectedFixedPrice !== null" class="flex items-center gap-1" role="group" aria-label="Số lượng thiết bị">
+              <div v-if="isFixedPrice && selectedFixedPrice !== null && !visitGrouping" class="flex items-center gap-1" role="group" aria-label="Số lượng thiết bị">
                 <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity <= 1" aria-label="Giảm số lượng" data-testid="booking-quantity-decrease" @click="setQuantity(quantity - 1)"><Minus :size="15" aria-hidden="true" /></button>
                 <span class="w-8 text-center font-semibold font-num" data-testid="booking-quantity">{{ quantity }}</span>
                 <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity >= 99" aria-label="Tăng số lượng" data-testid="booking-quantity-increase" @click="setQuantity(quantity + 1)"><Plus :size="15" aria-hidden="true" /></button>
@@ -1679,7 +2027,7 @@ async function createAndFindTech() {
           <div ref="requirementsRef" class="booking-request-configuration space-y-4" tabindex="-1" aria-label="Thông tin yêu cầu" data-testid="booking-request-configuration">
             <BookingDeviceDetails
               v-if="selectedServiceId"
-              :key="selectedServiceId"
+              :key="`${selectedServiceId}:${devicePricingRevision}`"
               :service-id="selectedServiceId"
               :device-attributes="deviceAttributes"
               :selected-variant-code="selectedVariantCode"
@@ -1745,16 +2093,37 @@ async function createAndFindTech() {
                 <span v-if="uploadingPhoto" class="sr-only" role="status" aria-live="polite">Đang tải ảnh hiện trạng…</span>
               </div>
             </section>
+            <section
+              v-if="visitEnabled && !isAiFlow && visitGrouping && selectedServiceId"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm"
+              data-testid="visit-current-device"
+            >
+              <span class="text-ink-700">{{ editingSavedDeviceKey ? 'Bạn đang sửa thiết bị đã lưu.' : 'Thiết bị này sẽ được thêm riêng vào lượt sửa.' }}</span>
+              <FhButton
+                v-if="editingSavedDeviceKey || visitDeviceCount <= VISIT_DEVICE_LIMIT"
+                variant="secondary"
+                size="sm"
+                :disabled="loading || uploadingPhoto"
+                :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
+                @click="addAnotherDevice"
+              >
+                <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : 'Thêm thiết bị này vào lượt' }}
+              </FhButton>
+              <FhButton v-if="editingSavedDeviceKey" variant="ghost" size="sm" :disabled="loading || uploadingPhoto" data-testid="visit-device-edit-cancel" @click="cancelSavedDeviceEdit">Hủy sửa</FhButton>
+              <span v-else class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
+                Tối đa {{ VISIT_DEVICE_LIMIT }} thiết bị mỗi lần đặt.
+              </span>
+            </section>
           </div>
         </div>
 
         <BookingSummary
-          :service-name="selectedService?.name ?? null"
+          :service-name="selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
           :device-text="deviceSummaryText"
           :price="summaryPrice"
-          cta-label="Tiếp tục"
+          :cta-label="visitGrouping && extraDevices.length && !selectedServiceId ? `Tiếp tục với ${extraDevices.length} thiết bị đã lưu` : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
-          :cta-disabled="!selectedServiceId || !isCatalogV2PreviewReady"
+          :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
         />
       </div>
@@ -1863,7 +2232,7 @@ async function createAndFindTech() {
         </div>
 
         <BookingSummary
-          :service-name="selectedService?.name ?? null"
+          :service-name="selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
           :device-text="deviceSummaryText"
           :schedule-text="scheduleSummaryText"
           :price="summaryPrice"
@@ -1973,9 +2342,12 @@ async function createAndFindTech() {
         <p v-if="aiSessionId" data-testid="ai-summary-note" class="rounded-xl border border-warning-200 bg-warning-50 p-3.5 text-sm text-warning-900 text-pretty">
           Kỹ thuật viên nhận việc sẽ thấy tóm tắt phần bạn trao đổi với trợ lý AI, nên bạn không cần kể lại từ đầu.
         </p>
+        <p v-if="visitGrouping && extraDevices.length === 0 && selectedServiceId" class="rounded-xl border border-ink-200 bg-ink-50 p-3.5 text-sm text-ink-700 text-pretty" data-testid="visit-singleton-note">
+          Hiện có 1 thiết bị. Yêu cầu này sẽ được gửi như đặt lịch thông thường, không tạo lượt sửa nhiều thiết bị.
+        </p>
 
         <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review">
-          <div class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">{{ extraDevices.length ? `Máy ${extraDevices.length + 1}` : 'Dịch vụ' }}</span>
             <div class="min-w-0 flex-1">
               <p class="font-medium text-ink-900">{{ selectedService?.name }}<span v-if="isFixedPrice && quantity > 1" class="text-ink-500"> × {{ quantity }}</span></p>
@@ -1983,12 +2355,12 @@ async function createAndFindTech() {
             </div>
             <button type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 1">Sửa</button>
           </div>
-          <div v-if="description.trim()" class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId && description.trim()" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Tình trạng</span>
             <p class="min-w-0 flex-1 text-ink-900 text-pretty">{{ description.trim() }}</p>
             <button v-if="!isAiFlow" type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 1">Sửa</button>
           </div>
-          <div v-if="uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Ảnh</span>
             <div class="flex flex-wrap gap-2">
               <img v-for="photo in uploadedPhotos" :key="photo.localId" :src="photo.previewUrl" alt="Ảnh thiết bị" class="h-14 w-14 rounded-lg object-cover" />
@@ -2009,7 +2381,7 @@ async function createAndFindTech() {
           </div>
         </section>
 
-        <section class="space-y-2.5 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="booking-review-price">
+        <section v-if="selectedServiceId && extraDevices.length === 0" class="space-y-2.5 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="booking-review-price">
           <div v-if="summaryPrice.kind === 'firm'" class="flex justify-between gap-4" data-testid="confirm-v2-price">
             <span class="text-ink-700">Tiền công</span>
             <span class="font-semibold text-ink-900 font-num"><FhMoney :amount="summaryPrice.amount" /></span>
@@ -2068,7 +2440,7 @@ async function createAndFindTech() {
         </div>
 
         <section
-          v-if="visitEnabled && !isAiFlow"
+          v-if="visitEnabled && !isAiFlow && (visitGrouping || extraDevices.length > 0)"
           class="space-y-3 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6"
           data-testid="visit-devices"
         >
@@ -2076,15 +2448,30 @@ async function createAndFindTech() {
             <h3 class="font-semibold text-ink-900">Sửa thêm thiết bị khác</h3>
             <span class="whitespace-nowrap text-ink-500">{{ visitDeviceCount }}/{{ VISIT_DEVICE_LIMIT }} thiết bị</span>
           </div>
-          <ul v-if="extraDevices.length" class="divide-y divide-ink-100">
-            <li v-for="(device, index) in extraDevices" :key="device.key" class="flex items-center gap-3 py-2">
-              <span class="min-w-0 flex-1 truncate text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</span>
-              <span class="whitespace-nowrap text-ink-500">{{ device.priceText }}</span>
-              <button type="button" class="rounded-lg px-2 py-1 font-semibold text-danger-700 hover:bg-danger-50" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
+          <ol v-if="extraDevices.length" class="divide-y divide-ink-100">
+            <li v-for="(device, index) in extraDevices" :key="device.key" class="space-y-2 py-3 first:pt-0 last:pb-0" :data-testid="`visit-device-${index}`">
+              <div class="flex items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</p>
+                  <p class="text-ink-500">{{ device.priceText }}</p>
+                  <p class="mt-1 text-ink-700 text-pretty">{{ device.input.description || 'Chưa có mô tả' }}</p>
+                </div>
+                <div class="flex shrink-0 gap-1">
+                  <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
+                  <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
+                </div>
+              </div>
+              <div v-if="device.photos.length" class="flex flex-wrap gap-2" :aria-label="`Ảnh máy ${index + 1}`">
+                <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
+              </div>
             </li>
-          </ul>
+          </ol>
+          <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
+            <span>Đã bỏ một thiết bị.</span>
+            <button type="button" class="min-h-10 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+          </div>
           <p class="text-ink-500 text-pretty">Một thợ sửa tất cả trong cùng buổi hẹn, mỗi máy báo giá riêng và bạn trả tiền một lần cho các máy sửa được.</p>
-          <FhButton variant="secondary" size="md" :disabled="!canAddDevice || loading" data-testid="visit-add-device" @click="addAnotherDevice">
+          <FhButton variant="secondary" size="md" :disabled="!canAddDevice || loading" data-testid="visit-add-device" @click="selectedServiceId ? addAnotherDevice() : step = 1">
             <Plus :size="16" class="mr-1.5" /> Thêm thiết bị khác
           </FhButton>
           <p v-if="!canAddDevice" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
@@ -2107,12 +2494,12 @@ async function createAndFindTech() {
             size="lg"
             class="w-full sm:w-auto sm:px-8"
             :loading="loading"
-            :disabled="loading || submitOutcomeUnknown || chatUploads.busy > 0 || chatUploads.failed > 0 || !isCatalogV2PreviewReady"
+            :disabled="loading || submitOutcomeUnknown || chatUploads.busy > 0 || chatUploads.failed > 0 || visitDeviceCount > VISIT_DEVICE_LIMIT || (selectedServiceId ? !isCatalogV2PreviewReady : extraDevices.length < 2)"
             data-testid="booking-submit"
             @click="createAndFindTech"
           >
             <template v-if="chatUploads.busy > 0">Đang gửi ảnh, video cho thợ {{ Math.round(chatUploads.progress * 100) }}%</template>
-            <template v-else>Tìm kỹ thuật viên</template>
+            <template v-else>{{ visitGrouping && visitDeviceCount >= 2 ? `Tìm kỹ thuật viên cho ${visitDeviceCount} thiết bị` : 'Tìm kỹ thuật viên' }}</template>
           </FhButton>
         </div>
       </div>
