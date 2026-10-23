@@ -315,6 +315,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết đơn sửa chữa', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'part-returns',
+        name: 'console-part-returns',
+        component: () => import('../pages/console/ConsolePartReturnsPage.vue'),
+        meta: { title: 'Hoàn trả linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'part-requests',
         name: 'console-part-requests',
         component: () => import('../pages/console/ConsolePartRequestsPage.vue'),

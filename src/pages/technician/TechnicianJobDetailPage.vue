@@ -74,6 +74,7 @@ import { afterRunningRead, onOrderChange, onResync, whileOffline } from '../../s
 import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -485,6 +486,43 @@ const canRecoverFixedPriceRepair = computed(() => skipsQuote.value && statusUppe
   gpsCheckedIn.value && hasBeforePhoto.value && !pendingEvidenceUpload.value && uploadingPhase.value === null);
 const quotationRejected = computed(() => String(job.value?.quotation?.status ?? '').toLowerCase() === 'rejected');
 const isRepairing = computed(() => statusUpper.value === 'UNDER_REPAIR' || statusUpper.value === 'IN_PROGRESS');
+/**
+ * Parts declared used per item, from the custody ledger: a line of 2 of which the
+ * technician used 1 and returned 1 counts as 1 used (BUG DETECTOR 12). Items with
+ * no custody record count their whole quantity, as the Backend does.
+ */
+const custodyByItem = ref(new Map<string, { usedQty: number; declaredQty: number }>());
+const custodyUsed = computed(() => new Map([...custodyByItem.value].map(([id, row]) => [id, row.usedQty])));
+
+/**
+ * FixHome parts the technician still holds for this order beyond what the approved quotation
+ * and approved additional costs use (BUG DETECTOR 14): offered first when proposing an
+ * additional cost. Approving such a line asks the warehouse for nothing new.
+ */
+const heldSpareParts = computed(() => {
+  const quote = job.value?.quotation;
+  const quoteApproved = ['approved', 'accepted'].includes(String(quote?.status ?? '').toLowerCase());
+  return computeHeldSpareParts(receivedRequests.value, new Map([...custodyByItem.value].map(([id, row]) => [id, row.declaredQty])), [
+    ...(quoteApproved ? quote?.items ?? [] : []),
+    ...additionalCosts.value.filter(cost => cost.status === 'APPROVED').flatMap(cost => cost.items),
+  ]);
+});
+/** True when some FixHome line of the proposal needs parts the technician does not hold: only then is delivery asked. */
+const acNeedsWarehouse = computed(() => {
+  const wanted = new Map<string, number>();
+  for (const item of acItems.value) {
+    if (item.type === 'PARTS' && item.partSource === 'fixhome' && item.partCatalogId) wanted.set(item.partCatalogId, (wanted.get(item.partCatalogId) ?? 0) + item.quantity);
+  }
+  return [...wanted].some(([id, quantity]) => quantity > (heldSpareParts.value.find(part => part.partCatalogId === id)?.quantity ?? 0));
+});
+const addHeldPartToAc = (part: { partCatalogId: string; name: string; unitPrice: number; quantity: number }) => {
+  const already = acItems.value.filter(item => item.partCatalogId === part.partCatalogId).reduce((sum, item) => sum + item.quantity, 0);
+  const quantity = part.quantity - already;
+  if (quantity < 1) return;
+  const line: QuotationItemPayload = { type: 'PARTS', partSource: 'fixhome', partCatalogId: part.partCatalogId, partNameSnapshot: part.name, description: part.name, quantity, unitPrice: part.unitPrice };
+  if (acItems.value.length === 1 && !acItems.value[0].description.trim() && acItems.value[0].unitPrice === 0) acItems.value = [line];
+  else acItems.value.push(line);
+};
 const completionBlockers = computed(() => {
   if (!isRepairing.value || completionRequested.value) return [] as string[];
   const blockers: string[] = [];
@@ -530,7 +568,7 @@ const completionBlockers = computed(() => {
             (item.usageStatus !== 'used' && item.usageStatus !== 'returned')) continue;
           resolvedQuantities.set(item.partCatalogId, (resolvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
           if (item.usageStatus === 'used') {
-            usedQuantities.set(item.partCatalogId, (usedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
+            usedQuantities.set(item.partCatalogId, (usedQuantities.get(item.partCatalogId) ?? 0) + (custodyUsed.value.get(item.id) ?? item.quantity));
           }
         }
       }
@@ -1434,6 +1472,13 @@ watch([showQuotationForm, stockCatalog, receivedRequests], () => {
     if (quotationItems.value.some(line => line.partSource === 'fixhome' && line.partCatalogId === item.partCatalogId)) suggestedStockIds.add(item.partCatalogId!);
   }
 });
+/** One cost line as the technician reads it: labour, or a part with its quantity and where it comes from. */
+function costLineLabel(item: { type: string; description: string; quantity: number; partSource?: string | null; partNameSnapshot?: string | null }): string {
+  if (String(item.type).toUpperCase() === 'LABOR') return `Tiền công: ${item.description}`;
+  const source = item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'thợ tự có' : 'mua ngoài';
+  return `${item.partNameSnapshot || item.description} × ${item.quantity} · ${source}`;
+}
+const quotationStatusLabel = computed(() => ({ approved: 'Khách đã duyệt', accepted: 'Khách đã duyệt', sent: 'Chờ khách duyệt', pending: 'Chờ khách duyệt', rejected: 'Khách từ chối', superseded: 'Đã thay bằng bản mới', draft: 'Bản nháp' } as Record<string, string>)[String(job.value?.quotation?.status ?? '').toLowerCase()] ?? '');
 const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
 const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
   : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
@@ -1578,19 +1623,14 @@ const selectPartForAc = (part: FixHomePart) => {
   acTargetItemIndex.value = null;
 };
 
-const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician' | 'external' = 'technician') => {
+const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician' = 'technician') => {
   if (type === 'PARTS' && partSource === 'fixhome') {
     openAcPartPicker(null);
     return;
   }
   acItems.value.push({
     type,
-    description:
-      type === 'LABOR'
-        ? 'Hạng mục công phát sinh'
-        : partSource === 'external'
-          ? 'Linh kiện mua ngoài'
-          : 'Tên linh kiện phát sinh',
+    description: type === 'LABOR' ? 'Hạng mục công phát sinh' : 'Tên linh kiện phát sinh',
     quantity: 1,
     unitPrice: 0,
     partSource: type === 'PARTS' ? partSource : undefined,
@@ -1661,7 +1701,8 @@ async function handleSubmitAdditionalCost() {
 
   acSubmitting.value = true;
   try {
-    const hasFixHomeParts = validItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome');
+    // Parts the technician holds need no delivery (BUG DETECTOR 14).
+    const hasFixHomeParts = validItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome') && acNeedsWarehouse.value;
     const shipping =
       hasFixHomeParts && acFulfillmentMethod.value === 'delivery' ? Number(acShippingFee.value || 0) : 0;
     const body = {
@@ -2024,6 +2065,28 @@ const toggleMore = async () => {
           <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
           <div><dt class="text-ink-600">Tổng cộng</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
         </dl>
+        <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
+        <details v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-3 text-xs" data-testid="cost-lines">
+          <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Xem chi tiết báo giá và phát sinh</summary>
+          <div v-if="job?.quotation?.items?.length" class="pt-2" data-testid="cost-lines-quotation">
+            <h3 class="font-medium text-ink-800">Báo giá<span class="font-normal text-ink-500"> · {{ quotationStatusLabel }}</span></h3>
+            <ul class="mt-1 space-y-1 text-ink-700">
+              <li v-for="(item, index) in job.quotation.items" :key="index" class="flex justify-between gap-3">
+                <span class="min-w-0">{{ costLineLabel(item) }}</span>
+                <FhMoney :amount="item.lineTotal" class="shrink-0" />
+              </li>
+            </ul>
+          </div>
+          <div v-for="cost in additionalCosts" :key="cost.id" class="border-t border-ink-100 pt-2 mt-2" data-testid="cost-lines-additional">
+            <h3 class="font-medium text-ink-800">Phát sinh<span class="font-normal text-ink-500"> · {{ AC_STATUS_LABELS[cost.status] }}</span></h3>
+            <ul class="mt-1 space-y-1 text-ink-700">
+              <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3">
+                <span class="min-w-0">{{ costLineLabel(item) }}</span>
+                <FhMoney :amount="item.lineTotal" class="shrink-0" />
+              </li>
+            </ul>
+          </div>
+        </details>
         <details v-if="proposedParts.length || receivedRequests.length" class="border-t border-ink-100 pt-3 text-xs">
           <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
         <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
@@ -2608,6 +2671,7 @@ const toggleMore = async () => {
                 @requests-error="quoteStockLoading = false; quoteStockError = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.'"
                 @pending-usage="pendingPartsUsage = $event"
                 @pending-returns="pendingPartsReturns = $event"
+                @custody="custodyByItem = $event"
               />
             </div>
           </section>
@@ -2637,6 +2701,15 @@ const toggleMore = async () => {
                     </span>
                   </div>
                   <p class="text-ink-600 text-pretty">{{ cost.reason }}</p>
+                  <details v-if="cost.items?.length" class="text-xs" :data-testid="`additional-cost-lines-${cost.id}`">
+                    <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Xem {{ cost.items.length }} dòng chi tiết</summary>
+                    <ul class="space-y-1 text-ink-700">
+                      <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3">
+                        <span class="min-w-0">{{ costLineLabel(item) }}</span>
+                        <FhMoney :amount="item.lineTotal" class="shrink-0" />
+                      </li>
+                    </ul>
+                  </details>
                   <button
                     v-if="['REJECTED', 'EXPIRED'].includes(cost.status) && isRepairing"
                     type="button"
@@ -2685,7 +2758,6 @@ const toggleMore = async () => {
                     >
                       <option value="fixhome">Kho FixHome</option>
                       <option value="technician">Thợ tự có</option>
-                      <option value="external">Mua ngoài</option>
                     </select>
                     <span v-else class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
 
@@ -2752,6 +2824,23 @@ const toggleMore = async () => {
                   </div>
                 </div>
 
+                <!-- Parts already in hand come first: no new request from the warehouse (BUG DETECTOR 14). -->
+                <div v-if="heldSpareParts.length" class="space-y-2" data-testid="ac-held-parts">
+                  <p class="font-medium text-ink-700">Linh kiện FixHome bạn đang giữ, chưa dùng hết</p>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-for="part in heldSpareParts"
+                      :key="part.partCatalogId"
+                      type="button"
+                      class="min-h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm text-ink-800 hover:border-brand-500 inline-flex items-center gap-1.5"
+                      :data-testid="`ac-held-part-${part.partCatalogId}`"
+                      @click="addHeldPartToAc(part)"
+                    >
+                      <Plus :size="14" class="text-brand-700" /> {{ part.name }} <span class="text-ink-500">× {{ part.quantity }}</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div class="flex flex-wrap gap-2">
                   <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('LABOR')">
                     <Plus :size="16" /> Tiền công
@@ -2759,13 +2848,10 @@ const toggleMore = async () => {
                   <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS', 'fixhome')">
                     <Plus :size="16" /> Linh kiện FixHome
                   </button>
-                  <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS', 'external')">
-                    <Plus :size="16" /> Linh kiện mua ngoài
-                  </button>
                 </div>
 
                 <!-- How FixHome parts reach the technician -->
-                <div v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome')" class="space-y-2">
+                <div v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome') && acNeedsWarehouse" class="space-y-2">
                   <p class="font-medium text-ink-700">Nhận linh kiện FixHome</p>
                   <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
                     <label class="inline-flex items-center gap-2 min-h-10 cursor-pointer">
@@ -2789,13 +2875,6 @@ const toggleMore = async () => {
                   </div>
                 </div>
 
-                <p
-                  v-if="acItems.some((i) => i.partSource === 'external')"
-                  class="px-3 py-2 rounded-xl bg-warning-50 border border-warning-200 text-warning-800 flex items-start gap-2"
-                >
-                  <AlertTriangle :size="16" class="text-warning-600 mt-0.5 shrink-0" />
-                  <span class="text-pretty">Linh kiện mua ngoài không được FixHome bảo hành. Khách phải đồng ý điều này khi duyệt.</span>
-                </p>
 
                 <div class="space-y-1.5">
                   <p class="font-medium text-ink-700">Ảnh (không bắt buộc)</p>
