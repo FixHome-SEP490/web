@@ -75,6 +75,7 @@ import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
+import { partsCompletionBlockers } from '../../utils/parts-completion';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -541,64 +542,13 @@ const completionBlockers = computed(() => {
     blockers.push('Còn linh kiện đã nhận chưa ghi nhận đã dùng hoặc hoàn trả.');
   }
 
-  if (quotation && quoteApproved) {
-    const quoteItems = quotation.items.filter(item => item.type === 'PARTS' && item.partSource === 'fixhome');
-    if (quoteItems.length) {
-      const approvedQuantities = new Map<string, number>();
-      let hasUnmatchedQuoteItem = false;
-      for (const item of quoteItems) {
-        if (!item.partCatalogId || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
-          hasUnmatchedQuoteItem = true;
-          continue;
-        }
-        approvedQuantities.set(item.partCatalogId, (approvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
-      }
-
-      // PRE_REPAIR stock and a QUOTATION request linked to this quote share the
-      // same approved quantity pool in Backend's completion check.
-      const resolvedQuantities = new Map<string, number>();
-      const usedQuantities = new Map<string, number>();
-      const quoteRequests = requests.filter(request =>
-        request.status === 'received' || request.status === 'completed'
-      ).filter(request => request.requestType === 'pre_repair' ||
-        (request.requestType === 'quotation' && request.quotationId === quotation.id && !request.additionalCostId));
-      for (const request of quoteRequests) {
-        for (const item of request.items) {
-          if (item.partSource !== 'fixhome' || !item.partCatalogId ||
-            (item.usageStatus !== 'used' && item.usageStatus !== 'returned')) continue;
-          resolvedQuantities.set(item.partCatalogId, (resolvedQuantities.get(item.partCatalogId) ?? 0) + item.quantity);
-          if (item.usageStatus === 'used') {
-            usedQuantities.set(item.partCatalogId, (usedQuantities.get(item.partCatalogId) ?? 0) + (custodyUsed.value.get(item.id) ?? item.quantity));
-          }
-        }
-      }
-
-      const hasUnresolvedQuantity = [...approvedQuantities].some(([catalogId, quantity]) =>
-        (resolvedQuantities.get(catalogId) ?? 0) < quantity ||
-        (usedQuantities.get(catalogId) ?? 0) > quantity
-      );
-      if (hasUnmatchedQuoteItem || hasUnresolvedQuantity) {
-        blockers.push('Lượng linh kiện FixHome đã nhận và ghi nhận dùng hoặc hoàn trả chưa khớp báo giá.');
-      }
-    }
-  }
-
-  const approvedRequests: Array<{ type: 'additional'; id: string; label: string; catalogIds: string[] }> = [];
-  for (const cost of additionalCosts.value.filter(row => row.status === 'APPROVED')) {
-    const items = cost.items.filter(item => item.type !== 'LABOR' && item.partSource === 'fixhome');
-    if (items.length) approvedRequests.push({ type: 'additional', id: cost.id, label: 'chi phí phát sinh', catalogIds: items.map(item => item.partCatalogId).filter((id): id is string => !!id) });
-  }
-  for (const approved of approvedRequests) {
-    const request = requests.find(row => row.requestType === approved.type && row.additionalCostId === approved.id);
-    const linkedItems = request?.items.filter(item => item.partSource === 'fixhome' &&
-      (approved.catalogIds.length === 0 || approved.catalogIds.includes(item.partCatalogId ?? '')));
-    if (!request || request.status !== 'received' || !request.receivedAt || !linkedItems?.length ||
-      approved.catalogIds.some(catalogId => !linkedItems.some(item => item.partCatalogId === catalogId))) {
-      blockers.push(`Linh kiện FixHome theo ${approved.label} cần được nhận bằng QR.`);
-    } else if (linkedItems.some(item => item.usageStatus !== 'used' && item.usageStatus !== 'returned')) {
-      blockers.push(`Ghi nhận đã dùng hoặc hoàn trả linh kiện FixHome theo ${approved.label}.`);
-    }
-  }
+  // Same rules as the Backend at invoice time (BUG DETECTOR 12 and 14), see utils/parts-completion.
+  blockers.push(...partsCompletionBlockers(
+    quotation && quoteApproved ? { id: quotation.id, items: quotation.items } : null,
+    additionalCosts.value.filter(row => row.status === 'APPROVED'),
+    requests,
+    custodyUsed.value,
+  ));
   return [...new Set(blockers)];
 });
 const canRequestCompletion = computed(() => hasAfterPhoto.value && completionBlockers.value.length === 0 && !actionLoading.value);
