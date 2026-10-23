@@ -58,12 +58,14 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         Kết quả {{ resolved }}/{{ devices.length }} máy
       </span>
     </div>
-    <div class="grid grid-cols-3 gap-2">
+    <div class="visit-device-grid grid gap-2 sm:grid-cols-3">
       <template v-for="device in devices" :key="device.bookingId">
         <div
           v-if="device.serviceOrderId === activeOrderId"
-          class="min-w-0 rounded-xl border border-brand-600 bg-brand-50 px-2.5 py-3"
+          class="visit-device min-w-0 rounded-xl border border-brand-600 bg-brand-50 p-3"
           aria-current="page"
+          role="group"
+          :aria-label="`Máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
           <span class="flex items-center justify-between gap-1 text-sm font-semibold text-brand-800">Máy {{ device.sequence }}<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" /></span>
@@ -74,7 +76,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         <router-link
           v-else-if="device.serviceOrderId"
           :to="`/tech/jobs/${device.serviceOrderId}`"
-          class="min-w-0 rounded-xl border border-ink-200 bg-white px-2.5 py-3 transition-colors hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-white p-3 transition-colors motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           :aria-label="`Mở máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
@@ -85,7 +87,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         </router-link>
         <div
           v-else
-          class="min-w-0 rounded-xl border border-ink-200 bg-ink-25 px-2.5 py-3 text-ink-500"
+          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-ink-25 p-3 text-ink-600"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
           <span class="block text-sm font-semibold">Máy {{ device.sequence }}</span>
@@ -108,6 +110,15 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         Xem linh kiện máy {{ pendingReadyPartRequest.sequence }}
       </button>
     </div>
-    <p class="text-xs text-ink-600">Chọn máy để xem báo giá, ảnh và linh kiện riêng.</p>
   </nav>
 </template>
+
+<style scoped>
+/* Keep each status readable at field-use widths; wide screens retain the three-machine rail. */
+@media (max-width: 639px) {
+  .visit-device { display: grid; grid-template-columns: 4rem minmax(0, 1fr); column-gap: 12px; align-content: start; }
+  .visit-device > :first-child { grid-row: 1 / span 3; align-self: start; white-space: nowrap; }
+  .visit-device > :not(:first-child) { grid-column: 2; margin-top: 0; font-size: 14px; line-height: 20px; }
+  .visit-device > :nth-child(n + 3) { margin-top: 4px; }
+}
+</style>

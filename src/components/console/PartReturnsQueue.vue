@@ -151,11 +151,11 @@ defineExpose({ reload: loadReturns });
     aria-label="Linh kiện chờ nhận hoàn trả"
   >
     <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3">
-      <div class="flex items-center gap-2">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
         <h2 class="text-base font-semibold text-ink-900">Chờ nhận linh kiện hoàn trả</h2>
         <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-sm text-ink-500" data-testid="part-returns-count">{{ awaiting.length }}</span>
       </div>
-      <FhButton variant="ghost" size="sm" :disabled="returnsLoading" @click="loadReturns">Làm mới</FhButton>
+      <FhButton variant="ghost" size="md" :disabled="returnsLoading" @click="loadReturns">Làm mới</FhButton>
     </header>
 
     <div
@@ -165,7 +165,7 @@ defineExpose({ reload: loadReturns });
       :role="toastMessage.type === 'success' ? 'status' : 'alert'"
     >
       <span>{{ toastMessage.text }}</span>
-      <button type="button" class="shrink-0 rounded p-1 hover:bg-white/60" aria-label="Đóng thông báo" @click="toastMessage = null">
+      <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng thông báo" @click="toastMessage = null">
         <X :size="16" aria-hidden="true" />
       </button>
     </div>
@@ -178,7 +178,7 @@ defineExpose({ reload: loadReturns });
 
     <div v-else-if="returnsLoadError" role="alert" class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm text-ink-600">
       <span>Chưa tải được danh sách chờ nhận.</span>
-      <FhButton variant="secondary" size="sm" @click="loadReturns">Thử lại</FhButton>
+      <FhButton variant="secondary" size="md" @click="loadReturns">Thử lại</FhButton>
     </div>
 
     <p v-else-if="groups.length === 0" class="px-5 py-4 text-sm text-ink-500">
@@ -192,11 +192,14 @@ defineExpose({ reload: loadReturns });
           <router-link v-if="group.first.orderId" :to="`/console/orders/${group.first.orderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
           <span>Kỹ thuật viên: <span class="font-num">{{ technicianRef(group.first) }}</span></span>
         </div>
-        <div v-for="row in group.rows" :key="returnKey(row)" class="space-y-2 rounded-[var(--radius-sm)] border border-ink-100 px-3 py-2.5">
+        <div v-for="row in group.rows" :key="returnKey(row)" class="space-y-3 border-t border-ink-100 pt-3">
           <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <div class="min-w-0 font-medium text-ink-900">{{ row.partNameSnapshot }}</div>
-            <div class="whitespace-nowrap font-num text-xs text-ink-600">
-              Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Khai trả {{ row.declaredQty }} · Đã nhận {{ row.managerAcceptedQty }}
+            <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
+            <div class="flex flex-wrap gap-x-1 gap-y-1 text-sm text-ink-600">
+              <span class="whitespace-nowrap">Cấp <strong class="font-num text-ink-900">{{ row.issuedQty }}</strong></span> ·
+              <span class="whitespace-nowrap">Dùng <strong class="font-num text-ink-900">{{ row.usedQty }}</strong></span> ·
+              <span class="whitespace-nowrap">Khai trả <strong class="font-num text-ink-900">{{ row.declaredQty }}</strong></span> ·
+              <span class="whitespace-nowrap">Đã nhận <strong class="font-num text-ink-900">{{ row.managerAcceptedQty }}</strong></span>
             </div>
           </div>
           <div v-if="canOperate" class="flex flex-wrap items-end gap-2">
@@ -210,20 +213,22 @@ defineExpose({ reload: loadReturns });
                 min="1"
                 step="1"
                 :max="maxAcceptQty(row)"
+                :aria-describedby="`accept-hint-${returnKey(row)}`"
                 :class="consoleField"
-                class="w-24"
+                class="min-h-11 w-24"
               />
             </div>
-            <span class="pb-2 text-xs text-ink-500">tối đa {{ maxAcceptQty(row) }}</span>
+            <span :id="`accept-hint-${returnKey(row)}`" class="pb-3 text-sm text-warning-800">Chờ nhận · tối đa {{ maxAcceptQty(row) }}</span>
             <FhButton
               data-testid="accept-return"
               variant="primary"
-              size="sm"
-              class="mb-1.5"
+              size="md"
+              class="w-full sm:ml-auto sm:w-auto"
+              :aria-label="`Xác nhận đã nhận ${row.partNameSnapshot}`"
               :loading="acceptingKey === returnKey(row)"
               :disabled="!!acceptingKey || returnsLoading || maxAcceptQty(row) < 1"
               @click="handleAcceptReturn(row)"
-            >Đã nhận</FhButton>
+            >Xác nhận đã nhận</FhButton>
           </div>
           <p v-else class="text-xs text-ink-500">Chỉ quản lý dịch vụ xác nhận được số linh kiện đã nhận.</p>
         </div>
@@ -231,7 +236,7 @@ defineExpose({ reload: loadReturns });
     </ul>
 
     <details v-if="!returnsLoading && !returnsLoadError && heldGroups.length" class="border-t border-ink-100 px-5 py-3 text-sm" data-testid="part-returns-held">
-      <summary class="cursor-pointer font-medium text-ink-700 min-h-10 flex items-center">Thợ đang giữ, chưa khai trả ({{ undeclared.length }})</summary>
+      <summary class="cursor-pointer rounded-lg font-medium text-ink-700 min-h-11 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Thợ đang giữ, chưa khai trả ({{ undeclared.length }})</summary>
       <ul class="mt-2 space-y-2">
         <li v-for="group in heldGroups" :key="group.id" class="space-y-1">
           <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
@@ -239,9 +244,9 @@ defineExpose({ reload: loadReturns });
             <router-link v-if="group.first.orderId" :to="`/console/orders/${group.first.orderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
             <span>Kỹ thuật viên: <span class="font-num">{{ technicianRef(group.first) }}</span></span>
           </div>
-          <p v-for="row in group.rows" :key="returnKey(row)" class="flex justify-between gap-3 text-ink-700">
-            <span class="min-w-0">{{ row.partNameSnapshot }}</span>
-            <span class="whitespace-nowrap font-num text-xs text-ink-500">Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Còn giữ {{ row.outstandingQty }}</span>
+          <p v-for="row in group.rows" :key="returnKey(row)" class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-ink-700">
+            <span class="min-w-0 break-words">{{ row.partNameSnapshot }}</span>
+            <span class="text-sm text-ink-600">Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Còn giữ {{ row.outstandingQty }}</span>
           </p>
         </li>
       </ul>

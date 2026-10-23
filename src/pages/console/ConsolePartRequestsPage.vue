@@ -414,6 +414,7 @@ const getUsageBadgeClass = (status: string) => {
     <ConsoleLoadError v-if="loadError" @retry="loadData" />
     <ConsoleTable
       v-else
+      class="part-requests-table"
       :columns="columns"
       :rows="requests"
       :loading="loading"
@@ -422,7 +423,7 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-code="{ row }">
         <button
           type="button"
-          class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          class="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg font-num font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           :data-testid="`part-request-detail-${row.id}`"
           @click="detailModalRequest = row"
         >{{ requestCode(row) }}</button>
@@ -432,7 +433,7 @@ const getUsageBadgeClass = (status: string) => {
       </template>
 
       <template #cell-items="{ row }">
-        <ul class="max-w-72 min-w-40 space-y-0.5">
+        <ul class="part-request-items max-w-72 min-w-40 space-y-0.5">
           <li v-for="item in (row.items || []).slice(0, 3)" :key="item.id" class="space-y-1 py-1" :data-testid="`manager-part-${item.id}`">
             <div class="flex items-center justify-between gap-2">
             <span class="truncate text-ink-800" :title="item.partNameSnapshot">{{ item.partNameSnapshot }}</span>
@@ -441,8 +442,8 @@ const getUsageBadgeClass = (status: string) => {
             <template v-for="record in [custodyFor(row, item.id)]" :key="record?.partRequestItemId ?? item.id">
               <div v-if="record" class="space-y-1 text-xs text-ink-600">
                 <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }}</p>
+                <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận trả {{ record.managerAcceptedQty }}</p>
                 <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
-                <p v-else-if="record.managerAcceptedQty > 0">Đã nhận trả {{ record.managerAcceptedQty }}</p>
                 <p v-else-if="record.outstandingQty > 0">Cần trả kho {{ record.outstandingQty }}</p>
               </div>
               <div v-else class="space-y-1 text-xs text-ink-600">
@@ -455,7 +456,7 @@ const getUsageBadgeClass = (status: string) => {
         <button
           v-if="(row.items || []).length > 3"
           type="button"
-          class="mt-0.5 whitespace-nowrap text-xs font-medium text-brand-700 hover:underline"
+          class="mt-0.5 inline-flex min-h-11 items-center whitespace-nowrap rounded-lg text-sm font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           @click="detailModalRequest = row"
         >Thêm {{ (row.items || []).length - 3 }} linh kiện</button>
       </template>
@@ -652,3 +653,16 @@ const getUsageBadgeClass = (status: string) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Keep the same cells and actions in one row per request, readable without sideways scrolling. */
+@media (max-width: 639px) {
+  .part-requests-table :deep(thead) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .part-requests-table :deep(tbody > tr) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .part-requests-table :deep(tbody > tr > td) { padding: 12px 16px; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(2)) { grid-column: 1 / -1; grid-row: 2; padding-top: 0; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(4)) { grid-column: 2; grid-row: 1; align-self: center; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(6)) { grid-column: 1 / -1; padding-top: 0; }
+  .part-request-items { min-width: 0; max-width: none; }
+}
+</style>

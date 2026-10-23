@@ -61,6 +61,11 @@ describe('Technician VisitGroup machine navigation', () => {
     expect(wrapper.get('[data-testid="tech-visit-device-2"]').attributes('href')).toBe('/tech/jobs/o2');
   });
 
+  it('names the active machine and its status for assistive navigation', () => {
+    const wrapper = render([device(1, 'o1', 'failed'), device(2, 'o2')], 'o1');
+    expect(wrapper.get('[aria-current="page"]').attributes('aria-label')).toBe('Máy 1: Máy lạnh · Phòng 1, Không sửa được');
+  });
+
   it('keeps machines without a real ServiceOrder ID unclickable', () => {
     const wrapper = render([device(1, 'o1'), device(2, null)], 'o1');
     expect(wrapper.get('[data-testid="tech-visit-device-2"]').attributes('href')).toBeUndefined();

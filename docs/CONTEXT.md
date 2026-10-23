@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-23 22:51 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-v53-multiservice-ux-20261023
+> Cập nhật lần cuối: 2026-10-23 23:45 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-v54-sol-polish-20261023
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -120,6 +120,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 
 ### Khách hàng (`/app`)
 
+- Polish Web V5.4 trên base `cba04bf`: hàng máy đã lưu dành toàn chiều ngang cho giá/mô tả; review thu gọn nhãn sửa từng máy, lịch/địa chỉ chung xếp nhãn trên nội dung ở điện thoại. Sidebar giới hạn chiều cao theo viewport, giảm độ lớn số tiền để CTA giữ vai trò chính. Chip khách/thợ dùng hàng hai cột dưới 640px để đọc được trạng thái; desktop giữ ba máy cạnh nhau. Khu thanh toán có heading liên kết bằng `aria-labelledby`, không đổi cách xác định tiền hoặc trạng thái. Nút thực dùng/khai trả tự chia đều theo chiều rộng thực, tối thiểu 44px. Hàng chờ quản lý bỏ khung con, các số lượng xuống dòng theo từng cặp nhãn–số; nút “Xác nhận đã nhận” gọi cùng lệnh cũ, ô số lượng liên kết giới hạn qua `aria-describedby`. Bảng yêu cầu luôn hiện cả số khai trả và đã nhận khi có ledger; khai trả không đồng nghĩa đã nhận kho. Dưới 640px, cùng các ô bảng xếp mã/trạng thái trên, linh kiện và hành động dưới để không phải cuộn ngang; không tạo bản sao nút hay đổi điều kiện thao tác.
 - Hai form đặt lịch trên cùng trang `NewBookingWizardPage.vue`: `/app/bookings/new` khách tự chọn dịch vụ, không có AI; `/app/bookings/ai` khách mô tả và gửi tối đa 3 ảnh, trò chuyện với AI, AI gợi ý dịch vụ và khách được đổi. AI lỗi không chặn đặt lịch. Khi `/visit-groups/contact` bật, form thủ công cho lưu tối đa 3 thiết bị với service, mô tả, ảnh, thuộc tính và variant giá riêng; khách sửa/hủy sửa từng máy, bỏ và hoàn tác theo thứ tự. Địa chỉ và lịch hẹn dùng chung; từ 2 máy mới gửi một `VisitGroup`, còn 1 máy chuyển về Booking thường. Ở giới hạn 3 máy, khách có thể chủ động gửi yêu cầu hỗ trợ qua API tư vấn hiện có; hotline chỉ hiện nếu Backend trả về. Form thường, đặt qua AI và P012 vẫn giữ nguyên.
 - V5.3 Web: Summary bước 1 và 2 liệt kê đủ máy, dịch vụ, thông tin máy và giá tiền công theo kiểu `firm`, `range`, `survey`; phần đã xác nhận được cộng riêng khi máy khác còn chờ giá, không coi báo giá khảo sát là 0. Ở bước cuối, mỗi máy hiện mô tả, giá, ảnh và nút sửa riêng; sửa máy giữ variant và ảnh đã chọn. Khi đủ 3 máy, CTA là “Tiếp tục với 3 thiết bị” hoặc “Liên hệ FixHome hỗ trợ”; tư vấn chỉ gửi qua thao tác rõ ràng tới API hiện có, không tự tạo hotline.
 - Polish V5.3: thanh mobile tách giá và CTA thành hai hàng; sidebar hiện địa chỉ chung và giá từng máy, nhãn tham khảo/khảo sát tách rõ tiền công đã xác định. Review cuối dùng cùng hàng chi tiết cho máy đã lưu và máy đang chọn, lịch/địa chỉ chung chỉ một lần. Chip khách có tên dịch vụ và dấu chờ duyệt giá; disclosure mở được cả trước khi có ServiceOrder, media chỉ dựng một lần khi mở. Checkout và đọc số dư lỗi có nút thử lại, không diễn đạt lỗi phản hồi tiền mặt như thành công; bộ chọn thanh toán hỗ trợ phím mũi tên/Home/End. Chip thợ giữ trạng thái/custody theo đúng child, banner linh kiện có nhãn mở đúng máy. Chuông thông báo dùng nút truy cập bằng bàn phím, Escape trả focus; popup có lề ở màn hẹp. Không thay API, giá, kho, cache, quyền hay luồng AI.
@@ -355,6 +356,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- V5.4 đã render fixture cục bộ chặn API thật ở 360/390/430/1024/1440px cho Booking, CustomerVisit, navigator/linh kiện thợ và hàng chờ/bảng quản lý; chưa thấy tràn ngang ở fixture đã kiểm tra. Đã tương tác chuyển máy, mở chi tiết, chọn phương thức bằng bàn phím và xem các trạng thái thanh toán, gồm 0 ₫ chưa trả và lỗi API. Đây không phải E2E có đăng nhập hoặc kiểm chứng toàn bộ TechnicianJobDetail/layout thật. Backend DEV, giao nhận kho/PSP/thông báo thật và Mobile parity CHƯA KIỂM CHỨNG; Lead review/release riêng, cần hard-refresh sau triển khai.
 - Kiểm tra remote cuối đợt Web parts polish: Backend dev đã tiến từ base kế hoạch `1a2038d` tới `ccbdac697a3e6077415c49c1b16b2ef1457556f9`; chưa có object commit mới trong checkout đọc nên chưa đối chiếu nội dung hoặc deploy. Lead cần đối chiếu Backend writer với HEAD mới trước release phối hợp; Web writer không fetch/merge/sửa Backend.
 
 - Sửa UI linh kiện/hoàn trả V5.3 qua 16 file/206 focused tests; không chạy lại full suite 1.465 tests. Thông báo khai trả đã khớp source Backend writer; release và giao nhận socket thật CHƯA KIỂM CHỨNG. Browser, E2E kỹ thuật viên/quản lý, ledger/kho thật và Mobile parity CHƯA KIỂM CHỨNG; không sửa Backend, DB hay thanh toán trong Web worktree.
@@ -386,6 +388,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:23 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Polish booking summary/review theo máy, chip và disclosure khách/thợ, trạng thái lỗi thanh toán và truy cập thông báo bằng bàn phím; giữ nguyên hợp đồng và quyền, browser/E2E/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:00 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Bổ sung trạng thái hành động từng child, cảnh báo PartRequest `ready` từ API có quyền, chuyển child không làm remount shell, badge báo giá khách và sửa `aria-labelledby`; lint/typecheck/1.465 tests/build PASS, browser/E2E/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
@@ -458,5 +461,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-18 12:19 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Realtime thật (live-updates: chỉ đọc lại phần đổi, vị trí thợ không gọi API, polling chỉ khi socket rớt); trợ lý AI 3 ảnh + 2 video, nén video trên máy (mediabunny), tải nền có tiến độ, thử lại khi mạng yếu; chat gửi video có tiến độ, Thử lại/Bỏ; xem video bằng link stream
 
 - 2026-10-18 03:22 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Đợt PO 18/10/2026: lời mời có mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách; bỏ thanh kéo mức khẩn cấp; lịch chọn ngày rồi giờ; trợ lý AI nhận video gửi kèm thợ; chat gửi ảnh/video và khoá khi đơn hoàn tất; order:updated realtime; nút loa to/loa nhỏ khi gọi
-
-- 2026-10-17 00:04 (UTC+7) | ToanAltF4 | fix/ui-feedback | Sửa theo góp ý giao diện: Đơn của tôi chọn một trong hai danh sách (Đơn sửa chữa / Yêu cầu đặt lịch, có số đếm, ?list=), đơn chờ thợ thay thế hiện Đang tìm thợ thay thế; thợ thấy Bạn đã rời đơn với đơn đã rút; bảo hành ghi Công sửa/Linh kiện, tên hạng mục và số ngày còn lại; thêm màu ink-950 nên các hộp thoại có lại nền mờ, test quét màu theme

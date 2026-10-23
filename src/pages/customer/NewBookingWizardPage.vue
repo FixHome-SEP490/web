@@ -1926,15 +1926,15 @@ async function createAndFindTech() {
                 <div class="flex items-start gap-3">
                   <div class="min-w-0 flex-1">
                     <p class="break-words font-semibold text-ink-900">Máy {{ index + 1 }} · {{ device.serviceName }}</p>
-                    <p v-if="device.deviceText" class="mt-1 text-xs text-ink-600">{{ device.deviceText }}</p>
-                    <p class="mt-1 text-xs font-medium text-ink-800">Tiền công<template v-if="device.price.kind === 'range'"> tham khảo</template>: {{ priceTextOf(device.price) }}</p>
-                    <p class="mt-1 line-clamp-2 break-words text-ink-700 text-pretty" :data-testid="`visit-device-description-${index}`">{{ device.input.description || 'Chưa có mô tả' }}</p>
+                    <p v-if="device.deviceText" class="mt-1 text-sm text-ink-600">{{ device.deviceText }}</p>
                   </div>
-                  <div class="flex shrink-0 gap-1">
+                  <div class="flex shrink-0 justify-end gap-1">
                     <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="`Sửa máy ${index + 1}: ${device.serviceName}`" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
                     <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600" :aria-label="`Bỏ máy ${index + 1}: ${device.serviceName}`" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
                   </div>
                 </div>
+                <p class="text-sm font-medium text-ink-800">Tiền công<template v-if="device.price.kind === 'range'"> tham khảo</template>: {{ priceTextOf(device.price) }}</p>
+                <p class="line-clamp-2 break-words text-ink-700 text-pretty" :data-testid="`visit-device-description-${index}`">{{ device.input.description || 'Chưa có mô tả' }}</p>
                 <div v-if="device.photos.length" class="flex flex-wrap items-center gap-2" :aria-label="`Ảnh máy ${index + 1}`">
                   <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
                   <span class="text-xs text-ink-600">{{ device.photos.length }} ảnh</span>
@@ -1945,7 +1945,6 @@ async function createAndFindTech() {
               <span>Đã bỏ một thiết bị.</span>
               <button type="button" class="min-h-11 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
             </div>
-            <p class="text-ink-500 text-pretty">Mỗi máy giữ riêng mô tả và ảnh. Địa chỉ cùng lịch hẹn được dùng chung.</p>
           </section>
 
           <section
@@ -2425,14 +2424,14 @@ async function createAndFindTech() {
           </div>
           <ol v-if="reviewDevices.length" class="divide-y divide-ink-100">
             <li v-for="(device, index) in reviewDevices" :key="device.key" class="space-y-2.5 py-4 first:pt-0 last:pb-0" :data-testid="`visit-review-device-${index}`">
-              <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
                   <p class="text-xs font-medium text-ink-600">Máy {{ index + 1 }}</p>
                   <p class="break-words font-semibold text-ink-900">{{ device.serviceName }}</p>
                   <p v-if="device.deviceText" class="text-ink-600">{{ device.deviceText }}</p>
                 </div>
-                <div class="flex shrink-0 gap-1">
-                  <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="`Sửa máy ${index + 1}: ${device.serviceName}`" :data-testid="device.savedKey ? `visit-device-edit-${index}` : 'visit-current-device-edit'" @click="device.savedKey ? editSavedDevice(device.savedKey) : step = 1">Sửa máy {{ index + 1 }}</button>
+                <div class="flex shrink-0 justify-end gap-1">
+                  <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="`Sửa máy ${index + 1}: ${device.serviceName}`" :data-testid="device.savedKey ? `visit-device-edit-${index}` : 'visit-current-device-edit'" @click="device.savedKey ? editSavedDevice(device.savedKey) : step = 1">Sửa</button>
                   <button v-if="device.savedKey" type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600" :aria-label="`Bỏ máy ${index + 1}: ${device.serviceName}`" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.savedKey)">Bỏ</button>
                 </div>
               </div>
@@ -2478,16 +2477,16 @@ async function createAndFindTech() {
               <img v-for="photo in uploadedPhotos" :key="photo.localId" :src="photo.previewUrl" alt="Ảnh thiết bị" class="h-14 w-14 rounded-lg object-cover" />
             </div>
           </div>
-          <div class="flex gap-4 px-5 py-4 sm:px-6">
+          <div class="booking-review-common flex gap-4 px-4 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Lịch hẹn</span>
             <p class="min-w-0 flex-1 font-medium text-ink-900">{{ formattedScheduleDisplay }}</p>
             <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 2">Sửa</button>
           </div>
-          <div class="flex gap-4 px-5 py-4 sm:px-6">
+          <div class="booking-review-common flex gap-4 px-4 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Địa chỉ</span>
             <div class="min-w-0 flex-1">
               <p class="font-medium text-ink-900">{{ selectedAddress?.label || 'Địa chỉ' }}</p>
-              <p class="text-ink-500">{{ selectedAddress ? addressLine(selectedAddress) : '' }}</p>
+              <p class="break-words text-ink-600">{{ selectedAddress ? addressLine(selectedAddress) : '' }}</p>
             </div>
             <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 2">Sửa</button>
           </div>
@@ -2623,6 +2622,12 @@ async function createAndFindTech() {
 .booking-step1-grid--catalog { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .booking-request-configuration { scroll-margin-top: 6rem; }
 .booking-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 639px) {
+  .booking-review-common { display: grid; grid-template-columns: minmax(0, 1fr) 44px; column-gap: 12px; row-gap: 4px; }
+  .booking-review-common > :first-child { width: auto; }
+  .booking-review-common > :nth-child(2) { grid-column: 1; }
+  .booking-review-common > button { grid-column: 2; grid-row: 1 / span 2; }
+}
 @media (min-width: 1024px) {
   .booking-layout { grid-template-columns: minmax(0, 1fr) 22rem; gap: 32px; }
 }

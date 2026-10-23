@@ -205,6 +205,7 @@ describe('customer visit page', () => {
     expect(w.findAll('[data-testid="visit-quotation-cta"]')).toHaveLength(1);
     expect(w.get('[data-testid="visit-quotation-cta"]').attributes('href')).toBe('/app/orders/o-b1');
     expect(w.get('[data-testid="visit-device-quotation-status-1"]').text()).toBe('Báo giá đang chờ bạn duyệt');
+    expect(w.get('[data-testid="visit-device-select-1"]').attributes('aria-label')).toContain('Chờ bạn duyệt báo giá');
     expect(w.get('[data-testid="visit-device-select-1"]').text()).toContain('Chờ bạn duyệt báo giá');
     expect(w.find('[data-testid="visit-device-quotation-status-2"]').exists()).toBe(false);
   });

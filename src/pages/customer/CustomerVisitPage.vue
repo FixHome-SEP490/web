@@ -331,26 +331,26 @@ async function answerCash(agreed: boolean) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl space-y-5 pb-16" data-testid="customer-visit">
+  <div class="mx-auto min-w-0 max-w-3xl space-y-6 pb-16" data-testid="customer-visit">
     <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
     <FhSkeleton v-if="loading" class="h-40 rounded-2xl" />
     <div v-else-if="loadError" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
       {{ loadError }}
-      <FhButton variant="secondary" size="sm" class="ml-2" @click="load">Thử lại</FhButton>
+      <FhButton variant="secondary" size="md" class="ml-2" @click="load">Thử lại</FhButton>
     </div>
 
     <template v-else-if="visit">
       <header class="space-y-1">
-        <h1 class="text-2xl font-bold tracking-tight text-ink-900">Lượt sửa {{ visit.items.length }} thiết bị</h1>
+        <h1 class="text-[24px] leading-8 font-bold tracking-tight text-ink-900 sm:text-xl sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
         <p class="text-sm text-ink-600">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></p>
         <p v-if="outcomeProgress" class="text-sm text-ink-600" data-testid="visit-outcome-progress">
           Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
         </p>
       </header>
 
-      <section v-if="priorityQuotation" class="space-y-2.5 rounded-2xl border border-warning-200 bg-warning-50 p-3.5 sm:p-4" data-testid="visit-quotation-priority">
-        <div>
+      <section v-if="priorityQuotation" class="flex flex-col gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 sm:flex-row sm:items-center" data-testid="visit-quotation-priority">
+        <div class="min-w-0 flex-1 break-words">
           <p class="text-sm font-semibold text-ink-900">
             Máy {{ priorityQuotation.item.sequence }}<template v-if="priorityQuotation.item.booking?.serviceName">: {{ priorityQuotation.item.booking.serviceName }}</template>
             <template v-if="priorityQuotation.item.deviceLabel"> · {{ priorityQuotation.item.deviceLabel }}</template>
@@ -360,7 +360,7 @@ async function answerCash(agreed: boolean) {
         <router-link
           :to="`/app/orders/${priorityQuotation.serviceOrderId}`"
           :aria-label="`Duyệt báo giá cho máy ${priorityQuotation.item.sequence}${priorityQuotation.item.booking?.serviceName ? `: ${priorityQuotation.item.booking.serviceName}` : ''}`"
-          class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-medium text-white shadow-[var(--shadow-e1)] transition-colors duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          class="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-semibold text-white transition-colors motion-reduce:transition-none duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
           data-testid="visit-quotation-cta"
         >
           Duyệt báo giá máy {{ priorityQuotation.item.sequence }}
@@ -377,12 +377,12 @@ async function answerCash(agreed: boolean) {
       >{{ message.text }}</p>
 
       <section class="space-y-3" data-testid="visit-device-list">
-        <div class="grid grid-cols-3 gap-2" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
+        <div class="grid gap-2 sm:grid-cols-3" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
           <button
             v-for="item in visit.items"
             :key="item.id"
             type="button"
-            class="min-h-11 min-w-0 rounded-xl border px-2.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            class="visit-device min-h-11 min-w-0 rounded-xl border p-3 text-left transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
             :class="selectedVisitItem?.id === item.id ? 'border-brand-500 bg-brand-50' : 'border-ink-200 bg-white hover:border-brand-300'"
             :aria-pressed="selectedVisitItem?.id === item.id"
             :aria-controls="selectedVisitItem?.id === item.id ? `visit-device-panel-${item.sequence}` : undefined"
@@ -411,11 +411,11 @@ async function answerCash(agreed: boolean) {
           <component
             :is="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? 'router-link' : 'div'"
             :to="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? `/app/orders/${deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId}` : undefined"
-            class="flex min-h-11 items-center gap-3 rounded-lg px-1 py-1"
+            class="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             :class="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? 'hover:bg-ink-25' : ''"
             data-testid="visit-device-order-link"
           >
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-[1_1_12rem]">
               <p class="break-words text-sm font-medium text-ink-900 sm:text-base">
                 Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
               </p>
@@ -473,16 +473,16 @@ async function answerCash(agreed: boolean) {
         <p>{{ checkoutError }}</p>
         <FhButton variant="secondary" size="md" data-testid="visit-checkout-retry" @click="load">Thử lại</FhButton>
       </section>
-      <section v-if="checkout && held" class="space-y-3 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="visit-checkout" :data-checkout-state="checkoutState">
+      <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState">
         <div class="flex flex-col gap-2 border-b border-ink-100 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 class="font-semibold text-ink-900">Thanh toán cả lượt</h2>
+          <h2 id="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán cả lượt</h2>
           <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
           <span v-else-if="checkoutState === 'zero_due'" data-testid="visit-checkout-state" class="font-semibold text-ink-700">Không phát sinh khoản cần thanh toán</span>
           <span v-else-if="checkoutState === 'pending_cash'" data-testid="visit-checkout-state" class="font-semibold text-warning-800">Chờ xác nhận tiền mặt</span>
           <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
           <div v-else class="sm:text-right">
             <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
-            <span class="text-xl font-semibold text-brand-700 font-num"><FhMoney :amount="checkout.total" /></span>
+            <span class="text-xl font-semibold text-ink-900 font-num"><FhMoney :amount="checkout.total" /></span>
           </div>
         </div>
         <p v-if="checkout.waiting > 0" class="text-ink-600">Còn {{ checkout.waiting }} thiết bị đang xử lý. Bạn thanh toán một lần khi mọi thiết bị đã có kết quả, chỉ cho các máy sửa được.</p>
@@ -576,3 +576,12 @@ async function answerCash(agreed: boolean) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+  .visit-device { display: grid; grid-template-columns: 4rem minmax(0, 1fr); column-gap: 12px; }
+  .visit-device > :first-child { grid-row: 1 / span 2; align-self: start; white-space: nowrap; }
+  .visit-device > :not(:first-child) { grid-column: 2; margin-top: 0; font-size: 14px; line-height: 20px; }
+  .visit-device > :last-child { margin-top: 4px; }
+}
+</style>

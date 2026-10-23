@@ -60,7 +60,7 @@ const barNote = computed(() => {
 
 <template>
   <!-- Wide screens -->
-  <aside class="hidden lg:block lg:sticky lg:top-24 rounded-2xl border border-ink-200 bg-white p-6" aria-label="Yêu cầu của bạn" data-testid="booking-summary">
+  <aside class="hidden min-w-0 lg:block lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto rounded-2xl border border-ink-200 bg-white p-6" aria-label="Yêu cầu của bạn" data-testid="booking-summary">
     <h2 class="text-base font-semibold text-ink-900">Yêu cầu của bạn <span v-if="devices?.length" class="font-normal text-ink-600">· {{ devices.length }} thiết bị</span></h2>
     <dl class="mt-4 grid grid-cols-[6rem_minmax(0,1fr)] gap-y-3 text-sm">
       <dt class="text-ink-500">Dịch vụ</dt>
@@ -82,11 +82,11 @@ const barNote = computed(() => {
           <div class="space-y-1">
             <div class="min-w-0">
               <p class="break-words font-medium text-ink-900">{{ device.label }} · {{ device.serviceName }}</p>
-              <p v-if="device.deviceText" class="text-xs text-ink-600">{{ device.deviceText }}</p>
+              <p v-if="device.deviceText" class="break-words text-sm text-ink-600">{{ device.deviceText }}</p>
             </div>
             <span v-if="device.price.kind === 'firm'" class="shrink-0 font-semibold text-ink-900 font-num"><FhMoney :amount="device.price.amount" /></span>
-            <span v-else-if="device.price.kind === 'range'" class="block text-xs text-ink-700">Tham khảo <span class="font-num"><FhMoney :amount="device.price.min" /> – <FhMoney :amount="device.price.max" /></span></span>
-            <span v-else-if="device.price.kind === 'survey'" class="block text-xs text-ink-700"><template v-if="device.price.from">Tham khảo <FhMoney :amount="device.price.from" /> · </template>Khảo sát, báo giá</span>
+            <span v-else-if="device.price.kind === 'range'" class="block text-sm text-ink-700">Tham khảo <span class="font-num"><FhMoney :amount="device.price.min" /> – <FhMoney :amount="device.price.max" /></span></span>
+            <span v-else-if="device.price.kind === 'survey'" class="block text-sm text-ink-700"><template v-if="device.price.from">Tham khảo <FhMoney :amount="device.price.from" /> · </template>Khảo sát, báo giá</span>
             <span v-else class="shrink-0 text-xs text-ink-500">Chưa xác định</span>
           </div>
         </li>
@@ -95,7 +95,7 @@ const barNote = computed(() => {
     <div class="my-5 h-px bg-ink-100"></div>
     <div class="flex flex-wrap items-baseline justify-between gap-2" data-testid="booking-summary-price">
       <span class="text-sm text-ink-600">{{ price.kind === 'partial' ? 'Tiền công đã xác định' : price.kind === 'range' ? 'Tiền công tham khảo' : 'Tiền công' }}</span>
-      <span v-if="price.kind === 'firm'" class="text-2xl font-semibold text-brand-700 font-num"><FhMoney :amount="price.amount" /></span>
+      <span v-if="price.kind === 'firm'" class="text-xl font-semibold text-ink-900 font-num"><FhMoney :amount="price.amount" /></span>
       <span v-else-if="price.kind === 'range'" class="text-base font-semibold text-ink-800 font-num"><FhMoney :amount="price.min" /> – <FhMoney :amount="price.max" /></span>
       <span v-else-if="price.kind === 'survey' && price.from" class="text-base font-semibold text-ink-800 font-num">Tham khảo <FhMoney :amount="price.from" /></span>
       <span v-else-if="price.kind === 'partial' && price.confirmedTotal > 0" class="text-base font-semibold text-ink-800 font-num"><FhMoney :amount="price.confirmedTotal" /></span>
@@ -115,7 +115,7 @@ const barNote = computed(() => {
     <div class="mx-auto max-w-3xl space-y-2">
       <div class="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-ink-600" data-testid="booking-summary-bar-price">
         <span>{{ devices?.length ? `${devices.length} thiết bị · ${barNote}` : barNote }}</span>
-        <span v-if="price.kind === 'firm'" class="font-num text-base font-semibold text-brand-700"><FhMoney :amount="price.amount" /></span>
+        <span v-if="price.kind === 'firm'" class="font-num text-lg font-semibold text-ink-900"><FhMoney :amount="price.amount" /></span>
         <span v-else-if="price.kind === 'range'" class="font-num text-sm font-semibold text-ink-900"><FhMoney :amount="price.min" /> – <FhMoney :amount="price.max" /></span>
         <span v-else-if="price.kind === 'partial'" class="text-ink-700"><template v-if="price.confirmedTotal > 0"><FhMoney :amount="price.confirmedTotal" /> · </template>{{ price.unresolvedCount }} máy chờ giá</span>
         <span v-else-if="price.kind === 'survey' && price.from" class="font-num text-sm text-ink-900">Tham khảo <FhMoney :amount="price.from" /></span>

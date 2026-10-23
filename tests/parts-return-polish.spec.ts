@@ -129,6 +129,7 @@ describe('Manager custody projection and refresh', () => {
     const w = mountManager(); await flushPromises();
     const row = w.get('[data-testid="manager-part-item-pr-1"]');
     expect(text(row)).toContain('Cấp 2 · Dùng 1');
+    expect(text(row)).toContain(`Khai trả 1 · Đã nhận trả ${accepted}`);
     expect(text(row)).toContain(pending ? 'Chờ nhận 1' : 'Đã nhận trả 1');
     await w.get('[data-testid="part-request-detail-pr-1"]').trigger('click');
     const item = w.get('[data-testid="manager-part-detail-item-pr-1"]');

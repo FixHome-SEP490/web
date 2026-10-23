@@ -1214,7 +1214,7 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- Items list in this request -->
           <div class="space-y-1">
-            <h5 class="font-semibold text-ink-800 text-[11px]">Thực tế đã dùng/không dùng</h5>
+            <h5 class="font-semibold text-ink-800 text-sm">Thực tế đã dùng/không dùng</h5>
             <p v-if="requestHasReturns(pr)" class="text-ink-600">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý dịch vụ nhận thực tế.</p>
             <div class="space-y-2">
               <article v-for="item in pr.items" :key="item.id" class="rounded-xl border border-ink-200 bg-white p-3 space-y-2.5" :data-testid="`part-item-${item.id}`">
@@ -1232,7 +1232,11 @@ const getStatusBadgeClass = (status: string) => {
                 </div>
                 <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
                   <div v-if="record" class="space-y-2 text-xs text-ink-700">
-                    <p class="font-num font-medium">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả kho {{ record.outstandingQty }}</p>
+                    <p class="flex flex-wrap gap-x-1 gap-y-1 text-sm font-medium">
+                      <span class="whitespace-nowrap">Cấp <span class="font-num">{{ record.issuedQty }}</span></span> ·
+                      <span class="whitespace-nowrap">Dùng <span class="font-num">{{ record.usedQty }}</span></span> ·
+                      <span class="whitespace-nowrap">Cần trả kho <span class="font-num">{{ record.outstandingQty }}</span></span>
+                    </p>
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-ink-50 p-3">
                       <div><dt>Còn phải khai</dt><dd class="font-num font-semibold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
                       <div><dt>Đã khai, chờ nhận</dt><dd class="font-num font-semibold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-800' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
@@ -1257,20 +1261,20 @@ const getStatusBadgeClass = (status: string) => {
                     <p class="font-medium">{{ item.usageStatus === 'used' ? 'Đã dùng · chưa có số lượng chi tiết' : item.usageStatus === 'returned' ? 'Đã ghi nhận không dùng · chưa xác nhận trả kho' : 'Chưa ghi nhận sử dụng' }}</p>
                   </div>
 
-                  <div class="grid grid-cols-2 gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
+                  <div class="part-item-actions flex flex-wrap gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
                     <template v-if="isUnderRepair && pr.status === 'received' && !record">
-                      <button type="button" class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                         :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
                         :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
                         :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
-                      <button type="button" class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                         :class="item.usageStatus === 'returned' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
                         :aria-pressed="item.usageStatus === 'returned'" :aria-label="`Ghi nhận không dùng ${item.partNameSnapshot}`"
                         :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')"><RotateCcw :size="16" class="shrink-0" aria-hidden="true" />Hoàn trả</button>
                     </template>
                     <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && record" type="button"
                       data-testid="edit-part-usage"
-                      class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-xs font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                       :disabled="actionLoading || disabled"
                       :aria-label="`Ghi số lượng thực dùng ${item.partNameSnapshot}`"
                       :aria-expanded="!!partialUsageEditing[item.id]" :aria-controls="`part-usage-editor-${item.id}`"
@@ -1279,7 +1283,7 @@ const getStatusBadgeClass = (status: string) => {
                     </button>
                     <button v-if="record && canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button"
                       data-testid="open-declare-return"
-                      class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-xs font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                       :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
                       :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
                       <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho

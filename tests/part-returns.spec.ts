@@ -322,7 +322,12 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
     expect(text).toContain('Cấp 3 · Dùng 1 · Khai trả 2 · Đã nhận 0');
     expect(text).toContain('tối đa 2');
     expect((wrapper.get('input[type="number"]').element as HTMLInputElement).value).toBe('2');
-    expect(wrapper.get('[data-testid="accept-return"]').text()).toContain('Đã nhận');
+    expect(wrapper.get('[data-testid="accept-return"]').text()).toBe('Xác nhận đã nhận');
+    expect(wrapper.get('[data-testid="accept-return"]').attributes('aria-label')).toBe('Xác nhận đã nhận Van xả');
+    const quantity = wrapper.get('input[type="number"]');
+    const hintId = quantity.attributes('aria-describedby');
+    expect(hintId).toBeTruthy();
+    expect(wrapper.findAll('[id]').find(node => node.attributes('id') === hintId)?.text()).toContain('tối đa 2');
     wrapper.unmount();
   });
 
