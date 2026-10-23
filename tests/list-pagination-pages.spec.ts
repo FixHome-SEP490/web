@@ -54,7 +54,7 @@ describe('Technician jobs', () => {
     const wrapper = mount(TechnicianJobsPage, { global: { stubs } });
     await flushPromises();
     const lists = () => paramsOf('/service-orders/my').filter((p) => p.pageSize === 20);
-    expect(lists()).toEqual([{ page: 1, pageSize: 20 }]);
+    expect(lists()).toEqual([{ page: 1, pageSize: 20, excludeVisitGroups: 'true' }]);
     expect(wrapper.findAll('[data-testid^="technician-job-"]')).toHaveLength(20);
     expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–20 / 25');
     // The tabs as before: "Cần di chuyển" is accepted and en route together; empty tabs show no count.
@@ -63,13 +63,13 @@ describe('Technician jobs', () => {
 
     await wrapper.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
-    expect(lists().at(-1)).toEqual({ page: 2, pageSize: 20 });
+    expect(lists().at(-1)).toEqual({ page: 2, pageSize: 20, excludeVisitGroups: 'true' });
     expect(wrapper.findAll('[data-testid^="technician-job-"]')).toHaveLength(5);
 
     const tab = wrapper.findAll('[role="tab"]').find((t) => t.text().startsWith('Cần di chuyển'))!;
     await tab.trigger('click');
     await flushPromises();
-    expect(lists().at(-1)).toEqual({ page: 1, pageSize: 20, statuses: 'accepted,en_route' });
+    expect(lists().at(-1)).toEqual({ page: 1, pageSize: 20, statuses: 'accepted,en_route', excludeVisitGroups: 'true' });
     expect(wrapper.findAll('[data-testid^="technician-job-"]').map((r) => r.attributes('data-testid'))).toEqual(['technician-job-r1']);
     expect(wrapper.find('[data-testid="pagination"]').exists()).toBe(false);
   });

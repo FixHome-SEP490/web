@@ -31,6 +31,12 @@ export const queryKeys = {
     board: (filter: Filter) => ['bookings', 'board', filter] as const,
     boardCounts: ['bookings', 'board-counts'] as const,
   },
+  /** Server-paged VisitGroup parents; children stay inside their parent row. */
+  visitGroups: {
+    all: ['visit-groups'] as const,
+    customerList: (filter: Filter) => ['visit-groups', 'customer-list', filter] as const,
+    technicianList: (filter: Filter) => ['visit-groups', 'technician-list', filter] as const,
+  },
   /** Invitations waiting for the technician. */
   invitations: {
     all: ['invitations'] as const,
@@ -108,6 +114,7 @@ export const affectedBy = {
   orderChange: [
     queryKeys.orders.all,
     queryKeys.bookings.all,
+    queryKeys.visitGroups.all,
     queryKeys.wallet.all,
     queryKeys.earnings.all,
     queryKeys.warranty.all,
@@ -118,12 +125,14 @@ export const affectedBy = {
     queryKeys.invitations.all,
     queryKeys.orders.all,
     queryKeys.bookings.all,
+    queryKeys.visitGroups.all,
     queryKeys.consoleDashboard,
   ],
   /** Creating, cancelling or assigning a booking. */
   bookingChange: [
     queryKeys.bookings.all,
     queryKeys.orders.all,
+    queryKeys.visitGroups.all,
     queryKeys.invitations.all,
     queryKeys.consoleDashboard,
   ],

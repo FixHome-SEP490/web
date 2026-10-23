@@ -29,6 +29,30 @@ describe('visit-groups api', () => {
     expect(visit.items[0].booking).toMatchObject({ status: 'SUBMITTED', serviceName: 'Máy lạnh' });
   });
 
+  it('reads customer and assigned visit pages with server totals and filters', async () => {
+    const { visitGroupsApi } = await import('../src/api/visit-groups.api');
+    const group = {
+      id: 'v2', status: 'accepted', createdAt: '2026-10-22T08:00:00Z', bookingMode: 'scheduled', slot: null,
+      scheduledAt: '2026-10-23T02:00:00Z', scheduledEndAt: '2026-10-23T06:00:00Z',
+      items: [{ itemId: 'i2', sequence: 1, bookingId: 'b2', serviceId: 's2', deviceLabel: 'Phòng khách', outcome: null, bookingStatus: 'accepted', serviceName: 'Sửa máy lạnh', orderId: 'o2', orderCode: 'FH-2', orderStatus: 'accepted' }],
+    };
+    client.get
+      .mockResolvedValueOnce({ data: { data: [group], meta: { total: 21, page: 2, pageSize: 10 } } })
+      .mockResolvedValueOnce({ data: { data: [group], meta: { total: 7, page: 1, pageSize: 20 } } });
+
+    const customerPage = await visitGroupsApi.minePage(2, 10, { q: 'máy lạnh' });
+    expect(client.get).toHaveBeenNthCalledWith(1, '/visit-groups/my-page', {
+      params: { page: 2, pageSize: 10, q: 'máy lạnh' },
+    });
+    expect(customerPage).toMatchObject({ items: [group], total: 21, page: 2, pageSize: 10 });
+
+    const assignedPage = await visitGroupsApi.assignedPage(1, 20);
+    expect(client.get).toHaveBeenNthCalledWith(2, '/visit-groups/assigned-page', {
+      params: { page: 1, pageSize: 20 },
+    });
+    expect(assignedPage).toMatchObject({ items: [group], total: 7, page: 1, pageSize: 20 });
+  });
+
   it('treats the feature as off unless the server says it is on', async () => {
     const { visitGroupsApi } = await import('../src/api/visit-groups.api');
     client.get.mockResolvedValue({ data: { data: {} } });

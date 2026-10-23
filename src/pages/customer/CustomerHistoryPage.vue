@@ -16,11 +16,12 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
+import { visitGroupsApi, type VisitGroupPageItem, type VisitGroupReadStatus } from '../../api/visit-groups.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { queryKeys } from '../../lib/query-keys';
-import { SEARCH_MAX_LENGTH, useQueryChoice, useQuerySearch } from '../../composables/useQueryState';
+import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch } from '../../composables/useQueryState';
 import { userFacingError } from '../../utils/user-facing-error';
-import { vnDateString } from '../../utils/vn-time';
+import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
 type Filter = 'all' | 'completed' | 'cancelled';
 
@@ -29,6 +30,7 @@ const router = useRouter();
 
 // Filter and page stay in the address bar (?filter=cancelled&page=2).
 const filter = useQueryChoice<Filter>('filter', ['all', 'completed', 'cancelled'], 'all');
+const historyList = useQueryChoice<'orders' | 'visits'>('list', ['orders', 'visits'], 'orders');
 // Server search (order code, service; accents ignored), kept as ?q=.
 const { input: searchQuery, search } = useQuerySearch();
 const {
@@ -44,13 +46,68 @@ const {
   key: () => queryKeys.orders.history({ filter: filter.value, search: search.value }),
   pageSize: PAGE_SIZE,
   fetch: async (p, size) => {
-    const result = await ordersApi.getRepairHistory(p, size, filter.value === 'all' ? undefined : filter.value, search.value || undefined);
+    const result = await ordersApi.getRepairHistory(p, size, filter.value === 'all' ? undefined : filter.value, search.value || undefined, true);
     return { items: result.data, total: result.total, page: p, pageSize: size };
   },
 });
+const VISIT_TERMINAL_STATUSES: readonly VisitGroupReadStatus[] = ['completed', 'cancelled', 'failed', 'quote_declined', 'mixed'];
+
+async function readVisitGroupPrefix(status: VisitGroupReadStatus, wanted: number): Promise<{ items: VisitGroupPageItem[]; total: number }> {
+  const items: VisitGroupPageItem[] = [];
+  let pageNumber = 1;
+  let total = 0;
+  const pageSize = Math.min(100, Math.max(1, wanted));
+  while (pageNumber === 1 || (items.length < wanted && items.length < total)) {
+    const result = await visitGroupsApi.minePage(pageNumber, pageSize, { status, q: search.value || undefined });
+    if (pageNumber === 1) total = result.total;
+    items.push(...result.items);
+    if (items.length >= total || result.items.length < pageSize) break;
+    pageNumber += 1;
+  }
+  return { items, total };
+}
+
+async function fetchVisitHistoryPage(p: number, size: number) {
+  const statuses = filter.value === 'completed'
+    ? ['completed' as const]
+    : filter.value === 'cancelled'
+      ? ['cancelled' as const]
+      : VISIT_TERMINAL_STATUSES;
+  const wanted = p * size;
+  const groups = await Promise.all(statuses.map((status) => readVisitGroupPrefix(status, wanted)));
+  const rows = groups.flatMap((group) => group.items).sort((a, b) => {
+    const byDate = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    return byDate || b.id.localeCompare(a.id);
+  });
+  const total = groups.reduce((sum, group) => sum + group.total, 0);
+  const start = (p - 1) * size;
+  return { items: rows.slice(start, start + size), total, page: p, pageSize: size };
+}
+
+const visitHistory = usePagedList<VisitGroupPageItem>({
+  key: () => queryKeys.visitGroups.customerList({ history: true, filter: filter.value, search: search.value }),
+  pageSize: PAGE_SIZE,
+  page: useQueryPage('visitHistoryPage'),
+  fetch: fetchVisitHistoryPage,
+});
+const {
+  page: visitHistoryPage,
+  items: visitGroups,
+  total: visitGroupsTotal,
+  loading: loadingVisitGroups,
+  error: visitGroupsFailure,
+  load: retryVisitGroups,
+  changingPage: changingVisitGroupsPage,
+  prefetch: prefetchVisitGroups,
+} = visitHistory;
 const error = computed(() =>
   loadError.value ? userFacingError(loadError.value, 'Không thể tải lịch sử sửa chữa. Vui lòng thử lại.') : null,
 );
+const visitGroupsError = computed(() =>
+  visitGroupsFailure.value ? userFacingError(visitGroupsFailure.value, 'Không thể tải lịch sử lượt sửa. Vui lòng thử lại.') : null,
+);
+const currentTotal = computed(() => historyList.value === 'visits' ? visitGroupsTotal.value : total.value);
+const currentLoading = computed(() => historyList.value === 'visits' ? loadingVisitGroups.value : loading.value);
 
 const tabs = computed<{ key: Filter; label: string; count: number }[]>(() => [
   { key: 'all', label: 'Tất cả', count: total.value },
@@ -93,6 +150,19 @@ function updateTabIndicator() {
 
 const isCancelled = (item: RepairHistoryItem) => String(item.status).toLowerCase() === 'cancelled';
 const finishedAt = (item: RepairHistoryItem) => (isCancelled(item) ? item.cancelledAt : item.completedAt);
+const groupStatusLabel = (status: VisitGroupPageItem['status']) => ({
+  submitted: 'Đang chờ xử lý', matching: 'Đang tìm thợ', no_technician: 'Chưa có thợ phù hợp',
+  completed: 'Hoàn thành', cancelled: 'Đã hủy', failed: 'Có thiết bị chưa sửa',
+  quote_declined: 'Có báo giá chưa được nhận', mixed: 'Kết quả nhiều trạng thái',
+  accepted: 'Đã nhận lịch', en_route: 'Đang di chuyển', under_repair: 'Đang sửa chữa',
+}[status]);
+const groupItemStatus = (item: VisitGroupPageItem['items'][number]) => {
+  if (item.outcome === 'failed') return 'Không sửa được';
+  if (item.outcome === 'quote_declined') return 'Không đồng ý báo giá';
+  if (item.outcome === 'succeeded' || item.orderStatus?.toLowerCase() === 'completed') return 'Hoàn thành';
+  if (item.orderStatus?.toLowerCase() === 'cancelled' || item.bookingStatus.toLowerCase() === 'cancelled') return 'Đã hủy';
+  return 'Đã kết thúc';
+};
 watch(filter, () => {
   void nextTick(updateTabIndicator);
 });
@@ -123,15 +193,29 @@ onUnmounted(() => {
           <History :size="28" class="text-brand-600 shrink-0" />
           <span>Lịch sử sửa chữa</span>
         </h1>
-        <p class="text-sm text-ink-500 mt-1">
-          Theo dõi chi tiết các dịch vụ sửa chữa đã hoàn thành và chi phí thực hiện.
-        </p>
+      <p class="text-sm text-ink-500 mt-1">
+        {{ historyList === 'visits' ? 'Xem các lượt nhiều thiết bị đã kết thúc và trạng thái từng thiết bị.' : 'Theo dõi chi tiết các dịch vụ sửa chữa đã hoàn thành và chi phí thực hiện.' }}
+      </p>
       </div>
 
-      <div v-if="!loading && total > 0" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto">
+      <div v-if="!currentLoading && currentTotal > 0" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto">
         <Sparkles :size="14" class="text-brand-600" />
-        <span>Tổng {{ total }} đơn trong lịch sử</span>
+        <span>Tổng {{ currentTotal }} {{ historyList === 'visits' ? 'lượt sửa' : 'đơn' }} trong lịch sử</span>
       </div>
+    </div>
+
+    <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại lịch sử">
+      <button
+        v-for="choice in [{ key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa' }, { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị' }]"
+        :key="choice.key"
+        type="button"
+        :aria-pressed="historyList === choice.key"
+        :aria-label="choice.label"
+        :data-testid="`history-list-switch-${choice.key}`"
+        class="h-11 min-w-[9.5rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        :class="historyList === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
+        @click="historyList = choice.key"
+      ><span class="sm:hidden">{{ choice.shortLabel }}</span><span class="hidden sm:inline">{{ choice.label }}</span></button>
     </div>
 
     <!-- Search input -->
@@ -141,7 +225,7 @@ onUnmounted(() => {
         v-model="searchQuery"
         type="text"
         :maxlength="SEARCH_MAX_LENGTH"
-        placeholder="Tìm theo mã đơn, dịch vụ…"
+        placeholder="Tìm theo mã đơn, dịch vụ, thiết bị…"
         aria-label="Tìm trong lịch sử"
         data-testid="history-search"
         class="w-full h-11 pl-10 pr-4 rounded-xl bg-white border border-ink-200 text-base sm:text-sm text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
@@ -179,14 +263,14 @@ onUnmounted(() => {
           class="inline-flex items-center rounded-full px-1.5 py-0.2 font-num text-xs transition-colors"
           :class="filter === t.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'bg-ink-200/60 text-ink-600'"
         >
-          {{ t.count }}
+          <span v-if="historyList === 'orders'">{{ t.count }}</span>
         </span>
       </button>
     </div>
 
     <!-- Error state -->
     <div
-      v-if="error"
+      v-if="historyList === 'orders' && error"
       role="alert"
       class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3 shadow-xs"
     >
@@ -201,7 +285,7 @@ onUnmounted(() => {
 
     <!-- Skeleton Loading state -->
     <div
-      v-if="loading"
+      v-if="historyList === 'orders' && loading"
       class="rounded-2xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs"
       aria-busy="true"
       aria-label="Đang tải lịch sử sửa chữa"
@@ -226,7 +310,7 @@ onUnmounted(() => {
 
     <!-- Empty state -->
     <div
-      v-else-if="!error && items.length === 0"
+      v-else-if="historyList === 'orders' && !error && items.length === 0"
       data-testid="history-empty"
       class="py-16 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
     >
@@ -248,7 +332,7 @@ onUnmounted(() => {
 
     <!-- History items list -->
     <ul
-      v-else-if="items.length > 0"
+      v-else-if="historyList === 'orders' && items.length > 0"
       class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs transition-opacity"
       :class="{ 'opacity-60': changingPage }"
       :aria-busy="changingPage"
@@ -342,13 +426,62 @@ onUnmounted(() => {
       </li>
     </ul>
 
+    <div v-if="historyList === 'visits' && visitGroupsError" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+      <span>{{ visitGroupsError }}</span>
+      <FhButton variant="secondary" size="sm" @click="retryVisitGroups">Thử lại</FhButton>
+    </div>
+    <div v-if="historyList === 'visits' && loadingVisitGroups" class="rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lịch sử lượt sửa">
+      <div v-for="i in 3" :key="i" class="space-y-2 border-b border-ink-100 py-3 last:border-0">
+        <FhSkeleton width="50%" height="18px" />
+        <FhSkeleton width="75%" height="14px" />
+      </div>
+    </div>
+    <div v-else-if="historyList === 'visits' && !visitGroupsError && visitGroups.length === 0" data-testid="history-visit-empty" class="space-y-2 rounded-3xl border border-ink-200 bg-white px-6 py-12 text-center">
+      <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400"><History :size="24" /></div>
+      <h2 class="font-semibold text-ink-900">Chưa có lượt sửa nhiều thiết bị đã kết thúc</h2>
+      <p class="text-sm text-ink-500">Các lượt đã hoàn thành, hủy hoặc có thiết bị chưa sửa sẽ hiện ở đây.</p>
+    </div>
+    <ul v-else-if="historyList === 'visits' && visitGroups.length > 0" data-testid="history-visit-groups" class="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
+      <li v-for="group in visitGroups" :key="group.id" :data-testid="`history-visit-group-${group.id}`" class="space-y-3 p-4 sm:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
+            <p class="mt-1 text-xs font-num text-ink-500">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
+          </div>
+          <span class="shrink-0 rounded-full bg-ink-100 px-2.5 py-1 text-xs font-semibold text-ink-700">{{ groupStatusLabel(group.status) }}</span>
+        </div>
+        <p class="text-sm text-ink-600">Lịch hẹn <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
+        <ul class="grid gap-2 sm:grid-cols-2" aria-label="Đơn trong lượt sửa đã kết thúc">
+          <li v-for="item in group.items" :key="item.itemId" :data-testid="`history-visit-child-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl bg-ink-50 px-3 py-2">
+            <router-link v-if="item.orderId" :to="`/app/orders/${item.orderId}`" class="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+              <span class="block truncate text-sm font-semibold text-brand-700">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+              <span class="mt-1 block truncate text-xs text-ink-600">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ groupItemStatus(item) }}</span>
+              <span class="mt-1 block font-num text-xs text-ink-500">{{ item.orderCode || 'Mở chi tiết đơn' }}</span>
+            </router-link>
+            <div v-else>
+              <span class="block truncate text-sm font-semibold text-ink-800">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+              <span class="mt-1 block truncate text-xs text-ink-600">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ groupItemStatus(item) }}</span>
+            </div>
+          </li>
+        </ul>
+      </li>
+    </ul>
+
     <FhPagination
-      v-if="!error"
+      v-if="historyList === 'orders' && !error"
       v-model:page="page"
       :page-size="PAGE_SIZE"
       :total="total"
       :disabled="loading"
       @prefetch="prefetch"
+    />
+    <FhPagination
+      v-if="historyList === 'visits' && !visitGroupsError"
+      v-model:page="visitHistoryPage"
+      :page-size="PAGE_SIZE"
+      :total="visitGroupsTotal"
+      :disabled="loadingVisitGroups"
+      @prefetch="prefetchVisitGroups"
     />
   </div>
 </template>

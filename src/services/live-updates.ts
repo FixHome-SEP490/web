@@ -150,6 +150,7 @@ const ORDER_LIST_KEYS: readonly QueryKey[] = [
   ['orders', 'customer-list'],
   queryKeys.orders.customerRecent,
   ['orders', 'history'],
+  queryKeys.visitGroups.all,
   ['orders', 'console'],
   queryKeys.orders.cancellations,
   queryKeys.consoleDashboard,
@@ -192,7 +193,7 @@ export function startLiveUpdates(client: QueryClient): () => void {
     if (lists) keys.push(...ORDER_LIST_KEYS);
     if (warranty) keys.push(queryKeys.warranty.all);
     if (bookingEvents.length || (lists && orderEvents.some((event) => !event.kinds || event.kinds.includes('status')))) {
-      keys.push(queryKeys.bookings.all);
+      keys.push(queryKeys.bookings.all, queryKeys.visitGroups.all);
     }
     if (invitationsChanged) keys.push(queryKeys.invitations.all);
     if (walletsChanged) keys.push(queryKeys.wallet.all, queryKeys.earnings.all);

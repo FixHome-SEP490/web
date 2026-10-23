@@ -86,7 +86,7 @@ describe('TechnicianJobsPage', () => {
     await completedTab.trigger('click');
     await flushPromises();
     expect(completedTab.attributes('aria-selected')).toBe('true');
-    expect(mockGet).toHaveBeenLastCalledWith('/service-orders/my', { params: { page: 1, pageSize: 20, status: 'completed' } });
+    expect(mockGet).toHaveBeenLastCalledWith('/service-orders/my', { params: { page: 1, pageSize: 20, status: 'completed', excludeVisitGroups: 'true' } });
     expect(wrapper.text()).toContain('Không có công việc ở mục này');
   });
 });

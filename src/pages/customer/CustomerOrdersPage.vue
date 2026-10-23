@@ -24,6 +24,7 @@ import {
   FhStatusPill,
 } from '../../components';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import { visitGroupsApi, type VisitGroupPageDevice, type VisitGroupPageItem } from '../../api/visit-groups.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import type { PageResult } from '../../api/paging';
@@ -31,7 +32,7 @@ import { usePagedList } from '../../composables/usePagedList';
 import { queryKeys } from '../../lib/query-keys';
 import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch, useQueryState } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
-import { vnDateString } from '../../utils/vn-time';
+import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
 
 const PAGE_SIZE = 10;
@@ -135,10 +136,10 @@ async function readMergedPage<T extends DatedItem>(options: {
 
 function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
   // The unfiltered endpoint already provides the exact ALL page efficiently.
-  if (activeTab.value === 'ALL' && !search.value) return ordersApi.getMyOrdersPage(page, pageSize);
+  if (activeTab.value === 'ALL' && !search.value) return ordersApi.getMyOrdersPage(page, pageSize, { excludeVisitGroups: true });
   const statuses = ORDER_STATES[activeTab.value];
   if (statuses.length === 1 && !search.value) {
-    return ordersApi.getMyOrdersPage(page, pageSize, { status: statuses[0] });
+    return ordersApi.getMyOrdersPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
   }
   return readMergedPage({
     page,
@@ -146,7 +147,7 @@ function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<Ser
     statuses,
     search: search.value,
     fetchPage: (statusPage, statusPageSize, status) =>
-      ordersApi.getMyOrdersPage(statusPage, statusPageSize, { status }),
+      ordersApi.getMyOrdersPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
     searchableText: (order) => `${order.code} ${order.serviceName}`,
   });
 }
@@ -155,7 +156,7 @@ function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<B
   const statuses = BOOKING_STATES[activeTab.value];
   if (statuses.length === 0) return emptyPage<BookingItem>(page, pageSize);
   if (statuses.length === 1 && !search.value) {
-    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0] });
+    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
   }
   return readMergedPage({
     page,
@@ -163,7 +164,7 @@ function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<B
     statuses,
     search: search.value,
     fetchPage: (statusPage, statusPageSize, status) =>
-      bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status }),
+      bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
     searchableText: (booking) => booking.serviceName ?? '',
   });
 }
@@ -178,6 +179,12 @@ const bookingsList = usePagedList<BookingItem>({
   pageSize: PAGE_SIZE,
   page: useQueryPage('requestsPage'),
   fetch: fetchBookingsPage,
+});
+const visitGroupsList = usePagedList<VisitGroupPageItem>({
+  key: () => queryKeys.visitGroups.customerList({ search: search.value }),
+  pageSize: PAGE_SIZE,
+  page: useQueryPage('visitsPage'),
+  fetch: (p, size) => visitGroupsApi.minePage(p, size, { q: search.value || undefined }),
 });
 
 const {
@@ -200,27 +207,40 @@ const {
   changingPage: changingBookingsPage,
   prefetch: prefetchBookings,
 } = bookingsList;
+const {
+  page: visitGroupsPage,
+  items: visitGroups,
+  total: visitGroupsTotal,
+  loading: loadingVisitGroups,
+  error: visitGroupsFailure,
+  load: retryVisitGroups,
+  changingPage: changingVisitGroupsPage,
+  prefetch: prefetchVisitGroups,
+} = visitGroupsList;
 
 // Short lines only; the server's wording never reaches the customer.
 const ordersError = computed(() => (ordersFailure.value ? 'Chưa tải được đơn sửa chữa, vui lòng thử lại.' : null));
 const bookingsError = computed(() => (bookingsFailure.value ? 'Chưa tải được yêu cầu đặt lịch, vui lòng thử lại.' : null));
+const visitGroupsError = computed(() => (visitGroupsFailure.value ? 'Chưa tải được lượt sửa nhiều thiết bị, vui lòng thử lại.' : null));
 
 // ── Which list is on screen ──
-type ListView = 'orders' | 'requests';
+type ListView = 'orders' | 'requests' | 'visits';
 const chosenList = useQueryState<ListView | null>(
   'list',
-  (raw) => (raw === 'orders' || raw === 'requests' ? raw : null),
+  (raw) => (raw === 'orders' || raw === 'requests' || raw === 'visits' ? raw : null),
   (value) => value ?? undefined,
 );
-// Until the customer picks, show the list that has something, repair orders first.
+// An unselected list opens on parent visits when present; otherwise preserve the legacy default.
 const listView = computed<ListView>(() => {
   if (chosenList.value) return chosenList.value;
+  if (!loadingVisitGroups.value && visitGroupsTotal.value > 0) return 'visits';
   const ordersEmpty = !loadingOrders.value && ordersTotal.value === 0;
   return ordersEmpty && !loadingBookings.value && bookingsTotal.value > 0 ? 'requests' : 'orders';
 });
 const listChoices = computed(() => [
-  { key: 'orders' as const, label: 'Đơn sửa chữa', count: ordersTotal.value, loading: loadingOrders.value },
-  { key: 'requests' as const, label: 'Yêu cầu đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value },
+  { key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa', count: ordersTotal.value, loading: loadingOrders.value },
+  { key: 'requests' as const, label: 'Yêu cầu đặt lịch', shortLabel: 'Đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value },
+  { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị', count: visitGroupsTotal.value, loading: loadingVisitGroups.value },
 ]);
 
 // ── Tab sliding indicator animation ──
@@ -259,7 +279,7 @@ function selectTab(key: Tab) {
 }
 
 // ── Computed & Count ──
-const loading = computed(() => loadingOrders.value && loadingBookings.value);
+const loading = computed(() => loadingOrders.value && loadingBookings.value && loadingVisitGroups.value);
 const hasError = computed(() => !!(ordersError.value || bookingsError.value));
 
 // Keep total count persistent once fetched so switching tabs doesn't cause tab width jitter
@@ -285,6 +305,41 @@ const pendingLabel = (booking: BookingItem) => {
   if (booking.status === 'CLOSED') return 'Chưa tìm được thợ, chờ hỗ trợ';
   return 'Đang tìm thợ phù hợp';
 };
+
+function visitItemStatus(item: VisitGroupPageDevice) {
+  if (item.outcome === 'failed') return { label: 'Không sửa được', tone: 'bg-danger-50 text-danger-700' };
+  if (item.outcome === 'quote_declined') return { label: 'Không đồng ý báo giá', tone: 'bg-warning-50 text-warning-800' };
+  if (item.outcome === 'succeeded') return { label: 'Hoàn thành', tone: 'bg-success-50 text-success-700' };
+  if (item.orderStatus?.toUpperCase() === 'CANCELLED' || item.bookingStatus.toUpperCase() === 'CANCELLED') {
+    return { label: 'Đã hủy', tone: 'bg-ink-100 text-ink-600' };
+  }
+  switch (item.orderStatus?.toUpperCase()) {
+    case 'ACCEPTED': return { label: 'Đã nhận đơn', tone: 'bg-brand-50 text-brand-700' };
+    case 'EN_ROUTE': return { label: 'Đang di chuyển', tone: 'bg-warning-50 text-warning-800' };
+    case 'UNDER_REPAIR': return { label: 'Đang sửa chữa', tone: 'bg-brand-50 text-brand-700' };
+    case 'COMPLETED': return { label: 'Hoàn thành', tone: 'bg-success-50 text-success-700' };
+    default:
+      return item.bookingStatus.toUpperCase() === 'CLOSED'
+        ? { label: 'Chưa tìm được thợ', tone: 'bg-warning-50 text-warning-800' }
+        : { label: 'Đang tìm thợ', tone: 'bg-ink-100 text-ink-600' };
+  }
+}
+
+function visitGroupStatus(status: VisitGroupPageItem['status']) {
+  switch (status) {
+    case 'submitted': return { label: 'Đang chờ xử lý', tone: 'bg-ink-100 text-ink-700' };
+    case 'matching': return { label: 'Đang tìm thợ', tone: 'bg-brand-50 text-brand-700' };
+    case 'no_technician': return { label: 'Chưa có thợ phù hợp', tone: 'bg-warning-50 text-warning-800' };
+    case 'accepted': return { label: 'Đã nhận lịch', tone: 'bg-brand-50 text-brand-700' };
+    case 'en_route': return { label: 'Đang di chuyển', tone: 'bg-warning-50 text-warning-800' };
+    case 'under_repair': return { label: 'Đang sửa chữa', tone: 'bg-brand-50 text-brand-700' };
+    case 'completed': return { label: 'Hoàn thành', tone: 'bg-success-50 text-success-700' };
+    case 'cancelled': return { label: 'Đã hủy', tone: 'bg-ink-100 text-ink-600' };
+    case 'failed': return { label: 'Có thiết bị chưa sửa', tone: 'bg-danger-50 text-danger-700' };
+    case 'quote_declined': return { label: 'Có báo giá chưa được nhận', tone: 'bg-warning-50 text-warning-800' };
+    case 'mixed': return { label: 'Kết quả nhiều trạng thái', tone: 'bg-ink-100 text-ink-700' };
+  }
+}
 
 let tabResizeObserver: ResizeObserver | null = null;
 
@@ -385,6 +440,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
     </div>
 
     <div
+      v-if="listView !== 'visits'"
       ref="tabListRef"
       class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 select-none scrollbar-none"
       role="tablist"
@@ -481,7 +537,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <!-- Empty state -->
     <div
-      v-else-if="!hasError && !loadingOrders && !loadingBookings && ordersTotal === 0 && bookingsTotal === 0"
+      v-else-if="!hasError && !visitGroupsError && !loadingOrders && !loadingBookings && !loadingVisitGroups && ordersTotal === 0 && bookingsTotal === 0 && visitGroupsTotal === 0"
       data-testid="history-empty-state"
       class="space-y-2 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
     >
@@ -498,18 +554,20 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 
     <div v-else class="space-y-3">
       <!-- Repair orders or booking requests: one list at a time -->
-      <div class="grid grid-cols-2 gap-2" role="group" aria-label="Chọn danh sách">
+      <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn danh sách">
         <button
           v-for="choice in listChoices"
           :key="choice.key"
           type="button"
-          class="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
           :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
           :aria-pressed="listView === choice.key"
+          :aria-label="choice.label"
           :data-testid="`list-switch-${choice.key}`"
           @click="chosenList = choice.key"
         >
-          <span class="truncate">{{ choice.label }}</span>
+          <span class="truncate whitespace-nowrap sm:hidden">{{ choice.shortLabel }}</span>
+          <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
           <span
             v-if="!choice.loading"
             class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs"
@@ -517,6 +575,60 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           >{{ choice.count }}</span>
         </button>
       </div>
+
+      <!-- One server-paged parent row per multi-device visit. -->
+      <section v-if="listView === 'visits'" class="space-y-2" data-testid="visit-groups-section">
+        <div
+          v-if="visitGroupsError"
+          role="alert"
+          class="flex items-center justify-between gap-3 rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700"
+        >
+          <span>{{ visitGroupsError }}</span>
+          <button type="button" class="h-9 shrink-0 rounded-lg px-2 font-semibold hover:bg-danger-100" :disabled="loadingVisitGroups" @click="retryVisitGroups">Thử lại</button>
+        </div>
+        <div v-if="loadingVisitGroups" class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lượt sửa nhiều thiết bị">
+          <FhSkeleton width="55%" height="18px" />
+          <FhSkeleton width="75%" height="14px" />
+          <FhSkeleton width="45%" height="14px" />
+        </div>
+        <p v-else-if="!visitGroupsError && visitGroupsTotal === 0" data-testid="visit-groups-empty" class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500">
+          Chưa có lượt sửa nhiều thiết bị.
+        </p>
+        <ul v-else-if="visitGroups.length" class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200 bg-white transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
+          <li v-for="group in visitGroups" :key="group.id" :data-testid="`visit-group-card-${group.id}`" class="space-y-3 px-4 py-4 sm:px-5">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="min-w-0">
+                <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
+                <p class="mt-1 text-xs text-ink-500 font-num">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
+              </div>
+              <span :class="`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${visitGroupStatus(group.status).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group.status).label}`">
+                {{ visitGroupStatus(group.status).label }}
+              </span>
+            </div>
+            <p :data-testid="`visit-group-time-${group.id}`" class="text-sm text-ink-600">
+              <span class="font-medium text-ink-700">Lịch hẹn:</span>
+              <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span>
+            </p>
+            <ul class="space-y-2" aria-label="Thiết bị trong lượt sửa">
+              <li v-for="item in group.items" :key="item.itemId" :data-testid="`visit-group-device-${group.id}-${item.sequence}`" class="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-ink-50 px-3 py-2 text-sm">
+                <span class="min-w-0 flex-1 text-ink-800">
+                  <span class="font-medium">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+                  <span v-if="item.serviceName" class="text-ink-500"> · {{ item.serviceName }}</span>
+                </span>
+                <span :class="`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${visitItemStatus(item).tone}`" :aria-label="`Trạng thái thiết bị: ${visitItemStatus(item).label}`">
+                  {{ visitItemStatus(item).label }}
+                </span>
+              </li>
+            </ul>
+            <div class="flex justify-end border-t border-ink-100 pt-3">
+              <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                Xem lượt sửa <ChevronRight :size="16" aria-hidden="true" />
+              </router-link>
+            </div>
+          </li>
+        </ul>
+        <FhPagination v-model:page="visitGroupsPage" :page-size="PAGE_SIZE" :total="visitGroupsTotal" :disabled="loadingVisitGroups" @prefetch="prefetchVisitGroups" />
+      </section>
 
       <!-- Bookings with no technician yet, so no service order -->
       <section v-if="listView === 'requests'" class="space-y-2" data-testid="requests-section">
@@ -594,7 +706,7 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </section>
 
       <!-- Service orders -->
-      <section v-else class="space-y-2" data-testid="orders-section">
+      <section v-else-if="listView === 'orders'" class="space-y-2" data-testid="orders-section">
           <div class="space-y-2">
             <div v-if="loadingOrders" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
               <div v-for="i in 3" :key="i" class="px-5 py-4 space-y-2">

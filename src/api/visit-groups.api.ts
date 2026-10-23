@@ -5,6 +5,7 @@ import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-s
 import type { BookingDeviceAttributes } from './catalog-pricing.api';
 import type { BookingItem, TechnicianCandidate } from './bookings.api';
 import { CANDIDATES_TIMEOUT_MS, normalizeBooking } from './bookings.api';
+import { readPage, type PageResult } from './paging';
 import apiClient from './client';
 
 /** The most devices one visit takes; the form locks "Thêm thiết bị" at this count. */
@@ -52,6 +53,83 @@ export interface Visit {
   preferredEndAt: string;
   leadBookingId: string | null;
   items: VisitItem[];
+}
+
+/** A server-paged parent row for the customer or assigned technician lists. */
+export interface VisitGroupPageItem {
+  id: string;
+  createdAt: string;
+  bookingMode: BookingMode;
+  slot: BookingSlot | null;
+  scheduledAt: string | null;
+  scheduledEndAt: string | null;
+  status: VisitGroupReadStatus;
+  items: VisitGroupPageDevice[];
+}
+
+export interface VisitGroupPageDevice {
+  itemId: string;
+  sequence: number;
+  bookingId: string;
+  serviceId: string;
+  deviceLabel: string | null;
+  outcome: 'succeeded' | 'failed' | 'quote_declined' | null;
+  bookingStatus: string;
+  serviceName: string | null;
+  orderId: string | null;
+  orderCode: string | null;
+  orderStatus: string | null;
+}
+
+export type VisitGroupReadStatus =
+  | 'submitted'
+  | 'matching'
+  | 'no_technician'
+  | 'accepted'
+  | 'en_route'
+  | 'under_repair'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'quote_declined'
+  | 'mixed';
+
+export type VisitGroupTechnicianTab =
+  | 'all'
+  | 'in_progress'
+  | 'accepted'
+  | 'en_route'
+  | 'under_repair'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'quote_declined'
+  | 'mixed';
+
+export interface VisitGroupsCustomerPageFilter {
+  status?: VisitGroupReadStatus;
+  q?: string;
+}
+
+export interface VisitGroupsAssignedPageFilter {
+  tab?: VisitGroupTechnicianTab;
+}
+
+function pageParams(page: number, pageSize: number) {
+  return { page, pageSize };
+}
+
+function customerPageParams(page: number, pageSize: number, filter: VisitGroupsCustomerPageFilter = {}) {
+  const q = filter.q?.trim();
+  return {
+    ...pageParams(page, pageSize),
+    ...(filter.status ? { status: filter.status } : {}),
+    ...(q ? { q } : {}),
+  };
+}
+
+function assignedPageParams(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}) {
+  return { ...pageParams(page, pageSize), ...(filter.tab ? { tab: filter.tab } : {}) };
 }
 
 export type VisitDeviceState = 'succeeded' | 'failed' | 'quote_declined' | 'cancelled' | 'open';
@@ -113,6 +191,18 @@ export const visitGroupsApi = {
   async get(id: string): Promise<Visit> {
     const res = await apiClient.get<{ data: Visit }>(`/visit-groups/${id}`);
     return normalizeVisit(res.data.data);
+  },
+
+  /** Customer-owned visits. Filtering, search and totals stay on the server. */
+  async minePage(page: number, pageSize: number, filter: VisitGroupsCustomerPageFilter = {}): Promise<PageResult<VisitGroupPageItem>> {
+    const res = await apiClient.get<unknown>('/visit-groups/my-page', { params: customerPageParams(page, pageSize, filter) });
+    return readPage(res.data, { page, pageSize });
+  },
+
+  /** Visits assigned to the signed-in technician; the response contains only authorized orders. */
+  async assignedPage(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}): Promise<PageResult<VisitGroupPageItem>> {
+    const res = await apiClient.get<unknown>('/visit-groups/assigned-page', { params: assignedPageParams(page, pageSize, filter) });
+    return readPage(res.data, { page, pageSize });
   },
 
   async candidates(id: string): Promise<TechnicianCandidate[]> {

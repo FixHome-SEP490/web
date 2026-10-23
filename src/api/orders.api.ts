@@ -403,9 +403,10 @@ export const ordersApi = {
     pageSize = 20,
     status?: 'completed' | 'cancelled',
     search?: string,
+    excludeVisitGroups = false,
   ): Promise<{ data: RepairHistoryItem[]; total: number }> {
     const res = await apiClient.get<unknown>('/repair-history', {
-      params: { page, pageSize, ...filterParams({ status, search }) },
+      params: { page, pageSize, ...filterParams({ status, search, excludeVisitGroups }) },
     });
     const money = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
     const result = readPage(res.data, { page, pageSize }, (row: RepairHistoryItem) => ({

@@ -129,6 +129,8 @@ describe('readPage, slicePage and filterParams', () => {
     expect(filterParams({ statuses: ['ACCEPTED', 'EN_ROUTE'] })).toEqual({ statuses: 'accepted,en_route' });
     expect(filterParams({ statuses: ['COMPLETED'] })).toEqual({ status: 'completed' });
     expect(filterParams({ status: 'CANCELLED', search: '  điều hoà ' })).toEqual({ status: 'cancelled', search: 'điều hoà' });
+    expect(filterParams({ excludeVisitGroups: true })).toEqual({ excludeVisitGroups: 'true' });
+    expect(filterParams({ excludeVisitGroups: false })).toEqual({});
     expect(filterParams({ statuses: [], search: '   ' })).toEqual({});
     expect(filterParams()).toEqual({});
   });

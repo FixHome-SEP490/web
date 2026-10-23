@@ -66,6 +66,8 @@ export interface ListFilter {
   statuses?: readonly string[] | null;
   /** Server search; accents and case are ignored by the backend. */
   search?: string | null;
+  /** Opt-in server filter for legacy lists that also have a parent VisitGroup list. */
+  excludeVisitGroups?: boolean;
 }
 
 /** `status`/`statuses` in lower case as the backend enums are, `search` trimmed; empty values left out. */
@@ -77,5 +79,6 @@ export function filterParams(filter: ListFilter = {}): Record<string, string> {
   else if (filter.status) params.status = filter.status.toLowerCase();
   const search = filter.search?.trim();
   if (search) params.search = search;
+  if (filter.excludeVisitGroups) params.excludeVisitGroups = 'true';
   return params;
 }

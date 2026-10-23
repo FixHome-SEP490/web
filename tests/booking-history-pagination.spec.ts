@@ -37,7 +37,23 @@ import CustomerOrdersPage from '../src/pages/customer/CustomerOrdersPage.vue';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type Params = { page: number; pageSize: number; status?: string; statuses?: string; search?: string };
+type Params = { page: number; pageSize: number; status?: string; statuses?: string; search?: string; q?: string; excludeVisitGroups?: string };
+
+function makeVisit(id: string) {
+  return {
+    id,
+    status: 'mixed',
+    createdAt: '2026-10-22T08:00:00Z',
+    bookingMode: 'scheduled',
+    slot: null,
+    scheduledAt: '2026-10-23T02:00:00Z',
+    scheduledEndAt: '2026-10-23T06:00:00Z',
+    items: [
+      { itemId: `${id}-i1`, sequence: 1, bookingId: `${id}-b1`, serviceId: 'svc-ac', deviceLabel: 'Phòng khách', serviceName: 'Sửa máy lạnh', orderId: `${id}-o1`, orderCode: `${id}-code-1`, bookingStatus: 'completed', orderStatus: 'completed', outcome: 'failed' },
+      { itemId: `${id}-i2`, sequence: 2, bookingId: `${id}-b2`, serviceId: 'svc-ac', deviceLabel: 'Phòng ngủ', serviceName: 'Sửa máy lạnh', orderId: `${id}-o2`, orderCode: `${id}-code-2`, bookingStatus: 'cancelled', orderStatus: 'cancelled', outcome: null },
+    ],
+  };
+}
 
 function makeBooking(overrides: Partial<{ id: string; status: string; createdAt: string; serviceName: string }> = {}) {
   return {
@@ -85,10 +101,15 @@ const day = (n: number) => `2026-09-${String(n).padStart(2, '0')}T08:00:00Z`;
 function serve(
   orders: Record<string, ReturnType<typeof makeOrder>[]>,
   bookings: Record<string, ReturnType<typeof makeBooking>[]>,
+  visits: ReturnType<typeof makeVisit>[] = [],
+  visitTotal = visits.length,
 ) {
-  const slice = <T>(rows: T[], { page, pageSize }: Params) => response(rows.slice((page - 1) * pageSize, page * pageSize), rows.length);
+  const slice = <T>(rows: T[], { page, pageSize }: Params, total = rows.length) => ({
+    data: { data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { total, page, pageSize } },
+  });
   const byNewest = <T extends { createdAt: string }>(rows: T[]) => [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
+    if (url === '/visit-groups/my-page') return slice(visits, opts.params, visitTotal);
     const source: Record<string, { createdAt: string; serviceName: string; code?: string }[]> = url === '/service-orders/my' ? orders : bookings;
     const states = opts.params.statuses?.split(',') ?? (opts.params.status ? [opts.params.status] : Object.keys(source));
     const q = opts.params.search?.toLowerCase();
@@ -103,7 +124,7 @@ const calls = (url: string) =>
   mockGet.mock.calls.filter(([u]) => u === url).map(([, opts]) => (opts as { params: Params }).params);
 
 async function mountPage() {
-  const wrapper = mount(CustomerOrdersPage, { global: { stubs: { FhButton: true, FhCostBreakdown: true, FhMoney: true, RebookDialog: true } } });
+  const wrapper = mount(CustomerOrdersPage, { global: { stubs: { FhButton: true, FhCostBreakdown: true, FhMoney: true, RebookDialog: true, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
   await flushPromises();
   return wrapper;
 }
@@ -164,12 +185,12 @@ describe('CustomerOrdersPage: requests per tab', () => {
     );
     const wrapper = await mountPage();
 
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10 }]);
+    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, excludeVisitGroups: 'true' }]);
     expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'submitted' },
-      { page: 1, pageSize: 10, status: 'matching' },
-      { page: 1, pageSize: 10, status: 'closed' },
-      { page: 1, pageSize: 10, status: 'cancelled' },
+      { page: 1, pageSize: 10, status: 'submitted', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'matching', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'closed', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' },
     ]);
     // A matched booking shows as its order only.
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
@@ -191,8 +212,8 @@ describe('CustomerOrdersPage: requests per tab', () => {
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-CANCELLED"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled' }]);
-    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled' }]);
+    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' }]);
+    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' }]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oX']);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bC']);
@@ -203,13 +224,13 @@ describe('CustomerOrdersPage: requests per tab', () => {
     await flushPromises();
     // The strict Backend DTO accepts one status per request; the page merges them.
     expect(calls('/service-orders/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'accepted' },
-      { page: 1, pageSize: 10, status: 'en_route' },
-      { page: 1, pageSize: 10, status: 'under_repair' },
+      { page: 1, pageSize: 10, status: 'accepted', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'en_route', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'under_repair', excludeVisitGroups: 'true' },
     ]);
     expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'submitted' },
-      { page: 1, pageSize: 10, status: 'matching' },
+      { page: 1, pageSize: 10, status: 'submitted', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 10, status: 'matching', excludeVisitGroups: 'true' },
     ]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oR']);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
@@ -219,7 +240,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-COMPLETED"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'completed' }]);
+    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'completed', excludeVisitGroups: 'true' }]);
     expect(calls('/bookings/my')).toEqual([]);
     expect(wrapper.get('[data-testid="history-empty-state"]').text()).toContain('Không có đơn ở mục này');
   });
@@ -240,7 +261,7 @@ describe('CustomerOrdersPage: numbered pagination', () => {
 
     await pager.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 2, pageSize: 10 });
+    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 2, pageSize: 10, excludeVisitGroups: 'true' });
     expect(cardIds(wrapper, 'order-card-')).toEqual(['o15', 'o14', 'o13', 'o12', 'o11', 'o10', 'o9', 'o8', 'o7', 'o6']);
     expect(wrapper.get('[data-testid="orders-section"] [data-testid="pagination-summary"]').text()).toBe('11–20 / 25');
 
@@ -262,10 +283,10 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     await pager.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
     expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 20, status: 'submitted' },
-      { page: 1, pageSize: 20, status: 'matching' },
-      { page: 1, pageSize: 20, status: 'closed' },
-      { page: 1, pageSize: 20, status: 'cancelled' },
+      { page: 1, pageSize: 20, status: 'submitted', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 20, status: 'matching', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 20, status: 'closed', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 20, status: 'cancelled', excludeVisitGroups: 'true' },
     ]);
     expect(calls('/service-orders/my')).toEqual([]);
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['c6', 'c5', 'c4', 'c3', 'c2', 'c1']);
@@ -276,11 +297,11 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="orders-section"] [data-testid="pagination-page-3"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 3, pageSize: 10 });
+    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 3, pageSize: 10, excludeVisitGroups: 'true' });
 
     await wrapper.get('[data-testid="history-tab-COMPLETED"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 1, pageSize: 10, status: 'completed' });
+    expect(calls('/service-orders/my').at(-1)).toEqual({ page: 1, pageSize: 10, status: 'completed', excludeVisitGroups: 'true' });
     expect(cardIds(wrapper, 'order-card-')).toEqual(['done']);
   });
 
@@ -306,10 +327,10 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
     expect(calls('/service-orders/my')).toEqual(
-      ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status })),
+      ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status, excludeVisitGroups: 'true' })),
     );
     expect(calls('/bookings/my')).toEqual(
-      ['submitted', 'matching', 'closed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status })),
+      ['submitted', 'matching', 'closed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status, excludeVisitGroups: 'true' })),
     );
     expect(mockGet.mock.calls.some(([, options]) => 'statuses' in (options as { params: Params }).params || 'search' in (options as { params: Params }).params)).toBe(false);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['o3']);
@@ -334,8 +355,8 @@ describe('CustomerOrdersPage: one list at a time', () => {
       { submitted: [makeBooking({ id: 'b1' })] },
     );
     const wrapper = await mountPage();
-    expect(wrapper.get('[data-testid="list-switch-orders"]').text()).toBe('Đơn sửa chữa2');
-    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toBe('Yêu cầu đặt lịch1');
+    expect(wrapper.get('[data-testid="list-switch-orders"]').text()).toContain('Đơn sửa chữa');
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('Yêu cầu đặt lịch');
     expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
     expect(cardIds(wrapper, 'order-card-').sort()).toEqual(['o1', 'o2']);
     expect(cardIds(wrapper, 'booking-card-')).toEqual([]);
@@ -351,6 +372,35 @@ describe('CustomerOrdersPage: one list at a time', () => {
     const wrapper = await mountPage();
     expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['b1']);
+  });
+
+  it('shows paged visit parents with device outcomes and one shared visit time', async () => {
+    serve({}, {}, Array.from({ length: 11 }, (_, i) => makeVisit(`v${i + 1}`)), 11);
+    const wrapper = await mountPage();
+
+    expect(wrapper.get('[data-testid="list-switch-visits"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[data-testid="list-switch-visits"]').text()).toContain('11');
+    expect(wrapper.findAll('[data-testid^="visit-group-card-"]')).toHaveLength(10);
+    expect(wrapper.findAll('[data-testid^="visit-group-device-"]')).toHaveLength(20);
+    expect(wrapper.get('[data-testid="visit-group-card-v1"]').text()).toContain('Sửa máy lạnh');
+    expect(wrapper.get('[data-testid="visit-group-device-v1-1"]').text()).toContain('Không sửa được');
+    expect(wrapper.get('[data-testid="visit-group-device-v1-2"]').text()).toContain('Đã hủy');
+    expect(wrapper.get('[data-testid="visit-group-time-v1"]').text()).toContain('09:00 23/10/2026');
+    expect(wrapper.get('[data-testid="visit-group-open-v1"]').attributes('href')).toBe('/app/visits/v1');
+    expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–10 / 11');
+
+    await wrapper.get('[data-testid="pagination-page-2"]').trigger('click');
+    await flushPromises();
+    expect(mockGet.mock.calls.filter(([url]) => url === '/visit-groups/my-page').map(([, options]) => (options as { params: Params }).params.page)).toContain(2);
+    expect(wrapper.findAll('[data-testid^="visit-group-card-"]')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="visit-group-card-v11"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('11–11 / 11');
+
+    await wrapper.get('[data-testid="list-switch-orders"]').trigger('click');
+    expect(cardIds(wrapper, 'order-card-')).toEqual([]);
+    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
+    expect(calls('/service-orders/my').every((params) => params.excludeVisitGroups === 'true')).toBe(true);
+    expect(calls('/bookings/my').every((params) => params.excludeVisitGroups === 'true')).toBe(true);
   });
 
   it('says so when the chosen list is empty but the other one is not', async () => {
@@ -374,6 +424,7 @@ describe('CustomerOrdersPage: one list at a time', () => {
 describe('CustomerOrdersPage: partial failure', () => {
   it('shows orders when bookings fail, with a banner and no empty state', async () => {
     mockGet.mockReset().mockImplementation(async (url: string) => {
+      if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/bookings/my') throw new Error('Network Error');
       return response([makeOrder()], 1);
     });
@@ -385,6 +436,7 @@ describe('CustomerOrdersPage: partial failure', () => {
 
   it('shows bookings when orders fail, with a banner', async () => {
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
+      if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') throw new Error('Network Error');
       return opts.params.status === 'submitted' ? response([makeBooking()], 1) : response([], 0);
     });
@@ -407,6 +459,7 @@ describe('CustomerOrdersPage: partial failure', () => {
   it('retries the page that failed and keeps the other list on screen', async () => {
     let attempts = 0;
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
+      if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/bookings/my') return opts.params.status === 'submitted' ? response([makeBooking({ id: 'keep' })], 1) : response([], 0);
       if (opts.params.page === 2) {
         attempts++;
