@@ -33,6 +33,7 @@ vi.mock('../src/stores/auth', () => ({ useAuthStore: () => auth }));
 
 import TechnicianPartsSection from '../src/components/TechnicianPartsSection.vue';
 import ConsolePartRequestsPage from '../src/pages/console/ConsolePartRequestsPage.vue';
+import ConsolePartReturnsPage from '../src/pages/console/ConsolePartReturnsPage.vue';
 import { createIdempotencyKey } from '../src/api/part-requests.api';
 
 const loadActualApi = () =>
@@ -310,7 +311,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
   it('loads the pending queue with declared numbers and the maximum accepted quantity', async () => {
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -331,7 +332,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
       .mockResolvedValueOnce([returnRecord({ declaredQty: 2, managerAcceptedQty: 1, version: 5 })]);
     partRequestsApi.acceptReturn.mockResolvedValue(null);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -362,7 +363,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
     const pending = deferred<null>();
     partRequestsApi.acceptReturn.mockReturnValue(pending.promise);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -381,7 +382,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
   it('rejects a non-positive or too large accepted quantity without calling the API', async () => {
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -398,16 +399,20 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
   it('hides the whole return section when the backend has not enabled the feature (404)', async () => {
     partRequestsApi.getPendingReturns.mockRejectedValue({ response: { status: 404 } });
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
 
     expect(wrapper.find('[data-testid="part-returns-queue"]').exists()).toBe(false);
     expect(normalized(wrapper)).not.toContain('Chưa tải được danh sách chờ nhận.');
-    // The existing requests page still works.
-    expect(normalized(wrapper)).toContain('Không có yêu cầu linh kiện nào phù hợp.');
     wrapper.unmount();
+    // The existing requests page still works, without a link to returns.
+    const requests = mount(ConsolePartRequestsPage, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+    await flushPromises();
+    expect(normalized(requests)).toContain('Không có yêu cầu linh kiện nào phù hợp.');
+    expect(requests.find('[data-testid="part-returns-link"]').exists()).toBe(false);
+    requests.unmount();
   });
 
   it('shows a retry line on a real failure and recovers when retried', async () => {
@@ -415,7 +420,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
       .mockRejectedValueOnce(new Error('mạng lỗi'))
       .mockResolvedValueOnce([returnRecord({ declaredQty: 2 })]);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -436,7 +441,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
     auth.hasRole.mockReturnValue(false);
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
 
-    const wrapper = mount(ConsolePartRequestsPage, {
+    const wrapper = mount(ConsolePartReturnsPage, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
@@ -512,5 +517,38 @@ describe('part-requests.api P1 return contract', () => {
     expect(first).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
     expect(second).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
     expect(first).not.toBe(second);
+  });
+});
+
+describe('Hoàn trả linh kiện (BUG DETECTOR 10)', () => {
+  it('gives a receive form only to what technicians declared and the manager has not received, one card per part request', async () => {
+    partRequestsApi.getPendingReturns.mockResolvedValue([
+      returnRecord({ partRequestItemId: 'i-1', declaredQty: 2 }),
+      returnRecord({ partRequestItemId: 'i-2', partNameSnapshot: 'Tụ điện', declaredQty: 0 }),
+      returnRecord({ partRequestItemId: 'i-3', partNameSnapshot: 'Dây nguồn', declaredQty: 1, managerAcceptedQty: 1, outstandingQty: 1 }),
+    ]);
+    const wrapper = mount(ConsolePartReturnsPage, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+    await flushPromises();
+    const text = normalized(wrapper);
+    expect(text).toContain('Van xả');
+    expect(text).not.toContain('tối đa 0');
+    expect(wrapper.findAll('[data-testid="part-return-group"]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="accept-return"]')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="part-returns-count"]').text()).toBe('1');
+    // Parts still held without a declaration are listed to follow up, never with a receive form.
+    const held = wrapper.get('[data-testid="part-returns-held"]').text();
+    expect(held).toContain('Tụ điện');
+    expect(held).toContain('Dây nguồn');
+    expect(held).toContain('Còn giữ 1');
+    wrapper.unmount();
+  });
+
+  it('points the part requests page at the returns waiting to be received', async () => {
+    partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 }), returnRecord({ partRequestItemId: 'i-2', declaredQty: 0 })]);
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="part-returns-link"]').text()).toContain('1 linh kiện thợ đã khai trả đang chờ nhận');
+    expect(wrapper.find('[data-testid="part-returns-queue"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

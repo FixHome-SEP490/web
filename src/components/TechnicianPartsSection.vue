@@ -51,6 +51,8 @@ const emit = defineEmits<{
   (e: 'summary', value: { count: number; needsAction: boolean }): void;
   (e: 'pending-usage', count: number): void;
   (e: 'pending-returns', count: number): void;
+  /** Custody per item: what the technician declared used and declared going back. */
+  (e: 'custody', byItemId: Map<string, { usedQty: number; declaredQty: number }>): void;
   (e: 'return-summary', value: { needDeclare: number; awaitingManager: number }): void;
 }>();
 
@@ -218,6 +220,7 @@ const returnSummary = computed(() => returnRecords.value.reduce((totals, record)
   totals.awaitingManager += Math.min(record.outstandingQty, declaredWaiting);
   return totals;
 }, { needDeclare: 0, awaitingManager: 0 }));
+watch(returnRecords, records => emit('custody', new Map(records.map(record => [record.partRequestItemId, { usedQty: record.usedQty, declaredQty: record.declaredQty }]))), { immediate: true });
 watch(returnSummary, totals => {
   emit('pending-returns', totals.needDeclare + totals.awaitingManager);
   emit('return-summary', totals);

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-23 02:24 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/feature-visit-group-ux-owner-v1-20261022
+> Cập nhật lần cuối: 2026-10-23 19:08 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/tech-parts-bugs
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -367,6 +367,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
 - 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.
 
 - 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
@@ -445,4 +446,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-16 15:44 (UTC+7) | ToanAltF4 | fix/checkin-recent-fix | Check-in thợ: trình duyệt không trả vị trí mới trong lúc chờ (Chrome desktop vị trí Wi-Fi, đã có ping đang chạy) thì dùng vị trí ping trong 2 phút gần nhất; server vẫn kiểm 5 km
 
-- 2026-10-16 11:33 (UTC+7) | ToanAltF4 | fix/technician-topup-envelope | Nạp ví thợ: đọc success/message ở envelope (backend nhấc lên ngoài data), trước đây web luôn báo Chưa mở được cổng thanh toán VNPay; thêm test với đúng phản hồi thật
