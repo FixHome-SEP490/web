@@ -271,6 +271,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng ngủ không mát');
     await selectPhoto(new File(['two'], 'bedroom.png', { type: 'image/png' }));
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     await wrapper.get('[data-testid="visit-device-remove-0"]').trigger('click');
     await wrapper.get('[data-testid="visit-device-undo"]').trigger('click');
     expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách rò nước');
@@ -330,6 +331,14 @@ describe('NewBookingWizardPage A+ service finder', () => {
       await wrapper.get('[data-testid="booking-description"]').setValue(`Máy số ${index + 1}`);
       await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     }
+    expect(wrapper.find('[data-testid="visit-consultation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
+    expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="booking-summary-price"]').find('[data-money="600000"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="visit-consultation-open"]').text()).toBe('Liên hệ FixHome hỗ trợ');
+    expect(createConsultation).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="visit-consultation-open"]').trigger('click');
     expect(wrapper.get('[data-testid="visit-consultation"]').text()).toContain('Cần sửa thêm thiết bị?');
     expect(wrapper.get('[data-testid="visit-consultation-submit"]').attributes('disabled')).toBeDefined();
     expect(createConsultation).not.toHaveBeenCalled();
@@ -343,6 +352,44 @@ describe('NewBookingWizardPage A+ service finder', () => {
       devices: ['Máy 1: Vệ sinh điều hòa treo tường', 'Máy 2: Vệ sinh điều hòa treo tường', 'Máy 3: Vệ sinh điều hòa treo tường'],
     });
     expect(wrapper.get('[data-testid="visit-devices-banner"]').findAll('li')).toHaveLength(3);
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid^="visit-review-device-"]')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="booking-review"]').text()).toContain('Lịch và địa chỉ chung');
+    expect(wrapper.findAll('[data-testid="booking-submit"]')).toHaveLength(1);
+    for (let index = 0; index < 3; index += 1) {
+      const machine = wrapper.get(`[data-testid="visit-review-device-${index}"]`);
+      expect(machine.text()).toContain(`Máy số ${index + 1}`);
+      expect(machine.get(`[data-testid="visit-device-edit-${index}"]`).attributes('aria-label')).toContain(`Sửa máy ${index + 1}`);
+    }
+    expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-device-limit"]').text()).toContain('3/3 thiết bị');
+    expect(wrapper.get('[data-testid="visit-review-consultation"]').text()).toBe('Liên hệ FixHome hỗ trợ');
+    wrapper.unmount();
+  });
+
+  it('requires saving the third device before continuing the shared visit', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    for (let index = 0; index < 2; index += 1) {
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="booking-description"]').setValue(`Máy ${index + 1}`);
+      await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    }
+
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy 3');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 3 trước khi tiếp tục');
+    expect(wrapper.find('[data-testid="visit-device-2"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toContain('Thêm thiết bị này vào lượt');
+
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
+    expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
     wrapper.unmount();
   });
 

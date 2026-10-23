@@ -7,7 +7,7 @@
  * linh kiện (BUG DETECTOR 10). Linh kiện thợ còn giữ mà chưa khai trả chỉ hiện
  * để theo dõi, không thành dòng toàn số 0 với nút bấm được.
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { X } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '..';
 import { consoleField } from './console-ui';
@@ -19,6 +19,8 @@ import {
   type PartCustodyReturnRecord,
 } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { partCustodyQuantities } from '../../utils/part-custody-quantities';
+import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
 
 const emit = defineEmits<{ (e: 'count', value: number | null): void }>();
 
@@ -44,7 +46,7 @@ const showToast = (type: 'success' | 'error', text: string) => {
 const returnKey = (row: PartCustodyReturnRecord) => `${row.partRequestId}:${row.partRequestItemId}`;
 
 /** Khai trả nhưng chưa được nhận thực tế: đây là phần quản lý còn phải xác nhận. */
-const pendingDeclaredQty = (row: PartCustodyReturnRecord) => Math.max(0, row.declaredQty - row.managerAcceptedQty);
+const pendingDeclaredQty = (row: PartCustodyReturnRecord) => partCustodyQuantities(row).awaitingManager;
 
 /** Số nhận thực tế tối đa: không quá phần đang chờ nhận của dòng này. */
 const maxAcceptQty = (row: PartCustodyReturnRecord) => Math.max(0, Math.min(row.outstandingQty, pendingDeclaredQty(row)));
@@ -74,12 +76,18 @@ const loadReturns = async () => {
   returnsLoading.value = true;
   returnsUnavailable.value = false;
   returnsLoadError.value = false;
+  emit('count', null);
   try {
     const rows = await partRequestsApi.getPendingReturns();
     if (version !== returnsLoadVersion) return;
-    returnQueue.value = rows;
     const drafts: Record<string, number> = {};
-    for (const row of rows) drafts[returnKey(row)] = maxAcceptQty(row);
+    for (const row of rows) {
+      const key = returnKey(row);
+      const previous = returnQueue.value.find(candidate => returnKey(candidate) === key);
+      const draft = acceptDrafts.value[key];
+      drafts[key] = previous?.version === row.version && Number.isInteger(draft) && draft >= 1 && draft <= maxAcceptQty(row) ? draft : maxAcceptQty(row);
+    }
+    returnQueue.value = rows;
     acceptDrafts.value = drafts;
     emit('count', awaiting.value.length);
   } catch (err: unknown) {
@@ -130,6 +138,8 @@ const handleAcceptReturn = async (row: PartCustodyReturnRecord) => {
 };
 
 onMounted(loadReturns);
+usePartReturnsRefresh(loadReturns);
+onUnmounted(() => { ++returnsLoadVersion; });
 defineExpose({ reload: loadReturns });
 </script>
 
@@ -166,7 +176,7 @@ defineExpose({ reload: loadReturns });
       <FhSkeleton height="40px" rounded="md" />
     </div>
 
-    <div v-else-if="returnsLoadError" class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm text-ink-600">
+    <div v-else-if="returnsLoadError" role="alert" class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm text-ink-600">
       <span>Chưa tải được danh sách chờ nhận.</span>
       <FhButton variant="secondary" size="sm" @click="loadReturns">Thử lại</FhButton>
     </div>

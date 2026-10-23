@@ -25,7 +25,8 @@ import {
 import { FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
 import BookingStepDock from '../../components/booking/BookingStepDock.vue';
-import BookingSummary, { type SummaryPrice } from '../../components/booking/BookingSummary.vue';
+import BookingSummary, { type SummaryDevice } from '../../components/booking/BookingSummary.vue';
+import { summarizeVisitDevicePrices, type SummaryPrice } from '../../components/booking/visit-device-pricing';
 import { useStepHistory } from '../../components/booking/use-step-history';
 import { catalogPriceLabel, deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import CompactServiceCard from '../../components/booking/CompactServiceCard.vue';
@@ -125,7 +126,8 @@ interface SavedVisitDevice {
   key: string;
   input: VisitDeviceInput;
   serviceName: string;
-  priceText: string;
+  deviceText: string | null;
+  price: SummaryPrice;
   photos: BookingPhotoDraft[];
 }
 interface ActiveDeviceDraft {
@@ -152,6 +154,7 @@ const visitHotline = ref<string | null>(null);
 const consultationMessage = ref('');
 const consultationSubmitting = ref(false);
 const consultationSent = ref(false);
+const consultationOpen = ref(false);
 const devicePricingRevision = ref(0);
 const visitKey = `visit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 let nextVisitDeviceKey = 0;
@@ -163,7 +166,9 @@ const visitDeviceCount = computed(() => extraDevices.value.length
   + (editingSavedDeviceKey.value ? 0 : currentDeviceUnits.value));
 const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
 const canContinueFromStep1 = computed(() => !editingSavedDeviceKey.value && (
-  selectedServiceId.value ? isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT : extraDevices.value.length > 0
+  selectedServiceId.value
+    ? extraDevices.value.length === 0 && isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT
+    : extraDevices.value.length > 0
 ));
 const onlySavedDeviceFallback = computed(() => (
   visitGrouping.value && extraDevices.value.length === 1 && !selectedServiceId.value && !editingSavedDeviceKey.value
@@ -381,6 +386,51 @@ const summaryPrice = computed<SummaryPrice>(() => {
   }
   if (summary?.kind === 'inspection_reference') return { kind: 'survey', from: min ?? positive(summary.suggestedLaborVnd), to: max };
   return { kind: 'survey', from: null, to: null };
+});
+
+const visitSummaryDevices = computed<SummaryDevice[] | undefined>(() => {
+  if (!visitGrouping.value || isAiFlow) return undefined;
+  const devices: SummaryDevice[] = extraDevices.value.map((device, index) => ({
+    label: `Máy ${index + 1}`,
+    serviceName: device.serviceName,
+    deviceText: device.deviceText,
+    price: device.price,
+  }));
+  if (selectedServiceId.value && selectedService.value && !editingSavedDeviceKey.value) {
+    devices.push({
+      label: `Máy ${devices.length + 1}`,
+      serviceName: selectedService.value.name,
+      deviceText: deviceSummaryText.value,
+      price: summaryPrice.value,
+    });
+  }
+  return devices.length ? devices : undefined;
+});
+
+const visitSummaryPrice = computed<SummaryPrice>(() => visitSummaryDevices.value
+  ? summarizeVisitDevicePrices(visitSummaryDevices.value.map((device) => device.price))
+  : summaryPrice.value);
+
+/** Presentation only: saved and current machines share one final-review row. */
+const reviewDevices = computed(() => {
+  const devices = extraDevices.value.map((device) => ({
+    key: device.key,
+    savedKey: device.key as string | null,
+    serviceName: device.serviceName,
+    deviceText: device.deviceText,
+    description: device.input.description || 'Chưa có mô tả',
+    price: device.price,
+    photos: device.photos,
+  }));
+  if (selectedServiceId.value && !editingSavedDeviceKey.value) devices.push({
+    key: 'current', savedKey: null,
+    serviceName: selectedService.value?.name ?? 'Thiết bị',
+    deviceText: deviceSummaryText.value,
+    description: description.value.trim() || 'Chưa có mô tả',
+    price: summaryPrice.value,
+    photos: uploadedPhotos.value,
+  });
+  return devices;
 });
 
 /** A survey job needs a few words; a firm-priced job may go without. */
@@ -1370,7 +1420,9 @@ function currentDeviceInputs(): VisitDeviceInput[] | null {
 function priceTextOf(price: SummaryPrice): string {
   if (price.kind === 'firm') return formatMoney(price.amount);
   if (price.kind === 'range') return `${formatMoney(price.min)} – ${formatMoney(price.max)}`;
-  return 'Thợ báo giá tại nhà';
+  if (price.kind === 'survey') return price.from ? `Tham khảo ${formatMoney(price.from)} · thợ báo giá tại nhà` : 'Thợ báo giá tại nhà';
+  if (price.kind === 'partial') return `${formatMoney(price.confirmedTotal)} đã xác định · ${price.unresolvedCount} máy cần báo giá`;
+  return 'Chưa xác định';
 }
 
 /** Keep this device in the visit and start the next one with the same address and time. */
@@ -1394,7 +1446,8 @@ function addAnotherDevice() {
     return;
   }
   const serviceName = selectedService.value?.name ?? 'Thiết bị';
-  const priceText = priceTextOf(summaryPrice.value);
+  const deviceText = deviceSummaryText.value;
+  const price = { ...summaryPrice.value } as SummaryPrice;
   const photos = copyPhotoDrafts(uploadedPhotos.value);
   if (editingKey) {
     const index = extraDevices.value.findIndex((device) => device.key === editingKey);
@@ -1404,7 +1457,7 @@ function addAnotherDevice() {
       return;
     }
     const previousPhotos = extraDevices.value[index].photos;
-    extraDevices.value.splice(index, 1, { key: editingKey, input, serviceName, priceText, photos });
+    extraDevices.value.splice(index, 1, { key: editingKey, input, serviceName, deviceText, price, photos });
     const backup = savedDeviceEditorBackup.value;
     editingSavedDeviceKey.value = null;
     savedDeviceEditorBackup.value = null;
@@ -1420,7 +1473,8 @@ function addAnotherDevice() {
     key: `${visitKey}-device-${nextVisitDeviceKey++}`,
     input,
     serviceName,
-    priceText,
+    deviceText,
+    price,
     photos,
   });
   clearServiceSelection();
@@ -1852,7 +1906,7 @@ async function createAndFindTech() {
             data-testid="visit-opt-in"
           >
             <span class="font-medium text-ink-800">Có nhiều thiết bị cần sửa?</span>
-            <FhButton variant="secondary" size="sm" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
+            <FhButton variant="secondary" size="md" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
           </section>
           <p
             v-else-if="visitEnabled && !isAiFlow && visitGrouping"
@@ -1863,7 +1917,7 @@ async function createAndFindTech() {
           </p>
           <section
             v-if="extraDevices.length || recentlyRemovedDevice"
-            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
+            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6"
             data-testid="visit-devices-banner"
           >
             <h2 v-if="extraDevices.length" class="font-semibold text-ink-900">Thiết bị đã lưu ({{ extraDevices.length }})</h2>
@@ -1871,51 +1925,62 @@ async function createAndFindTech() {
               <li v-for="(device, index) in extraDevices" :key="device.key" class="space-y-2 py-3 first:pt-0 last:pb-0" :data-testid="`visit-device-${index}`">
                 <div class="flex items-start gap-3">
                   <div class="min-w-0 flex-1">
-                    <p class="font-medium text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</p>
-                    <p class="text-ink-500">{{ device.priceText }}</p>
-                    <p class="mt-1 text-ink-700 text-pretty" :data-testid="`visit-device-description-${index}`">{{ device.input.description || 'Chưa có mô tả' }}</p>
+                    <p class="break-words font-semibold text-ink-900">Máy {{ index + 1 }} · {{ device.serviceName }}</p>
+                    <p v-if="device.deviceText" class="mt-1 text-xs text-ink-600">{{ device.deviceText }}</p>
+                    <p class="mt-1 text-xs font-medium text-ink-800">Tiền công<template v-if="device.price.kind === 'range'"> tham khảo</template>: {{ priceTextOf(device.price) }}</p>
+                    <p class="mt-1 line-clamp-2 break-words text-ink-700 text-pretty" :data-testid="`visit-device-description-${index}`">{{ device.input.description || 'Chưa có mô tả' }}</p>
                   </div>
                   <div class="flex shrink-0 gap-1">
-                    <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
-                    <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-40" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
+                    <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="`Sửa máy ${index + 1}: ${device.serviceName}`" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
+                    <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600" :aria-label="`Bỏ máy ${index + 1}: ${device.serviceName}`" :disabled="!!editingSavedDeviceKey" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
                   </div>
                 </div>
-                <div v-if="device.photos.length" class="flex flex-wrap gap-2" :aria-label="`Ảnh máy ${index + 1}`">
+                <div v-if="device.photos.length" class="flex flex-wrap items-center gap-2" :aria-label="`Ảnh máy ${index + 1}`">
                   <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
+                  <span class="text-xs text-ink-600">{{ device.photos.length }} ảnh</span>
                 </div>
               </li>
             </ol>
             <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
               <span>Đã bỏ một thiết bị.</span>
-              <button type="button" class="min-h-10 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+              <button type="button" class="min-h-11 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
             </div>
             <p class="text-ink-500 text-pretty">Mỗi máy giữ riêng mô tả và ảnh. Địa chỉ cùng lịch hẹn được dùng chung.</p>
           </section>
 
           <section
             v-if="visitEnabled && !isAiFlow && visitGrouping && extraDevices.length === VISIT_DEVICE_LIMIT && !selectedServiceId && !editingSavedDeviceKey"
-            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5 text-sm sm:p-6"
-            data-testid="visit-consultation"
+            class="space-y-3 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6"
+            data-testid="visit-limit-support"
           >
             <div>
-              <h2 class="font-semibold text-ink-900">Cần sửa thêm thiết bị?</h2>
-              <p class="mt-1 text-ink-600">Bạn có thể gửi yêu cầu để FixHome hỗ trợ sắp xếp. Ba thiết bị đã lưu vẫn được giữ lại.</p>
+              <h2 class="font-semibold text-ink-900">Đã đủ 3/3 thiết bị</h2>
+              <p class="mt-1 text-ink-600">Tiếp tục để chọn lịch và địa chỉ chung.</p>
               <p v-if="visitHotline" class="mt-1 text-ink-600">Hotline hỗ trợ: <a class="font-semibold text-brand-700 underline" :href="`tel:${visitHotline}`">{{ visitHotline }}</a></p>
             </div>
-            <template v-if="consultationSent">
+            <div v-if="!consultationOpen && !consultationSent" class="flex flex-wrap items-center gap-x-2 text-ink-600">
+              <span>Cần sửa thêm máy?</span>
+              <FhButton variant="ghost" size="md" data-testid="visit-consultation-open" @click="consultationOpen = true">Liên hệ FixHome hỗ trợ</FhButton>
+            </div>
+            <div v-if="consultationSent" class="space-y-3" data-testid="visit-consultation">
               <p class="rounded-lg bg-success-50 px-3 py-2 text-success-800" role="status">Đã gửi yêu cầu hỗ trợ.</p>
-            </template>
-            <template v-else>
+            </div>
+            <div v-else-if="consultationOpen" class="space-y-3" data-testid="visit-consultation">
+              <h3 class="font-semibold text-ink-900">Cần sửa thêm thiết bị?</h3>
+              <p class="text-ink-600">Gửi lời nhắn để FixHome hỗ trợ sắp xếp.</p>
               <label for="visit-consultation-message" class="block font-medium text-ink-800">Bạn cần FixHome hỗ trợ điều gì?</label>
               <textarea id="visit-consultation-message" v-model="consultationMessage" rows="3" maxlength="1000" class="w-full rounded-xl border border-ink-300 bg-white p-3 text-base focus:border-brand-600 focus:outline-none sm:text-sm" data-testid="visit-consultation-message" />
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <span class="text-xs text-ink-500">{{ consultationMessage.trim().length }}/1000 ký tự</span>
-                <FhButton variant="secondary" size="md" :loading="consultationSubmitting" :disabled="consultationSubmitting || !consultationMessage.trim()" data-testid="visit-consultation-submit" @click="sendVisitConsultation">Gửi yêu cầu hỗ trợ</FhButton>
+                <div class="flex items-center gap-2">
+                  <FhButton variant="ghost" size="md" :disabled="consultationSubmitting" data-testid="visit-consultation-close" @click="consultationOpen = false">Đóng</FhButton>
+                  <FhButton variant="secondary" size="md" :loading="consultationSubmitting" :disabled="consultationSubmitting || !consultationMessage.trim()" data-testid="visit-consultation-submit" @click="sendVisitConsultation">Gửi yêu cầu hỗ trợ</FhButton>
+                </div>
               </div>
-            </template>
+            </div>
           </section>
           <section
-            v-if="!selectedService || pickerOpen"
+            v-if="(!selectedService || pickerOpen) && (!visitGrouping || extraDevices.length < VISIT_DEVICE_LIMIT || editingSavedDeviceKey)"
             ref="finderRef"
             class="space-y-4 rounded-2xl border border-ink-200 bg-white p-5 sm:p-6"
             aria-labelledby="booking-finder-title"
@@ -1934,7 +1999,7 @@ async function createAndFindTech() {
                 placeholder="Tên dịch vụ hoặc thiết bị, ví dụ: máy lạnh chảy nước"
                 data-testid="booking-service-search"
               />
-              <button v-if="searchQuery" type="button" class="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-50" aria-label="Xóa tìm kiếm" data-testid="booking-service-search-clear" @click="searchQuery = ''">
+              <button v-if="searchQuery" type="button" class="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Xóa tìm kiếm" data-testid="booking-service-search-clear" @click="searchQuery = ''">
                 <X :size="16" aria-hidden="true" />
               </button>
             </label>
@@ -1947,7 +2012,7 @@ async function createAndFindTech() {
                 v-for="cat in [{ id: '', name: 'Tất cả' }, ...categoryFilters]"
                 :key="cat.id || 'all'"
                 type="button"
-                class="h-9 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-sm transition-colors"
+                class="h-11 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-sm transition-colors"
                 :class="selectedCategoryId === cat.id ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'border-ink-200 bg-white font-medium text-ink-600 hover:border-brand-300'"
                 :aria-pressed="selectedCategoryId === cat.id"
                 data-testid="booking-category-filter"
@@ -2001,7 +2066,7 @@ async function createAndFindTech() {
           </section>
 
           <!-- Chosen: one line, the list folds away. -->
-          <section v-else class="rounded-2xl border border-ink-200 bg-white px-5 py-4 sm:px-6" data-testid="selected-service-recap" tabindex="-1" aria-live="polite">
+          <section v-else-if="selectedService" class="rounded-2xl border border-ink-200 bg-white px-5 py-4 sm:px-6" data-testid="selected-service-recap" tabindex="-1" aria-live="polite">
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div class="min-w-0 flex-1">
                 <p class="text-xs text-ink-500">{{ selectedCategoryName || 'Dịch vụ' }}</p>
@@ -2055,7 +2120,7 @@ async function createAndFindTech() {
                   v-for="sym in categorySymptoms"
                   :key="sym"
                   type="button"
-                  class="h-9 rounded-full border px-3 text-sm transition-colors"
+                  class="h-11 rounded-full border px-3 text-sm transition-colors"
                   :class="hasSymptom(sym) ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'border-ink-200 bg-ink-50 text-ink-600 hover:border-brand-300'"
                   :aria-pressed="hasSymptom(sym)"
                   @click="toggleSymptom(sym)"
@@ -2067,7 +2132,7 @@ async function createAndFindTech() {
                 <div v-for="(photo, idx) in uploadedPhotos" :key="photo.localId" class="relative h-[72px] w-[72px] overflow-hidden rounded-xl border border-ink-200 bg-ink-100">
                   <img :src="photo.previewUrl" alt="Ảnh thiết bị đã chọn" class="h-full w-full object-cover" />
                   <div v-if="!photo.uploadId" class="absolute inset-0 flex items-center justify-center bg-black/40 text-white"><LoaderCircle class="animate-spin" :size="16" /></div>
-                  <button type="button" class="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-danger-600" aria-label="Xóa ảnh" @click.stop="removePhoto(idx)"><Trash2 :size="12" /></button>
+                  <button type="button" class="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white hover:bg-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600" aria-label="Xóa ảnh" @click.stop="removePhoto(idx)"><Trash2 :size="12" /></button>
                 </div>
                 <div
                   v-if="uploadedPhotos.length < 5"
@@ -2102,15 +2167,15 @@ async function createAndFindTech() {
               <FhButton
                 v-if="editingSavedDeviceKey || visitDeviceCount <= VISIT_DEVICE_LIMIT"
                 variant="secondary"
-                size="sm"
+                size="md"
                 :disabled="loading || uploadingPhoto"
                 :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
                 @click="addAnotherDevice"
               >
                 <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : 'Thêm thiết bị này vào lượt' }}
               </FhButton>
-              <FhButton v-if="editingSavedDeviceKey" variant="ghost" size="sm" :disabled="loading || uploadingPhoto" data-testid="visit-device-edit-cancel" @click="cancelSavedDeviceEdit">Hủy sửa</FhButton>
-              <span v-else class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
+              <FhButton v-if="editingSavedDeviceKey" variant="ghost" size="md" :disabled="loading || uploadingPhoto" data-testid="visit-device-edit-cancel" @click="cancelSavedDeviceEdit">Hủy sửa</FhButton>
+              <span v-else-if="visitDeviceCount > VISIT_DEVICE_LIMIT" class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
                 Tối đa {{ VISIT_DEVICE_LIMIT }} thiết bị mỗi lần đặt.
               </span>
             </section>
@@ -2118,10 +2183,11 @@ async function createAndFindTech() {
         </div>
 
         <BookingSummary
-          :service-name="selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
+          :service-name="visitSummaryDevices?.length ? `${visitSummaryDevices.length} thiết bị` : selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
           :device-text="deviceSummaryText"
-          :price="summaryPrice"
-          :cta-label="visitGrouping && extraDevices.length && !selectedServiceId ? `Tiếp tục với ${extraDevices.length} thiết bị đã lưu` : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :price="visitSummaryPrice"
+          :devices="visitSummaryDevices"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi máy' : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
@@ -2232,10 +2298,12 @@ async function createAndFindTech() {
         </div>
 
         <BookingSummary
-          :service-name="selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
+          :service-name="visitSummaryDevices?.length ? `${visitSummaryDevices.length} thiết bị` : selectedService?.name ?? (extraDevices.length ? `${extraDevices.length} thiết bị đã lưu` : null)"
           :device-text="deviceSummaryText"
           :schedule-text="scheduleSummaryText"
-          :price="summaryPrice"
+          :address-text="selectedAddress ? addressLine(selectedAddress) : null"
+          :price="visitSummaryPrice"
+          :devices="visitSummaryDevices"
           cta-label="Xác nhận đơn"
           cta-testid="step2-next"
           back-label="Quay lại"
@@ -2327,7 +2395,7 @@ async function createAndFindTech() {
       <!-- Step 4: one last look, then send. -->
       <div v-else-if="step === 4" key="step-4" class="mx-auto w-full max-w-3xl space-y-4">
         <div>
-          <h2 class="text-2xl font-bold tracking-tight text-ink-900">Kiểm tra lần cuối</h2>
+          <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Kiểm tra lần cuối</h2>
           <p class="mt-1 text-sm text-ink-500">Gửi xong, bạn chọn thợ phù hợp ở bước tiếp theo.</p>
         </div>
 
@@ -2346,21 +2414,65 @@ async function createAndFindTech() {
           Hiện có 1 thiết bị. Yêu cầu này sẽ được gửi như đặt lịch thông thường, không tạo lượt sửa nhiều thiết bị.
         </p>
 
+        <section
+          v-if="visitEnabled && !isAiFlow && extraDevices.length > 0"
+          class="space-y-3 rounded-2xl border border-ink-200 bg-white px-4 py-4 text-sm sm:px-6"
+          data-testid="visit-devices"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <h3 class="font-semibold text-ink-900">Thiết bị trong lượt</h3>
+            <span class="whitespace-nowrap text-ink-500">{{ visitDeviceCount }}/{{ VISIT_DEVICE_LIMIT }} thiết bị</span>
+          </div>
+          <ol v-if="reviewDevices.length" class="divide-y divide-ink-100">
+            <li v-for="(device, index) in reviewDevices" :key="device.key" class="space-y-2.5 py-4 first:pt-0 last:pb-0" :data-testid="`visit-review-device-${index}`">
+              <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-medium text-ink-600">Máy {{ index + 1 }}</p>
+                  <p class="break-words font-semibold text-ink-900">{{ device.serviceName }}</p>
+                  <p v-if="device.deviceText" class="text-ink-600">{{ device.deviceText }}</p>
+                </div>
+                <div class="flex shrink-0 gap-1">
+                  <button type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="`Sửa máy ${index + 1}: ${device.serviceName}`" :data-testid="device.savedKey ? `visit-device-edit-${index}` : 'visit-current-device-edit'" @click="device.savedKey ? editSavedDevice(device.savedKey) : step = 1">Sửa máy {{ index + 1 }}</button>
+                  <button v-if="device.savedKey" type="button" class="min-h-11 min-w-11 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600" :aria-label="`Bỏ máy ${index + 1}: ${device.serviceName}`" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.savedKey)">Bỏ</button>
+                </div>
+              </div>
+              <p class="break-words whitespace-pre-line text-ink-700 text-pretty">{{ device.description }}</p>
+              <p class="text-sm text-ink-800"><span class="font-medium">Tiền công<template v-if="device.price.kind === 'range'"> tham khảo</template>:</span> {{ priceTextOf(device.price) }}</p>
+              <div v-if="device.photos.length" class="flex flex-wrap gap-2" :aria-label="`Ảnh máy ${index + 1}`">
+                <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
+              </div>
+            </li>
+          </ol>
+          <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
+            <span>Đã bỏ một thiết bị.</span>
+            <button type="button" class="min-h-11 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+          </div>
+          <p class="text-xs leading-relaxed text-ink-600 text-pretty">Một kỹ thuật viên, một buổi hẹn. Mỗi máy có báo giá riêng; bạn thanh toán một lần cho các máy sửa được.</p>
+          <FhButton v-if="canAddDevice" variant="secondary" size="md" :disabled="loading" data-testid="visit-add-device" @click="selectedServiceId ? addAnotherDevice() : step = 1">
+            <Plus :size="16" class="mr-1.5" /> Thêm thiết bị khác
+          </FhButton>
+          <div v-else class="flex flex-wrap items-center justify-between gap-x-3 border-t border-ink-100 pt-2" data-testid="visit-device-limit">
+            <p class="text-ink-700">Đã đủ {{ VISIT_DEVICE_LIMIT }}/{{ VISIT_DEVICE_LIMIT }} thiết bị.</p>
+            <FhButton variant="ghost" size="md" :disabled="loading" data-testid="visit-review-consultation" @click="step = 1; consultationOpen = true">Liên hệ FixHome hỗ trợ</FhButton>
+          </div>
+        </section>
+
         <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review">
-          <div v-if="selectedServiceId" class="flex gap-4 px-5 py-4 sm:px-6">
+          <h3 v-if="extraDevices.length" class="px-4 py-4 font-semibold text-ink-900 sm:px-6">Lịch và địa chỉ chung</h3>
+          <div v-if="selectedServiceId && !extraDevices.length" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">{{ extraDevices.length ? `Máy ${extraDevices.length + 1}` : 'Dịch vụ' }}</span>
             <div class="min-w-0 flex-1">
               <p class="font-medium text-ink-900">{{ selectedService?.name }}<span v-if="isFixedPrice && quantity > 1" class="text-ink-500"> × {{ quantity }}</span></p>
               <p v-if="deviceSummaryText" class="text-ink-500" data-testid="confirm-v2-scope">{{ deviceSummaryText }}</p>
             </div>
-            <button type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 1">Sửa</button>
+            <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :data-testid="extraDevices.length ? 'visit-current-device-edit' : undefined" @click="step = 1">{{ extraDevices.length ? `Sửa máy ${extraDevices.length + 1}` : 'Sửa' }}</button>
           </div>
-          <div v-if="selectedServiceId && description.trim()" class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId && !extraDevices.length && description.trim()" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Tình trạng</span>
             <p class="min-w-0 flex-1 text-ink-900 text-pretty">{{ description.trim() }}</p>
-            <button v-if="!isAiFlow" type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 1">Sửa</button>
+            <button v-if="!isAiFlow" type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 1">Sửa</button>
           </div>
-          <div v-if="selectedServiceId && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId && !extraDevices.length && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Ảnh</span>
             <div class="flex flex-wrap gap-2">
               <img v-for="photo in uploadedPhotos" :key="photo.localId" :src="photo.previewUrl" alt="Ảnh thiết bị" class="h-14 w-14 rounded-lg object-cover" />
@@ -2369,7 +2481,7 @@ async function createAndFindTech() {
           <div class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Lịch hẹn</span>
             <p class="min-w-0 flex-1 font-medium text-ink-900">{{ formattedScheduleDisplay }}</p>
-            <button type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 2">Sửa</button>
+            <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 2">Sửa</button>
           </div>
           <div class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Địa chỉ</span>
@@ -2377,7 +2489,7 @@ async function createAndFindTech() {
               <p class="font-medium text-ink-900">{{ selectedAddress?.label || 'Địa chỉ' }}</p>
               <p class="text-ink-500">{{ selectedAddress ? addressLine(selectedAddress) : '' }}</p>
             </div>
-            <button type="button" class="self-start font-semibold text-brand-700 hover:underline" @click="step = 2">Sửa</button>
+            <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 2">Sửa</button>
           </div>
         </section>
 
@@ -2439,44 +2551,25 @@ async function createAndFindTech() {
           <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, bạn có thể bấm Bỏ để đặt thợ không kèm.</p>
         </div>
 
-        <section
-          v-if="visitEnabled && !isAiFlow && (visitGrouping || extraDevices.length > 0)"
-          class="space-y-3 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6"
-          data-testid="visit-devices"
-        >
-          <div class="flex items-baseline justify-between gap-3">
-            <h3 class="font-semibold text-ink-900">Sửa thêm thiết bị khác</h3>
-            <span class="whitespace-nowrap text-ink-500">{{ visitDeviceCount }}/{{ VISIT_DEVICE_LIMIT }} thiết bị</span>
+        <section v-if="visitGrouping && extraDevices.length" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="visit-review-price">
+          <div v-if="visitSummaryPrice.kind === 'firm'" class="flex flex-wrap items-baseline justify-between gap-2">
+            <span class="font-semibold text-ink-900">Tổng tiền công đã xác định</span>
+            <span class="text-lg font-semibold text-brand-700 font-num"><FhMoney :amount="visitSummaryPrice.amount" /></span>
           </div>
-          <ol v-if="extraDevices.length" class="divide-y divide-ink-100">
-            <li v-for="(device, index) in extraDevices" :key="device.key" class="space-y-2 py-3 first:pt-0 last:pb-0" :data-testid="`visit-device-${index}`">
-              <div class="flex items-start gap-3">
-                <div class="min-w-0 flex-1">
-                  <p class="font-medium text-ink-900">Máy {{ index + 1 }}: {{ device.serviceName }}</p>
-                  <p class="text-ink-500">{{ device.priceText }}</p>
-                  <p class="mt-1 text-ink-700 text-pretty">{{ device.input.description || 'Chưa có mô tả' }}</p>
-                </div>
-                <div class="flex shrink-0 gap-1">
-                  <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50" :data-testid="`visit-device-edit-${index}`" @click="editSavedDevice(device.key)">Sửa</button>
-                  <button type="button" class="min-h-10 rounded-lg px-2 font-semibold text-danger-700 hover:bg-danger-50" :data-testid="`visit-device-remove-${index}`" @click="removeExtraDevice(device.key)">Bỏ</button>
-                </div>
-              </div>
-              <div v-if="device.photos.length" class="flex flex-wrap gap-2" :aria-label="`Ảnh máy ${index + 1}`">
-                <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
-              </div>
-            </li>
-          </ol>
-          <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
-            <span>Đã bỏ một thiết bị.</span>
-            <button type="button" class="min-h-10 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+          <div v-else-if="visitSummaryPrice.kind === 'range'" class="flex flex-wrap items-baseline justify-between gap-2">
+            <span class="font-semibold text-ink-900">Tổng tiền công tham khảo</span>
+            <span class="font-semibold text-ink-900 font-num"><FhMoney :amount="visitSummaryPrice.min" /> – <FhMoney :amount="visitSummaryPrice.max" /></span>
           </div>
-          <p class="text-ink-500 text-pretty">Một thợ sửa tất cả trong cùng buổi hẹn, mỗi máy báo giá riêng và bạn trả tiền một lần cho các máy sửa được.</p>
-          <FhButton variant="secondary" size="md" :disabled="!canAddDevice || loading" data-testid="visit-add-device" @click="selectedServiceId ? addAnotherDevice() : step = 1">
-            <Plus :size="16" class="mr-1.5" /> Thêm thiết bị khác
-          </FhButton>
-          <p v-if="!canAddDevice" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
-            Tối đa {{ VISIT_DEVICE_LIMIT }} thiết bị mỗi lần đặt.
-          </p>
+          <div v-else-if="visitSummaryPrice.kind === 'partial'" class="flex flex-wrap items-baseline justify-between gap-2">
+            <span class="font-semibold text-ink-900">Tiền công đã xác định</span>
+            <span class="font-semibold text-ink-900 font-num"><FhMoney :amount="visitSummaryPrice.confirmedTotal" /></span>
+          </div>
+          <div v-else class="flex items-baseline justify-between gap-4">
+            <span class="font-semibold text-ink-900">Tiền công</span>
+            <span class="text-ink-700">Thợ báo giá tại nhà</span>
+          </div>
+          <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">{{ visitSummaryPrice.unresolvedCount }} máy còn chờ khảo sát, xác nhận giá.</p>
+          <p class="text-xs leading-relaxed text-ink-600">Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.</p>
         </section>
 
         <div v-if="submitOutcomeUnknown" role="alert" class="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="booking-submit-unknown">
@@ -2492,14 +2585,14 @@ async function createAndFindTech() {
           <FhButton
             variant="primary"
             size="lg"
-            class="w-full sm:w-auto sm:px-8"
+            class="w-full px-3 text-sm sm:w-auto sm:px-8 sm:text-base"
             :loading="loading"
             :disabled="loading || submitOutcomeUnknown || chatUploads.busy > 0 || chatUploads.failed > 0 || visitDeviceCount > VISIT_DEVICE_LIMIT || (selectedServiceId ? !isCatalogV2PreviewReady : extraDevices.length < 2)"
             data-testid="booking-submit"
             @click="createAndFindTech"
           >
             <template v-if="chatUploads.busy > 0">Đang gửi ảnh, video cho thợ {{ Math.round(chatUploads.progress * 100) }}%</template>
-            <template v-else>{{ visitGrouping && visitDeviceCount >= 2 ? `Tìm kỹ thuật viên cho ${visitDeviceCount} thiết bị` : 'Tìm kỹ thuật viên' }}</template>
+            <template v-else>{{ visitGrouping && visitDeviceCount >= 2 ? `Tìm kỹ thuật viên · ${visitDeviceCount} thiết bị` : 'Tìm kỹ thuật viên' }}</template>
           </FhButton>
         </div>
       </div>

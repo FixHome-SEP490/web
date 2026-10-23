@@ -1,6 +1,7 @@
 // src/api/notifications.api.ts
 import apiClient from './client';
 import { readPage } from './paging';
+import { partRequestsApi } from './part-requests.api';
 
 export type NotificationSenderRole = 'TECHNICIAN' | 'SERVICE_MANAGER' | 'ADMIN' | 'SYSTEM';
 export type NotificationSeverity = 'error' | 'warning' | 'success' | 'info';
@@ -62,6 +63,15 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
   const t = (item.type || '').toUpperCase();
   const title = (item.title || '').toLowerCase();
   const m = (item.message || '').toLowerCase();
+
+  if (t === 'PART_RETURN_DECLARED') {
+    return {
+      category: 'TECHNICIAN', severity: 'warning', label: 'Kỹ thuật viên',
+      eventLabel: 'Chờ nhận hoàn trả',
+      badgeClass: 'bg-warning-50 text-warning-800 border-warning-200',
+      ...toneOf('warning'), iconName: 'package',
+    };
+  }
 
   // 0. Types the backend names exactly, matched before any wording guess.
   // The technician has not left by the appointment time; the order cancels
@@ -267,11 +277,37 @@ export function customerNotificationPath(item: NotificationItem): string | null 
   if (!item.referenceId) return null;
   const type = (item.type || '').toUpperCase();
   const refType = (item.referenceType || '').toUpperCase();
+  // PART_REQUEST_READY points to a PartRequest, not a ServiceOrder. Resolve
+  // its assigned order through the customer-authorized detail endpoint first.
+  if (type === 'PART_REQUEST_READY') return null;
   if (type === 'BOOKING_MATCHING_EXHAUSTED') return `/app/bookings/${item.referenceId}/candidates`;
   // The technician could not make it (PO 20/10/2026): straight to choosing another one.
   if (type === 'TECHNICIAN_RELEASED') return `/app/bookings/${item.referenceId}/candidates?released=1`;
   if (refType.includes('BOOKING')) return `/app/bookings/${item.referenceId}`;
   return `/app/orders/${item.referenceId}`;
+}
+
+/** Reads the order link from a PartRequest through its role-authorized detail API. */
+export async function resolvePartRequestServiceOrderId(item: NotificationItem): Promise<string | null> {
+  const type = (item.type || '').toUpperCase();
+  if (type !== 'PART_REQUEST_READY' || !item.referenceId) return null;
+  try {
+    const orderId = (await partRequestsApi.getById(item.referenceId)).serviceOrderId?.trim();
+    return orderId || null;
+  } catch {
+    // The detail endpoint enforces order ownership/assignment for the caller.
+    return null;
+  }
+}
+
+/** Resolves notification targets that need their server-owned parent reference. */
+export async function resolveCustomerNotificationPath(item: NotificationItem): Promise<string | null> {
+  const type = (item.type || '').toUpperCase();
+  if (type === 'PART_REQUEST_READY') {
+    const orderId = await resolvePartRequestServiceOrderId(item);
+    return orderId ? `/app/orders/${encodeURIComponent(orderId)}` : null;
+  }
+  return customerNotificationPath(item);
 }
 
 export interface NotificationApiEnvelope<T> {

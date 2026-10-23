@@ -118,7 +118,7 @@ describe('Technician khai trả linh kiện (P1 custody)', () => {
     });
     await flushPromises();
 
-    expect(normalized(wrapper)).toContain('Cấp 3 · Dùng 1 · Cần trả 2');
+    expect(normalized(wrapper)).toContain('Cấp 3 · Dùng 1 · Cần trả kho 2');
 
     await wrapper.get('[data-testid="open-declare-return"]').trigger('click');
     await wrapper.get('input[type="number"]').setValue('2');
@@ -547,7 +547,7 @@ describe('Hoàn trả linh kiện (BUG DETECTOR 10)', () => {
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 }), returnRecord({ partRequestItemId: 'i-2', declaredQty: 0 })]);
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
     await flushPromises();
-    expect(wrapper.get('[data-testid="part-returns-link"]').text()).toContain('1 linh kiện thợ đã khai trả đang chờ nhận');
+    expect(wrapper.get('[data-testid="part-returns-link"]').text()).toContain('1 dòng linh kiện đã khai trả đang chờ nhận');
     expect(wrapper.find('[data-testid="part-returns-queue"]').exists()).toBe(false);
     wrapper.unmount();
   });

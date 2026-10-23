@@ -35,6 +35,7 @@ import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
 import { onOrderChange, whileOffline } from '../services/live-updates';
 import type { FixHomePart } from '../api/admin-parts.api';
 import { vnDateTimeString } from '../utils/vn-time';
+import { partCustodyQuantities } from '../utils/part-custody-quantities';
 
 const props = defineProps<{
   orderId: string;
@@ -140,11 +141,11 @@ const requestHasReturns = (pr: PartRequest) =>
 
 /** Declared but not physically accepted yet: the manager still has to confirm. */
 const pendingDeclaredQty = (record: PartCustodyReturnRecord) =>
-  Math.max(0, record.declaredQty - record.managerAcceptedQty);
+  partCustodyQuantities(record).awaitingManager;
 
 /** What the technician may declare now: the return-due quantity not declared yet. */
 const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
-  Math.max(0, record.outstandingQty - pendingDeclaredQty(record));
+  partCustodyQuantities(record).remainingToDeclare;
 
 // Usage RETURNED is a decision during repair; warehouse acceptance is physical.
 const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) => {
@@ -603,7 +604,7 @@ const handlePartialUsage = async (requestId: string, itemId: string) => {
         ? { ...line, ...saved, usageStatus: saved?.usageStatus ?? status } : line) }
       : request);
     emit('requests', partRequests.value);
-    actionSuccess.value = `Đã ghi nhận dùng ${usedQty}, cần trả ${custody.issuedQty - usedQty} linh kiện.`;
+    actionSuccess.value = `Đã ghi nhận dùng ${usedQty} linh kiện. Số cần trả kho được cập nhật bên dưới.`;
     partialUsageEditing.value[itemId] = false;
     delete partialUsageDraft.value[itemId];
     await loadReturns();
@@ -1229,62 +1230,80 @@ const getStatusBadgeClass = (status: string) => {
                     <ShieldCheck :size="11" /> {{ getPartWarrantyFromHistory(item) }}
                   </span>
                 </div>
-                <div class="grid grid-cols-2 gap-2 rounded-lg bg-ink-25 p-2 text-xs">
-                  <p class="text-ink-600">Số lượng <span class="font-num font-semibold text-ink-900">{{ item.quantity }}</span></p>
-                  <p class="text-right text-ink-600">Đơn giá <span class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot" /></span></p>
-                  <p class="col-span-2 flex justify-between border-t border-ink-100 pt-1.5 text-ink-700"><span>Thành tiền</span><strong class="font-num text-ink-900"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></strong></p>
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span v-if="item.usageStatus === 'used'" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700"><Check :size="13" /> Đã dùng</span>
-                  <span v-else-if="item.usageStatus === 'returned'" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700"><RotateCcw :size="13" /> Hoàn trả</span>
-                  <span v-else class="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-600">Chưa ghi nhận sử dụng</span>
-                  <div v-if="isUnderRepair && pr.status === 'received' && !returnFor(item.id)" class="flex flex-wrap gap-2">
-                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'used' ? 'border-success-600 bg-success-600 text-white' : 'border-success-300 bg-success-50 text-success-700 hover:bg-success-100'" :aria-pressed="item.usageStatus === 'used'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')">Đã dùng</button>
-                    <button type="button" class="min-h-10 rounded-lg border px-3 text-xs font-semibold" :class="item.usageStatus === 'returned' ? 'border-warning-600 bg-warning-600 text-white' : 'border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100'" :aria-pressed="item.usageStatus === 'returned'" :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')">Hoàn trả</button>
+                <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
+                  <div v-if="record" class="space-y-2 text-xs text-ink-700">
+                    <p class="font-num font-medium">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả kho {{ record.outstandingQty }}</p>
+                    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-ink-50 p-3">
+                      <div><dt>Còn phải khai</dt><dd class="font-num font-semibold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
+                      <div><dt>Đã khai, chờ nhận</dt><dd class="font-num font-semibold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-800' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
+                      <div><dt>Quản lý đã nhận</dt><dd class="font-num font-semibold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
+                      <div><dt>Đơn giá</dt><dd><FhMoney :amount="item.unitPriceSnapshot" /></dd></div>
+                    </dl>
+                    <p v-if="record.usageRecorded !== false" class="flex flex-wrap items-baseline justify-between gap-2">
+                      <span>Giá trị linh kiện đã dùng</span>
+                      <FhMoney :amount="item.unitPriceSnapshot * record.usedQty" data-testid="part-used-value" class="font-semibold text-ink-900" />
+                    </p>
+                    <p v-else class="text-ink-600">Chưa chốt số lượng thực dùng.</p>
+                    <p v-if="pendingDeclaredQty(record) > 0" class="flex items-start gap-1.5 font-medium text-warning-800"><Clock :size="16" class="shrink-0" aria-hidden="true" />Đang chờ quản lý xác nhận nhận thực tế, chưa hoàn tất trả kho.</p>
+                    <p v-else-if="record.outstandingQty === 0 && record.managerAcceptedQty > 0" class="flex items-center gap-1.5 text-success-700"><CheckCircle2 :size="16" aria-hidden="true" />Đã nhận đủ số linh kiện hoàn trả.</p>
                   </div>
-                  <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id)" type="button"
-                    class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700"
-                    :aria-expanded="!!partialUsageEditing[item.id]"
-                    @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
-                    {{ partialUsageEditing[item.id] ? 'Đóng nhập số lượng' : 'Ghi số lượng thực dùng' }}
-                  </button>
-                  <div v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && returnFor(item.id) && partialUsageEditing[item.id]" class="w-full rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2" data-testid="partial-usage-editor">
-                    <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
-                      <template v-if="record">
-                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-700">
-                          <span>Đã nhận: <strong>{{ record.issuedQty }}</strong></span>
-                          <span>Cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) }}</strong></span>
-                        </div>
-                        <div class="flex flex-wrap items-end gap-2">
-                          <label class="flex-1 min-w-[110px] text-xs font-semibold text-ink-700">
-                            Số lượng thực dùng
-                            <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" :min="record.usedQty"
-                              :max="record.issuedQty - record.managerAcceptedQty" inputmode="numeric"
-                              :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
-                              class="mt-1 h-10 w-full rounded-lg border border-ink-300 bg-white px-3 font-num text-sm" />
-                          </label>
-                          <button type="button" class="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-                            :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < record.usedQty || Number(partialUsageDraft[item.id]) > record.issuedQty - record.managerAcceptedQty || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
-                            @click="handlePartialUsage(pr.id, item.id)">
-                            {{ partialUsageSaving === item.id ? 'Đang lưu…' : 'Lưu số lượng' }}
-                          </button>
-                        </div>
-                        <p class="text-[11px] text-ink-600">Hóa đơn mới chỉ tính số lượng đã dùng. Số còn lại cần khai trả và chờ quản lý xác nhận.</p>
-                      </template>
-                    </template>
-                  </div>
-                </div>
-                <div v-if="requestHasReturns(pr)" class="space-y-1 border-t border-ink-100 pt-2 text-xs">
-                  <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
-                    <div v-if="record" class="flex flex-wrap items-center justify-between gap-2">
-                      <span class="font-num text-ink-700">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}</span>
-                      <span v-if="pendingDeclaredQty(record) > 0" class="inline-flex items-center gap-1 rounded-full border border-warning-200 bg-warning-50 px-2 py-1 text-[10px] font-semibold text-warning-700"><Clock :size="11" /> Đang chờ quản lý xác nhận</span>
-                      <span v-else-if="record.outstandingQty === 0" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700"><CheckCircle2 :size="11" /> Đã nhận</span>
-                      <button v-if="canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button" data-testid="open-declare-return" class="min-h-10 rounded-lg border border-brand-300 bg-brand-50 px-3 text-xs font-semibold text-brand-700 hover:bg-brand-100" :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"><Undo2 :size="13" class="mr-1 inline" />Khai trả</button>
+                  <div v-else class="space-y-2 text-xs text-ink-700">
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                      <p>Số lượng yêu cầu/cấp <strong class="font-num">{{ item.quantity }}</strong></p>
+                      <p>Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /></p>
                     </div>
-                    <span v-else class="text-xs text-ink-400">Chưa có thông tin hoàn trả</span>
-                  </template>
-                </div>
+                    <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></p>
+                    <p class="text-ink-600">Chưa có số lượng thực dùng chi tiết.</p>
+                    <p class="font-medium">{{ item.usageStatus === 'used' ? 'Đã dùng · chưa có số lượng chi tiết' : item.usageStatus === 'returned' ? 'Đã ghi nhận không dùng · chưa xác nhận trả kho' : 'Chưa ghi nhận sử dụng' }}</p>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
+                    <template v-if="isUnderRepair && pr.status === 'received' && !record">
+                      <button type="button" class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                        :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
+                        :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
+                        :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
+                      <button type="button" class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                        :class="item.usageStatus === 'returned' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
+                        :aria-pressed="item.usageStatus === 'returned'" :aria-label="`Ghi nhận không dùng ${item.partNameSnapshot}`"
+                        :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')"><RotateCcw :size="16" class="shrink-0" aria-hidden="true" />Hoàn trả</button>
+                    </template>
+                    <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && record" type="button"
+                      data-testid="edit-part-usage"
+                      class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-xs font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      :disabled="actionLoading || disabled"
+                      :aria-label="`Ghi số lượng thực dùng ${item.partNameSnapshot}`"
+                      :aria-expanded="!!partialUsageEditing[item.id]" :aria-controls="`part-usage-editor-${item.id}`"
+                      @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
+                      <Check :size="16" class="shrink-0" aria-hidden="true" />{{ partialUsageEditing[item.id] ? 'Đóng nhập' : 'Ghi thực dùng' }}
+                    </button>
+                    <button v-if="record && canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button"
+                      data-testid="open-declare-return"
+                      class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-xs font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
+                      :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
+                      <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
+                    </button>
+                  </div>
+                  <div v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && record && partialUsageEditing[item.id]"
+                    :id="`part-usage-editor-${item.id}`" class="space-y-3 rounded-lg bg-ink-50 p-3" data-testid="partial-usage-editor">
+                    <p class="text-xs text-ink-700">Dự kiến cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) - record.managerAcceptedQty }}</strong> · Đã nhận lại: {{ record.managerAcceptedQty }}</p>
+                    <div class="flex flex-wrap items-end gap-2">
+                      <label class="min-w-28 flex-1 text-xs font-medium text-ink-700">
+                        Số lượng thực dùng
+                        <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" :min="record.usedQty"
+                          :max="record.issuedQty - record.managerAcceptedQty" inputmode="numeric" :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
+                          class="mt-1 h-11 w-full rounded-lg border border-ink-300 bg-white px-3 font-num text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
+                      </label>
+                      <button type="button" class="min-h-11 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < record.usedQty || Number(partialUsageDraft[item.id]) > record.issuedQty - record.managerAcceptedQty || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
+                        @click="handlePartialUsage(pr.id, item.id)">
+                        {{ partialUsageSaving === item.id ? 'Đang lưu…' : 'Lưu số lượng' }}
+                      </button>
+                    </div>
+                    <p class="text-xs text-ink-600">Số thực dùng được đối chiếu khi lập hóa đơn. Khai trả kho vẫn cần quản lý nhận thực tế.</p>
+                  </div>
+                </template>
               </article>
             </div>
           </div>

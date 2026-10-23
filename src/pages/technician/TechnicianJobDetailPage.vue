@@ -72,6 +72,7 @@ import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuer
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { afterRunningRead, onOrderChange, onResync, whileOffline } from '../../services/live-updates';
 import type { OrderChangeKind } from '../../services/chat-socket.service';
+import { chatSocketService, type NotificationNewEvent } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
@@ -81,6 +82,8 @@ import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
+import { getHttpStatus } from '../../api/client';
+import { projectTechnicianVisitDeviceStatus, type TechnicianVisitDeviceStatus } from '../../utils/technician-visit-device-status';
 
 const route = useRoute();
 const router = useRouter();
@@ -106,6 +109,78 @@ const visitGroupId = computed(() => job.value?.visitGroupId ?? null);
 const skipsQuote = computed(() => isFixedPriceOrder.value && !visitGroupId.value);
 const visitCheckout = ref<VisitCheckout | null>(null);
 let visitCheckoutReadVersion = 0;
+let prefetchedVisitGroupId: string | null = null;
+let visitPrefetchEpoch = 0;
+const prefetchedVisitOrderIds = new Set<string>();
+const siblingOrderPrefetches = new Map<string, Promise<void>>();
+const visitChildBundles = ref<Record<string, TechnicianJobBundle>>({});
+let visitPartRequestReadVersion = 0;
+
+function clearPrefetchedVisitOrders() {
+  visitPrefetchEpoch += 1;
+  visitPartRequestReadVersion += 1;
+  for (const orderId of prefetchedVisitOrderIds) {
+    queryClient.removeQueries({ queryKey: queryKeys.orders.technicianDetail(orderId), exact: true });
+  }
+  prefetchedVisitOrderIds.clear();
+  siblingOrderPrefetches.clear();
+  visitChildBundles.value = {};
+  prefetchedVisitGroupId = null;
+}
+const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((event) => {
+  if (event.type !== 'removed') return;
+  const removedKey = event.query.queryKey;
+  if (removedKey.length === 3 && removedKey[0] === 'orders'
+    && removedKey[1] === 'technician-detail' && removedKey[2] === jobIdRef.value) {
+    // clearQueryCache() runs on logout/account switch; invalidate in-flight
+    // sibling reads too, so a late response cannot repopulate the new session.
+    clearPrefetchedVisitOrders();
+  }
+});
+
+function prefetchVisitSiblingOrders(checkout: VisitCheckout, activeOrderId: string, groupId: string) {
+  const deviceOrderIds = [...checkout.devices]
+    .sort((a, b) => a.sequence - b.sequence)
+    .slice(0, 3)
+    .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []);
+  for (const orderId of deviceOrderIds) {
+    if (orderId !== activeOrderId) prefetchedVisitOrderIds.add(orderId);
+  }
+
+  const siblingOrderIds = [...new Set(deviceOrderIds)].filter((orderId) => orderId !== activeOrderId);
+  for (const orderId of siblingOrderIds) {
+    const key = queryKeys.orders.technicianDetail(orderId);
+    const cached = queryClient.getQueryData<TechnicianJobBundle>(key);
+    if (cached && (cached.job?.id === orderId || cached.historical?.id === orderId)) {
+      cacheVisitChildBundle(orderId, cached, groupId);
+      continue;
+    }
+    const prefetchKey = `${groupId}:${orderId}`;
+    if (siblingOrderPrefetches.has(prefetchKey)) continue;
+    const requestEpoch = visitPrefetchEpoch;
+
+    const request = (async () => {
+      try {
+        const bundle = await fetchJobBundle(orderId);
+        if (requestEpoch !== visitPrefetchEpoch || visitGroupId.value !== groupId || prefetchedVisitGroupId !== groupId) return;
+        if (!bundle.job && !bundle.historical) {
+          queryClient.removeQueries({ queryKey: key, exact: true });
+          prefetchedVisitOrderIds.delete(orderId);
+          return;
+        }
+        queryClient.setQueryData(key, bundle);
+        cacheVisitChildBundle(orderId, bundle, groupId);
+      } catch (error) {
+        if (requestEpoch !== visitPrefetchEpoch || visitGroupId.value !== groupId || prefetchedVisitGroupId !== groupId) return;
+        if (getHttpStatus(error) === 403) clearPrefetchedVisitOrders();
+      }
+    })();
+    siblingOrderPrefetches.set(prefetchKey, request);
+    void request.finally(() => {
+      if (siblingOrderPrefetches.get(prefetchKey) === request) siblingOrderPrefetches.delete(prefetchKey);
+    });
+  }
+}
 // "Không sửa được" (PO 21/10/2026): one quick step for the technician.
 const repairFailedOpen = ref(false);
 const repairFailedReason = ref<RepairFailureReason>('beyond_repair');
@@ -144,13 +219,29 @@ async function loadVisitCheckout() {
   const groupId = visitGroupId.value;
   const orderId = jobIdRef.value;
   const version = ++visitCheckoutReadVersion;
-  // Clear old sibling IDs on every read, including revoked permissions.
-  visitCheckout.value = null;
-  if (!groupId) return;
-  const result = await visitGroupsApi.checkout(groupId).catch(() => null);
+  if (!groupId) {
+    visitCheckout.value = null;
+    clearPrefetchedVisitOrders();
+    return;
+  }
+  if (prefetchedVisitGroupId && prefetchedVisitGroupId !== groupId) {
+    clearPrefetchedVisitOrders();
+    visitCheckout.value = null;
+  }
+  prefetchedVisitGroupId = groupId;
+  const result = await visitGroupsApi.checkout(groupId).catch((error) => {
+    if (getHttpStatus(error) === 403 && version === visitCheckoutReadVersion && orderId === jobIdRef.value && groupId === visitGroupId.value) {
+      clearPrefetchedVisitOrders();
+      visitCheckout.value = null;
+    }
+    return null;
+  });
   if (version !== visitCheckoutReadVersion || orderId !== jobIdRef.value || groupId !== visitGroupId.value) return;
   visitCheckout.value = result?.visitGroupId === groupId ? result : null;
-  if (visitCheckout.value?.ready) declaredCashAmount.value = visitCheckout.value.total;
+  if (visitCheckout.value) {
+    if (visitCheckout.value.ready) declaredCashAmount.value = visitCheckout.value.total;
+    prefetchVisitSiblingOrders(visitCheckout.value, orderId, groupId);
+  }
 }
 const fixedPriceTotal = computed(() => {
   const unit = job.value?.fixedUnitPrice;
@@ -224,6 +315,8 @@ const onPartRequests = async (requests: PartRequest[]) => {
   const version = ++stockReadVersion;
   const id = jobIdRef.value;
   receivedRequests.value = requests;
+  const groupId = job.value?.id === id ? job.value.visitGroupId : null;
+  if (groupId) updateVisitChildPartRequests(id, groupId, requests);
   // Update local completion blockers without a full order/cache refresh.
   if (isRepairing.value) {
     completionPartRequests.value = requests;
@@ -365,6 +458,12 @@ const revealParts = async () => {
   await nextTick();
   document.getElementById('job-parts')?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
 };
+let partsFocusConsumedForJobId: string | null = null;
+function focusPartsIfRequested() {
+  if (route.query?.focus !== 'parts' || job.value?.id !== jobIdRef.value || partsFocusConsumedForJobId === jobIdRef.value) return;
+  partsFocusConsumedForJobId = jobIdRef.value;
+  void revealParts();
+}
 const partsSummary = ref<{ count: number; needsAction: boolean }>({ count: 0, needsAction: false });
 const onPartsSummary = (value: { count: number; needsAction: boolean }) => {
   partsSummary.value = value;
@@ -481,6 +580,8 @@ const googleMapsUrl = computed(() => {
 const statusUpper = computed(() => String(job.value?.status ?? '').toUpperCase());
 const isCancelled = computed(() => statusUpper.value === 'CANCELLED');
 const isPaid = computed(() => String(job.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
+const visitDeviceFailed = computed(() => !!job.value && visitCheckout.value?.devices.some((device) =>
+  device.serviceOrderId === job.value?.id && device.state === 'failed') === true);
 const hasBeforePhoto = computed(() => beforePhotoUploaded.value || beforeEvidences.value.length > 0);
 const hasAfterPhoto = computed(() => afterPhotoUploaded.value || afterEvidences.value.length > 0);
 const canRecoverFixedPriceRepair = computed(() => skipsQuote.value && statusUpper.value === 'EN_ROUTE' &&
@@ -927,6 +1028,150 @@ interface TechnicianJobBundle {
   review?: Review | null;
 }
 
+function cacheVisitChildBundle(orderId: string, bundle: TechnicianJobBundle, groupId: string) {
+  const child = bundle.job;
+  if (!child || child.id !== orderId || child.visitGroupId !== groupId) {
+    const next = { ...visitChildBundles.value };
+    delete next[orderId];
+    visitChildBundles.value = next;
+    return;
+  }
+  visitChildBundles.value = { ...visitChildBundles.value, [orderId]: bundle };
+}
+
+function authorizedVisitChildBundle(orderId: string, groupId: string): TechnicianJobBundle | null {
+  const deviceExists = visitCheckout.value?.visitGroupId === groupId
+    && visitCheckout.value.devices.slice(0, 3).some((device) => device.serviceOrderId === orderId);
+  if (!deviceExists) return null;
+  const bundle = visitChildBundles.value[orderId]
+    ?? queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(orderId));
+  if (!bundle?.job || bundle.job.id !== orderId || bundle.job.visitGroupId !== groupId) return null;
+  return bundle;
+}
+
+function updateVisitChildPartRequests(orderId: string, groupId: string, requests: PartRequest[]) {
+  const bundle = visitChildBundles.value[orderId]
+    ?? queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(orderId));
+  const isActiveAssignedChild = job.value?.id === orderId && job.value.visitGroupId === groupId;
+  if ((!isActiveAssignedChild && !authorizedVisitChildBundle(orderId, groupId))
+    || !bundle?.job || bundle.job.id !== orderId || bundle.job.visitGroupId !== groupId) return;
+  const safeRequests = requests.filter((request) => request.serviceOrderId === orderId);
+  const updated = { ...bundle, partRequests: safeRequests, partRequestsReadFailed: false };
+  visitChildBundles.value = { ...visitChildBundles.value, [orderId]: updated };
+  queryClient.setQueryData(queryKeys.orders.technicianDetail(orderId), updated);
+}
+
+function markVisitChildPartsUnknown(orderId: string, groupId: string) {
+  const bundle = visitChildBundles.value[orderId]
+    ?? queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(orderId));
+  const isActiveAssignedChild = job.value?.id === orderId && job.value.visitGroupId === groupId;
+  if ((!isActiveAssignedChild && !authorizedVisitChildBundle(orderId, groupId))
+    || !bundle?.job || bundle.job.id !== orderId || bundle.job.visitGroupId !== groupId) return;
+  const updated = { ...bundle, partRequests: undefined, partRequestsReadFailed: true };
+  visitChildBundles.value = { ...visitChildBundles.value, [orderId]: updated };
+  queryClient.setQueryData(queryKeys.orders.technicianDetail(orderId), updated);
+}
+
+function onPartRequestsError() {
+  quoteStockLoading.value = false;
+  quoteStockError.value = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.';
+  if (job.value?.visitGroupId) markVisitChildPartsUnknown(jobIdRef.value, job.value.visitGroupId);
+}
+
+const visitDeviceStatusByOrderId = computed<Record<string, TechnicianVisitDeviceStatus>>(() => {
+  const groupId = visitGroupId.value;
+  if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return {};
+  const statuses: Record<string, TechnicianVisitDeviceStatus> = {};
+  for (const device of visitCheckout.value.devices.slice(0, 3)) {
+    const orderId = device.serviceOrderId?.trim();
+    if (!orderId) continue;
+    const bundle = authorizedVisitChildBundle(orderId, groupId);
+    const activeCustody = orderId === jobIdRef.value && job.value?.id === orderId
+      ? { needDeclare: returnsToDeclare.value, awaitingManager: returnsAwaitingManager.value }
+      : null;
+    statuses[orderId] = projectTechnicianVisitDeviceStatus(
+      device.state,
+      bundle?.job ?? null,
+      bundle?.partRequestsReadFailed ? null : bundle?.partRequests ?? null,
+      activeCustody,
+    );
+  }
+  return statuses;
+});
+
+const pendingReadyVisitPartRequest = computed(() => {
+  const groupId = visitGroupId.value;
+  const checkout = visitCheckout.value;
+  if (!groupId || checkout?.visitGroupId !== groupId) return null;
+  for (const device of [...checkout.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3)) {
+    const orderId = device.serviceOrderId?.trim();
+    if (!orderId) continue;
+    const bundle = authorizedVisitChildBundle(orderId, groupId);
+    if (bundle?.partRequestsReadFailed || !bundle?.partRequests) continue;
+    if (bundle.partRequests.some((request) => request.serviceOrderId === orderId && request.status === 'ready')) {
+      return { orderId, sequence: device.sequence };
+    }
+  }
+  return null;
+});
+
+async function readVisitPartRequestsOnce() {
+  const groupId = visitGroupId.value;
+  const checkout = visitCheckout.value;
+  if (!groupId || checkout?.visitGroupId !== groupId || document.visibilityState === 'hidden') return;
+  const orderIds = [...new Set(checkout.devices.slice(0, 3)
+    .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []))]
+    .filter((orderId) => !!authorizedVisitChildBundle(orderId, groupId));
+  if (!orderIds.length) return;
+  const version = ++visitPartRequestReadVersion;
+  const results = await Promise.allSettled(orderIds.map((orderId) => partRequestsApi.getByOrderId(orderId)));
+  if (version !== visitPartRequestReadVersion || groupId !== visitGroupId.value || visitCheckout.value?.visitGroupId !== groupId) return;
+  results.forEach((result, index) => {
+    const orderId = orderIds[index];
+    if (result.status === 'fulfilled') updateVisitChildPartRequests(orderId, groupId, result.value);
+    else markVisitChildPartsUnknown(orderId, groupId);
+  });
+}
+
+let visitPartRequestRefresh: Promise<void> | null = null;
+let visitPartRequestRefreshQueued = false;
+async function refreshVisitPartRequests() {
+  if (visitPartRequestRefresh) {
+    visitPartRequestRefreshQueued = true;
+    return visitPartRequestRefresh;
+  }
+  const request = (async () => {
+    do {
+      visitPartRequestRefreshQueued = false;
+      await readVisitPartRequestsOnce();
+    } while (visitPartRequestRefreshQueued);
+  })();
+  visitPartRequestRefresh = request;
+  try {
+    await request;
+  } finally {
+    if (visitPartRequestRefresh === request) visitPartRequestRefresh = null;
+  }
+}
+
+async function revalidatePartRequestReadyNotification(event: NotificationNewEvent) {
+  // The PartRequest reference is only a signal. Refresh the bounded, assigned
+  // child list and project its authorized response; never treat unread state or
+  // notification text as proof that parts are ready.
+  if (String(event.type).toUpperCase() !== 'PART_REQUEST_READY' || !event.referenceId?.trim()) return;
+  await refreshVisitPartRequests();
+}
+
+async function openVisitParts(orderId: string) {
+  const groupId = visitGroupId.value;
+  if (!groupId || !authorizedVisitChildBundle(orderId, groupId)) return;
+  if (orderId === jobIdRef.value) {
+    await revealParts();
+    return;
+  }
+  await router.push({ path: `/tech/jobs/${orderId}`, query: { ...(route.query ?? {}), focus: 'parts' } });
+}
+
 // The booking (with its private photos) is read once per visit; later reads of the
 // same job reuse it, as the page did before the cache.
 let bookingReadThisVisit = false;
@@ -1010,7 +1255,25 @@ async function fetchJobBundle(id: string, kinds?: OrderChangeKind[]): Promise<Te
 
 const jobQuery = useCachedQuery({
   key: () => queryKeys.orders.technicianDetail(jobIdRef.value),
-  fetch: () => fetchJobBundle(jobIdRef.value),
+  fetch: async () => {
+    const id = jobIdRef.value;
+    try {
+      return await fetchJobBundle(id);
+    } catch (error) {
+      if (getHttpStatus(error) === 403) {
+        clearPrefetchedVisitOrders();
+        queryClient.removeQueries({ queryKey: queryKeys.orders.technicianDetail(id), exact: true });
+        if (id === jobIdRef.value) {
+          job.value = null;
+          historicalJob.value = null;
+          bookingForMedia.value = null;
+          visitCheckout.value = null;
+          ++visitCheckoutReadVersion;
+        }
+      }
+      throw error;
+    }
+  },
   enabled: () => !!jobIdRef.value,
   // Status and money of a job change from the other side too (customer, manager):
   // the cached copy shows at once, and every visit reads it again.
@@ -1022,6 +1285,7 @@ const jobQuery = useCachedQuery({
 /** Spreads one answer over the page state. */
 function applyJobBundle(bundle: TechnicianJobBundle) {
   if (bundle.historical) {
+    if (bundle.historical.id !== jobIdRef.value) return;
     historicalJob.value = bundle.historical;
     job.value = null;
     ++visitCheckoutReadVersion;
@@ -1030,9 +1294,10 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
     return;
   }
   const data = bundle.job;
-  if (!data) return;
+  if (!data || data.id !== jobIdRef.value) return;
   historicalJob.value = null;
   job.value = data;
+  if (data.visitGroupId) cacheVisitChildBundle(data.id, bundle, data.visitGroupId);
   if (bundle.invoice !== undefined) jobInvoice.value = bundle.invoice;
   isEnRoute.value = data.status !== 'ACCEPTED';
   gpsCheckedIn.value = !!data.arrivalVerified;
@@ -1059,6 +1324,7 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   else if (bundle.partRequestsReadFailed) completionPartRequests.value = null;
   completionPartsReadFailed.value = !!bundle.partRequestsReadFailed;
   if (bundle.review !== undefined) customerReview.value = bundle.review;
+  focusPartsIfRequested();
 }
 
 let mounted = false;
@@ -1112,17 +1378,32 @@ watch(jobIdRef, (id) => {
   stopLiveOrder();
   stopLiveOrder = onOrderChange(id, (event) => void liveRefresh(id, event.kinds));
 });
-const stopResync = onResync(() => void liveRefresh(jobIdRef.value, undefined));
+const stopResync = onResync(() => {
+  void liveRefresh(jobIdRef.value, undefined);
+  void refreshVisitPartRequests();
+});
 const stopOfflineOrder = whileOffline(() => void liveRefresh(jobIdRef.value, undefined), 20_000);
+let stopVisitPartNotifications: (() => void) | null = null;
+const onVisitPartRequestFocus = () => { void refreshVisitPartRequests(); };
 onUnmounted(() => {
   stopLiveOrder();
   stopResync();
   stopOfflineOrder();
+  stopVisitCacheSessionListener();
+  stopVisitPartNotifications?.();
+  window.removeEventListener('focus', onVisitPartRequestFocus);
+  document.removeEventListener('visibilitychange', onVisitPartRequestFocus);
+  visitPartRequestReadVersion += 1;
 });
 
 onMounted(() => {
   mounted = true;
   window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('focus', onVisitPartRequestFocus);
+  document.addEventListener('visibilitychange', onVisitPartRequestFocus);
+  stopVisitPartNotifications = chatSocketService.subscribe({
+    onNotificationNew: (event) => { void revalidatePartRequestReadyNotification(event); },
+  });
   // A cached answer shows at once; a stale one is read again in the background.
   const cached = jobQuery.query.data.value;
   if (cached) applyJobBundle(cached);
@@ -1143,12 +1424,45 @@ watch(
   () => String(route.params.id ?? ''),
   (nextId, previousId) => {
     if (!nextId || nextId === previousId) return;
+    const currentGroupId = visitGroupId.value;
+    const isKnownSibling = !!currentGroupId
+      && visitCheckout.value?.visitGroupId === currentGroupId
+      && visitCheckout.value.devices.slice(0, 3).some((device) => device.serviceOrderId === nextId);
+    const cachedBundle = queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(nextId));
+    const cachedSiblingReady = isKnownSibling
+      && cachedBundle?.job?.id === nextId
+      && cachedBundle.job.visitGroupId === currentGroupId;
+
+    // Drop every child-specific view before showing the next child. A verified
+    // same-visit bundle is applied synchronously below so it never flashes the
+    // full-page skeleton while the route's query observer catches up.
+    job.value = null;
+    historicalJob.value = null;
+    evidences.value = [];
+    completionPartRequests.value = null;
     quotationItems.value = [];
     receivedRequests.value = [];
     completionPartRequests.value = null;
     completionPartsReadFailed.value = false;
     pendingEvidenceUpload.value = null;
     jobInvoice.value = null;
+    additionalCosts.value = [];
+    actionMessage.value = null;
+    showAiSummary.value = false;
+    previewModalUrl.value = null;
+    customerReview.value = null;
+    isEnRoute.value = false;
+    gpsCheckedIn.value = false;
+    beforePhotoUploaded.value = false;
+    afterPhotoUploaded.value = false;
+    quotationSubmitted.value = false;
+    isCompleted.value = false;
+    completionRequested.value = false;
+    declaredCashAmount.value = 0;
+    technicianCashNotes.value = '';
+    cashSettled.value = false;
+    cashSettlementStatus.value = null;
+    hasCashPayment.value = null;
     stockCatalog.value = new Map();
     quoteStockError.value = '';
     quoteStockLoading.value = false;
@@ -1160,16 +1474,46 @@ watch(
     quoteLaborWarranty.value = '';
     showAcPartPicker.value = false;
     showAdditionalCostForm.value = false;
+    acItems.value = [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
+    acEvidenceUrls.value = [];
+    acReason.value = '';
+    acReviseId.value = null;
+    acFulfillmentMethod.value = 'pickup';
+    acShippingFee.value = 0;
+    acUploading.value = false;
+    acSubmitting.value = false;
+    departureChoiceOpen.value = false;
+    repairFailedOpen.value = false;
+    repairFailedReason.value = 'beyond_repair';
+    repairFailedNote.value = '';
+    repairFailedParts.value = {};
+    repairFailedSaving.value = false;
+    moreOpen.value = false;
+    showWithdrawModal.value = false;
+    replacementOpen.value = false;
+    replacementReason.value = '';
+    replacementError.value = '';
+    replacementSent.value = false;
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
+    returnsToDeclare.value = 0;
+    returnsAwaitingManager.value = 0;
+    partsSummary.value = { count: 0, needsAction: false };
+    sections.parts = false;
+    sections.photos = false;
+    sections.extra = false;
+    custodyByItem.value = new Map();
     jobId = nextId;
     ++visitCheckoutReadVersion;
-    visitCheckout.value = null;
+    if (!cachedSiblingReady) visitCheckout.value = null;
     bookingReadThisVisit = false;
     bookingForMedia.value = null;
     faceUploaded.value = false;
     cameraPurpose.value = null;
+    partsFocusConsumedForJobId = null;
+    if (!cachedSiblingReady) clearPrefetchedVisitOrders();
     jobIdRef.value = nextId;
+    if (cachedSiblingReady) applyJobBundle(cachedBundle);
   },
 );
 
@@ -1850,7 +2194,7 @@ const toggleMore = async () => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''">
+  <div class="max-w-6xl mx-auto space-y-4 sm:space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''" data-testid="technician-job-detail-shell">
     <a
       href="/tech/jobs"
       class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
@@ -1860,7 +2204,7 @@ const toggleMore = async () => {
     </a>
 
     <!-- Loading: the shape of the page that is coming -->
-    <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải công việc">
+    <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải công việc" data-testid="technician-job-loading-skeleton">
       <FhSkeleton height="28px" width="55%" />
       <FhSkeleton height="18px" width="35%" />
       <div class="bg-white rounded-md border border-ink-200 p-5 sm:p-6 space-y-3">
@@ -1982,7 +2326,13 @@ const toggleMore = async () => {
         data-testid="job-visit"
       >
         <div v-if="visitCheckout?.visitGroupId === visitGroupId && visitCheckout.devices.length > 1" class="min-w-0 flex-1 basis-full">
-          <TechnicianVisitDeviceNavigator :devices="visitCheckout.devices" :active-order-id="job.id" />
+          <TechnicianVisitDeviceNavigator
+            :devices="visitCheckout.devices"
+            :active-order-id="job.id"
+            :status-by-order-id="visitDeviceStatusByOrderId"
+            :pending-ready-part-request="pendingReadyVisitPartRequest"
+            @open-parts="openVisitParts"
+          />
         </div>
         <p v-else class="flex-1 min-w-0 text-ink-700 text-pretty">Thiết bị này thuộc một lượt sửa nhiều máy: mỗi máy báo giá riêng, khách trả tiền một lần cho cả lượt.</p>
         <FhButton
@@ -2008,7 +2358,7 @@ const toggleMore = async () => {
       </section>
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
-      <section data-testid="job-cost-summary" class="order-2 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
+      <section data-testid="job-cost-summary" class="order-2 min-w-0 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
         <h2 class="font-semibold text-ink-900">{{ financialStage }}</h2>
         <dl class="flex flex-wrap gap-x-6 gap-y-2">
           <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
@@ -2017,7 +2367,7 @@ const toggleMore = async () => {
         </dl>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
         <details v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-3 text-xs" data-testid="cost-lines">
-          <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Xem chi tiết báo giá và phát sinh</summary>
+          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Xem chi tiết báo giá và phát sinh</summary>
           <div v-if="job?.quotation?.items?.length" class="pt-2" data-testid="cost-lines-quotation">
             <h3 class="font-medium text-ink-800">Báo giá<span class="font-normal text-ink-500"> · {{ quotationStatusLabel }}</span></h3>
             <ul class="mt-1 space-y-1 text-ink-700">
@@ -2038,7 +2388,7 @@ const toggleMore = async () => {
           </div>
         </details>
         <details v-if="proposedParts.length || receivedRequests.length" class="border-t border-ink-100 pt-3 text-xs">
-          <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
+          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
         <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
           <h3 class="font-medium text-ink-800">Dự kiến/đã duyệt</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
@@ -2077,12 +2427,12 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="isCompleted && isPaid && pendingPartsReturns > 0" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
-        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ quản lý xác nhận nhận trả' : 'Chờ hoàn trả linh kiện' }}</p>
-        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện cần khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đang chờ quản lý nhận</span>.</p>
-        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ quản lý nhận và xác nhận thực tế.</p>
+      <div v-if="pendingPartsReturns > 0 && ((isCompleted && isPaid) || visitDeviceFailed)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
+        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ Quản lý Dịch vụ xác nhận' : 'Chờ hoàn trả linh kiện' }}</p>
+        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện chưa khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế</span>.</p>
+        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ Quản lý Dịch vụ nhận và xác nhận thực tế.</p>
         <p v-else>Còn {{ pendingPartsReturns }} linh kiện chưa hoàn tất trả kho. Mở chi tiết để kiểm tra.</p>
-        <button type="button" class="mt-2 font-semibold underline" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
+        <button type="button" class="mt-2 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
@@ -2492,13 +2842,13 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
-      <FhCard v-if="!isCancelled" padding="none" data-testid="job-details" class="order-4 lg:col-start-1">
+      <FhCard v-if="!isCancelled || visitDeviceFailed" padding="none" data-testid="job-details" class="order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->
           <section>
             <button
               type="button"
-              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
               :aria-expanded="sections.photos"
               aria-controls="job-photos"
               @click="sections.photos = !sections.photos"
@@ -2524,7 +2874,7 @@ const toggleMore = async () => {
                     <button
                       v-if="canDeleteEvidence(img)"
                       type="button"
-                      class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
+                      class="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl bg-white/95 text-ink-600 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                       aria-label="Xoá ảnh này"
                       :disabled="actionLoading"
                       @click="handleDeleteEvidence(img)"
@@ -2565,7 +2915,7 @@ const toggleMore = async () => {
                     <button
                       v-if="canDeleteEvidence(img)"
                       type="button"
-                      class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 border border-ink-200 text-ink-600 hover:text-danger-600 flex items-center justify-center"
+                      class="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl bg-white/95 text-ink-600 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                       aria-label="Xoá ảnh này"
                       :disabled="actionLoading"
                       @click="handleDeleteEvidence(img)"
@@ -2595,12 +2945,12 @@ const toggleMore = async () => {
           <section>
             <button
               type="button"
-              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
               :aria-expanded="sections.parts"
               aria-controls="job-parts"
               @click="sections.parts = !sections.parts"
             >
-              <span class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Linh kiện của máy này' : 'Linh kiện' }}</span>
+              <span class="min-w-0 text-sm font-semibold text-ink-900 sm:text-base">{{ visitGroupId ? 'Linh kiện của máy này' : 'Linh kiện' }}</span>
               <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
                 <span v-if="partsSummary.needsAction" class="px-2 py-0.5 rounded-full bg-warning-50 text-warning-800 text-xs font-medium">Cần xử lý</span>
                 <template v-else-if="partsSummary.count > 0">{{ partsSummary.count }} yêu cầu</template>
@@ -2618,7 +2968,7 @@ const toggleMore = async () => {
                 @summary="onPartsSummary"
                 @requests="onPartRequests"
                 @requests-loading="quoteStockLoading = true"
-                @requests-error="quoteStockLoading = false; quoteStockError = 'Chưa tải được linh kiện đã nhận. Vui lòng thử lại trước khi gửi báo giá.'"
+                @requests-error="onPartRequestsError"
                 @pending-usage="pendingPartsUsage = $event"
                 @pending-returns="pendingPartsReturns = $event"
                 @custody="custodyByItem = $event"
@@ -2630,7 +2980,7 @@ const toggleMore = async () => {
           <section v-if="isRepairing || isCompleted">
             <button
               type="button"
-              class="w-full h-14 px-5 sm:px-6 flex items-center justify-between gap-3 text-left hover:bg-ink-25"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
               :aria-expanded="sections.extra"
               aria-controls="job-extra-costs"
               @click="sections.extra = !sections.extra"
@@ -2652,7 +3002,7 @@ const toggleMore = async () => {
                   </div>
                   <p class="text-ink-600 text-pretty">{{ cost.reason }}</p>
                   <details v-if="cost.items?.length" class="text-xs" :data-testid="`additional-cost-lines-${cost.id}`">
-                    <summary class="cursor-pointer font-medium text-brand-700 min-h-10 flex items-center">Xem {{ cost.items.length }} dòng chi tiết</summary>
+                    <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Xem {{ cost.items.length }} dòng chi tiết</summary>
                     <ul class="space-y-1 text-ink-700">
                       <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3">
                         <span class="min-w-0">{{ costLineLabel(item) }}</span>
@@ -2995,14 +3345,16 @@ const toggleMore = async () => {
                 type="button"
                 class="h-9 px-3 text-xs font-semibold"
                 :class="repairFailedParts[request.id] === outcome ? 'bg-brand-600 text-white' : 'bg-white text-ink-700 hover:bg-ink-50'"
+                :aria-label="outcome === 'installed' ? 'Linh kiện đã lắp' : 'Linh kiện chưa lắp, cần khai trả'"
                 @click="repairFailedParts[request.id] = outcome"
-              >{{ outcome === 'installed' ? 'Đã lắp' : 'Trả lại kho' }}</button>
+              >{{ outcome === 'installed' ? 'Đã lắp' : 'Chưa lắp' }}</button>
             </span>
           </div>
         </div>
-        <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">
-          Máy này không tính tiền sửa, các máy khác vẫn làm và thu tiền bình thường. Quản lý kiểm tra linh kiện; bạn không bị trừ điểm.
-        </p>
+        <div class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">
+          <p>Máy này không tính tiền sửa, các máy khác vẫn làm và thu tiền bình thường. Bạn không bị trừ điểm.</p>
+          <p>Nếu còn giữ linh kiện, hãy khai trả trong mục Quản lý linh kiện. Khai trả chưa xác nhận kho đã nhận; Quản lý Dịch vụ sẽ xác nhận số lượng thực tế.</p>
+        </div>
         <div class="flex justify-end gap-2.5">
           <FhButton variant="secondary" size="md" :disabled="repairFailedSaving" @click="repairFailedOpen = false">Quay lại</FhButton>
           <FhButton variant="danger" size="md" :loading="repairFailedSaving" data-testid="repair-failed-confirm" @click="confirmRepairFailed">Xác nhận không sửa được</FhButton>

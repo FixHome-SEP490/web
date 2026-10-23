@@ -1,10 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { defineComponent, h, onMounted } from 'vue';
+import { createTestQueryClient, installQueryClient } from './support/query-client';
+import { queryKeys } from '../src/lib/query-keys';
 
-const { mockGet, mockPost } = vi.hoisted(() => ({
-  mockGet: vi.fn(),
-  mockPost: vi.fn(),
-}));
+const { mockGet, mockPost, mockRouteState, mockRouteControl, mockPush, mockSocketSubscriptions } = vi.hoisted(() => {
+  const routeState = { params: { id: 'job-test-101' }, query: {} as Record<string, unknown> };
+  const routeControl: { current: { params: { id: string }; query: Record<string, unknown> } | null } = { current: null };
+  const socketSubscriptions: Array<Record<string, (event: unknown) => void>> = [];
+  const push = vi.fn((to: string | { path?: string; query?: Record<string, unknown> }) => {
+    if (!routeControl.current) return Promise.resolve();
+    const path = typeof to === 'string' ? to : to.path;
+    const match = path?.match(/^\/tech\/jobs\/([^/?]+)/);
+    if (match) routeControl.current.params.id = decodeURIComponent(match[1]);
+    routeControl.current.query = typeof to === 'object' && to.query ? to.query : {};
+    return Promise.resolve();
+  });
+  return {
+    mockGet: vi.fn(),
+    mockPost: vi.fn(),
+    mockRouteState: routeState,
+    mockRouteControl: routeControl,
+    mockPush: push,
+    mockSocketSubscriptions: socketSubscriptions,
+  };
+});
 
 vi.mock('../src/api/client', () => ({
   default: {
@@ -13,11 +33,29 @@ vi.mock('../src/api/client', () => ({
     patch: vi.fn(),
     delete: vi.fn(),
   },
+  getHttpStatus: vi.fn(),
+  registerAuthSessionInvalidator: vi.fn(),
+  registerTokenRefreshed: vi.fn(),
 }));
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: 'job-test-101' } }),
-  useRouter: () => ({ push: vi.fn() }),
+vi.mock('vue-router', async () => {
+  const vue = await vi.importActual<typeof import('vue')>('vue');
+  const route = vue.reactive(mockRouteState);
+  mockRouteControl.current = route;
+  return { useRoute: () => route, useRouter: () => ({ push: mockPush }) };
+});
+
+vi.mock('../src/services/chat-socket.service', () => ({
+  chatSocketService: {
+    connected: true,
+    subscribe: (handlers: Record<string, (event: unknown) => void>) => {
+      mockSocketSubscriptions.push(handlers);
+      return () => {
+        const index = mockSocketSubscriptions.indexOf(handlers);
+        if (index >= 0) mockSocketSubscriptions.splice(index, 1);
+      };
+    },
+  },
 }));
 
 vi.mock('../src/stores/chat.store', () => ({
@@ -58,7 +96,22 @@ const stubs = {
   FhStatusPill: { props: ['status'], template: '<span class="status-pill">{{ status }}</span>' },
   FhMoney: { props: ['amount'], template: '<span>{{ amount }} đ</span>' },
   FhCostBreakdown: { template: '<div>Cost breakdown</div>' },
-  BookingMediaViewer: { template: '<div data-testid="booking-media-viewer">Media</div>' },
+  'router-link': defineComponent({
+    props: { to: { type: [String, Object], required: true } },
+    setup(props, { slots }) {
+      return () => h('a', {
+        href: typeof props.to === 'string' ? props.to : props.to.path,
+        onClick: (event: Event) => {
+          event.preventDefault();
+          void mockPush(props.to as string | { path?: string; query?: Record<string, unknown> });
+        },
+      }, slots.default?.());
+    },
+  }),
+  BookingMediaViewer: {
+    props: ['bookingId', 'media'],
+    template: '<div data-testid="booking-media-viewer" :data-booking-id="bookingId" :data-media-count="media.length">Media</div>',
+  },
   TechnicianPartsSection: { template: '<div data-testid="parts-section">Parts</div>' },
 };
 
@@ -75,6 +128,12 @@ describe('Technician Order Receiving & Execution Workspace', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    if (mockRouteControl.current) {
+      mockRouteControl.current.params.id = 'job-test-101';
+      mockRouteControl.current.query = {};
+    }
+    mockPush.mockClear();
+    mockSocketSubscriptions.splice(0);
   });
 
   it('renders Hero Action Bar with correct initial action for ACCEPTED status', async () => {
@@ -106,6 +165,251 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     expect(menuItems(wrapper)).toContain('Huỷ đơn');
 
     wrapper.unmount();
+  });
+
+  it('prefetches only the other assigned visit orders and seeds their detail cache', async () => {
+    // The sibling detail has no observer yet, so keep this cache entry alive
+    // long enough to verify that navigation can reuse the prefetched bundle.
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    const current = { ...activeOrder, visitGroupId: 'visit-1' };
+    const sibling = { ...activeOrder, id: 'job-test-202', bookingId: 'booking-202', visitGroupId: 'visit-1' };
+    const third = { ...activeOrder, id: 'job-test-303', bookingId: 'booking-303', visitGroupId: 'visit-1' };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: current } };
+      if (path === '/service-orders/job-test-202') return { data: { data: sibling } };
+      if (path === '/service-orders/job-test-303') return { data: { data: third } };
+      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
+        visitGroupId: 'visit-1', total: 0, waiting: 3, ready: false, paid: false, pendingCash: null,
+        devices: [
+          { sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'open', amount: 0, paid: false },
+          { sequence: 2, bookingId: 'booking-202', serviceName: 'Máy giặt', serviceOrderId: 'job-test-202', state: 'open', amount: 0, paid: false },
+          { sequence: 3, bookingId: 'booking-303', serviceName: 'Tủ lạnh', serviceOrderId: 'job-test-303', state: 'open', amount: 0, paid: false },
+          { sequence: 4, bookingId: 'booking-404', serviceName: 'Lò vi sóng', serviceOrderId: 'job-test-404', state: 'open', amount: 0, paid: false },
+        ],
+      } } };
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      if (path.endsWith('/evidence')) return { data: { data: [] } };
+      if (path.startsWith('/bookings/')) return { data: { data: { id: path.split('/').at(-1), media: [] } } };
+      return { data: { data: [] } };
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await flushPromises();
+
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-202');
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-303');
+    expect(mockGet).not.toHaveBeenCalledWith('/service-orders/job-test-404');
+    await vi.waitFor(() => {
+      expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-202'))).toMatchObject({ job: { id: 'job-test-202' } });
+      expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-303'))).toMatchObject({ job: { id: 'job-test-303' } });
+    });
+    expect(wrapper.find('[data-testid="tech-visit-navigator"]').exists()).toBe(true);
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
+  it('switches to a prefetched child in the same page and opens its verified ready-parts section', async () => {
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    let readyPartsPublished = false;
+    let readyPartRequestsFailed = false;
+    const current = { ...activeOrder, visitGroupId: 'visit-1', customerName: 'Khách máy A', serviceName: 'Máy lạnh A', status: 'EN_ROUTE' };
+    const sibling = {
+      ...activeOrder,
+      id: 'job-test-202',
+      bookingId: 'booking-202',
+      serviceName: 'Máy giặt B',
+      customerName: 'Khách máy B',
+      visitGroupId: 'visit-1',
+      status: 'UNDER_REPAIR',
+    };
+    const readyRequest = {
+      id: 'part-ready-b', serviceOrderId: 'job-test-202', technicianId: 'tech-1', requestType: 'pre_repair',
+      fulfillmentMethod: 'pickup', status: 'ready', shippingFee: 0, createdAt: '2026-10-23T00:00:00Z',
+      updatedAt: '2026-10-23T00:00:00Z', items: [],
+    };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: current } };
+      if (path === '/service-orders/job-test-202') return { data: { data: sibling } };
+      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
+        visitGroupId: 'visit-1', total: 0, waiting: 2, ready: false, paid: false, pendingCash: null,
+        devices: [
+          { sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh A', serviceOrderId: 'job-test-101', state: 'open', amount: 0, paid: false },
+          { sequence: 2, bookingId: 'booking-202', serviceName: 'Máy giặt B', serviceOrderId: 'job-test-202', state: 'open', amount: 0, paid: false },
+        ],
+      } } };
+      if (path === '/service-orders/job-test-101/part-requests') return { data: { data: [] } };
+      if (path === '/service-orders/job-test-202/part-requests') {
+        if (readyPartRequestsFailed) throw new Error('Part request read unavailable');
+        return { data: { data: readyPartsPublished ? [readyRequest] : [] } };
+      }
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      if (path.endsWith('/evidence')) return { data: { data: [] } };
+      if (path.endsWith('/additional-costs')) return { data: { data: [] } };
+      if (path.startsWith('/bookings/')) {
+        const id = path.split('/').at(-1);
+        return { data: { data: {
+          id, status: 'MATCHED', media: [{ id: `media-${id}`, url: null, isPrivate: true, legacyInsecure: false, mimeType: 'image/jpeg', sizeBytes: 12 }],
+          description: id === 'booking-202' ? 'Mô tả riêng máy B' : 'Mô tả riêng máy A',
+        } } };
+      }
+      return { data: { data: [] } };
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await flushPromises();
+    expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-202'))).toMatchObject({ job: { id: 'job-test-202' }, partRequests: [] });
+    expect(wrapper.get('[data-testid="booking-description"]').text()).toContain('Mô tả riêng máy A');
+    expect(wrapper.get('[data-testid="booking-media-viewer"]').attributes('data-booking-id')).toBe('booking-101');
+
+    const notificationHandler = mockSocketSubscriptions.find((handlers) => typeof handlers.onNotificationNew === 'function');
+    expect(notificationHandler).toBeDefined();
+    readyPartsPublished = true;
+    notificationHandler?.onNotificationNew?.({
+      id: 'notification-1', title: 'Linh kiện đã sẵn sàng', message: 'Máy 2', type: 'PART_REQUEST_READY',
+      referenceId: 'part-ready-b', referenceType: 'PartRequest', isRead: true, createdAt: '2026-10-23T00:00:00Z',
+    });
+    await flushPromises();
+
+    expect(mockGet).not.toHaveBeenCalledWith('/part-requests/part-ready-b');
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-101/part-requests');
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-202/part-requests');
+    expect(wrapper.get('[data-testid="tech-visit-ready-parts-alert"]').text()).toContain('Máy 2');
+    const shell = wrapper.get('[data-testid="technician-job-detail-shell"]').element;
+    await wrapper.get('[data-testid="tech-visit-ready-parts-action"]').trigger('click');
+
+    expect(mockPush).toHaveBeenCalledWith({ path: '/tech/jobs/job-test-202', query: { focus: 'parts' } });
+    expect(wrapper.get('[data-testid="technician-job-detail-shell"]').element).toBe(shell);
+    expect(wrapper.find('[data-testid="technician-job-loading-skeleton"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="booking-description"]').text()).toContain('Mô tả riêng máy B');
+    expect(wrapper.get('[data-testid="booking-description"]').text()).not.toContain('Mô tả riêng máy A');
+    expect(wrapper.get('[data-testid="booking-media-viewer"]').attributes('data-booking-id')).toBe('booking-202');
+    expect(wrapper.get('button[aria-controls="job-parts"]').attributes('aria-expanded')).toBe('true');
+
+    readyPartRequestsFailed = true;
+    window.dispatchEvent(new Event('focus'));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tech-visit-ready-parts-alert"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="tech-visit-action-status-2"]').text()).toBe('Chưa cập nhật');
+
+    await wrapper.get('[data-testid="tech-visit-device-1"]').trigger('click');
+    expect(mockPush).toHaveBeenCalledWith('/tech/jobs/job-test-101');
+    expect(wrapper.get('[data-testid="technician-job-detail-shell"]').element).toBe(shell);
+    expect(wrapper.get('h1').text()).toContain('Máy lạnh A');
+    expect(wrapper.get('[data-testid="booking-description"]').text()).toContain('Mô tả riêng máy A');
+    expect(wrapper.get('[data-testid="booking-media-viewer"]').attributes('data-booking-id')).toBe('booking-101');
+    expect(wrapper.find('[data-testid="technician-job-loading-skeleton"]').exists()).toBe(false);
+
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
+  it('uses a child-safe skeleton on a cache miss instead of leaving the previous machine visible', async () => {
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    const current = { ...activeOrder, visitGroupId: 'visit-1', customerName: 'Khách máy A' };
+    let resolveUncachedOrder!: (value: { data: { data: typeof activeOrder } }) => void;
+    const uncachedOrderRead = new Promise<{ data: { data: typeof activeOrder } }>((resolve) => { resolveUncachedOrder = resolve; });
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: current } };
+      if (path === '/service-orders/job-test-404') return uncachedOrderRead;
+      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
+        visitGroupId: 'visit-1', total: 0, waiting: 1, ready: false, paid: false, pendingCash: null,
+        devices: [{ sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh A', serviceOrderId: 'job-test-101', state: 'open', amount: 0, paid: false }],
+      } } };
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      if (path.endsWith('/evidence')) return { data: { data: [] } };
+      if (path.startsWith('/bookings/')) return { data: { data: { id: 'booking-101', status: 'MATCHED', media: [], description: 'Mô tả riêng máy A' } } };
+      return { data: { data: [] } };
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="job-summary"]').text()).toContain('Khách máy A');
+
+    await mockPush('/tech/jobs/job-test-404');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="technician-job-loading-skeleton"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="job-summary"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Khách máy A');
+    expect(wrapper.text()).not.toContain('0901234567');
+
+    wrapper.unmount();
+    queryClient.clear();
+    resolveUncachedOrder({ data: { data: { ...activeOrder, id: 'job-test-404' } } });
+  });
+
+  it('does not refill a prefetched order cache when the session ends during the read', async () => {
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    const current = { ...activeOrder, visitGroupId: 'visit-1' };
+    const sibling = { ...activeOrder, id: 'job-test-202', bookingId: 'booking-202', visitGroupId: 'visit-1' };
+    let resolveSibling!: (value: { data: { data: typeof sibling } }) => void;
+    const pendingSibling = new Promise<{ data: { data: typeof sibling } }>((resolve) => { resolveSibling = resolve; });
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: current } };
+      if (path === '/service-orders/job-test-202') return pendingSibling;
+      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
+        visitGroupId: 'visit-1', total: 0, waiting: 2, ready: false, paid: false, pendingCash: null,
+        devices: [
+          { sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'open', amount: 0, paid: false },
+          { sequence: 2, bookingId: 'booking-202', serviceName: 'Máy giặt', serviceOrderId: 'job-test-202', state: 'open', amount: 0, paid: false },
+        ],
+      } } };
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      if (path.endsWith('/evidence')) return { data: { data: [] } };
+      if (path.startsWith('/bookings/')) return { data: { data: { id: path.split('/').at(-1), media: [] } } };
+      return { data: { data: [] } };
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-202'));
+    queryClient.clear();
+    resolveSibling({ data: { data: sibling } });
+    await flushPromises();
+    await flushPromises();
+
+    expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-202'))).toBeUndefined();
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
+  it('keeps the held, declare, and Service Manager confirmation custody steps visible after one device fails', async () => {
+    const failedOrder = { ...activeOrder, status: 'CANCELLED', visitGroupId: 'visit-1' };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: failedOrder } };
+      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
+        visitGroupId: 'visit-1', total: 0, waiting: 0, ready: true, paid: false, pendingCash: null,
+        devices: [{ sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'failed', amount: 0, paid: false }],
+      } } };
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      if (path.endsWith('/evidence')) return { data: { data: [] } };
+      if (path.startsWith('/bookings/')) return { data: { data: { id: 'booking-101', media: [] } } };
+      return { data: { data: [] } };
+    });
+    const custodyPartsStub = defineComponent({
+      emits: ['pending-returns', 'return-summary'],
+      setup(_props, { emit }) {
+        onMounted(() => {
+          emit('pending-returns', 2);
+          emit('return-summary', { needDeclare: 1, awaitingManager: 1 });
+        });
+        return () => h('div', { 'data-testid': 'parts-section' }, 'Parts');
+      },
+    });
+
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: { ...stubs, TechnicianPartsSection: custodyPartsStub } } });
+    await flushPromises();
+    await flushPromises();
+
+    const custody = wrapper.get('[data-testid="pending-parts-returns"]');
+    expect(custody.text()).toContain('1 linh kiện chưa khai trả');
+    expect(custody.text()).toContain('1 đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế');
+    expect(custody.text()).toContain('Mở khai trả');
   });
 
   it('offers releasing the order without losing points only when the server says the technician is on another job (PO 20/10/2026)', async () => {

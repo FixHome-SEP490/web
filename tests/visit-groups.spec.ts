@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.
-const { client, visitApi, orders, wallet, push } = vi.hoisted(() => ({
+const { client, visitApi, orders, wallet, push, orderListeners } = vi.hoisted(() => ({
   client: { get: vi.fn(), post: vi.fn() },
   visitApi: {
     get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), vnpayUrl: vi.fn(), confirmCash: vi.fn(),
@@ -11,6 +11,7 @@ const { client, visitApi, orders, wallet, push } = vi.hoisted(() => ({
   orders: { getOrder: vi.fn() },
   wallet: { summary: vi.fn() },
   push: vi.fn(),
+  orderListeners: new Map<string, () => void>(),
 }));
 
 describe('visit-groups api', () => {
@@ -101,6 +102,14 @@ describe('customer visit page', () => {
     vi.doMock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visitApi }));
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
+    vi.doMock('../src/services/live-updates', () => ({
+      onOrderChange: (orderId: string, callback: () => void) => {
+        orderListeners.set(orderId, callback);
+        return () => orderListeners.delete(orderId);
+      },
+      onResync: () => () => undefined,
+      whileOffline: () => () => undefined,
+    }));
     vi.doMock('vue-router', () => ({ useRoute: () => ({ params: { id: 'v1' } }), useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
     const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
@@ -110,24 +119,26 @@ describe('customer visit page', () => {
 
   beforeEach(() => {
     Object.values(visitApi).forEach((fn) => fn.mockReset());
+    orderListeners.clear();
     orders.getOrder.mockReset().mockRejectedValue(new Error('Order detail unavailable'));
     wallet.summary.mockResolvedValue({ balance: 1000000 });
     visitApi.get.mockResolvedValue(visit);
   });
 
-  it('lists every device with its result and charges only the one repaired', async () => {
+  it('shows a single machine selector and only the selected machine panel', async () => {
     visitApi.checkout.mockResolvedValue(checkout());
     const w = await mountPage();
-    expect(w.get('[data-testid="visit-device-1"]').text()).toContain('Đã sửa xong');
-    expect(w.get('[data-testid="visit-device-2"]').text()).toContain('Không sửa được, không tính tiền sửa');
-    expect(w.get('[data-testid="visit-device-2"]').text()).not.toContain('Đã huỷ');
-    expect(w.get('[data-testid="visit-device-1"]').text()).toContain('Máy lạnh');
-    expect(w.get('[data-testid="visit-device-2"]').text()).toContain('Tủ lạnh');
+    const selector = w.get('[data-testid="visit-device-selector"]');
+    expect(selector.findAll('[data-testid^="visit-device-select-"]')).toHaveLength(2);
+    expect(w.get('[data-testid="visit-device-select-1"]').attributes('aria-pressed')).toBe('true');
+    expect(w.get('[data-testid="visit-device-panel-1"]').attributes('aria-labelledby')).toBe('visit-device-select-1');
+    expect(w.get('[data-testid="visit-device-select-1"]').attributes('id')).toBe('visit-device-select-1');
+    expect(w.get('[data-testid="visit-device-panel-1"]').text()).toContain('Đã sửa xong');
+    expect(w.get('[data-testid="visit-device-panel-1"]').text()).toContain('Máy lạnh');
+    expect(w.find('[data-testid="visit-device-panel-2"]').exists()).toBe(false);
     expect(w.get('[data-testid="visit-outcome-progress"]').text()).toBe('Kết quả 2/2 thiết bị');
     expect(w.get('[data-testid="visit-device-description-1"]').text()).toBe('Máy lạnh phòng khách chảy nước');
-    expect(w.get('[data-testid="visit-device-description-2"]').text()).toBe('Tủ lạnh không lạnh');
     expect(w.get('[data-testid="visit-device-media-count-1"]').text()).toContain('1');
-    expect(w.get('[data-testid="visit-device-media-count-2"]').text()).toContain('1');
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual([]);
 
     const firstDisclosure = w.get('[data-testid="visit-device-expand-1"]');
@@ -137,14 +148,52 @@ describe('customer visit page', () => {
     expect(firstDisclosure.attributes('aria-controls')).toBe('visit-device-details-1');
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b1']);
 
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.get('[data-testid="visit-device-select-2"]').attributes('aria-pressed')).toBe('true');
+    expect(w.find('[data-testid="visit-device-panel-1"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-device-panel-2"]').text()).toContain('Không sửa được, không tính tiền sửa');
+    expect(w.get('[data-testid="visit-device-panel-2"]').text()).toContain('Tủ lạnh');
+    expect(w.get('[data-testid="visit-device-description-2"]').text()).toBe('Tủ lạnh không lạnh');
+    expect(w.get('[data-testid="visit-device-media-count-2"]').text()).toContain('1');
     await w.get('[data-testid="visit-device-expand-2"]').trigger('click');
-    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b1', 'b2']);
-    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-media-count'))).toEqual(['1', '1']);
+    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b2']);
+    expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-media-count'))).toEqual(['1']);
     expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
   });
 
+  it('shows a failed child outcome even if the parent visit is marked cancelled', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, status: 'cancelled' });
+    visitApi.checkout.mockResolvedValue(checkout({
+      devices: [device('b1', { state: 'failed' }), device('b2', { state: 'succeeded', amount: 0 })],
+    }));
+    const w = await mountPage();
+
+    expect(w.get('[data-testid="visit-device-select-1"]').text()).toContain('Không sửa được');
+    expect(w.get('[data-testid="visit-device-select-1"]').attributes('aria-label')).toContain('Không sửa được, không tính tiền sửa');
+    await w.get('[data-testid="visit-device-select-1"]').trigger('click');
+    expect(w.get('[data-testid="visit-device-panel-1"]').text()).toContain('Không sửa được, không tính tiền sửa');
+    expect(w.get('[data-testid="visit-device-panel-1"]').text()).not.toContain('Đã huỷ');
+  });
+
+  it('expands a short description and its media before matching without linking to a phantom order', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: visit.items.map((item) => ({ ...item, booking: { ...item.booking, status: 'SUBMITTED', description: 'Máy kêu' } })) });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [], ready: false }));
+    const w = await mountPage();
+    const toggle = w.get('[data-testid="visit-device-expand-1"]');
+    expect(w.get('[data-testid="visit-device-order-link"]').attributes('href')).toBeUndefined();
+    expect(toggle.attributes('aria-controls')).toBe('visit-device-details-1');
+    expect(w.find('#visit-device-details-1').exists()).toBe(true);
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(w.get('[data-testid="visit-device-description-1"]').text()).toBe('Máy kêu');
+    expect(w.findAll('[data-testid="visit-booking-media"]')).toHaveLength(1);
+    await toggle.trigger('click');
+    expect(w.findAll('[data-testid="visit-booking-media"]')).toHaveLength(0);
+    expect(orders.getOrder).not.toHaveBeenCalled();
+  });
+
   it('offers one child-specific quotation action only when that order has a sent quotation', async () => {
-    visitApi.checkout.mockResolvedValue(checkout());
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
     orders.getOrder
       .mockResolvedValueOnce({ id: 'o-b1', status: 'EN_ROUTE', quotation: { id: 'q1', status: 'sent' } })
       .mockResolvedValueOnce({ id: 'o-b2', status: 'EN_ROUTE', quotation: { id: 'q2', status: 'approved' } });
@@ -156,6 +205,7 @@ describe('customer visit page', () => {
     expect(w.findAll('[data-testid="visit-quotation-cta"]')).toHaveLength(1);
     expect(w.get('[data-testid="visit-quotation-cta"]').attributes('href')).toBe('/app/orders/o-b1');
     expect(w.get('[data-testid="visit-device-quotation-status-1"]').text()).toBe('Báo giá đang chờ bạn duyệt');
+    expect(w.get('[data-testid="visit-device-select-1"]').text()).toContain('Chờ bạn duyệt báo giá');
     expect(w.find('[data-testid="visit-device-quotation-status-2"]').exists()).toBe(false);
   });
 
@@ -259,12 +309,123 @@ describe('customer visit page', () => {
     expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
   });
 
+  it('refreshes the shared checkout when a child order changes and the last device finishes', async () => {
+    visitApi.checkout
+      .mockResolvedValueOnce(checkout({ ready: false, waiting: 1, devices: [device('b1', { state: 'succeeded' }), device('b2', { state: 'open' })] }))
+      .mockResolvedValueOnce(checkout({ ready: true, waiting: 0 }));
+    const w = await mountPage();
+    expect(visitApi.checkout).toHaveBeenCalledTimes(1);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+    expect(orderListeners.has('o-b2')).toBe(true);
+
+    orderListeners.get('o-b2')?.();
+    await flushPromises();
+
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(true);
+  });
+
   it('confirms the cash the technician reported for the whole visit', async () => {
     visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { id: 'c1', amount: 250000, declaredAt: '2030-01-01T06:00:00Z' } }));
     const w = await mountPage();
     await w.get('[data-testid="visit-cash-confirm"]').trigger('click');
     await flushPromises();
     expect(visitApi.confirmCash).toHaveBeenCalledWith('v1', true, undefined);
+  });
+
+  it('shows zero due separately from paid and offers no payment action', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ total: 0, ready: true, paid: false }));
+    const w = await mountPage();
+
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('zero_due');
+    expect(w.get('[data-testid="visit-checkout-state"]').text()).toContain('Không phát sinh khoản cần thanh toán');
+    expect(w.get('[data-testid="visit-checkout"]').text()).not.toContain('Đã thanh toán');
+    expect(w.find('[data-testid="visit-pay-methods"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+  });
+
+  it('keeps a failed checkout visible with retry instead of implying zero due', async () => {
+    visitApi.checkout.mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValue(checkout());
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-checkout-error"]').attributes('role')).toBe('alert');
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+    expect(w.text()).not.toContain('Không phát sinh khoản cần thanh toán');
+    await w.get('[data-testid="visit-checkout-retry"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="visit-checkout-error"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(true);
+  });
+
+  it('does not describe a rejected cash dispute request as recorded successfully', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { id: 'c1', amount: 250000 } }));
+    visitApi.confirmCash.mockRejectedValue(new Error('Network unavailable'));
+    const w = await mountPage();
+    await w.get('[data-testid="visit-cash-dispute"]').trigger('click');
+    await flushPromises();
+    const alert = w.get('[data-testid="visit-action-message"]');
+    expect(alert.attributes('role')).toBe('alert');
+    expect(alert.text()).toContain('Chưa gửi được yêu cầu kiểm tra tiền mặt');
+    expect(alert.text()).not.toContain('Đã ghi nhận');
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('pending_cash');
+  });
+
+  it('switches payment methods with arrow keys and preserves the wallet funding gate', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    wallet.summary.mockResolvedValue({ balance: 0 });
+    const w = await mountPage();
+    await w.get('[data-testid="visit-pay-method-wallet"]').trigger('keydown', { key: 'ArrowRight' });
+    expect(w.get('[data-testid="visit-pay-method-vnpay"]').attributes('aria-checked')).toBe('true');
+    expect(w.find('[data-testid="visit-pay-vnpay"]').exists()).toBe(true);
+    await w.get('[data-testid="visit-pay-method-vnpay"]').trigger('keydown', { key: 'End' });
+    expect(w.get('[data-testid="visit-pay-method-cash"]').attributes('aria-checked')).toBe('true');
+    expect(w.find('[data-testid="visit-pay-vnpay"]').exists()).toBe(false);
+    await w.get('[data-testid="visit-pay-method-cash"]').trigger('keydown', { key: 'Home' });
+    expect(w.get('[data-testid="visit-pay-method-wallet"]').attributes('aria-checked')).toBe('true');
+    expect((w.get('[data-testid="visit-pay-wallet"]').element as HTMLButtonElement).disabled).toBe(true);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+  });
+
+  it('offers a wallet read retry without presenting a read error as zero balance', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    wallet.summary.mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValue({ balance: 1000000 });
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-wallet-error"]').attributes('role')).toBe('alert');
+    expect(w.find('[data-testid="visit-wallet-short"]').exists()).toBe(false);
+    expect((w.get('[data-testid="visit-pay-wallet"]').element as HTMLButtonElement).disabled).toBe(true);
+    await w.get('[data-testid="visit-wallet-retry"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="visit-wallet-error"]').exists()).toBe(false);
+    expect((w.get('[data-testid="visit-pay-wallet"]').element as HTMLButtonElement).disabled).toBe(false);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+  });
+
+  it('does not offer another payment after the group is paid', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ paid: true }));
+    const w = await mountPage();
+
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('paid');
+    expect(w.get('[data-testid="visit-checkout-state"]').text()).toBe('Đã thanh toán');
+    expect(w.find('[data-testid="visit-pay-methods"]').exists()).toBe(false);
+  });
+
+  it('labels wallet shortfall and only offers VNPay at its minimum amount', async () => {
+    wallet.summary.mockResolvedValue({ balance: 100000 });
+    visitApi.checkout.mockResolvedValue(checkout());
+    const short = await mountPage();
+    expect(short.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('wallet_short');
+    expect(short.get('[data-testid="visit-wallet-short"]').text()).toContain('Ví chưa đủ tiền');
+    expect((short.get('[data-testid="visit-pay-wallet"]').element as HTMLButtonElement).disabled).toBe(true);
+    short.unmount();
+
+    visitApi.checkout.mockResolvedValue(checkout({ total: 4999 }));
+    const belowMinimum = await mountPage();
+    expect(belowMinimum.find('[data-testid="visit-pay-method-vnpay"]').exists()).toBe(false);
+    belowMinimum.unmount();
+
+    visitApi.checkout.mockResolvedValue(checkout({ total: 5000 }));
+    const eligible = await mountPage();
+    expect(eligible.find('[data-testid="visit-pay-method-vnpay"]').exists()).toBe(true);
   });
 });
 
