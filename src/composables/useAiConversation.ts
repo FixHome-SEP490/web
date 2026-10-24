@@ -15,6 +15,7 @@ import {
   aiApi,
   looksLikeAQuestion,
   AI_MAX_IMAGES,
+  type AiDeviceSuggestion,
   type AiReply,
   type RecommendedService,
 } from '../api/ai.api';
@@ -46,11 +47,22 @@ export const SESSION_IDLE_MINUTES = 60;
 const ACKNOWLEDGEMENT_DWELL_MS = 900;
 
 /**
- * Catch-all services the assistant falls back to when a turn names no fault -
- * a price question, a thank-you. They must not replace a specific service the
- * conversation already found ("Sửa điều hòa không mát" -> "Kiểm tra/chẩn đoán").
+ * Catch-all services that must not replace a specific service the conversation
+ * already found. Catalogue V2 retired the generic inspection
+ * (KIEM_TRA_CHAN_DOAN_THIET_BI): every service is now for one appliance, and the
+ * assistant names none rather than a catch-all when the appliance is unknown.
  */
-const FALLBACK_SERVICE_CODES = new Set(['KIEM_TRA_CHAN_DOAN_THIET_BI', 'DICH_VU_KHAC']);
+const FALLBACK_SERVICE_CODES = new Set(['DICH_VU_KHAC']);
+
+/** The most appliances one visit takes, and so the most the assistant suggests at once. */
+export const AI_VISIT_DEVICE_LIMIT = 3;
+
+/** The appliances of a reply that can be booked now, in the order the assistant gave them. */
+export function bookableDevices(reply: AiReply | null | undefined): AiDeviceSuggestion[] {
+  return (reply?.devices ?? [])
+    .filter((device) => !!device.service?.serviceId)
+    .slice(0, AI_VISIT_DEVICE_LIMIT);
+}
 
 export interface AiChatMessage {
   id: string;
@@ -241,6 +253,14 @@ export function useAiConversation(options: AiConversationOptions = {}) {
    */
   const pinnedService = ref<RecommendedService | null>(null);
 
+  /**
+   * The appliances to book together when the conversation is about more than
+   * one (photographed or named), each with its own service. Empty for one
+   * appliance. Replaced by every reply that carries the list, kept by a reply
+   * that does not (a plain question answered in passing).
+   */
+  const pinnedDevices = ref<AiDeviceSuggestion[]>([]);
+
   /** The most recent real answer (not a holding line), for summaries. */
   const lastReply = ref<AiReply | null>(null);
 
@@ -271,6 +291,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   function startOver() {
     sessionId.value = null;
     pinnedService.value = null;
+    pinnedDevices.value = [];
     lastReply.value = null;
     pending.value = [];
     for (const controller of controllers.values()) controller.abort();
@@ -549,6 +570,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     const keepsSpecific =
       !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
     if (offered && !keepsSpecific) pinnedService.value = offered;
+    if (Array.isArray(reply.devices)) {
+      const devices = bookableDevices(reply);
+      pinnedDevices.value = devices.length >= 2 ? devices : [];
+    }
 
     const shown = reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply);
     const pace = options.revealMs ?? defaultRevealMs();
@@ -612,6 +637,7 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     problem,
     sessionId,
     pinnedService,
+    pinnedDevices,
     lastReply,
     isRevealing,
     canSend,

@@ -47,6 +47,8 @@ import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { VISIT_DEVICE_LIMIT, visitGroupsApi, type VisitDeviceInput } from '../../api/visit-groups.api';
+import { takeAiVisitDraft } from '../../composables/aiVisitDraft';
+import type { AiDeviceSuggestion } from '../../api/ai.api';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
 import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
@@ -147,6 +149,24 @@ interface ActiveDeviceDraft {
   servicesExpanded: boolean;
 }
 const extraDevices = ref<SavedVisitDevice[]>([]);
+
+/**
+ * Appliances the assistant suggested booking together (?visit=ai&aiSession=).
+ * They are not saved blindly: each is loaded into the device editor in turn,
+ * service chosen and the customer's words filled in, and the customer checks
+ * it (type of machine, photos) and saves it like any device they add.
+ */
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const aiVisitSession = (() => {
+  if (isAiFlow || route.query.visit !== 'ai') return null;
+  const raw = typeof route.query.aiSession === 'string' ? route.query.aiSession : '';
+  return SESSION_ID_PATTERN.test(raw) ? raw : null;
+})();
+const aiVisitDevices = ref<AiDeviceSuggestion[]>(aiVisitSession ? takeAiVisitDraft(aiVisitSession) : []);
+const aiVisitQueue = ref<AiDeviceSuggestion[]>([...aiVisitDevices.value]);
+const aiVisitCurrent = ref<AiDeviceSuggestion | null>(null);
+const visitContactLoaded = ref(false);
+let aiVisitStarted = false;
 const editingSavedDeviceKey = ref<string | null>(null);
 const savedDeviceEditorBackup = ref<ActiveDeviceDraft | null>(null);
 const recentlyRemovedDevice = ref<{ device: SavedVisitDevice; index: number } | null>(null);
@@ -1103,8 +1123,54 @@ onMounted(() => {
     visitGroupsApi.contact().then((contact) => {
       visitEnabled.value = contact.enabled;
       visitHotline.value = contact.hotline;
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => {
+      visitContactLoaded.value = true;
+    });
   }
+});
+
+/** Once the catalogue and the visit switch are known, the assistant's first appliance goes into the editor. */
+watch(
+  () => [catalogLoading.value, visitContactLoaded.value] as const,
+  ([loadingCatalog, contactLoaded]) => {
+    if (aiVisitStarted || loadingCatalog || !contactLoaded || !aiVisitQueue.value.length) return;
+    aiVisitStarted = true;
+    if (visitEnabled.value) {
+      startVisitGrouping();
+    } else {
+      // Several devices in one visit is switched off: book the first one as usual.
+      aiVisitQueue.value = aiVisitQueue.value.slice(0, 1);
+      aiVisitDevices.value = aiVisitDevices.value.slice(0, 1);
+    }
+    loadNextAiDevice();
+  },
+);
+
+/** The next suggested appliance into the editor; one whose service is gone from the catalogue is skipped. */
+function loadNextAiDevice(): AiDeviceSuggestion | null {
+  while (aiVisitQueue.value.length) {
+    const next = aiVisitQueue.value.shift()!;
+    const id = next.service?.serviceId;
+    if (!id || !findServiceById(id)) {
+      toast.warning(`Dịch vụ cho ${next.nameVi.toLowerCase()} hiện chưa đặt được, anh/chị chọn dịch vụ khác giúp em.`);
+      continue;
+    }
+    selectServiceById(id, { syncCategoryFilter: true });
+    pickerOpen.value = false;
+    const words = (next.descriptionVi ?? '').trim().slice(0, 1000);
+    description.value = words;
+    userModifiedDescription.value = !!words;
+    aiVisitCurrent.value = next;
+    return next;
+  }
+  aiVisitCurrent.value = null;
+  return null;
+}
+
+/** What the customer calls the device in the editor, when it is the one the assistant suggested. */
+const aiDeviceLabel = computed(() => {
+  const current = aiVisitCurrent.value;
+  return current && current.service?.serviceId === selectedServiceId.value ? current.nameVi : null;
 });
 
 onBeforeUnmount(() => {
@@ -1409,6 +1475,7 @@ function currentDeviceInputs(): VisitDeviceInput[] | null {
   }
   const input: VisitDeviceInput = {
     serviceId: selectedServiceId.value,
+    ...(aiDeviceLabel.value ? { deviceLabel: aiDeviceLabel.value } : {}),
     ...(description.value.trim() ? { description: description.value.trim() } : {}),
     ...(photoUploadIds.length ? { photoUploadIds } : {}),
     ...(Object.keys(deviceAttributes.value).length > 0 ? { deviceAttributes: { ...deviceAttributes.value } } : {}),
@@ -1483,6 +1550,12 @@ function addAnotherDevice() {
   uploadedPhotos.value = [];
   quantity.value = 1;
   step.value = 1;
+  aiVisitCurrent.value = null;
+  const nextAi = aiVisitQueue.value.length ? loadNextAiDevice() : null;
+  if (nextAi) {
+    toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Kiểm tra tiếp ${nextAi.nameVi.toLowerCase()}.`);
+    return;
+  }
   toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
 }
 
@@ -1534,6 +1607,8 @@ async function submitVisit(current: VisitDeviceInput[]) {
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       urgency,
       idempotencyKey: visitKey,
+      // The conversation that suggested the visit; the first device keeps its summary for the technician.
+      ...(aiVisitSession && aiVisitDevices.value.length ? { aiSessionId: aiVisitSession } : {}),
       items,
     });
     router.push(`/app/visits/${visit.id}`);
@@ -1908,8 +1983,29 @@ async function createAndFindTech() {
             <span class="font-medium text-ink-800">Có nhiều thiết bị cần sửa?</span>
             <FhButton variant="secondary" size="md" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
           </section>
+          <section
+            v-if="aiVisitDevices.length >= 2 && visitGrouping"
+            class="space-y-1.5 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900 text-pretty"
+            data-testid="ai-visit-note"
+          >
+            <p class="font-semibold">Trợ lý AI gợi ý {{ aiVisitDevices.length }} thiết bị cho lượt này</p>
+            <ol class="space-y-0.5">
+              <li v-for="(device, index) in aiVisitDevices" :key="`${device.deviceType}-${index}`" :data-testid="`ai-visit-device-${index}`">
+                {{ index + 1 }}. {{ device.nameVi }}: {{ device.service?.nameVi }}
+                <span v-if="aiVisitCurrent === device" class="font-semibold">(đang kiểm tra)</span>
+              </li>
+            </ol>
+            <p>Kiểm tra loại máy và thêm ảnh nếu có, rồi bấm "Thêm thiết bị này vào lượt" cho từng thiết bị.</p>
+          </section>
           <p
-            v-else-if="visitEnabled && !isAiFlow && visitGrouping"
+            v-else-if="aiVisitDevices.length === 1 && !visitGrouping"
+            class="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900 text-pretty"
+            data-testid="ai-visit-single-note"
+          >
+            Hiện chưa đặt được nhiều thiết bị trong một lượt, em điền sẵn thiết bị đầu tiên trợ lý gợi ý.
+          </p>
+          <p
+            v-if="visitEnabled && !isAiFlow && visitGrouping && aiVisitDevices.length < 2"
             class="rounded-xl border border-ink-200 bg-ink-50 px-4 py-3 text-sm text-ink-700 text-pretty"
             data-testid="visit-grouping-note"
           >

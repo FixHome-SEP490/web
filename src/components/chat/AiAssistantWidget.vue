@@ -8,6 +8,7 @@ import { Bot, X, RotateCcw, CalendarPlus, Minus, ChevronUp } from 'lucide-vue-ne
 import AiConversationThread from './AiConversationThread.vue';
 import { useChatStore } from '../../stores/chat.store';
 import { useSharedAiConversation, SESSION_IDLE_MINUTES } from '../../composables/useAiConversation';
+import { setAiVisitDraft } from '../../composables/aiVisitDraft';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -31,7 +32,7 @@ const conversation = useSharedAiConversation();
 
 /** Pages that hold the assistant conversation themselves (the booking form). */
 const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
-const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, customerWords, isThinking } = conversation;
+const { turnCount, pinnedService, pinnedDevices, sessionId, startOver, loadHoldingLines, customerWords, isThinking } = conversation;
 
 /**
  * The booking card shows only once the assistant has finished answering. While
@@ -40,6 +41,9 @@ const { turnCount, pinnedService, sessionId, startOver, loadHoldingLines, custom
  * as the assistant answering before it has listened.
  */
 const showBooking = computed(() => !!pinnedService.value && !isThinking.value);
+/** Two or three appliances the assistant suggested booking as one visit. */
+const showVisit = computed(() => pinnedDevices.value.length >= 2 && !!sessionId.value && !isThinking.value);
+const visitNames = computed(() => pinnedDevices.value.map((device) => device.nameVi).join(', '));
 
 async function toggle() {
   const nextOpen = !isOpen.value;
@@ -72,6 +76,15 @@ function goToBooking() {
       desc: customerWords() || undefined,
     },
   });
+}
+
+/** Every suggested appliance into one visit: the booking form takes them one by one. */
+function goToVisit() {
+  const id = sessionId.value;
+  if (!id || pinnedDevices.value.length < 2) return;
+  setAiVisitDraft(id, pinnedDevices.value);
+  isOpen.value = false;
+  void router.push({ name: 'new-booking', query: { visit: 'ai', aiSession: id } });
 }
 </script>
 
@@ -170,7 +183,25 @@ function goToBooking() {
                   leave-active-class="transition duration-100 ease-in"
                   leave-to-class="opacity-0"
                 >
-                <div v-if="showBooking && pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-if="showVisit" data-testid="ai-visit-bar" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-brand-700">{{ pinnedDevices.length }} thiết bị, đặt chung một lượt</p>
+                    <p class="text-sm font-bold text-ink-900 truncate">{{ visitNames }}</p>
+                    <button type="button" data-testid="ai-book-primary" class="text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700" @click="goToBooking">
+                      Chỉ đặt {{ pinnedService?.nameVi?.toLowerCase() }}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="ai-book-visit"
+                    class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 whitespace-nowrap"
+                    @click="goToVisit"
+                  >
+                    <CalendarPlus :size="14" />
+                    Đặt {{ pinnedDevices.length }} thiết bị
+                  </button>
+                </div>
+                <div v-else-if="showBooking && pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
                   <div class="flex-1 min-w-0">
                     <p class="text-xs font-semibold text-brand-700">Dịch vụ đang chọn</p>
                     <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>
