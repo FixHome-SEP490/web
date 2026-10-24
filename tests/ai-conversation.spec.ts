@@ -133,9 +133,9 @@ describe('useAiConversation', () => {
 describe('useAiConversation service suggestion', () => {
   beforeEach(() => { analyze.mockReset(); ask.mockReset(); acknowledgements.mockReset().mockResolvedValue({}); });
 
-  it('keeps the specific service when a later turn only offers the catch-all check-up', async () => {
-    analyze.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'SUA_DIEU_HOA', nameVi: 'Sửa điều hòa không mát', serviceId: 'svc-ac' }] }));
-    ask.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'KIEM_TRA_CHAN_DOAN_THIET_BI', nameVi: 'Kiểm tra/chẩn đoán', serviceId: 'svc-check' }] }));
+  it('keeps the specific service when a later turn only offers the catch-all', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac' }] }));
+    ask.mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'DICH_VU_KHAC', nameVi: 'Khác', serviceId: 'svc-other' }] }));
     const c = useAiConversation({ dwellMs: 0 });
     await c.sendTurn('Máy lạnh không mát', []);
     await c.sendTurn('Sửa hết bao nhiêu tiền?', []);
@@ -144,12 +144,56 @@ describe('useAiConversation service suggestion', () => {
 
   it('still takes the catch-all when nothing specific was found, and a specific one over it later', async () => {
     analyze
-      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'KIEM_TRA_CHAN_DOAN_THIET_BI', nameVi: 'Kiểm tra', serviceId: 'svc-check' }] }))
-      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'SUA_MAY_GIAT', nameVi: 'Sửa máy giặt', serviceId: 'svc-wm' }] }));
+      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'DICH_VU_KHAC', nameVi: 'Khác', serviceId: 'svc-other' }] }))
+      .mockResolvedValueOnce(reply({ recommendedServices: [{ serviceCode: 'WM-01', nameVi: 'Sửa máy giặt', serviceId: 'svc-wm' }] }));
     const c = useAiConversation({ dwellMs: 0 });
     await c.sendTurn('Đồ trong nhà bị hỏng', []);
-    expect(c.pinnedService.value?.serviceId).toBe('svc-check');
+    expect(c.pinnedService.value?.serviceId).toBe('svc-other');
     await c.sendTurn('Máy giặt không vắt', []);
     expect(c.pinnedService.value?.serviceId).toBe('svc-wm');
+  });
+});
+
+describe('useAiConversation several appliances', () => {
+  beforeEach(() => { analyze.mockReset(); ask.mockReset(); acknowledgements.mockReset().mockResolvedValue({}); });
+
+  const service = (code: string, id: string | null, deviceType: string) => ({ serviceCode: code, nameVi: code, serviceId: id, deviceType });
+  const devices = [
+    { deviceType: 'washing_machine', nameVi: 'Máy giặt', isPrimary: true, imageIndex: 0, service: service('WM-01', 'svc-wm', 'washing_machine') },
+    { deviceType: 'refrigerator', nameVi: 'Tủ lạnh', imageIndex: 1, descriptionVi: 'không lạnh', service: service('FR-01', 'svc-fr', 'refrigerator') },
+    { deviceType: 'microwave_oven', nameVi: 'Lò vi sóng', imageIndex: 2, service: null, noteVi: 'Hiện FixHome chưa mở dịch vụ sửa lò vi sóng' },
+  ];
+
+  it('pins every appliance that can be booked, and only those', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [devices[0].service, devices[1].service], devices }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Máy giặt không vắt', []);
+    expect(c.pinnedService.value?.serviceId).toBe('svc-wm');
+    expect(c.pinnedDevices.value.map((d) => d.deviceType)).toEqual(['washing_machine', 'refrigerator']);
+  });
+
+  it('keeps the list over a plain question, drops it when the conversation is about one appliance again', async () => {
+    analyze
+      .mockResolvedValueOnce(reply({ recommendedServices: [devices[0].service], devices }))
+      .mockResolvedValueOnce(reply({ recommendedServices: [service('FR-01', 'svc-fr', 'refrigerator')], devices: [] }));
+    ask.mockResolvedValueOnce(reply({ answerVi: 'Bảo hành 30 ngày ạ.' }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Máy giặt không vắt', []);
+    await c.sendTurn('Bảo hành bao lâu?', []);
+    expect(c.pinnedDevices.value).toHaveLength(2);
+    await c.sendTurn('À không phải máy giặt, là tủ lạnh', []);
+    expect(c.pinnedDevices.value).toEqual([]);
+  });
+
+  it('never pins a single bookable appliance as a visit, and forgets the list on start over', async () => {
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [devices[0].service], devices: [devices[0], devices[2]] }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Máy giặt không vắt', []);
+    expect(c.pinnedDevices.value).toEqual([]);
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [devices[0].service], devices }));
+    await c.sendTurn('Máy giặt không vắt, tủ lạnh không lạnh', []);
+    expect(c.pinnedDevices.value).toHaveLength(2);
+    c.startOver();
+    expect(c.pinnedDevices.value).toEqual([]);
   });
 });

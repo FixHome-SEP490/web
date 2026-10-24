@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-23 23:45 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-v54-sol-polish-20261023
+> Cập nhật lần cuối: 2026-10-25 00:01 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-multi-device
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -388,6 +388,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
 - 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:23 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Polish booking summary/review theo máy, chip và disclosure khách/thợ, trạng thái lỗi thanh toán và truy cập thông báo bằng bàn phím; giữ nguyên hợp đồng và quyền, browser/E2E/Mobile CHƯA KIỂM CHỨNG.
@@ -460,4 +461,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-18 12:19 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Realtime thật (live-updates: chỉ đọc lại phần đổi, vị trí thợ không gọi API, polling chỉ khi socket rớt); trợ lý AI 3 ảnh + 2 video, nén video trên máy (mediabunny), tải nền có tiến độ, thử lại khi mạng yếu; chat gửi video có tiến độ, Thử lại/Bỏ; xem video bằng link stream
 
-- 2026-10-18 03:22 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Đợt PO 18/10/2026: lời mời có mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách; bỏ thanh kéo mức khẩn cấp; lịch chọn ngày rồi giờ; trợ lý AI nhận video gửi kèm thợ; chat gửi ảnh/video và khoá khi đơn hoàn tất; order:updated realtime; nút loa to/loa nhỏ khi gọi

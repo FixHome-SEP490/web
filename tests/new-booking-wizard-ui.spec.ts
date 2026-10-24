@@ -293,6 +293,90 @@ describe('NewBookingWizardPage A+ service finder', () => {
     wrapper.unmount();
   });
 
+  it('takes the appliances the assistant suggested one by one into one visit, with the conversation', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-ai', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', isPrimary: true, descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', descriptionVi: 'lavabo rò nước', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-ai' };
+    const wrapper = await renderWizard();
+
+    const note = wrapper.get('[data-testid="ai-visit-note"]');
+    expect(note.text()).toContain('Trợ lý AI gợi ý 2 thiết bị');
+    expect(wrapper.get('[data-testid="ai-visit-device-0"]').text()).toContain('(đang kiểm tra)');
+    expect(textareaValue(wrapper)).toBe('máy lạnh không mát');
+    // Continuing now would drop the second appliance without a word.
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 1 trước khi tiếp tục');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await flushPromises();
+
+    // The second one is loaded for the customer to check, not saved behind their back.
+    expect(wrapper.get('[data-testid="ai-visit-device-1"]').text()).toContain('(đang kiểm tra)');
+    expect(textareaValue(wrapper)).toBe('lavabo rò nước');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 2 trước khi tiếp tục');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(createVisit).toHaveBeenCalledWith(expect.objectContaining({
+      aiSessionId: 'sess-ai',
+      items: [
+        { serviceId: 'svc-ac-repair', deviceLabel: 'Máy lạnh', description: 'máy lạnh không mát' },
+        { serviceId: 'svc-siphon', deviceLabel: 'Chậu rửa', description: 'lavabo rò nước' },
+      ],
+    }));
+    wrapper.unmount();
+  });
+
+  it('lets the customer drop the appliances still waiting and book what is open', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-skip', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-skip' };
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="ai-visit-skip-rest"]').trigger('click');
+    expect(wrapper.find('[data-testid="ai-visit-skip-rest"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="step1-next"]').text()).not.toContain('Lưu máy');
+    wrapper.unmount();
+  });
+
+  it('books only the first suggested appliance when several in one visit is switched off', async () => {
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-off', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-off' };
+    const wrapper = await renderWizard();
+    expect(wrapper.get('[data-testid="ai-visit-single-note"]').text()).toContain('thiết bị đầu tiên');
+    expect(wrapper.find('[data-testid="ai-visit-note"]').exists()).toBe(false);
+    expect(textareaValue(wrapper)).toBe('máy lạnh không mát');
+    wrapper.unmount();
+  });
+
+  it('ignores a draft from another conversation', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-a', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-b' };
+    const wrapper = await renderWizard();
+    expect(wrapper.find('[data-testid="ai-visit-note"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-opt-in"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('routes one saved device back through the ordinary Booking flow with its description and photo', async () => {
     visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
     uploadBookingPhoto.mockResolvedValue({ uploadId: 'photo-single', mimeType: 'image/jpeg', sizeBytes: 3 });
