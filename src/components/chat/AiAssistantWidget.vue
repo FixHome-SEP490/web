@@ -183,9 +183,9 @@ function goToVisit() {
                   leave-active-class="transition duration-100 ease-in"
                   leave-to-class="opacity-0"
                 >
-                <div v-if="showVisit" data-testid="ai-visit-bar" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-if="showVisit" data-testid="ai-visit-bar" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
                   <div class="flex-1 min-w-0">
-                    <p class="text-xs font-semibold text-brand-700">{{ pinnedDevices.length }} thiết bị, đặt chung một lượt</p>
+                    <p class="text-xs font-semibold text-brand-700">{{ pinnedDevices.length }} thiết bị một lượt</p>
                     <p class="text-sm font-bold text-ink-900 truncate">{{ visitNames }}</p>
                     <button type="button" data-testid="ai-book-primary" class="text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700" @click="goToBooking">
                       Chỉ đặt {{ pinnedService?.nameVi?.toLowerCase() }}
@@ -201,7 +201,7 @@ function goToVisit() {
                     Đặt {{ pinnedDevices.length }} thiết bị
                   </button>
                 </div>
-                <div v-else-if="showBooking && pinnedService" class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-else-if="showBooking && pinnedService" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
                   <div class="flex-1 min-w-0">
                     <p class="text-xs font-semibold text-brand-700">Dịch vụ đang chọn</p>
                     <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>

@@ -165,6 +165,8 @@ const aiVisitSession = (() => {
 const aiVisitDevices = ref<AiDeviceSuggestion[]>(aiVisitSession ? takeAiVisitDraft(aiVisitSession) : []);
 const aiVisitQueue = ref<AiDeviceSuggestion[]>([...aiVisitDevices.value]);
 const aiVisitCurrent = ref<AiDeviceSuggestion | null>(null);
+/** Suggested appliances not yet saved: continuing now would drop them without a word. */
+const aiVisitWaiting = computed(() => visitGrouping.value && aiVisitQueue.value.length > 0);
 const visitContactLoaded = ref(false);
 let aiVisitStarted = false;
 const editingSavedDeviceKey = ref<string | null>(null);
@@ -187,7 +189,7 @@ const visitDeviceCount = computed(() => extraDevices.value.length
 const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
 const canContinueFromStep1 = computed(() => !editingSavedDeviceKey.value && (
   selectedServiceId.value
-    ? extraDevices.value.length === 0 && isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT
+    ? extraDevices.value.length === 0 && !aiVisitWaiting.value && isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT
     : extraDevices.value.length > 0
 ));
 const onlySavedDeviceFallback = computed(() => (
@@ -1167,6 +1169,13 @@ function loadNextAiDevice(): AiDeviceSuggestion | null {
   return null;
 }
 
+/** The customer books only what is already saved or open; the rest of the suggestion is dropped on purpose. */
+function skipRemainingAiDevices() {
+  const skipped = new Set(aiVisitQueue.value);
+  aiVisitQueue.value = [];
+  aiVisitDevices.value = aiVisitDevices.value.filter((device) => !skipped.has(device));
+}
+
 /** What the customer calls the device in the editor, when it is the one the assistant suggested. */
 const aiDeviceLabel = computed(() => {
   const current = aiVisitCurrent.value;
@@ -1996,6 +2005,15 @@ async function createAndFindTech() {
               </li>
             </ol>
             <p>Kiểm tra loại máy và thêm ảnh nếu có, rồi bấm "Thêm thiết bị này vào lượt" cho từng thiết bị.</p>
+            <button
+              v-if="aiVisitQueue.length"
+              type="button"
+              class="min-h-11 font-semibold text-warning-900 underline underline-offset-2"
+              data-testid="ai-visit-skip-rest"
+              @click="skipRemainingAiDevices"
+            >
+              Không đặt các thiết bị còn lại
+            </button>
           </section>
           <p
             v-else-if="aiVisitDevices.length === 1 && !visitGrouping"
@@ -2282,7 +2300,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi máy' : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi máy' : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
