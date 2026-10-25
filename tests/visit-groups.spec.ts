@@ -1,17 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { reactive } from 'vue';
+enableAutoUnmount(afterEach);
+afterEach(() => vi.useRealTimers());
+const routeState = reactive({ params: { id: 'v1' } });
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.
-const { client, visitApi, orders, wallet, push, orderListeners } = vi.hoisted(() => ({
+const { client, visitApi, orders, wallet, push, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
   client: { get: vi.fn(), post: vi.fn() },
   visitApi: {
     get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), vnpayUrl: vi.fn(), confirmCash: vi.fn(),
     cancel: vi.fn(), reschedule: vi.fn(), availableSessions: vi.fn(),
   },
-  orders: { getOrder: vi.fn() },
+  orders: { getOrder: vi.fn(), getAdditionalCosts: vi.fn(), getInvoice: vi.fn(), getEvidence: vi.fn(), approveQuotation: vi.fn(), rejectQuotation: vi.fn(), decideAdditionalCost: vi.fn() },
   wallet: { summary: vi.fn() },
   push: vi.fn(),
   orderListeners: new Map<string, () => void>(),
+  bookingListeners: new Map<string, () => void>(),
+  resyncListeners: new Set<() => void>(),
+  socketHandlers: new Set<import('../src/services/chat-socket.service').ChatSocketHandlers>(),
 }));
 
 describe('visit-groups api', () => {
@@ -103,14 +110,20 @@ describe('customer visit page', () => {
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
     vi.doMock('../src/services/live-updates', () => ({
+      LIVE_DEBOUNCE_MS: 150,
+      onBookingChange: (bookingId: string, callback: () => void) => {
+        bookingListeners.set(bookingId, callback);
+        return () => bookingListeners.delete(bookingId);
+      },
       onOrderChange: (orderId: string, callback: () => void) => {
         orderListeners.set(orderId, callback);
         return () => orderListeners.delete(orderId);
       },
-      onResync: () => () => undefined,
+      onResync: (callback: () => void) => { resyncListeners.add(callback); return () => resyncListeners.delete(callback); },
       whileOffline: () => () => undefined,
     }));
-    vi.doMock('vue-router', () => ({ useRoute: () => ({ params: { id: 'v1' } }), useRouter: () => ({ push }) }));
+    vi.doMock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: (handler: import('../src/services/chat-socket.service').ChatSocketHandlers) => { socketHandlers.add(handler); return () => socketHandlers.delete(handler); } } }));
+    vi.doMock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
     const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
     await flushPromises();
@@ -119,8 +132,19 @@ describe('customer visit page', () => {
 
   beforeEach(() => {
     Object.values(visitApi).forEach((fn) => fn.mockReset());
+    routeState.params.id = 'v1';
     orderListeners.clear();
+    bookingListeners.clear();
+    resyncListeners.clear();
+    socketHandlers.clear();
     orders.getOrder.mockReset().mockRejectedValue(new Error('Order detail unavailable'));
+    orders.getAdditionalCosts.mockReset().mockResolvedValue([]);
+    orders.getInvoice.mockReset().mockResolvedValue(null);
+    orders.getEvidence.mockReset().mockResolvedValue([]);
+    orders.approveQuotation.mockReset().mockResolvedValue({});
+    orders.rejectQuotation.mockReset().mockResolvedValue({});
+    orders.decideAdditionalCost.mockReset().mockResolvedValue({});
+    push.mockClear();
     wallet.summary.mockResolvedValue({ balance: 1000000 });
     visitApi.get.mockResolvedValue(visit);
   });
@@ -203,11 +227,371 @@ describe('customer visit page', () => {
     expect(orders.getOrder).toHaveBeenNthCalledWith(1, 'o-b1');
     expect(orders.getOrder).toHaveBeenNthCalledWith(2, 'o-b2');
     expect(w.findAll('[data-testid="visit-quotation-cta"]')).toHaveLength(1);
-    expect(w.get('[data-testid="visit-quotation-cta"]').attributes('href')).toBe('/app/orders/o-b1');
+    expect(w.get('[data-testid="visit-quotation-cta"]').element.tagName).toBe('BUTTON');
+    expect(w.get('[data-testid="visit-quotation-cta"]').attributes('href')).toBeUndefined();
+    await w.get('[data-testid="visit-quotation-cta"]').trigger('click');
+    expect(w.find('[data-testid="visit-inline-quotation"]').exists()).toBe(true);
+    expect(push).not.toHaveBeenCalled();
     expect(w.get('[data-testid="visit-device-quotation-status-1"]').text()).toBe('Báo giá đang chờ bạn duyệt');
     expect(w.get('[data-testid="visit-device-select-1"]').attributes('aria-label')).toContain('Chờ bạn duyệt báo giá');
     expect(w.get('[data-testid="visit-device-select-1"]').text()).toContain('Chờ bạn duyệt báo giá');
     expect(w.find('[data-testid="visit-device-quotation-status-2"]').exists()).toBe(false);
+  });
+
+  it('shows one authorized shared technician and address for the whole visit', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async (id) => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'UNDER_REPAIR', addressSummary: 'Địa chỉ fixture', technician: { id: 'tech1', fullName: 'Thợ thử nghiệm', phoneNumber: '0900000000' } }));
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-shared-technician"]').text()).toContain('Thợ thử nghiệm');
+    expect(w.findAll('a[href="tel:0900000000"]')).toHaveLength(1);
+    expect(w.get('[data-testid="visit-shared-address"]').text()).toBe('Địa chỉ fixture');
+    expect(w.get('header').text()).toContain('Một kỹ thuật viên');
+    w.unmount();
+  });
+
+  it('approves the base quote inline once, refreshes the parent and never navigates', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ ready: false, waiting: 2, devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
+    const child = (id: string, status = 'EN_ROUTE') => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status, quotation: { id: `q-${id}`, status: 'SENT', laborTotal: 199000, partsTotal: 0, items: [{ type: 'LABOR', description: 'Công sửa riêng', quantity: 1, unitPrice: 199000, lineTotal: 199000 }] } });
+    orders.getOrder.mockImplementation(async id => child(id));
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-inline-quotation"]').text()).toContain('Công sửa riêng');
+    let finish!: () => void;
+    orders.approveQuotation.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    await w.get('[data-testid="visit-quote-approve"]').trigger('click');
+    await w.get('[data-testid="visit-quote-approve"]').trigger('click');
+    expect(orders.approveQuotation).toHaveBeenCalledTimes(1);
+    expect(orders.approveQuotation).toHaveBeenCalledWith('q-o-b1');
+    orders.getOrder.mockImplementation(async id => ({ ...child(id, 'UNDER_REPAIR'), quotation: { ...child(id).quotation, status: 'approved' } }));
+    finish();
+    await flushPromises();
+    expect(w.find('[data-testid="visit-quote-approve"]').exists()).toBe(false);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(push).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('scopes repeated additional decisions to the selected child, with external consent', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
+    orders.getOrder.mockImplementation(async id => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'UNDER_REPAIR' }));
+    const cost = (id: string, owner: string, source = 'fixhome') => ({ id, serviceOrderId: owner, status: 'PENDING_APPROVAL', reason: `Lý do ${id}`, totalLaborDelta: 0, totalPartsDelta: 50000, items: [{ id: `${id}-line`, type: 'PARTS_EQUIPMENT', description: `Linh kiện ${id}`, quantity: 1, unitPrice: 50000, lineTotal: 50000, partSource: source }] });
+    let costs = [cost('extra1', 'o-b1'), cost('extra2', 'o-b1'), cost('extra3', 'o-b1', 'external')];
+    orders.getAdditionalCosts.mockImplementation(async id => id === 'o-b1' ? [...costs, cost('foreign', 'o-foreign')] : [cost('sibling', 'o-b2')]);
+    const w = await mountPage();
+    expect(w.text()).not.toContain('Lý do foreign');
+    expect(w.text()).not.toContain('Lý do sibling');
+    expect(w.get('[data-testid="visit-device-select-2"]').text()).toContain('Chờ duyệt phát sinh');
+    expect(w.get('[data-testid="visit-cost-approve-extra3"]').attributes('disabled')).toBeDefined();
+    orders.decideAdditionalCost.mockImplementation(async (id, action) => { costs = costs.map(c => c.id === id ? { ...c, status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED' } : c); return costs.find(c => c.id === id); });
+    await w.get('[data-testid="visit-cost-approve-extra1"]').trigger('click');
+    await flushPromises();
+    await w.get('[data-testid="visit-cost-reject-extra2"]').trigger('click');
+    await flushPromises();
+    await w.get('[data-testid="visit-external-consent-extra3"]').setValue(true);
+    await w.get('[data-testid="visit-cost-approve-extra3"]').trigger('click');
+    await flushPromises();
+    expect(orders.decideAdditionalCost.mock.calls).toEqual([['extra1', 'APPROVE'], ['extra2', 'REJECT'], ['extra3', 'APPROVE']]);
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.text()).toContain('Lý do sibling');
+    expect(w.text()).not.toContain('Lý do extra1');
+    expect(w.findAll('[data-testid="visit-checkout"]')).toHaveLength(1);
+    w.unmount();
+  });
+
+  it('resyncs pending cash on focus without accepting money and removes listeners on unmount', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { amount: 250000 } }));
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(w.get('[data-testid="visit-cash-pending"]').text()).toContain('250000');
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    w.unmount();
+    const calls = visitApi.checkout.mock.calls.length;
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(visitApi.checkout).toHaveBeenCalledTimes(calls);
+  });
+
+  it('ignores unrelated notifications and updates cash on an authorized group notification', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    const event = { id: 'n1', title: '', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'other', isRead: false, createdAt: '' };
+    for (const handler of socketHandlers) handler.onNotificationNew?.(event);
+    await flushPromises();
+    expect(visitApi.checkout).toHaveBeenCalledTimes(1);
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { amount: 250000 } }));
+    for (const handler of socketHandlers) handler.onNotificationNew?.({ ...event, referenceId: 'v1' });
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(w.find('[data-testid="visit-cash-confirm"]').exists()).toBe(true);
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
+  });
+
+  it('subscribes every child booking before orders exist and coalesces assignment updates', async () => {
+    const third = { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0].booking, id: 'b3', status: 'MATCHING' } };
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, third].map(item => ({ ...item, booking: { ...item.booking, status: 'MATCHING' } })) });
+    visitApi.checkout.mockResolvedValue(checkout({ ready: false, waiting: 3, devices: ['b1', 'b2', 'b3'].map(id => device(id, { state: 'open', serviceOrderId: null })) }));
+    const w = await mountPage();
+    expect([...bookingListeners.keys()]).toEqual(['b1', 'b2', 'b3']);
+    expect(orderListeners.size).toBe(0);
+    vi.useFakeTimers();
+    orders.getOrder.mockImplementation(async id => ({ id, status: 'ACCEPTED', technician: { id: 'tech1', fullName: 'Thợ vừa nhận lượt', phoneNumber: '0900000000' } }));
+    visitApi.checkout.mockResolvedValue(checkout({ ready: false, waiting: 3, devices: ['b1', 'b2', 'b3'].map(id => device(id, { state: 'open' })) }));
+    for (let i = 0; i < 6; i++) for (const listener of bookingListeners.values()) listener();
+    await vi.advanceTimersByTimeAsync(149);
+    expect(visitApi.get).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await flushPromises();
+    expect(visitApi.get).toHaveBeenCalledTimes(2);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="visit-shared-technician"]').text()).toContain('Thợ vừa nhận lượt');
+    expect([...orderListeners.keys()]).toEqual(['o-b1', 'o-b2', 'o-b3']);
+    w.unmount();
+    expect(bookingListeners.size).toBe(0);
+    expect(orderListeners.size).toBe(0);
+  });
+
+  it('ignores wrong notification types/references and deduplicates cash delivery by notification ID', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    const event = { id: 'cash-n1', title: '', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'v1', isRead: false, createdAt: '' };
+    const emit = (delta: object = {}) => { for (const handler of socketHandlers) handler.onNotificationNew?.({ ...event, ...delta }); };
+    emit({ type: 'CASH_DECLARED' });
+    emit({ referenceType: 'SERVICE_ORDER' });
+    emit({ referenceId: 'unauthorized-visit' });
+    emit({ id: '' });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(1);
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { amount: 250000 } }));
+    for (let i = 0; i < 10; i++) emit();
+    emit({ id: 'cash-n2' });
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="visit-cash-pending"]').text()).toContain('250000');
+    emit();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+  });
+
+  it('merges booking, order, group cash, resync and focus into one read and cancels pending work on unmount', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    bookingListeners.get('b1')?.();
+    orderListeners.get('o-b1')?.();
+    for (const callback of resyncListeners) callback();
+    for (const handler of socketHandlers) handler.onNotificationNew?.({ id: 'combined-cash', title: '', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'v1', isRead: false, createdAt: '' });
+    window.dispatchEvent(new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(visitApi.get).toHaveBeenCalledTimes(2);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    bookingListeners.get('b2')?.();
+    w.unmount();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(visitApi.get).toHaveBeenCalledTimes(2);
+    expect(resyncListeners.size).toBe(0);
+    expect(socketHandlers.size).toBe(0);
+  });
+
+  it('drops a late cash checkout response from a previous visit', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    let finish!: (value: ReturnType<typeof checkout>) => void;
+    visitApi.checkout.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    for (const handler of socketHandlers) handler.onNotificationNew?.({ id: 'late-cash', title: '', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'v1', isRead: false, createdAt: '' });
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    visitApi.get.mockResolvedValue({ ...visit, id: 'v2', items: [] });
+    visitApi.checkout.mockResolvedValue({ ...checkout({ total: 50000, devices: [], ready: false }), visitGroupId: 'v2' });
+    routeState.params.id = 'v2';
+    await flushPromises();
+    finish(checkout({ paid: true, total: 0 }));
+    await flushPromises();
+    expect(visitApi.checkout).toHaveBeenLastCalledWith('v2');
+    expect(w.find('[data-checkout-state="paid"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-zero-due"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-cash-confirm"]').exists()).toBe(false);
+  });
+
+  it('never grants payment state from a cash notification when checkout fails', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    visitApi.checkout.mockRejectedValue(new Error('Forbidden'));
+    for (const handler of socketHandlers) handler.onNotificationNew?.({ id: 'cash-failed', title: 'Đã trả tiền', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'v1', isRead: false, createdAt: '' });
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    expect(w.find('[data-testid="visit-checkout-error"]').exists()).toBe(true);
+    expect(w.find('[data-checkout-state="paid"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-zero-due"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-cash-confirm"]').exists()).toBe(false);
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
+  });
+
+  it('cleans old booking subscriptions and ignores retained callbacks for a previous visit', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [], ready: false }));
+    const w = await mountPage();
+    const oldBooking = bookingListeners.get('b1');
+    expect(oldBooking).toBeTypeOf('function');
+    vi.useFakeTimers();
+    oldBooking?.();
+    visitApi.get.mockResolvedValue({ ...visit, id: 'v2', items: [{ ...visit.items[0], id: 'i-new', booking: { ...visit.items[0].booking, id: 'b-new' } }] });
+    visitApi.checkout.mockResolvedValue({ ...checkout({ devices: [], ready: false }), visitGroupId: 'v2' });
+    routeState.params.id = 'v2';
+    await flushPromises();
+    const calls = visitApi.get.mock.calls.length;
+    oldBooking?.();
+    for (const handler of socketHandlers) handler.onNotificationNew?.({ id: 'old-cash', title: '', message: '', type: 'VISIT_CASH_DECLARED', referenceType: 'VISIT_GROUP', referenceId: 'v1', isRead: false, createdAt: '' });
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+    expect([...bookingListeners.keys()]).toEqual(['b-new']);
+    expect(visitApi.get).toHaveBeenCalledTimes(calls);
+    w.unmount();
+    expect(bookingListeners.size).toBe(0);
+  });
+
+  it('does not fetch child or checkout data after an unauthorized parent read', async () => {
+    visitApi.get.mockRejectedValue(new Error('Forbidden'));
+    const w = await mountPage();
+    expect(w.find('[role="alert"]').exists()).toBe(true);
+    expect(visitApi.checkout).not.toHaveBeenCalled();
+    expect(orders.getOrder).not.toHaveBeenCalled();
+    expect(bookingListeners.size).toBe(0);
+    expect(orderListeners.size).toBe(0);
+  });
+
+  it('coalesces changes during a read and blocks payment until the newer cash snapshot arrives', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    vi.useFakeTimers();
+    let finish!: (value: ReturnType<typeof checkout>) => void;
+    visitApi.checkout.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    orderListeners.get('o-b1')?.();
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    orderListeners.get('o-b2')?.();
+    await vi.advanceTimersByTimeAsync(150);
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { amount: 250000 } }));
+    expect(w.get('[data-testid="visit-pay-wallet"]').attributes('disabled')).toBeDefined();
+    await w.get('[data-testid="visit-pay-wallet"]').trigger('click');
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    finish(checkout());
+    await flushPromises();
+    expect(w.find('[data-testid="visit-cash-confirm"]').exists()).toBe(true);
+    expect(visitApi.checkout).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails closed on mismatched order ownership and never fetches its photos or costs', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async id => ({ id, bookingId: 'foreign', visitGroupId: 'other', status: 'UNDER_REPAIR', technician: { id: 'foreign', fullName: 'PRIVATE NAME' } }));
+    const w = await mountPage();
+    expect(w.text()).not.toContain('PRIVATE NAME');
+    expect(orders.getEvidence).not.toHaveBeenCalled();
+    expect(orders.getAdditionalCosts).not.toHaveBeenCalled();
+    expect(w.find('[data-testid="visit-inline-details"]').exists()).toBe(false);
+  });
+
+  it('keeps late child decisions and photos out of the newly selected child', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
+    orders.getOrder.mockImplementation(async id => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'EN_ROUTE', quotation: { id: `q-${id}`, status: 'SENT' } }));
+    orders.getEvidence.mockImplementation(async id => [{ id: `e-${id}`, mediaUrl: `https://example.invalid/${id}.jpg`, note: `Ảnh ${id}`, type: 'before' }]);
+    let finish!: () => void;
+    orders.approveQuotation.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const w = await mountPage();
+    await w.get('[data-testid="visit-quote-approve"]').trigger('click');
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.text()).not.toContain('Ảnh o-b1');
+    finish();
+    await flushPromises();
+    expect(w.text()).not.toContain('Đã duyệt báo giá của máy này.');
+    expect(w.get('[data-testid="visit-inline-details"]').text()).toContain('Ảnh o-b2');
+    expect(w.find('img[src="https://example.invalid/o-b1.jpg"]').exists()).toBe(false);
+  });
+
+  it('clears prior visit details immediately on route change and drops a late prior read', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async id => ({ id, status: 'UNDER_REPAIR', bookingId: id.slice(2), visitGroupId: 'v1' }));
+    const w = await mountPage();
+    vi.useFakeTimers();
+    let finish!: (value: typeof visit) => void;
+    visitApi.get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    orderListeners.get('o-b1')?.();
+    await vi.advanceTimersByTimeAsync(150);
+    await flushPromises();
+    visitApi.get.mockResolvedValue({ ...visit, id: 'v2', items: [{ ...visit.items[0], id: 'v2-i', booking: { ...visit.items[0].booking, id: 'v2-b', description: 'Máy thuộc lượt mới' } }] });
+    visitApi.checkout.mockResolvedValue({ ...checkout({ devices: [], ready: false }), visitGroupId: 'v2' });
+    routeState.params.id = 'v2';
+    await flushPromises();
+    expect(w.text()).not.toContain('Máy lạnh phòng khách chảy nước');
+    expect(w.find('[data-testid="visit-inline-details"]').exists()).toBe(false);
+    finish(visit);
+    await flushPromises();
+    expect(visitApi.get).toHaveBeenLastCalledWith('v2');
+    expect(w.text()).toContain('Máy thuộc lượt mới');
+    expect(w.text()).not.toContain('Máy lạnh phòng khách chảy nước');
+  });
+
+  it('does not permit additional approval once finalization was requested', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async id => ({ id, status: 'UNDER_REPAIR', completionRequestedAt: '2026-10-26T01:00:00Z' }));
+    orders.getAdditionalCosts.mockImplementation(async id => [{ id: 'locked', serviceOrderId: id, status: 'PENDING_APPROVAL', reason: 'Khoản đang chờ', items: [], totalLaborDelta: 50000, totalPartsDelta: 0 }]);
+    const w = await mountPage();
+    expect(w.text()).toContain('Khoản đang chờ');
+    expect(w.find('[data-testid="visit-cost-approve-locked"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-cost-reject-locked"]').exists()).toBe(false);
+    expect(orders.decideAdditionalCost).not.toHaveBeenCalled();
+  });
+
+  it('shows a failed quote decision and reloads authoritative state without announcing success', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async id => ({ id, status: 'EN_ROUTE', quotation: { id: 'q1', status: 'SENT' } }));
+    orders.rejectQuotation.mockRejectedValue(new Error('network'));
+    const w = await mountPage();
+    await w.get('[data-testid="visit-quote-reject"]').trigger('click');
+    await flushPromises();
+    expect(w.get('[role="alert"]').text()).toContain('Chưa gửi được lựa chọn');
+    expect(w.text()).not.toContain('Đã từ chối báo giá của máy này.');
+    expect(visitApi.checkout).toHaveBeenCalledTimes(2);
+    expect(w.find('[data-testid="visit-quote-reject"]').exists()).toBe(true);
+  });
+
+  it('does not show an incomplete checkout as paid or free', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ total: undefined, paid: true }));
+    const w = await mountPage();
+    expect(w.find('[data-testid="visit-checkout-error"]').exists()).toBe(true);
+    expect(w.find('[data-checkout-state="paid"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-zero-due"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+  });
+
+  it('does not announce a prior visit cash confirmation on the newly selected visit', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { amount: 250000 } }));
+    let finish!: () => void;
+    visitApi.confirmCash.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const w = await mountPage();
+    await w.get('[data-testid="visit-cash-confirm"]').trigger('click');
+    await w.get('[data-testid="visit-cash-confirm"]').trigger('click');
+    expect(visitApi.confirmCash).toHaveBeenCalledTimes(1);
+    visitApi.get.mockResolvedValue({ ...visit, id: 'v2' });
+    visitApi.checkout.mockResolvedValue({ ...checkout(), visitGroupId: 'v2' });
+    routeState.params.id = 'v2';
+    await flushPromises();
+    finish();
+    await flushPromises();
+    expect(w.text()).not.toContain('Đã xác nhận trả tiền mặt cho cả lượt.');
   });
 
   it('does not offer approval when a quotation is sent but its order is not EN_ROUTE', async () => {
@@ -245,6 +629,7 @@ describe('customer visit page', () => {
   });
 
   it('bounds child order reads to three checkout devices', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0].booking, id: 'b3' } }] });
     visitApi.checkout.mockResolvedValue(checkout({
       ready: false,
       waiting: 4,
@@ -315,11 +700,13 @@ describe('customer visit page', () => {
       .mockResolvedValueOnce(checkout({ ready: false, waiting: 1, devices: [device('b1', { state: 'succeeded' }), device('b2', { state: 'open' })] }))
       .mockResolvedValueOnce(checkout({ ready: true, waiting: 0 }));
     const w = await mountPage();
+    vi.useFakeTimers();
     expect(visitApi.checkout).toHaveBeenCalledTimes(1);
     expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
     expect(orderListeners.has('o-b2')).toBe(true);
 
     orderListeners.get('o-b2')?.();
+    await vi.advanceTimersByTimeAsync(150);
     await flushPromises();
 
     expect(visitApi.checkout).toHaveBeenCalledTimes(2);

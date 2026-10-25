@@ -136,6 +136,135 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     mockSocketSubscriptions.splice(0);
   });
 
+  it('offers repeatable supplemental quotes beside repair actions, then freezes them before payment', async () => {
+    let frozen = false;
+    const base = { id: 'q1', status: 'approved', items: [{ type: 'labor', description: 'Công cố định', quantity: 1, unitPrice: 449000, lineTotal: 449000 }], laborTotal: 449000, partsTotal: 0 };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', quotation: base, completionRequestedAt: frozen ? '2026-10-26T01:00:00Z' : null } } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    let next = 0;
+    mockPost.mockImplementation(async () => ({ data: { data: { id: `extra-${++next}`, status: 'pending_approval', reason: 'Cần sửa thêm', items: [], totalLaborDelta: 50000, totalPartsDelta: 0, createdAt: '2026-10-26T00:00:00Z' } } }));
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="job-now"] [data-testid="repair-additional-quote"]').text()).toBe('Báo giá bổ sung');
+    for (let n = 0; n < 3; n++) {
+      await wrapper.get('[data-testid="repair-additional-quote"]').trigger('click');
+      await wrapper.get('[data-testid="additional-cost-form"] textarea').setValue('Cần sửa thêm');
+      await wrapper.get('[data-testid="additional-cost-form"] input[aria-label="Mô tả công việc phát sinh"]').setValue('Công phát sinh');
+      await wrapper.get('[data-testid="additional-cost-form"] input[aria-label="Đơn giá"]').setValue(50000);
+      await wrapper.findAll('button').find(b => b.text().includes('Gửi cho khách duyệt'))!.trigger('click');
+      await flushPromises();
+    }
+    expect(mockPost.mock.calls.filter(([path]) => path.endsWith('/additional-costs'))).toHaveLength(3);
+    expect(wrapper.get('[data-testid="additional-history-summary"]').text()).toContain('3 chờ duyệt');
+    expect(wrapper.get('[data-testid="completion-blockers"]').text()).toContain('chờ khách duyệt');
+    await wrapper.get('[data-testid="repair-additional-quote"]').trigger('click');
+    frozen = true;
+    await openMoreMenu(wrapper);
+    await wrapper.findAll('[role="menuitem"]').find(b => b.text().includes('Làm mới'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="repair-additional-quote"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="additional-cost-form"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="cost-lines-quotation"]').text()).toContain('Công cố định');
+    wrapper.unmount();
+  });
+
+  it('blocks new supplemental quotes when an invoice exists even without completionRequestedAt', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', quotation: { id: 'q1', status: 'approved', items: [], laborTotal: 150000, partsTotal: 0 } } } };
+      if (path.endsWith('/invoice')) return { data: { data: { id: 'invoice-1', total: 150000 } } };
+      if (path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="repair-additional-quote"]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some(b => b.text().includes('Thêm chi phí phát sinh'))).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('summarizes pre-repair parts for all three machines and opens the exact sibling to prepare', async () => {
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    mockGet.mockImplementation(async (path: string) => {
+      if (/^\/service-orders\/job-test-\d+$/.test(path)) return { data: { data: { ...activeOrder, id: path.split('/').at(-1), visitGroupId: 'v1' } } };
+      if (path === '/visit-groups/v1/checkout') return { data: { data: {
+        visitGroupId: 'v1', total: 0, waiting: 3, ready: false, paid: false,
+        devices: [101, 202, 303].map((n, i) => ({ sequence: i + 1, bookingId: `b${n}`, serviceOrderId: `job-test-${n}`, serviceName: `Thiết bị ${i+1}`, state: 'open', amount: 0, paid: false })),
+      } } };
+      if (path.endsWith('/part-requests')) return { data: { data: path.includes('101') ? [{ id: 'p1', serviceOrderId: 'job-test-101', requestType: 'pre_repair', status: 'received', items: [] }] : [] } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find(b => b.text().includes('Bắt đầu di chuyển'))!.trigger('click');
+    await flushPromises();
+    const dialog = wrapper.get('[data-testid="departure-pre-repair-dialog"]');
+    expect(dialog.text()).toContain('Máy 1');
+    expect(dialog.text()).toContain('Máy 2');
+    expect(dialog.text()).toContain('Máy 3');
+    expect(dialog.text()).toContain('Không bắt buộc');
+    expect(mockPost).not.toHaveBeenCalled();
+    await dialog.get('[data-testid="prepare-device-2"]').trigger('click');
+    await flushPromises();
+    expect(mockPush).toHaveBeenCalledWith({ path: '/tech/jobs/job-test-202', query: { focus: 'parts', prepare: 'true' } });
+    expect(wrapper.find('[data-testid="technician-job-loading-skeleton"]').exists()).toBe(false);
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
+  it('requires a last-chance confirmation and guards pending returns before finalizing', async () => {
+    let pendingReturn = 1;
+    const Parts = defineComponent({ emits: ['return-summary'], setup(_, { emit }) { onMounted(() => emit('return-summary', { needDeclare: pendingReturn, awaitingManager: 0 })); return () => null; } });
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', pricingMode: 'fixed_price', afterEvidenceCount: 1 } } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs: { ...stubs, TechnicianPartsSection: Parts } } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="completion-blockers"]').text()).toContain('khai trả');
+    expect(mockPost).not.toHaveBeenCalled();
+    pendingReturn = 0;
+    wrapper.findComponent(Parts).vm.$emit('return-summary', { needDeclare: 0, awaitingManager: 1 });
+    await flushPromises();
+    await wrapper.get('[data-testid="job-now"]').findAll('button').find(b => b.text() === 'Gửi hoàn thành')!.trigger('click');
+    expect(mockPost).not.toHaveBeenCalled();
+    const confirm = wrapper.get('[data-testid="completion-confirm-dialog"]');
+    expect(confirm.text()).toContain('Còn khoản phát sinh chưa báo?');
+    expect(confirm.text()).toContain('khóa');
+    expect(confirm.text()).toContain('1 linh kiện');
+    await confirm.get('[data-testid="confirm-finalize-repair"]').trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost.mock.calls[0]?.[0]).toContain('request-completion');
+    wrapper.unmount();
+  });
+
+  it('seeds the correct fixed labor draft when switching directly between two quote-ready children', async () => {
+    const queryClient = createTestQueryClient({ queries: { gcTime: 60_000 } });
+    installQueryClient(queryClient);
+    mockGet.mockImplementation(async (path: string) => {
+      if (/^\/service-orders\/job-test-\d+$/.test(path)) return { data: { data: { ...activeOrder, id: path.split('/').at(-1), status: 'EN_ROUTE', arrivalVerified: true, beforeEvidenceCount: 1, visitGroupId: 'v1', pricingMode: 'fixed_price', quantity: 1, fixedUnitPrice: path.endsWith('101') ? 449000 : 229000 } } };
+      if (path === '/visit-groups/v1/checkout') return { data: { data: { visitGroupId: 'v1', waiting: 2, ready: false, total: 0, devices: [101,202].map((n,i) => ({sequence:i+1,bookingId:`b${n}`,serviceOrderId:`job-test-${n}`,state:'open',amount:0,paid:false})) } } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect((wrapper.get('[data-testid="quotation-form"] input[aria-label="Đơn giá"]').element as HTMLInputElement).value).toBe('449000');
+    await wrapper.get('[data-testid="tech-visit-device-2"]').trigger('click');
+    await flushPromises();
+    expect((wrapper.get('[data-testid="quotation-form"] input[aria-label="Đơn giá"]').element as HTMLInputElement).value).toBe('229000');
+    expect(wrapper.find('[data-testid="technician-job-loading-skeleton"]').exists()).toBe(false);
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
   it('renders Hero Action Bar with correct initial action for ACCEPTED status', async () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
