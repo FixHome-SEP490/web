@@ -105,7 +105,7 @@ beforeEach(() => {
       if (server.failPartRequests) throw { response: { status: 500 } };
       return { data: { data: server.partRequests } };
     }
-    if (path === '/service-orders/job-1/cash-settlement') return { data: { data: null } };
+    if (path === '/service-orders/job-1/cash-settlement' || path === '/service-orders/job-1/invoice') return { data: { data: null } };
     return { data: { data: [] } };
   });
   mockPost.mockReset().mockImplementation(async (path: string, body: unknown) => {
@@ -346,6 +346,9 @@ describe('job photos only through the camera', () => {
 
     await primary(wrapper, 'Gửi hoàn thành').trigger('click');
     await flushPromises();
+    expect(posts('/request-completion')).toHaveLength(0);
+    await wrapper.get('[data-testid="confirm-finalize-repair"]').trigger('click');
+    await flushPromises();
     expect(posts('/request-completion')).toHaveLength(1);
     expect(now(wrapper).text()).toContain('Thu tiền');
     wrapper.unmount();
@@ -454,6 +457,9 @@ describe('job photos only through the camera', () => {
     expect(wrapper.find('[data-testid="completion-blockers"]').exists()).toBe(false);
     expect(primary(wrapper, 'Gửi hoàn thành').attributes('disabled')).toBeUndefined();
     await primary(wrapper, 'Gửi hoàn thành').trigger('click');
+    await flushPromises();
+    expect(posts('/request-completion')).toHaveLength(0);
+    await wrapper.get('[data-testid="confirm-finalize-repair"]').trigger('click');
     await flushPromises();
     expect(posts('/request-completion')).toHaveLength(1);
     wrapper.unmount();

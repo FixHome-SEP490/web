@@ -33,6 +33,22 @@ function render(devices: VisitCheckout['devices'], activeOrderId: string) {
 }
 
 describe('Technician VisitGroup machine navigation', () => {
+  it('labels one shared visit and separates each child price and parts from the current machine', () => {
+    const wrapper = mount(TechnicianVisitDeviceNavigator, {
+      props: { devices: [device(1, 'o1'), device(2, 'o2'), device(3, 'o3')], activeOrderId: 'o1', overviewByOrderId: {
+        o1: { price: 449000, priceLabel: 'Tiền công cố định', partsLabel: 'Đã nhận qua QR', extraLabel: '1 chờ duyệt' },
+        o2: { price: null, priceLabel: 'Cần khảo sát để báo giá', partsLabel: 'Chưa đặt linh kiện trước', extraLabel: '' },
+      } }, global: { stubs: { 'router-link': routerLinkStub } },
+    });
+    expect(wrapper.text()).toContain('Chung cả lượt');
+    expect(wrapper.text()).toContain('Một kỹ thuật viên');
+    expect(wrapper.get('[data-testid="tech-visit-device-1"]').text()).toContain('Đang xem');
+    expect(wrapper.get('[data-testid="tech-visit-device-1"]').text()).toContain('Tiền công cố định');
+    expect(wrapper.get('[data-testid="tech-visit-device-1"]').text()).toContain('1 chờ duyệt');
+    expect(wrapper.get('[data-testid="tech-visit-device-2"]').text()).toContain('Cần khảo sát để báo giá');
+    expect(wrapper.get('[data-testid="tech-visit-device-3"]').text()).toContain('Chưa cập nhật giá');
+  });
+
   it('shows three ordered machines, active order and a link to the next open machine', () => {
     const wrapper = render([
       device(3, 'o3', 'open'),
