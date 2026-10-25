@@ -21,7 +21,7 @@ import {
 import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { customerNotificationPath, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
+import { resolveCustomerNotificationPath, resolvePartRequestServiceOrderId, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
 import { vnDateString } from '../../utils/vn-time';
 
 const router = useRouter();
@@ -31,6 +31,15 @@ const notifStore = useNotificationsStore();
 const isOpen = ref(false);
 const activeTab = ref<'all' | 'unread'>('all');
 const dropdownRef = ref<HTMLElement | null>(null);
+const bellRef = ref<HTMLButtonElement | null>(null);
+function closeDropdown() {
+  isOpen.value = false;
+  bellRef.value?.focus();
+}
+const viewAllLabel = computed(() => {
+  const role = (authStore.userRole || '').toUpperCase();
+  return role === 'TECHNICIAN' ? 'Xem công việc' : ['SERVICE_MANAGER', 'ADMIN'].includes(role) ? 'Xem đơn sửa chữa' : 'Xem tất cả thông báo';
+});
 
 // Watch for incoming new unread notifications to alert user via toast
 let previousUnreadCount = -1;
@@ -115,6 +124,12 @@ const handleItemClick = async (item: NotificationItem) => {
 
   // 1. TECHNICIAN navigation
   if (role === 'TECHNICIAN') {
+    if (itemType === 'PART_REQUEST_READY') {
+      const orderId = await resolvePartRequestServiceOrderId(item);
+      if (orderId) router.push(`/tech/jobs/${encodeURIComponent(orderId)}`);
+      else toast.error('Không mở được máy liên quan. Vui lòng tải lại thông báo và thử lại.');
+      return;
+    }
     if (refType.includes('BOOKING') || itemType.includes('INVITATION')) {
       router.push('/tech/invitations');
       return;
@@ -133,6 +148,10 @@ const handleItemClick = async (item: NotificationItem) => {
 
   // 2. SERVICE_MANAGER or ADMIN navigation
   if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
+    if (role === 'SERVICE_MANAGER' && itemType === 'PART_RETURN_DECLARED') {
+      router.push('/console/part-returns');
+      return;
+    }
     if (refType.includes('PART_REQUEST') || itemType.startsWith('PART_REQUEST')) {
       router.push('/console/part-requests');
       return;
@@ -154,9 +173,13 @@ const handleItemClick = async (item: NotificationItem) => {
   }
 
   // 3. CUSTOMER navigation (Default)
-  const customerPath = customerNotificationPath(item);
+  const customerPath = await resolveCustomerNotificationPath(item);
   if (customerPath) {
     router.push(customerPath);
+    return;
+  }
+  if (itemType === 'PART_REQUEST_READY') {
+    toast.error('Không mở được thiết bị liên quan. Vui lòng tải lại thông báo và thử lại.');
     return;
   }
 
@@ -187,14 +210,18 @@ const handleViewAll = () => {
 </script>
 
 <template>
-  <div ref="dropdownRef" class="relative inline-block text-left">
+  <div ref="dropdownRef" class="relative inline-block text-left" @keydown.esc.stop.prevent="closeDropdown">
     <!-- Bell Button -->
     <button
       type="button"
       id="fixhome-global-bell-btn"
-      class="relative p-2 rounded-xl text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-all focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+      ref="bellRef"
+      class="relative flex h-11 w-11 items-center justify-center rounded-xl text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
       :class="{ 'bg-ink-100 text-brand-600': isOpen }"
       title="Thông báo hệ thống"
+      :aria-label="effectiveUnreadCount ? `Thông báo, ${effectiveUnreadCount} chưa đọc` : 'Thông báo'"
+      :aria-expanded="isOpen"
+      :aria-controls="isOpen ? 'fixhome-notifications-panel' : undefined"
       @click="toggleDropdown"
     >
       <Bell :size="20" class="transition-transform group-hover:scale-105" />
@@ -212,16 +239,19 @@ const handleViewAll = () => {
 
     <!-- Dropdown Popover -->
     <Transition
-      enter-active-class="transition ease-out duration-200"
+      enter-active-class="transition ease-out duration-200 motion-reduce:transition-none"
       enter-from-class="transform opacity-0 scale-95 -translate-y-2"
       enter-to-class="transform opacity-100 scale-100 translate-y-0"
-      leave-active-class="transition ease-in duration-150"
+      leave-active-class="transition ease-in duration-150 motion-reduce:transition-none"
       leave-from-class="transform opacity-100 scale-100 translate-y-0"
       leave-to-class="transform opacity-0 scale-95 -translate-y-2"
     >
       <div
         v-if="isOpen"
-        class="absolute right-0 mt-2 w-84 sm:w-96 bg-white rounded-2xl border border-ink-200 shadow-2xl z-50 overflow-hidden flex flex-col text-ink-900"
+        id="fixhome-notifications-panel"
+        role="region"
+        aria-label="Thông báo"
+        class="fixed inset-x-4 top-16 z-50 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-white text-ink-900 shadow-(--shadow-e3) sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96"
       >
         <!-- Header -->
         <div class="p-3.5 px-4 bg-white border-b border-ink-100 flex items-center justify-between">
@@ -238,12 +268,12 @@ const handleViewAll = () => {
           <button
             v-if="effectiveUnreadCount > 0"
             type="button"
-            class="text-[11px] font-medium text-ink-500 hover:text-brand-600 transition-colors flex items-center gap-1"
+            class="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium text-ink-600 transition-colors hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             title="Đánh dấu đã đọc tất cả"
             @click="handleMarkAllRead"
           >
             <CheckCheck :size="14" class="text-brand-600" />
-            <span>Đã đọc hết</span>
+            <span>Đánh dấu tất cả đã đọc</span>
           </button>
         </div>
 
@@ -251,7 +281,8 @@ const handleViewAll = () => {
         <div class="flex items-center border-b border-ink-100 bg-ink-50/60 px-3 pt-2 text-xs font-medium">
           <button
             type="button"
-            class="pb-2 px-3 transition-colors relative"
+            class="relative min-h-11 rounded-t-lg px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
+            :aria-pressed="activeTab === 'all'"
             :class="activeTab === 'all' ? 'text-brand-600 font-bold border-b-2 border-brand-600' : 'text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'all'"
           >
@@ -259,7 +290,8 @@ const handleViewAll = () => {
           </button>
           <button
             type="button"
-            class="pb-2 px-3 transition-colors relative"
+            class="relative min-h-11 rounded-t-lg px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
+            :aria-pressed="activeTab === 'unread'"
             :class="activeTab === 'unread' ? 'text-brand-600 font-bold border-b-2 border-brand-600' : 'text-ink-500 hover:text-ink-800'"
             @click="activeTab = 'unread'"
           >
@@ -268,7 +300,7 @@ const handleViewAll = () => {
         </div>
 
         <!-- Notification Items List -->
-        <div class="max-h-96 overflow-y-auto divide-y divide-ink-100">
+        <div class="min-h-0 max-h-96 overflow-y-auto divide-y divide-ink-100">
           <div v-if="notifStore.loading && notifStore.notifications.length === 0" class="py-12 text-center text-xs text-ink-400">
             <div class="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
             Đang tải thông báo...
@@ -288,10 +320,11 @@ const handleViewAll = () => {
           </div>
 
           <template v-else>
-            <div
+            <button
               v-for="item in displayedNotifications"
               :key="item.id"
-              class="p-3.5 px-4 hover:bg-ink-50/80 transition-all cursor-pointer flex gap-3 relative group"
+              type="button"
+              class="group relative flex min-h-11 w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
               :class="{ 'bg-brand-50/25': !item.isRead }"
               @click="handleItemClick(item)"
             >
@@ -325,12 +358,12 @@ const handleViewAll = () => {
                     >
                       {{ getNotificationCategory(item).label }}
                     </span>
-                    <h4
-                      class="text-xs font-bold text-ink-900 truncate"
+                    <span
+                      class="break-words text-sm font-semibold text-ink-900"
                       :class="{ 'text-brand-900 font-bold': !item.isRead }"
                     >
                       {{ item.title }}
-                    </h4>
+                    </span>
                   </div>
 
                   <!-- Unread Dot -->
@@ -345,7 +378,7 @@ const handleViewAll = () => {
                   {{ item.message }}
                 </p>
 
-                <div class="flex items-center justify-between text-[11px] text-ink-400 pt-0.5">
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs text-ink-600">
                   <span class="flex items-center gap-1">
                     <Clock :size="12" />
                     {{ formatTimeAgo(item.createdAt) }}
@@ -353,14 +386,14 @@ const handleViewAll = () => {
 
                   <span
                     v-if="item.referenceId"
-                    class="text-brand-600 font-medium group-hover:underline inline-flex items-center gap-0.5 text-[10px]"
+                    class="inline-flex items-center gap-1 font-medium text-brand-700 group-hover:underline"
                   >
-                    Xem chi tiết
+                    {{ item.type?.toUpperCase() === 'PART_RETURN_DECLARED' ? 'Mở trang hoàn trả' : item.type?.toUpperCase() === 'PART_REQUEST_READY' ? 'Xem máy và linh kiện' : 'Xem chi tiết' }}
                     <ExternalLink :size="10" />
                   </span>
                 </div>
               </div>
-            </div>
+            </button>
           </template>
         </div>
 
@@ -368,10 +401,10 @@ const handleViewAll = () => {
         <div class="p-2.5 px-4 bg-ink-50/80 border-t border-ink-100 flex items-center justify-between text-xs">
           <button
             type="button"
-            class="text-ink-600 hover:text-brand-600 font-medium transition-colors w-full text-center py-1 hover:underline inline-flex items-center justify-center gap-1"
+            class="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-lg text-center font-medium text-ink-600 transition-colors hover:text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             @click="handleViewAll"
           >
-            <span>Xem tất cả thông báo</span>
+            <span>{{ viewAllLabel }}</span>
             <ArrowRight :size="12" />
           </button>
         </div>

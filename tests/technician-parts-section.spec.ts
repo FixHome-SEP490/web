@@ -225,14 +225,14 @@ describe('TechnicianPartsSection inside the job page', () => {
     await flushPromises();
 
     expect(partRequestsApi.receiveByQr).toHaveBeenCalledWith('pr-1', { qrToken: 'qr-test-only' });
-    expect(wrapper.text().replace(/\s+/g, ' ')).toContain('Cấp 1 · Dùng 0 · Cần trả 1');
+    expect(wrapper.text().replace(/\s+/g, ' ')).toContain('Cấp 1 · Dùng 0 · Cần trả kho 1');
     expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(false);
     expect(wrapper.findAll('button').some(button => button.text() === 'Đã dùng')).toBe(false);
     wrapper.unmount();
   });
 
   it.each([
-    { usedQty: 1, status: 'used', declaredQty: 0, outstandingQty: 0, expected: 'Cấp 1 · Dùng 1 · Cần trả 0' },
+    { usedQty: 1, status: 'used', declaredQty: 0, outstandingQty: 0, expected: 'Cấp 1 · Dùng 1 · Cần trả kho 0' },
     { usedQty: 0, status: 'returned', declaredQty: 1, outstandingQty: 1, expected: 'Đang chờ quản lý xác nhận' },
   ])('records exact usage quantity $usedQty for an enrolled warehouse item', async ({ usedQty, status, declaredQty, outstandingQty, expected }) => {
     partRequestsApi.getByOrderId.mockResolvedValue([request('received')]);
@@ -250,7 +250,7 @@ describe('TechnicianPartsSection inside the job page', () => {
       }]);
     const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
     await flushPromises();
-    await wrapper.findAll('button').find(button => button.text().includes('Ghi số lượng thực dùng'))!.trigger('click');
+    await wrapper.get('[data-testid="edit-part-usage"]').trigger('click');
     const editor = wrapper.get('[data-testid="partial-usage-editor"]');
     await editor.get('input[type="number"]').setValue(usedQty);
     await editor.findAll('button').find(button => button.text().includes('Lưu số lượng'))!.trigger('click');
@@ -280,15 +280,15 @@ describe('TechnicianPartsSection inside the job page', () => {
       }]);
     const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
     await flushPromises();
-    await wrapper.findAll('button').find(b => b.text().includes('Ghi số lượng thực dùng'))!.trigger('click');
+    await wrapper.get('[data-testid="edit-part-usage"]').trigger('click');
     await wrapper.get('[data-testid="partial-usage-editor"] input').setValue('1');
-    expect(wrapper.get('[data-testid="partial-usage-editor"]').text()).toContain('Cần trả: 2');
+    expect(wrapper.get('[data-testid="partial-usage-editor"]').text()).toContain('Dự kiến cần trả: 2');
     await wrapper.get('[data-testid="partial-usage-editor"]').findAll('button')
       .find(b => b.text().includes('Lưu số lượng'))!.trigger('click');
     await flushPromises();
     expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1',
       expect.objectContaining({ usageStatus: 'used', usedQty: 1, expectedVersion: 0 }));
-    expect(wrapper.text().replace(/\s+/g, ' ')).toContain('Cấp 3 · Dùng 1 · Cần trả 2');
+    expect(wrapper.text().replace(/\s+/g, ' ')).toContain('Cấp 3 · Dùng 1 · Cần trả kho 2');
     expect(wrapper.find('[data-testid="open-declare-return"]').exists()).toBe(true);
     expect(partRequestsApi.getByOrderId).toHaveBeenCalledTimes(1);
     wrapper.unmount();

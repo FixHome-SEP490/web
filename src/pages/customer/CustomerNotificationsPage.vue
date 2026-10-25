@@ -23,7 +23,7 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, FhPagination, FhSkeleton } from '../../components';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { customerNotificationPath, getNotificationCategory, notificationsApi, type NotificationItem } from '../../api/notifications.api';
+import { resolveCustomerNotificationPath, getNotificationCategory, notificationsApi, type NotificationItem } from '../../api/notifications.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
@@ -104,8 +104,11 @@ const handleItemClick = async (item: NotificationItem) => {
     // The bell keeps its own short list; read the count again so both agree.
     void notifStore.fetchUnreadCount();
   }
-  const path = customerNotificationPath(item);
+  const path = await resolveCustomerNotificationPath(item);
   if (path) router.push(path);
+  else if ((item.type || '').toUpperCase() === 'PART_REQUEST_READY') {
+    toast.error('Không mở được thiết bị liên quan. Vui lòng tải lại thông báo và thử lại.');
+  }
 };
 
 const handleMarkAllRead = async () => {
@@ -143,7 +146,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       <FhButton
         v-if="notifStore.unreadCount > 0"
         variant="secondary"
-        size="sm"
+        size="md"
         data-testid="notifications-mark-all"
         class="self-start sm:self-auto shrink-0"
         @click="handleMarkAllRead"
@@ -168,8 +171,8 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
         <button
           v-if="searchQuery"
           type="button"
-          class="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
-          title="Xóa tìm kiếm"
+          class="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-ink-600 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          aria-label="Xóa tìm kiếm"
           @click="searchQuery = ''"
         >
           <X :size="16" />
@@ -185,7 +188,8 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
             :key="cat.key"
             type="button"
             :data-testid="`notifications-filter-${cat.key}`"
-            class="h-9 px-3.5 rounded-xl font-medium transition-all shrink-0 whitespace-nowrap flex items-center gap-1.5 cursor-pointer select-none"
+            :aria-pressed="selectedCategory === cat.key"
+            class="h-11 px-3.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 font-medium transition-all shrink-0 whitespace-nowrap flex items-center gap-1.5 cursor-pointer select-none"
             :class="selectedCategory === cat.key
               ? 'bg-brand-600 text-white shadow-2xs font-semibold'
               : 'bg-ink-100/70 text-ink-600 hover:bg-ink-100 hover:text-ink-900'"
@@ -198,7 +202,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 
         <!-- Only unread toggle -->
         <label
-          class="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-ink-700 cursor-pointer select-none shrink-0 self-start sm:self-auto px-3 py-1.5 rounded-xl border transition-colors"
+          class="inline-flex min-h-11 items-center gap-2 text-xs sm:text-sm font-medium text-ink-700 cursor-pointer select-none shrink-0 self-start sm:self-auto px-3 py-1.5 rounded-xl border transition-colors"
           :class="onlyUnread ? 'bg-brand-50 border-brand-300 text-brand-700 font-semibold' : 'bg-white border-ink-200/90 hover:bg-ink-50'"
         >
           <input
@@ -239,7 +243,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       data-testid="notifications-load-error"
     >
       <p class="text-sm text-ink-700">Chưa tải được thông báo, vui lòng thử lại.</p>
-      <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
+      <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton>
     </div>
 
     <div
@@ -257,7 +261,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
         {{ hasFilter ? 'Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục để tìm thông báo.' : 'Các thông báo mới về đơn sửa chữa và tài khoản sẽ hiển thị ở đây.' }}
       </p>
       <div v-if="hasFilter" class="pt-2">
-        <FhButton variant="secondary" size="sm" @click="clearFilters">Xóa bộ lọc</FhButton>
+        <FhButton variant="secondary" size="md" @click="clearFilters">Xóa bộ lọc</FhButton>
       </div>
     </div>
 
@@ -271,7 +275,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       <li v-for="item in filteredNotifications" :key="item.id">
         <button
           type="button"
-          class="w-full p-4 sm:p-5 flex items-start gap-4 text-left hover:bg-brand-50/20 transition-all cursor-pointer group"
+          class="group flex min-h-11 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:gap-4 sm:p-5"
           :class="{ 'bg-brand-50/40': !item.isRead }"
           :data-testid="`notification-${item.id}`"
           @click="handleItemClick(item)"
@@ -288,7 +292,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
           <div class="flex-1 min-w-0 space-y-1.5">
             <div class="flex items-start justify-between gap-3">
               <span
-                class="text-sm text-ink-900 group-hover:text-brand-600 transition-colors"
+                class="break-words text-sm text-ink-900 group-hover:text-brand-600 transition-colors"
                 :class="item.isRead ? 'font-medium' : 'font-bold text-brand-900'"
               >
                 {{ item.title }}
@@ -300,11 +304,11 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
               />
             </div>
 
-            <p class="text-sm text-ink-600 leading-relaxed text-pretty">
+            <p class="break-words text-sm text-ink-600 leading-relaxed text-pretty">
               {{ item.message }}
             </p>
 
-            <div class="flex items-center gap-2 text-xs text-ink-400 pt-1">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-ink-600">
               <span class="font-medium text-ink-600 px-2 py-0.5 rounded-md bg-ink-100/70">
                 {{ getNotificationCategory(item).label }}
               </span>
@@ -314,6 +318,9 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
                 {{ formatFullDate(item.createdAt) }}
               </span>
             </div>
+            <span v-if="item.referenceId" class="inline-flex min-h-6 items-center text-xs font-medium text-brand-700">
+              {{ item.type?.toUpperCase() === 'PART_REQUEST_READY' ? 'Xem máy và linh kiện' : 'Xem chi tiết' }}
+            </span>
           </div>
 
           <!-- Navigation Arrow -->

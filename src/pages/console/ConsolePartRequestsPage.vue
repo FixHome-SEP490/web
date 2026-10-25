@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
 import { Copy, Check, X } from 'lucide-vue-next';
-import { FhMoney, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
+import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
@@ -14,16 +14,17 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import {
   partRequestsApi,
-  createIdempotencyKey,
-  isPartReturnsUnavailableError,
   type PartRequest,
   type PartRequestStatus,
   type PartRequestType,
   type FulfillmentMethod,
   type PartCustodyReturnRecord,
+  isPartReturnsUnavailableError,
 } from '../../api/part-requests.api';
 import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeString } from '../../utils/vn-time';
 import { userFacingError } from '../../utils/user-facing-error';
+import { partCustodyQuantities } from '../../utils/part-custody-quantities';
+import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
@@ -48,94 +49,71 @@ const detailModalRequest = ref<PartRequest | null>(null);
 const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
 
-// P1 hoàn trả linh kiện (owner lock 19/10/2026): kỹ thuật viên khai trả, quản lý
-// dịch vụ kiểm tra thực tế và bấm "Đã nhận". Nhận thiếu thì phần còn lại vẫn chờ.
-const returnQueue = ref<PartCustodyReturnRecord[]>([]);
-const returnsLoading = ref(true);
-const returnsUnavailable = ref(false);
-const returnsLoadError = ref(false);
-let returnsLoadVersion = 0;
-const acceptDrafts = ref<Record<string, number>>({});
-const acceptingKey = ref<string | null>(null);
-
-const returnKey = (row: PartCustodyReturnRecord) =>
-  `${row.partRequestId}:${row.partRequestItemId}`;
-
-/** Khai trả nhưng chưa được nhận thực tế: đây là phần quản lý còn phải xác nhận. */
-const pendingDeclaredQty = (row: PartCustodyReturnRecord) =>
-  Math.max(0, row.declaredQty - row.managerAcceptedQty);
-
-/** Số nhận thực tế tối đa: không quá phần đang chờ nhận của dòng này. */
-const maxAcceptQty = (row: PartCustodyReturnRecord) =>
-  Math.max(0, Math.min(row.outstandingQty, pendingDeclaredQty(row)));
-
-const returnRequestCode = (row: PartCustodyReturnRecord) =>
-  `PR-${row.partRequestId.substring(0, 8).toUpperCase()}`;
-
-/** Reference for the counter: name when the Backend has it, otherwise a short code. */
-const technicianRef = (row: PartCustodyReturnRecord) => {
-  const name = row.technicianId ? (row.technicianName ?? '').trim() : '';
-  if (name) return name;
-  return row.technicianId ? `KT-${row.technicianId.substring(0, 8).toUpperCase()}` : '—';
-};
-
-const loadReturns = async () => {
-  const version = ++returnsLoadVersion;
-  returnsLoading.value = true;
-  returnsUnavailable.value = false;
-  returnsLoadError.value = false;
+// Thợ đã khai trả, quản lý nhận ở trang Hoàn trả linh kiện (BUG DETECTOR 10); ở đây chỉ nhắc số dòng đang chờ.
+const returnsWaiting = ref<number | null>(null);
+const returnsWaitingError = ref(false);
+let returnsWaitingVersion = 0;
+const loadReturnsWaiting = async () => {
+  const version = ++returnsWaitingVersion;
+  returnsWaiting.value = null;
+  returnsWaitingError.value = false;
+  if (!canOperate.value) return;
   try {
     const rows = await partRequestsApi.getPendingReturns();
-    if (version !== returnsLoadVersion) return;
-    returnQueue.value = rows;
-    const drafts: Record<string, number> = {};
-    for (const row of rows) drafts[returnKey(row)] = maxAcceptQty(row);
-    acceptDrafts.value = drafts;
-  } catch (err: unknown) {
-    if (version !== returnsLoadVersion) return;
-    returnQueue.value = [];
-    acceptDrafts.value = {};
-    // Cờ tính năng đang tắt hoặc không có quyền: ẩn mục hoàn trả, không chặn trang.
-    if (isPartReturnsUnavailableError(err)) returnsUnavailable.value = true;
-    else returnsLoadError.value = true;
-  } finally {
-    if (version === returnsLoadVersion) returnsLoading.value = false;
+    if (version !== returnsWaitingVersion || !canOperate.value) return;
+    returnsWaiting.value = rows.filter((row) => row.declaredQty - row.managerAcceptedQty > 0 && row.outstandingQty > 0).length;
+  } catch (err) {
+    if (version !== returnsWaitingVersion || !canOperate.value) return;
+    returnsWaitingError.value = !isPartReturnsUnavailableError(err);
   }
 };
 
-const handleAcceptReturn = async (row: PartCustodyReturnRecord) => {
-  if (!canOperate.value || acceptingKey.value) return;
-  const key = returnKey(row);
-  const maxQty = maxAcceptQty(row);
-  const quantity = Number(acceptDrafts.value[key]);
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxQty) {
-    showToast('error', `Số lượng nhận thực tế phải là số nguyên từ 1 đến ${maxQty}.`);
-    return;
-  }
-
-  acceptingKey.value = key;
-  try {
-    await partRequestsApi.acceptReturn(row.partRequestId, row.partRequestItemId, {
-      quantity,
-      expectedVersion: row.version,
-      idempotencyKey: createIdempotencyKey('accept'),
-    });
-    showToast(
-      'success',
-      quantity < pendingDeclaredQty(row)
-        ? 'Đã ghi nhận số lượng nhận thực tế. Phần còn lại vẫn chờ nhận.'
-        : 'Đã ghi nhận số linh kiện đã nhận.',
-    );
-    await loadReturns();
-  } catch (err: unknown) {
-    showToast('error', userFacingError(err, 'Chưa ghi nhận được linh kiện hoàn trả, vui lòng thử lại.'));
-    // Dòng đã bị người khác cập nhật: đọc lại để lấy đúng số và phiên bản.
-    const status = (err as { response?: { status?: number } } | null)?.response?.status;
-    if (status === 409) await loadReturns();
-  } finally {
-    acceptingKey.value = null;
-  }
-};
+type CustodyRead = { rows: PartCustodyReturnRecord[]; state: 'loading' | 'ready' | 'error' | 'unavailable' };
+const custodyByOrder = ref<Record<string, CustodyRead>>({});
+let custodyReadVersion = 0;
+let activeCustodyReads = 0;
+const custodyReadWaiters: Array<() => void> = [];
+/** Only the current server page, one read per order, at most three concurrent reads. */
+async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
+  const version = ++custodyReadVersion;
+  // Release obsolete queued reads; the in-flight cap also spans page changes.
+  custodyReadWaiters.splice(0).forEach(resolve => resolve());
+  custodyByOrder.value = {};
+  if (!canOperate.value) return;
+  const ids = [...new Set(rows.slice(0, pageSize)
+    .filter(row => ['received', 'completed'].includes(row.status.toLowerCase()) && row.items.some(item => item.partSource === 'fixhome'))
+    .map(row => row.serviceOrderId).filter(Boolean))];
+  custodyByOrder.value = Object.fromEntries(ids.map(id => [id, { rows: [], state: 'loading' as const }]));
+  const current = () => version === custodyReadVersion && pageVersion === loadVersion && canOperate.value;
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(3, ids.length) }, async () => {
+    while (next < ids.length && current()) {
+      const id = ids[next++];
+      while (activeCustodyReads >= 3) {
+        await new Promise<void>(resolve => custodyReadWaiters.push(resolve));
+        if (!current()) return;
+      }
+      if (!current()) return;
+      ++activeCustodyReads;
+      try {
+        const records = await partRequestsApi.getReturnsByOrderId(id);
+        if (current()) custodyByOrder.value[id] = { rows: records, state: 'ready' };
+      } catch (err) {
+        if (current()) custodyByOrder.value[id] = { rows: [], state: isPartReturnsUnavailableError(err) ? 'unavailable' : 'error' };
+      } finally {
+        --activeCustodyReads;
+        custodyReadWaiters.shift()?.();
+      }
+    }
+  }));
+}
+function custodyFor(request: PartRequest, itemId: string) {
+  return custodyByOrder.value[request.serviceOrderId]?.rows.find(row => row.partRequestId === request.id && row.partRequestItemId === itemId);
+}
+function custodyReadLabel(request: PartRequest) {
+  const state = custodyByOrder.value[request.serviceOrderId]?.state;
+  return state === 'loading' ? 'Đang đọc số thực dùng…' : state === 'error' ? 'Chưa tải được số thực dùng' : 'Chưa có số lượng thực dùng chi tiết';
+}
 watch(qrModalRequest, async (request) => {
   qrImage.value = '';
   if (!request?.qrToken) return;
@@ -181,6 +159,7 @@ const loadData = async () => {
     if (version !== loadVersion) return;
     requests.value = res.data;
     totalCount.value = res.total;
+    void loadVisibleCustody(res.data, version);
   } catch {
     if (version !== loadVersion) return;
     requests.value = [];
@@ -192,7 +171,16 @@ const loadData = async () => {
 
 onMounted(() => {
   void loadData();
-  void loadReturns();
+  void loadReturnsWaiting();
+});
+usePartReturnsRefresh(async () => {
+  await Promise.all([loadReturnsWaiting(), loadVisibleCustody(requests.value, loadVersion)]);
+});
+const refreshData = async () => { await Promise.all([loadData(), loadReturnsWaiting()]); };
+watch(canOperate, () => { custodyByOrder.value = {}; void refreshData(); });
+onUnmounted(() => {
+  ++loadVersion; ++custodyReadVersion; ++returnsWaitingVersion;
+  custodyReadWaiters.splice(0).forEach(resolve => resolve());
 });
 
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
@@ -322,7 +310,7 @@ const getUsageShortLabel = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'pending': return 'Đang giữ';
     case 'used': return 'Đã dùng';
-    case 'returned': return 'Đã trả lại';
+    case 'returned': return 'Ghi nhận không dùng';
     default: return 'Chưa rõ';
   }
 };
@@ -331,7 +319,7 @@ const getUsageStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'pending': return 'Đang giữ (chưa chốt)';
     case 'used': return 'Đã dùng (chỉ tính phí đã duyệt)';
-    case 'returned': return 'Đã trả lại (miễn phí)';
+    case 'returned': return 'Ghi nhận không dùng (chưa xác nhận trả kho)';
     default: return 'Chưa rõ';
   }
 };
@@ -354,7 +342,7 @@ const getUsageBadgeClass = (status: string) => {
       </template>
       <template #actions>
         <ConsoleMoreMenu>
-          <ConsoleMenuItem :disabled="loading" @click="loadData">Làm mới</ConsoleMenuItem>
+          <ConsoleMenuItem :disabled="loading" @click="refreshData">Làm mới</ConsoleMenuItem>
         </ConsoleMoreMenu>
       </template>
     </ConsolePageHeader>
@@ -407,93 +395,26 @@ const getUsageBadgeClass = (status: string) => {
       </button>
     </div>
 
-    <!-- P1: chờ nhận linh kiện hoàn trả (ẩn khi Backend chưa bật tính năng) -->
-    <section
-      v-if="!returnsUnavailable"
-      data-testid="part-returns-queue"
-      class="rounded-[var(--radius-md)] border border-ink-200 bg-white"
-      aria-label="Linh kiện chờ nhận hoàn trả"
+    <router-link
+      v-if="returnsWaiting !== null && returnsWaiting > 0"
+      to="/console/part-returns"
+      class="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900 hover:bg-warning-100"
+      data-testid="part-returns-link"
     >
-      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3">
-        <div class="flex items-center gap-2">
-          <h2 class="text-base font-semibold text-ink-900">Chờ nhận linh kiện hoàn trả</h2>
-          <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-sm text-ink-500">{{ returnQueue.length }}</span>
-        </div>
-        <FhButton variant="ghost" size="sm" :disabled="returnsLoading" @click="loadReturns">Làm mới</FhButton>
-      </header>
-
-      <div v-if="returnsLoading" class="space-y-2 px-5 py-4" aria-busy="true" aria-label="Đang tải linh kiện chờ nhận">
-        <FhSkeleton height="14px" width="30%" />
-        <FhSkeleton height="40px" rounded="md" />
-        <FhSkeleton height="40px" rounded="md" />
+      <span>{{ returnsWaiting }} dòng linh kiện đã khai trả đang chờ nhận</span>
+      <span class="whitespace-nowrap font-semibold">Mở trang hoàn trả</span>
+    </router-link>
+    <div v-if="returnsWaitingError" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" data-testid="part-returns-check-error">
+      <p>Chưa kiểm tra được linh kiện chờ nhận hoàn trả.</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <FhButton variant="secondary" size="md" data-testid="part-returns-check-retry" @click="loadReturnsWaiting">Thử lại</FhButton>
+        <router-link to="/console/part-returns" class="inline-flex min-h-11 items-center rounded-lg px-2 font-medium underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Mở trang hoàn trả</router-link>
       </div>
-
-      <div v-else-if="returnsLoadError" class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm text-ink-600">
-        <span>Chưa tải được danh sách chờ nhận.</span>
-        <FhButton variant="secondary" size="sm" @click="loadReturns">Thử lại</FhButton>
-      </div>
-
-      <p v-else-if="returnQueue.length === 0" class="px-5 py-4 text-sm text-ink-500">
-        Không có linh kiện nào đang chờ xác nhận hoàn trả.
-      </p>
-
-      <ul v-else class="divide-y divide-ink-100">
-        <li v-for="row in returnQueue" :key="returnKey(row)" class="space-y-2 px-5 py-4">
-          <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <div class="min-w-0">
-              <div class="font-medium text-ink-900">{{ row.partNameSnapshot }}</div>
-              <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
-                <span class="font-num">{{ returnRequestCode(row) }}</span>
-                <router-link
-                  v-if="row.orderId"
-                  :to="`/console/orders/${row.orderId}`"
-                  class="text-brand-700 hover:underline"
-                >Xem đơn</router-link>
-                <span>Kỹ thuật viên: <span class="font-num">{{ technicianRef(row) }}</span></span>
-              </div>
-            </div>
-            <div class="whitespace-nowrap font-num text-xs text-ink-600">
-              Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Khai trả {{ row.declaredQty }} · Đã nhận {{ row.managerAcceptedQty }}
-            </div>
-          </div>
-
-          <div v-if="canOperate" class="flex flex-wrap items-end gap-2">
-            <div>
-              <label
-                :for="`accept-qty-${returnKey(row)}`"
-                class="mb-1 block text-xs font-medium text-ink-700"
-              >Số lượng nhận thực tế</label>
-              <input
-                :id="`accept-qty-${returnKey(row)}`"
-                v-model.number="acceptDrafts[returnKey(row)]"
-                type="number"
-                inputmode="numeric"
-                min="1"
-                step="1"
-                :max="maxAcceptQty(row)"
-                :class="consoleField"
-                class="w-24"
-              />
-            </div>
-            <span class="pb-2 text-xs text-ink-500">tối đa {{ maxAcceptQty(row) }}</span>
-            <FhButton
-              data-testid="accept-return"
-              variant="primary"
-              size="sm"
-              class="mb-1.5"
-              :loading="acceptingKey === returnKey(row)"
-              :disabled="!!acceptingKey || returnsLoading"
-              @click="handleAcceptReturn(row)"
-            >Đã nhận</FhButton>
-          </div>
-          <p v-else class="text-xs text-ink-500">Chỉ quản lý dịch vụ xác nhận được số linh kiện đã nhận.</p>
-        </li>
-      </ul>
-    </section>
-
+    </div>
     <ConsoleLoadError v-if="loadError" @retry="loadData" />
     <ConsoleTable
       v-else
+      class="part-requests-table"
       :columns="columns"
       :rows="requests"
       :loading="loading"
@@ -502,7 +423,8 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-code="{ row }">
         <button
           type="button"
-          class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          class="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg font-num font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          :data-testid="`part-request-detail-${row.id}`"
           @click="detailModalRequest = row"
         >{{ requestCode(row) }}</button>
         <div>
@@ -511,19 +433,30 @@ const getUsageBadgeClass = (status: string) => {
       </template>
 
       <template #cell-items="{ row }">
-        <ul class="max-w-72 min-w-40 space-y-0.5">
-          <li v-for="item in (row.items || []).slice(0, 3)" :key="item.id" class="flex items-center justify-between gap-2">
+        <ul class="part-request-items max-w-72 min-w-40 space-y-0.5">
+          <li v-for="item in (row.items || []).slice(0, 3)" :key="item.id" class="space-y-1 py-1" :data-testid="`manager-part-${item.id}`">
+            <div class="flex items-center justify-between gap-2">
             <span class="truncate text-ink-800" :title="item.partNameSnapshot">{{ item.partNameSnapshot }}</span>
-            <span class="flex shrink-0 items-center gap-1.5">
-              <span class="font-num text-xs text-ink-500">×{{ item.quantity }}</span>
-              <span class="whitespace-nowrap rounded border px-1 text-[11px] font-medium" :class="getUsageBadgeClass(item.usageStatus)">{{ getUsageShortLabel(item.usageStatus) }}</span>
-            </span>
+            <span v-if="!custodyFor(row, item.id)" class="font-num text-xs text-ink-600">Yêu cầu/cấp {{ item.quantity }}</span>
+            </div>
+            <template v-for="record in [custodyFor(row, item.id)]" :key="record?.partRequestItemId ?? item.id">
+              <div v-if="record" class="space-y-1 text-xs text-ink-600">
+                <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }}</p>
+                <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận trả {{ record.managerAcceptedQty }}</p>
+                <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
+                <p v-else-if="record.outstandingQty > 0">Cần trả kho {{ record.outstandingQty }}</p>
+              </div>
+              <div v-else class="space-y-1 text-xs text-ink-600">
+                <span class="whitespace-nowrap rounded border px-1 text-[11px] font-medium" :class="getUsageBadgeClass(item.usageStatus)">{{ getUsageShortLabel(item.usageStatus) }}</span>
+                <p>{{ custodyReadLabel(row) }}</p>
+              </div>
+            </template>
           </li>
         </ul>
         <button
           v-if="(row.items || []).length > 3"
           type="button"
-          class="mt-0.5 whitespace-nowrap text-xs font-medium text-brand-700 hover:underline"
+          class="mt-0.5 inline-flex min-h-11 items-center whitespace-nowrap rounded-lg text-sm font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           @click="detailModalRequest = row"
         >Thêm {{ (row.items || []).length - 3 }} linh kiện</button>
       </template>
@@ -685,20 +618,30 @@ const getUsageBadgeClass = (status: string) => {
             <li
               v-for="item in detailModalRequest.items || []"
               :key="item.id"
-              class="flex items-center justify-between gap-3 p-2.5 text-sm"
+              class="space-y-2 p-3 text-sm"
+              :data-testid="`manager-part-detail-${item.id}`"
             >
-              <div class="min-w-0">
-                <div class="font-medium text-ink-900">{{ item.partNameSnapshot }}</div>
-                <div class="text-xs text-ink-500">
-                  <span class="font-num">{{ Number(item.unitPriceSnapshot).toLocaleString('vi-VN') }}&nbsp;₫</span> × <span class="font-num">{{ item.quantity }}</span>
+              <p class="font-medium text-ink-900">{{ item.partNameSnapshot }}</p>
+              <template v-for="record in [custodyFor(detailModalRequest, item.id)]" :key="record?.partRequestItemId ?? item.id">
+                <div v-if="record" class="space-y-2 text-xs text-ink-700">
+                  <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả kho {{ record.outstandingQty }}</p>
+                  <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận {{ record.managerAcceptedQty }}</p>
+                  <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
+                  <p>Còn phải khai {{ partCustodyQuantities(record).remainingToDeclare }}</p>
+                  <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <span>Giá trị linh kiện đã dùng</span>
+                    <FhMoney v-if="record.usageRecorded !== false" :amount="item.unitPriceSnapshot * record.usedQty" data-testid="manager-part-used-value" />
+                    <span v-else>Chưa chốt sử dụng</span>
+                  </div>
+                  <p>Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /> · Giá trị sử dụng được đối chiếu khi lập hóa đơn.</p>
                 </div>
-              </div>
-              <div class="shrink-0 text-right">
-                <span class="whitespace-nowrap rounded border px-2 py-0.5 text-xs" :class="getUsageBadgeClass(item.usageStatus)">
-                  {{ getUsageStatusLabel(item.usageStatus) }}
-                </span>
-                <div class="mt-0.5"><FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></div>
-              </div>
+                <div v-else class="space-y-2 text-xs text-ink-600">
+                  <p>Số lượng yêu cầu/cấp {{ item.quantity }} · Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /></p>
+                  <p>{{ getUsageStatusLabel(item.usageStatus) }}</p>
+                  <p>{{ custodyReadLabel(detailModalRequest) }}</p>
+                  <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></p>
+                </div>
+              </template>
             </li>
           </ul>
         </div>
@@ -710,3 +653,16 @@ const getUsageBadgeClass = (status: string) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Keep the same cells and actions in one row per request, readable without sideways scrolling. */
+@media (max-width: 639px) {
+  .part-requests-table :deep(thead) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .part-requests-table :deep(tbody > tr) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .part-requests-table :deep(tbody > tr > td) { padding: 12px 16px; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(2)) { grid-column: 1 / -1; grid-row: 2; padding-top: 0; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(4)) { grid-column: 2; grid-row: 1; align-self: center; }
+  .part-requests-table :deep(tbody > tr > td:nth-child(6)) { grid-column: 1 / -1; padding-top: 0; }
+  .part-request-items { min-width: 0; max-width: none; }
+}
+</style>

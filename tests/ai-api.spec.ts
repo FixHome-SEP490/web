@@ -19,7 +19,7 @@ const realReply = {
   ],
   recommendedServices: [
     {
-      serviceCode: 'SUA_MAY_GIAT',
+      serviceCode: 'WM-01',
       nameVi: 'Sửa máy giặt rung lắc / không vắt',
       serviceId: 'f19905a8-bbe3-44aa-8b52-a8265deba5b0',
     },

@@ -12,6 +12,7 @@ import {
   ListChecks,
   MapPinned,
   Package,
+  PackageCheck,
   Receipt,
   ScrollText,
   ShieldCheck,
@@ -44,6 +45,7 @@ const overview = item('Tổng quan', '/console', LayoutDashboard);
 const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
 const bookings = item('Gán thợ', '/console/bookings', UserPlus);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
+const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
 const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
 const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', MapPinned);
@@ -55,7 +57,7 @@ const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', Map
 export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, payouts, serviceAreas] },
+      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, partReturns, payouts, serviceAreas] },
       {
         group: 'Hỗ trợ',
         items: [
@@ -71,7 +73,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
     return [
       {
         group: 'Vận hành',
-        items: [overview, orders, bookings, partRequests, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+        items: [overview, orders, bookings, partRequests, partReturns, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
       },
       {
         group: 'Kỹ thuật viên',

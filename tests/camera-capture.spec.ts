@@ -241,3 +241,18 @@ describe('CameraCapture', () => {
     wrapper.unmount();
   });
 });
+
+describe('CameraCapture fits the screen (BUG DETECTOR 11)', () => {
+  it('never grows past the screen, so the buttons stay visible after keeping a photo', async () => {
+    const wrapper = mountCamera('product');
+    await flushPromises();
+    const dialog = wrapper.get('[role="dialog"]').classes();
+    expect(dialog).toContain('max-h-[100dvh]');
+    expect(dialog).toContain('sm:max-h-[calc(100dvh-2rem)]');
+    // The preview is the part that shrinks: it may not force the footer off-screen.
+    const preview = wrapper.get('video').element.parentElement!.classList;
+    expect(preview.contains('min-h-0')).toBe(true);
+    expect(preview.contains('sm:flex-none')).toBe(false);
+    wrapper.unmount();
+  });
+});

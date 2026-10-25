@@ -378,7 +378,7 @@ onBeforeUnmount(() => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="camera-capture-title"
-      class="relative w-full sm:max-w-md bg-ink-900 text-white sm:rounded-[20px] overflow-hidden flex flex-col"
+      class="relative w-full max-h-[100dvh] sm:max-w-md sm:max-h-[calc(100dvh-2rem)] bg-ink-900 text-white sm:rounded-[20px] overflow-hidden flex flex-col"
     >
       <div class="flex items-center justify-between gap-3 px-4 h-14 shrink-0">
         <h2 id="camera-capture-title" class="text-base font-semibold truncate">{{ title }}</h2>
@@ -394,7 +394,8 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="relative flex-1 sm:flex-none sm:aspect-[3/4] bg-black overflow-hidden">
+      <!-- The preview gives up height when kept photos and the send button need room, so the buttons stay on screen. -->
+      <div class="relative flex-1 min-h-0 sm:flex-initial sm:aspect-[3/4] bg-black overflow-hidden">
         <!-- Live preview; the front camera is mirrored on screen like a mirror -->
         <video
           v-show="phase === 'live' || phase === 'starting'"

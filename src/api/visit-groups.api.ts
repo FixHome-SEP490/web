@@ -28,6 +28,8 @@ export interface CreateVisitDto {
   customerNote?: string;
   urgency?: 'LOW' | 'NORMAL' | 'HIGH' | 'EMERGENCY';
   idempotencyKey: string;
+  /** The assistant conversation that suggested the visit; its summary goes with the first device. */
+  aiSessionId?: string;
   items: VisitDeviceInput[];
 }
 

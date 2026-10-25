@@ -47,6 +47,27 @@ export interface RecommendedService {
   nameVi: string;
   /** Added by our backend from the catalogue. Null if the code is unknown. */
   serviceId?: string | null;
+  /** Which appliance it is for, when the reply covers more than one. */
+  deviceType?: string | null;
+}
+
+/**
+ * One appliance of a reply about several, at most three (one visit). The
+ * appliance being talked through is `isPrimary`; the others carry what the
+ * customer said about them and the service to book each under.
+ */
+export interface AiDeviceSuggestion {
+  deviceType: string;
+  nameVi: string;
+  imageIndex?: number | null;
+  isPrimary?: boolean;
+  service?: RecommendedService | null;
+  variantCode?: string | null;
+  questionsVi?: string[];
+  priceEstimate?: PriceEstimate | null;
+  descriptionVi?: string | null;
+  /** Why there is no service, e.g. FixHome does not repair it yet. */
+  noteVi?: string | null;
 }
 
 export interface PriceEstimate {
@@ -101,6 +122,8 @@ export interface AiReply {
    * they already tried or ruled out, what they suspect. Goes to the technician.
    */
   notesVi?: string[];
+  /** Every appliance of the conversation when there is more than one; empty otherwise. */
+  devices?: AiDeviceSuggestion[];
   disclaimerVi?: string;
 }
 

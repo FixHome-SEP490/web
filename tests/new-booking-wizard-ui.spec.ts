@@ -271,6 +271,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng ngủ không mát');
     await selectPhoto(new File(['two'], 'bedroom.png', { type: 'image/png' }));
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     await wrapper.get('[data-testid="visit-device-remove-0"]').trigger('click');
     await wrapper.get('[data-testid="visit-device-undo"]').trigger('click');
     expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách rò nước');
@@ -289,6 +290,90 @@ describe('NewBookingWizardPage A+ service finder', () => {
     }));
     expect(createVisit).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/app/visits/visit-id');
+    wrapper.unmount();
+  });
+
+  it('takes the appliances the assistant suggested one by one into one visit, with the conversation', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-ai', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', isPrimary: true, descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', descriptionVi: 'lavabo rò nước', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-ai' };
+    const wrapper = await renderWizard();
+
+    const note = wrapper.get('[data-testid="ai-visit-note"]');
+    expect(note.text()).toContain('Trợ lý AI gợi ý 2 thiết bị');
+    expect(wrapper.get('[data-testid="ai-visit-device-0"]').text()).toContain('(đang kiểm tra)');
+    expect(textareaValue(wrapper)).toBe('máy lạnh không mát');
+    // Continuing now would drop the second appliance without a word.
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 1 trước khi tiếp tục');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await flushPromises();
+
+    // The second one is loaded for the customer to check, not saved behind their back.
+    expect(wrapper.get('[data-testid="ai-visit-device-1"]').text()).toContain('(đang kiểm tra)');
+    expect(textareaValue(wrapper)).toBe('lavabo rò nước');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 2 trước khi tiếp tục');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(createVisit).toHaveBeenCalledWith(expect.objectContaining({
+      aiSessionId: 'sess-ai',
+      items: [
+        { serviceId: 'svc-ac-repair', deviceLabel: 'Máy lạnh', description: 'máy lạnh không mát' },
+        { serviceId: 'svc-siphon', deviceLabel: 'Chậu rửa', description: 'lavabo rò nước' },
+      ],
+    }));
+    wrapper.unmount();
+  });
+
+  it('lets the customer drop the appliances still waiting and book what is open', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-skip', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-skip' };
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="ai-visit-skip-rest"]').trigger('click');
+    expect(wrapper.find('[data-testid="ai-visit-skip-rest"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="step1-next"]').text()).not.toContain('Lưu máy');
+    wrapper.unmount();
+  });
+
+  it('books only the first suggested appliance when several in one visit is switched off', async () => {
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-off', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', descriptionVi: 'máy lạnh không mát', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-off' };
+    const wrapper = await renderWizard();
+    expect(wrapper.get('[data-testid="ai-visit-single-note"]').text()).toContain('thiết bị đầu tiên');
+    expect(wrapper.find('[data-testid="ai-visit-note"]').exists()).toBe(false);
+    expect(textareaValue(wrapper)).toBe('máy lạnh không mát');
+    wrapper.unmount();
+  });
+
+  it('ignores a draft from another conversation', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const { setAiVisitDraft } = await import('../src/composables/aiVisitDraft');
+    setAiVisitDraft('sess-a', [
+      { deviceType: 'air_conditioner', nameVi: 'Máy lạnh', service: { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac-repair' } },
+      { deviceType: 'sink', nameVi: 'Chậu rửa', service: { serviceCode: 'SA-02', nameVi: 'Thay siphon', serviceId: 'svc-siphon' } },
+    ]);
+    route.query = { visit: 'ai', aiSession: 'sess-b' };
+    const wrapper = await renderWizard();
+    expect(wrapper.find('[data-testid="ai-visit-note"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-opt-in"]').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -330,6 +415,14 @@ describe('NewBookingWizardPage A+ service finder', () => {
       await wrapper.get('[data-testid="booking-description"]').setValue(`Máy số ${index + 1}`);
       await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     }
+    expect(wrapper.find('[data-testid="visit-consultation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
+    expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="booking-summary-price"]').find('[data-money="600000"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="visit-consultation-open"]').text()).toBe('Liên hệ FixHome hỗ trợ');
+    expect(createConsultation).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="visit-consultation-open"]').trigger('click');
     expect(wrapper.get('[data-testid="visit-consultation"]').text()).toContain('Cần sửa thêm thiết bị?');
     expect(wrapper.get('[data-testid="visit-consultation-submit"]').attributes('disabled')).toBeDefined();
     expect(createConsultation).not.toHaveBeenCalled();
@@ -343,6 +436,44 @@ describe('NewBookingWizardPage A+ service finder', () => {
       devices: ['Máy 1: Vệ sinh điều hòa treo tường', 'Máy 2: Vệ sinh điều hòa treo tường', 'Máy 3: Vệ sinh điều hòa treo tường'],
     });
     expect(wrapper.get('[data-testid="visit-devices-banner"]').findAll('li')).toHaveLength(3);
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid^="visit-review-device-"]')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="booking-review"]').text()).toContain('Lịch và địa chỉ chung');
+    expect(wrapper.findAll('[data-testid="booking-submit"]')).toHaveLength(1);
+    for (let index = 0; index < 3; index += 1) {
+      const machine = wrapper.get(`[data-testid="visit-review-device-${index}"]`);
+      expect(machine.text()).toContain(`Máy số ${index + 1}`);
+      expect(machine.get(`[data-testid="visit-device-edit-${index}"]`).attributes('aria-label')).toContain(`Sửa máy ${index + 1}`);
+    }
+    expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-device-limit"]').text()).toContain('3/3 thiết bị');
+    expect(wrapper.get('[data-testid="visit-review-consultation"]').text()).toBe('Liên hệ FixHome hỗ trợ');
+    wrapper.unmount();
+  });
+
+  it('requires saving the third device before continuing the shared visit', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    for (let index = 0; index < 2; index += 1) {
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="booking-description"]').setValue(`Máy ${index + 1}`);
+      await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    }
+
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy 3');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 3 trước khi tiếp tục');
+    expect(wrapper.find('[data-testid="visit-device-2"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toContain('Thêm thiết bị này vào lượt');
+
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
+    expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
