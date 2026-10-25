@@ -206,6 +206,20 @@ describe('Departure warning and matching exhausted notifications', () => {
     expect(customerNotificationPath({ ...order, referenceId: null })).toBeNull();
   });
 
+  it.each(['VISIT_GROUP', 'visit_group'])('opens the parent visit for a cash signal with reference %s', async referenceType => {
+    const item: NotificationItem = { ...base, id: 'visit-cash', title: 'Xác nhận tiền mặt', message: '', type: 'VISIT_CASH_DECLARED', referenceType, referenceId: 'visit-1' };
+    expect(customerNotificationPath(item)).toBe('/app/visits/visit-1');
+    await expect(resolveCustomerNotificationPath(item)).resolves.toBe('/app/visits/visit-1');
+    expect(customerNotificationPath({ ...item, referenceId: null })).toBeNull();
+  });
+
+  it('uses only the VisitGroup reference for its new route and keeps the ID in one path segment', () => {
+    const item: NotificationItem = { ...base, id: 'group-event', type: 'VISIT_CASH_DECLARED', title: '', message: '', referenceType: 'VISIT_GROUP', referenceId: 'visit/other?query=1#fragment' };
+    expect(customerNotificationPath(item)).toBe('/app/visits/visit%2Fother%3Fquery%3D1%23fragment');
+    expect(customerNotificationPath({ ...item, referenceType: 'SERVICE_ORDER', referenceId: 'order-1' })).toBe('/app/orders/order-1');
+    expect(customerNotificationPath({ ...item, type: 'OTHER_GROUP_EVENT', referenceId: 'visit-1' })).toBe('/app/visits/visit-1');
+  });
+
   it('resolves PART_REQUEST_READY to its customer-owned service order instead of treating the part request as an order', async () => {
     const item: NotificationItem = {
       ...base,

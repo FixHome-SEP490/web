@@ -187,7 +187,13 @@ const currentDeviceUnits = computed(() => {
 const visitDeviceCount = computed(() => extraDevices.value.length
   + (editingSavedDeviceKey.value ? 0 : currentDeviceUnits.value));
 const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT);
-const canContinueFromStep1 = computed(() => !editingSavedDeviceKey.value && (
+// Keep the assistant's queue workflow unchanged; the manual third editor saves
+// and advances in one action, without ever creating a fourth draft.
+const canSaveThirdAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+  && extraDevices.value.length === VISIT_DEVICE_LIMIT - 1 && !!selectedServiceId.value && !editingSavedDeviceKey.value);
+const canContinueFromStep1 = computed(() => (!!editingSavedDeviceKey.value || canSaveThirdAndContinue.value)
+  ? isCatalogV2PreviewReady.value && !loading.value && !uploadingPhoto.value
+  : !editingSavedDeviceKey.value && (
   selectedServiceId.value
     ? extraDevices.value.length === 0 && !aiVisitWaiting.value && isCatalogV2PreviewReady.value && visitDeviceCount.value <= VISIT_DEVICE_LIMIT
     : extraDevices.value.length > 0
@@ -1384,7 +1390,12 @@ function toggleSymptom(symptom: string) {
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
   if (editingSavedDeviceKey.value) {
-    toast.warning('Lưu hoặc hủy thay đổi của thiết bị đang sửa trước khi tiếp tục.');
+    addAnotherDevice();
+    return;
+  }
+  if (canSaveThirdAndContinue.value) {
+    addAnotherDevice();
+    if (extraDevices.value.length === VISIT_DEVICE_LIMIT && !selectedServiceId.value) step.value = 2;
     return;
   }
   if (!selectedServiceId.value && visitGrouping.value && extraDevices.value.length >= 2) {
@@ -1565,7 +1576,9 @@ function addAnotherDevice() {
     toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Kiểm tra tiếp ${nextAi.nameVi.toLowerCase()}.`);
     return;
   }
-  toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
+  toast.success(extraDevices.value.length === VISIT_DEVICE_LIMIT
+    ? `Đã lưu đủ ${VISIT_DEVICE_LIMIT} thiết bị.`
+    : `Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
 }
 
 function removeExtraDevice(key: string) {
@@ -1784,7 +1797,7 @@ async function createAndFindTech() {
 <template>
   <div
     class="w-full space-y-5 sm:space-y-6"
-    :class="(step === 1 && !isAiFlow) || step === 2 ? 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-16'"
+    :class="(step === 1 && !isAiFlow) || step === 2 ? (visitSummaryPrice.kind === 'partial' ? 'pb-[calc(12rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24') : 'pb-16'"
   >
     <!-- Stepper. On a phone (PO 18/10/2026) four labels do not fit and were cut after the second:
          there it is "Bước 2/4" with the step's name and a progress bar; wider screens show every step. -->
@@ -2300,7 +2313,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi máy' : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveThirdAndContinue ? `Lưu máy ${VISIT_DEVICE_LIMIT} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
@@ -2681,7 +2694,7 @@ async function createAndFindTech() {
             <span class="font-semibold text-ink-900">Tiền công</span>
             <span class="text-ink-700">Thợ báo giá tại nhà</span>
           </div>
-          <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">{{ visitSummaryPrice.unresolvedCount }} máy còn chờ khảo sát, xác nhận giá.</p>
+          <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">+ {{ visitSummaryPrice.unresolvedCount }} máy chờ khảo sát báo giá. Chưa phải tổng {{ reviewDevices.length }} máy.</p>
           <p class="text-xs leading-relaxed text-ink-600">Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.</p>
         </section>
 

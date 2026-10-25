@@ -265,7 +265,9 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     await wrapper.get('[data-testid="visit-device-edit-0"]').trigger('click');
     await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh phòng khách rò nước');
-    await wrapper.get('[data-testid="visit-device-edit-save"]').trigger('click');
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu thay đổi');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
     expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('Máy lạnh phòng khách rò nước');
 
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
@@ -466,14 +468,25 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-description"]').setValue('Máy 3');
-    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 3 trước khi tiếp tục');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 3 và tiếp tục');
+    expect(wrapper.get('[data-testid="step1-next-bar"]').text()).toBe('Lưu máy 3 và tiếp tục');
     expect(wrapper.find('[data-testid="visit-device-2"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toContain('Thêm thiết bị này vào lượt');
 
-    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
-    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toBe('3 thiết bị');
     expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    expect(wrapper.get('[data-testid="visit-device-limit"]').text()).toContain('3/3 thiết bị');
+    expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(createVisit.mock.calls[0][0].items).toHaveLength(3);
     wrapper.unmount();
   });
 
