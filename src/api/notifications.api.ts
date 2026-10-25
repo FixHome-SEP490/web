@@ -271,7 +271,8 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
 /**
  * Where a customer lands from a notification, or null when it points nowhere.
  * A booking nobody accepted opens the technician list, so the customer can
- * pick others; other bookings open the booking, everything else the order.
+ * pick others; visit groups open the parent visit, other bookings open the
+ * booking, and the remaining references keep their existing order fallback.
  */
 export function customerNotificationPath(item: NotificationItem): string | null {
   if (!item.referenceId) return null;
@@ -283,6 +284,7 @@ export function customerNotificationPath(item: NotificationItem): string | null 
   if (type === 'BOOKING_MATCHING_EXHAUSTED') return `/app/bookings/${item.referenceId}/candidates`;
   // The technician could not make it (PO 20/10/2026): straight to choosing another one.
   if (type === 'TECHNICIAN_RELEASED') return `/app/bookings/${item.referenceId}/candidates?released=1`;
+  if (refType === 'VISIT_GROUP') return `/app/visits/${encodeURIComponent(item.referenceId)}`;
   if (refType.includes('BOOKING')) return `/app/bookings/${item.referenceId}`;
   return `/app/orders/${item.referenceId}`;
 }
