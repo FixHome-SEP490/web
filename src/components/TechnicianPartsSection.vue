@@ -29,6 +29,7 @@ import {
   isPartReturnsUnavailableError,
   type PartRequest,
   type PartCustodyReturnRecord,
+  type DeclareReturnPayload,
   type FulfillmentMethod,
 } from '../api/part-requests.api';
 import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
@@ -136,6 +137,19 @@ let custodyScope = 0;
 const bulkReturnOpen = ref(false);
 const bulkReturnSubmitting = ref(false);
 const bulkReturnDraft = ref<Record<string, number>>({});
+type BulkReturnRow = {
+  request: PartRequest;
+  item: PartRequest['items'][number];
+  record: PartCustodyReturnRecord;
+  quantity: number;
+  completed?: boolean;
+  command?: Readonly<DeclareReturnPayload>;
+};
+const bulkReturnAttempt = ref<BulkReturnRow[]>([]);
+// Keep ambiguous commands across an explicit close too: reopening must reconcile
+// the original command, never turn an unknown outcome into a fresh declaration.
+const pendingBulkDeclarations = ref<Record<string, BulkReturnRow>>({});
+const completedBulkReturns = computed(() => bulkReturnAttempt.value.filter(row => row.completed));
 // A retry of the same command must carry exactly the same version, quantity and key.
 const custodyCommandKeys = new Map<string, string>();
 function custodyCommandKey(kind: string, itemId: string, version: number, quantity: number) {
@@ -156,20 +170,38 @@ function usageLimit(item: PartRequest['items'][number]) {
 function unapprovedItem(item: PartRequest['items'][number]) {
   return !!props.approvedPartQuantities && !!item.partCatalogId && (props.approvedPartQuantities[item.partCatalogId] ?? 0) === 0;
 }
-const bulkReturnItems = computed(() => partRequests.value.flatMap(request => request.items.flatMap(item => {
+const bulkReturnCandidates = computed(() => partRequests.value.flatMap(request => request.items.flatMap(item => {
   const record = returnFor(item.id);
   if (item.partSource !== 'fixhome' || !record || canDeclareMoreQty(record) < 1 || !['received', 'completed'].includes(request.status)) return [];
   // Approved but undecided stock must first have its actual use explicitly recorded.
   if (!record.usageRecorded && item.usageStatus !== 'returned' && (props.usageFrozen || !unapprovedItem(item))) return [];
   return [{ request, item, record, quantity: canDeclareMoreQty(record) }];
 })));
+const bulkReturnItems = computed<BulkReturnRow[]>(() => bulkReturnOpen.value
+  ? bulkReturnAttempt.value.filter(row => !row.completed)
+  : bulkReturnCandidates.value);
 const bulkReturnValid = computed(() => bulkReturnItems.value.length > 0 && bulkReturnItems.value.every(row => {
+  const record = returnFor(row.item.id);
+  if (!record || record.partRequestId !== row.request.id) return false;
   const qty = bulkReturnDraft.value[row.item.id];
-  return Number.isInteger(qty) && qty! >= 1 && qty! <= row.quantity;
+  // A retry is a replay of its immutable command, even if the ledger version or
+  // remaining quantity changed. Only a server reply can confirm that command.
+  return row.command ? qty === row.command.quantity
+    : Number.isInteger(qty) && qty! >= 1 && qty! <= Math.min(row.quantity, canDeclareMoreQty(record));
 }));
+function closeBulkReturn() {
+  if (bulkReturnSubmitting.value) return;
+  bulkReturnOpen.value = false;
+  bulkReturnAttempt.value = [];
+  bulkReturnDraft.value = {};
+}
 function openBulkReturn() {
-  if (props.disabled || returnsLoadError.value || actionLoading.value || bulkReturnSubmitting.value) return;
-  bulkReturnDraft.value = Object.fromEntries(bulkReturnItems.value.map(row => [row.item.id, row.quantity]));
+  if (bulkReturnOpen.value || props.disabled || returnsLoadError.value || actionLoading.value || declareSubmitting.value || bulkReturnSubmitting.value) return;
+  const candidates = bulkReturnCandidates.value.map(row => pendingBulkDeclarations.value[row.item.id] ?? { ...row });
+  const ids = new Set(candidates.map(row => row.item.id));
+  bulkReturnAttempt.value = [...candidates, ...Object.values(pendingBulkDeclarations.value).filter(row => !ids.has(row.item.id))];
+  bulkReturnDraft.value = Object.fromEntries(bulkReturnAttempt.value.map(row => [row.item.id, row.command?.quantity ?? row.quantity]));
+  declareTarget.value = null;
   bulkReturnOpen.value = true;
 }
 async function submitBulkReturn() {
@@ -177,7 +209,7 @@ async function submitBulkReturn() {
   const orderId = props.orderId;
   const epoch = custodyScope;
   const stillCurrent = () => orderId === props.orderId && epoch === custodyScope;
-  const targets = bulkReturnItems.value.map(row => ({ ...row, quantity: bulkReturnDraft.value[row.item.id]! }));
+  const targets = [...bulkReturnItems.value];
   bulkReturnSubmitting.value = true;
   actionLoading.value = true;
   actionError.value = null;
@@ -186,8 +218,8 @@ async function submitBulkReturn() {
     for (const target of targets) {
       if (!stillCurrent() || props.disabled) return;
       let record = returnFor(target.item.id);
-      if (!record) throw new Error('Custody unavailable');
-      if (!record.usageRecorded && target.item.usageStatus !== 'returned' && isUnderRepair.value) {
+      if (!record || record.partRequestId !== target.request.id) throw new Error('Custody unavailable');
+      if (!target.command && !record.usageRecorded && target.item.usageStatus !== 'returned' && isUnderRepair.value) {
         if (props.usageFrozen || !unapprovedItem(target.item) || record.usedQty !== 0) throw new Error('Usage decision required');
         const saved = await partRequestsApi.updateItemUsage(target.request.id, target.item.id, {
           usageStatus: 'returned', usedQty: 0, expectedVersion: record.version,
@@ -201,13 +233,23 @@ async function submitBulkReturn() {
         record = returnFor(target.item.id);
         if (!record?.usageRecorded) throw new Error('Usage not confirmed');
       }
-      if (!record || target.quantity > canDeclareMoreQty(record)) throw new Error('Return changed');
-      const saved = await partRequestsApi.declareReturn(target.request.id, target.item.id, {
-        quantity: target.quantity, expectedVersion: record.version,
-        idempotencyKey: custodyCommandKey('declare', target.item.id, record.version, target.quantity),
-      });
+      if (!target.command) {
+        const quantity = bulkReturnDraft.value[target.item.id]!;
+        if (!record || quantity > canDeclareMoreQty(record)) throw new Error('Return changed');
+        target.command = Object.freeze({
+          quantity, expectedVersion: record.version,
+          idempotencyKey: custodyCommandKey('declare', target.item.id, record.version, quantity),
+        });
+      }
+      pendingBulkDeclarations.value[target.item.id] = target;
+      const saved = await partRequestsApi.declareReturn(target.request.id, target.item.id, target.command);
       if (!stillCurrent()) return;
-      if (saved && saved.partRequestItemId === target.item.id && saved.partRequestId === target.request.id) {
+      if (saved && (saved.partRequestItemId !== target.item.id || saved.partRequestId !== target.request.id)) throw new Error('Return response mismatch');
+      // A successful declaration completes this selected quantity, not the
+      // item's entire return obligation. Record it before any GET can fail.
+      target.completed = true;
+      delete pendingBulkDeclarations.value[target.item.id];
+      if (saved) {
         returnRecords.value = returnRecords.value.map(row => row.partRequestItemId === saved.partRequestItemId ? saved : row);
       }
       if (!await loadReturns()) throw new Error('Custody refresh required');
@@ -219,8 +261,8 @@ async function submitBulkReturn() {
     if (!stillCurrent()) return;
     await loadReturns();
     if (!stillCurrent()) return;
-    // Confirmed rows disappear; retries cover only the remaining rows and reuse command keys.
-    bulkReturnDraft.value = Object.fromEntries(bulkReturnItems.value.map(row => [row.item.id, Math.min(bulkReturnDraft.value[row.item.id] ?? row.quantity, row.quantity)]));
+    // Preserve the attempt's completed rows, selected quantities and uncertain
+    // commands. Ledger refresh/reordering must never create another declaration.
     actionError.value = userFacingError(err, 'Chưa xác nhận đủ khai trả. Kiểm tra số lượng còn lại rồi thử lại.');
   } finally {
     if (stillCurrent()) { bulkReturnSubmitting.value = false; actionLoading.value = false; }
@@ -572,6 +614,8 @@ watch(() => props.orderId, id => {
   bulkReturnOpen.value = false;
   bulkReturnSubmitting.value = false;
   bulkReturnDraft.value = {};
+  bulkReturnAttempt.value = [];
+  pendingBulkDeclarations.value = {};
   custodyCommandKeys.clear();
   actionLoading.value = false;
   selectedItems.value = [];
@@ -740,7 +784,7 @@ const openDeclareReturn = (
 ) => {
   const request = partRequests.value.find(row => row.id === requestId);
   const item = request?.items.find(row => row.id === itemId);
-  if (!request || !item || !canDeclareReturn(request, item) || props.disabled) return;
+  if (!request || !item || !canDeclareReturn(request, item) || props.disabled || bulkReturnOpen.value || pendingBulkDeclarations.value[itemId]) return;
   const maxQty = canDeclareMoreQty(record);
   if (maxQty < 1 || declareSubmitting.value) return;
   declareTarget.value = { requestId, itemId, itemName, maxQty, version: record.version };
@@ -751,7 +795,7 @@ const openDeclareReturn = (
 
 const submitDeclareReturn = async () => {
   const target = declareTarget.value;
-  if (!target || declareSubmitting.value || props.disabled || returnsLoadError.value) return;
+  if (!target || declareSubmitting.value || props.disabled || returnsLoadError.value || bulkReturnOpen.value || pendingBulkDeclarations.value[target.itemId]) return;
   const request = partRequests.value.find(row => row.id === target.requestId);
   const item = request?.items.find(row => row.id === target.itemId);
   if (!request || !item || !canDeclareReturn(request, item)) { declareTarget.value = null; return; }
@@ -862,17 +906,22 @@ const getStatusBadgeClass = (status: string) => {
         </button>
       </div>
 
-      <div v-if="bulkReturnItems.length" class="space-y-3" data-testid="bulk-return-section">
+      <div v-if="bulkReturnItems.length || bulkReturnOpen || Object.keys(pendingBulkDeclarations).length" class="space-y-3" data-testid="bulk-return-section">
         <button type="button" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-ink-300 px-3 text-sm font-semibold text-ink-800 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" data-testid="return-all-unused" :disabled="disabled || actionLoading || returnsLoadError" :aria-expanded="bulkReturnOpen" @click="openBulkReturn"><Undo2 :size="16" aria-hidden="true" /><span>Khai trả toàn bộ linh kiện chưa dùng</span></button>
         <div v-if="bulkReturnOpen" class="space-y-3 rounded-xl border border-ink-200 p-3 text-sm" data-testid="bulk-return-confirm" role="group" aria-label="Xác nhận số lượng khai trả từng linh kiện">
           <p class="text-ink-700">Kiểm tra số lượng từng linh kiện. Khai trả chưa phải quản lý đã nhận kho.</p>
+          <ul v-if="completedBulkReturns.length" class="space-y-1 text-success-800" data-testid="bulk-return-processed" aria-live="polite">
+            <li v-for="row in completedBulkReturns" :key="row.item.id">Đã khai trả {{ row.item.partNameSnapshot }}: {{ row.command?.quantity }} · Chờ quản lý nhận thực tế</li>
+          </ul>
+          <p v-if="completedBulkReturns.length && bulkReturnItems.length" class="text-ink-700">Còn {{ bulkReturnItems.length }} dòng trong lượt này cần xác nhận. Các dòng đã khai thành công sẽ không gửi lại.</p>
+          <p v-if="bulkReturnItems.some(row => row.command)" class="text-warning-800" role="status">Có khai trả chưa xác định kết quả. Thử lại giữ nguyên số lượng để đối chiếu; không tạo khai trả mới.</p>
           <label v-for="row in bulkReturnItems" :key="row.item.id" class="flex items-center justify-between gap-3 text-ink-900">
             <span class="min-w-0">{{ row.item.partNameSnapshot }}</span>
-            <input v-model.number="bulkReturnDraft[row.item.id]" type="number" min="1" :max="row.quantity" step="1" :aria-label="`Số lượng khai trả ${row.item.partNameSnapshot}`" :disabled="bulkReturnSubmitting" class="h-11 w-20 shrink-0 rounded-lg border border-ink-300 px-2 font-num focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
+            <input v-model.number="bulkReturnDraft[row.item.id]" type="number" min="1" :max="row.command?.quantity ?? Math.min(row.quantity, returnFor(row.item.id) ? canDeclareMoreQty(returnFor(row.item.id)!) : 0)" step="1" :aria-label="`Số lượng khai trả ${row.item.partNameSnapshot}`" :disabled="bulkReturnSubmitting || !!row.command" class="h-11 w-20 shrink-0 rounded-lg border border-ink-300 px-2 font-num focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
           </label>
           <div class="flex flex-wrap gap-2">
             <FhButton data-testid="confirm-return-all" class="min-h-11" :disabled="!bulkReturnValid || bulkReturnSubmitting || disabled || returnsLoadError" :loading="bulkReturnSubmitting" @click="submitBulkReturn">Xác nhận khai trả</FhButton>
-            <FhButton variant="secondary" class="min-h-11" :disabled="bulkReturnSubmitting" @click="bulkReturnOpen = false">Đóng</FhButton>
+            <FhButton variant="secondary" class="min-h-11" :disabled="bulkReturnSubmitting" @click="closeBulkReturn">Đóng</FhButton>
           </div>
         </div>
       </div>
@@ -1417,7 +1466,7 @@ const getStatusBadgeClass = (status: string) => {
                       data-testid="open-declare-return"
                       class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                       :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
-                      :disabled="declareSubmitting || returnsLoadError || disabled" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
+                      :disabled="declareSubmitting || returnsLoadError || disabled || bulkReturnOpen || !!pendingBulkDeclarations[item.id]" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
                       <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
                     </button>
                   </div>
