@@ -35,12 +35,16 @@ import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
 import { onOrderChange, whileOffline } from '../services/live-updates';
 import type { FixHomePart } from '../api/admin-parts.api';
 import { vnDateTimeString } from '../utils/vn-time';
+import { technicianUsageLimit } from '../utils/technician-workflow';
 import { partCustodyQuantities } from '../utils/part-custody-quantities';
 
 const props = defineProps<{
   orderId: string;
   orderStatus: string;
   disabled?: boolean;
+  usageFrozen?: boolean;
+  /** Approved SKU ceilings from the selected order, never from stock received. null = unknown. */
+  approvedPartQuantities?: Record<string, number> | null;
 }>();
 
 const emit = defineEmits<{
@@ -128,6 +132,101 @@ const declareTarget = ref<{
 } | null>(null);
 const declareQty = ref(1);
 const declareSubmitting = ref(false);
+let custodyScope = 0;
+const bulkReturnOpen = ref(false);
+const bulkReturnSubmitting = ref(false);
+const bulkReturnDraft = ref<Record<string, number>>({});
+// A retry of the same command must carry exactly the same version, quantity and key.
+const custodyCommandKeys = new Map<string, string>();
+function custodyCommandKey(kind: string, itemId: string, version: number, quantity: number) {
+  const signature = `${props.orderId}:${kind}:${itemId}:${version}:${quantity}`;
+  let key = custodyCommandKeys.get(signature);
+  if (!key) { key = createIdempotencyKey(kind); custodyCommandKeys.set(signature, key); }
+  return key;
+}
+const allStockItems = computed(() => partRequests.value.filter(row => row.status === 'received' || row.status === 'completed').flatMap(row => row.items));
+function usageLimit(item: PartRequest['items'][number]) {
+  if (item.partSource !== 'fixhome') return item.quantity;
+  if (props.approvedPartQuantities === undefined) {
+    const record = returnFor(item.id);
+    return record ? Math.max(0, record.issuedQty - Math.max(record.declaredQty, record.managerAcceptedQty)) : item.quantity;
+  }
+  return technicianUsageLimit(item, props.approvedPartQuantities, allStockItems.value, returnRecords.value);
+}
+function unapprovedItem(item: PartRequest['items'][number]) {
+  return !!props.approvedPartQuantities && !!item.partCatalogId && (props.approvedPartQuantities[item.partCatalogId] ?? 0) === 0;
+}
+const bulkReturnItems = computed(() => partRequests.value.flatMap(request => request.items.flatMap(item => {
+  const record = returnFor(item.id);
+  if (item.partSource !== 'fixhome' || !record || canDeclareMoreQty(record) < 1 || !['received', 'completed'].includes(request.status)) return [];
+  // Approved but undecided stock must first have its actual use explicitly recorded.
+  if (!record.usageRecorded && item.usageStatus !== 'returned' && (props.usageFrozen || !unapprovedItem(item))) return [];
+  return [{ request, item, record, quantity: canDeclareMoreQty(record) }];
+})));
+const bulkReturnValid = computed(() => bulkReturnItems.value.length > 0 && bulkReturnItems.value.every(row => {
+  const qty = bulkReturnDraft.value[row.item.id];
+  return Number.isInteger(qty) && qty! >= 1 && qty! <= row.quantity;
+}));
+function openBulkReturn() {
+  if (props.disabled || returnsLoadError.value || actionLoading.value || bulkReturnSubmitting.value) return;
+  bulkReturnDraft.value = Object.fromEntries(bulkReturnItems.value.map(row => [row.item.id, row.quantity]));
+  bulkReturnOpen.value = true;
+}
+async function submitBulkReturn() {
+  if (!bulkReturnValid.value || props.disabled || returnsLoadError.value || bulkReturnSubmitting.value || actionLoading.value) return;
+  const orderId = props.orderId;
+  const epoch = custodyScope;
+  const stillCurrent = () => orderId === props.orderId && epoch === custodyScope;
+  const targets = bulkReturnItems.value.map(row => ({ ...row, quantity: bulkReturnDraft.value[row.item.id]! }));
+  bulkReturnSubmitting.value = true;
+  actionLoading.value = true;
+  actionError.value = null;
+  actionSuccess.value = null;
+  try {
+    for (const target of targets) {
+      if (!stillCurrent() || props.disabled) return;
+      let record = returnFor(target.item.id);
+      if (!record) throw new Error('Custody unavailable');
+      if (!record.usageRecorded && target.item.usageStatus !== 'returned' && isUnderRepair.value) {
+        if (props.usageFrozen || !unapprovedItem(target.item) || record.usedQty !== 0) throw new Error('Usage decision required');
+        const saved = await partRequestsApi.updateItemUsage(target.request.id, target.item.id, {
+          usageStatus: 'returned', usedQty: 0, expectedVersion: record.version,
+          idempotencyKey: custodyCommandKey('parts-used', target.item.id, record.version, 0),
+        });
+        if (!stillCurrent()) return;
+        partRequests.value = partRequests.value.map(row => row.id === target.request.id ? { ...row, items: row.items.map(item => item.id === target.item.id ? { ...item, ...saved, usageStatus: saved.usageStatus } : item) } : row);
+        emit('requests', partRequests.value);
+        if (!await loadReturns()) throw new Error('Custody refresh required');
+        if (!stillCurrent() || props.disabled) return;
+        record = returnFor(target.item.id);
+        if (!record?.usageRecorded) throw new Error('Usage not confirmed');
+      }
+      if (!record || target.quantity > canDeclareMoreQty(record)) throw new Error('Return changed');
+      const saved = await partRequestsApi.declareReturn(target.request.id, target.item.id, {
+        quantity: target.quantity, expectedVersion: record.version,
+        idempotencyKey: custodyCommandKey('declare', target.item.id, record.version, target.quantity),
+      });
+      if (!stillCurrent()) return;
+      if (saved && saved.partRequestItemId === target.item.id && saved.partRequestId === target.request.id) {
+        returnRecords.value = returnRecords.value.map(row => row.partRequestItemId === saved.partRequestItemId ? saved : row);
+      }
+      if (!await loadReturns()) throw new Error('Custody refresh required');
+    }
+    if (!stillCurrent()) return;
+    bulkReturnOpen.value = false;
+    actionSuccess.value = 'Đã gửi khai trả. Chờ quản lý dịch vụ nhận và xác nhận thực tế.';
+  } catch (err) {
+    if (!stillCurrent()) return;
+    await loadReturns();
+    if (!stillCurrent()) return;
+    // Confirmed rows disappear; retries cover only the remaining rows and reuse command keys.
+    bulkReturnDraft.value = Object.fromEntries(bulkReturnItems.value.map(row => [row.item.id, Math.min(bulkReturnDraft.value[row.item.id] ?? row.quantity, row.quantity)]));
+    actionError.value = userFacingError(err, 'Chưa xác nhận đủ khai trả. Kiểm tra số lượng còn lại rồi thử lại.');
+  } finally {
+    if (stillCurrent()) { bulkReturnSubmitting.value = false; actionLoading.value = false; }
+  }
+}
+
 
 const returnByItemId = computed(() => {
   const map = new Map<string, PartCustodyReturnRecord>();
@@ -151,6 +250,7 @@ const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
 const canDeclareReturn = (_request: PartRequest, item: PartRequest['items'][number]) => {
   const record = returnFor(item.id);
   return item.partSource === 'fixhome' && (item.usageStatus === 'returned' ||
+    (!!record && unapprovedItem(item) && record.usedQty === 0 && record.usageRecorded === true) ||
     (item.usageStatus === 'used' && !!record?.usageRecorded && record.usedQty < record.issuedQty) ||
     ['COMPLETED', 'CANCELLED'].includes(props.orderStatus.toUpperCase()));
 };
@@ -323,7 +423,7 @@ const loadReturns = async () => {
   const version = ++returnsLoadVersion;
   try {
     const records = await partRequestsApi.getReturnsByOrderId(props.orderId);
-    if (version !== returnsLoadVersion) return;
+    if (version !== returnsLoadVersion) return false;
     returnRecords.value = records;
     returnsLoadError.value = false;
     for (const record of records) {
@@ -342,13 +442,15 @@ const loadReturns = async () => {
         ? { ...target, itemName: record.partNameSnapshot, maxQty, version: record.version }
         : null;
     }
+    return true;
   } catch (err: unknown) {
-    if (version !== returnsLoadVersion) return;
+    if (version !== returnsLoadVersion) return false;
     declareTarget.value = null;
     // Feature flag off or no access to the route: hide the return UI and keep
     // the existing QR / usage / part-request flow untouched.
     returnsLoadError.value = !isPartReturnsUnavailableError(err);
     if (!returnsLoadError.value) returnRecords.value = [];
+    return false;
   }
 };
 
@@ -431,6 +533,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  custodyScope += 1;
   document.removeEventListener('click', handleClickOutside);
   stopLiveParts();
   stopOfflineParts();
@@ -454,6 +557,7 @@ let stopLiveParts = onOrderChange(props.orderId, event => {
 });
 const stopOfflineParts = whileOffline(() => void refreshParts(), 20_000);
 watch(() => props.orderId, id => {
+  custodyScope += 1;
   stopLiveParts();
   ++requestsLoadVersion;
   ++returnsLoadVersion;
@@ -465,6 +569,11 @@ watch(() => props.orderId, id => {
     returnRecords.value = [];
     requestDetailOverrides.value = {};
   declareTarget.value = null;
+  bulkReturnOpen.value = false;
+  bulkReturnSubmitting.value = false;
+  bulkReturnDraft.value = {};
+  custodyCommandKeys.clear();
+  actionLoading.value = false;
   selectedItems.value = [];
   showCreateForm.value = false;
   actionError.value = null;
@@ -546,7 +655,8 @@ const handleUpdateUsage = async (
   status: 'used' | 'returned',
 ) => {
   const request = partRequests.value.find(row => row.id === requestId);
-  if (!isUnderRepair.value || request?.status !== 'received' || props.disabled || actionLoading.value) return;
+  const item = request?.items.find(row => row.id === itemId);
+  if (!item || !isUnderRepair.value || props.usageFrozen || request?.status !== 'received' || props.disabled || actionLoading.value || (status === 'used' && usageLimit(item) < item.quantity)) return;
   try {
     actionLoading.value = true;
     actionError.value = null;
@@ -578,11 +688,12 @@ const handlePartialUsage = async (requestId: string, itemId: string) => {
   const row = partRequests.value.find(request => request.id === requestId);
   const item = row?.items.find(record => record.id === itemId);
   const custody = returnFor(itemId);
-  if (props.disabled || actionLoading.value || !isUnderRepair.value ||
-      row?.status !== 'received' || item?.partSource !== 'fixhome' || !custody) return;
+  if (props.disabled || props.usageFrozen || actionLoading.value || !isUnderRepair.value ||
+      row?.status !== 'received' || item?.partSource !== 'fixhome' || !custody || returnsLoadError.value) return;
+  const orderId = props.orderId;
   const usedQty = Number(partialUsageDraft.value[itemId]);
-  if (!Number.isInteger(partialUsageDraft.value[itemId]) || usedQty < custody.usedQty ||
-      usedQty > custody.issuedQty - custody.managerAcceptedQty) {
+  if (!Number.isInteger(partialUsageDraft.value[itemId]) || usedQty < 0 ||
+      usedQty > usageLimit(item)) {
     actionError.value = 'Số lượng đã dùng không hợp lệ.';
     return;
   }
@@ -597,8 +708,9 @@ const handlePartialUsage = async (requestId: string, itemId: string) => {
       usageStatus: status,
       usedQty,
       expectedVersion: custody.version,
-      idempotencyKey: createIdempotencyKey('parts-used'),
+      idempotencyKey: custodyCommandKey('parts-used', itemId, custody.version, usedQty),
     });
+    if (orderId !== props.orderId) return;
     partRequests.value = partRequests.value.map(request => request.id === requestId
       ? { ...request, items: request.items.map(line => line.id === itemId
         ? { ...line, ...saved, usageStatus: saved?.usageStatus ?? status } : line) }
@@ -611,12 +723,12 @@ const handlePartialUsage = async (requestId: string, itemId: string) => {
   } catch (err: unknown) {
     // On 409 or any uncertain write, refresh the authoritative version and
     // reset the input to the newly confirmed quantity.
+    if (orderId !== props.orderId) return;
     delete partialUsageDraft.value[itemId];
     await loadReturns();
     actionError.value = userFacingError(err, 'Không thể lưu số lượng. Vui lòng kiểm tra và thử lại.');
   } finally {
-    partialUsageSaving.value = null;
-    actionLoading.value = false;
+    if (orderId === props.orderId) { partialUsageSaving.value = null; actionLoading.value = false; }
   }
 };
 
@@ -656,7 +768,7 @@ const submitDeclareReturn = async () => {
     await partRequestsApi.declareReturn(target.requestId, target.itemId, {
       quantity,
       expectedVersion: target.version,
-      idempotencyKey: createIdempotencyKey('declare'),
+      idempotencyKey: custodyCommandKey('declare', target.itemId, target.version, quantity),
     });
     declareTarget.value = null;
     actionSuccess.value =
@@ -748,6 +860,21 @@ const getStatusBadgeClass = (status: string) => {
         >
           Thử lại
         </button>
+      </div>
+
+      <div v-if="bulkReturnItems.length" class="space-y-3" data-testid="bulk-return-section">
+        <button type="button" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-ink-300 px-3 text-sm font-semibold text-ink-800 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" data-testid="return-all-unused" :disabled="disabled || actionLoading || returnsLoadError" :aria-expanded="bulkReturnOpen" @click="openBulkReturn"><Undo2 :size="16" aria-hidden="true" /><span>Khai trả toàn bộ linh kiện chưa dùng</span></button>
+        <div v-if="bulkReturnOpen" class="space-y-3 rounded-xl border border-ink-200 p-3 text-sm" data-testid="bulk-return-confirm" role="group" aria-label="Xác nhận số lượng khai trả từng linh kiện">
+          <p class="text-ink-700">Kiểm tra số lượng từng linh kiện. Khai trả chưa phải quản lý đã nhận kho.</p>
+          <label v-for="row in bulkReturnItems" :key="row.item.id" class="flex items-center justify-between gap-3 text-ink-900">
+            <span class="min-w-0">{{ row.item.partNameSnapshot }}</span>
+            <input v-model.number="bulkReturnDraft[row.item.id]" type="number" min="1" :max="row.quantity" step="1" :aria-label="`Số lượng khai trả ${row.item.partNameSnapshot}`" :disabled="bulkReturnSubmitting" class="h-11 w-20 shrink-0 rounded-lg border border-ink-300 px-2 font-num focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
+          </label>
+          <div class="flex flex-wrap gap-2">
+            <FhButton data-testid="confirm-return-all" class="min-h-11" :disabled="!bulkReturnValid || bulkReturnSubmitting || disabled || returnsLoadError" :loading="bulkReturnSubmitting" @click="submitBulkReturn">Xác nhận khai trả</FhButton>
+            <FhButton variant="secondary" class="min-h-11" :disabled="bulkReturnSubmitting" @click="bulkReturnOpen = false">Đóng</FhButton>
+          </div>
+        </div>
       </div>
 
       <!-- Action: Create Pre-Repair Request (Only in ACCEPTED state) -->
@@ -1240,6 +1367,7 @@ const getStatusBadgeClass = (status: string) => {
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-ink-50 p-3">
                       <div><dt>Còn phải khai</dt><dd class="font-num font-semibold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
                       <div><dt>Đã khai, chờ nhận</dt><dd class="font-num font-semibold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-800' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
+                      <div><dt>Khách duyệt tối đa (cả máy)</dt><dd class="font-num font-semibold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
                       <div><dt>Quản lý đã nhận</dt><dd class="font-num font-semibold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
                       <div><dt>Đơn giá</dt><dd><FhMoney :amount="item.unitPriceSnapshot" /></dd></div>
                     </dl>
@@ -1261,26 +1389,30 @@ const getStatusBadgeClass = (status: string) => {
                     <p class="font-medium">{{ item.usageStatus === 'used' ? 'Đã dùng · chưa có số lượng chi tiết' : item.usageStatus === 'returned' ? 'Đã ghi nhận không dùng · chưa xác nhận trả kho' : 'Chưa ghi nhận sử dụng' }}</p>
                   </div>
 
+                  <p v-if="unapprovedItem(item)" class="text-sm text-warning-800">Chưa được khách duyệt linh kiện này. Thực dùng tối đa 0; báo giá bổ sung để xin duyệt hoặc khai trả toàn bộ.</p>
                   <div class="part-item-actions flex flex-wrap gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
-                    <template v-if="isUnderRepair && pr.status === 'received' && !record">
+                    <template v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && !record">
                       <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                         :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
                         :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
-                        :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
+                        :disabled="actionLoading || disabled || usageLimit(item) < item.quantity" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
                       <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                         :class="item.usageStatus === 'returned' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
                         :aria-pressed="item.usageStatus === 'returned'" :aria-label="`Ghi nhận không dùng ${item.partNameSnapshot}`"
                         :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')"><RotateCcw :size="16" class="shrink-0" aria-hidden="true" />Hoàn trả</button>
                     </template>
-                    <button v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && record" type="button"
+                    <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && item.partSource === 'fixhome' && record && usageLimit(item) > 0" type="button"
                       data-testid="edit-part-usage"
                       class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                      :disabled="actionLoading || disabled"
+                      :disabled="actionLoading || disabled || returnsLoadError"
                       :aria-label="`Ghi số lượng thực dùng ${item.partNameSnapshot}`"
                       :aria-expanded="!!partialUsageEditing[item.id]" :aria-controls="`part-usage-editor-${item.id}`"
                       @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
                       <Check :size="16" class="shrink-0" aria-hidden="true" />{{ partialUsageEditing[item.id] ? 'Đóng nhập' : 'Ghi thực dùng' }}
                     </button>
+                    <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && record && !record.usageRecorded && record.usedQty === 0 && usageLimit(item) === 0" type="button"
+                      data-testid="confirm-zero-usage" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                      :disabled="actionLoading || disabled || returnsLoadError" @click="partialUsageDraft[item.id] = 0; handlePartialUsage(pr.id, item.id)"><RotateCcw :size="16" aria-hidden="true" />Xác nhận không dùng</button>
                     <button v-if="record && canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button"
                       data-testid="open-declare-return"
                       class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
@@ -1289,23 +1421,23 @@ const getStatusBadgeClass = (status: string) => {
                       <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
                     </button>
                   </div>
-                  <div v-if="isUnderRepair && pr.status === 'received' && item.partSource === 'fixhome' && record && partialUsageEditing[item.id]"
+                  <div v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && item.partSource === 'fixhome' && record && usageLimit(item) > 0 && partialUsageEditing[item.id]"
                     :id="`part-usage-editor-${item.id}`" class="space-y-3 rounded-lg bg-ink-50 p-3" data-testid="partial-usage-editor">
                     <p class="text-xs text-ink-700">Dự kiến cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) - record.managerAcceptedQty }}</strong> · Đã nhận lại: {{ record.managerAcceptedQty }}</p>
                     <div class="flex flex-wrap items-end gap-2">
                       <label class="min-w-28 flex-1 text-xs font-medium text-ink-700">
                         Số lượng thực dùng
-                        <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" :min="record.usedQty"
-                          :max="record.issuedQty - record.managerAcceptedQty" inputmode="numeric" :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
+                        <input v-model.number="partialUsageDraft[item.id]" type="number" step="1" min="0"
+                          :max="usageLimit(item)" inputmode="numeric" :aria-label="`Số lượng thực dùng ${item.partNameSnapshot}`"
                           class="mt-1 h-11 w-full rounded-lg border border-ink-300 bg-white px-3 font-num text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
                       </label>
                       <button type="button" class="min-h-11 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                        :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < record.usedQty || Number(partialUsageDraft[item.id]) > record.issuedQty - record.managerAcceptedQty || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
+                        :disabled="actionLoading || disabled || partialUsageSaving === item.id || !Number.isInteger(partialUsageDraft[item.id]) || Number(partialUsageDraft[item.id]) < 0 || Number(partialUsageDraft[item.id]) > usageLimit(item) || (record.usageRecorded && Number(partialUsageDraft[item.id]) === record.usedQty)"
                         @click="handlePartialUsage(pr.id, item.id)">
                         {{ partialUsageSaving === item.id ? 'Đang lưu…' : 'Lưu số lượng' }}
                       </button>
                     </div>
-                    <p class="text-xs text-ink-600">Số thực dùng được đối chiếu khi lập hóa đơn. Khai trả kho vẫn cần quản lý nhận thực tế.</p>
+                    <p class="text-xs text-ink-600">Số khách duyệt là giới hạn tối đa. Hóa đơn linh kiện FixHome tính theo số thực dùng đã được đối chiếu. Khai trả kho vẫn cần quản lý nhận thực tế.</p>
                   </div>
                 </template>
               </article>

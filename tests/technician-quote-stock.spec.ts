@@ -9,9 +9,9 @@ import Page from '../src/pages/technician/TechnicianJobDetailPage.vue';
 const requests = [{ id: 'r1', requestType: 'pre_repair', status: 'received', receivedAt: '2026-10-20', items: [{ id: 'l1', partCatalogId: 's1', partSource: 'fixhome', partNameSnapshot: 'Van kho', quantity: 2, unitPriceSnapshot: 50000, usageStatus: 'pending' }] }];
 const Parts = defineComponent({ emits: ['requests'], setup(_, { emit }) { onMounted(() => emit('requests', requests)); return () => null; } });
 let missingCatalog = false;
-const open = async (approved = false) => {
+const open = async (approved = false, fixedVisit = false) => {
   api.get.mockImplementation(async (path: string) => {
-    if (path === '/service-orders/o1') return { data: { data: { id: 'o1', code: 'TEST', status: approved ? 'under_repair' : 'en_route', paymentStatus: 'unpaid', arrivalVerified: true, beforeEvidenceCount: 1, laborTotal: 0, partsTotal: 0, grandTotal: 0,
+    if (path === '/service-orders/o1') return { data: { data: { id: 'o1', code: 'TEST', ...(fixedVisit ? { visitGroupId: 'v1', pricingMode: 'FIXED_PRICE', fixedUnitPrice: 449000, quantity: 1 } : {}), status: approved ? 'under_repair' : 'en_route', paymentStatus: 'unpaid', arrivalVerified: true, beforeEvidenceCount: 1, laborTotal: 0, partsTotal: 0, grandTotal: 0,
       quotation: approved ? { id: 'q1', status: 'approved', items: [{ type: 'parts_equipment', partSource: 'technician', quantity: 1, unitPrice: 70000, lineTotal: 70000, description: 'Van riêng' }] } : undefined } } };
     if (path === '/parts/catalog/s1' && missingCatalog) throw new Error('offline');
     if (path === '/parts/catalog/s1') return { data: { data: { id: 's1', name: 'Van kho', sellingPrice: 60000, warrantyDays: 90 } } };
@@ -25,6 +25,24 @@ const open = async (approved = false) => {
 };
 describe('technician base quote stock integration', () => {
   beforeEach(() => { vi.clearAllMocks(); missingCatalog = false; });
+  it('keeps a fixed visit base labor-only even with received stock and unavailable catalog', async () => {
+    missingCatalog = true;
+    api.post.mockResolvedValue({ data: { data: {} } });
+    const w = await open(false, true);
+    const form = w.get('[data-testid="quotation-form"]');
+    expect(form.text()).toContain('chỉ gồm tiền công');
+    expect(form.find('input[aria-label="Số lượng linh kiện"]').exists()).toBe(false);
+    expect(form.findAll('input[aria-label="Đơn giá"]')).toHaveLength(1);
+    expect(form.get('input[aria-label="Đơn giá"]').attributes('disabled')).toBeDefined();
+    expect(form.text()).not.toContain('Thêm linh kiện');
+    expect(w.find('[data-testid="quote-stock-error"]').exists()).toBe(false);
+    await w.findAll('button').find(b => b.text() === 'Gửi báo giá cho khách duyệt')!.trigger('click');
+    await flushPromises();
+    expect(api.post).toHaveBeenCalledWith('/service-orders/o1/quotations', expect.objectContaining({
+      items: [expect.objectContaining({ type: 'labor', quantity: 1, unitPrice: 449000 })],
+    }));
+    w.unmount();
+  });
   it('suggests stock with locked warehouse price/warranty once, preserves edited quantity and removal', async () => {
     const w = await open();
     const form = w.get('[data-testid="quotation-form"]');

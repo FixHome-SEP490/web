@@ -5,6 +5,7 @@
  * belong to the selected ServiceOrder.
  */
 import { computed } from 'vue';
+import FhMoney from '../FhMoney.vue';
 import { PackageCheck } from 'lucide-vue-next';
 import type { VisitCheckout } from '../../api/visit-groups.api';
 import type { TechnicianVisitDeviceStatus } from '../../utils/technician-visit-device-status';
@@ -13,10 +14,12 @@ import { projectTechnicianVisitDeviceStatus } from '../../utils/technician-visit
 const props = withDefaults(defineProps<{
   devices: VisitCheckout['devices'];
   activeOrderId: string;
+  overviewByOrderId?: Record<string, { price: number | null; priceLabel: string; partsLabel: string; extraLabel: string }>;
   statusByOrderId?: Record<string, TechnicianVisitDeviceStatus>;
   pendingReadyPartRequest?: { orderId: string; sequence: number } | null;
 }>(), {
   statusByOrderId: () => ({}),
+  overviewByOrderId: () => ({}),
   pendingReadyPartRequest: null,
 });
 const emit = defineEmits<{ openParts: [orderId: string] }>();
@@ -58,6 +61,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         Kết quả {{ resolved }}/{{ devices.length }} máy
       </span>
     </div>
+    <p class="text-sm text-ink-600"><span class="font-medium text-ink-800">Chung cả lượt:</span> Một kỹ thuật viên · Một lịch hẹn, địa chỉ · Thanh toán một lần</p>
     <div class="visit-device-grid grid gap-2 sm:grid-cols-3">
       <template v-for="device in devices" :key="device.bookingId">
         <div
@@ -68,9 +72,14 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
           :aria-label="`Máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
-          <span class="flex items-center justify-between gap-1 text-sm font-semibold text-brand-800">Máy {{ device.sequence }}<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" /></span>
+          <span class="flex items-center justify-between gap-1 text-sm font-semibold text-brand-800">Máy {{ device.sequence }}<span class="sr-only"> · Đang xem</span><span class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" /></span>
           <span class="mt-1 block truncate text-xs text-ink-800" :title="deviceLabel(device)">{{ deviceLabel(device) }}</span>
           <span class="mt-1 block text-xs font-medium" :class="toneClass(statusFor(device).tone)" :data-testid="`tech-visit-action-status-${device.sequence}`">{{ statusFor(device).label }}</span>
+          <span class="mt-2 block space-y-1 text-xs text-ink-700" :data-testid="`tech-visit-price-${device.sequence}`">
+            <span class="block">{{ overviewByOrderId[device.serviceOrderId]?.priceLabel || 'Chưa cập nhật giá' }}<FhMoney v-if="overviewByOrderId[device.serviceOrderId]?.price != null" :amount="overviewByOrderId[device.serviceOrderId]?.price" class="ml-1 font-semibold" /></span>
+            <span v-if="overviewByOrderId[device.serviceOrderId]?.partsLabel" class="block">Linh kiện: {{ overviewByOrderId[device.serviceOrderId]?.partsLabel }}</span>
+            <span v-if="overviewByOrderId[device.serviceOrderId]?.extraLabel" class="block text-warning-800">Bổ sung: {{ overviewByOrderId[device.serviceOrderId]?.extraLabel }}</span>
+          </span>
           <span v-if="statusFor(device).custodyLabel" class="mt-2 block text-xs leading-relaxed text-warning-800" :data-testid="`tech-visit-custody-status-${device.sequence}`">{{ statusFor(device).custodyLabel }}</span>
         </div>
         <router-link
@@ -83,6 +92,11 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
           <span class="flex items-center justify-between gap-1 text-sm font-semibold text-ink-900">Máy {{ device.sequence }}<span v-if="statusFor(device).tone === 'attention' || statusFor(device).custodyLabel" class="h-2 w-2 shrink-0 rounded-full bg-warning-600" aria-hidden="true" /></span>
           <span class="mt-1 block truncate text-xs text-ink-700" :title="deviceLabel(device)">{{ deviceLabel(device) }}</span>
           <span class="mt-1 block text-xs font-medium" :class="toneClass(statusFor(device).tone)" :data-testid="`tech-visit-action-status-${device.sequence}`">{{ statusFor(device).label }}</span>
+          <span class="mt-2 block space-y-1 text-xs text-ink-700" :data-testid="`tech-visit-price-${device.sequence}`">
+            <span class="block">{{ overviewByOrderId[device.serviceOrderId]?.priceLabel || 'Chưa cập nhật giá' }}<FhMoney v-if="overviewByOrderId[device.serviceOrderId]?.price != null" :amount="overviewByOrderId[device.serviceOrderId]?.price" class="ml-1 font-semibold" /></span>
+            <span v-if="overviewByOrderId[device.serviceOrderId]?.partsLabel" class="block">Linh kiện: {{ overviewByOrderId[device.serviceOrderId]?.partsLabel }}</span>
+            <span v-if="overviewByOrderId[device.serviceOrderId]?.extraLabel" class="block text-warning-800">Bổ sung: {{ overviewByOrderId[device.serviceOrderId]?.extraLabel }}</span>
+          </span>
           <span v-if="statusFor(device).custodyLabel" class="mt-2 block text-xs leading-relaxed text-warning-800" :data-testid="`tech-visit-custody-status-${device.sequence}`">{{ statusFor(device).custodyLabel }}</span>
         </router-link>
         <div

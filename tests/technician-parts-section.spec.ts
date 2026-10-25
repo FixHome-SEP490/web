@@ -48,11 +48,142 @@ const stubs = { FhButton: { template: '<button><slot /></button>' }, FhMoney: { 
 describe('TechnicianPartsSection inside the job page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    partRequestsApi.updateItemUsage.mockReset();
+    partRequestsApi.declareReturn.mockReset();
     live.listeners.clear();
     live.whileOffline.mockReturnValue(live.stopOffline);
     partsCatalogApi.getCatalog.mockResolvedValue({ data: [] });
     // P1 return feature idle by default in these tests.
     partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
+  });
+
+  it('restricts unapproved usage to zero and declares all unused units with confirmed quantities', async () => {
+    const pr = request('received');
+    pr.items[0] = { ...pr.items[0]!, quantity: 2, partCatalogId: 'sku' } as typeof pr.items[number];
+    let ledger = { partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả', issuedQty: 2, usedQty: 0, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 2, version: 1, usageRecorded: false };
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.getReturnsByOrderId.mockImplementation(async () => [ledger]);
+    partRequestsApi.updateItemUsage.mockImplementation(async () => { ledger = { ...ledger, version: 2, usageRecorded: true }; return { ...pr.items[0], usageStatus: 'returned' }; });
+    partRequestsApi.declareReturn.mockImplementation(async () => { ledger = { ...ledger, version: 3, declaredQty: 2 }; return ledger; });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR', approvedPartQuantities: {} }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="edit-part-usage"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Chưa được khách duyệt');
+    await wrapper.get('[data-testid="return-all-unused"]').trigger('click');
+    const confirm = wrapper.get('[data-testid="bulk-return-confirm"]');
+    expect(confirm.text()).toContain('Van xả');
+    expect((confirm.get('input[type="number"]').element as HTMLInputElement).value).toBe('2');
+    expect(partRequestsApi.declareReturn).not.toHaveBeenCalled();
+    await confirm.get('[data-testid="confirm-return-all"]').trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', expect.objectContaining({ usedQty: 0, usageStatus: 'returned', expectedVersion: 1 }));
+    expect(partRequestsApi.declareReturn).toHaveBeenCalledWith('pr-1', 'i-1', expect.objectContaining({ quantity: 2, expectedVersion: 2 }));
+    expect(wrapper.emitted('return-summary')?.at(-1)).toEqual([{ needDeclare: 0, awaitingManager: 2 }]);
+    expect(wrapper.text()).not.toContain('Đã nhận đủ');
+    wrapper.unmount();
+  });
+
+  it('caps approved2 at actual use1, collapses the editor, and allows correcting usage downward', async () => {
+    const pr = request('received', 'used');
+    pr.items[0] = { ...pr.items[0]!, quantity: 2, partCatalogId: 'sku' } as typeof pr.items[number];
+    let ledger = { partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả', issuedQty: 2, usedQty: 2, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 0, version: 1, usageRecorded: true };
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.getReturnsByOrderId.mockImplementation(async () => [ledger]);
+    partRequestsApi.updateItemUsage.mockImplementation(async () => { ledger = { ...ledger, usedQty: 1, outstandingQty: 1, version: 2 }; return pr.items[0]; });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR', approvedPartQuantities: { sku: 2 } }, global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="edit-part-usage"]').trigger('click');
+    await wrapper.get('input[aria-label="Số lượng thực dùng Van xả"]').setValue(1);
+    await wrapper.findAll('button').find(b => b.text() === 'Lưu số lượng')!.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', expect.objectContaining({ usedQty: 1 }));
+    expect(wrapper.find('[data-testid="partial-usage-editor"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="part-used-value"]').text()).toBe('50000');
+    expect(wrapper.emitted('return-summary')?.at(-1)).toEqual([{ needDeclare: 1, awaitingManager: 0 }]);
+    wrapper.unmount();
+  });
+
+  it('retries only unresolved bulk rows with the same idempotency key after a partial failure', async () => {
+    const pr = request('received', 'returned');
+    pr.items.push({ ...pr.items[0]!, id: 'i-2', partNameSnapshot: 'Cảm biến' });
+    const ledgers = pr.items.map(item => ({ partRequestId: 'pr-1', partRequestItemId: item.id, partNameSnapshot: item.partNameSnapshot, issuedQty: 1, usedQty: 0, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 1, version: 1, usageRecorded: true }));
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.getReturnsByOrderId.mockImplementation(async () => ledgers.map(row => ({ ...row })));
+    let failed = false;
+    partRequestsApi.declareReturn.mockImplementation(async (_request, itemId) => {
+      if (itemId === 'i-2' && !failed) { failed = true; throw new Error('offline'); }
+      const row = ledgers.find(record => record.partRequestItemId === itemId)!;
+      row.declaredQty = 1;
+      row.version++;
+      return { ...row };
+    });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR', approvedPartQuantities: {} }, global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="return-all-unused"]').trigger('click');
+    await wrapper.get('[data-testid="confirm-return-all"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="bulk-return-confirm"]').findAll('input')).toHaveLength(1);
+    expect(wrapper.emitted('return-summary')?.at(-1)).toEqual([{ needDeclare: 1, awaitingManager: 1 }]);
+    await wrapper.get('[data-testid="confirm-return-all"]').trigger('click');
+    await flushPromises();
+    const calls = partRequestsApi.declareReturn.mock.calls;
+    expect(calls.filter(call => call[1] === 'i-1')).toHaveLength(1);
+    expect(calls[1]?.[2]).toEqual(calls[2]?.[2]);
+    expect(wrapper.emitted('return-summary')?.at(-1)).toEqual([{ needDeclare: 0, awaitingManager: 2 }]);
+    wrapper.unmount();
+  });
+
+  it('freezes usage after finalization while preserving the independent return declaration', async () => {
+    const pr = request('received', 'used');
+    pr.items[0] = { ...pr.items[0]!, quantity: 2, partCatalogId: 'sku' } as typeof pr.items[number];
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.getReturnsByOrderId.mockResolvedValue([{ partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả', issuedQty: 2, usedQty: 1, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 1, version: 2, usageRecorded: true }]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR', usageFrozen: true, approvedPartQuantities: { sku: 2 } }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="edit-part-usage"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="return-all-unused"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="return-all-unused"]').trigger('click');
+    expect(wrapper.get('[data-testid="bulk-return-confirm"]').text()).toContain('Van xả');
+    expect(partRequestsApi.updateItemUsage).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('declares unapproved stock before repair without sending a usage command outside UNDER_REPAIR', async () => {
+    const pr = request('received');
+    pr.items[0] = { ...pr.items[0]!, partCatalogId: 'sku' } as typeof pr.items[number];
+    let ledger = { partRequestId: 'pr-1', partRequestItemId: 'i-1', partNameSnapshot: 'Van xả', issuedQty: 1, usedQty: 0, declaredQty: 0, managerAcceptedQty: 0, outstandingQty: 1, version: 1, usageRecorded: false };
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.getReturnsByOrderId.mockImplementation(async () => [{ ...ledger }]);
+    partRequestsApi.declareReturn.mockImplementation(async () => { ledger = { ...ledger, declaredQty: 1, version: 2 }; return ledger; });
+    partRequestsApi.updateItemUsage.mockImplementation(async () => { ledger = { ...ledger, usageRecorded: true, version: 3 }; return { ...pr.items[0], usageStatus: 'returned' }; });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'EN_ROUTE', approvedPartQuantities: {} }, global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="return-all-unused"]').trigger('click');
+    await wrapper.get('[data-testid="confirm-return-all"]').trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).not.toHaveBeenCalled();
+    expect(partRequestsApi.declareReturn).toHaveBeenCalledTimes(1);
+    await wrapper.setProps({ orderStatus: 'UNDER_REPAIR' });
+    await wrapper.get('[data-testid="confirm-zero-usage"]').trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', expect.objectContaining({ usedQty: 0, expectedVersion: 2 }));
+    expect(wrapper.emitted('pending-usage')?.at(-1)).toEqual([0]);
+    wrapper.unmount();
+  });
+
+  it('preserves technician-supplied usage controls outside the FixHome SKU approval ceiling', async () => {
+    const pr = request('received');
+    pr.items[0]!.partSource = 'technician';
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.updateItemUsage.mockResolvedValue({ ...pr.items[0], usageStatus: 'used' });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR', approvedPartQuantities: {} }, global: { stubs } });
+    await flushPromises();
+    const used = wrapper.get('button[aria-label="Ghi nhận đã dùng Van xả"]');
+    expect(used.attributes('disabled')).toBeUndefined();
+    await used.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', { usageStatus: 'used' });
+    wrapper.unmount();
   });
 
   it('pages the real catalog and retries server search without a partial local fallback', async () => {
