@@ -6,22 +6,26 @@
  * repaired only. Matching, the one reschedule and cancelling act on the whole
  * visit here; each device's order page shows its own quote and photos.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
-import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
+import type { ServiceOrderItem } from '../../api/orders.api';
+import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { sessionLabel, upcomingSessions, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
-import { onOrderChange, onResync, whileOffline } from '../../services/live-updates';
+import { billingAmount } from '../../utils/order-billing';
+import { LIVE_DEBOUNCE_MS, onBookingChange, onOrderChange, onResync } from '../../services/live-updates';
+import { chatSocketService } from '../../services/chat-socket.service';
 
 const route = useRoute();
 const router = useRouter();
-const visitId = route.params.id as string;
+const visitId = computed(() => String(route.params.id));
 
 const visit = ref<Visit | null>(null);
 const checkout = ref<VisitCheckout | null>(null);
@@ -36,46 +40,67 @@ const childOrderStatusLoading = ref(false);
 const childOrderStatusUnavailable = ref(false);
 const expandedDevices = ref<Record<string, boolean>>({});
 const selectedVisitItemId = ref<string | null>(null);
+const checkoutLoading = ref(false);
+const child = useVisitOrderDetails(() => visitId.value, load);
+const { details: orderDetails, fresh: childDetailsFresh, deciding: childDeciding, feedback: childFeedback } = child;
+let disposed = false;
+let runningLoad: Promise<void> | null = null;
+let reloadRequested = false;
 let childOrderLookupVersion = 0;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+const seenCashNotifications = new Set<string>();
+
+function scheduleVisitRefresh() {
+  if (disposed || refreshTimer !== null) return;
+  checkoutLoading.value = true;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void load();
+  }, LIVE_DEBOUNCE_MS);
+}
 
 async function loadChildOrderDetails(devices: VisitCheckout['devices'], lookupVersion: number) {
   if (lookupVersion !== childOrderLookupVersion) return;
   const seen = new Set<string>();
-  const childOrders: Array<{ serviceOrderId: string; sequence: number }> = [];
+  const childOrders: Array<{ serviceOrderId: string; sequence: number; bookingId: string }> = [];
   for (const device of devices) {
     const serviceOrderId = device.serviceOrderId?.trim();
     if (!serviceOrderId || seen.has(serviceOrderId)) continue;
     seen.add(serviceOrderId);
-    const sequence = visit.value?.items.find((item) => item.booking?.id === device.bookingId)?.sequence ?? device.sequence;
-    childOrders.push({ serviceOrderId, sequence });
+    const item = visit.value?.items.find((candidate) => candidate.booking?.id === device.bookingId);
+    if (!item) continue;
+    childOrders.push({ serviceOrderId, sequence: item.sequence, bookingId: device.bookingId });
     if (childOrders.length === 3) break;
   }
 
   if (childOrders.length === 0) {
+    child.publish({}, lookupVersion);
     childOrderStatusLoading.value = false;
     return;
   }
 
   childOrderStatusLoading.value = true;
-  const results = await Promise.allSettled(childOrders.map(({ serviceOrderId }) => ordersApi.getOrder(serviceOrderId)));
+  const results = await Promise.allSettled(childOrders.map(({ serviceOrderId, bookingId }) => child.read(serviceOrderId, bookingId, lookupVersion)));
   if (lookupVersion !== childOrderLookupVersion) return;
 
   const nextStatuses: Record<string, ServiceOrderItem['status']> = {};
   const nextQuotationOrderIds: Record<number, string> = {};
   let incompleteRead = false;
+  const nextDetails: Record<string, OrderDetails> = {};
   results.forEach((result, index) => {
     if (result.status !== 'fulfilled') {
       incompleteRead = true;
       return;
     }
     const childOrder = childOrders[index];
-    if (!result.value || typeof result.value.id !== 'string' || result.value.id !== childOrder.serviceOrderId) {
+    if (!result.value || result.value.order.id !== childOrder.serviceOrderId) {
       incompleteRead = true;
       return;
     }
-    nextStatuses[childOrder.serviceOrderId] = result.value.status;
+    nextDetails[childOrder.serviceOrderId] = result.value;
+    nextStatuses[childOrder.serviceOrderId] = result.value.order.status;
     // Same Backend gate as CustomerOrderDetail: EN_ROUTE + an official SENT quotation.
-    if (canDecideOfficialQuotation(result.value)) {
+    if (canDecideOfficialQuotation(result.value.order)) {
       nextQuotationOrderIds[childOrder.sequence] = childOrder.serviceOrderId;
     }
   });
@@ -83,10 +108,14 @@ async function loadChildOrderDetails(devices: VisitCheckout['devices'], lookupVe
   quotationOrderIdsBySequence.value = nextQuotationOrderIds;
   childOrderStatusUnavailable.value = incompleteRead;
   childOrderStatusLoading.value = false;
+  child.publish(nextDetails, lookupVersion);
 }
 
-async function load() {
-  const lookupVersion = ++childOrderLookupVersion;
+async function readVisit() {
+  const groupId = visitId.value;
+  const lookupVersion = child.invalidate();
+  childOrderLookupVersion = lookupVersion;
+  checkoutLoading.value = true;
   childOrderStatuses.value = {};
   quotationOrderIdsBySequence.value = {};
   childOrderStatusUnavailable.value = false;
@@ -94,26 +123,109 @@ async function load() {
   loadError.value = '';
   checkoutError.value = '';
   try {
-    visit.value = await visitGroupsApi.get(visitId);
-    checkout.value = await visitGroupsApi.checkout(visitId).catch(() => {
-      checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
+    const nextVisit = await visitGroupsApi.get(groupId);
+    if (disposed || lookupVersion !== childOrderLookupVersion) return;
+    if (nextVisit?.id !== groupId) throw new Error('Mismatched visit response');
+    visit.value = nextVisit;
+    const nextCheckout = await visitGroupsApi.checkout(groupId).catch(() => {
+      if (lookupVersion === childOrderLookupVersion) checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
       return null;
     });
-    if (checkout.value) void loadChildOrderDetails(checkout.value.devices, lookupVersion);
+    if (disposed || lookupVersion !== childOrderLookupVersion) return;
+    const validCheckout = nextCheckout && nextCheckout.visitGroupId === groupId
+      && Array.isArray(nextCheckout.devices) && billingAmount(nextCheckout.total) !== null
+      && Number.isSafeInteger(nextCheckout.waiting) && nextCheckout.waiting >= 0
+      && typeof nextCheckout.ready === 'boolean' && typeof nextCheckout.paid === 'boolean'
+      && (!nextCheckout.pendingCash || billingAmount(nextCheckout.pendingCash.amount) !== null);
+    checkout.value = validCheckout ? nextCheckout : null;
+    if (!validCheckout) checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
+    if (checkout.value) await loadChildOrderDetails(checkout.value.devices, lookupVersion);
+    else {
+      child.publish({}, lookupVersion);
+      childOrderStatusUnavailable.value = true;
+    }
   } catch (err) {
+    if (disposed || lookupVersion !== childOrderLookupVersion) return;
     loadError.value = userFacingError(err, 'Không tải được lượt sửa. Vui lòng thử lại.');
+    checkout.value = null;
+    child.publish({}, lookupVersion);
+    childOrderStatusUnavailable.value = true;
   } finally {
-    loading.value = false;
+    if (!disposed && lookupVersion === childOrderLookupVersion) {
+      loading.value = false;
+      checkoutLoading.value = reloadRequested || refreshTimer !== null;
+    }
   }
 }
+function load(): Promise<void> {
+  if (disposed) return Promise.resolve();
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  if (runningLoad) {
+    reloadRequested = true;
+    return runningLoad;
+  }
+  runningLoad = (async () => {
+    do {
+      reloadRequested = false;
+      await readVisit();
+    } while (reloadRequested && !disposed);
+  })().finally(() => { runningLoad = null; });
+  return runningLoad;
+}
 onMounted(load);
+watch(visitId, () => {
+  seenCashNotifications.clear();
+  childOrderLookupVersion = child.clear();
+  visit.value = null;
+  checkout.value = null;
+  childOrderStatuses.value = {};
+  quotationOrderIdsBySequence.value = {};
+  expandedDevices.value = {};
+  selectedVisitItemId.value = null;
+  message.value = null;
+  cancelOpen.value = false;
+  rescheduleOpen.value = false;
+  loading.value = true;
+  void load();
+});
 
 const checkoutOrderIds = computed(() => [...new Set((checkout.value?.devices ?? [])
   .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []))].slice(0, 3));
+const visitBookingIds = computed(() => [...new Set((visit.value?.items ?? [])
+  .flatMap(item => item.booking?.id?.trim() ? [item.booking.id.trim()] : []))].slice(0, 3));
 const stopOrderSubscriptions = new Map<string, () => void>();
-const stopVisitResync = onResync(() => { void load(); });
-const stopVisitOfflinePolling = whileOffline(() => { void load(); }, 20_000);
+const stopBookingSubscriptions = new Map<string, () => void>();
+const stopVisitResync = onResync(scheduleVisitRefresh);
+// Group cash does not change child orders. This recipient-scoped notification
+// only wakes the authorized GET; it never supplies a payment verdict or amount.
+const stopVisitEvents = chatSocketService.subscribe({
+  onNotificationNew(event) {
+    if (event.type?.toUpperCase() !== 'VISIT_CASH_DECLARED'
+      || event.referenceType?.toUpperCase() !== 'VISIT_GROUP'
+      || event.referenceId !== visitId.value || !event.id?.trim()
+      || seenCashNotifications.has(event.id)) return;
+    seenCashNotifications.add(event.id);
+    if (seenCashNotifications.size > 100) {
+      const oldest = seenCashNotifications.values().next().value;
+      if (oldest) seenCashNotifications.delete(oldest);
+    }
+    scheduleVisitRefresh();
+  },
+});
+let focusRefreshAt = -Infinity;
+function resyncOnReturn() {
+  if (document.visibilityState === 'hidden' || Date.now() - focusRefreshAt < 1000) return;
+  focusRefreshAt = Date.now();
+  scheduleVisitRefresh();
+}
+onMounted(() => {
+  window.addEventListener('focus', resyncOnReturn);
+  window.addEventListener('online', resyncOnReturn);
+  document.addEventListener('visibilitychange', resyncOnReturn);
+});
 watch(checkoutOrderIds, (orderIds) => {
+  const groupId = visitId.value;
   for (const [orderId, stop] of stopOrderSubscriptions) {
     if (!orderIds.includes(orderId)) {
       stop();
@@ -122,29 +234,57 @@ watch(checkoutOrderIds, (orderIds) => {
   }
   for (const orderId of orderIds) {
     if (!stopOrderSubscriptions.has(orderId)) {
-      stopOrderSubscriptions.set(orderId, onOrderChange(orderId, () => { void load(); }));
+      stopOrderSubscriptions.set(orderId, onOrderChange(orderId, () => {
+        if (groupId === visitId.value) scheduleVisitRefresh();
+      }));
+    }
+  }
+}, { immediate: true });
+// Booking IDs are available before acceptance creates any ServiceOrders.
+watch(visitBookingIds, (bookingIds) => {
+  const groupId = visitId.value;
+  for (const [bookingId, stop] of stopBookingSubscriptions) {
+    if (!bookingIds.includes(bookingId)) {
+      stop();
+      stopBookingSubscriptions.delete(bookingId);
+    }
+  }
+  for (const bookingId of bookingIds) {
+    if (!stopBookingSubscriptions.has(bookingId)) {
+      stopBookingSubscriptions.set(bookingId, onBookingChange(bookingId, () => {
+        if (groupId === visitId.value) scheduleVisitRefresh();
+      }));
     }
   }
 }, { immediate: true });
 onUnmounted(() => {
+  disposed = true;
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  childOrderLookupVersion = child.invalidate();
   for (const stop of stopOrderSubscriptions.values()) stop();
   stopOrderSubscriptions.clear();
+  for (const stop of stopBookingSubscriptions.values()) stop();
+  stopBookingSubscriptions.clear();
   stopVisitResync();
-  stopVisitOfflinePolling();
+  stopVisitEvents();
+  window.removeEventListener('focus', resyncOnReturn);
+  window.removeEventListener('online', resyncOnReturn);
+  document.removeEventListener('visibilitychange', resyncOnReturn);
 });
 
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
 const held = computed(() => (checkout.value?.devices ?? []).some((device) => device.serviceOrderId));
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
-const canChooseTechnician = computed(() => !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
+const canChooseTechnician = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
 const rescheduled = computed(() => (visit.value?.items ?? []).some((item) => (item.booking?.rescheduleCount ?? 0) >= 1));
 const repairStarted = computed(() => (checkout.value?.devices ?? []).some((device) => device.state !== 'open')
   || childOrderStatusLoading.value
   || childOrderStatusUnavailable.value
   || Object.values(childOrderStatuses.value).some((status) => status === 'UNDER_REPAIR'));
-const canReschedule = computed(() => !cancelled.value && !rescheduled.value && !repairStarted.value);
-const canCancel = computed(() => !cancelled.value && !repairStarted.value);
+const canReschedule = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !rescheduled.value && !repairStarted.value);
+const canCancel = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !repairStarted.value);
 const outcomeProgress = computed(() => {
   if (cancelled.value || !checkout.value) return null;
   const devices = checkout.value.devices;
@@ -155,6 +295,38 @@ const sessionText = computed(() => visit.value ? sessionLabel({ bookingMode: vis
 const selectedVisitItem = computed(() => visit.value?.items.find((item) => item.id === selectedVisitItemId.value)
   ?? visit.value?.items[0]
   ?? null);
+const selectedOrderId = computed(() => deviceOf(selectedVisitItem.value?.booking?.id)?.serviceOrderId ?? null);
+const selectedDetails = computed(() => selectedOrderId.value ? orderDetails.value[selectedOrderId.value] : null);
+const sharedTechnician = computed(() => {
+  const orders = Object.values(orderDetails.value).map(bundle => bundle.order);
+  const technician = orders.find(order => order.technician?.id)?.technician;
+  if (!technician || childOrderStatusUnavailable.value || childOrderStatusLoading.value
+    || orders.some(order => order.technician?.id && order.technician.id !== technician.id)) return null;
+  return technician;
+});
+const sharedAddress = computed(() => lead.value?.addressSummary?.trim()
+  || Object.values(orderDetails.value).find(bundle => bundle.order.addressSummary?.trim())?.order.addressSummary || '');
+const technicianProgress = computed(() => {
+  if (cancelled.value) return 'Lượt sửa đã kết thúc';
+  if (childOrderStatusLoading.value) return 'Đang cập nhật tiến độ';
+  const statuses = Object.values(childOrderStatuses.value).map(status => status.toUpperCase());
+  if (statuses.includes('UNDER_REPAIR')) return 'Đang sửa chữa';
+  if (statuses.includes('EN_ROUTE')) return 'Đang di chuyển';
+  if (statuses.includes('ACCEPTED')) return 'Đã nhận lượt sửa';
+  if (statuses.length && statuses.every(status => ['COMPLETED', 'CANCELLED'].includes(status))) return 'Đã có kết quả các máy';
+  return held.value ? 'Chờ cập nhật tiến độ' : matchingState.value === 'MATCHING' ? 'Đang chờ thợ nhận' : 'Chưa có kỹ thuật viên nhận lượt';
+});
+function pendingCosts(item: Visit['items'][number]) {
+  const orderId = deviceOf(item.booking?.id)?.serviceOrderId;
+  const bundle = orderId ? orderDetails.value[orderId] : null;
+  return !!bundle && bundle.costs.some(cost => child.canDecideCost(bundle, cost));
+}
+async function openQuotation(item: Visit['items'][number]) {
+  selectedVisitItemId.value = item.id;
+  await nextTick();
+  document.querySelector<HTMLElement>('[data-testid="visit-inline-quotation"]')?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+  document.querySelector<HTMLButtonElement>('[data-testid="visit-quote-approve"]')?.focus({ preventScroll: true });
+}
 
 const STATE_LABEL: Record<VisitDeviceState, string> = {
   succeeded: 'Đã sửa xong',
@@ -172,6 +344,7 @@ function statusText(item: Visit['items'][number]): string {
   // repair closes its order, but it does not mean the customer cancelled it.
   if (device && device.state !== 'open') return STATE_LABEL[device.state];
   if (device?.state === 'open' && quotationOrderId(item)) return 'Chờ bạn duyệt báo giá';
+  if (device?.state === 'open' && pendingCosts(item)) return 'Chờ duyệt phát sinh';
   if (cancelled.value) return 'Đã huỷ';
   if (device?.serviceOrderId) return STATE_LABEL[device.state];
   if (matchingState.value === 'MATCHING') return 'Đang chờ thợ nhận';
@@ -218,12 +391,15 @@ async function openReschedule() {
 async function saveReschedule() {
   if (!chosenSession.value || busy.value) return;
   busy.value = true;
+  const groupId = visitId.value;
   try {
-    visit.value = await visitGroupsApi.reschedule(visitId, chosenSession.value);
+    await visitGroupsApi.reschedule(groupId, chosenSession.value);
+    if (disposed || groupId !== visitId.value) return;
     rescheduleOpen.value = false;
     message.value = { type: 'success', text: 'Đã đổi lịch hẹn cho cả lượt sửa.' };
     await load();
   } catch (err) {
+    if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'error', text: userFacingError(err, 'Chưa đổi được lịch. Vui lòng chọn buổi khác.') };
   } finally {
     busy.value = false;
@@ -235,12 +411,15 @@ const cancelOpen = ref(false);
 async function confirmCancel() {
   if (busy.value) return;
   busy.value = true;
+  const groupId = visitId.value;
   try {
-    await visitGroupsApi.cancel(visitId, 'Khách huỷ lượt sửa');
+    await visitGroupsApi.cancel(groupId, 'Khách huỷ lượt sửa');
+    if (disposed || groupId !== visitId.value) return;
     cancelOpen.value = false;
     message.value = { type: 'success', text: 'Đã huỷ lượt sửa.' };
     await load();
   } catch (err) {
+    if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'error', text: userFacingError(err, 'Chưa huỷ được lượt sửa.') };
   } finally {
     busy.value = false;
@@ -290,38 +469,47 @@ async function loadWallet() {
 onMounted(loadWallet);
 
 async function payWithWallet() {
-  if (busy.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due' || !walletCovers.value) return;
+  if (checkoutLoading.value || busy.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due' || !walletCovers.value) return;
   busy.value = true;
+  const groupId = visitId.value;
   try {
-    const result = await visitGroupsApi.payWithWallet(visitId);
+    const result = await visitGroupsApi.payWithWallet(groupId);
+    if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví cho cả lượt.` };
     await Promise.all([load(), loadWallet()]);
   } catch (err) {
+    if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'error', text: userFacingError(err, 'Chưa thanh toán được bằng ví.') };
   } finally {
     busy.value = false;
   }
 }
 async function payWithVnpay() {
-  if (busy.value || !vnpayAllowed.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due') return;
+  if (checkoutLoading.value || busy.value || !vnpayAllowed.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due') return;
   busy.value = true;
+  const groupId = visitId.value;
   try {
-    window.location.href = await visitGroupsApi.vnpayUrl(visitId);
+    const url = await visitGroupsApi.vnpayUrl(groupId);
+    if (disposed || groupId !== visitId.value) { busy.value = false; return; }
+    window.location.href = url;
   } catch (err) {
-    message.value = { type: 'error', text: userFacingError(err, 'Chưa mở được trang thanh toán VNPay. Vui lòng thử lại.') };
+    if (!disposed && groupId === visitId.value) message.value = { type: 'error', text: userFacingError(err, 'Chưa mở được trang thanh toán VNPay. Vui lòng thử lại.') };
     busy.value = false;
   }
 }
 async function answerCash(agreed: boolean) {
-  if (busy.value) return;
+  if (checkoutLoading.value || busy.value || checkoutState.value !== 'pending_cash') return;
   busy.value = true;
+  const groupId = visitId.value;
   try {
-    await visitGroupsApi.confirmCash(visitId, agreed, agreed ? undefined : 'Số tiền mặt chưa đúng');
+    await visitGroupsApi.confirmCash(groupId, agreed, agreed ? undefined : 'Số tiền mặt chưa đúng');
+    if (disposed || groupId !== visitId.value) return;
     message.value = agreed
       ? { type: 'success', text: 'Đã xác nhận trả tiền mặt cho cả lượt.' }
       : { type: 'success', text: 'Đã báo FixHome kiểm tra lại số tiền mặt.' };
     await load();
   } catch (err) {
+    if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'error', text: userFacingError(err, agreed ? 'Chưa xác nhận được.' : 'Chưa gửi được yêu cầu kiểm tra tiền mặt. Vui lòng thử lại.') };
     await load();
   } finally {
@@ -332,7 +520,7 @@ async function answerCash(agreed: boolean) {
 
 <template>
   <div class="mx-auto min-w-0 max-w-3xl space-y-6 pb-16" data-testid="customer-visit">
-    <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
+    <FhBackLink class="min-h-11" label="Đơn của tôi" @click="router.push('/app/orders')" />
 
     <FhSkeleton v-if="loading" class="h-40 rounded-2xl" />
     <div v-else-if="loadError" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
@@ -341,9 +529,25 @@ async function answerCash(agreed: boolean) {
     </div>
 
     <template v-else-if="visit">
-      <header class="space-y-1">
-        <h1 class="text-[24px] leading-8 font-bold tracking-tight text-ink-900 sm:text-xl sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
-        <p class="text-sm text-ink-600">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></p>
+      <header class="space-y-4">
+        <div class="space-y-1">
+          <h1 class="text-2xl leading-8 font-bold tracking-tight text-ink-900 sm:text-[28px] sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
+          <p class="text-sm text-ink-600">Một kỹ thuật viên · Một lịch hẹn · Thanh toán một lần</p>
+        </div>
+        <div class="divide-y divide-ink-200 rounded-2xl border border-ink-200 bg-white px-4 sm:px-6">
+          <div class="flex flex-wrap items-center justify-between gap-2 py-4" data-testid="visit-shared-technician">
+            <div class="min-w-0 flex-1 basis-48">
+              <h2 class="text-sm font-medium text-ink-600">Kỹ thuật viên của lượt sửa</h2>
+              <p v-if="sharedTechnician" class="break-words text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
+              <p class="text-sm text-ink-700" role="status">{{ technicianProgress }}</p>
+            </div>
+            <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-11 items-center rounded-xl border border-ink-200 px-3 text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+          </div>
+          <dl class="space-y-3 py-4 text-sm">
+            <div class="space-y-1"><dt class="text-ink-600">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
+            <div v-if="sharedAddress" class="space-y-1"><dt class="text-ink-600">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
+          </dl>
+        </div>
         <p v-if="outcomeProgress" class="text-sm text-ink-600" data-testid="visit-outcome-progress">
           Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
         </p>
@@ -357,15 +561,17 @@ async function answerCash(agreed: boolean) {
           </p>
           <p class="text-sm text-warning-800">Báo giá đang chờ bạn duyệt</p>
         </div>
-        <router-link
-          :to="`/app/orders/${priorityQuotation.serviceOrderId}`"
+        <button
+          type="button"
+          :disabled="checkoutLoading"
+          @click="openQuotation(priorityQuotation.item)"
           :aria-label="`Duyệt báo giá cho máy ${priorityQuotation.item.sequence}${priorityQuotation.item.booking?.serviceName ? `: ${priorityQuotation.item.booking.serviceName}` : ''}`"
           class="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-semibold text-white transition-colors motion-reduce:transition-none duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
           data-testid="visit-quotation-cta"
         >
           Duyệt báo giá máy {{ priorityQuotation.item.sequence }}
           <ChevronRight :size="18" aria-hidden="true" />
-        </router-link>
+        </button>
       </section>
 
       <p
@@ -377,6 +583,7 @@ async function answerCash(agreed: boolean) {
       >{{ message.text }}</p>
 
       <section class="space-y-3" data-testid="visit-device-list">
+        <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
         <div class="grid gap-2 sm:grid-cols-3" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
           <button
             v-for="item in visit.items"
@@ -393,9 +600,9 @@ async function answerCash(agreed: boolean) {
           >
             <span class="flex items-center justify-between gap-1 text-sm font-semibold" :class="selectedVisitItem?.id === item.id ? 'text-brand-800' : 'text-ink-900'">
               Máy {{ item.sequence }}
-              <span v-if="quotationOrderId(item)" class="h-2 w-2 shrink-0 rounded-full bg-warning-600" aria-label="Cần duyệt báo giá" />
+              <span v-if="quotationOrderId(item) || pendingCosts(item)" class="h-2 w-2 shrink-0 rounded-full bg-warning-600" aria-label="Cần duyệt báo giá" />
             </span>
-            <span class="mt-1 block truncate text-xs text-ink-700" :title="item.booking?.serviceName || item.deviceLabel || 'Thiết bị'">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
+            <span class="mt-1 block break-words text-sm text-ink-700">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
             <span class="mt-1 block break-words text-xs leading-relaxed" :class="quotationOrderId(item) ? 'font-medium text-warning-800' : 'text-ink-600'">{{ chipStatusText(item) }}</span>
           </button>
         </div>
@@ -408,13 +615,7 @@ async function answerCash(agreed: boolean) {
           :aria-labelledby="`visit-device-select-${selectedVisitItem.sequence}`"
           :data-testid="`visit-device-panel-${selectedVisitItem.sequence}`"
         >
-          <component
-            :is="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? 'router-link' : 'div'"
-            :to="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? `/app/orders/${deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId}` : undefined"
-            class="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-            :class="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId ? 'hover:bg-ink-25' : ''"
-            data-testid="visit-device-order-link"
-          >
+          <div class="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2 px-1 py-1">
             <div class="min-w-0 flex-[1_1_12rem]">
               <p class="break-words text-sm font-medium text-ink-900 sm:text-base">
                 Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
@@ -422,8 +623,7 @@ async function answerCash(agreed: boolean) {
               <p class="break-words text-sm text-ink-600"><template v-if="selectedVisitItem.deviceLabel">{{ selectedVisitItem.deviceLabel }} · </template>{{ statusText(selectedVisitItem) }}</p>
             </div>
             <span v-if="deviceOf(selectedVisitItem.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(selectedVisitItem.booking?.id)!.amount" /></span>
-            <ChevronRight v-if="deviceOf(selectedVisitItem.booking?.id)?.serviceOrderId" :size="18" class="shrink-0 text-ink-400" aria-hidden="true" />
-          </component>
+          </div>
           <p v-if="quotationOrderId(selectedVisitItem)" class="mt-2 text-sm font-medium text-warning-800" :data-testid="`visit-device-quotation-status-${selectedVisitItem.sequence}`">
             Báo giá đang chờ bạn duyệt
           </p>
@@ -455,6 +655,21 @@ async function answerCash(agreed: boolean) {
               >{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}<ChevronDown :size="16" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" /></FhButton>
             </div>
           </div>
+          <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+          <VisitOrderDetails
+            v-if="selectedDetails"
+            :key="selectedDetails.order.id"
+            :details="selectedDetails"
+            :disabled="!childDetailsFresh || childDeciding || checkoutLoading"
+            @quote="child.decide(selectedDetails.order.id, $event)"
+            @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
+            @retry="load"
+          />
+          <div v-else-if="selectedOrderId" class="mt-4 space-y-2 border-t border-ink-100 pt-4">
+            <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />
+            <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
+          </div>
+          <component :is="selectedOrderId ? 'router-link' : 'div'" :to="selectedOrderId ? `/app/orders/${selectedOrderId}` : undefined" class="mt-3 inline-flex min-h-11 items-center gap-1 rounded-lg px-1 text-sm font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" data-testid="visit-device-order-link"><template v-if="selectedOrderId">Chi tiết nâng cao của máy {{ selectedVisitItem.sequence }}<ChevronRight :size="16" aria-hidden="true" /></template></component>
         </div>
       </section>
 
@@ -473,7 +688,8 @@ async function answerCash(agreed: boolean) {
         <p>{{ checkoutError }}</p>
         <FhButton variant="secondary" size="md" data-testid="visit-checkout-retry" @click="load">Thử lại</FhButton>
       </section>
-      <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState">
+      <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
+        <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
         <div class="flex flex-col gap-2 border-b border-ink-100 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
           <h2 id="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán cả lượt</h2>
           <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
@@ -497,8 +713,8 @@ async function answerCash(agreed: boolean) {
           <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
             <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho cả lượt. Bạn xác nhận đúng số tiền đã trả.</p>
             <div class="flex flex-wrap gap-2">
-              <FhButton size="md" :loading="busy" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
-              <FhButton variant="secondary" size="md" :disabled="busy" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
+              <FhButton size="md" :loading="busy" :disabled="checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
+              <FhButton variant="secondary" size="md" :disabled="busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
             </div>
           </div>
         </template>
@@ -544,8 +760,8 @@ async function answerCash(agreed: boolean) {
               Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
             </p>
             <p v-else-if="payMethod === 'cash'" class="text-ink-600">Đưa tiền cho kỹ thuật viên. Thợ báo số tiền của cả lượt, bạn xác nhận lại tại trang này.</p>
-            <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="!walletCovers || busy" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
-            <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="busy" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
+            <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="!walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
+            <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
         </template>
       </section>
     </template>

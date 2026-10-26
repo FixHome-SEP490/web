@@ -38,7 +38,7 @@ const base = {
 const mountPage = async (order: Record<string, unknown>) => {
   mockGet.mockImplementation(async (path: string) => {
     if (path === '/service-orders/job-1') return { data: { data: order } };
-    if (path === '/service-orders/job-1/cash-settlement') return { data: { data: null } };
+    if (path === '/service-orders/job-1/cash-settlement' || path === '/service-orders/job-1/invoice') return { data: { data: null } };
     if (path === '/service-orders/job-1/evidence') return { data: { data: [{ id: 'e1', type: 'before', mediaUrl: 'https://img.test/before.jpg' }] } };
     if (path === '/bookings/booking-1') return { data: { data: { id: 'booking-1', status: 'matched', media: [] } } };
     return { data: { data: [] } };

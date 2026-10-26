@@ -39,7 +39,7 @@ const priceNote = computed(() => {
     case 'firm': return 'Tiền công, chưa gồm linh kiện';
     case 'range': return 'Giá tham khảo; kỹ thuật viên xác nhận sau khi khảo sát';
     case 'survey': return 'Kỹ thuật viên báo giá tại nhà, bạn duyệt trước khi sửa';
-    case 'partial': return `Tiền công đã xác định; ${props.price.unresolvedCount} thiết bị cần xác nhận giá`;
+    case 'partial': return `+ ${props.price.unresolvedCount} máy chờ khảo sát báo giá. Chưa phải tổng ${props.devices?.length ? `${props.devices.length} máy` : 'cả lượt'}.`;
     default: return 'Chọn dịch vụ để xem giá';
   }
 });
@@ -117,9 +117,10 @@ const barNote = computed(() => {
         <span>{{ devices?.length ? `${devices.length} thiết bị · ${barNote}` : barNote }}</span>
         <span v-if="price.kind === 'firm'" class="font-num text-lg font-semibold text-ink-900"><FhMoney :amount="price.amount" /></span>
         <span v-else-if="price.kind === 'range'" class="font-num text-sm font-semibold text-ink-900"><FhMoney :amount="price.min" /> – <FhMoney :amount="price.max" /></span>
-        <span v-else-if="price.kind === 'partial'" class="text-ink-700"><template v-if="price.confirmedTotal > 0"><FhMoney :amount="price.confirmedTotal" /> · </template>{{ price.unresolvedCount }} máy chờ giá</span>
+        <span v-else-if="price.kind === 'partial'" class="text-ink-700"><template v-if="price.confirmedTotal > 0"><FhMoney :amount="price.confirmedTotal" /></template></span>
         <span v-else-if="price.kind === 'survey' && price.from" class="font-num text-sm text-ink-900">Tham khảo <FhMoney :amount="price.from" /></span>
       </div>
+      <p v-if="price.kind === 'partial'" class="text-xs leading-relaxed text-ink-700">{{ priceNote }}</p>
       <div class="flex items-center gap-2">
         <button v-if="backLabel" type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="backLabel" @click="emit('back')">
           <ArrowLeft :size="18" aria-hidden="true" />
