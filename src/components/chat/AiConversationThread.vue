@@ -175,7 +175,7 @@ defineExpose({ scrollToEnd });
                 <button
                   v-if="photoLabels[messageIndex]?.[index]"
                   type="button"
-                  class="max-w-full truncate rounded-full px-2 py-0.5 text-[11px] leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
+                  class="max-w-full line-clamp-2 break-words text-center rounded-xl px-2 py-0.5 text-[11px] leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
                   :class="photoLabels[messageIndex][index]!.uncertain ? 'ring-1 ring-warning-300' : ''"
                   :title="`Bấm để sửa nếu ảnh ${index + 1} không phải thiết bị này`"
                   :aria-label="`Ảnh ${index + 1}: ${photoLabels[messageIndex][index]!.text}. Bấm để sửa`"
