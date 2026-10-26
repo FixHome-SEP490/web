@@ -25,6 +25,16 @@ export interface AiWrongAnswer {
   reply: string | null;
   customerText: string | null;
   deviceName: string | null;
+  /** "chat" when the assistant noticed it in the conversation; "button" for old verdicts. */
+  source?: string;
+  /** fault, device or photo. */
+  kind?: string | null;
+  /** The words that were read wrong. */
+  said?: string | null;
+  /** What the customer turned down, by name. */
+  rejected?: string[];
+  /** The faults the conversation ended on. */
+  settledOn?: string[];
 }
 
 export interface AiQuality {
