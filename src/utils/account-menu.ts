@@ -4,7 +4,7 @@
 
 export type AccountMenuContext = 'public' | 'customer-app';
 
-export type AccountMenuIcon = 'orders' | 'history' | 'warranty' | 'wallet' | 'notifications' | 'profile' | 'area';
+export type AccountMenuIcon = 'orders' | 'history' | 'warranty' | 'wallet' | 'notifications' | 'profile' | 'area' | 'vouchers';
 
 export interface AccountMenuLink {
   to: string;
@@ -56,6 +56,7 @@ export function accountMenuLinks(role: string | null | undefined, context: Accou
         { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history' },
         { to: '/app/warranties', label: 'Bảo hành', icon: 'warranty', testId: 'menu-warranties', hiddenOnWide: true },
         { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet' },
+        { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers' },
         { to: '/app/notifications', label: 'Thông báo', icon: 'notifications', testId: 'menu-notifications' },
         { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile' },
       ];
@@ -64,6 +65,7 @@ export function accountMenuLinks(role: string | null | undefined, context: Accou
       { to: '/app/orders', label: 'Đơn của tôi', icon: 'orders', testId: 'menu-orders' },
       { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history' },
       { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet' },
+        { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers' },
       { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile' },
     ];
   }

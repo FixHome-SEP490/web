@@ -185,6 +185,34 @@ describe('customer visit page', () => {
     expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
   });
 
+  it('offers rebooking only for failed B in A succeeded / B failed / C succeeded, without a POST', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0]!.booking, id: 'b3', serviceName: 'Máy C' } }] });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'succeeded' }), device('b2', { state: 'failed' }), device('b3', { state: 'succeeded' })] }));
+    const w = await mountPage();
+    expect(w.find('[data-testid="failed-repair-rebook"]').exists()).toBe(false);
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.findAll('[data-testid="failed-repair-rebook"]')).toHaveLength(1);
+    expect(w.find('[data-testid="failed-repair-rebook-all"]').exists()).toBe(false);
+    await w.get('[data-testid="failed-repair-rebook"]').trigger('click');
+    expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { repairFailure: 'b2' } });
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    const originalHistory = w.get('[data-testid="visit-device-selector"]').text();
+    await w.findAll('button').find(button => button.text() === 'Để sau')!.trigger('click');
+    expect(push).toHaveBeenLastCalledWith('/app');
+    expect(w.get('[data-testid="visit-device-selector"]').text()).toBe(originalHistory);
+    expect(visitApi.cancel).not.toHaveBeenCalled();
+    await w.get('[data-testid="visit-device-select-3"]').trigger('click');
+    expect(w.find('[data-testid="failed-repair-rebook"]').exists()).toBe(false);
+  });
+
+  it('offers one new group of only failed children when multiple devices failed', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0]!.booking, id: 'b3' } }] });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'failed' }), device('b2', { state: 'failed' }), device('b3', { state: 'succeeded' })] }));
+    const w = await mountPage();
+    await w.get('[data-testid="failed-repair-rebook-all"]').trigger('click');
+    expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { repairFailure: 'b1,b2' } });
+  });
+
   it('shows a failed child outcome even if the parent visit is marked cancelled', async () => {
     visitApi.get.mockResolvedValue({ ...visit, status: 'cancelled' });
     visitApi.checkout.mockResolvedValue(checkout({

@@ -12,6 +12,7 @@ import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next'
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
+import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
 import type { ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
@@ -275,6 +276,11 @@ onUnmounted(() => {
 
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
+const failedBookingIds = computed(() => {
+  if (checkoutLoading.value || checkoutError.value) return [];
+  return (visit.value?.items ?? []).flatMap(item => item.booking?.id
+    && checkout.value?.devices.some(device => device.bookingId === item.booking!.id && device.state === 'failed') ? [item.booking.id] : []);
+});
 const held = computed(() => (checkout.value?.devices ?? []).some((device) => device.serviceOrderId));
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
 const canChooseTechnician = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
@@ -584,6 +590,13 @@ async function answerCash(agreed: boolean) {
 
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
+        <FhButton
+          v-if="failedBookingIds.length > 1"
+          variant="secondary"
+          size="md"
+          data-testid="failed-repair-rebook-all"
+          @click="router.push({ path: '/app/bookings/new', query: { repairFailure: failedBookingIds.join(',') } })"
+        >Đặt lại {{ failedBookingIds.length }} máy không sửa được</FhButton>
         <div class="grid gap-2 sm:grid-cols-3" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
           <button
             v-for="item in visit.items"
@@ -656,6 +669,13 @@ async function answerCash(agreed: boolean) {
             </div>
           </div>
           <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+          <FailedRepairIncident
+            v-if="!checkoutLoading && !checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
+            :key="selectedVisitItem.booking.id"
+            :booking-id="selectedVisitItem.booking.id"
+            @rebook="bookingId => router.push({ path: '/app/bookings/new', query: { repairFailure: bookingId } })"
+            @later="router.push('/app')"
+          />
           <VisitOrderDetails
             v-if="selectedDetails"
             :key="selectedDetails.order.id"

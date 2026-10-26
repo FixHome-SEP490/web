@@ -17,6 +17,7 @@ import {
   ClipboardList,
   ShieldCheck,
   Bot,
+  TicketPercent,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -202,6 +203,7 @@ const navItems = [
   { to: '/app/orders', label: 'Đơn sửa chữa', icon: ClipboardList, exact: false },
   { to: '/app/warranties', label: 'Bảo hành', icon: ShieldCheck, exact: false },
   { to: '/app/messages', label: 'Tin nhắn', icon: MessageSquare, exact: false },
+  { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },
 ];
 
 const tabItems = [

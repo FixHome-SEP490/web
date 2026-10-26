@@ -40,6 +40,8 @@ import {
   type BookingCatalogService,
 } from '../../components/booking/booking-service-catalog';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
+import FailedRepairBookingForm from '../../components/customer/FailedRepairBookingForm.vue';
+import { useAuthStore } from '../../stores/auth.store';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import type { BookingDeviceAttributes, CatalogPricingPreview } from '../../api/catalog-pricing.api';
 import { useReferenceData } from '../../composables/useCachedQuery';
@@ -60,6 +62,13 @@ import { formatCurrencyVND } from '../../utils/formatters';
 
 const route = useRoute();
 const router = useRouter();
+// Dedicated failed-repair entry: only authenticated server drafts, never URL-prefilled content.
+const isFailedRepairEntry = computed(() => route.query.repairFailure !== undefined);
+const failedRepairSources = computed(() => {
+  const value = route.query.repairFailure;
+  return (typeof value === 'string' ? value.split(',') : []).filter(Boolean);
+});
+const failedRepairCustomerId = computed(() => isFailedRepairEntry.value ? useAuthStore().user?.id ?? '' : '');
 const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-layout-width', () => {});
 
 /**
@@ -70,7 +79,7 @@ const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
 const step = ref(1);
-useStepHistory(step, router, route);
+if (!isFailedRepairEntry.value) useStepHistory(step, router, route);
 watch(step, (currentStep, previous) => {
   setBookingLayoutWidth(currentStep === 2 || (!isAiFlow && currentStep === 1));
   // A new step starts at its top, never mid-page under the header (PO 20/10/2026).
@@ -1123,6 +1132,7 @@ async function loadAddresses() {
 }
 
 onMounted(() => {
+  if (isFailedRepairEntry.value) return;
   applyIncomingDescription();
   void loadCategories();
   void loadAddresses();
@@ -1795,7 +1805,15 @@ async function createAndFindTech() {
 </script>
 
 <template>
+  <FailedRepairBookingForm
+    v-if="isFailedRepairEntry"
+    :source-booking-ids="failedRepairSources"
+    :customer-id="failedRepairCustomerId"
+    @created="result => router.push(result.kind === 'booking' ? `/app/bookings/${result.id}/candidates` : `/app/visits/${result.id}/candidates`)"
+    @later="router.push('/app')"
+  />
   <div
+    v-else
     class="w-full space-y-5 sm:space-y-6"
     :class="(step === 1 && !isAiFlow) || step === 2 ? (visitSummaryPrice.kind === 'partial' ? 'pb-[calc(12rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24') : 'pb-16'"
   >

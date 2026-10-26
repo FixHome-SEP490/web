@@ -55,8 +55,9 @@ import {
   type EvidencePhase,
   type EvidenceType,
 } from '../../api/orders.api';
+import FailedRepairDialog from '../../components/technician/FailedRepairDialog.vue';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
-import { REPAIR_FAILURE_REASONS, reportRepairFailed, visitGroupsApi, type RepairFailureReason, type VisitCheckout } from '../../api/visit-groups.api';
+import { visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { mediaApi } from '../../api/media.api';
@@ -185,36 +186,18 @@ function prefetchVisitSiblingOrders(checkout: VisitCheckout, activeOrderId: stri
 }
 // "Không sửa được" (PO 21/10/2026): one quick step for the technician.
 const repairFailedOpen = ref(false);
-const repairFailedReason = ref<RepairFailureReason>('beyond_repair');
-const repairFailedNote = ref('');
-const repairFailedParts = ref<Record<string, 'installed' | 'returned'>>({});
-const repairFailedSaving = ref(false);
 const heldParts = computed(() => receivedRequests.value.filter((request) => String(request.status).toLowerCase() === 'received'));
-const canReportRepairFailed = computed(() => !!visitGroupId.value && isRepairing.value && !completionRequested.value);
-function openRepairFailed() {
-  repairFailedReason.value = 'beyond_repair';
-  repairFailedNote.value = '';
-  repairFailedParts.value = Object.fromEntries(heldParts.value.map((request) => [request.id, 'returned' as const]));
-  repairFailedOpen.value = true;
-}
-async function confirmRepairFailed() {
-  if (repairFailedSaving.value) return;
-  repairFailedSaving.value = true;
-  try {
-    await reportRepairFailed(jobId, {
-      reason: repairFailedReason.value,
-      ...(repairFailedNote.value.trim() ? { note: repairFailedNote.value.trim() } : {}),
-      ...(heldParts.value.length ? { parts: heldParts.value.map((request) => ({ partRequestId: request.id, outcome: repairFailedParts.value[request.id] ?? 'returned' })) } : {}),
-    });
-    repairFailedOpen.value = false;
-    void cache.refresh(affectedBy.orderChange);
-    toast.success('Đã báo không sửa được. Máy này không tính tiền, quản lý sẽ kiểm tra linh kiện.');
-    await loadJob(jobId, { silent: true });
-  } catch (err) {
-    notifyError(userFacingError(err, 'Chưa báo được. Vui lòng thử lại.'));
-  } finally {
-    repairFailedSaving.value = false;
-  }
+const failedRepairParts = computed(() => heldParts.value.map(request => ({
+  id: request.id,
+  label: request.items.map(item => (item.partNameSnapshot ?? 'Linh kiện') + ' ×' + item.quantity).join(', ') || 'Linh kiện',
+})));
+const canReportRepairFailed = computed(() => isRepairing.value && !completionRequested.value);
+function openRepairFailed() { repairFailedOpen.value = true; }
+async function repairFailureReported() {
+  repairFailedOpen.value = false;
+  void cache.refresh(affectedBy.orderChange);
+  toast.success('Đã ghi nhận kết quả không sửa được.');
+  await loadJob(jobIdRef.value, { silent: true });
 }
 
 async function loadVisitCheckout() {
@@ -1589,10 +1572,6 @@ watch(
     completionConfirmOpen.value = false;
     departureDevices.value = [];
     repairFailedOpen.value = false;
-    repairFailedReason.value = 'beyond_repair';
-    repairFailedNote.value = '';
-    repairFailedParts.value = {};
-    repairFailedSaving.value = false;
     moreOpen.value = false;
     showWithdrawModal.value = false;
     replacementOpen.value = false;
@@ -3462,64 +3441,15 @@ const toggleMore = async () => {
       </section>
     </div>
 
-    <!-- Dialog: "Không sửa được" for one device of a visit (PO 21/10/2026) -->
-    <div
+    <FailedRepairDialog
       v-if="repairFailedOpen"
-      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
-      @click.self="!repairFailedSaving && (repairFailedOpen = false)"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="repair-failed-title"
-        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
-        data-testid="repair-failed-dialog"
-      >
-        <h2 id="repair-failed-title" class="text-lg font-semibold text-ink-900">Không sửa được máy này</h2>
-        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Lý do">
-          <button
-            v-for="reason in REPAIR_FAILURE_REASONS"
-            :key="reason.code"
-            type="button"
-            role="radio"
-            :aria-checked="repairFailedReason === reason.code"
-            class="min-h-10 rounded-full border px-3.5 text-sm font-medium transition-colors"
-            :class="repairFailedReason === reason.code ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
-            :data-testid="`repair-failed-reason-${reason.code}`"
-            @click="repairFailedReason = reason.code"
-          >{{ reason.label }}</button>
-        </div>
-        <label class="block space-y-1.5 text-sm">
-          <span class="text-ink-600">Ghi thêm (không bắt buộc)</span>
-          <textarea v-model="repairFailedNote" maxlength="500" rows="2" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
-        </label>
-        <div v-if="heldParts.length" class="space-y-2 text-sm" data-testid="repair-failed-parts">
-          <p class="font-medium text-ink-900">Linh kiện đã nhận</p>
-          <div v-for="request in heldParts" :key="request.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 px-3 py-2">
-            <span class="min-w-0 flex-1 text-ink-800">{{ request.items.map((item) => `${item.partNameSnapshot ?? 'Linh kiện'} x${item.quantity}`).join(', ') || 'Linh kiện' }}</span>
-            <span class="inline-flex overflow-hidden rounded-lg border border-ink-200">
-              <button
-                v-for="outcome in (['installed', 'returned'] as const)"
-                :key="outcome"
-                type="button"
-                class="h-9 px-3 text-xs font-semibold"
-                :class="repairFailedParts[request.id] === outcome ? 'bg-brand-600 text-white' : 'bg-white text-ink-700 hover:bg-ink-50'"
-                :aria-label="outcome === 'installed' ? 'Linh kiện đã lắp' : 'Linh kiện chưa lắp, cần khai trả'"
-                @click="repairFailedParts[request.id] = outcome"
-              >{{ outcome === 'installed' ? 'Đã lắp' : 'Chưa lắp' }}</button>
-            </span>
-          </div>
-        </div>
-        <div class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">
-          <p>Máy này không tính tiền sửa, các máy khác vẫn làm và thu tiền bình thường. Bạn không bị trừ điểm.</p>
-          <p>Nếu còn giữ linh kiện, hãy khai trả trong mục Quản lý linh kiện. Khai trả chưa xác nhận kho đã nhận; Quản lý Dịch vụ sẽ xác nhận số lượng thực tế.</p>
-        </div>
-        <div class="flex justify-end gap-2.5">
-          <FhButton variant="secondary" size="md" :disabled="repairFailedSaving" @click="repairFailedOpen = false">Quay lại</FhButton>
-          <FhButton variant="danger" size="md" :loading="repairFailedSaving" data-testid="repair-failed-confirm" @click="confirmRepairFailed">Xác nhận không sửa được</FhButton>
-        </div>
-      </div>
-    </div>
+      :key="jobIdRef"
+      :order-id="jobIdRef"
+      :parts="failedRepairParts"
+      :parts-ready="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
+      @close="repairFailedOpen = false"
+      @reported="repairFailureReported"
+    />
 
     <!-- Dialog: cancel the order -->
     <div
