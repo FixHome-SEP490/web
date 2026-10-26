@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   User,
   Wallet,
+  TicketPercent,
 } from 'lucide-vue-next';
 import { useAuthStore } from '../../stores/auth';
 import {
@@ -36,6 +37,7 @@ const icons: Record<AccountMenuIcon, Component> = {
   history: History,
   warranty: ShieldCheck,
   wallet: Wallet,
+  vouchers: TicketPercent,
   notifications: Bell,
   profile: User,
   area: LayoutGrid,

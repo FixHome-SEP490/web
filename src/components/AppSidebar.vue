@@ -45,6 +45,11 @@ withDefaults(defineProps<{
 // phone about 130px for the page, and every console page overflowed.
 const NARROW = '(max-width: 1023px)';
 const isCollapsed = ref(typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches);
+const collapseOnNarrowResize = () => {
+  if (window.matchMedia?.(NARROW).matches) isCollapsed.value = true;
+};
+onMounted(() => window.addEventListener('resize', collapseOnNarrowResize));
+onBeforeUnmount(() => window.removeEventListener('resize', collapseOnNarrowResize));
 const route = useRoute();
 const authStore = useAuthStore();
 const prefetchRoute = useRoutePrefetch();

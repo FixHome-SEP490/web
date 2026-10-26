@@ -158,6 +158,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết tiến độ đơn' },
       },
       {
+        path: 'vouchers',
+        name: 'customer-vouchers',
+        component: () => import('../pages/customer/CustomerVouchersPage.vue'),
+        meta: { title: 'Ví ưu đãi', roles: ['CUSTOMER'] },
+      },
+      {
         path: 'wallet',
         name: 'customer-wallet',
         component: () => import('../pages/customer/CustomerWalletPage.vue'),
@@ -435,6 +441,12 @@ const routes: RouteRecordRaw[] = [
         name: 'admin-users',
         component: () => import('../pages/console/admin/AdminUsersPage.vue'),
         meta: { title: 'Người dùng', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/vouchers',
+        name: 'admin-vouchers',
+        component: () => import('../pages/console/ConsoleVouchersPage.vue'),
+        meta: { title: 'Quản lý ưu đãi', roles: ['ADMIN'] },
       },
       {
         path: 'admin/config',

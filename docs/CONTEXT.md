@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-26 13:41 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-photo-label-wrap
+> Cập nhật lần cuối: 2026-10-26 14:32 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-t2-integration-20261026
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,11 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Voucher T2 (26/10/2026)
+
+- `/app/vouchers` (CUSTOMER) đọc ví và ưu đãi chung, nhận mã qua REST; có link thanh trên và menu tài khoản. `/console/admin/vouchers` (ADMIN) tạo chiến dịch GENERAL/PERSONAL, chọn danh mục/dịch vụ, thời gian Việt Nam và quota; bật/tắt, xem counter thanh toán thành công do server lưu, tìm khách đang hoạt động và cấp PERSONAL với `grantId` giữ nguyên khi thử lại kết quả chưa rõ. Điều khoản đã lưu bất biến.
+- `api/vouchers.api.ts` dùng Axios/JWT chung; kiểm tra response, lỗi và quyền, không dùng dữ liệu dự phòng. Checkout lượt và hộp thanh toán đơn có bộ chọn xem voucher trong ví, khóa APPLY; không tính giảm tiền, giữ chỗ hay sửa hóa đơn T1, hoa hồng/công nợ. D1 gồm tiền công và cả linh kiện.
 
 Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã trao đổi (`aiSummary.notes`: khách đã thử gì, đã loại gì, đang nghi gì), đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
@@ -310,6 +315,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 5. Hợp đồng với repo khác
 
+- Voucher T2: ADMIN `GET|POST /vouchers/campaigns`, `PATCH /vouchers/campaigns/:id/status {active}`, `POST /vouchers/campaigns/:id/grants {customerId,grantId}`; CUSTOMER `GET /vouchers/general`, `GET /vouchers/wallet`, `POST /vouchers/claim {code}`. DTO create gồm code/name/kind/discount/value/capVnd/minimumVnd/categoryIds/serviceIds/startsAt/endsAt/quota. GENERAL discovery được server lọc theo thời gian và chưa claim, không chứng minh financial eligibility. Wallet chỉ CLAIMED/REDEEMED và policySnapshot; không có quota/hold/customerDue. Admin chỉ đọc redeemed/quota, không suy ra số chỗ còn lại. Đã đối chiếu controller/DTO/service tại worktree Backend tích hợp T2; runtime thật và Mobile CHƯA KIỂM CHỨNG. Không gọi APPLY/release khi finance adapter chưa được tích hợp.
+
 - E3 cash VisitGroup: contract thống nhất với E0 là notification dành riêng khách sở hữu, `type=VISIT_CASH_DECLARED`, `referenceType=VISIT_GROUP`, `referenceId` bằng ID lượt; Backend tạo trong transaction khai tiền mặt mới, không tạo lại khi replay. Đây chỉ là tín hiệu gọi lại GET checkout, không phải chứng cứ đã trả tiền. Web chỉ nhận đúng type/reference/lượt đang mở và route notification `VISIT_GROUP` tới `/app/visits/:id`; các mapping khác giữ nguyên. Backend E0 đang triển khai; PG trigger/socket và runtime liên repository CHƯA KIỂM CHỨNG.
 
 - P013: `POST /invoices/:id/no-charge` gửi `{}`, trả envelope `data: {invoiceId, paymentStatus: 'paid', settlementMethod: 'NO_CHARGE'}`. Đã đối chiếu route và response trong source Backend P013; runtime CHƯA KIỂM CHỨNG. Backend chịu ownership, idempotency, đối chiếu hóa đơn 0, hoàn tất đơn và giới hạn VNPay. `PartRequest.requestType` bổ sung `quotation`, có `quotationId`; khách dùng API đọc yêu cầu linh kiện hiện có để trình bày chứng cứ hoàn trả. Web không sửa Backend/DB.
@@ -359,6 +366,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Voucher T2 cần Backend đăng ký module/migration và restart trước QA có đăng nhập. Bộ tài chính, bù sự cố tự động, giữ chỗ/thanh toán giảm giá chưa được chứng minh; không mở các lệnh đó từ Web. List Backend giới hạn 100 bản ghi, chưa có phân trang voucher. Runtime JWT/DB thật và Mobile parity NOT VERIFIED; hard-refresh khi QA Web.
+
 - E2 customer/booking: đã tương tác fixture mock tại 360/390/430/1440px, kiểm tra tràn ngang, tap target trang lượt, focus, reduced motion, duyệt/từ chối phát sinh và tiền mặt cập nhật theo focus. Hai fixture tạm đã được xóa và Vite phục vụ fixture đã dừng trong follow-up E3; screenshot không nằm trong repository. Signed-in E2E, socket Backend thật và Mobile parity CHƯA KIỂM CHỨNG. Hard-refresh khi QA bản tích hợp.
 - Giao diện cần E0/E1/E3 đối chiếu: Backend giữ nguyên API quyết định quotation/additional và checkout cả lượt; hóa đơn cuối cùng vẫn theo actual-use của server. Assignment dùng `booking:updated` hiện có, không cần event Backend mới. E0 đang tích hợp tín hiệu cash theo contract ở mục 5; Web chỉ thức dậy đọc GET và không tự trả/xác nhận tiền. PG trigger, socket delivery thật, freeze và invoice thực tế cần gate tích hợp E0/E1 trước release; E3 source/component tests không chứng minh signed-in E2E.
 
@@ -394,7 +403,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
+
 - 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
 
@@ -462,7 +473,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-19 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Tích hợp nguồn P0 handoff staging + P1 hoàn trả + P2 Services/Booking trên DEV 7c237d9: giữ UI 1120px, media/AI/lịch và xử lý feature OFF; runtime liên repo chưa kiểm chứng
 
 - 2026-10-19 00:40 (UTC+7) | foxonworld | foxonworld/fixhome-p1-parts-return-20261018 | Hoàn trả linh kiện FixHome P1: thợ khai trả trong trang việc, quản lý dịch vụ nhận thực tế ở trang Yêu cầu linh kiện (nhận một phần vẫn chờ phần còn lại), ẩn khi backend chưa bật, test part-returns
-
-- 2026-10-18 23:42 (UTC+7) | ToanAltF4 | fix/ui-review-2026-10-18 | Sửa 6 chỗ khó xem theo rà giao diện: ô soạn tin luôn trong tầm nhìn, tổng quan thợ ở màn hẹp, nút nổi, thanh bước đặt lịch, tách sự cố với phạm vi dịch vụ, mã đơn trong danh sách tin nhắn
-
-
