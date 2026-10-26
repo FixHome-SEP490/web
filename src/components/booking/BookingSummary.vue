@@ -49,7 +49,7 @@ const mobileCtaLabel = computed(() => props.ctaLabel.replace(/^(Lưu máy \d+) t
 /** The phone bar has one short line above the amount. */
 const barNote = computed(() => {
   switch (props.price.kind) {
-    case 'firm': return 'Tiền công';
+    case 'firm': return 'Tiền công, chưa gồm linh kiện';
     case 'range': return 'Giá tham khảo';
     case 'survey': return 'Thợ báo giá tại nhà';
     case 'partial': return 'Tiền công đã xác định';
@@ -62,9 +62,9 @@ const barNote = computed(() => {
   <!-- Wide screens -->
   <aside class="hidden min-w-0 lg:block lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto rounded-2xl border border-ink-200 bg-white p-6" aria-label="Yêu cầu của bạn" data-testid="booking-summary">
     <h2 class="text-base font-semibold text-ink-900">Yêu cầu của bạn <span v-if="devices?.length" class="font-normal text-ink-600">· {{ devices.length }} thiết bị</span></h2>
-    <dl class="mt-4 grid grid-cols-[6rem_minmax(0,1fr)] gap-y-3 text-sm">
+    <dl class="mt-4 grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
       <dt class="text-ink-500">Dịch vụ</dt>
-      <dd class="font-medium text-ink-900" :class="!serviceName && 'font-normal text-ink-400'" data-testid="booking-summary-service">{{ devices?.length ? `${devices.length} thiết bị` : serviceName || 'Chưa chọn' }}</dd>
+      <dd class="min-w-0 break-words font-medium text-ink-900" :class="!serviceName && 'font-normal text-ink-400'" data-testid="booking-summary-service">{{ devices?.length ? `${devices.length} thiết bị` : serviceName || 'Chưa chọn' }}</dd>
       <template v-if="deviceText && !devices?.length">
         <dt class="text-ink-500">Thiết bị</dt>
         <dd class="font-medium text-ink-900" data-testid="booking-summary-device">{{ deviceText }}</dd>
@@ -74,7 +74,7 @@ const barNote = computed(() => {
         <dd class="break-words text-ink-900">{{ addressText }}</dd>
       </template>
       <dt class="text-ink-500">Lịch hẹn</dt>
-      <dd :class="scheduleText ? 'font-medium text-ink-900' : 'text-ink-400'" data-testid="booking-summary-schedule">{{ scheduleText || 'Chọn ở bước sau' }}</dd>
+      <dd class="min-w-0 break-words" :class="scheduleText ? 'font-medium text-ink-900' : 'text-ink-400'" data-testid="booking-summary-schedule">{{ scheduleText || 'Chọn ở bước sau' }}</dd>
     </dl>
     <section v-if="devices?.length" class="mt-4 border-t border-ink-100 pt-3" aria-label="Dịch vụ từng thiết bị" data-testid="booking-summary-devices">
       <ol class="space-y-3">
@@ -103,7 +103,7 @@ const barNote = computed(() => {
       <span v-else-if="price.kind === 'partial'" class="text-sm text-ink-700">Chờ báo giá</span>
       <span v-else class="text-sm text-ink-400">—</span>
     </div>
-    <p class="mt-2 text-xs leading-relaxed text-ink-600">{{ priceNote }}</p>
+    <p class="mt-2 text-sm leading-relaxed text-ink-600">{{ priceNote }}</p>
     <FhButton class="mt-5 w-full" size="lg" :disabled="ctaDisabled" :loading="ctaLoading" :data-testid="ctaTestid" @click="emit('next')">{{ ctaLabel }}</FhButton>
     <FhButton v-if="backLabel" variant="ghost" size="md" class="mt-2 w-full" data-testid="booking-summary-back" @click="emit('back')">
       <ArrowLeft :size="15" class="mr-1.5" aria-hidden="true" /> {{ backLabel }}

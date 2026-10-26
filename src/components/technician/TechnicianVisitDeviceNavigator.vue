@@ -72,8 +72,8 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
           :aria-label="`Máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
-          <span class="flex items-center justify-between gap-1 text-sm font-semibold text-brand-800">Máy {{ device.sequence }}<span class="sr-only"> · Đang xem</span><span class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" /></span>
-          <span class="mt-1 block truncate text-xs text-ink-800" :title="deviceLabel(device)">{{ deviceLabel(device) }}</span>
+          <span class="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-brand-800">Máy {{ device.sequence }}<span class="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium">Đang xem</span></span>
+          <span class="mt-1 block break-words text-sm text-ink-800">{{ deviceLabel(device) }}</span>
           <span class="mt-1 block text-xs font-medium" :class="toneClass(statusFor(device).tone)" :data-testid="`tech-visit-action-status-${device.sequence}`">{{ statusFor(device).label }}</span>
           <span class="mt-2 block space-y-1 text-xs text-ink-700" :data-testid="`tech-visit-price-${device.sequence}`">
             <span class="block">{{ overviewByOrderId[device.serviceOrderId]?.priceLabel || 'Chưa cập nhật giá' }}<FhMoney v-if="overviewByOrderId[device.serviceOrderId]?.price != null" :amount="overviewByOrderId[device.serviceOrderId]?.price" class="ml-1 font-semibold" /></span>
@@ -90,7 +90,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
           <span class="flex items-center justify-between gap-1 text-sm font-semibold text-ink-900">Máy {{ device.sequence }}<span v-if="statusFor(device).tone === 'attention' || statusFor(device).custodyLabel" class="h-2 w-2 shrink-0 rounded-full bg-warning-600" aria-hidden="true" /></span>
-          <span class="mt-1 block truncate text-xs text-ink-700" :title="deviceLabel(device)">{{ deviceLabel(device) }}</span>
+          <span class="mt-1 block break-words text-sm text-ink-700">{{ deviceLabel(device) }}</span>
           <span class="mt-1 block text-xs font-medium" :class="toneClass(statusFor(device).tone)" :data-testid="`tech-visit-action-status-${device.sequence}`">{{ statusFor(device).label }}</span>
           <span class="mt-2 block space-y-1 text-xs text-ink-700" :data-testid="`tech-visit-price-${device.sequence}`">
             <span class="block">{{ overviewByOrderId[device.serviceOrderId]?.priceLabel || 'Chưa cập nhật giá' }}<FhMoney v-if="overviewByOrderId[device.serviceOrderId]?.price != null" :amount="overviewByOrderId[device.serviceOrderId]?.price" class="ml-1 font-semibold" /></span>
@@ -105,7 +105,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
           <span class="block text-sm font-semibold">Máy {{ device.sequence }}</span>
-          <span class="mt-1 block truncate text-xs" :title="deviceLabel(device)">{{ deviceLabel(device) }}</span>
+          <span class="mt-1 block break-words text-sm">{{ deviceLabel(device) }}</span>
           <span class="mt-1 block text-xs">Chưa có công việc</span>
         </div>
       </template>
@@ -130,9 +130,6 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
 <style scoped>
 /* Keep each status readable at field-use widths; wide screens retain the three-machine rail. */
 @media (max-width: 639px) {
-  .visit-device { display: grid; grid-template-columns: 4rem minmax(0, 1fr); column-gap: 12px; align-content: start; }
-  .visit-device > :first-child { grid-row: 1 / span 3; align-self: start; white-space: nowrap; }
-  .visit-device > :not(:first-child) { grid-column: 2; margin-top: 0; font-size: 14px; line-height: 20px; }
-  .visit-device > :nth-child(n + 3) { margin-top: 4px; }
+  .visit-device > :not(:first-child) { font-size: 14px; line-height: 20px; }
 }
 </style>
