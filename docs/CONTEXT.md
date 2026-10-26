@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-26 18:49 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-pushback-no-buttons
+> Cập nhật lần cuối: 2026-10-26 21:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-price-and-description
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -134,6 +134,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 - Chọn 1 đến 2 kỹ thuật viên ở trang ứng viên, theo dõi booking, huỷ, đổi lịch, gia hạn tìm thợ.
 - Đơn sửa chữa: duyệt hoặc từ chối báo giá và chi phí phát sinh, xem hoá đơn, thanh toán VNPay hoặc tiền mặt, xác nhận hoàn tất, xem bằng chứng, bảo hành và yêu cầu bảo hành, đánh giá kỹ thuật viên, khiếu nại.
 - Lịch sử sửa chữa (trong menu avatar) có danh sách đơn như cũ và tab VisitGroup cha đã kết thúc, child nào đã có ServiceOrder thì dẫn đến chi tiết bảo hành/linh kiện; hồ sơ và sổ địa chỉ (gợi ý địa chỉ qua `backend`), thông báo.
+- Giá trong chat AI (PO 26/10/2026 khuya): dưới "Chi phí tham khảo" có dòng "Gồm tiền công dịch vụ X, cộng linh kiện nếu phải thay (tới Y)" khi `priceEstimate.partsMax` > 0 (`priceBreakdown`); số thấp nhất là đúng giá dịch vụ form đặt lịch hiện. "Đặt thợ" chỉ chọn sẵn dịch vụ, form vẫn hiện giá của chính dịch vụ. Mô tả mang sang form (`customerWords`) bỏ câu "sai rồi" của lượt khách bác (dùng `customerDisagreed.restVi`), lượt chỉ có lời bác thì bỏ hẳn.
 - Thanh trên cùng của khách (`CustomerLayout.vue`): năm mục từ khi có "Ưu đãi", icon cạnh chữ chỉ hiện từ 2xl và khung rộng 90rem ở 2xl, vì có icon thì mục cuối chui dưới nút "Đặt thợ ngay" ở mọi bề rộng desktop (đo 1024 đến 1920 px bằng `.claude/tools/qa/ui/probe-header-fit.mjs`, 26/10/2026).
 - Bong bóng trợ lý AI (`AiAssistantWidget`) chuyển cuộc trò chuyện sang `/app/bookings/ai?aiSession=...`. Khối "Đặt thợ" trong bong bóng (và nút "Đổi sang dịch vụ này" ở bước AI của form) chỉ hiện khi trợ lý đã trả lời xong (`isThinking` false); khách nhắn thêm thì ẩn cho tới khi tin trả lời về (`tests/ai-widget-book-after-reply.spec.ts`). Câu trả lời của trợ lý hiện dần từng cụm chữ (tối đa 40 bước, khoảng 28 ms mỗi bước, tắt khi trình duyệt bật giảm chuyển động, và trong test) sau khi đã về đủ và đã qua kiểm tra ở ai-service; trong lúc hiện `isThinking` vẫn đúng nên nút Đặt thợ, trả lời nhanh, Đúng ý/Chưa đúng và phần giá/dịch vụ dưới tin chỉ ra khi chữ đã hiện hết; ba chấm đang gõ ẩn khi chữ bắt đầu hiện (`isRevealing`, `revealSteps`, `tests/ai-reply-reveal.spec.ts`). Không truyền từng token từ máy chủ vì bộ kiểm câu trả lời (`answer_guard`) cần cả câu trước khi cho hiện. Khi trợ lý hỏi lại một câu có/không (kết thúc bằng "không?" hoặc "chưa?"), dưới câu hỏi mới nhất có nút trả lời nhanh "Có"/"Không"/"Không rõ" hoặc "Rồi"/"Chưa"/"Không rõ", bấm là gửi như tin nhắn (`quickReplies` trong `useAiConversation.ts`, `tests/ai-quick-replies.spec.ts`); ẩn khi trợ lý đang trả lời hoặc khách đã nhắn tiếp. Không có nút "Đúng ý / Chưa đúng" (PO 26/10/2026 bỏ): khách nói sai ngay trong chat ("sai rồi", "không phải bệnh đó", "ảnh 2 là tủ lạnh"), ai-service tự nhận ra và backend ghi lại (`tests/ai-feedback.spec.ts` kiểm không còn nút). Khách nhắn quá nhanh (429) thì báo "Anh/chị nhắn hơi nhanh..." thay vì "chưa kết nối được". Admin có trang `/console/admin/ai-quality` (`AdminAiQualityPage.vue`, mục "Trợ lý AI" trong nhóm Vận hành, backend `GET /admin/ai-quality`): số cuộc trò chuyện, lượt nhắn, đặt thợ từ trợ lý và tỉ lệ, số lần khách nói trợ lý sai, 20 lần gần nhất (nhãn Đoán sai bệnh / Nhận nhầm thiết bị / Đọc nhầm ảnh, "Khách kể", "Trợ lý đoán", "Khách nói lại", "Cuối cuộc trò chuyện"), bảng theo ngày; chọn 7/30/90 ngày. Chỉ xem. Bước Xác nhận hiện mức khẩn cấp bằng chữ (Tiêu chuẩn, Khẩn cấp...) thay vì mã, hàng nút xếp dọc trên điện thoại. Bước Xác nhận của form đặt qua AI hiện khung tóm tắt kỹ thuật viên sẽ nhận (thiết bị, tối đa 2 lỗi có thể là, "Bạn đã cho biết" từ `notesVi` của câu trả lời mới nhất, đổi giọng "Khách ..." sang lời của khách; thiết bị lấy từ câu trả lời gần nhất có nhận ra thiết bị, tức là khi có ảnh) bằng `bookingRecap` trong `useAiConversation.ts` (`tests/ai-booking-recap.spec.ts`). Bong bóng chat với kỹ thuật viên (`ChatFloatingWidget`) kèm gọi thoại WebRTC, có ở mọi trang của khách và kỹ thuật viên.
 
@@ -404,6 +405,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-26 21:40 (UTC+7) | ToanAltF4 | fix/ai-price-and-description | Chat AI ghi rõ khoảng giá gồm tiền công và linh kiện; mô tả sang form bỏ câu sai rồi
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
@@ -472,5 +474,4 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-19 03:35 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | P012 Web: mục thông tin thiết bị và phạm vi tiền công trong bước 1 đặt lịch đọc preview catalog-v2-pricing, chỉ gửi facts cùng variant server đã xác nhận, recap bước 4 lặp lại đúng câu trả lời server, ẩn khi 404/503, test mock; runtime chưa kiểm chứng
 
-- 2026-10-19 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Tích hợp nguồn P0 handoff staging + P1 hoàn trả + P2 Services/Booking trên DEV 7c237d9: giữ UI 1120px, media/AI/lịch và xử lý feature OFF; runtime liên repo chưa kiểm chứng
 

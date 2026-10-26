@@ -17,7 +17,7 @@ vi.mock('../src/utils/image-for-ai', () => ({
   shrinkForRetry: vi.fn(async (images: { dataUrl: string }[]) => images.map((i) => `${i.dataUrl}#small`)),
 }));
 
-import { useAiConversation, composeFromFields, priceLabel } from '../src/composables/useAiConversation';
+import { useAiConversation, composeFromFields, priceLabel, priceBreakdown } from '../src/composables/useAiConversation';
 
 const reply = (extra: Record<string, unknown> = {}) => ({
   sessionId: 'sess-1', status: 'ok', aiAvailable: true, messageVi: 'Dạ em xem rồi ạ.',
@@ -45,6 +45,27 @@ describe('useAiConversation', () => {
     expect(c.turnCount.value).toBe(2);
     expect(c.pinnedService.value?.serviceId).toBe('svc-ac');
     expect(c.customerWords()).toBe('Máy lạnh kêu lạch cạch. Cục trong phòng ạ');
+  });
+
+  it('leaves the "sai rồi" out of the description the technician reads (PO 26/10/2026)', async () => {
+    analyze
+      .mockResolvedValueOnce(reply({ suspectedFaults: [{ faultCode: 'AC_LOW_REFRIGERANT', nameVi: 'Thiếu gas' }] }))
+      .mockResolvedValueOnce(reply({ customerDisagreed: { kind: 'fault', rejectedVi: ['Thiếu gas'], restVi: 'máy vẫn mát nhưng chảy nước' } }))
+      .mockResolvedValueOnce(reply({ customerDisagreed: { kind: 'fault', rejectedVi: ['Nghẹt ống'], restVi: '' } }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('máy lạnh chạy mà không mát', []);
+    await c.sendTurn('sai rồi, máy vẫn mát nhưng chảy nước', []);
+    expect(c.customerWords()).toBe('máy lạnh chạy mà không mát. máy vẫn mát nhưng chảy nước');
+    await c.sendTurn('nói sai rồi em ơi', []);
+    expect(c.customerWords()).toBe('máy lạnh chạy mà không mát. máy vẫn mát nhưng chảy nước');
+  });
+
+  it('says what the price range is made of', () => {
+    const priced = reply({ priceEstimate: { min: 249000, max: 999000, currency: 'VND', requiresAssessment: true, labourMin: 249000, labourMax: 249000, partsMax: 750000 } });
+    expect(priceLabel(priced as never)).toBe('249.000đ – 999.000đ');
+    expect(priceBreakdown(priced as never)).toBe('Gồm tiền công dịch vụ 249.000đ, cộng linh kiện nếu phải thay (tới 750.000đ).');
+    const cleaning = reply({ priceEstimate: { min: 199000, max: 449000, currency: 'VND', requiresAssessment: false, labourMin: 199000, labourMax: 449000, partsMax: 0 } });
+    expect(priceBreakdown(cleaning as never)).toBeNull();
   });
 
   it('sends questions to the question route and keeps the session', async () => {
