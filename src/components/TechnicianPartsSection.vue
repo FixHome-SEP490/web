@@ -873,10 +873,11 @@ const getStatusBadgeClass = (status: string) => {
 </script>
 
 <template>
-  <div class="space-y-4 text-xs">
+  <div class="space-y-4 text-sm">
       <!-- Alerts -->
       <div
         v-if="actionSuccess"
+        role="status"
         class="p-3 rounded-lg bg-success-50 text-success-800 border border-success-200 flex items-center gap-2"
       >
         <CheckCircle2 :size="15" class="text-success-600 shrink-0" />
@@ -885,6 +886,7 @@ const getStatusBadgeClass = (status: string) => {
 
       <div
         v-if="actionError"
+        role="alert"
         class="p-3 rounded-lg bg-danger-50 text-danger-800 border border-danger-200 flex items-center gap-2"
       >
         <AlertCircle :size="15" class="text-danger-600 shrink-0" />
@@ -916,7 +918,7 @@ const getStatusBadgeClass = (status: string) => {
           <p v-if="completedBulkReturns.length && bulkReturnItems.length" class="text-ink-700">Còn {{ bulkReturnItems.length }} dòng trong lượt này cần xác nhận. Các dòng đã khai thành công sẽ không gửi lại.</p>
           <p v-if="bulkReturnItems.some(row => row.command)" class="text-warning-800" role="status">Có khai trả chưa xác định kết quả. Thử lại giữ nguyên số lượng để đối chiếu; không tạo khai trả mới.</p>
           <label v-for="row in bulkReturnItems" :key="row.item.id" class="flex items-center justify-between gap-3 text-ink-900">
-            <span class="min-w-0">{{ row.item.partNameSnapshot }}</span>
+            <span class="min-w-0 break-words">{{ row.item.partNameSnapshot }}<span class="mt-1 block text-xs text-ink-600">Số lượng khai trả · tối đa {{ row.command?.quantity ?? Math.min(row.quantity, returnFor(row.item.id) ? canDeclareMoreQty(returnFor(row.item.id)!) : 0) }}</span></span>
             <input v-model.number="bulkReturnDraft[row.item.id]" type="number" min="1" :max="row.command?.quantity ?? Math.min(row.quantity, returnFor(row.item.id) ? canDeclareMoreQty(returnFor(row.item.id)!) : 0)" step="1" :aria-label="`Số lượng khai trả ${row.item.partNameSnapshot}`" :disabled="bulkReturnSubmitting || !!row.command" class="h-11 w-20 shrink-0 rounded-lg border border-ink-300 px-2 font-num focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
           </label>
           <div class="flex flex-wrap gap-2">
@@ -1278,9 +1280,9 @@ const getStatusBadgeClass = (status: string) => {
         >
           <!-- Request Header -->
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-2">
-            <div class="flex items-center gap-2">
+            <div class="flex min-w-0 flex-wrap items-center gap-2">
               <span
-                class="px-2 py-0.5 rounded text-[10px] font-bold border"
+                class="px-2 py-1 rounded text-xs font-semibold border"
                 :class="getStatusBadgeClass(pr.status)"
               >
                 {{ formatStatusText(pr.status) }}
@@ -1306,7 +1308,7 @@ const getStatusBadgeClass = (status: string) => {
               </span>
             </div>
 
-            <button type="button" class="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-brand-700" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
+            <button type="button" class="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-700" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
               {{ isRequestExpanded(pr.id, group.key) ? 'Thu gọn' : 'Chi tiết' }}
               <span aria-hidden="true">{{ isRequestExpanded(pr.id, group.key) ? '⌃' : '⌄' }}</span>
             </button>
@@ -1413,7 +1415,7 @@ const getStatusBadgeClass = (status: string) => {
                       <span class="whitespace-nowrap">Dùng <span class="font-num">{{ record.usedQty }}</span></span> ·
                       <span class="whitespace-nowrap">Cần trả kho <span class="font-num">{{ record.outstandingQty }}</span></span>
                     </p>
-                    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-ink-50 p-3">
+                    <dl class="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg bg-ink-50 p-3 [&_dd]:mt-1 [&_dd]:text-sm">
                       <div><dt>Còn phải khai</dt><dd class="font-num font-semibold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
                       <div><dt>Đã khai, chờ nhận</dt><dd class="font-num font-semibold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-800' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
                       <div><dt>Khách duyệt tối đa (cả máy)</dt><dd class="font-num font-semibold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
@@ -1466,6 +1468,7 @@ const getStatusBadgeClass = (status: string) => {
                       data-testid="open-declare-return"
                       class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                       :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
+                      :aria-expanded="declareTarget?.itemId === item.id" :aria-controls="`part-return-editor-${item.id}`"
                       :disabled="declareSubmitting || returnsLoadError || disabled || bulkReturnOpen || !!pendingBulkDeclarations[item.id]" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
                       <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
                     </button>
@@ -1496,6 +1499,7 @@ const getStatusBadgeClass = (status: string) => {
           <!-- P1: khai trả phần chưa dùng; quản lý dịch vụ vẫn phải nhận và xác nhận thực tế -->
           <div
             v-if="declareTarget && declareTarget.requestId === pr.id"
+            :id="`part-return-editor-${declareTarget.itemId}`"
             class="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3"
           >
             <p class="text-xs font-semibold text-ink-900">
@@ -1516,13 +1520,14 @@ const getStatusBadgeClass = (status: string) => {
                   min="1"
                   step="1"
                   :max="declareTarget.maxQty"
-                  class="w-20 rounded border border-ink-300 bg-white p-1.5 text-xs text-ink-900 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  :aria-describedby="`part-return-hint-${declareTarget.itemId}`"
+                  class="h-11 w-24 rounded-lg border border-ink-300 bg-white px-3 text-base text-ink-900 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                 />
               </div>
               <FhButton
                 data-testid="submit-declare-return"
                 variant="primary"
-                size="sm"
+                size="md"
                 :loading="declareSubmitting"
                 :disabled="declareSubmitting || !declareValid"
                 @click="submitDeclareReturn"
@@ -1531,14 +1536,14 @@ const getStatusBadgeClass = (status: string) => {
               </FhButton>
               <FhButton
                 variant="ghost"
-                size="sm"
+                size="md"
                 :disabled="declareSubmitting"
                 @click="declareTarget = null"
               >
                 Huỷ
               </FhButton>
             </div>
-            <p class="text-[11px] text-ink-500">
+            <p :id="`part-return-hint-${declareTarget.itemId}`" class="text-sm text-ink-600">
               Quản lý dịch vụ sẽ nhận linh kiện và xác nhận số lượng thực tế. Khai trả chưa phải là đã trả xong.
             </p>
           </div>
