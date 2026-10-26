@@ -658,7 +658,6 @@ const addHeldPartToAc = (part: { partCatalogId: string; name: string; unitPrice:
 const completionBlockers = computed(() => {
   if (!isRepairing.value || completionRequested.value) return [] as string[];
   const blockers: string[] = [];
-  if (returnsToDeclare.value > 0) blockers.push(`Còn ${returnsToDeclare.value} linh kiện chưa khai trả kho.`);
   if (acSubmitting.value || acUploading.value) blockers.push('Đang gửi báo giá bổ sung. Chờ xác nhận trước khi hoàn thành.');
   if (completionPartsReadFailed.value || completionPartRequests.value === null) {
     blockers.push('Chưa tải được trạng thái linh kiện. Thử tải lại trước khi hoàn thành.');
@@ -1630,12 +1629,15 @@ const partsTotal = () =>
 
 const addItem = (type: 'LABOR' | 'PARTS') => {
   if (fixedVisitBase.value) return;
+  if (type === 'PARTS') {
+    openQuotationPartPicker();
+    return;
+  }
   quotationItems.value.push({
     type,
     description: '',
     quantity: 1,
     unitPrice: 0,
-    ...(type === 'PARTS' ? { partSource: 'technician' as const, partWarrantyOption: 'no_warranty' as const } : {}),
   });
 };
 
@@ -1865,12 +1867,15 @@ const proposedParts = computed(() => [
   ...(job.value?.quotation?.items ?? []).filter(item => item.type === 'PARTS'),
   ...additionalCosts.value.filter(cost => cost.status === 'APPROVED').flatMap(cost => cost.items.filter(item => item.type !== 'LABOR')),
 ]);
+const invoicePartLines = computed(() => jobInvoice.value
+  ? jobBilling.value.items.filter(item => String(item.type).toUpperCase() !== 'LABOR')
+  : []);
 
 const fixedBaseValid = computed(() => !fixedVisitBase.value || (fixedPriceTotal.value !== null && quotationItems.value.length === 1 && quotationItems.value[0]?.type === 'LABOR' && quotationItems.value[0].quantity === 1 && quotationItems.value[0].unitPrice === fixedPriceTotal.value));
 const quotationValid = computed(() => fixedBaseValid.value && (fixedVisitBase.value || (!quoteStockError.value && !quoteStockLoading.value)) && quotationItems.value.length > 0 && quotationItems.value.every(item =>
   !!item.description.trim() && item.description.length <= 2000 && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 1000 &&
   Number.isInteger(item.unitPrice) && item.unitPrice >= 0 && item.unitPrice <= 999999999 &&
-  (item.type !== 'PARTS' || item.partSource !== 'fixhome' || !!item.partCatalogId),
+  (item.type !== 'PARTS' || (item.partSource === 'fixhome' && !!item.partCatalogId)),
 ) && quoteLaborWarrantyValid.value);
 const cancelQuotation = () => {
   quoteEditorDismissed.value = true;
@@ -1879,14 +1884,6 @@ const cancelQuotation = () => {
   quoteLaborWarranty.value = job.value?.laborWarrantyDays ?? '';
   editingQuotation.value = false;
   showAcPartPicker.value = false;
-};
-const changeQuotePartSource = (index: number) => {
-  const item = quotationItems.value[index];
-  if (!item) return;
-  const source = item.partSource;
-  quotationItems.value[index] = { type: 'PARTS', partSource: source, description: '', quantity: item.quantity, unitPrice: 0,
-    ...(source === 'technician' ? { partWarrantyOption: 'no_warranty' as const } : {}) };
-  if (source === 'fixhome') openQuotationPartPicker(index);
 };
 const openQuotationPartPicker = (index: number | null = null) => {
   openAcPartPicker(index);
@@ -1922,6 +1919,7 @@ const acLaborTotal = () =>
   acItems.value.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 const acPartsTotal = () =>
   acItems.value.filter((i) => i.type === 'PARTS').reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+const acLegacyParts = ref<AdditionalCostRecord['items']>([]);
 
 // FixHome parts catalog picker for additional costs
 const showAcPartPicker = ref(false);
@@ -2004,17 +2002,16 @@ const selectPartForAc = (part: FixHomePart) => {
   acTargetItemIndex.value = null;
 };
 
-const addAcItem = (type: 'LABOR' | 'PARTS', partSource: 'fixhome' | 'technician' = 'technician') => {
-  if (type === 'PARTS' && partSource === 'fixhome') {
+const addAcItem = (type: 'LABOR' | 'PARTS') => {
+  if (type === 'PARTS') {
     openAcPartPicker(null);
     return;
   }
   acItems.value.push({
     type,
-    description: type === 'LABOR' ? 'Hạng mục công phát sinh' : 'Tên linh kiện phát sinh',
+    description: 'Hạng mục công phát sinh',
     quantity: 1,
     unitPrice: 0,
-    partSource: type === 'PARTS' ? partSource : undefined,
   });
 };
 const removeAcItem = (idx: number) => acItems.value.splice(idx, 1);
@@ -2025,8 +2022,9 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
   acReason.value = revise?.reason ?? '';
   acFulfillmentMethod.value = revise?.fulfillmentMethod || 'pickup';
   acShippingFee.value = revise?.shippingFee || 0;
+  acLegacyParts.value = revise?.items.filter(i => i.type !== 'LABOR' && i.partSource !== 'fixhome') ?? [];
   acItems.value = revise
-    ? revise.items.map((i) => ({
+    ? revise.items.filter(i => i.type === 'LABOR' || i.partSource === 'fixhome').map((i) => ({
         type: i.type === 'LABOR' ? 'LABOR' : 'PARTS',
         description: i.description,
         quantity: i.quantity,
@@ -2036,7 +2034,7 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
         partNameSnapshot: i.partNameSnapshot || undefined,
         warrantyDays: (i as unknown as { warrantyDays?: number }).warrantyDays || undefined,
       }))
-    : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
+  : [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
   acEvidenceUrls.value = revise?.evidenceUrls ? [...revise.evidenceUrls] : [];
   showAdditionalCostForm.value = true;
   sections.extra = true;
@@ -2090,7 +2088,7 @@ async function handleSubmitAdditionalCost() {
     return;
   }
 
-  if (validItems.some(item => !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1000 || !Number.isSafeInteger(item.unitPrice) || item.unitPrice < 0 || item.unitPrice > 999999999 || (item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId))) {
+  if (validItems.some(item => !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1000 || !Number.isSafeInteger(item.unitPrice) || item.unitPrice < 0 || item.unitPrice > 999999999 || (item.type === 'PARTS' && (item.partSource !== 'fixhome' || !item.partCatalogId)))) {
     notifyError('Kiểm tra số lượng, đơn giá và linh kiện đã chọn.');
     return;
   }
@@ -2479,7 +2477,7 @@ const toggleMore = async () => {
         <dl class="flex flex-wrap gap-x-6 gap-y-2">
           <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
           <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
-          <div><dt class="text-ink-600">Tổng cộng</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
+          <div><dt class="text-ink-600">{{ jobInvoice ? 'Tổng hóa đơn' : 'Tổng báo giá' }}</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
         </dl>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
         <details v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-3 text-xs" data-testid="cost-lines">
@@ -2503,26 +2501,39 @@ const toggleMore = async () => {
             </ul>
           </div>
         </details>
-        <details v-if="proposedParts.length || receivedRequests.length" class="border-t border-ink-100 pt-3 text-xs">
-          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length }})</summary>
+        <details v-if="proposedParts.length || receivedRequests.length || invoicePartLines.length" class="border-t border-ink-100 pt-3 text-xs">
+          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length || invoicePartLines.length }})</summary>
         <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
-          <h3 class="font-medium text-ink-800">Dự kiến/đã duyệt</h3>
+          <h3 class="font-medium text-ink-800">Số lượng dự kiến/đã duyệt · lịch sử</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2">
-              <span>{{ item.description }} · {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
+              <span>{{ item.description }} · tối đa {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
               <FhMoney :amount="item.lineTotal" />
             </li>
           </ul>
         </div>
         <div v-if="receivedRequests.length" data-testid="actual-parts" class="border-t border-ink-100 pt-3">
-          <h3 class="font-medium text-ink-800">Thực tế đã dùng/không dùng</h3>
+          <h3 class="font-medium text-ink-800">Đã cấp và thực tế đã dùng</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="request in receivedRequests" :key="request.id">
               {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
-              <ul class="pl-3"><li v-for="item in request.items" :key="item.id">{{ item.partNameSnapshot }} × {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}</li></ul>
+              <ul class="pl-3"><li v-for="item in request.items" :key="item.id">
+                {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
+                <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>
+                <span v-if="custodyByItem.has(item.id)"> · Đã khai trả {{ custodyByItem.get(item.id)?.declaredQty }}</span>
+              </li></ul>
             </li>
           </ul>
           <button type="button" class="mt-2 min-h-10 text-brand-700 underline" @click="revealParts">Mở quản lý linh kiện</button>
+        </div>
+        <div v-if="invoicePartLines.length" data-testid="invoice-part-lines" class="border-t border-ink-100 pt-3">
+          <h3 class="font-medium text-ink-800">Đã tính vào hóa đơn · số lượng và giá thực tế</h3>
+          <ul class="mt-1 space-y-1 text-ink-700">
+            <li v-for="(item, index) in invoicePartLines" :key="index" class="flex flex-wrap justify-between gap-2">
+              <span>{{ item.description }} × {{ item.quantity }}</span>
+              <FhMoney :amount="item.lineTotal" />
+            </li>
+          </ul>
         </div>
         </details>
       </section>
@@ -2579,7 +2590,7 @@ const toggleMore = async () => {
         <p v-if="additionalCosts.length" class="mt-3 text-sm text-ink-700" data-testid="additional-history-summary">Báo giá bổ sung: {{ additionalHistorySummary }}</p>
         <!-- Quotation form (inspection jobs, after check-in with a photo) -->
         <div v-if="showQuotationForm" class="mt-4 space-y-3" data-testid="quotation-form">
-          <p v-if="fixedVisitBase" class="text-sm text-ink-700" data-testid="fixed-base-guidance">Báo giá gốc chỉ gồm tiền công theo giá cố định. Sau khi khách duyệt, dùng “Báo giá bổ sung” cho linh kiện hoặc tiền công phát sinh; khách phải duyệt riêng trước khi sử dụng.</p>
+          <p v-if="fixedVisitBase" class="text-sm text-ink-700" data-testid="fixed-base-guidance">Báo giá gốc chỉ gồm tiền công cố định, không gồm linh kiện hay công ngoài phạm vi. Mọi khoản phát sinh được báo riêng và khách phải duyệt trước khi thực hiện.</p>
           <p v-if="fixedVisitBase && fixedPriceTotal === null" role="alert" class="text-sm text-danger-700">Chưa đọc được tiền công cố định. Vui lòng tải lại công việc trước khi gửi báo giá.</p>
           <p v-if="quoteStockLoading && !fixedVisitBase" role="status" class="text-sm text-ink-600">Đang đối chiếu linh kiện đã nhận…</p>
           <p v-if="quoteStockError && !fixedVisitBase" data-testid="quote-stock-error" role="alert" class="text-sm text-danger-700">
@@ -2587,7 +2598,7 @@ const toggleMore = async () => {
           </p>
           <details class="text-xs text-ink-600 rounded-lg bg-ink-50 px-3 py-2">
             <summary class="cursor-pointer font-medium text-brand-700"><Info :size="15" aria-hidden="true" class="inline-block align-middle mr-1" /> Thông tin báo giá</summary>
-            <p class="mt-2">Linh kiện FixHome theo đơn giá và bảo hành danh mục. Điều chỉnh số lượng trước khi gửi. Linh kiện FixHome nhận qua QR, linh kiện tự có chọn nguồn kỹ thuật viên. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
+            <p class="mt-2">Chọn linh kiện trong danh mục FixHome để dùng đơn giá và bảo hành hiện hành. Điều chỉnh số lượng trước khi gửi. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
           </details>
           <div
             v-for="(item, idx) in quotationItems"
@@ -2595,15 +2606,11 @@ const toggleMore = async () => {
             class="flex flex-wrap items-center gap-2"
           >
             <span v-if="item.type === 'LABOR'" class="shrink-0 w-20 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
-            <select v-else v-model="item.partSource" aria-label="Nguồn linh kiện" class="h-10 max-w-full rounded-xl border border-ink-200 text-sm" @change="changeQuotePartSource(idx)">
-              <option value="fixhome">Linh kiện FixHome</option>
-              <option value="technician">Kỹ thuật viên tự có</option>
-            </select>
-            <button v-if="item.type === 'PARTS' && item.partSource === 'fixhome'" type="button" class="min-w-0 flex-1 h-10 px-3 rounded-xl border border-ink-200 text-sm text-left truncate" @click="openQuotationPartPicker(idx)">
+            <button v-else type="button" class="min-w-0 flex-1 h-10 px-3 rounded-xl border border-ink-200 text-sm text-left truncate" @click="openQuotationPartPicker(idx)">
               {{ item.partCatalogId ? item.description : 'Chọn linh kiện FixHome' }}
             </button>
             <input
-              v-else
+              v-if="item.type === 'LABOR'"
               v-model="item.description"
               type="text"
               placeholder="Mô tả công việc hoặc tên linh kiện..."
@@ -3149,6 +3156,12 @@ const toggleMore = async () => {
               <!-- Additional cost form -->
               <div v-if="showAdditionalCostForm && canQuoteAdditional" class="space-y-3 pt-3 border-t border-ink-100" data-testid="additional-cost-form">
                 <p class="text-sm text-ink-600">Khách duyệt từng báo giá bổ sung riêng. Chỉ thực hiện và sử dụng linh kiện trong số lượng đã duyệt; báo giá gốc được giữ nguyên.</p>
+                <div v-if="acLegacyParts.length" class="rounded-lg bg-ink-50 p-3 text-sm" data-testid="legacy-additional-parts">
+                  <p class="font-medium text-ink-800">Linh kiện trong báo giá cũ · chỉ xem</p>
+                  <ul class="mt-1 space-y-1 text-ink-600">
+                    <li v-for="item in acLegacyParts" :key="item.id">{{ costLineLabel(item) }} · <FhMoney :amount="item.lineTotal" /></li>
+                  </ul>
+                </div>
                 <label class="block">
                   <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh</span>
                   <textarea
@@ -3165,21 +3178,12 @@ const toggleMore = async () => {
                     :key="idx"
                     class="flex flex-wrap sm:flex-nowrap items-center gap-2"
                   >
-                    <select
-                      v-if="item.type === 'PARTS'"
-                      v-model="item.partSource"
-                      aria-label="Nguồn linh kiện"
-                      class="shrink-0 w-32 h-10 px-2 bg-white border border-ink-200 rounded-xl text-sm"
-                      @change="if (item.partSource === 'fixhome' && !item.partCatalogId) openAcPartPicker(idx);"
-                    >
-                      <option value="fixhome">Kho FixHome</option>
-                      <option value="technician">Thợ tự có</option>
-                    </select>
+                    <span v-if="item.type === 'PARTS'" class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Kho FixHome</span>
                     <span v-else class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
 
                     <!-- FixHome part picked from the catalog -->
                     <div
-                      v-if="item.type === 'PARTS' && item.partSource === 'fixhome' && item.partCatalogId"
+                      v-if="item.type === 'PARTS' && item.partCatalogId"
                       class="flex-1 min-w-0 flex items-center justify-between gap-2"
                     >
                       <span class="min-w-0 truncate font-medium text-ink-900" :title="item.warrantyPolicy || item.description">{{ item.description }}</span>
@@ -3189,7 +3193,7 @@ const toggleMore = async () => {
                       </button>
                     </div>
                     <button
-                      v-else-if="item.type === 'PARTS' && item.partSource === 'fixhome' && !item.partCatalogId"
+                      v-else-if="item.type === 'PARTS' && !item.partCatalogId"
                       type="button"
                       class="flex-1 min-w-0 h-10 px-3 rounded-xl border border-dashed border-ink-300 text-ink-700 hover:border-brand-500 hover:text-brand-700 text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
                       @click="openAcPartPicker(idx)"
@@ -3261,7 +3265,7 @@ const toggleMore = async () => {
                   <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('LABOR')">
                     <Plus :size="16" /> Tiền công
                   </button>
-                  <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS', 'fixhome')">
+          <button type="button" class="h-10 px-3 rounded-xl text-sm font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1.5 whitespace-nowrap" @click="addAcItem('PARTS')">
                     <Plus :size="16" /> Linh kiện FixHome
                   </button>
                 </div>
@@ -3432,6 +3436,7 @@ const toggleMore = async () => {
         <p class="text-sm text-ink-700">Hoàn tất sửa sẽ chốt quyết toán và khóa báo giá bổ sung ngay, kể cả khi khách chưa thanh toán. Kiểm tra tiền công, linh kiện và ảnh của máy này trước khi xác nhận.</p>
         <p class="text-sm text-ink-700">{{ additionalHistorySummary }}</p>
         <p v-if="showAdditionalCostForm" class="text-sm text-warning-800">Còn bản nháp báo giá bổ sung chưa gửi. Quay lại nếu cần khách duyệt khoản này trước khi chốt.</p>
+        <p v-if="returnsToDeclare > 0" class="text-sm text-warning-800" data-testid="completion-returns-owed">Còn {{ returnsToDeclare }} linh kiện cần khai trả kho. Có thể khai trả sau khi hoàn tất sửa.</p>
         <p v-if="returnsAwaitingManager" class="text-sm text-warning-800">{{ returnsAwaitingManager }} linh kiện đã khai trả, còn chờ quản lý dịch vụ nhận thực tế. Khai trả chưa phải đã nhận kho.</p>
         <ul v-if="completionBlockers.length" class="list-disc pl-5 text-sm text-danger-700" role="alert"><li v-for="blocker in completionBlockers" :key="blocker">{{ blocker }}</li></ul>
         <div class="flex flex-wrap justify-end gap-2">

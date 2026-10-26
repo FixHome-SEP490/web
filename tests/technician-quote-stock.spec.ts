@@ -7,16 +7,25 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'o1' } }), useRo
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ conversations: [] }) }));
 import Page from '../src/pages/technician/TechnicianJobDetailPage.vue';
 const requests = [{ id: 'r1', requestType: 'pre_repair', status: 'received', receivedAt: '2026-10-20', items: [{ id: 'l1', partCatalogId: 's1', partSource: 'fixhome', partNameSnapshot: 'Van kho', quantity: 2, unitPriceSnapshot: 50000, usageStatus: 'pending' }] }];
-const Parts = defineComponent({ emits: ['requests'], setup(_, { emit }) { onMounted(() => emit('requests', requests)); return () => null; } });
+const Parts = defineComponent({ emits: ['requests', 'custody'], setup(_, { emit }) { onMounted(() => { emit('requests', requestFixture); emit('custody', custodyFixture); }); return () => null; } });
 let missingCatalog = false;
+let requestFixture: typeof requests = requests;
+let custodyFixture = new Map<string, { usedQty: number; declaredQty: number }>();
+let catalogFixture: Array<Record<string, unknown>> = [];
+let invoiceFixture: Record<string, unknown> | null = null;
+let additionalCostsFixture: Array<Record<string, unknown>> = [];
+let quotationFixture: Record<string, unknown> | null | undefined;
 const open = async (approved = false, fixedVisit = false) => {
   api.get.mockImplementation(async (path: string) => {
     if (path === '/service-orders/o1') return { data: { data: { id: 'o1', code: 'TEST', ...(fixedVisit ? { visitGroupId: 'v1', pricingMode: 'FIXED_PRICE', fixedUnitPrice: 449000, quantity: 1 } : {}), status: approved ? 'under_repair' : 'en_route', paymentStatus: 'unpaid', arrivalVerified: true, beforeEvidenceCount: 1, laborTotal: 0, partsTotal: 0, grandTotal: 0,
-      quotation: approved ? { id: 'q1', status: 'approved', items: [{ type: 'parts_equipment', partSource: 'technician', quantity: 1, unitPrice: 70000, lineTotal: 70000, description: 'Van riêng' }] } : undefined } } };
+      quotation: quotationFixture !== undefined ? quotationFixture : approved ? { id: 'q1', status: 'approved', items: [{ type: 'parts_equipment', partSource: 'technician', quantity: 1, unitPrice: 70000, lineTotal: 70000, description: 'Van riêng' }] } : undefined } } };
+    if (path === '/parts/catalog') return { data: { data: catalogFixture, meta: { total: catalogFixture.length } } };
     if (path === '/parts/catalog/s1' && missingCatalog) throw new Error('offline');
     if (path === '/parts/catalog/s1') return { data: { data: { id: 's1', name: 'Van kho', sellingPrice: 60000, warrantyDays: 90 } } };
-    if (path.endsWith('/part-requests')) return { data: { data: requests } };
-    if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+    if (path.endsWith('/part-requests')) return { data: { data: requestFixture } };
+    if (path.endsWith('/additional-costs')) return { data: { data: additionalCostsFixture } };
+    if (path.endsWith('/invoice')) return { data: { data: invoiceFixture } };
+    if (path.endsWith('/cash-settlement')) return { data: { data: null } };
     return { data: { data: [] } };
   });
   const w = mount(Page, { global: { stubs: { TechnicianPartsSection: Parts, BookingMediaViewer: true } } });
@@ -24,7 +33,7 @@ const open = async (approved = false, fixedVisit = false) => {
   return w;
 };
 describe('technician base quote stock integration', () => {
-  beforeEach(() => { vi.clearAllMocks(); missingCatalog = false; });
+  beforeEach(() => { vi.clearAllMocks(); missingCatalog = false; requestFixture = requests; custodyFixture = new Map(); catalogFixture = []; invoiceFixture = null; additionalCostsFixture = []; quotationFixture = undefined; });
   it('keeps a fixed visit base labor-only even with received stock and unavailable catalog', async () => {
     missingCatalog = true;
     api.post.mockResolvedValue({ data: { data: {} } });
@@ -63,6 +72,16 @@ describe('technician base quote stock integration', () => {
     expect(api.post).not.toHaveBeenCalled();
     w.unmount();
   });
+  it('opens the FixHome catalog for every newly added base quote part', async () => {
+    catalogFixture = [{ id: 's2', name: 'Tụ quạt', sellingPrice: 30000, warrantyDays: 90 }];
+    const w = await open();
+    const form = w.get('[data-testid="quotation-form"]');
+    await form.findAll('button').find(button => button.text().includes('Thêm linh kiện'))!.trigger('click');
+    await flushPromises();
+    expect(form.find('select[aria-label="Nguồn linh kiện"]').exists()).toBe(false);
+    expect(w.get('[role="dialog"][aria-labelledby="part-picker-title"]').text()).toContain('Tụ quạt');
+    w.unmount();
+  });
   it('visibly blocks submission when a received SKU outside the first catalog page cannot be resolved, then retries by ID', async () => {
     missingCatalog = true;
     const w = await open();
@@ -83,6 +102,36 @@ describe('technician base quote stock integration', () => {
     expect(w.get('[data-testid="actual-parts"]').text()).toContain('Van kho');
     expect(w.get('[data-testid="actual-parts"]').text()).toContain('Chưa ghi nhận sử dụng');
     expect(w.find('[data-testid="quotation-form"]').exists()).toBe(false);
+    w.unmount();
+  });
+  it('compares approved maximum, actual used quantity, and the historical invoice line', async () => {
+    requestFixture = [{ id: 'r1', requestType: 'pre_repair', status: 'received', receivedAt: '2026-10-20', items: [
+      { id: 'l1', partCatalogId: 's1', partSource: 'fixhome', partNameSnapshot: 'Quạt kho', quantity: 3, unitPriceSnapshot: 30000, usageStatus: 'used' },
+    ] }];
+    custodyFixture = new Map([['l1', { usedQty: 1, declaredQty: 2 }]]);
+    invoiceFixture = { id: 'inv-1', grandTotal: 499000, laborTotal: 459000, partsTotal: 35000, items: [
+      { type: 'LABOR', description: 'Công sửa', quantity: 1, unitPrice: 449000, lineTotal: 449000 },
+      { type: 'LABOR', description: 'Công phát sinh', quantity: 1, unitPrice: 10000, lineTotal: 10000 },
+      { type: 'PARTS', partCatalogId: 's1', description: 'Quạt kho', quantity: 1, unitPrice: 30000, lineTotal: 30000 },
+      { type: 'PARTS', description: 'Cầu chì', quantity: 1, unitPrice: 5000, lineTotal: 5000 },
+    ] };
+    quotationFixture = { id: 'q1', status: 'approved', items: [
+      { type: 'LABOR', description: 'Công sửa', quantity: 1, unitPrice: 449000, lineTotal: 449000 },
+      { type: 'PARTS', partSource: 'fixhome', partCatalogId: 's1', description: 'Quạt kho', quantity: 2, unitPrice: 30000, lineTotal: 60000 },
+    ] };
+    additionalCostsFixture = [{ id: 'extra-1', status: 'APPROVED', reason: 'Hỏng thêm', totalLaborDelta: 10000, totalPartsDelta: 5000, shippingFee: 5000,
+      items: [{ type: 'LABOR', description: 'Công phát sinh', quantity: 1, unitPrice: 10000, lineTotal: 10000 }, { type: 'PARTS', description: 'Cầu chì', quantity: 1, unitPrice: 5000, lineTotal: 5000 }] }];
+    const w = await open(true);
+    const approved = w.get('[data-testid="approved-parts"]');
+    expect(approved.text()).toContain('2');
+    expect(approved.text()).toContain('60.000₫');
+    const actual = w.get('[data-testid="actual-parts"]');
+    expect(actual.text()).toContain('Đã dùng 1 / Cấp 3');
+    expect(w.get('[data-testid="invoice-part-lines"]').text()).toContain('Quạt kho × 1');
+    expect(w.get('[data-testid="invoice-part-lines"]').text()).toContain('30.000₫');
+    expect(w.get('[data-testid="job-cost-summary"]').text()).toContain('499.000₫');
+    expect(w.get('[data-testid="job-cost-summary"]').text()).toContain('Tổng hóa đơn');
+    expect(w.get('[data-testid="cost-lines-quotation"]').text()).toContain('Công sửa');
     w.unmount();
   });
 });

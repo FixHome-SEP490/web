@@ -17,6 +17,17 @@ const emit = defineEmits<{
 const consent = ref<Record<string, boolean>>({});
 // Reuse the same display reconciliation as CustomerOrderDetail; never build a bill here.
 const billing = computed(() => orderBilling(props.details.order, props.details.invoice, props.details.costs));
+const fixedPriceOrder = computed(() => String(props.details.order.pricingMode).toLowerCase() === 'fixed_price');
+const fixedLaborSnapshot = computed(() => {
+  if (!fixedPriceOrder.value || billing.value.final) return null;
+  const unitPrice = billingAmount(props.details.order.fixedUnitPrice);
+  const quantity = Number.isSafeInteger(props.details.order.quantity) && Number(props.details.order.quantity) > 0
+    ? Number(props.details.order.quantity) : 1;
+  const unitSnapshot = unitPrice !== null && unitPrice > 0 ? unitPrice * quantity : null;
+  if (unitSnapshot !== null && Number.isSafeInteger(unitSnapshot)) return unitSnapshot;
+  const laborSnapshot = billingAmount(props.details.order.laborTotal);
+  return laborSnapshot !== null && laborSnapshot > 0 ? laborSnapshot : null;
+});
 const quoteReady = computed(() => canDecideOfficialQuotation(props.details.order));
 const visibleQuote = computed(() => ['sent', 'approved', 'accepted', 'rejected'].includes(String(props.details.order.quotation?.status).toLowerCase()));
 const labels: Record<AdditionalCostRecord['status'], string> = {
@@ -48,6 +59,9 @@ const costTotal = (cost: AdditionalCostRecord) => {
           <FhMoney :amount="item.lineTotal" class="font-medium text-ink-900" />
         </li>
       </ul>
+      <p v-if="quoteReady && fixedPriceOrder" class="text-sm text-ink-600" data-testid="visit-fixed-price-disclaimer">
+        Tiền công chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá; bạn duyệt trước khi thực hiện.
+      </p>
       <FhCostBreakdown v-if="quoteReady && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
       <div v-if="quoteReady" class="grid grid-cols-1 gap-2 sm:flex sm:justify-end">
         <FhButton variant="secondary" size="md" :disabled="disabled" data-testid="visit-quote-reject" @click="emit('quote', 'REJECT')">Từ chối báo giá</FhButton>
@@ -83,10 +97,17 @@ const costTotal = (cost: AdditionalCostRecord) => {
     </section>
 
     <section v-if="!quoteReady" class="space-y-3" aria-label="Chi phí của máy này">
-      <h3 class="text-base font-semibold text-ink-900">{{ billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h3>
+      <h3 class="text-base font-semibold text-ink-900">{{ billing.final ? 'Hóa đơn cuối cùng' : fixedPriceOrder ? 'Tiền công theo phạm vi đã xác nhận' : 'Tạm tính' }}</h3>
       <p v-if="details.invoiceError" role="alert" class="text-sm text-danger-700">Chưa tải được hóa đơn cuối cùng. <FhButton variant="ghost" size="md" :disabled="disabled" @click="emit('retry')">Thử lại</FhButton></p>
-      <FhCostBreakdown v-else-if="billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
-      <p v-else class="text-sm text-ink-600">Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.</p>
+      <FhCostBreakdown v-else-if="billing.final && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
+      <p v-else-if="fixedPriceOrder && fixedLaborSnapshot !== null" class="text-sm font-semibold text-ink-900" data-testid="visit-fixed-labor">
+        <FhMoney :amount="fixedLaborSnapshot" />
+      </p>
+      <FhCostBreakdown v-else-if="!fixedPriceOrder && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
+      <p v-else class="text-sm text-ink-600">Chưa có tạm tính. Kỹ thuật viên sẽ kiểm tra và gửi báo giá để bạn duyệt trước khi sửa.</p>
+      <p v-if="fixedPriceOrder" class="text-sm text-ink-600" data-testid="visit-fixed-price-disclaimer">
+        Tiền công chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá; bạn duyệt trước khi thực hiện.
+      </p>
       <p class="text-sm text-ink-600">Thanh toán một lần ở mục Thanh toán cả lượt.</p>
     </section>
     <section v-if="details.evidence.length || details.evidenceError" class="space-y-3">
