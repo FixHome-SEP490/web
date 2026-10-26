@@ -200,6 +200,36 @@ function money(value: number) {
   return `${value.toLocaleString('vi-VN')}đ`;
 }
 
+/**
+ * The label under photo `imageIndex` of the customer's message at
+ * `messageIndex`: what the assistant read it as, from the first reply after it
+ * that reports its photos. PO 26/10/2026: shown so a wrong reading is seen at
+ * once and corrected with a tap ("Ảnh 2 là ..."), instead of the customer
+ * finding out from a diagnosis of the wrong appliance.
+ */
+export interface PhotoLabel {
+  text: string;
+  uncertain: boolean;
+  /** What the composer is filled with when the label is tapped. */
+  correction: string;
+}
+
+export function photoLabel(messages: AiChatMessage[], messageIndex: number, imageIndex: number): PhotoLabel | null {
+  const sent = messages[messageIndex];
+  if (!sent || sent.sender !== 'user' || !sent.images?.length) return null;
+  for (let i = messageIndex + 1; i < messages.length; i++) {
+    const message = messages[i];
+    if (message.sender === 'user') return null;
+    const photos = message.reply?.photos;
+    if (!photos?.length) continue;
+    const reading = photos.find((photo) => photo.index === imageIndex);
+    const correction = sent.images.length > 1 ? `Ảnh ${imageIndex + 1} là ` : 'Ảnh này là ';
+    if (!reading?.nameVi) return { text: 'Chưa nhận ra', uncertain: true, correction };
+    return { text: reading.uncertain ? `${reading.nameVi}?` : reading.nameVi, uncertain: Boolean(reading.uncertain), correction };
+  }
+  return null;
+}
+
 export function priceLabel(reply: AiReply): string | null {
   const price = reply.priceEstimate;
   if (!price) return null;

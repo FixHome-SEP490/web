@@ -33,6 +33,18 @@ export interface DetectedDevice {
   nameVi: string;
   confidence: number;
   source?: string | null;
+  /** A guess from a photograph nobody was sure of; the customer can correct it. */
+  uncertain?: boolean;
+}
+
+/** What one photograph of the message was read as (ai-service, 26/10/2026). */
+export interface PhotoReading {
+  /** Its place among the message's photos, from 0. */
+  index: number;
+  /** Null when nothing was recognised in it. */
+  deviceType?: string | null;
+  nameVi?: string | null;
+  uncertain?: boolean;
 }
 
 export interface SuspectedFault {
@@ -68,6 +80,8 @@ export interface AiDeviceSuggestion {
   descriptionVi?: string | null;
   /** Why there is no service, e.g. FixHome does not repair it yet. */
   noteVi?: string | null;
+  /** The appliance of this photograph is a guess. */
+  uncertain?: boolean;
 }
 
 export interface PriceEstimate {
@@ -124,6 +138,8 @@ export interface AiReply {
   notesVi?: string[];
   /** Every appliance of the conversation when there is more than one; empty otherwise. */
   devices?: AiDeviceSuggestion[];
+  /** One per photo of the message this replies to, in order: what each was read as. */
+  photos?: PhotoReading[];
   disclaimerVi?: string;
 }
 
