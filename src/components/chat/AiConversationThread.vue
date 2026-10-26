@@ -13,6 +13,7 @@ import {
   AI_VIDEO_TYPES,
   DESCRIBE_BEFORE_SEND,
   VIDEO_NOT_ANALYSED,
+  photoLabel,
   priceLabel,
   quickReplies,
   type AiChatMessage,
@@ -44,6 +45,26 @@ function attachmentsOf(message: AiChatMessage): ChatAttachment[] {
   return (message.attachmentIds ?? []).flatMap((id) => {
     const item = attachmentsById.value.get(id);
     return item ? [item] : [];
+  });
+}
+
+const composer = ref<HTMLTextAreaElement | null>(null);
+
+/** What each sent photo was read as, per message and photo; null until the reply says. */
+const photoLabels = computed(() =>
+  c.messages.map((message: AiChatMessage, messageIndex: number) =>
+    (message.images ?? []).map((_src: string, imageIndex: number) => photoLabel(c.messages, messageIndex, imageIndex)),
+  ),
+);
+
+/** A tap on a photo's label: the composer gets "Ảnh 2 là " for the customer to finish. */
+function correctPhoto(correction: string) {
+  c.input = correction;
+  nextTick(() => {
+    const box = composer.value;
+    if (!box) return;
+    box.focus();
+    box.setSelectionRange(correction.length, correction.length);
   });
 }
 
@@ -145,11 +166,25 @@ defineExpose({ scrollToEnd });
   <div class="flex flex-col min-h-0 h-full">
     <!-- Thread -->
     <div ref="thread" class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 bg-ink-50/40" data-testid="ai-thread">
-      <div v-for="message in c.messages" :key="message.id">
+      <div v-for="(message, messageIndex) in c.messages" :key="message.id">
         <div v-if="message.sender === 'user'" class="flex justify-end">
           <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-600 text-white px-3.5 py-2">
             <div v-if="message.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
-              <img v-for="(src, index) in message.images" :key="index" :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
+              <div v-for="(src, index) in message.images" :key="index" class="flex flex-col items-center gap-1 w-20">
+                <img :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
+                <button
+                  v-if="photoLabels[messageIndex]?.[index]"
+                  type="button"
+                  class="max-w-full truncate rounded-full px-2 py-0.5 text-[11px] leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
+                  :class="photoLabels[messageIndex][index]!.uncertain ? 'ring-1 ring-warning-300' : ''"
+                  :title="`Bấm để sửa nếu ảnh ${index + 1} không phải thiết bị này`"
+                  :aria-label="`Ảnh ${index + 1}: ${photoLabels[messageIndex][index]!.text}. Bấm để sửa`"
+                  data-testid="ai-photo-label"
+                  @click="correctPhoto(photoLabels[messageIndex][index]!.correction)"
+                >
+                  {{ photoLabels[messageIndex][index]!.text }}
+                </button>
+              </div>
             </div>
             <div v-if="message.videos?.length" class="flex flex-wrap gap-1.5 mb-1.5" data-testid="ai-message-videos">
               <video
@@ -379,6 +414,7 @@ defineExpose({ scrollToEnd });
         <ImageIcon :size="19" />
       </button>
       <textarea
+        ref="composer"
         v-model="c.input"
         rows="1"
         :placeholder="placeholder"
