@@ -126,7 +126,6 @@ describe('Technician labor warranty on the job page', () => {
       ? { data: { data: [{ id: 'part-792', name: 'Van xả', sku: 'VAN', sellingPrice: 65000, warrantyDays: 30 }], meta: { total: 792 } } }
       : previous(path, config));
     await w.findAll('button').find(b => b.text() === 'Thêm linh kiện')!.trigger('click');
-    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('fixhome');
     await flushPromises();
     expect(mockGet).toHaveBeenCalledWith('/parts/catalog', { params: { page: 1, limit: 50 } });
     expect(w.get('[role="dialog"]').text()).toContain('792 linh kiện');
@@ -139,25 +138,21 @@ describe('Technician labor warranty on the job page', () => {
     w.unmount();
   });
 
-  it('clears the catalog identity and price when switching to technician-owned parts', async () => {
+  it('does not offer technician-owned parts or freeform parts in a new quote', async () => {
     const w = await mountPage(base);
     const previous = mockGet.getMockImplementation()!;
     mockGet.mockImplementation(async (path, config) => path === '/parts/catalog'
       ? { data: { data: [{ id: 'part-1', name: 'Van xả', sellingPrice: 65000 }], meta: { total: 1 } } }
       : previous(path, config));
     await w.findAll('button').find(b => b.text() === 'Thêm linh kiện')!.trigger('click');
-    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('fixhome');
     await flushPromises();
     await w.get('[role="dialog"] li button').trigger('click');
-    await w.get('select[aria-label="Nguồn linh kiện"]').setValue('technician');
-    expect(w.get('input[aria-label="Đơn giá"]').attributes('disabled')).toBeUndefined();
-    expect((w.get('input[aria-label="Đơn giá"]').element as HTMLInputElement).value).toBe('0');
-    await w.get('input[aria-label="Tên linh kiện"]').setValue('Van tự có');
-    await w.get('input[aria-label="Đơn giá"]').setValue(45000);
-    await submitQuote(w);
-    const body = mockPost.mock.calls.find(([path]) => path.endsWith('/quotations'))![1];
-    expect(body.items[0]).toMatchObject({ partSource: 'technician', description: 'Van tự có', unitPrice: 45000 });
-    expect(body.items[0].partCatalogId).toBeUndefined();
+    const form = w.get('[data-testid="quotation-form"]');
+    expect(form.find('select[aria-label="Nguồn linh kiện"]').exists()).toBe(false);
+    expect(form.find('input[aria-label="Tên linh kiện"]').exists()).toBe(false);
+    expect(form.text()).not.toContain('Kỹ thuật viên tự có');
+    expect(w.get('input[aria-label="Đơn giá"]').attributes('disabled')).toBeDefined();
+    expect(mockPost).not.toHaveBeenCalled();
     w.unmount();
   });
 

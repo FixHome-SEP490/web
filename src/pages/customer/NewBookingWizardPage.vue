@@ -2309,14 +2309,14 @@ async function createAndFindTech() {
             >
               <span class="text-ink-700">{{ editingSavedDeviceKey ? 'Bạn đang sửa thiết bị đã lưu.' : 'Thiết bị này sẽ được thêm riêng vào lượt sửa.' }}</span>
               <FhButton
-                v-if="editingSavedDeviceKey || visitDeviceCount <= VISIT_DEVICE_LIMIT"
+                v-if="editingSavedDeviceKey || canAddDevice || canSaveThirdAndContinue"
                 variant="secondary"
                 size="md"
                 :disabled="loading || uploadingPhoto"
                 :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
-                @click="addAnotherDevice"
+                @click="canSaveThirdAndContinue ? goToStep2() : addAnotherDevice()"
               >
-                <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : 'Thêm thiết bị này vào lượt' }}
+                <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveThirdAndContinue ? `Lưu máy ${VISIT_DEVICE_LIMIT} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
               </FhButton>
               <FhButton v-if="editingSavedDeviceKey" variant="ghost" size="md" :disabled="loading || uploadingPhoto" data-testid="visit-device-edit-cancel" @click="cancelSavedDeviceEdit">Hủy sửa</FhButton>
               <span v-else-if="visitDeviceCount > VISIT_DEVICE_LIMIT" class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
@@ -2652,7 +2652,7 @@ async function createAndFindTech() {
           </div>
           <div class="flex justify-between gap-4 text-ink-500">
             <span>Linh kiện, vật tư</span>
-            <span class="text-right">Thợ báo giá nếu cần, bạn duyệt trước</span>
+            <span class="text-right">Kỹ thuật viên báo giá nếu cần; bạn duyệt trước khi thực hiện</span>
           </div>
           <template v-if="summaryPrice.kind === 'firm'">
             <div class="h-px bg-ink-100"></div>
@@ -2661,6 +2661,9 @@ async function createAndFindTech() {
               <span class="text-2xl font-semibold text-brand-700 font-num"><FhMoney :amount="summaryPrice.amount" /></span>
             </div>
           </template>
+          <p v-if="summaryPrice.kind === 'firm'" class="text-xs leading-relaxed text-ink-600" data-testid="confirm-fixed-price-scope">
+            Tiền công theo phạm vi đã xác nhận; chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá, bạn duyệt trước khi thực hiện.
+          </p>
           <p v-else class="text-ink-500" data-testid="confirm-v2-range-note">Thợ kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.</p>
         </section>
 
@@ -2713,7 +2716,7 @@ async function createAndFindTech() {
             <span class="text-ink-700">Thợ báo giá tại nhà</span>
           </div>
           <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">+ {{ visitSummaryPrice.unresolvedCount }} máy chờ khảo sát báo giá. Chưa phải tổng {{ reviewDevices.length }} máy.</p>
-          <p class="text-xs leading-relaxed text-ink-600">Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.</p>
+          <p class="text-xs leading-relaxed text-ink-600">{{ visitSummaryPrice.kind === 'firm' ? 'Tiền công theo phạm vi đã xác nhận; chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá, bạn duyệt trước khi thực hiện.' : 'Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.' }}</p>
         </section>
 
         <div v-if="submitOutcomeUnknown" role="alert" class="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="booking-submit-unknown">

@@ -36,7 +36,7 @@ const emit = defineEmits<{ (e: 'next'): void; (e: 'back'): void }>();
 
 const priceNote = computed(() => {
   switch (props.price.kind) {
-    case 'firm': return 'Tiền công, chưa gồm linh kiện';
+    case 'firm': return 'Tiền công theo phạm vi đã xác nhận; chưa gồm linh kiện FixHome hoặc tiền công phát sinh.';
     case 'range': return 'Giá tham khảo; kỹ thuật viên xác nhận sau khi khảo sát';
     case 'survey': return 'Kỹ thuật viên báo giá tại nhà, bạn duyệt trước khi sửa';
     case 'partial': return `+ ${props.price.unresolvedCount} máy chờ khảo sát báo giá. Chưa phải tổng ${props.devices?.length ? `${props.devices.length} máy` : 'cả lượt'}.`;
@@ -49,7 +49,7 @@ const mobileCtaLabel = computed(() => props.ctaLabel.replace(/^(Lưu máy \d+) t
 /** The phone bar has one short line above the amount. */
 const barNote = computed(() => {
   switch (props.price.kind) {
-    case 'firm': return 'Tiền công, chưa gồm linh kiện';
+    case 'firm': return 'Tiền công đã xác định; chưa gồm linh kiện FixHome hoặc tiền công phát sinh';
     case 'range': return 'Giá tham khảo';
     case 'survey': return 'Thợ báo giá tại nhà';
     case 'partial': return 'Tiền công đã xác định';
@@ -104,6 +104,7 @@ const barNote = computed(() => {
       <span v-else class="text-sm text-ink-400">—</span>
     </div>
     <p class="mt-2 text-sm leading-relaxed text-ink-600">{{ priceNote }}</p>
+    <p v-if="price.kind === 'firm'" class="mt-1 text-xs leading-relaxed text-ink-500">Kỹ thuật viên gửi báo giá phần phát sinh; bạn duyệt trước khi thực hiện.</p>
     <FhButton class="mt-5 w-full" size="lg" :disabled="ctaDisabled" :loading="ctaLoading" :data-testid="ctaTestid" @click="emit('next')">{{ ctaLabel }}</FhButton>
     <FhButton v-if="backLabel" variant="ghost" size="md" class="mt-2 w-full" data-testid="booking-summary-back" @click="emit('back')">
       <ArrowLeft :size="15" class="mr-1.5" aria-hidden="true" /> {{ backLabel }}
@@ -120,7 +121,8 @@ const barNote = computed(() => {
         <span v-else-if="price.kind === 'partial'" class="text-ink-700"><template v-if="price.confirmedTotal > 0"><FhMoney :amount="price.confirmedTotal" /></template></span>
         <span v-else-if="price.kind === 'survey' && price.from" class="font-num text-sm text-ink-900">Tham khảo <FhMoney :amount="price.from" /></span>
       </div>
-      <p v-if="price.kind === 'partial'" class="text-xs leading-relaxed text-ink-700">{{ priceNote }}</p>
+      <p v-if="price.kind === 'firm'" class="text-xs leading-relaxed text-ink-600">Kỹ thuật viên gửi báo giá phần phát sinh; bạn duyệt trước khi thực hiện.</p>
+      <p v-else-if="price.kind === 'partial'" class="text-xs leading-relaxed text-ink-700">{{ priceNote }}</p>
       <div class="flex items-center gap-2">
         <button v-if="backLabel" type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :aria-label="backLabel" @click="emit('back')">
           <ArrowLeft :size="18" aria-hidden="true" />
