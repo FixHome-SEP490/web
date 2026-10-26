@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-26 12:47 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-photo-device-label
+> Cập nhật lần cuối: 2026-10-26 13:41 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-photo-label-wrap
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -394,6 +394,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
 - 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
 
@@ -464,5 +465,4 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-18 23:42 (UTC+7) | ToanAltF4 | fix/ui-review-2026-10-18 | Sửa 6 chỗ khó xem theo rà giao diện: ô soạn tin luôn trong tầm nhìn, tổng quan thợ ở màn hẹp, nút nổi, thanh bước đặt lịch, tách sự cố với phạm vi dịch vụ, mã đơn trong danh sách tin nhắn
 
-- 2026-10-18 23:16 (UTC+7) | foxonworld | foxonworld/fixhome-p2-web-a-plus-20261018 | Owner UX V3: rail danh mục dùng flyout Teleport neo bên phải icon khi hover/focus; vùng tải ảnh riêng tư cao 100px có camera và một dòng hướng dẫn; 6 chip Search Spotlight bố trí orbit bất đối xứng, float chậm và halo crossfade, dừng khi tương tác hoặc reduced-motion. 134 file/1179 test, lint, typecheck, build PASS; đã chụp `/services` ở 1440/430/390/360 nhưng GET danh mục không tải sau retry do dev DB nên trạng thái đủ 6 chip và booking có đăng nhập CHƯA KIỂM CHỨNG; API/Backend/Mobile không đổi.
 
