@@ -232,29 +232,6 @@ export const aiApi = {
   },
 
   /**
-   * The customer's verdict on an answer, for the team to learn from. Best
-   * effort: thanking the customer does not depend on it being stored.
-   */
-  async feedback(payload: {
-    sessionId: string;
-    verdict: 'wrong' | 'right';
-    note?: string;
-    reply?: string;
-  }): Promise<boolean> {
-    try {
-      await apiClient.post('/ai/feedback', {
-        sessionId: payload.sessionId,
-        verdict: payload.verdict,
-        note: payload.note?.trim().slice(0, 300) || undefined,
-        reply: payload.reply?.slice(0, 1000) || undefined,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  },
-
-  /**
    * Holding lines, grouped by situation - first_photo, first_text, follow_up,
    * price_question - so the wait can sound like it belongs to the message that
    * caused it.

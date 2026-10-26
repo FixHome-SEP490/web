@@ -1,16 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
 import { ref } from 'vue';
-
-const { feedback } = vi.hoisted(() => ({ feedback: vi.fn(async () => true) }));
-vi.mock('../src/api/ai.api', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../src/api/ai.api')>();
-  return { ...original, aiApi: { ...original.aiApi, feedback } };
-});
 
 import AiConversationThread from '../src/components/chat/AiConversationThread.vue';
 
-function conversation(opts: { thinking?: boolean; sessionId?: string | null } = {}) {
+function conversation() {
   return {
     messages: ref([
       { id: 'u1', sender: 'user', text: 'máy lạnh không mát, mới vệ sinh rồi' },
@@ -18,11 +12,11 @@ function conversation(opts: { thinking?: boolean; sessionId?: string | null } = 
     ]),
     input: ref(''),
     pending: ref([]),
-    isThinking: ref(opts.thinking ?? false),
+    isThinking: ref(false),
     problem: ref(''),
     canSend: ref(true),
     needsDescription: ref(false),
-    sessionId: ref(opts.sessionId === undefined ? 'sess-1' : opts.sessionId),
+    sessionId: ref('sess-1'),
     addFiles: vi.fn(),
     removePending: vi.fn(),
     sendTurn: vi.fn(),
@@ -31,30 +25,13 @@ function conversation(opts: { thinking?: boolean; sessionId?: string | null } = 
 }
 
 describe('Feedback on the assistant answer', () => {
-  beforeEach(() => feedback.mockClear());
-
-  it('asks under the newest answer and thanks after "Đúng ý"', async () => {
+  // PO 26/10/2026: a customer who disagrees says so in the conversation and
+  // the assistant notices; there is nothing to press.
+  it('shows no "Đúng ý / Chưa đúng" buttons under an answer', () => {
     const wrapper = mount(AiConversationThread, { props: { conversation: conversation() as never } });
-    await wrapper.find('[data-testid="ai-feedback-right"]').trigger('click');
-    expect(feedback).toHaveBeenCalledWith({ sessionId: 'sess-1', verdict: 'right', note: undefined, reply: 'Dạ khả năng cao là thiếu gas ạ.' });
-    expect(wrapper.find('[data-testid="ai-feedback-thanks"]').exists()).toBe(true);
-  });
-
-  it('takes an optional note with "Chưa đúng"', async () => {
-    const wrapper = mount(AiConversationThread, { props: { conversation: conversation() as never } });
-    await wrapper.find('[data-testid="ai-feedback-wrong"]').trigger('click');
-    await wrapper.find('[data-testid="ai-feedback-note"]').setValue('em đã nói vệ sinh rồi');
-    await wrapper.find('form').trigger('submit');
-    await flushPromises();
-    expect(feedback).toHaveBeenCalledWith({ sessionId: 'sess-1', verdict: 'wrong', note: 'em đã nói vệ sinh rồi', reply: 'Dạ khả năng cao là thiếu gas ạ.' });
-    expect(wrapper.find('[data-testid="ai-feedback-thanks"]').exists()).toBe(true);
-  });
-
-  it('does not ask while the assistant is answering or before there is a conversation', () => {
-    expect(mount(AiConversationThread, { props: { conversation: conversation({ thinking: true }) as never } })
-      .find('[data-testid="ai-feedback"]').exists()).toBe(false);
-    expect(mount(AiConversationThread, { props: { conversation: conversation({ sessionId: null }) as never } })
-      .find('[data-testid="ai-feedback"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="ai-feedback"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Chưa đúng');
+    expect(wrapper.text()).not.toContain('Đúng ý');
   });
 });
 
