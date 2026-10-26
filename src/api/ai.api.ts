@@ -90,6 +90,20 @@ export interface PriceEstimate {
   max?: number | null;
   currency: string;
   requiresAssessment: boolean;
+  /** The service's own price, as the booking form shows it: `min` is this (PO 26/10/2026). */
+  labourMin?: number | null;
+  /** Its top while the fixed-price variant is not known yet. */
+  labourMax?: number | null;
+  /** The parts the suspected fault usually needs, at FixHome's selling price; `max` adds them. */
+  partsMax?: number | null;
+}
+
+/** The customer said the last answer was wrong; see ai-service `customerDisagreed`. */
+export interface AiDisagreement {
+  kind?: string | null;
+  rejectedVi?: string[];
+  /** This turn's words without the opening "sai rồi", for the booking description. */
+  restVi?: string | null;
 }
 
 export interface Clarification {
@@ -141,6 +155,7 @@ export interface AiReply {
   /** One per photo of the message this replies to, in order: what each was read as. */
   photos?: PhotoReading[];
   disclaimerVi?: string;
+  customerDisagreed?: AiDisagreement | null;
 }
 
 export type AcknowledgementSituations = Record<string, string[]>;

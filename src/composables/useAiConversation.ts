@@ -230,6 +230,20 @@ export function photoLabel(messages: AiChatMessage[], messageIndex: number, imag
   return null;
 }
 
+/**
+ * What the range is made of (PO 26/10/2026): the low end is the service's own
+ * price, the same one the booking form shows, and the high end adds the parts
+ * the fault usually needs. Null when no part is involved.
+ */
+export function priceBreakdown(reply: AiReply): string | null {
+  const price = reply.priceEstimate;
+  if (!price || !price.partsMax || price.labourMin == null) return null;
+  const labour = price.labourMax && price.labourMax > price.labourMin
+    ? `${money(price.labourMin)} – ${money(price.labourMax)}`
+    : money(price.labourMin);
+  return `Gồm tiền công dịch vụ ${labour}, cộng linh kiện nếu phải thay (tới ${money(price.partsMax)}).`;
+}
+
 export function priceLabel(reply: AiReply): string | null {
   const price = reply.priceEstimate;
   if (!price) return null;
@@ -644,13 +658,21 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     await sendTurn(text, images, { videos });
   }
 
-  /** What the customer typed, oldest first, for the booking description. */
+  /**
+   * What the customer typed, oldest first, for the booking description. A turn
+   * that told the assistant it was wrong goes in without the "sai rồi" (the
+   * reply's customerDisagreed.restVi), and not at all when that was all it said.
+   */
   function customerWords(): string {
-    return messages.value
-      .filter((m) => m.sender === 'user' && m.text.trim())
-      .map((m) => m.text.trim())
-      .join('. ')
-      .slice(0, 1000);
+    const words: string[] = [];
+    messages.value.forEach((m, index) => {
+      if (m.sender !== 'user' || !m.text.trim()) return;
+      const reply = messages.value.slice(index + 1).find((next) => next.sender === 'user' || (next.reply && !next.isAcknowledgement));
+      const disagreed = reply && reply.sender !== 'user' ? reply.reply?.customerDisagreed : null;
+      const text = disagreed ? (disagreed.restVi ?? m.text).trim() : m.text.trim();
+      if (text) words.push(text);
+    });
+    return words.join('. ').slice(0, 1000);
   }
 
   return {

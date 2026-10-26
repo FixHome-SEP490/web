@@ -14,6 +14,7 @@ import {
   VIDEO_NOT_ANALYSED,
   photoLabel,
   priceLabel,
+  priceBreakdown,
   quickReplies,
   type AiChatMessage,
   type AiConversation,
@@ -288,6 +289,7 @@ defineExpose({ scrollToEnd });
                 <span class="text-xs text-ink-500">Chi phí tham khảo</span>
                 <span class="text-sm font-semibold text-ink-900 font-num whitespace-nowrap">{{ priceLabel(message.reply) }}</span>
               </div>
+              <p v-if="priceBreakdown(message.reply)" class="text-xs text-ink-500" data-testid="ai-price-breakdown">{{ priceBreakdown(message.reply) }}</p>
               <p v-if="message.reply.priceEstimate?.requiresAssessment" class="text-xs text-ink-500">Thợ xem tận nơi rồi mới báo giá chính xác ạ.</p>
 
               <p v-if="message.reply.disclaimerVi" class="text-xs text-ink-400 leading-snug">{{ message.reply.disclaimerVi }}</p>
