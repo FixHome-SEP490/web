@@ -214,6 +214,30 @@ describe('SupportDetailPage for a complaint', () => {
     wrapper.unmount();
   });
 
+  it('submits an approved funded gross separately from customer NET, including 0 wallet due', async () => {
+    const wrapper = await mountPage(baseCase({ caseType: 'parts_dispute' }));
+    await wrapper.findAll('select')[1].setValue('refund_to_wallet');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="funded-gross-refund-field"]').exists()).toBe(true);
+    const amounts = wrapper.findAll('input[type="number"]');
+    await amounts[0].setValue('0');
+    await wrapper.get('[data-testid="funded-gross-refund-input"]').setValue('150000');
+    await wrapper.get('textarea').setValue('Đã xác minh hoàn phần tiền gốc được FixHome tài trợ theo voucher.');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const confirm = Array.from(document.body.querySelectorAll('button'))
+      .find((b) => b.textContent?.includes('Gửi kết quả'));
+    expect(confirm).toBeDefined();
+    apiClientMock.post.mockResolvedValueOnce(envelope(baseCase({ status: 'resolved', resolutionCode: 'refund_to_wallet' })));
+    confirm!.click();
+    await flushPromises();
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/resolve',
+      expect.objectContaining({ resolutionCode: 'refund_to_wallet', amount: 0, grossRefundVnd: 150000, liableParty: 'platform' }));
+    wrapper.unmount();
+  });
+
   it('offers a wallet refund only for a faulty part or a warranty, borne by FixHome', async () => {
     const quality = await mountPage(baseCase({ caseType: 'quality' }));
     expect(quality.findAll('select')[1].findAll('option').map((o) => o.attributes('value'))).not.toContain('refund_to_wallet');
