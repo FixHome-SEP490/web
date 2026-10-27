@@ -1,7 +1,5 @@
-// The reusable voucher sheet is presentation-only until the funded checkout
-// contract exists. It must stay a real dialog, show server-truth eligibility
-// and reservation timestamps without inventing an amount, and emit intent
-// instead of calling an API or enabling a discount.
+// The reusable voucher sheet is a consent surface over server preview and
+// reservation state. It must never calculate or apply a client-side discount.
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
@@ -250,13 +248,28 @@ describe('VoucherSelectionSheet', () => {
     expect(wrapper.text()).toContain('Chưa có voucher');
   });
 
-  it('always keeps payment unavailable and never promises an applied discount', () => {
+  it('shows server preview and enables Apply only when the server allows reservation', async () => {
+    const serverPreview = {
+      scopeId: 'order-1', claimId: 'claim-personal', previewOnly: true as const,
+      paymentAvailable: true, reason: null, originalGrossVnd: 250000,
+      eligibleBaseVnd: 200000, fixHomeDiscountSubsidyVnd: 50000,
+      customerDueVnd: 200000, reasonCodes: ['DISCOUNT_APPLIED'],
+    };
     const wrapper = mountSheet({
       serverQuote: { eligibleVoucherIds: ['claim-personal'] },
-      serverReservation: activeReservation,
+      serverPreview,
+      canApply: true,
     });
+    const preview = wrapper.get('[data-testid="voucher-selection-preview"]');
+    expect(preview.text()).toContain('250.000');
+    expect(preview.text()).toContain('50.000');
+    expect(preview.text()).toContain('200.000');
+    expect(wrapper.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="voucher-selection-apply"]').trigger('click');
+    expect(wrapper.emitted('apply')).toHaveLength(1);
+
+    await wrapper.setProps({ serverPreview: { ...serverPreview, paymentAvailable: false, reason: 'VOUCHER_FUNDING_NOT_READY' }, canApply: false });
     expect(wrapper.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.text()).toContain('Áp dụng ưu đãi chưa khả dụng');
     expect(wrapper.text()).not.toContain('Đã áp dụng');
   });
 

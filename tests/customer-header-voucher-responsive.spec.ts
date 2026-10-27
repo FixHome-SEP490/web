@@ -133,6 +133,9 @@ describe('customer responsive header navigation', () => {
     expect(wrapper.get('[data-testid="customer-desktop-nav"]').isVisible()).toBe(false);
     const trigger = wrapper.get('[data-testid="customer-desktop-nav-overflow-trigger"]');
     expect(trigger.attributes('aria-expanded')).toBe('false');
+    // Compact navigation highlights “Thêm” with a pill, not a displaced
+    // sliding underline when zoom/viewport changes.
+    expect(trigger.element.parentElement?.querySelector(':scope > div[aria-hidden="true"]')).toBeNull();
     expect(trigger.attributes('aria-controls')).toBe('customer-desktop-nav-overflow');
 
     await trigger.trigger('click');

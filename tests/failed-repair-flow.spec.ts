@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import FailedRepairBookingForm from '../src/components/customer/FailedRepairBookingForm.vue';
 import FailedRepairDialog from '../src/components/technician/FailedRepairDialog.vue';
+import { FailedRepairReportError } from '../src/api/technician-failed-repair.api';
 import { failedRepairKey, blockedFailedRepair, FailedRepairDraftRefreshError, type FailedRepairDraft, type FailedRepairPort } from '../src/api/failed-repair.api';
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn(), go: vi.fn() }) }));
 
@@ -153,6 +154,54 @@ describe('technician incident form', () => {
   const render = (api: FailedRepairPort = { ...port(), report: vi.fn().mockResolvedValue(undefined) }) => mount(FailedRepairDialog, {
     props: { orderId: 'order-B', parts: [{ id: 'part-B', label: 'Linh kiện B' }], partsReady: true },
     global: { provide: { [failedRepairKey as symbol]: api }, stubs: { Teleport: true } },
+  });
+  it('allows correcting a rejected declaration and shows the actionable server error', async () => {
+    const api = { ...port(), report: vi.fn().mockRejectedValueOnce(new FailedRepairReportError('Ghi nhận linh kiện đã dùng trước khi báo không sửa được.', false, false)).mockResolvedValue(undefined) };
+    const w = render(api);
+    await w.get('input[value="no_part"]').setValue(true);
+    await w.get('select').setValue('installed');
+    await w.get('[data-testid="repair-failed-confirm"]').trigger('click'); await flushPromises();
+    expect(w.get('[role="alert"]').text()).toContain('Ghi nhận linh kiện đã dùng');
+    expect(w.get('[data-testid="repair-failed-confirm"]').attributes('disabled')).toBeUndefined();
+    expect(w.emitted('reported')).toBeUndefined();
+  });
+  it('locks an uncertain report and reconciles without rebuilding the edited request', async () => {
+    const api = { ...port(), report: vi.fn().mockRejectedValue(new FailedRepairReportError('Chưa xác nhận được kết quả.', true, true)), reconcileReport: vi.fn().mockResolvedValue(undefined) };
+    const w = render(api);
+    await w.get('input[value="no_part"]').setValue(true); await w.get('select').setValue('returned');
+    await w.get('[data-testid="repair-failed-confirm"]').trigger('click'); await flushPromises();
+    expect(w.get('[data-testid="repair-failed-confirm"]').attributes('disabled')).toBeDefined();
+    await w.get('[data-testid="repair-failed-reconcile"]').trigger('click'); await flushPromises();
+    expect(api.reconcileReport).toHaveBeenCalledWith('order-B');
+    expect(api.report).toHaveBeenCalledTimes(1);
+    expect(w.emitted('reported')).toHaveLength(1);
+  });
+  it('blocks confirm and close while private upload is pending; ignores the late upload after unmount', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture');
+    let finish!: (value: { evidenceId: string }) => void;
+    const api = { ...port(), evidenceAvailable: true, uploadEvidence: vi.fn(() => new Promise<{ evidenceId: string }>(resolve => { finish = resolve; })), report: vi.fn() };
+    const w = render(api);
+    const input = w.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'fixture.jpg', { type: 'image/jpeg' })] });
+    await input.trigger('change');
+    await w.get('input[value="no_part"]').setValue(true); await w.get('select').setValue('returned');
+    expect(w.get('[data-testid="repair-failed-confirm"]').attributes('disabled')).toBeDefined();
+    await w.get('[aria-label="Đóng"]').trigger('click');
+    expect(w.emitted('close')).toBeUndefined();
+    w.unmount(); finish({ evidenceId: 'old-child-photo' }); await flushPromises();
+    expect(api.report).not.toHaveBeenCalled();
+    expect(w.emitted('reported')).toBeUndefined();
+  });
+  it('rejects invalid MIME without upload and permits zero photos', async () => {
+    const api = { ...port(), evidenceAvailable: true, uploadEvidence: vi.fn(), report: vi.fn().mockResolvedValue(undefined) };
+    const w = render(api);
+    const input = w.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'fixture.gif', { type: 'image/gif' })] });
+    await input.trigger('change'); await flushPromises();
+    expect(w.text()).toContain('Chọn ảnh JPG, PNG hoặc WebP'); expect(api.uploadEvidence).not.toHaveBeenCalled();
+    await w.get('input[value="no_part"]').setValue(true); await w.get('select').setValue('returned');
+    await w.get('[data-testid="repair-failed-confirm"]').trigger('click'); await flushPromises();
+    expect(api.report).toHaveBeenCalledWith('order-B', expect.objectContaining({ photoEvidenceIds: [] }));
   });
   it('requires explicit reason and child-specific part disposition, with no defaults', async () => {
     const api = { ...port(), report: vi.fn().mockResolvedValue(undefined) };

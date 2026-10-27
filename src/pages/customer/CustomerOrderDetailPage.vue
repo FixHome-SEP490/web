@@ -82,6 +82,10 @@ const activeFundedVoucher = computed(() => fundedVoucher.value
   ? fundedVoucher.value : null);
 let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
+const quotationFeedback = ref<typeof actionMessage.value>(null);
+const quotationFeedbackElement = ref<HTMLElement | null>(null);
+const quotationCheckId = ref<string | null>(null);
+const quotationPending = ref(false);
 
 // Modals
 const showCancelModal = ref(false);
@@ -506,23 +510,77 @@ onMounted(() => {
 });
 onUnmounted(() => { if (voucherExpiryTimer) clearInterval(voucherExpiryTimer); });
 
-const handleApproveQuotation = async () => {
+async function confirmQuotationApproval(quotationId: string, allowRetry = false, failure?: unknown) {
+  let latest: ServiceOrderItem | undefined;
   try {
-    actionLoading.value = true;
-    actionMessage.value = null;
-    if (!canDecideQuotation.value) throw new Error('Báo giá không còn chờ duyệt. Hãy tải lại đơn hàng.');
-    if (!order.value?.quotation?.id) throw new Error('Không có báo giá để duyệt.');
-    await ordersApi.approveQuotation(order.value.quotation.id);
-    await loadOrder();
-    actionMessage.value = { type: 'success', text: 'Đã phê duyệt báo giá! Kỹ thuật viên sẽ tiến hành sửa chữa ngay.' };
-  } catch (err) {
-    actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa duyệt được báo giá. Vui lòng thử lại.') };
+    // A pre-decision read (including realtime) cannot confirm this write.
+    await liveReading;
+    await queryClient.cancelQueries({ queryKey: queryKeys.orders.customerDetail(orderId), exact: true });
+    const result = await orderQuery.query.refetch({ throwOnError: true });
+    if (result.data?.order.id === orderId) latest = result.data.order;
+    cache.markChanged(affectedBy.orderChange);
+  } catch { /* Keep the last rendered data, but never use it as confirmation. */ }
+  if (!mounted) return;
+  const quote = latest?.quotation;
+  const failureStatus = (failure as { response?: { status?: number } } | undefined)?.response?.status;
+  const rejected = failureStatus !== undefined && failureStatus >= 400 && failureStatus < 500 && failureStatus !== 409;
+  if (quote?.id === quotationId && String(quote.status).toUpperCase() === 'APPROVED') {
+    quotationCheckId.value = null;
+    quotationFeedback.value = { type: 'success', text: 'Đã duyệt báo giá.' };
+  } else if (quote && quote.id !== quotationId) {
+    quotationCheckId.value = null;
+    quotationFeedback.value = { type: 'error', text: 'Báo giá đã thay đổi. Vui lòng xem lại báo giá mới.' };
+  } else if (latest && (allowRetry || rejected)) {
+    quotationCheckId.value = null;
+    quotationFeedback.value = { type: 'error', text: failure ? userFacingError(failure, 'Chưa duyệt được báo giá. Vui lòng thử lại.') : 'Báo giá vẫn đang chờ duyệt. Vui lòng xem lại trước khi thử lại.' };
+  } else {
+    const reason = failure ? `${userFacingError(failure, 'Chưa duyệt được báo giá.')} ` : '';
+    quotationFeedback.value = { type: 'error', text: `${reason}Chưa xác nhận được kết quả. Vui lòng kiểm tra trạng thái trước khi thực hiện lại.` };
+  }
+}
+
+const handleApproveQuotation = async () => {
+  if (actionLoading.value || quotationCheckId.value || !canDecideQuotation.value || !order.value?.quotation?.id) return;
+  const quotationId = order.value.quotation.id;
+  const opener = document.activeElement;
+  actionLoading.value = true;
+  quotationPending.value = true;
+  quotationCheckId.value = quotationId;
+  quotationFeedback.value = null;
+  actionMessage.value = null;
+  let failure: unknown;
+  try {
+    await ordersApi.approveQuotation(quotationId);
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    await confirmQuotationApproval(quotationId, false, failure);
   } finally {
     actionLoading.value = false;
+    quotationPending.value = false;
+    await nextTick();
+    if (mounted && (document.activeElement === opener || document.activeElement === document.body)) {
+      quotationFeedbackElement.value?.focus({ preventScroll: true });
+    }
   }
 };
 
+async function checkQuotationApproval() {
+  if (actionLoading.value || !quotationCheckId.value) return;
+  const opener = document.activeElement;
+  actionLoading.value = true;
+  try { await confirmQuotationApproval(quotationCheckId.value, true); }
+  finally {
+    actionLoading.value = false;
+    await nextTick();
+    if (mounted && (document.activeElement === opener || document.activeElement === document.body)) quotationFeedbackElement.value?.focus({ preventScroll: true });
+  }
+}
+
 const handleRejectQuotation = async () => {
+  if (actionLoading.value || quotationCheckId.value) return;
+  quotationFeedback.value = null;
   try {
     actionLoading.value = true;
     actionMessage.value = null;
@@ -1577,14 +1635,17 @@ const parsedReview = computed(() => {
                     <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
                   </div>
                   <div v-if="canDecideQuotation" class="flex items-center gap-2">
-                    <FhButton variant="secondary" size="md" :disabled="actionLoading" @click="handleRejectQuotation">
+                    <FhButton variant="secondary" size="md" :disabled="actionLoading || !!quotationCheckId" @click="handleRejectQuotation">
                       Từ chối báo giá
                     </FhButton>
-                    <FhButton variant="primary" size="md" :disabled="actionLoading" @click="handleApproveQuotation">
+                    <FhButton variant="primary" size="md" :disabled="actionLoading || !!quotationCheckId" :loading="quotationPending" @click="handleApproveQuotation">
                       Duyệt báo giá
                     </FhButton>
                   </div>
                 </div>
+                <p v-if="quotationFeedback" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="quotationFeedback.type === 'error' ? 'alert' : 'status'" class="text-sm" :class="quotationFeedback.type === 'error' ? 'text-danger-700' : 'text-success-700'">{{ quotationFeedback.text }}</p>
+                <p v-if="quotationPending" role="status" class="text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
+                <FhButton v-if="quotationCheckId && !quotationPending" variant="secondary" size="md" :disabled="actionLoading" data-testid="quotation-check-status" @click="checkQuotationApproval">Kiểm tra trạng thái</FhButton>
               </template>
             </div>
           </div>

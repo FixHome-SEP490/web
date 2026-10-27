@@ -89,10 +89,11 @@ function updateNavIndicator() {
   const activeItem = navItems.find((item) =>
     item.exact ? currentPath === item.to : currentPath.startsWith(item.to)
   );
-  const nav = isWideDesktop.value ? desktopNavRef.value : compactDesktopNavRef.value;
-  const el = isWideDesktop.value
-    ? activeItem && navItemRefs.value[activeItem.to]
-    : compactDesktopOverflowButtonRef.value;
+  // The compact header highlights the disclosure button itself. Do not draw a
+  // full-width active underline beneath “Thêm”, which looks displaced at 75% zoom.
+  if (!isWideDesktop.value) { navIndicatorStyle.value = { opacity: '0' }; return; }
+  const nav = desktopNavRef.value;
+  const el = activeItem && navItemRefs.value[activeItem.to];
   if (!activeItem || !nav || !el) {
     navIndicatorStyle.value = { opacity: '0' };
     return;
@@ -339,11 +340,6 @@ const handleLogout = async () => {
             class="hidden lg:flex items-center h-16 relative"
             aria-label="Điều hướng chính"
           >
-            <div
-              class="pointer-events-none absolute bottom-0 left-0 h-[3px] bg-brand-600 rounded-t-sm transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-              :style="navIndicatorStyle"
-              aria-hidden="true"
-            />
             <button
               ref="compactDesktopOverflowButtonRef"
               type="button"

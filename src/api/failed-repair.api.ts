@@ -65,6 +65,8 @@ export interface FailedRepairPort {
   confirm(input: FailedRepairConfirmation): Promise<{ kind: 'booking' | 'visit'; id: string }>;
   readIncident(bookingId: string): Promise<FailedRepairIncident>;
   report(orderId: string, input: FailedRepairReport): Promise<void>;
+  /** Technician-only: read back and replay the exact pending report against its durable receipt. */
+  reconcileReport?(orderId: string): Promise<void>;
   uploadEvidence(orderId: string, file: File): Promise<{ evidenceId: string }>;
 }
 export const failedRepairKey: InjectionKey<FailedRepairPort> = Symbol('failed-repair');

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-27 21:08 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-t21-f3-wallet-only-20261027
+> Cập nhật lần cuối: 2026-10-27 23:46 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p0p1-web-integration-20261027
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -303,6 +303,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 
 - Service Manager F3 message updated to owner wallet-only refund rule for paid VNPay or CASH voucher invoices; Backend must confirm original paid evidence, then credit wallet NET only.
 
+- P0/P1 mới trên nhánh tích hợp từ Web dev eb1f31c: sửa Apply voucher, quyền báo không sửa được kèm ảnh, báo giá một lần, tổng hóa đơn 3 máy, tạo đơn nhiều thiết bị, cảnh báo trả kho và modal linh kiện; 1.831 test toàn bộ PASS trước phần Admin/header. Chưa merge/deploy hoặc thay đổi dữ liệu DEV.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -408,7 +410,10 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Màn công việc kỹ thuật viên đã có test tập trung cho ảnh, blocker và nhóm linh kiện; cần browser QA tại 360/390/430/1024 px trở lên để kiểm tra bố cục và thao tác thật. Tích hợp `deferAutoStart`, action khôi phục `startRepair` với Backend và tương đương Mobile CHƯA KIỂM CHỨNG.
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
+- Admin voucher DRAFT/PUBLISHED/PAUSED/ARCHIVED và Web tương ứng vẫn cần migration Backend mới, review RLS/quyền truy cập và kiểm thử thật. Không bỏ guard để mở tính năng. Vẫn chưa xác minh checkout voucher bằng tài khoản thật, ảnh riêng tư trên DEV hay E2E toàn VisitGroup.
+
 ## 9. Nhật ký cập nhật context
+- 2026-10-27 23:46 (UTC+7) | foxonworld | foxonworld/fixhome-p0p1-web-integration-20261027 | Ghép Web P0/P1 trên dev mới, thêm Admin voucher bản nháp và responsive header, chạy hồi quy, chưa merge/deploy hoặc chạy migration.
 - 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.
 
 
@@ -474,7 +479,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 14:16 (UTC+7) | foxonworld | foxonworld/fixhome-p013-quote-billing-20261020 | P013: gợi ý linh kiện QR theo ID, phân biệt dự kiến/sử dụng/khai trả kho, hóa đơn authoritative và khóa 0 lệch duyệt, API miễn phí và ngưỡng VNPay; Backend thật/Mobile chưa kiểm chứng
 
-- 2026-10-19 22:20 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Bổ sung ca tối 18–23 giờ VN, nhận đặt hôm nay trước 23:00; public đủ 13 chip danh mục, landing 6 nhóm với mô tả và icon phù hợp; browser fixture đã kiểm tra, Backend thật/Mobile NOT VERIFIED; AI giữ nguyên
 
 
 

@@ -186,7 +186,7 @@ describe('customer visit page', () => {
     await w.get('[data-testid="visit-device-expand-2"]').trigger('click');
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b2']);
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-media-count'))).toEqual(['1']);
-    expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
+    expect(w.get('[data-testid="visit-invoice-unpaid"]').text()).toBe('250000');
     expect(w.get('[data-testid="visit-checkout"]').find('[data-testid="visit-voucher-picker"]').exists()).toBe(true);
     expect(w.get('[data-testid="visit-voucher-picker"]').attributes('data-scope-id')).toBe('v1');
   });
