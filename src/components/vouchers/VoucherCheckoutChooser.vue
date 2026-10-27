@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ChevronDown, TicketPercent } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import FhMoney from '../FhMoney.vue';
@@ -22,6 +23,8 @@ type ChooserState = 'loading' | 'ready' | 'error' | 'denied' | 'offline';
 type PreviewState = 'idle' | 'loading' | 'ready' | 'no_scope' | 'offline' | 'forbidden' | 'conflict' | 'error';
 
 const props = withDefaults(defineProps<{ scopeId?: string | null }>(), { scopeId: null });
+const route = useRoute();
+const router = useRouter();
 const emit = defineEmits<{
   applied: [value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }];
   released: [];
@@ -35,6 +38,7 @@ const state = ref<ChooserState>('loading');
 const offers = ref<VoucherOffer[]>([]);
 const selectedId = ref('');
 const error = ref('');
+const returnSelectionMessage = ref('');
 const selectedOffer = computed(() => offers.value.find((offer) => offer.id === selectedId.value) ?? null);
 const previewState = ref<PreviewState>('idle');
 const preview = ref<VoucherCheckoutPreview | null>(null);
@@ -50,6 +54,31 @@ const remainingSeconds = computed(() => reservation.value
 const canApply = computed(() => previewState.value === 'ready' && preview.value?.paymentAvailable === true
   && !!selectedOffer.value && !!customerId.value && !!props.scopeId && !reservation.value
   && !applying.value && remainingSeconds.value >= 0);
+const walletLocation = computed(() => ({
+  name: 'customer-vouchers',
+  query: { returnTo: route.fullPath },
+}));
+const sheetPreviewMessage = computed(() => {
+  if (previewState.value === 'loading') return 'Đang tải bản xem trước từ máy chủ…';
+  if (previewState.value === 'no_scope') return 'Chưa có lượt thanh toán để kiểm tra điều kiện voucher.';
+  if (previewState.value === 'offline') return 'Đang ngoại tuyến. Chưa thể kiểm tra voucher hoặc giữ chỗ.';
+  if (previewState.value === 'forbidden') return previewError.value || 'Voucher không thuộc tài khoản này hoặc bạn không có quyền xem.';
+  if (previewState.value === 'conflict') return previewError.value || 'Voucher đã hết hạn, đã dùng hoặc không đủ điều kiện cho hóa đơn này.';
+  if (previewState.value === 'error') return previewError.value || 'Máy chủ chưa xác nhận được bản xem trước.';
+  if (previewState.value === 'ready' && preview.value?.paymentAvailable !== true) {
+    return preview.value?.reason === 'VOUCHER_FUNDING_NOT_READY'
+      ? 'Dịch vụ giữ chỗ voucher chưa sẵn sàng trên máy chủ. Chưa giữ chỗ; hóa đơn vẫn dùng tổng gốc.'
+      : 'Máy chủ chưa cho phép giữ chỗ voucher. Chưa giữ chỗ; hóa đơn vẫn dùng tổng gốc.';
+  }
+  if (previewState.value === 'ready' && preview.value?.paymentAvailable === true) {
+    return 'Máy chủ đã xác nhận có thể yêu cầu giữ chỗ. Hóa đơn chưa thay đổi cho đến khi máy chủ xác nhận thanh toán.';
+  }
+  return '';
+});
+const sheetPreviewMessageIsError = computed(() => ['forbidden', 'conflict', 'error'].includes(previewState.value)
+  || (previewState.value === 'ready' && preview.value?.paymentAvailable !== true));
+const sheetPreviewRetryable = computed(() => ['offline', 'conflict', 'error'].includes(previewState.value)
+  || (previewState.value === 'ready' && preview.value?.paymentAvailable !== true));
 let sequence = 0;
 let previewSequence = 0;
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
@@ -75,7 +104,32 @@ function resetAttempt() {
 function selectOffer(id: string) {
   if (reservationAttemptStarted.value || reservation.value) return;
   resetAttempt();
+  returnSelectionMessage.value = '';
   selectedId.value = id;
+}
+
+function selectReturnedClaim(value: unknown) {
+  if (typeof value !== 'string' || !value) {
+    returnSelectionMessage.value = '';
+    return;
+  }
+  if (reservationAttemptStarted.value || reservation.value) return;
+  if (!offers.value.some((offer) => offer.id === value)) {
+    selectedId.value = '';
+    returnSelectionMessage.value = 'Voucher vừa chọn không còn trong ví. Hãy mở ví để chọn voucher khác.';
+    consumeReturnedClaimQuery();
+    return;
+  }
+  returnSelectionMessage.value = '';
+  if (selectedId.value !== value) selectOffer(value);
+  consumeReturnedClaimQuery();
+}
+
+function consumeReturnedClaimQuery() {
+  if (!Object.hasOwn(route.query, 'voucherClaimId')) return;
+  const query = { ...route.query };
+  delete query.voucherClaimId;
+  void router.replace({ path: route.path, query, hash: route.hash });
 }
 
 async function applyVoucher() {
@@ -106,12 +160,16 @@ async function applyVoucher() {
       || (typeof error === 'object' && error !== null && 'code' in error && error.code === 'VOUCHER_RESERVATION_EXPIRED')) {
       resetAttempt();
       applyError.value = 'Lượt giữ voucher đã hết hạn. Bạn có thể thử giữ chỗ lại.';
+    } else if (getHttpStatus(error) === 401) {
+      applyError.value = 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại trước khi giữ chỗ voucher.';
     } else if (getHttpStatus(error) === 403) {
       applyError.value = 'Tài khoản này không có quyền giữ voucher cho lượt thanh toán.';
     } else if (getHttpStatus(error) === 409) {
       resetAttempt();
       previewState.value = 'conflict';
       applyError.value = 'Voucher đã hết hạn, đã được dùng hoặc lượt thanh toán đã thay đổi. Hãy tải lại bản xem trước.';
+    } else if (getHttpStatus(error) === 503) {
+      applyError.value = 'Máy chủ voucher tạm thời chưa sẵn sàng để giữ chỗ. Hãy thử lại; lần thử lại sẽ dùng cùng mã giao dịch.';
     } else {
       applyError.value = userFacingError(error, 'Chưa giữ được voucher. Hãy thử lại; lần thử lại sẽ dùng cùng mã giao dịch.');
     }
@@ -135,6 +193,10 @@ async function releaseReservation() {
     applying.value = false;
   }
 }
+
+watch(() => props.scopeId, (scopeId) => {
+  if (reservation.value && reservation.value.scopeId !== scopeId) void releaseReservation();
+}, { flush: 'sync' });
 
 function checkExpiry() {
   nowMs.value = Date.now();
@@ -171,8 +233,19 @@ async function loadPreview() {
     if (request !== previewSequence || claimId !== selectedId.value || scopeId !== props.scopeId || owner !== customerId.value) return;
     const status = getHttpStatus(e);
     if (isOffline() || (typeof e === 'object' && e !== null && 'code' in e && e.code === 'ERR_NETWORK')) previewState.value = 'offline';
-    else if (status === 403) previewState.value = 'forbidden';
-    else if (status === 409) previewState.value = 'conflict';
+    else if (status === 401) {
+      previewState.value = 'forbidden';
+      previewError.value = 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại để xem voucher.';
+    } else if (status === 403) {
+      previewState.value = 'forbidden';
+      previewError.value = 'Voucher không thuộc tài khoản này hoặc bạn không có quyền xem.';
+    } else if ([400, 404, 409].includes(status ?? 0)) {
+      previewState.value = 'conflict';
+      previewError.value = 'Voucher không hợp lệ, đã hết hạn, đã được dùng hoặc không đủ điều kiện cho hóa đơn này.';
+    } else if (status === 503) {
+      previewState.value = 'error';
+      previewError.value = 'Máy chủ voucher tạm thời chưa sẵn sàng để xác nhận bản xem trước. Chưa giữ chỗ hoặc thay đổi hóa đơn; hãy thử lại.';
+    }
     else {
       previewState.value = 'error';
       previewError.value = userFacingError(e, 'Chưa tải được bản xem trước. Vui lòng thử lại.');
@@ -184,6 +257,7 @@ async function load() {
   const request = ++sequence;
   offers.value = [];
   selectedId.value = '';
+  returnSelectionMessage.value = '';
   if (!customerId.value) {
     state.value = 'denied';
     return;
@@ -201,6 +275,7 @@ async function load() {
     if (request !== sequence) return;
     offers.value = result.filter((claim) => claim.status === 'CLAIMED').map((claim) => claimOffer(claim, owner));
     state.value = 'ready';
+    selectReturnedClaim(route.query.voucherClaimId);
   } catch (e) {
     if (request !== sequence) return;
     state.value = 'error';
@@ -225,6 +300,7 @@ function handleOffline() {
   previewState.value = 'offline';
   offers.value = [];
   selectedId.value = '';
+  returnSelectionMessage.value = '';
   error.value = '';
   state.value = 'offline';
 }
@@ -240,9 +316,14 @@ watch(customerId, () => {
   previewState.value = 'idle';
   offers.value = [];
   selectedId.value = '';
+  returnSelectionMessage.value = '';
   open.value = false;
   reservation.value = null;
   resetAttempt();
+}, { flush: 'sync' });
+
+watch(() => route.query.voucherClaimId, (claimId) => {
+  if (offers.value.length > 0) selectReturnedClaim(claimId);
 }, { flush: 'sync' });
 
 watch(() => [selectedId.value, props.scopeId, customerId.value] as const, () => {
@@ -291,6 +372,7 @@ onBeforeUnmount(() => {
     </button>
     <p v-if="preview && preview.paymentAvailable !== true" class="text-xs leading-5 text-ink-600">Thanh toán voucher chưa sẵn sàng từ máy chủ. Chưa giữ chỗ và hóa đơn vẫn dùng tổng gốc.</p>
     <p v-else-if="preview?.paymentAvailable === true" class="text-xs leading-5 text-ink-600">Máy chủ cho phép giữ voucher trong thời hạn ghi nhận. Hóa đơn chỉ thay đổi khi máy chủ xác nhận thanh toán.</p>
+    <p v-if="returnSelectionMessage" class="mt-2 text-sm text-warning-800" role="status" data-testid="checkout-voucher-return-state">{{ returnSelectionMessage }}</p>
 
     <div class="mt-3 space-y-3">
       <div v-if="selectedOffer" class="rounded-lg border border-brand-200 bg-brand-50 p-3" data-testid="checkout-voucher-selected">
@@ -308,9 +390,9 @@ onBeforeUnmount(() => {
       <div v-if="selectedOffer && previewState === 'loading'" class="text-sm text-ink-600" role="status" data-testid="checkout-voucher-preview-state">Đang tải bản xem trước từ máy chủ…</div>
       <div v-else-if="selectedOffer && previewState === 'no_scope'" class="text-sm text-ink-600" role="status" data-testid="checkout-voucher-preview-state">Chưa sẵn sàng xem trước vì thiếu lượt thanh toán.</div>
       <div v-else-if="selectedOffer && previewState === 'offline'" class="text-sm text-ink-600" role="status" data-testid="checkout-voucher-preview-state">Đang ngoại tuyến. Chưa thể tải bản xem trước.</div>
-      <div v-else-if="selectedOffer && previewState === 'forbidden'" class="text-sm text-danger-700" role="alert" data-testid="checkout-voucher-preview-state">Voucher không thuộc lượt thanh toán này hoặc bạn không có quyền xem.</div>
+      <div v-else-if="selectedOffer && previewState === 'forbidden'" class="text-sm text-danger-700" role="alert" data-testid="checkout-voucher-preview-state">{{ previewError || 'Voucher không thuộc lượt thanh toán này hoặc bạn không có quyền xem.' }}</div>
       <div v-else-if="selectedOffer && previewState === 'conflict'" class="space-y-2 text-sm text-danger-700" role="alert" data-testid="checkout-voucher-preview-state">
-        <p>Hóa đơn đã thay đổi hoặc voucher không còn hợp lệ. Hãy tải lại thông tin trước khi thử tiếp.</p>
+        <p>{{ previewError || 'Voucher đã hết hạn, đã dùng hoặc không đủ điều kiện cho hóa đơn này.' }}</p>
         <button type="button" class="min-h-11 underline" @click="loadPreview">Tải lại bản xem trước</button>
       </div>
       <div v-else-if="selectedOffer && previewState === 'error'" class="space-y-2 text-sm text-danger-700" role="alert" data-testid="checkout-voucher-preview-state">
@@ -344,7 +426,7 @@ onBeforeUnmount(() => {
         :loading="applying"
         @click="applyVoucher"
       >{{ applying ? 'Đang giữ chỗ…' : preview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}</FhButton>
-      <RouterLink to="/app/vouchers" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline focus-visible:outline-2 focus-visible:outline-brand-600">Mở ví ưu đãi</RouterLink>
+      <RouterLink :to="walletLocation" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline focus-visible:outline-2 focus-visible:outline-brand-600">Mở ví ưu đãi</RouterLink>
     </div>
 
     <VoucherSelectionSheet
@@ -354,9 +436,21 @@ onBeforeUnmount(() => {
       :message="error"
       :selected-id="selectedId"
       :customer-id="customerId"
+      :server-preview="preview"
+      :preview-loading="previewState === 'loading'"
+      :preview-message="sheetPreviewMessage"
+      :preview-message-is-error="sheetPreviewMessageIsError"
+      :preview-retryable="sheetPreviewRetryable"
+      :can-apply="canApply"
+      :applying="applying"
+      :selection-disabled="reservationAttemptStarted || !!reservation"
+      :apply-error="applyError"
+      :server-reservation="reservation ? { voucherId: reservation.claimId, expiresAt: reservation.expiresAt, serverTimeAtResponse: reservation.reservedAt } : null"
       @close="open = false"
       @retry="load"
       @select="selectOffer"
+      @apply="applyVoucher"
+      @retry-preview="loadPreview"
     />
   </section>
 </template>

@@ -17,7 +17,7 @@ import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutCho
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
 import type { FundedReservation } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
-import type { ServiceOrderItem } from '../../api/orders.api';
+import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -48,6 +48,75 @@ const selectedVisitItemId = ref<string | null>(null);
 const checkoutLoading = ref(false);
 const child = useVisitOrderDetails(() => visitId.value, load);
 const { details: orderDetails, fresh: childDetailsFresh, deciding: childDeciding, feedback: childFeedback } = child;
+const quotationChecks = ref<Record<string, string>>({});
+const approvingOrderId = ref<string | null>(null);
+const quotationFeedbackElement = ref<HTMLElement | null>(null);
+
+async function focusQuotationFeedback(groupId: string, orderId: string, opener: Element | null) {
+  await nextTick();
+  if (!disposed && groupId === visitId.value && orderId === selectedOrderId.value
+    && (document.activeElement === opener || document.activeElement === document.body)) quotationFeedbackElement.value?.focus({ preventScroll: true });
+}
+
+async function confirmChildQuotation(groupId: string, orderId: string, quotationId: string, allowRetry = false, failure?: unknown) {
+  await load();
+  if (disposed || groupId !== visitId.value) return;
+  const latest = childDetailsFresh.value ? orderDetails.value[orderId]?.order : undefined;
+  const quote = latest?.quotation;
+  const failureStatus = (failure as { response?: { status?: number } } | undefined)?.response?.status;
+  const rejected = failureStatus !== undefined && failureStatus >= 400 && failureStatus < 500 && failureStatus !== 409;
+  if (quote?.id === quotationId && String(quote.status).toUpperCase() === 'APPROVED') {
+    delete quotationChecks.value[orderId];
+    childFeedback.value = { orderId, error: false, text: 'Đã duyệt báo giá của máy này.' };
+  } else if (quote && quote.id !== quotationId) {
+    delete quotationChecks.value[orderId];
+    childFeedback.value = { orderId, error: true, text: 'Báo giá đã thay đổi. Vui lòng xem lại báo giá mới.' };
+  } else if (latest && (allowRetry || rejected)) {
+    delete quotationChecks.value[orderId];
+    childFeedback.value = { orderId, error: true, text: failure ? userFacingError(failure, 'Chưa duyệt được báo giá. Vui lòng thử lại.') : 'Báo giá vẫn đang chờ duyệt. Vui lòng xem lại trước khi thử lại.' };
+  } else {
+    const reason = failure ? `${userFacingError(failure, 'Chưa duyệt được báo giá.')} ` : '';
+    childFeedback.value = { orderId, error: true, text: `${reason}Chưa xác nhận được kết quả. Vui lòng kiểm tra trạng thái trước khi thực hiện lại.` };
+  }
+}
+
+async function decideChildQuotation(orderId: string, action: 'APPROVE' | 'REJECT') {
+  if (childDeciding.value || quotationChecks.value[orderId] || checkoutLoading.value) return;
+  if (action === 'REJECT') return child.decide(orderId, action);
+  const order = orderDetails.value[orderId]?.order;
+  if (!childDetailsFresh.value || !canDecideOfficialQuotation(order) || !order?.quotation?.id) return;
+  const groupId = visitId.value;
+  const quotationId = order.quotation.id;
+  const opener = document.activeElement;
+  childDeciding.value = true;
+  approvingOrderId.value = orderId;
+  quotationChecks.value[orderId] = quotationId;
+  childFeedback.value = null;
+  let failure: unknown;
+  try { await ordersApi.approveQuotation(quotationId); }
+  catch (error) { failure = error; }
+  try {
+    if (!disposed && groupId === visitId.value) await confirmChildQuotation(groupId, orderId, quotationId, false, failure);
+  } finally {
+    childDeciding.value = false;
+    approvingOrderId.value = null;
+    await focusQuotationFeedback(groupId, orderId, opener);
+  }
+}
+
+async function checkChildQuotation() {
+  const orderId = selectedOrderId.value;
+  const quotationId = orderId && quotationChecks.value[orderId];
+  if (!orderId || !quotationId || childDeciding.value) return;
+  const groupId = visitId.value;
+  const opener = document.activeElement;
+  childDeciding.value = true;
+  try { await confirmChildQuotation(groupId, orderId, quotationId, true); }
+  finally {
+    childDeciding.value = false;
+    await focusQuotationFeedback(groupId, orderId, opener);
+  }
+}
 let disposed = false;
 let runningLoad: Promise<void> | null = null;
 let reloadRequested = false;
@@ -121,8 +190,8 @@ async function readVisit() {
   const lookupVersion = child.invalidate();
   childOrderLookupVersion = lookupVersion;
   checkoutLoading.value = true;
-  childOrderStatuses.value = {};
-  quotationOrderIdsBySequence.value = {};
+  // Keep the rendered progress/quote labels during same-visit reads. Actions
+  // remain disabled by fresh/checkoutLoading until the new child reads finish.
   childOrderStatusUnavailable.value = false;
   childOrderStatusLoading.value = false;
   loadError.value = '';
@@ -186,6 +255,8 @@ watch(visitId, () => {
   }
   seenCashNotifications.clear();
   childOrderLookupVersion = child.clear();
+  quotationChecks.value = {};
+  approvingOrderId.value = null;
   visit.value = null;
   checkout.value = null;
   childOrderStatuses.value = {};
@@ -363,6 +434,70 @@ const STATE_LABEL: Record<VisitDeviceState, string> = {
 function deviceOf(bookingId: string | undefined) {
   return checkout.value?.devices.find((device) => device.bookingId === bookingId) ?? null;
 }
+
+type FinalInvoiceLine = { id: string; description: string; quantity: number; unitPrice: number; lineTotal: number };
+
+function invoiceSummaryRow(item: Visit['items'][number]) {
+  const unknown = { item, amount: null as number | null, lines: [] as FinalInvoiceLine[],
+    fees: [] as Array<{ label: string; amount: number }>, status: 'Chưa đối chiếu được hóa đơn' };
+  const devices = checkout.value?.devices ?? [];
+  const bookingId = item.booking?.id;
+  const matches = devices.filter(device => device.bookingId === bookingId);
+  if (!bookingId || matches.length !== 1
+    || visit.value?.items.filter(candidate => candidate.booking?.id === bookingId).length !== 1) return unknown;
+  const device = matches[0]!;
+  if (device.state === 'open') return { ...unknown, status: 'Chờ chốt hóa đơn' };
+  if (['failed', 'quote_declined', 'cancelled'].includes(device.state)) {
+    return billingAmount(device.amount) === 0 && !device.invoiceId
+      ? { ...unknown, amount: 0, status: STATE_LABEL[device.state] } : unknown;
+  }
+  if (device.state !== 'succeeded' || !device.serviceOrderId || !device.invoiceId
+    || devices.filter(candidate => candidate.serviceOrderId === device.serviceOrderId).length !== 1
+    || devices.filter(candidate => candidate.invoiceId === device.invoiceId).length !== 1) return unknown;
+  const bundle = orderDetails.value[device.serviceOrderId];
+  const invoice = bundle?.invoice;
+  const amount = billingAmount(invoice?.grandTotal);
+  if (!bundle || bundle.invoiceError || !invoice || invoice.id !== device.invoiceId
+    || invoice.serviceOrderId !== device.serviceOrderId || bundle.order.bookingId !== bookingId
+    || !(bundle.order.completionRequestedAt || bundle.order.status.toUpperCase() === 'COMPLETED')
+    || amount === null || amount !== billingAmount(device.amount) || !Array.isArray(invoice.items)) return unknown;
+
+  const lines: FinalInvoiceLine[] = [];
+  const lineIds = new Set<string>();
+  for (const value of invoice.items as unknown[]) {
+    if (!value || typeof value !== 'object') return unknown;
+    const line = value as Record<string, unknown>;
+    const unitPrice = billingAmount(line.unitPrice);
+    const lineTotal = billingAmount(line.lineTotal);
+    if (typeof line.id !== 'string' || !line.id.trim() || lineIds.has(line.id) || line.invoiceId !== invoice.id
+      || typeof line.description !== 'string' || !line.description.trim()
+      || typeof line.quantity !== 'number' || !Number.isSafeInteger(line.quantity) || line.quantity <= 0
+      || unitPrice === null || lineTotal === null) return unknown;
+    lineIds.add(line.id);
+    lines.push({ id: line.id, description: line.description, quantity: line.quantity, unitPrice, lineTotal });
+  }
+  const fees: Array<{ label: string; amount: number }> = [];
+  for (const [field, label] of [['shippingFee', 'Phí giao linh kiện'], ['technicianPartWarrantyFeeTotal', 'Phí bảo hành linh kiện']] as const) {
+    if (invoice[field] == null) continue;
+    const fee = billingAmount(invoice[field]);
+    if (fee === null) return unknown;
+    if (fee > 0) fees.push({ label, amount: fee });
+  }
+  if (amount > 0 && !lines.length && !fees.length) return unknown;
+  return { item, amount, lines, fees, status: device.paid ? 'Đã thanh toán' : 'Chưa thanh toán' };
+}
+
+// Display only: checkout.total is the server's UNPAID gross, not the visit's
+// historical invoice gross. Never use this summary to decide payment amounts.
+const invoiceSummary = computed(() => {
+  const rows = (visit.value?.items ?? []).map(invoiceSummaryRow);
+  const confirmed = rows.filter(row => row.amount !== null);
+  const gross = confirmed.reduce((total, row) => total + row.amount!, 0);
+  return { rows, pending: rows.length - confirmed.length,
+    gross: confirmed.length && Number.isSafeInteger(gross) ? gross : null,
+    unpaid: checkout.value ? billingAmount(checkout.value.total) : null };
+});
+
 function statusText(item: Visit['items'][number]): string {
   const device = deviceOf(item.booking?.id);
   // The child outcome is more specific than the parent visit status. A failed
@@ -770,7 +905,9 @@ async function answerCash(agreed: boolean) {
               >{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}<ChevronDown :size="16" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" /></FhButton>
             </div>
           </div>
-          <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+          <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+          <p v-if="approvingOrderId && approvingOrderId === selectedOrderId" role="status" class="mt-3 text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
+          <FhButton v-if="selectedOrderId && quotationChecks[selectedOrderId] && approvingOrderId !== selectedOrderId" variant="secondary" size="md" :disabled="childDeciding || checkoutLoading" data-testid="quotation-check-status" @click="checkChildQuotation">Kiểm tra trạng thái</FhButton>
           <FailedRepairIncident
             v-if="!checkoutLoading && !checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
             :key="selectedVisitItem.booking.id"
@@ -782,8 +919,8 @@ async function answerCash(agreed: boolean) {
             v-if="selectedDetails"
             :key="selectedDetails.order.id"
             :details="selectedDetails"
-            :disabled="!childDetailsFresh || childDeciding || checkoutLoading"
-            @quote="child.decide(selectedDetails.order.id, $event)"
+            :disabled="!childDetailsFresh || childDeciding || checkoutLoading || !!quotationChecks[selectedDetails.order.id]"
+            @quote="decideChildQuotation(selectedDetails.order.id, $event)"
             @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
             @retry="load"
           />
@@ -805,6 +942,43 @@ async function answerCash(agreed: boolean) {
       </section>
 
       <!-- One payment for the devices repaired, once every device has its result. -->
+      <section v-if="invoiceSummary.rows.length" class="rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
+        <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
+        <p v-if="checkoutLoading" role="status" class="mt-2 text-ink-600">Đang cập nhật hóa đơn…</p>
+        <ul class="mt-3 divide-y divide-ink-100">
+          <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-3" :data-testid="`visit-invoice-row-${row.item.sequence}`">
+            <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div class="min-w-0 flex-1 basis-36">
+                <p class="break-words font-medium text-ink-900">Máy {{ row.item.sequence }}<template v-if="row.item.booking?.serviceName"> · {{ row.item.booking.serviceName }}</template></p>
+                <p class="mt-0.5 text-xs text-ink-600">{{ row.status }}</p>
+              </div>
+              <FhMoney v-if="row.amount !== null" :amount="row.amount" class="shrink-0 whitespace-nowrap" data-testid="visit-invoice-amount" />
+              <span v-else class="text-ink-600">Chưa xác định</span>
+            </div>
+            <details v-if="row.lines.length || row.fees.length" class="group mt-1 text-ink-600">
+              <summary class="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"><span>Chi tiết hóa đơn máy {{ row.item.sequence }}</span><ChevronDown :size="16" class="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" /></summary>
+              <ul class="space-y-2 pb-1">
+                <li v-for="line in row.lines" :key="line.id" class="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                  <span class="min-w-0 flex-1 basis-36 break-words">{{ line.description }}<span class="block text-xs">{{ line.quantity }} × <FhMoney :amount="line.unitPrice" /></span></span>
+                  <FhMoney :amount="line.lineTotal" class="shrink-0 whitespace-nowrap" />
+                </li>
+                <li v-for="fee in row.fees" :key="fee.label" class="flex flex-wrap justify-between gap-2"><span>{{ fee.label }}</span><FhMoney :amount="fee.amount" class="whitespace-nowrap" /></li>
+              </ul>
+            </details>
+          </li>
+        </ul>
+        <dl class="space-y-3 border-t border-ink-200 pt-3">
+          <div class="flex flex-wrap items-baseline justify-between gap-2 font-semibold text-ink-900">
+            <dt>{{ invoiceSummary.pending ? 'Tổng hóa đơn đã chốt' : 'Tổng hóa đơn gốc' }}</dt>
+            <dd><FhMoney v-if="invoiceSummary.gross !== null" :amount="invoiceSummary.gross" emphasis data-testid="visit-invoice-gross" /><span v-else class="font-normal text-ink-600">Chưa xác định</span></dd>
+          </div>
+          <div class="flex flex-wrap items-baseline justify-between gap-2 text-ink-600">
+            <dt>Hóa đơn gốc chưa thanh toán</dt>
+            <dd><FhMoney v-if="invoiceSummary.unpaid !== null" :amount="invoiceSummary.unpaid" data-testid="visit-invoice-unpaid" /><span v-else>Chưa xác định</span></dd>
+          </div>
+        </dl>
+        <p v-if="invoiceSummary.pending" class="mt-3 text-xs text-ink-600">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
+      </section>
       <section v-if="checkoutError" role="alert" class="space-y-2 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800" data-testid="visit-checkout-error">
         <h2 class="font-semibold">Thông tin thanh toán chưa sẵn sàng</h2>
         <p>{{ checkoutError }}</p>
@@ -820,11 +994,7 @@ async function answerCash(agreed: boolean) {
           <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
           <div v-else class="sm:text-right">
             <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
-            <span class="text-right">
-              <span class="block text-xs text-ink-500">Tổng hóa đơn gốc</span>
-              <span class="text-xl font-semibold text-ink-900 font-num"><FhMoney :amount="checkout.total" /></span>
-              <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
-            </span>
+            <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
           </div>
         </div>
         <p v-if="checkout.waiting > 0" class="text-ink-600">Còn {{ checkout.waiting }} thiết bị đang xử lý. Bạn thanh toán một lần khi mọi thiết bị đã có kết quả, chỉ cho các máy sửa được.</p>

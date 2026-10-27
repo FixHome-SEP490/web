@@ -133,6 +133,141 @@ async function openMoreMenu(wrapper: ReturnType<typeof mount>) {
 const menuItems = (wrapper: ReturnType<typeof mount>) =>
   wrapper.findAll('[role="menuitem"]').map((item) => item.text());
 
+describe('VisitGroup departure and whole-visit warehouse warning', () => {
+  beforeEach(() => {
+    mockGet.mockReset(); mockPost.mockReset(); mockPush.mockClear();
+    if (mockRouteControl.current) { mockRouteControl.current.params.id = 'job-test-101'; mockRouteControl.current.query = {}; }
+    mockSocketSubscriptions.splice(0);
+    installQueryClient(createTestQueryClient({ queries: { gcTime: 60_000 } }));
+  });
+  const ids = ['job-test-101', 'job-test-202', 'job-test-303'];
+  const request = (id: string, status = 'ready') => ({ id: `request-${id}`, serviceOrderId: id, requestType: 'pre_repair', status, items: [] });
+  const ledger = (id: string, issued: number, used: number, declared: number, accepted: number) => ({
+    orderId: id, partRequestId: `request-${id}`, partRequestItemId: `item-${id}`, partNameSnapshot: 'Linh kiện fixture',
+    issuedQty: issued, usedQty: used, declaredQty: declared, managerAcceptedQty: accepted, outstandingQty: issued - used - accepted, version: 1,
+  });
+  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
+    mockGet.mockImplementation(async (path: string) => {
+      const id = ids.find(id => path === `/service-orders/${id}`);
+      if (id) return { data: { data: { ...activeOrder, id, bookingId: `booking-${id}`, visitGroupId: 'visit-p1', status: options.status ?? 'ACCEPTED' } } };
+      if (path === '/visit-groups/visit-p1/checkout') return { data: { data: {
+        visitGroupId: 'visit-p1', total: 0, waiting: 0, ready: true, paid: false,
+        devices: ids.map((id, i) => ({ sequence: i + 1, bookingId: `booking-${id}`, serviceOrderId: id, serviceName: `Máy fixture ${i + 1}`, state: options.status === 'COMPLETED' ? 'succeeded' : 'open', amount: 0, paid: false })),
+      } } };
+      const partsId = ids.find(id => path === `/service-orders/${id}/part-requests`);
+      if (partsId) {
+        if (partsId === options.denied) throw { response: { status: 403 } };
+        return { data: { data: partsId === options.missing ? [] : [request(partsId === options.foreignRequest ? ids[0] : partsId, options.requestStatuses?.[ids.indexOf(partsId)] ?? 'ready')] } };
+      }
+      const returnsId = ids.find(id => path === `/service-orders/${id}/part-returns`);
+      if (returnsId) {
+        if (returnsId === options.invalidReturns) throw { response: { status: 503 } };
+        if (returnsId === options.invalidEnvelope) return { data: {} };
+        return { data: { data: await options.returns?.[returnsId] ?? [] } };
+      }
+      return { data: { data: path.endsWith('/invoice') || path.endsWith('/cash-settlement') ? null : [] } };
+    });
+    mockPost.mockResolvedValue({ data: { data: {} } });
+    const w = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises(); return w;
+  }
+  it('reads all three requests again and skips redundant pre-order modal without claiming stock was picked up', async () => {
+    const w = await render();
+    mockGet.mockClear();
+    await w.get('[data-testid="job-now"]').findAll('button').find(b => b.text().includes('Bắt đầu di chuyển'))!.trigger('click'); await flushPromises();
+    expect(w.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    for (const id of ids) expect(mockGet).toHaveBeenCalledWith(`/service-orders/${id}/part-requests`);
+    expect(mockPost.mock.calls).toEqual([['/service-orders/job-test-101/en-route']]);
+    expect(w.text()).not.toContain('Đã nhận qua QR'); w.unmount();
+  });
+  it.each(['missing', 'denied', 'foreignRequest'] as const)('does not skip if machine 2 is %s and identifies that child', async problem => {
+    const w = await render({ [problem]: ids[1] });
+    await w.get('[data-testid="job-now"]').findAll('button').find(b => b.text().includes('Bắt đầu di chuyển'))!.trigger('click'); await flushPromises();
+    const dialog = w.get('[data-testid="departure-pre-repair-dialog"]');
+    expect(dialog.get('[data-testid="departure-missing-devices"]').text()).toContain('Máy 2');
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('skips a duplicate creation prompt for requested/ready/delivering requests without receiving stock', async () => {
+    const w = await render({ requestStatuses: ['requested', 'ready', 'delivering'] });
+    await w.get('[data-testid="job-now"]').findAll('button').find(b => b.text().includes('Bắt đầu di chuyển'))!.trigger('click'); await flushPromises();
+    expect(w.find('[data-testid="departure-pre-repair-dialog"]').exists()).toBe(false);
+    expect(w.text()).toContain('Chờ kho chuẩn bị'); expect(w.text()).toContain('Sẵn sàng nhận'); expect(w.text()).toContain('Đang giao');
+    expect(w.text()).not.toContain('Đã nhận qua QR');
+    expect(mockPost.mock.calls).toEqual([['/service-orders/job-test-101/en-route']]); w.unmount();
+  });
+  it.each(['cancelled', 'unexpected'])('does not count %s requests as valid preparation', async status => {
+    const w = await render({ requestStatuses: ['ready', status, 'ready'] });
+    await w.get('[data-testid="job-now"]').findAll('button').find(b => b.text().includes('Bắt đầu di chuyển'))!.trigger('click'); await flushPromises();
+    expect(w.get('[data-testid="departure-missing-devices"]').text()).toContain('Máy 2');
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('keeps two completed-machine return obligations at the top while switching active machine', async () => {
+    const w = await render({ status: 'COMPLETED', returns: { [ids[0]]: [ledger(ids[0], 4, 1, 2, 0)], [ids[1]]: [ledger(ids[1], 2, 0, 2, 1)] } });
+    let banner = w.get('[data-testid="visit-returns-warning"]');
+    expect(banner.text()).toContain('1 linh kiện cần khai trả');
+    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(banner.get('[data-testid="visit-return-device-1"]').text()).toContain('2 đã khai');
+    expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('1 đã khai');
+    expect(banner.attributes('role')).toBe('status');
+    const heading = w.get('h1').element;
+    expect(heading.compareDocumentPosition(banner.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner.element.compareDocumentPosition(w.get('[data-testid="job-visit"]').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await banner.get('[data-testid="visit-return-open-2"]').trigger('click'); await flushPromises();
+    expect(mockPush).toHaveBeenCalledWith({ path: '/tech/jobs/job-test-202', query: { focus: 'parts' } });
+    banner = w.get('[data-testid="visit-returns-warning"]');
+    expect(banner.text()).toContain('1 linh kiện cần khai trả');
+    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(w.find('#job-parts').exists()).toBe(true);
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('clears only quantities physically accepted by manager after an authoritative refresh', async () => {
+    const returns = { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)], [ids[1]]: [ledger(ids[1], 1, 0, 1, 0)] };
+    const w = await render({ status: 'COMPLETED', returns });
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('3 linh kiện chờ');
+    returns[ids[0]] = [ledger(ids[0], 2, 0, 2, 2)];
+    window.dispatchEvent(new Event('focus')); await flushPromises();
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('1 linh kiện chờ');
+    expect(w.find('[data-testid="visit-return-device-1"]').exists()).toBe(false);
+    returns[ids[1]] = [ledger(ids[1], 1, 0, 1, 1)];
+    window.dispatchEvent(new Event('focus')); await flushPromises();
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('shows unknown child reads without inventing zero or hiding known pending returns', async () => {
+    const w = await render({ status: 'COMPLETED', invalidReturns: ids[1], returns: { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)] } });
+    const banner = w.get('[data-testid="visit-returns-warning"]');
+    expect(banner.text()).toContain('2 linh kiện chờ');
+    expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
+    expect(banner.find('[data-testid="visit-returns-retry"]').exists()).toBe(true);
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('rejects a ledger belonging to another child rather than adding its quantities', async () => {
+    const w = await render({ status: 'COMPLETED', returns: { [ids[1]]: [ledger(ids[0], 99, 0, 99, 0)] } });
+    const banner = w.get('[data-testid="visit-returns-warning"]');
+    expect(banner.text()).not.toContain('99');
+    expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
+    w.unmount();
+  });
+  it('treats a missing ledger envelope as unknown instead of an empty returned-stock list', async () => {
+    const w = await render({ status: 'COMPLETED', invalidEnvelope: ids[1] });
+    expect(w.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).not.toContain('0 linh kiện');
+    w.unmount();
+  });
+  it('ignores an older pending ledger response after a newer manager-confirmed read', async () => {
+    let finish!: (rows: unknown[]) => void;
+    const returns: Record<string, unknown[] | Promise<unknown[]>> = { [ids[0]]: new Promise(resolve => { finish = resolve; }) };
+    const w = await render({ status: 'COMPLETED', returns });
+    expect(w.get('[data-testid="visit-returns-warning"]').attributes('aria-busy')).toBe('true');
+    returns[ids[0]] = [ledger(ids[0], 2, 0, 2, 2)];
+    window.dispatchEvent(new Event('focus')); await flushPromises();
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    finish([ledger(ids[0], 2, 0, 2, 0)]); await flushPromises();
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    w.unmount();
+  });
+});
+
 describe('Technician Order Receiving & Execution Workspace', () => {
   beforeEach(() => {
     mockGet.mockReset();
@@ -199,7 +334,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     ['VisitGroup child repair', 'visit-101'],
   ] as const)('offers repair failure from the Thêm menu for a %s', async (_label, visitGroupId) => {
     mockGet.mockImplementation(async (path: string) => {
-      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', visitGroupId } } };
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', visitGroupId, quotation: { id: 'approved-quote', status: 'approved', items: [], laborTotal: 150000, partsTotal: 0 } } } };
       if (path === '/visit-groups/visit-101/checkout') return { data: { data: { visitGroupId: 'visit-101', total: 0, waiting: 1, ready: false, paid: false, devices: [] } } };
       if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
       return { data: { data: [] } };

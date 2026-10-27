@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { supportCasesApi } from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
-import { computed, ref, reactive, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
+import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import {
@@ -56,6 +56,8 @@ import {
   type EvidenceType,
 } from '../../api/orders.api';
 import FailedRepairDialog from '../../components/technician/FailedRepairDialog.vue';
+import { failedRepairKey } from '../../api/failed-repair.api';
+import { createTechnicianFailedRepairPort } from '../../api/technician-failed-repair.api';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
 import { visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
@@ -81,12 +83,13 @@ import { technicianApprovedParts, technicianPreRepairLabel } from '../../utils/t
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
 import { partsCompletionBlockers } from '../../utils/parts-completion';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
-import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
+import { partRequestsApi, type PartRequest, type PartCustodyReturnRecord } from '../../api/part-requests.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
-import { getHttpStatus } from '../../api/client';
+import apiClient, { getHttpStatus } from '../../api/client';
 import { projectTechnicianVisitDeviceStatus, type TechnicianVisitDeviceStatus } from '../../utils/technician-visit-device-status';
+import { summarizeTechnicianVisitInvoices } from '../../utils/technician-visit-invoice';
 
 const route = useRoute();
 const router = useRouter();
@@ -98,6 +101,7 @@ const queryClient = useQueryClient();
 
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+provide(failedRepairKey, createTechnicianFailedRepairPort());
 // Re-evaluated every 30 s so the depart button lights up on time without a reload.
 const nowTick = ref(Date.now());
 const nowTimer = setInterval(() => { nowTick.value = Date.now(); }, 30_000);
@@ -119,8 +123,17 @@ const prefetchedVisitOrderIds = new Set<string>();
 const siblingOrderPrefetches = new Map<string, Promise<void>>();
 const visitChildBundles = ref<Record<string, TechnicianJobBundle>>({});
 let visitPartRequestReadVersion = 0;
+type VisitReturnSummary = { needDeclare: number; awaitingManager: number };
+const visitReturns = ref<Record<string, { state: 'loading' | 'ready' | 'error'; summary: VisitReturnSummary | null }>>({});
+const visitReturnsGroupId = ref<string | null>(null);
+const visitReturnsLoading = ref(false);
+let visitReturnsReadVersion = 0;
 
 function clearPrefetchedVisitOrders() {
+  visitReturnsReadVersion += 1;
+  visitReturns.value = {};
+  visitReturnsGroupId.value = null;
+  visitReturnsLoading.value = false;
   visitPrefetchEpoch += 1;
   visitPartRequestReadVersion += 1;
   for (const orderId of prefetchedVisitOrderIds) {
@@ -187,13 +200,15 @@ function prefetchVisitSiblingOrders(checkout: VisitCheckout, activeOrderId: stri
 }
 // "Không sửa được" (PO 21/10/2026): one quick step for the technician.
 const repairFailedOpen = ref(false);
-const heldParts = computed(() => receivedRequests.value.filter((request) => String(request.status).toLowerCase() === 'received'));
+const heldParts = computed(() => (completionPartRequests.value ?? []).filter((request) => request.serviceOrderId === jobIdRef.value && String(request.status).toLowerCase() === 'received'));
 const failedRepairParts = computed(() => heldParts.value.map(request => ({
   id: request.id,
   label: request.items.map(item => (item.partNameSnapshot ?? 'Linh kiện') + ' ×' + item.quantity).join(', ') || 'Linh kiện',
 })));
-const canReportRepairFailed = computed(() => isRepairing.value && !completionRequested.value);
+const canReportRepairFailed = computed(() => isRepairing.value && !completionRequested.value && !jobInvoice.value
+  && (skipsQuote.value || String(job.value?.quotation?.status).toLowerCase() === 'approved'));
 function openRepairFailed() {
+  if (!canReportRepairFailed.value) return;
   moreOpen.value = false;
   repairFailedOpen.value = true;
 }
@@ -230,6 +245,7 @@ async function loadVisitCheckout() {
   if (visitCheckout.value) {
     if (visitCheckout.value.ready) declaredCashAmount.value = visitCheckout.value.total;
     prefetchVisitSiblingOrders(visitCheckout.value, orderId, groupId);
+    void refreshVisitReturns();
   }
 }
 const fixedPriceTotal = computed(() => {
@@ -418,7 +434,8 @@ const openCamera = (purpose: CameraPurpose) => {
   cameraPurpose.value = purpose;
 };
 const departureChoiceOpen = ref(false);
-const departureDevices = ref<Array<{ orderId: string; sequence: number; name: string; partsLabel: string; canPrepare: boolean }>>([]);
+const departureDevices = ref<Array<{ orderId: string; sequence: number; name: string; partsLabel: string; canPrepare: boolean; prepared?: boolean }>>([]);
+const departureMissingDevices = computed(() => departureDevices.value.filter(device => !device.prepared));
 
 const partsSection = ref<{ openPreRepairForm?: () => void } | null>(null);
 // One departure covers the visit. Never infer siblings' stock from the selected child.
@@ -446,12 +463,16 @@ const openDepartureChoice = async () => {
       if (id !== jobIdRef.value || groupId !== visitGroupId.value) return;
       departureDevices.value = devices.map(device => {
         const bundle = device.serviceOrderId ? authorizedVisitChildBundle(device.serviceOrderId, groupId) : null;
-        const requests = bundle && !bundle.partRequestsReadFailed ? bundle.partRequests ?? null : null;
+        const read = bundle && !bundle.partRequestsReadFailed ? bundle.partRequests ?? null : null;
+        const requests = read?.filter(row => row.serviceOrderId === device.serviceOrderId) ?? null;
+        const prepared = !!requests?.some(row => !!row.id && row.requestType === 'pre_repair'
+          && ['requested', 'ready', 'delivering', 'received', 'completed'].includes(row.status));
         return { orderId: device.serviceOrderId ?? '', sequence: device.sequence,
           name: device.serviceName || device.deviceLabel || 'Thiết bị', partsLabel: technicianPreRepairLabel(requests),
-          canPrepare: bundle?.job?.status === 'ACCEPTED' && !!requests && !requests.some(row => row.requestType === 'pre_repair' && row.status !== 'cancelled') };
+          prepared, canPrepare: bundle?.job?.status === 'ACCEPTED' && !!requests && !prepared };
       });
-      departureChoiceOpen.value = true;
+      if (devices.length > 0 && departureDevices.value.every(device => device.prepared)) await handleEnRoute();
+      else departureChoiceOpen.value = true;
     } else {
       const requests = await partRequestsApi.getByOrderId(id);
       if (id !== jobIdRef.value) return;
@@ -1188,6 +1209,15 @@ const visitDeviceOverview = computed(() => {
   return overview;
 });
 
+const technicianVisitInvoiceSummary = computed(() => summarizeTechnicianVisitInvoices(
+  visitCheckout.value?.visitGroupId === visitGroupId.value ? visitCheckout.value : null,
+  (orderId) => {
+    if (orderId === jobIdRef.value && job.value?.id === orderId) return jobInvoice.value;
+    const groupId = visitGroupId.value;
+    return groupId ? authorizedVisitChildBundle(orderId, groupId)?.invoice ?? null : null;
+  },
+));
+
 const pendingReadyVisitPartRequest = computed(() => {
   const groupId = visitGroupId.value;
   const checkout = visitCheckout.value;
@@ -1259,6 +1289,67 @@ async function openVisitParts(orderId: string) {
     return;
   }
   await router.push({ path: `/tech/jobs/${orderId}`, query: { ...(route.query ?? {}), focus: 'parts' } });
+}
+
+// Read each bounded child ledger directly: the owner may still owe physical
+// returns after repair is COMPLETED or the assignment has become historical.
+// `/part-returns/mine` is capped at 100 and cannot prove a whole visit is clear.
+async function refreshVisitReturns() {
+  const groupId = visitGroupId.value;
+  const checkout = visitCheckout.value;
+  if (!groupId || checkout?.visitGroupId !== groupId || document.visibilityState === 'hidden') return;
+  const ids = checkout.devices.slice(0, 3).flatMap(device => device.serviceOrderId ? [device.serviceOrderId] : []);
+  if (!ids.length || new Set(ids).size !== ids.length || checkout.devices.length > 3) return;
+  const version = ++visitReturnsReadVersion;
+  const epoch = visitPrefetchEpoch;
+  if (visitReturnsGroupId.value !== groupId) visitReturns.value = {};
+  visitReturnsGroupId.value = groupId;
+  visitReturnsLoading.value = true;
+  visitReturns.value = Object.fromEntries(ids.map(id => [id, { state: 'loading', summary: visitReturns.value[id]?.summary ?? null }]));
+  const results = await Promise.allSettled(ids.map(async id => {
+    // Keep the envelope here: the legacy helper maps missing data to [],
+    // which cannot prove that a whole visit has no return obligations.
+    const response = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(`/service-orders/${encodeURIComponent(id)}/part-returns`);
+    const records = response.data?.data;
+    const seen = new Set<string>();
+    const summary = { needDeclare: 0, awaitingManager: 0 };
+    if (!Array.isArray(records)) throw new Error('Invalid return ledger');
+    for (const record of records) {
+      if (!record || record.orderId !== id || !record.partRequestId || !record.partRequestItemId || seen.has(record.partRequestItemId)
+        || ![record.issuedQty, record.usedQty, record.declaredQty, record.managerAcceptedQty, record.outstandingQty].every(value => Number.isSafeInteger(value) && value >= 0)
+        || record.usedQty + record.managerAcceptedQty > record.issuedQty
+        || record.managerAcceptedQty > record.declaredQty || record.declaredQty > record.issuedQty - record.usedQty
+        || record.outstandingQty !== record.issuedQty - record.usedQty - record.managerAcceptedQty) throw new Error('Invalid return ledger');
+      seen.add(record.partRequestItemId);
+      const waiting = Math.min(record.outstandingQty, Math.max(0, record.declaredQty - record.managerAcceptedQty));
+      summary.needDeclare += record.outstandingQty - waiting;
+      summary.awaitingManager += waiting;
+    }
+    return summary;
+  }));
+  if (version !== visitReturnsReadVersion || epoch !== visitPrefetchEpoch || groupId !== visitGroupId.value || visitCheckout.value?.visitGroupId !== groupId) return;
+  visitReturns.value = Object.fromEntries(results.map((result, index) => [ids[index]!, result.status === 'fulfilled'
+    ? { state: 'ready', summary: result.value }
+    : { state: 'error', summary: visitReturns.value[ids[index]!]?.summary ?? null }]));
+  visitReturnsLoading.value = false;
+}
+const visitReturnDevices = computed(() => {
+  if (!visitGroupId.value || visitReturnsGroupId.value !== visitGroupId.value || visitCheckout.value?.visitGroupId !== visitGroupId.value) return [];
+  return [...visitCheckout.value.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3).map(device => ({
+    ...device, ledger: device.serviceOrderId ? visitReturns.value[device.serviceOrderId] : undefined,
+  }));
+});
+const visitReturnTotals = computed(() => visitReturnDevices.value.reduce((total, device) => ({
+  needDeclare: total.needDeclare + (device.ledger?.summary?.needDeclare ?? 0),
+  awaitingManager: total.awaitingManager + (device.ledger?.summary?.awaitingManager ?? 0),
+}), { needDeclare: 0, awaitingManager: 0 }));
+const visitReturnUnknown = computed(() => visitReturnDevices.value.some(device => device.ledger?.state !== 'ready'));
+const visitReturnWarning = computed(() => visitReturnDevices.value.length > 0
+  && (visitReturnUnknown.value || visitReturnTotals.value.needDeclare > 0 || visitReturnTotals.value.awaitingManager > 0));
+function onReturnSummary(value: VisitReturnSummary) {
+  returnsToDeclare.value = value.needDeclare;
+  returnsAwaitingManager.value = value.awaitingManager;
+  void refreshVisitReturns();
 }
 
 // The booking (with its private photos) is read once per visit; later reads of the
@@ -1470,10 +1561,11 @@ watch(jobIdRef, (id) => {
 const stopResync = onResync(() => {
   void liveRefresh(jobIdRef.value, undefined);
   void refreshVisitPartRequests();
+  void refreshVisitReturns();
 });
 const stopOfflineOrder = whileOffline(() => void liveRefresh(jobIdRef.value, undefined), 20_000);
 let stopVisitPartNotifications: (() => void) | null = null;
-const onVisitPartRequestFocus = () => { void refreshVisitPartRequests(); };
+const onVisitPartRequestFocus = () => { void refreshVisitPartRequests(); void refreshVisitReturns(); };
 onUnmounted(() => {
   stopLiveOrder();
   stopResync();
@@ -1483,6 +1575,7 @@ onUnmounted(() => {
   window.removeEventListener('focus', onVisitPartRequestFocus);
   document.removeEventListener('visibilitychange', onVisitPartRequestFocus);
   visitPartRequestReadVersion += 1;
+  visitReturnsReadVersion += 1;
 });
 
 onMounted(() => {
@@ -1491,7 +1584,10 @@ onMounted(() => {
   window.addEventListener('focus', onVisitPartRequestFocus);
   document.addEventListener('visibilitychange', onVisitPartRequestFocus);
   stopVisitPartNotifications = chatSocketService.subscribe({
-    onNotificationNew: (event) => { void revalidatePartRequestReadyNotification(event); },
+    onNotificationNew: (event) => {
+      void revalidatePartRequestReadyNotification(event);
+      if (String(event.type).toUpperCase() === 'PART_RETURN_DECLARED') void refreshVisitReturns();
+    },
   });
   // A cached answer shows at once; a stale one is read again in the background.
   const cached = jobQuery.query.data.value;
@@ -2484,8 +2580,35 @@ const toggleMore = async () => {
           </div>
         </div>
       </div>
-
-
+      <section
+        v-if="visitReturnWarning"
+        role="status"
+        aria-live="polite"
+        aria-labelledby="visit-returns-title"
+        :aria-busy="visitReturnsLoading"
+        class="space-y-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800"
+        data-testid="visit-returns-warning"
+      >
+        <h2 id="visit-returns-title" class="flex items-start gap-2 text-base font-semibold"><AlertTriangle :size="20" class="mt-0.5 shrink-0" aria-hidden="true" />Linh kiện của cả lượt chưa hoàn tất trả kho</h2>
+        <p v-if="visitReturnTotals.needDeclare || visitReturnTotals.awaitingManager" class="font-semibold">
+          <span v-if="visitReturnTotals.needDeclare">{{ visitReturnTotals.needDeclare }} linh kiện cần khai trả</span><span v-if="visitReturnTotals.needDeclare && visitReturnTotals.awaitingManager"> · </span><span v-if="visitReturnTotals.awaitingManager">{{ visitReturnTotals.awaitingManager }} linh kiện chờ Quản lý Dịch vụ xác nhận</span>
+        </p>
+        <p>Có thể hoàn tất sửa khi còn linh kiện cần trả. Khai trả chưa phải kho đã nhận; Quản lý Dịch vụ xác nhận số lượng thực nhận.</p>
+        <p v-if="visitReturnUnknown">{{ visitReturnsLoading ? 'Đang kiểm tra lại cả lượt. Số đã ghi nhận được giữ lại trong lúc kiểm tra.' : 'Chưa kiểm tra được đầy đủ cả lượt. Số liệu đã đọc trước đó có thể đã thay đổi.' }}</p>
+        <ul class="divide-y divide-danger-200">
+          <template v-for="device in visitReturnDevices" :key="device.bookingId">
+            <li v-if="device.ledger?.state !== 'ready' || device.ledger?.summary?.needDeclare || device.ledger?.summary?.awaitingManager" class="flex flex-wrap items-center justify-between gap-x-3 py-2" :data-testid="`visit-return-device-${device.sequence}`">
+              <div class="min-w-0 flex-[1_1_14rem]">
+                <p class="break-words font-semibold">Máy {{ device.sequence }} · {{ device.serviceName || device.deviceLabel || 'Thiết bị' }}</p>
+                <p v-if="device.ledger?.summary"><span v-if="device.ledger.summary.needDeclare">{{ device.ledger.summary.needDeclare }} cần khai trả<span v-if="device.ledger.summary.awaitingManager"> · </span></span><span v-if="device.ledger.summary.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý nhận thực tế</span></p>
+                <p v-if="device.ledger?.state !== 'ready'">{{ device.ledger?.state === 'loading' ? 'Đang kiểm tra hoàn trả máy này…' : 'Chưa kiểm tra được hoàn trả máy này.' }}</p>
+              </div>
+              <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline underline-offset-4 hover:bg-danger-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" :data-testid="`visit-return-open-${device.sequence}`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
+            </li>
+          </template>
+        </ul>
+        <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại cả lượt</button>
+      </section>
 
       <section
         v-if="visitGroupId"
@@ -2736,6 +2859,34 @@ const toggleMore = async () => {
         >
           Gửi lại báo giá khác
         </button>
+
+        <!-- Display-only historical gross; actual payment remains server-authoritative. -->
+        <section
+          v-if="technicianVisitInvoiceSummary"
+          class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm sm:p-4"
+          aria-label="Tổng hóa đơn cả lượt sửa"
+          data-testid="technician-visit-invoice-summary"
+        >
+          <h3 class="font-semibold text-ink-900">Tổng hóa đơn cả lượt · {{ technicianVisitInvoiceSummary.rows.length }} máy</h3>
+          <ul class="mt-3 divide-y divide-ink-200">
+            <li v-for="row in technicianVisitInvoiceSummary.rows" :key="row.sequence" class="flex flex-wrap items-start justify-between gap-2 py-2" :data-testid="`technician-visit-invoice-row-${row.sequence}`">
+              <div><p class="font-medium text-ink-800">Máy {{ row.sequence }} · {{ row.name }}</p><p class="text-xs text-ink-600">{{ row.state === 'failed' ? 'Không sửa được' : row.state === 'quote_declined' ? 'Không duyệt báo giá' : row.state === 'cancelled' ? 'Đã hủy' : row.paid ? 'Đã thanh toán' : 'Chưa thanh toán' }}</p></div>
+              <FhMoney v-if="row.amount !== null" :amount="row.amount" class="shrink-0 whitespace-nowrap" data-testid="technician-visit-invoice-amount" />
+              <span v-else class="text-ink-600" data-testid="technician-visit-invoice-unknown">Chưa xác định</span>
+            </li>
+          </ul>
+          <div class="mt-2 flex items-center justify-between gap-3 border-t border-ink-200 pt-3 font-semibold">
+            <span>{{ technicianVisitInvoiceSummary.pending ? 'Tổng hóa đơn đã chốt' : 'Tổng hóa đơn gốc' }}</span>
+            <FhMoney v-if="technicianVisitInvoiceSummary.confirmedGross !== null" :amount="technicianVisitInvoiceSummary.confirmedGross" emphasis data-testid="technician-visit-invoice-gross" />
+            <span v-else class="font-normal text-ink-600">Chưa xác định</span>
+          </div>
+          <div class="mt-2 flex items-center justify-between gap-2 text-ink-600">
+            <span>Hóa đơn gốc chưa thanh toán</span>
+            <FhMoney v-if="technicianVisitInvoiceSummary.unpaidGross !== null" :amount="technicianVisitInvoiceSummary.unpaidGross" data-testid="technician-visit-invoice-unpaid" />
+            <span v-else>Chưa xác định</span>
+          </div>
+          <p v-if="technicianVisitInvoiceSummary.pending" class="mt-2 text-xs text-ink-600">Còn {{ technicianVisitInvoiceSummary.pending }} máy chưa có hóa đơn cuối cùng. Đây chưa phải tổng đầy đủ.</p>
+        </section>
 
         <!-- Payment: how the customer pays, then the cash amount -->
         <div v-if="showPaymentChoice" class="mt-4 space-y-3" data-testid="payment-choice">
@@ -3140,7 +3291,7 @@ const toggleMore = async () => {
                 :usage-frozen="completionRequested || !!jobInvoice"
                 :approved-part-quantities="approvedPartQuantities"
                 @parts-updated="loadJob(jobId, { silent: true })"
-                @return-summary="returnsToDeclare = $event.needDeclare; returnsAwaitingManager = $event.awaitingManager"
+                @return-summary="onReturnSummary"
                 @summary="onPartsSummary"
                 @requests="onPartRequests"
                 @requests-loading="quoteStockLoading = true"
@@ -3464,6 +3615,7 @@ const toggleMore = async () => {
         </div>
         <div v-if="departureDevices.length" class="divide-y divide-ink-100" data-testid="departure-devices">
           <p class="pb-3 text-sm text-ink-600">Không bắt buộc đặt linh kiện trước. Có thể chuẩn bị từng máy hoặc xuất phát cho cả lượt.</p>
+          <p v-if="departureMissingDevices.length" role="status" class="pb-3 text-sm font-medium text-warning-800" data-testid="departure-missing-devices">Cần kiểm tra yêu cầu linh kiện: {{ departureMissingDevices.map(device => `Máy ${device.sequence}`).join(', ') }}. Đã tạo yêu cầu chưa có nghĩa là đã nhận linh kiện qua QR.</p>
           <div v-for="device in departureDevices" :key="device.sequence" class="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
             <div class="min-w-0"><p class="font-semibold text-ink-900">Máy {{ device.sequence }} · {{ device.name }}</p><p class="mt-1 text-ink-600">{{ device.partsLabel }}</p></div>
             <FhButton v-if="device.canPrepare" variant="secondary" class="min-h-11" :data-testid="`prepare-device-${device.sequence}`" @click="prepareVisitDevice(device.orderId)">Chuẩn bị máy {{ device.sequence }}</FhButton>
@@ -3497,7 +3649,7 @@ const toggleMore = async () => {
       :key="jobIdRef"
       :order-id="jobIdRef"
       :parts="failedRepairParts"
-      :parts-ready="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
+      :parts-ready="canReportRepairFailed && completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
       @close="repairFailedOpen = false"
       @reported="repairFailureReported"
     />

@@ -4,6 +4,7 @@ import { Camera, ImagePlus, Trash2, X } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import CameraCapture from './CameraCapture.vue';
 import { blockedFailedRepair, failedRepairKey, FAILED_REPAIR_UNAVAILABLE } from '../../api/failed-repair.api';
+import { FailedRepairReportError } from '../../api/technician-failed-repair.api';
 import { REPAIR_FAILURE_REASONS, type RepairFailureReason } from '../../api/visit-groups.api';
 import { ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -18,6 +19,7 @@ const photos = ref<Array<{ id: number; file: File; url: string; evidenceId: stri
 const busy = ref(false);
 const uploading = ref(false);
 const uncertain = ref(false);
+const canReconcile = ref(false);
 const error = ref('');
 const camera = ref(false);
 const cameraButton = ref<InstanceType<typeof FhButton> | null>(null);
@@ -69,7 +71,7 @@ async function upload(photo: typeof photos.value[number]) {
 }
 async function addFiles(files: File[]) {
   camera.value = false;
-  if (!api.evidenceAvailable || uploading.value || busy.value) return;
+  if (!api.evidenceAvailable || uploading.value || busy.value || uncertain.value) return;
   error.value = '';
   if (photos.value.length + files.length > 3) { error.value = 'Tối đa 3 ảnh. Hãy chọn lại hoặc xóa bớt ảnh.'; return; }
   if (files.some(file => !ALLOWED_MEDIA_MIME_TYPES.includes(file.type) || file.size > MAX_MEDIA_SIZE_BYTES)) {
@@ -114,10 +116,24 @@ async function confirm() {
       parts: props.parts.map(part => ({ partRequestId: part.id, outcome: dispositions.value[part.id] as 'installed' | 'returned' })),
     });
     if (!disposed) emit('reported');
-  } catch {
+  } catch (err) {
     if (!disposed) {
-      uncertain.value = true;
-      error.value = 'Chưa xác nhận được kết quả. Đóng hộp thoại và tải lại công việc để kiểm tra trước khi gửi lại.';
+      uncertain.value = !(err instanceof FailedRepairReportError) || err.locked;
+      canReconcile.value = err instanceof FailedRepairReportError && err.uncertain && !!api.reconcileReport;
+      error.value = userFacingError(err, 'Chưa xác nhận được kết quả. Đóng hộp thoại và tải lại công việc để kiểm tra trước khi gửi lại.');
+    }
+  } finally { if (!disposed) busy.value = false; }
+}
+async function reconcile() {
+  if (busy.value || uploading.value || !canReconcile.value || !api.reconcileReport) return;
+  busy.value = true;
+  try {
+    await api.reconcileReport(props.orderId);
+    if (!disposed) emit('reported');
+  } catch (err) {
+    if (!disposed) {
+      canReconcile.value = !(err instanceof FailedRepairReportError) || err.uncertain;
+      error.value = userFacingError(err, 'Chưa xác nhận được kết quả. Kiểm tra kết nối rồi thử lại.');
     }
   } finally { if (!disposed) busy.value = false; }
 }
@@ -143,6 +159,7 @@ async function confirm() {
         <p v-if="!partsReady" role="alert" class="text-sm text-danger-700">Chưa kiểm tra được linh kiện của máy. Đóng và tải lại công việc trước khi báo.</p>
         <p class="rounded-xl bg-warning-50 p-3 text-sm text-warning-800">Khai trả chưa xác nhận kho đã nhận; Quản lý Dịch vụ xác nhận số lượng thực tế. Lịch sử các máy khác được giữ nguyên.</p>
         <p v-if="error" role="alert" class="text-sm text-danger-700">{{ error }}</p>
+        <FhButton v-if="canReconcile" variant="secondary" size="md" :disabled="busy || uploading" :loading="busy" data-testid="repair-failed-reconcile" @click="reconcile">Kiểm tra kết quả</FhButton>
         <footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><FhButton variant="secondary" size="md" :disabled="busy || uploading" @click="close">Quay lại</FhButton><FhButton variant="danger" size="md" :disabled="!ready" :loading="busy" data-testid="repair-failed-confirm" @click="confirm">Xác nhận không sửa được</FhButton></footer>
       </section>
     </div>

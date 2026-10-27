@@ -1,22 +1,19 @@
 <script setup lang="ts">
-// Presentation-only checkout picker until the funded voucher contract exists.
-// `serverQuote` and `serverReservation` are integration seams for the future
-// server-authoritative quote/hold DTOs; no amount is derived, no API is called
-// and the Apply action stays unavailable. The sheet emits intent only.
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import {
   BadgePercent,
   Check,
   CircleHelp,
   Clock3,
-  LockKeyhole,
   Search,
   TicketPercent,
   WifiOff,
   X,
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
+import FhMoney from '../FhMoney.vue';
 import VoucherStatePanel from './VoucherStatePanel.vue';
+import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import {
   filterCustomerVoucherOffers,
   formatVoucherCountdown,
@@ -27,7 +24,7 @@ import {
   type VoucherOffer,
 } from './voucher-model';
 
-type SheetState = 'loading' | 'ready' | 'empty' | 'error' | 'offline' | 'denied' | 'unavailable';
+type SheetState = 'loading' | 'ready' | 'empty' | 'error' | 'offline' | 'denied';
 type EligibilityTone = 'eligible' | 'ineligible' | 'unknown';
 
 interface VoucherSelectionQuote {
@@ -54,6 +51,15 @@ const props = withDefaults(defineProps<{
   customerId?: string | null;
   serverQuote?: VoucherSelectionQuote | null;
   serverReservation?: VoucherSelectionReservation | null;
+  serverPreview?: VoucherCheckoutPreview | null;
+  previewLoading?: boolean;
+  previewMessage?: string;
+  previewMessageIsError?: boolean;
+  previewRetryable?: boolean;
+  canApply?: boolean;
+  applying?: boolean;
+  selectionDisabled?: boolean;
+  applyError?: string;
   showCodeEntry?: boolean;
   codeEntryEnabled?: boolean;
 }>(), {
@@ -64,6 +70,15 @@ const props = withDefaults(defineProps<{
   customerId: null,
   serverQuote: null,
   serverReservation: null,
+  serverPreview: null,
+  previewLoading: false,
+  previewMessage: '',
+  previewMessageIsError: false,
+  previewRetryable: false,
+  canApply: false,
+  applying: false,
+  selectionDisabled: false,
+  applyError: '',
   showCodeEntry: true,
   codeEntryEnabled: false,
 });
@@ -72,6 +87,8 @@ const emit = defineEmits<{
   close: [];
   retry: [];
   select: [voucherId: string];
+  apply: [];
+  retryPreview: [];
   verifyCode: [code: string];
 }>();
 
@@ -251,6 +268,7 @@ function onPanelKeydown(event: KeyboardEvent) {
 }
 
 function choose(offer: VoucherOffer) {
+  if (props.selectionDisabled) return;
   activeId.value = offer.id;
   emit('select', offer.id);
 }
@@ -337,7 +355,7 @@ onBeforeUnmount(() => {
           aria-modal="true"
           :aria-labelledby="titleId"
           :aria-describedby="descriptionId"
-          :aria-busy="state === 'loading'"
+          :aria-busy="state === 'loading' || previewLoading || applying"
           class="voucher-sheet-panel flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[var(--radius-lg)] border border-ink-200 bg-white shadow-[var(--shadow-e3)] sm:rounded-[var(--radius-lg)]"
           data-testid="voucher-selection-sheet"
           @keydown="onPanelKeydown"
@@ -429,13 +447,6 @@ onBeforeUnmount(() => {
               title="Cần đăng nhập để xem voucher"
               message="Đăng nhập bằng tài khoản khách hàng để mở ví ưu đãi của bạn."
             />
-            <VoucherStatePanel
-              v-else-if="state === 'unavailable'"
-              state="unavailable"
-              title="Ưu đãi chưa khả dụng"
-              message="Dịch vụ voucher chưa được kết nối. Không có ưu đãi nào được giữ chỗ hoặc áp dụng."
-            />
-
             <template v-else>
               <div
                 ref="tablistRef"
@@ -487,7 +498,8 @@ onBeforeUnmount(() => {
                       data-testid="voucher-selection-option"
                       :data-voucher-id="offer.id"
                       :aria-pressed="activeId === offer.id"
-                      class="flex min-h-11 w-full items-start gap-3 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5 text-left transition-colors hover:border-ink-300 hover:bg-ink-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 aria-pressed:border-brand-600 aria-pressed:bg-brand-50 motion-reduce:transition-none"
+                      :disabled="selectionDisabled"
+                      class="flex min-h-11 w-full items-start gap-3 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5 text-left transition-colors hover:border-ink-300 hover:bg-ink-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 aria-pressed:border-brand-600 aria-pressed:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
                       @click="choose(offer)"
                     >
                       <span class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-brand-50 text-brand-700" aria-hidden="true">
@@ -569,9 +581,56 @@ onBeforeUnmount(() => {
                 </div>
               </details>
 
-              <p class="flex items-start gap-2 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3 text-xs leading-5 text-ink-700" data-testid="voucher-selection-unavailable" role="note">
-                <LockKeyhole :size="15" class="mt-0.5 shrink-0" aria-hidden="true" />
-                <span><strong class="font-semibold text-ink-900">Chưa kết nối dịch vụ áp dụng.</strong> Không có khoản giảm giá nào được ghi vào hóa đơn từ màn hình này.</span>
+              <div
+                v-if="previewLoading"
+                class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3 text-sm leading-5 text-ink-700"
+                role="status"
+                data-testid="voucher-selection-preview-state"
+              >Đang tải bản xem trước từ máy chủ…</div>
+              <div
+                v-else-if="previewMessage"
+                class="flex flex-col gap-2 rounded-[var(--radius-sm)] border p-3 text-sm leading-5 sm:flex-row sm:items-center sm:justify-between"
+                :class="previewMessageIsError ? 'border-warning-200 bg-warning-50 text-warning-900' : 'border-ink-200 bg-ink-50 text-ink-700'"
+                :role="previewMessageIsError ? 'alert' : 'status'"
+                data-testid="voucher-selection-preview-state"
+              >
+                <span>{{ previewMessage }}</span>
+                <button
+                  v-if="previewRetryable"
+                  type="button"
+                  class="min-h-11 shrink-0 rounded-[var(--radius-sm)] px-3 font-medium underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                  data-testid="voucher-selection-preview-retry"
+                  @click="emit('retryPreview')"
+                >Thử lại</button>
+              </div>
+
+              <section
+                v-if="serverPreview"
+                class="rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-3.5"
+                data-testid="voucher-selection-preview"
+                :data-claim-id="serverPreview.claimId"
+                :data-scope-id="serverPreview.scopeId"
+              >
+                <h3 class="text-sm font-semibold text-ink-900">{{ activeReservation ? 'Voucher đã được giữ chỗ' : 'Bản xem trước do máy chủ cung cấp' }}</h3>
+                <dl class="mt-2 space-y-1.5 text-xs leading-5 text-ink-700">
+                  <div class="flex justify-between gap-3"><dt>Tổng hóa đơn gốc</dt><dd class="shrink-0 font-num"><FhMoney :amount="serverPreview.originalGrossVnd" /></dd></div>
+                  <div class="flex justify-between gap-3"><dt>Cơ sở đủ điều kiện</dt><dd class="shrink-0 font-num"><FhMoney :amount="serverPreview.eligibleBaseVnd" /></dd></div>
+                  <div class="flex justify-between gap-3"><dt>Trợ giá FixHome dự kiến</dt><dd class="shrink-0 font-num"><FhMoney :amount="serverPreview.fixHomeDiscountSubsidyVnd" /></dd></div>
+                  <div class="flex justify-between gap-3 font-semibold text-ink-900"><dt>Khách hàng dự kiến thanh toán</dt><dd class="shrink-0 font-num"><FhMoney :amount="serverPreview.customerDueVnd" /></dd></div>
+                </dl>
+                <p v-if="activeReservation" class="mt-2 text-xs leading-5 text-warning-800">
+                  Máy chủ đã giữ chỗ voucher. Việc giữ chỗ chưa xác nhận thanh toán; thời hạn do máy chủ quyết định.
+                </p>
+                <p v-else-if="serverPreview.paymentAvailable" class="mt-2 text-xs leading-5 text-ink-600">
+                  Đây chỉ là bản xem trước. Chọn “Áp dụng voucher” để yêu cầu máy chủ giữ chỗ; hóa đơn chưa thay đổi.
+                </p>
+                <p v-else class="mt-2 text-xs leading-5 text-warning-800">
+                  Máy chủ chưa cho phép giữ chỗ. Hóa đơn và tổng tiền hiện tại vẫn được giữ nguyên.
+                </p>
+              </section>
+
+              <p v-if="applyError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 p-3 text-sm leading-5 text-danger-800" role="alert" data-testid="voucher-selection-apply-error">
+                {{ applyError }}
               </p>
 
               <div v-if="activeOffer" class="rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-3.5" data-testid="voucher-selection-selected">
@@ -583,12 +642,19 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <footer class="flex shrink-0 flex-col-reverse gap-2 border-t border-ink-100 bg-ink-25 p-4 sm:flex-row sm:items-center sm:justify-end">
+          <footer class="flex shrink-0 flex-col gap-2 border-t border-ink-100 bg-ink-25 p-4 sm:flex-row sm:items-center sm:justify-end">
             <FhButton data-testid="voucher-selection-cancel" variant="secondary" size="md" @click="requestClose">
               Huỷ
             </FhButton>
-            <FhButton data-testid="voucher-selection-apply" variant="primary" size="md" disabled>
-              Áp dụng ưu đãi chưa khả dụng
+            <FhButton
+              data-testid="voucher-selection-apply"
+              variant="primary"
+              size="md"
+              :disabled="!canApply || applying || !!activeReservation"
+              :loading="applying"
+              @click="emit('apply')"
+            >
+              {{ applying ? 'Đang giữ chỗ…' : activeReservation ? 'Voucher đã được giữ chỗ' : serverPreview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}
             </FhButton>
           </footer>
         </div>

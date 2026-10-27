@@ -1,7 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { reactive } from 'vue';
+import { nextTick } from 'vue';
+import { routeLocationKey, routerKey } from 'vue-router';
 import VoucherCheckoutChooser from '../src/components/vouchers/VoucherCheckoutChooser.vue';
+import VoucherSelectionSheet from '../src/components/vouchers/VoucherSelectionSheet.vue';
 import apiClient from '../src/api/client';
 import { vouchersApi } from '../src/api/vouchers.api';
 import { useAuthStore } from '../src/stores/auth.store';
@@ -13,6 +17,7 @@ const walletClaim = {
   policySnapshot: { discount: 'FIXED', value: 50000, capVnd: null, minimumVnd: 100000, categoryIds: [], serviceIds: [], components: ['LABOR', 'PARTS'] },
   campaign: { code: 'FIX50', name: 'Ưu đãi cá nhân', kind: 'PERSONAL', active: true, startsAt: '2026-01-01T00:00:00Z', endsAt: '2026-12-31T23:59:59Z' },
 };
+const routeReplace = vi.fn();
 
 function signIn() {
   const auth = useAuthStore();
@@ -20,15 +25,26 @@ function signIn() {
   return auth;
 }
 
-function mountChooser(pinia: ReturnType<typeof createPinia>, scopeId: string | null = 'order-1') {
+function mountChooser(pinia: ReturnType<typeof createPinia>, scopeId: string | null = 'order-1', query: Record<string, unknown> = {}) {
+  routeReplace.mockClear();
   return mount(VoucherCheckoutChooser, {
     props: { scopeId },
-    global: { plugins: [pinia], stubs: { RouterLink: true, Teleport: true } },
+    global: {
+      plugins: [pinia],
+      provide: {
+        [routeLocationKey]: reactive({ path: '/app/orders/order-1', fullPath: '/app/orders/order-1', hash: '', query }),
+        [routerKey]: { replace: routeReplace },
+      },
+      stubs: {
+        RouterLink: { props: ['to'], template: '<a data-testid="voucher-wallet-link" :data-return-to="to.query?.returnTo"><slot /></a>' },
+        Teleport: true,
+      },
+    },
   });
 }
 
 const preview = (claimId: string, scopeId: string, originalGrossVnd = 250000, subsidy = 50000, paymentAvailable = false) => ({
-  scopeId, claimId, previewOnly: true, paymentAvailable, reason: paymentAvailable ? 'READY' : 'VOUCHER_FUNDING_NOT_READY',
+  scopeId, claimId, previewOnly: true, paymentAvailable, reason: paymentAvailable ? null : 'VOUCHER_FUNDING_NOT_READY',
   originalGrossVnd, eligibleBaseVnd: 200000, fixHomeDiscountSubsidyVnd: subsidy,
   customerDueVnd: 200000, reasonCodes: ['DISCOUNT_APPLIED'],
 });
@@ -49,6 +65,30 @@ describe('checkout voucher boundary', () => {
     const dto = { ...preview('claim-1', 'order-1', 250000, 50000, true) };
     vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: dto } });
     await expect(vouchersApi.checkoutPreview('claim-1', 'order-1')).resolves.toEqual(dto);
+  });
+  it('accepts the Backend ready preview where reason is null and keeps money fields strict', async () => {
+    const dto = {
+      scopeId: 'order-1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true,
+      reason: null, originalGrossVnd: 250000, eligibleBaseVnd: 200000,
+      fixHomeDiscountSubsidyVnd: 50000, customerDueVnd: 200000, reasonCodes: ['DISCOUNT_APPLIED'],
+    };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: dto } });
+    await expect(vouchersApi.checkoutPreview('claim-1', 'order-1')).resolves.toEqual(dto);
+
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { success: true, data: { ...dto, customerDueVnd: '200000' } },
+    });
+    await expect(vouchersApi.checkoutPreview('claim-1', 'order-1')).rejects.toThrow();
+
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { success: true, data: { ...dto, paymentAvailable: 'true' } },
+    });
+    await expect(vouchersApi.checkoutPreview('claim-1', 'order-1')).rejects.toThrow();
+
+    const withoutReason = { ...dto };
+    delete withoutReason.reason;
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: withoutReason } });
+    await expect(vouchersApi.checkoutPreview('claim-1', 'order-1')).resolves.toEqual(withoutReason);
   });
   it('reads owned vouchers on demand but never applies a discount while finance is unavailable', async () => {
     const pinia = createPinia(); setActivePinia(pinia);
@@ -140,6 +180,101 @@ describe('checkout voucher boundary', () => {
     wrapper.unmount();
   });
 
+  it('returns a wallet-selected claim to the checkout chooser and requests its scoped preview', async () => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [walletClaim] : preview('claim-1', 'order-1', 250000, 50000, true) },
+    }) as never);
+    const wrapper = mountChooser(pinia, 'order-1', { voucherClaimId: 'claim-1' });
+    expect(wrapper.get('[data-testid="voucher-wallet-link"]').attributes('data-return-to')).toBe('/app/orders/order-1');
+    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-voucher-id="claim-1"]').attributes('aria-pressed')).toBe('true');
+    expect(routeReplace).toHaveBeenCalledWith({ path: '/app/orders/order-1', query: {}, hash: '' });
+    expect(apiClient.get).toHaveBeenCalledWith('/vouchers/checkout-preview/claim-1/order-1');
+    expect(wrapper.get('[data-testid="checkout-voucher-preview"]').attributes('data-claim-id')).toBe('claim-1');
+    wrapper.unmount();
+  });
+
+  it('shows the server price in the selection sheet and reserves only after its Apply confirmation', async () => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    const claimId = '22222222-2222-4222-8222-222222222222';
+    const scope = '33333333-3333-4333-8333-333333333333';
+    const attemptId = '44444444-4444-4444-8444-444444444444';
+    const reservationId = '55555555-5555-4555-8555-555555555555';
+    const uuid = vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(attemptId);
+    const readyClaim = { ...walletClaim, id: claimId };
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [readyClaim] : preview(claimId, scope, 250000, 50000, true) },
+    }) as never);
+    let resolveReserve!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockReturnValue(new Promise((resolve) => { resolveReserve = resolve; }) as never);
+    const wrapper = mountChooser(pinia, scope);
+    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
+    await flushPromises();
+
+    const sheet = wrapper.findComponent(VoucherSelectionSheet);
+    expect(sheet.get('[data-testid="voucher-selection-preview"]').text()).toContain('200.000');
+    const apply = sheet.get('[data-testid="voucher-selection-apply"]');
+    expect(apply.attributes('disabled')).toBeUndefined();
+    await apply.trigger('click');
+    await apply.trigger('click');
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(sheet.get('[data-testid="voucher-selection-option"]').attributes('disabled')).toBeDefined();
+    resolveReserve({ data: { success: true, data: {
+      id: reservationId, claimId, scopeId: scope, attemptId, state: 'RESERVED',
+      reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z',
+    } } });
+    await flushPromises();
+    await nextTick();
+
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(apiClient.post).toHaveBeenCalledWith('/vouchers/apply', { claimId, scopeId: scope, attemptId });
+    expect(wrapper.emitted('applied')).toHaveLength(1);
+    expect(wrapper.findComponent(VoucherSelectionSheet).props('serverReservation')).toMatchObject({ voucherId: claimId });
+    expect(sheet.text()).toContain('Voucher đã được giữ chỗ');
+    uuid.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('releases a stale hold when the SOLO or VisitGroup checkout scope changes', async () => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    const claimId = '22222222-2222-4222-8222-222222222222';
+    const oldScope = '33333333-3333-4333-8333-333333333333';
+    const nextScope = '66666666-6666-4666-8666-666666666666';
+    const attemptId = '44444444-4444-4444-8444-444444444444';
+    const reservationId = '55555555-5555-4555-8555-555555555555';
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(attemptId);
+    const ownedClaim = { ...walletClaim, id: claimId };
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [ownedClaim] : preview(claimId, path.endsWith(nextScope) ? nextScope : oldScope, 250000, 50000, true) },
+    }) as never);
+    vi.mocked(apiClient.post)
+      .mockResolvedValueOnce({ data: { success: true, data: {
+        id: reservationId, claimId, scopeId: oldScope, attemptId, state: 'RESERVED',
+        reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z',
+      } } })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: reservationId, state: 'RELEASED' } } });
+    const wrapper = mountChooser(pinia, oldScope);
+    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="checkout-voucher-preview"]').attributes('data-scope-id')).toBe(oldScope);
+
+    await wrapper.setProps({ scopeId: nextScope });
+    await flushPromises();
+    expect(apiClient.post).toHaveBeenNthCalledWith(2, `/vouchers/reservations/${reservationId}/release`);
+    expect(wrapper.emitted('released')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="checkout-voucher-preview"]').attributes('data-scope-id')).toBe(nextScope);
+    expect(wrapper.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('does not report an expired claim or wrong-role reservation as applied', async () => {
     const pinia = createPinia(); setActivePinia(pinia); signIn();
     const claimId = '22222222-2222-4222-8222-222222222222';
@@ -171,7 +306,14 @@ describe('checkout voucher boundary', () => {
     wrapper.unmount();
   });
 
-  it.each([403, 409])('shows a safe preview error for HTTP %s without enabling apply', async (status) => {
+  it.each([
+    [400, 'không hợp lệ'],
+    [401, 'Phiên đăng nhập'],
+    [403, 'không thuộc tài khoản'],
+    [404, 'không hợp lệ'],
+    [409, 'không hợp lệ'],
+    [503, 'tạm thời chưa sẵn sàng'],
+  ])('shows a safe preview error for HTTP %s without enabling apply', async (status, message) => {
     const pinia = createPinia(); setActivePinia(pinia); signIn();
     vi.mocked(apiClient.get).mockImplementation(async (path: string) => {
       if (path === '/vouchers/wallet') return { data: { success: true, data: [walletClaim] } };
@@ -182,9 +324,35 @@ describe('checkout voucher boundary', () => {
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
-    expect(wrapper.get('[data-testid="checkout-voucher-preview-state"]').text()).toContain(status === 403 ? 'không thuộc lượt thanh toán' : 'Hóa đơn đã thay đổi');
+    expect(wrapper.get('[data-testid="checkout-voucher-preview-state"]').text()).toContain(message);
     expect(wrapper.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeDefined();
     expect(apiClient.post).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each([
+    [401, 'Phiên đăng nhập'],
+    [403, 'không có quyền'],
+    [409, 'đã hết hạn'],
+    [503, 'tạm thời chưa sẵn sàng'],
+  ])('shows the reservation error for HTTP %s and never reports success', async (status, message) => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    const claimId = '22222222-2222-4222-8222-222222222222';
+    const scope = '33333333-3333-4333-8333-333333333333';
+    const ownedClaim = { ...walletClaim, id: claimId };
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [ownedClaim] : preview(claimId, scope, 250000, 50000, true) },
+    }) as never);
+    vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { status } });
+    const wrapper = mountChooser(pinia, scope);
+    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="checkout-voucher-apply-error"]').text()).toContain(message);
+    expect(wrapper.emitted('applied')).toBeUndefined();
     wrapper.unmount();
   });
 

@@ -10,6 +10,7 @@ export interface VoucherPolicy {
   serviceIds: string[];
   components: ['LABOR', 'PARTS'];
 }
+export type VoucherCampaignLifecycle = 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ARCHIVED';
 export interface VoucherCampaign {
   id: string;
   code: string;
@@ -21,6 +22,9 @@ export interface VoucherCampaign {
   active: boolean;
   quota: number;
   redeemed: number;
+  status?: VoucherCampaignLifecycle;
+  version?: number;
+  publishedAt?: string | null;
 }
 export interface VoucherClaim {
   id: string;
@@ -52,12 +56,14 @@ export interface CreateVoucherCampaign {
   endsAt: string;
   quota: number;
 }
+export type VoucherCampaignEdit = CreateVoucherCampaign & { version: number; commandId: string };
+export type VoucherCampaignTransition = { version: number; commandId: string; status: 'PUBLISHED' | 'PAUSED' | 'ARCHIVED' };
 export interface VoucherCheckoutPreview {
   scopeId: string;
   claimId: string;
   previewOnly: true;
   paymentAvailable: boolean;
-  reason: string;
+  reason?: string | null;
   originalGrossVnd: number;
   eligibleBaseVnd: number;
   fixHomeDiscountSubsidyVnd: number;
@@ -96,7 +102,11 @@ function campaignInfo(value: unknown): value is VoucherClaim['campaign'] {
 }
 function campaign(value: unknown): value is VoucherCampaign {
   return record(value) && typeof value.id === 'string' && policy(value.policy)
-    && integer(value.quota, 1) && integer(value.redeemed) && value.redeemed <= value.quota && campaignInfo(value);
+    && integer(value.quota, 1) && integer(value.redeemed) && value.redeemed <= value.quota
+    && (value.status === undefined || ['DRAFT', 'PUBLISHED', 'PAUSED', 'ARCHIVED'].includes(String(value.status)))
+    && (value.version === undefined || integer(value.version, 1))
+    && (value.publishedAt === undefined || value.publishedAt === null || date(value.publishedAt))
+    && campaignInfo(value);
 }
 function general(value: unknown): value is GeneralVoucher {
   return record(value) && typeof value.id === 'string' && typeof value.code === 'string'
@@ -120,10 +130,12 @@ function checkoutPreview(value: unknown): value is VoucherCheckoutPreview {
     'scopeId', 'claimId', 'previewOnly', 'paymentAvailable', 'reason', 'originalGrossVnd',
     'eligibleBaseVnd', 'fixHomeDiscountSubsidyVnd', 'customerDueVnd', 'reasonCodes',
   ];
-  return record(value) && Object.keys(value).length === publicFields.length
-    && publicFields.every((field) => Object.hasOwn(value, field))
+  const requiredFields = publicFields.filter((field) => field !== 'reason');
+  return record(value) && Object.keys(value).every((field) => publicFields.includes(field))
+    && requiredFields.every((field) => Object.hasOwn(value, field))
     && typeof value.scopeId === 'string' && typeof value.claimId === 'string'
-    && value.previewOnly === true && typeof value.paymentAvailable === 'boolean' && typeof value.reason === 'string'
+    && value.previewOnly === true && typeof value.paymentAvailable === 'boolean'
+    && (value.reason === undefined || value.reason === null || typeof value.reason === 'string')
     && vndAmount(value.originalGrossVnd) && vndAmount(value.eligibleBaseVnd)
     && vndAmount(value.fixHomeDiscountSubsidyVnd) && vndAmount(value.customerDueVnd)
     && strings(value.reasonCodes);
@@ -151,12 +163,26 @@ export const vouchersApi = {
   async campaigns(): Promise<VoucherCampaign[]> {
     return unwrap((await apiClient.get<unknown>('/vouchers/campaigns')).data, list(campaign));
   },
-  async create(input: CreateVoucherCampaign): Promise<VoucherCampaign> {
+  async create(input: CreateVoucherCampaign & { commandId?: string }): Promise<VoucherCampaign> {
     // Explicit DTO allowlist: UI flags, counters and financial values are never sent.
-    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota } = input;
+    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, commandId } = input;
     return unwrap((await apiClient.post<unknown>('/vouchers/campaigns', {
       code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota,
+      ...(commandId ? { commandId } : {}),
     })).data, campaign);
+  },
+  async updateCampaign(id: string, input: VoucherCampaignEdit): Promise<VoucherCampaign> {
+    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, version, commandId } = input;
+    const updated = unwrap((await apiClient.patch<unknown>(`/vouchers/campaigns/${encodeURIComponent(id)}`, {
+      code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, version, commandId,
+    })).data, campaign);
+    if (updated.id !== id || updated.status !== 'DRAFT') invalid();
+    return updated;
+  },
+  async transitionCampaign(id: string, input: VoucherCampaignTransition): Promise<VoucherCampaign> {
+    const updated = unwrap((await apiClient.patch<unknown>(`/vouchers/campaigns/${encodeURIComponent(id)}/lifecycle`, input)).data, campaign);
+    if (updated.id !== id) invalid();
+    return updated;
   },
   async setActive(id: string, active: boolean): Promise<VoucherCampaign> {
     const result = unwrap((await apiClient.patch<unknown>(`/vouchers/campaigns/${encodeURIComponent(id)}/status`, { active })).data, campaign);
