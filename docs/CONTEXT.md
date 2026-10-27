@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-26 21:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-price-and-description
+> Cập nhật lần cuối: 2026-10-27 18:19 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-t21-web-integration-post178-20261027
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -95,7 +95,8 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 ### Voucher T2 (26/10/2026)
 
 - `/app/vouchers` (CUSTOMER) đọc ví và ưu đãi chung, nhận mã qua REST; có link thanh trên và menu tài khoản. `/console/admin/vouchers` (ADMIN) tạo chiến dịch GENERAL/PERSONAL, chọn danh mục/dịch vụ, thời gian Việt Nam và quota; bật/tắt, xem counter thanh toán thành công do server lưu, tìm khách đang hoạt động và cấp PERSONAL với `grantId` giữ nguyên khi thử lại kết quả chưa rõ. Điều khoản đã lưu bất biến.
-- `api/vouchers.api.ts` dùng Axios/JWT chung; kiểm tra response, lỗi và quyền, không dùng dữ liệu dự phòng. Checkout lượt và hộp thanh toán đơn có bộ chọn xem voucher trong ví, khóa APPLY; không tính giảm tiền, giữ chỗ hay sửa hóa đơn T1, hoa hồng/công nợ. D1 gồm tiền công và cả linh kiện.
+- `api/vouchers.api.ts` dùng Axios/JWT chung và kiểm tra response. Checkout lượt và hộp thanh toán đơn chỉ cho APPLY khi `GET /vouchers/checkout-preview/:claimId/:scopeId` trả `paymentAvailable=true`; `POST /vouchers/apply` gửi claim/scope/attempt ID, giữ cùng `attemptId` khi retry chưa rõ kết quả, theo expiry của server và chỉ truyền reservation ID sang rail funded. Web không tự tính giảm giá hoặc sửa hóa đơn T1, hoa hồng/công nợ. D1 gồm tiền công và cả linh kiện. Readiness được quyết định phía Backend; DEV runtime chưa kiểm chứng, Web giữ fail-closed khi server báo chưa sẵn sàng.
+- SOLO giữ chỗ theo ServiceOrder ID; Wallet/VNPay/ZERO dùng Invoice ID. VisitGroup dùng ID lượt. Backend canonical `fixhome-t21-final-merge-post-toan-20261027` có hai GET `cash/reservation`, giới hạn cho technician và trả `{ voucherReservationId, customerDueVnd }`; cả hai giá trị `null` là sentinel duy nhất cho không có hold. Web dùng due server khi khai funded cash và chỉ sentinel này mới cho phép legacy gross cash. HTTP 409/403/503, payload lệch hoặc thiếu dữ liệu đều fail-closed. Customer UI cho phép chọn cash cùng voucher và giữ reservation để xác nhận theo funded route.
 
 Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã trao đổi (`aiSummary.notes`: khách đã thử gì, đã loại gì, đang nghi gì), đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
@@ -317,7 +318,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 5. Hợp đồng với repo khác
 
-- Voucher T2: ADMIN `GET|POST /vouchers/campaigns`, `PATCH /vouchers/campaigns/:id/status {active}`, `POST /vouchers/campaigns/:id/grants {customerId,grantId}`; CUSTOMER `GET /vouchers/general`, `GET /vouchers/wallet`, `POST /vouchers/claim {code}`. DTO create gồm code/name/kind/discount/value/capVnd/minimumVnd/categoryIds/serviceIds/startsAt/endsAt/quota. GENERAL discovery được server lọc theo thời gian và chưa claim, không chứng minh financial eligibility. Wallet chỉ CLAIMED/REDEEMED và policySnapshot; không có quota/hold/customerDue. Admin chỉ đọc redeemed/quota, không suy ra số chỗ còn lại. Đã đối chiếu controller/DTO/service tại worktree Backend tích hợp T2; runtime thật và Mobile CHƯA KIỂM CHỨNG. Không gọi APPLY/release khi finance adapter chưa được tích hợp.
+- Voucher T2: ADMIN `GET|POST /vouchers/campaigns`, `PATCH /vouchers/campaigns/:id/status {active}`, `POST /vouchers/campaigns/:id/grants {customerId,grantId}`; CUSTOMER `GET /vouchers/general`, `GET /vouchers/wallet`, `POST /vouchers/claim {code}`. Checkout dùng `GET /vouchers/checkout-preview/:claimId/:scopeId`, `POST /vouchers/apply {claimId,scopeId,attemptId}` và `POST /vouchers/reservations/:id/release`; preview và reservation là quyết định máy chủ. Funded Finance routes dùng `{voucherReservationId}`: SOLO `/finance/funded/solo/:invoiceId/{wallet|vnpay|zero-closeout}` và `/finance/funded/solo/:serviceOrderId/cash/{declare|confirm}`; VisitGroup dùng `/finance/funded/visit-groups/:id/{wallet|vnpay|zero-closeout|cash/declare|cash/confirm}`. Cash declaration nhận thêm `declaredAmount`, server đối chiếu số tiền. Web chỉ truyền mã giữ chỗ vào rail và không tự tính giá. Đã đối chiếu controller/DTO/service đọc-only ở worktree Backend; Wallet/VNPay/Cash hiện fail-closed 503, preview trả `paymentAvailable=false`; ZERO source, migration/transaction gate, runtime thật và Mobile CHƯA KIỂM CHỨNG. Không chạy standalone PostgreSQL test.
 
 - E3 cash VisitGroup: contract thống nhất với E0 là notification dành riêng khách sở hữu, `type=VISIT_CASH_DECLARED`, `referenceType=VISIT_GROUP`, `referenceId` bằng ID lượt; Backend tạo trong transaction khai tiền mặt mới, không tạo lại khi replay. Đây chỉ là tín hiệu gọi lại GET checkout, không phải chứng cứ đã trả tiền. Web chỉ nhận đúng type/reference/lượt đang mở và route notification `VISIT_GROUP` tới `/app/visits/:id`; các mapping khác giữ nguyên. Backend E0 đang triển khai; PG trigger/socket và runtime liên repository CHƯA KIỂM CHỨNG.
 
@@ -368,7 +369,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
-- Voucher T2 cần Backend đăng ký module/migration và restart trước QA có đăng nhập. Bộ tài chính, bù sự cố tự động, giữ chỗ/thanh toán giảm giá chưa được chứng minh; không mở các lệnh đó từ Web. List Backend giới hạn 100 bản ghi, chưa có phân trang voucher. Runtime JWT/DB thật và Mobile parity NOT VERIFIED; hard-refresh khi QA Web.
+- Voucher T2: Backend canonical source có GET funded cash reservation cho SOLO/VisitGroup, DTO nullable sentinel, technician assignment/permission checks, và `assertFundedCollectionReady` ở lookup/declaration/confirmation. Web chỉ fallback gross khi nhận đúng sentinel hai field null; HTTP 409/403/503 và phản hồi không hợp lệ không fallback. Customer cash blocker đã bỏ sau khi đường thợ được nối. Backend DEV/runtime readiness, JWT, migration thực tế, callback/refund, PostgreSQL và Mobile parity CHƯA KIỂM CHỨNG; không chạy standalone PostgreSQL tests. Cần manual E2E sau deploy và hard-refresh Web.
 
 - E2 customer/booking: đã tương tác fixture mock tại 360/390/430/1440px, kiểm tra tràn ngang, tap target trang lượt, focus, reduced motion, duyệt/từ chối phát sinh và tiền mặt cập nhật theo focus. Hai fixture tạm đã được xóa và Vite phục vụ fixture đã dừng trong follow-up E3; screenshot không nằm trong repository. Signed-in E2E, socket Backend thật và Mobile parity CHƯA KIỂM CHỨNG. Hard-refresh khi QA bản tích hợp.
 - Giao diện cần E0/E1/E3 đối chiếu: Backend giữ nguyên API quyết định quotation/additional và checkout cả lượt; hóa đơn cuối cùng vẫn theo actual-use của server. Assignment dùng `booking:updated` hiện có, không cần event Backend mới. E0 đang tích hợp tín hiệu cash theo contract ở mục 5; Web chỉ thức dậy đọc GET và không tự trả/xác nhận tiền. PG trigger, socket delivery thật, freeze và invoice thực tế cần gate tích hợp E0/E1 trước release; E3 source/component tests không chứng minh signed-in E2E.
@@ -405,6 +406,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-27 18:19 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Đối chiếu Backend canonical nullable cash DTO; cho phép customer cash, dùng due server, và chỉ sentinel rõ ràng mới fallback gross.
+- 2026-10-27 18:12 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối kỹ thuật viên với lookup cash funded SOLO/VisitGroup và khai theo due server; giữ fail-closed cho tới khi Backend chốt GET và phản hồi không có reservation.
+- 2026-10-27 17:52 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối chooser với reservation và funded Wallet/VNPay/Cash-confirm/ZERO; giữ APPLY fail-closed theo preview Backend, khóa cash khi luồng thợ chưa gửi reservation; rails thật CHƯA KIỂM CHỨNG.
 - 2026-10-26 21:40 (UTC+7) | ToanAltF4 | fix/ai-price-and-description | Chat AI ghi rõ khoảng giá gồm tiền công và linh kiện; mô tả sang form bỏ câu sai rồi
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
@@ -468,10 +472,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-19 18:45 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Catalog V2 ưu tiên priceSummary từ API trên card đặt lịch và Services; giá tham khảo có nhãn duyệt báo giá, số kết quả nằm cuối danh sách; không đổi AI hoặc booking submission
 
-- 2026-10-19 15:18 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Owner duyệt tinh chỉnh UI bước 1: tìm kiếm + danh mục có tên, hàng dịch vụ gọn, hai cột 42/58, giữ selection/cấu hình qua bộ lọc, cuộn có giảm chuyển động; browser component harness chỉ đọc tại 360/390/430/768/1024/1100/1440 đã kiểm tra, Booking có đăng nhập và Web–Mobile runtime NOT VERIFIED; không đổi API/giá/DB/AI
-
-- 2026-10-19 05:12 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Sửa MED độc lập Luna: Booking V2 phải chờ preview có cùng serviceId/serviceCode, FIXED_PRICE chỉ tiếp tục khi selectedVariantCode được server xác nhận, INSPECTION_REQUIRED chỉ tiếp tục khi không có mã giá cố định; chặn bước 1 và POST nếu thiếu/lỗi preview, bảo toàn legacy và AI flow; focused Vitest 43 PASS; runtime full authenticated Browser QA NOT VERIFIED
-
-- 2026-10-19 03:35 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | P012 Web: mục thông tin thiết bị và phạm vi tiền công trong bước 1 đặt lịch đọc preview catalog-v2-pricing, chỉ gửi facts cùng variant server đã xác nhận, recap bước 4 lặp lại đúng câu trả lời server, ẩn khi 404/503, test mock; runtime chưa kiểm chứng
 
 
+\n

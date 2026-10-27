@@ -60,6 +60,7 @@ import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
 import { visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
+import { fundedCheckoutApi, NoActiveFundedCashReservationError, type FundedCashReservation, type FundedCashScope } from '../../api/funded-checkout.api';
 import { mediaApi } from '../../api/media.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -192,7 +193,10 @@ const failedRepairParts = computed(() => heldParts.value.map(request => ({
   label: request.items.map(item => (item.partNameSnapshot ?? 'Linh kiện') + ' ×' + item.quantity).join(', ') || 'Linh kiện',
 })));
 const canReportRepairFailed = computed(() => isRepairing.value && !completionRequested.value);
-function openRepairFailed() { repairFailedOpen.value = true; }
+function openRepairFailed() {
+  moreOpen.value = false;
+  repairFailedOpen.value = true;
+}
 async function repairFailureReported() {
   repairFailedOpen.value = false;
   void cache.refresh(affectedBy.orderChange);
@@ -284,6 +288,7 @@ const technicianCashNotes = ref('');
 const cashSettled = ref(false);
 const cashSettlementStatus = ref<'pending_confirmation' | 'confirmed' | 'disputed' | null>(null);
 const hasCashPayment = ref<'YES' | 'NO' | null>(null);
+const uncertainFundedCashScopes = new Set<string>();
 
 // Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([]);
@@ -2215,39 +2220,77 @@ const retryCompletionData = async () => {
 };
 
 const handleDeclareCash = async () => {
+  if (actionLoading.value) return;
+  if (!visitGroupId.value && hasCashPayment.value !== 'YES') return;
   if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
     notifyError('Vui lòng nhập số tiền mặt đã thu.');
     return;
   }
-  if (visitGroupId.value) {
-    try {
-      actionLoading.value = true;
-      await visitGroupsApi.declareCash(visitGroupId.value, declaredCashAmount.value);
-      await loadVisitCheckout();
-      notifySuccess('Đã báo nhận tiền mặt cả lượt, chờ khách xác nhận.');
-    } catch (err) {
-      notifyError(userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.'));
-    } finally {
-      actionLoading.value = false;
-    }
-    return;
-  }
+  const orderId = jobIdRef.value;
+  const groupId = visitGroupId.value;
+  const cashScope: FundedCashScope = groupId
+    ? { kind: 'VISIT_GROUP', id: groupId }
+    : { kind: 'SOLO', serviceOrderId: orderId };
+  const scopeKey = groupId ? `VISIT_GROUP:${groupId}` : `SOLO:${orderId}`;
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    const res = await ordersApi.declareCashSettlement(jobId, {
-      declaredAmount: declaredCashAmount.value,
+    let reservation: FundedCashReservation;
+    try {
+      reservation = await fundedCheckoutApi.cashReservation(cashScope);
+    } catch (error) {
+      if (!(error instanceof NoActiveFundedCashReservationError)) throw error;
+      if (uncertainFundedCashScopes.has(scopeKey)) {
+        throw new Error('Chưa xác định được lần khai báo trước. Hãy làm mới trạng thái trước khi thử lại.');
+      }
+      // An explicit no-hold result preserves the established gross cash path.
+      // Authorization, lookup failures, ambiguity and expiry never reach here.
+      if (orderId !== jobIdRef.value || groupId !== visitGroupId.value
+        || (!groupId && hasCashPayment.value !== 'YES')) return;
+      if (groupId) {
+        await visitGroupsApi.declareCash(groupId, declaredCashAmount.value);
+        await loadVisitCheckout();
+        notifySuccess('Đã báo nhận tiền mặt cả lượt, chờ khách xác nhận.');
+      } else {
+        const res = await ordersApi.declareCashSettlement(orderId, {
+          declaredAmount: declaredCashAmount.value,
+          technicianNotes: technicianCashNotes.value,
+        });
+        cashSettled.value = true;
+        hasCashPayment.value = 'YES';
+        cashSettlementStatus.value = String(res.status || 'pending_confirmation') as
+          | 'pending_confirmation'
+          | 'confirmed'
+          | 'disputed';
+        notifySuccess('Đã khai báo tiền mặt, chờ khách xác nhận.');
+      }
+      return;
+    }
+
+    if (orderId !== jobIdRef.value || groupId !== visitGroupId.value
+      || (!groupId && hasCashPayment.value !== 'YES')) return;
+    if (reservation.customerDueVnd <= 0) {
+      throw new Error('Voucher này không còn khoản tiền mặt cần thu. Hãy làm mới trạng thái thanh toán.');
+    }
+    uncertainFundedCashScopes.add(scopeKey);
+    await fundedCheckoutApi.declareCash(cashScope, reservation.voucherReservationId, {
+      declaredAmount: reservation.customerDueVnd,
       technicianNotes: technicianCashNotes.value,
     });
+    uncertainFundedCashScopes.delete(scopeKey);
+    if (orderId !== jobIdRef.value || groupId !== visitGroupId.value) return;
+    declaredCashAmount.value = reservation.customerDueVnd;
     cashSettled.value = true;
     hasCashPayment.value = 'YES';
-    cashSettlementStatus.value = String(res.status || 'pending_confirmation') as
-      | 'pending_confirmation'
-      | 'confirmed'
-      | 'disputed';
-    notifySuccess('Đã khai báo tiền mặt, chờ khách xác nhận.');
+    cashSettlementStatus.value = 'pending_confirmation';
+    if (groupId) await loadVisitCheckout();
+    notifySuccess(groupId
+      ? 'Đã báo nhận tiền mặt cả lượt, chờ khách xác nhận.'
+      : 'Đã khai báo tiền mặt, chờ khách xác nhận.');
   } catch (err) {
-    notifyError(userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.'));
+    notifyError(err instanceof NoActiveFundedCashReservationError
+      ? err.message
+      : userFacingError(err, 'Chưa khai báo được tiền mặt. Vui lòng thử lại.'));
   } finally {
     actionLoading.value = false;
   }
@@ -2405,6 +2448,17 @@ const toggleMore = async () => {
               Báo cáo vấn đề
             </button>
             <button
+              v-if="canReportRepairFailed"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left"
+              data-testid="job-repair-failed-menu"
+              @click="openRepairFailed"
+            >
+              <AlertTriangle :size="16" />
+              Không sửa được máy này
+            </button>
+            <button
               v-if="overrun?.eligible"
               type="button"
               role="menuitem"
@@ -2449,14 +2503,6 @@ const toggleMore = async () => {
           />
         </div>
         <p v-else class="flex-1 min-w-0 text-ink-700 text-pretty">Thiết bị này thuộc một lượt sửa nhiều máy: mỗi máy báo giá riêng, khách trả tiền một lần cho cả lượt.</p>
-        <FhButton
-          v-if="canReportRepairFailed"
-          variant="secondary"
-          size="md"
-          class="text-danger-700"
-          data-testid="job-repair-failed"
-          @click="openRepairFailed"
-        >Không sửa được</FhButton>
       </section>
 
       <section

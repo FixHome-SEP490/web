@@ -41,6 +41,7 @@ export interface SupportCaseSummary {
   holdCompletion?: boolean;
   liableParty?: string | null;
   amount?: number | null;
+  voucherGrossRefundVnd?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -143,6 +144,8 @@ export interface SupportCaseResolvePayload {
   evidenceRefs?: string[];
   liableParty?: 'technician' | 'customer' | 'platform' | 'shared';
   amount?: number;
+  /** Original-gross funding basis; amount remains customer NET. */
+  grossRefundVnd?: number;
 }
 
 export interface SupportCaseListResponse {
@@ -260,6 +263,7 @@ function normalizeSummary(payload: unknown): SupportCaseSummary {
     holdCompletion: payload.holdCompletion === true,
     liableParty: optionalString(payload, 'liableParty', 'Backend returned an invalid support case response.'),
     amount: optionalNumber(payload, 'amount', 'Backend returned an invalid support case response.'),
+    voucherGrossRefundVnd: optionalNumber(payload, 'voucherGrossRefundVnd', 'Invalid voucher refund source.'),
     createdAt: requiredString(payload.createdAt, 'Backend returned an invalid support case response.'),
     updatedAt: requiredString(payload.updatedAt, 'Backend returned an invalid support case response.'),
   };
@@ -433,8 +437,9 @@ function assertId(id: string): string {
 function assertResolvePayload(payload: SupportCaseResolvePayload): void {
   const keys = Object.keys(payload);
   if (
-    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs', 'liableParty', 'amount'].includes(key)) ||
-    (payload.amount !== undefined && (!Number.isInteger(payload.amount) || payload.amount < 0)) ||
+    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs', 'liableParty', 'amount', 'grossRefundVnd'].includes(key)) ||
+    (payload.amount !== undefined && (!Number.isSafeInteger(payload.amount) || payload.amount < 0 || payload.amount > 2_000_000_000)) ||
+    (payload.grossRefundVnd !== undefined && (!Number.isSafeInteger(payload.grossRefundVnd) || payload.grossRefundVnd <= 0 || payload.grossRefundVnd > 2_000_000_000 || payload.resolutionCode !== 'refund_to_wallet' || payload.finalStatus !== 'resolved')) ||
     !['resolved', 'rejected'].includes(payload.finalStatus) ||
     !payload.resolutionCode.trim() ||
     payload.resolutionCode.length > 128 ||

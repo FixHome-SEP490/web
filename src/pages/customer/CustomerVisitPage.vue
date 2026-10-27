@@ -13,6 +13,10 @@ import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '.
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
 import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
+import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
+import { fundedCheckoutApi } from '../../api/funded-checkout.api';
+import type { FundedReservation } from '../../api/funded-checkout.api';
+import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import type { ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
@@ -176,6 +180,10 @@ function load(): Promise<void> {
 }
 onMounted(load);
 watch(visitId, () => {
+  if (fundedVoucher.value && !checkout.value?.pendingCash) {
+    void fundedCheckoutApi.release(fundedVoucher.value.reservation.id).catch(() => undefined);
+    clearFundedVoucher();
+  }
   seenCashNotifications.clear();
   childOrderLookupVersion = child.clear();
   visit.value = null;
@@ -224,6 +232,14 @@ onMounted(() => {
   window.addEventListener('focus', resyncOnReturn);
   window.addEventListener('online', resyncOnReturn);
   document.addEventListener('visibilitychange', resyncOnReturn);
+  voucherExpiryTimer = setInterval(() => {
+    voucherClock.value = Date.now();
+    if (fundedVoucher.value && Date.parse(fundedVoucher.value.reservation.expiresAt) <= voucherClock.value
+      && !checkout.value?.pendingCash) {
+      clearFundedVoucher();
+      message.value = { type: 'error', text: 'Thời gian giữ voucher đã hết. Lượt sửa vẫn thanh toán theo trạng thái từ máy chủ.' };
+    }
+  }, 1000);
 });
 watch(checkoutOrderIds, (orderIds) => {
   const groupId = visitId.value;
@@ -260,6 +276,7 @@ watch(visitBookingIds, (bookingIds) => {
 }, { immediate: true });
 onUnmounted(() => {
   disposed = true;
+  if (voucherExpiryTimer) clearInterval(voucherExpiryTimer);
   if (refreshTimer !== null) clearTimeout(refreshTimer);
   refreshTimer = null;
   childOrderLookupVersion = child.invalidate();
@@ -439,11 +456,23 @@ type PayMethod = 'wallet' | 'vnpay' | 'cash';
 type CheckoutState = 'waiting' | 'paid' | 'pending_cash' | 'zero_due' | 'wallet_short' | 'vnpay' | 'ready';
 const payMethod = ref<PayMethod>('wallet');
 const cashInstructionsOpen = ref(false);
+const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
+const voucherClock = ref(Date.now());
+const activeFundedVoucher = computed(() => fundedVoucher.value
+  && fundedVoucher.value.reservation.scopeId === visitId.value
+  && (Date.parse(fundedVoucher.value.reservation.expiresAt) > voucherClock.value || !!checkout.value?.pendingCash)
+  ? fundedVoucher.value : null);
+let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
 const walletBalance = ref<number | null>(null);
 const walletError = ref(false);
-const walletCovers = computed(() => walletBalance.value !== null && checkout.value !== null && walletBalance.value >= checkout.value.total);
-const vnpayAllowed = computed(() => (checkout.value?.total ?? 0) >= 5000);
-const payMethods = computed<PayMethod[]>(() => (['wallet', 'vnpay', 'cash'] as PayMethod[]).filter((method) => method !== 'vnpay' || vnpayAllowed.value));
+const voucherDue = computed(() => activeFundedVoucher.value?.preview.customerDueVnd ?? checkout.value?.total ?? 0);
+const walletCovers = computed(() => walletBalance.value !== null && checkout.value !== null && walletBalance.value >= voucherDue.value);
+const vnpayAllowed = computed(() => voucherDue.value >= 5000);
+const payMethods = computed<PayMethod[]>(() => (['wallet', 'vnpay', 'cash'] as PayMethod[]).filter((method) =>
+  method !== 'vnpay' || vnpayAllowed.value));
+function selectPayMethod(method: PayMethod) {
+  payMethod.value = method;
+}
 function onPayMethodKey(event: KeyboardEvent, method: PayMethod) {
   if (busy.value || !['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
@@ -461,7 +490,7 @@ const checkoutState = computed<CheckoutState>(() => {
   if (!current || current.waiting > 0 || !current.ready) return 'waiting';
   if (current.pendingCash) return 'pending_cash';
   if (current.total <= 0) return 'zero_due';
-  if (payMethod.value === 'wallet' && walletBalance.value !== null && walletBalance.value < current.total) return 'wallet_short';
+  if (payMethod.value === 'wallet' && walletBalance.value !== null && !walletCovers.value) return 'wallet_short';
   if (payMethod.value === 'vnpay' && vnpayAllowed.value) return 'vnpay';
   return 'ready';
 });
@@ -488,14 +517,58 @@ async function loadWallet() {
 }
 onMounted(loadWallet);
 
+function clearFundedVoucher() { fundedVoucher.value = null; }
+function reservationForAction(): FundedReservation | null | undefined {
+  const held = fundedVoucher.value;
+  if (!held) return null;
+  if (held.reservation.scopeId !== visitId.value || Date.parse(held.reservation.expiresAt) <= Date.now()) {
+    clearFundedVoucher();
+    message.value = { type: 'error', text: 'Thời gian giữ voucher đã hết hoặc lượt thanh toán đã đổi. Hãy kiểm tra lại số tiền trước khi tiếp tục.' };
+    return undefined;
+  }
+  return held.reservation;
+}
+
+async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
+  if (value.reservation.scopeId !== visitId.value || value.preview.scopeId !== visitId.value
+    || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
+    message.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho lượt thanh toán này.' };
+    return;
+  }
+  fundedVoucher.value = value;
+  message.value = null;
+  if (value.preview.customerDueVnd !== 0) return;
+  const held = reservationForAction();
+  if (!held) return;
+  busy.value = true;
+  const groupId = visitId.value;
+  try {
+    await fundedCheckoutApi.zero({ kind: 'VISIT_GROUP', id: groupId }, held.id);
+    if (disposed || groupId !== visitId.value) return;
+    clearFundedVoucher();
+    message.value = { type: 'success', text: 'Máy chủ đã xác nhận tất toán voucher với số tiền khách hàng cần trả là 0 ₫.' };
+    await load();
+  } catch (err) {
+    if (!disposed && groupId === visitId.value) message.value = { type: 'error', text: userFacingError(err, 'Máy chủ chưa xác nhận được tất toán 0 ₫. Voucher vẫn giữ chỗ đến khi hết hạn; chưa ghi nhận thanh toán.') };
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function payWithWallet() {
   if (checkoutLoading.value || busy.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due' || !walletCovers.value) return;
   busy.value = true;
   const groupId = visitId.value;
+  const hadFundedVoucher = !!fundedVoucher.value;
+  const held = reservationForAction();
+  if (hadFundedVoucher && !held) { busy.value = false; return; }
   try {
-    const result = await visitGroupsApi.payWithWallet(groupId);
+    const result = held
+      ? await fundedCheckoutApi.wallet({ kind: 'VISIT_GROUP', id: groupId }, held.id)
+      : await visitGroupsApi.payWithWallet(groupId);
     if (disposed || groupId !== visitId.value) return;
     message.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví cho cả lượt.` };
+    if (held) clearFundedVoucher();
     await Promise.all([load(), loadWallet()]);
   } catch (err) {
     if (disposed || groupId !== visitId.value) return;
@@ -508,8 +581,13 @@ async function payWithVnpay() {
   if (checkoutLoading.value || busy.value || !vnpayAllowed.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due') return;
   busy.value = true;
   const groupId = visitId.value;
+  const hadFundedVoucher = !!fundedVoucher.value;
+  const held = reservationForAction();
+  if (hadFundedVoucher && !held) { busy.value = false; return; }
   try {
-    const url = await visitGroupsApi.vnpayUrl(groupId);
+    const url = held
+      ? await fundedCheckoutApi.vnpay({ kind: 'VISIT_GROUP', id: groupId }, held.id)
+      : await visitGroupsApi.vnpayUrl(groupId);
     if (disposed || groupId !== visitId.value) { busy.value = false; return; }
     window.location.href = url;
   } catch (err) {
@@ -521,9 +599,19 @@ async function answerCash(agreed: boolean) {
   if (checkoutLoading.value || busy.value || checkoutState.value !== 'pending_cash') return;
   busy.value = true;
   const groupId = visitId.value;
+  const held = fundedVoucher.value?.reservation ?? null;
+  if (held && held.scopeId !== groupId) {
+    busy.value = false;
+    message.value = { type: 'error', text: 'Mã giữ voucher không khớp với lượt này. Chưa gửi xác nhận tiền mặt.' };
+    return;
+  }
   try {
-    await visitGroupsApi.confirmCash(groupId, agreed, agreed ? undefined : 'Số tiền mặt chưa đúng');
+    if (held) await fundedCheckoutApi.confirmCash({ kind: 'VISIT_GROUP', id: groupId }, held.id, agreed
+      ? { agreed: true }
+      : { agreed: false, disputeReason: 'Số tiền mặt chưa đúng' });
+    else await visitGroupsApi.confirmCash(groupId, agreed, agreed ? undefined : 'Số tiền mặt chưa đúng');
     if (disposed || groupId !== visitId.value) return;
+    if (held && agreed) clearFundedVoucher();
     message.value = agreed
       ? { type: 'success', text: 'Đã xác nhận trả tiền mặt cho cả lượt.' }
       : { type: 'success', text: 'Đã báo FixHome kiểm tra lại số tiền mặt.' };
@@ -732,7 +820,11 @@ async function answerCash(agreed: boolean) {
           <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
           <div v-else class="sm:text-right">
             <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
-            <span class="text-xl font-semibold text-ink-900 font-num"><FhMoney :amount="checkout.total" /></span>
+            <span class="text-right">
+              <span class="block text-xs text-ink-500">Tổng hóa đơn gốc</span>
+              <span class="text-xl font-semibold text-ink-900 font-num"><FhMoney :amount="checkout.total" /></span>
+              <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
+            </span>
           </div>
         </div>
         <p v-if="checkout.waiting > 0" class="text-ink-600">Còn {{ checkout.waiting }} thiết bị đang xử lý. Bạn thanh toán một lần khi mọi thiết bị đã có kết quả, chỉ cho các máy sửa được.</p>
@@ -753,6 +845,12 @@ async function answerCash(agreed: boolean) {
           </div>
         </template>
         <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0">
+            <VoucherCheckoutChooser
+              :scope-id="visitId"
+              @applied="handleVoucherApplied"
+              @released="clearFundedVoucher"
+              @expired="clearFundedVoucher"
+            />
             <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="visit-pay-methods">
               <button
                 v-for="method in payMethods"
@@ -765,7 +863,7 @@ async function answerCash(agreed: boolean) {
                 :class="payMethod === method ? 'bg-brand-50' : 'bg-white hover:bg-ink-50'"
                 :data-testid="`visit-pay-method-${method}`"
                 :disabled="busy"
-                @click="payMethod = method"
+                @click="selectPayMethod(method)"
                 @keydown="onPayMethodKey($event, method)"
               >
                 <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
@@ -798,7 +896,8 @@ async function answerCash(agreed: boolean) {
               <FhButton v-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
               <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
                 <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt cho cả lượt</h3>
-                <p>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
+                <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>
+                <p v-else>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
                 <p>Nút này chỉ mở hướng dẫn. Chưa ghi nhận đã thanh toán và chưa gửi xác nhận tiền mặt lên hệ thống.</p>
                 <p>Đưa số tiền trên trực tiếp cho kỹ thuật viên. Kỹ thuật viên khai báo số tiền đã nhận; sau đó bạn xác nhận đúng số tiền hoặc báo chưa đúng.</p>
                 <FhButton variant="ghost" size="md" data-testid="visit-cash-instructions-close" @click="cashInstructionsOpen = false">Đóng hướng dẫn</FhButton>

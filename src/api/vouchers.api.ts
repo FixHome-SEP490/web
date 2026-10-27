@@ -52,6 +52,18 @@ export interface CreateVoucherCampaign {
   endsAt: string;
   quota: number;
 }
+export interface VoucherCheckoutPreview {
+  scopeId: string;
+  claimId: string;
+  previewOnly: true;
+  paymentAvailable: boolean;
+  reason: string;
+  originalGrossVnd: number;
+  eligibleBaseVnd: number;
+  fixHomeDiscountSubsidyVnd: number;
+  customerDueVnd: number;
+  reasonCodes: string[];
+}
 
 function invalid(): never { throw new Error('Thông tin ưu đãi chưa đầy đủ. Vui lòng thử lại.'); }
 function record(value: unknown): value is Record<string, unknown> {
@@ -59,6 +71,9 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 function integer(value: unknown, minimum = 0): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum && value <= 2147483647;
+}
+function vndAmount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(v => typeof v === 'string');
@@ -100,6 +115,19 @@ function unwrap<T>(payload: unknown, valid: (value: unknown) => value is T): T {
 function list<T>(valid: (value: unknown) => value is T) {
   return (value: unknown): value is T[] => Array.isArray(value) && value.every(valid);
 }
+function checkoutPreview(value: unknown): value is VoucherCheckoutPreview {
+  const publicFields = [
+    'scopeId', 'claimId', 'previewOnly', 'paymentAvailable', 'reason', 'originalGrossVnd',
+    'eligibleBaseVnd', 'fixHomeDiscountSubsidyVnd', 'customerDueVnd', 'reasonCodes',
+  ];
+  return record(value) && Object.keys(value).length === publicFields.length
+    && publicFields.every((field) => Object.hasOwn(value, field))
+    && typeof value.scopeId === 'string' && typeof value.claimId === 'string'
+    && value.previewOnly === true && typeof value.paymentAvailable === 'boolean' && typeof value.reason === 'string'
+    && vndAmount(value.originalGrossVnd) && vndAmount(value.eligibleBaseVnd)
+    && vndAmount(value.fixHomeDiscountSubsidyVnd) && vndAmount(value.customerDueVnd)
+    && strings(value.reasonCodes);
+}
 
 // JWT, refresh and safe transport errors remain owned by the shared Axios client.
 export const vouchersApi = {
@@ -108,6 +136,12 @@ export const vouchersApi = {
   },
   async wallet(): Promise<VoucherClaim[]> {
     return unwrap((await apiClient.get<unknown>('/vouchers/wallet')).data, list(claim));
+  },
+  async checkoutPreview(claimId: string, scopeId: string): Promise<VoucherCheckoutPreview> {
+    if (!claimId || !scopeId) invalid();
+    const result = unwrap((await apiClient.get<unknown>(`/vouchers/checkout-preview/${encodeURIComponent(claimId)}/${encodeURIComponent(scopeId)}`)).data, checkoutPreview);
+    if (result.claimId !== claimId || result.scopeId !== scopeId) invalid();
+    return result;
   },
   async claim(code: string): Promise<VoucherClaim> {
     const normalized = code.trim().toUpperCase();

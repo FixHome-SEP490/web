@@ -36,6 +36,9 @@ import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
+import { fundedCheckoutApi } from '../../api/funded-checkout.api';
+import type { FundedReservation } from '../../api/funded-checkout.api';
+import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
@@ -70,6 +73,14 @@ const awaitingTechnician = computed(() => !!order.value && !order.value.technici
 const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?? [])
   .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
+const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
+const voucherClock = ref(Date.now());
+const activeFundedVoucher = computed(() => fundedVoucher.value
+  && fundedVoucher.value.reservation.scopeId === order.value?.id
+  && (Date.parse(fundedVoucher.value.reservation.expiresAt) > voucherClock.value
+    || cashSettlement.value?.status === 'pending_confirmation')
+  ? fundedVoucher.value : null);
+let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
 // Modals
@@ -483,6 +494,17 @@ onMounted(async () => {
     showReviewModal.value = true;
   }
 });
+onMounted(() => {
+  voucherExpiryTimer = setInterval(() => {
+    voucherClock.value = Date.now();
+    if (fundedVoucher.value && Date.parse(fundedVoucher.value.reservation.expiresAt) <= voucherClock.value
+      && cashSettlement.value?.status !== 'pending_confirmation') {
+      clearFundedVoucher();
+      actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết. Hóa đơn vẫn thanh toán theo tổng gốc từ máy chủ.' };
+    }
+  }, 1000);
+});
+onUnmounted(() => { if (voucherExpiryTimer) clearInterval(voucherExpiryTimer); });
 
 const handleApproveQuotation = async () => {
   try {
@@ -542,13 +564,25 @@ const handleConfirmCashPayment = async () => {
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    await ordersApi.confirmCashSettlement(orderId, {
-      agreed: matches,
-      confirmedAmount: amount,
-      disputeReason: matches ? undefined : (cashMismatchNote.value.trim() || 'Số tiền khách xác nhận không khớp với số thợ khai báo'),
-    });
+    const held = fundedVoucher.value?.reservation ?? null;
+    if (held && held.scopeId !== order.value?.id) {
+      actionMessage.value = { type: 'error', text: 'Mã giữ voucher không khớp với đơn này. Chưa gửi xác nhận tiền mặt.' };
+      return;
+    }
+    if (held && invoice.value?.id) {
+      await fundedCheckoutApi.confirmCash({ kind: 'SOLO', serviceOrderId: orderId }, held.id, matches
+        ? { agreed: true }
+        : { agreed: false, disputeReason: cashMismatchNote.value.trim() || 'Số tiền khách xác nhận không khớp với số thợ khai báo' });
+    } else {
+      await ordersApi.confirmCashSettlement(orderId, {
+        agreed: matches,
+        confirmedAmount: amount,
+        disputeReason: matches ? undefined : (cashMismatchNote.value.trim() || 'Số tiền khách xác nhận không khớp với số thợ khai báo'),
+      });
+    }
 
     if (matches) {
+      if (held) clearFundedVoucher();
       await loadOrder();
       actionMessage.value = {
         type: 'success',
@@ -592,14 +626,53 @@ const handleChatWithTech = async () => {
 // Paying from the customer wallet (PO 08/10/2026): the balance is read when the payment opens.
 const walletBalance = ref<number | null>(null);
 const walletPaying = ref(false);
-const walletCovers = computed(() => walletBalance.value !== null && !!order.value && paymentOptions.value.includes('wallet') && walletBalance.value >= (billing.value.total ?? Infinity));
+const walletCovers = computed(() => walletBalance.value !== null && !!order.value && paymentOptions.value.includes('wallet')
+  && walletBalance.value >= (activeFundedVoucher.value?.preview.customerDueVnd ?? billing.value.total ?? Infinity));
+
+function clearFundedVoucher() { fundedVoucher.value = null; }
+function reservationForAction(): FundedReservation | null | undefined {
+  const held = fundedVoucher.value;
+  if (!held) return null;
+  if (held.reservation.scopeId !== order.value?.id || Date.parse(held.reservation.expiresAt) <= Date.now()) {
+    clearFundedVoucher();
+    actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết hoặc lượt thanh toán đã đổi. Hãy xem lại tổng tiền trước khi tiếp tục.' };
+    return undefined;
+  }
+  return held.reservation;
+}
+
+async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
+  if (value.reservation.scopeId !== order.value?.id || value.preview.scopeId !== order.value?.id
+    || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
+    actionMessage.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho hóa đơn này.' };
+    return;
+  }
+  fundedVoucher.value = value;
+  actionMessage.value = null;
+  if (value.preview.customerDueVnd !== 0) return;
+  const held = reservationForAction();
+  if (!held || !invoice.value?.id || !order.value?.id) return;
+  actionLoading.value = true;
+  try {
+    await fundedCheckoutApi.zero({ kind: 'SOLO', serviceOrderId: String(order.value.id), invoiceId: String(invoice.value.id) }, held.id);
+    clearFundedVoucher();
+    showPaymentModal.value = false;
+    await loadOrder(true);
+    actionMessage.value = { type: 'success', text: 'Máy chủ đã xác nhận tất toán voucher với số tiền khách hàng cần trả là 0 ₫.' };
+  } catch (err) {
+    actionMessage.value = { type: 'error', text: userFacingError(err, 'Máy chủ chưa xác nhận được tất toán 0 ₫. Voucher vẫn giữ chỗ đến khi hết hạn; chưa ghi nhận thanh toán.') };
+  } finally {
+    actionLoading.value = false;
+  }
+}
 
 // The ways to pay, as one list with one action (PO 21/10/2026). The wallet comes
 // first; when its balance turns out short and the customer has not picked yet,
 // the next way is chosen for them.
 type PayMethod = 'wallet' | 'vnpay' | 'cash';
 const PAY_ORDER: PayMethod[] = ['wallet', 'vnpay', 'cash'];
-const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) => paymentOptions.value.includes(method)));
+const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) => paymentOptions.value.includes(method)
+  && (method !== 'vnpay' || (activeFundedVoucher.value?.preview.customerDueVnd ?? billing.value.total ?? 0) >= 5000)));
 const payMethod = ref<PayMethod | null>(null);
 let payMethodPicked = false;
 function choosePayMethod(method: PayMethod) {
@@ -620,13 +693,23 @@ const handlePay = () => {
   if (paymentOptions.value.includes('wallet')) customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
 };
 
+function confirmCashIntent() {
+  showPaymentModal.value = false;
+}
+
 const payWithWallet = async () => {
   if (!invoice.value?.id || walletPaying.value || actionLoading.value || !walletCovers.value || !paymentOptions.value.includes('wallet')) return;
+  const hadFundedVoucher = !!fundedVoucher.value;
+  const held = reservationForAction();
+  if (hadFundedVoucher && !held) return;
   walletPaying.value = true;
   try {
-    const result = await customerWalletApi.payInvoice(String(invoice.value.id));
+    const result = held
+      ? await fundedCheckoutApi.wallet({ kind: 'SOLO', serviceOrderId: String(order.value?.id), invoiceId: String(invoice.value.id) }, held.id)
+      : await customerWalletApi.payInvoice(String(invoice.value.id));
     showPaymentModal.value = false;
     actionMessage.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví. Số dư còn ${result.balance.toLocaleString('vi-VN')} ₫.` };
+    if (held) clearFundedVoucher();
     await loadOrder(true);
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa thanh toán được bằng ví.') };
@@ -637,10 +720,15 @@ const payWithWallet = async () => {
 
 const confirmPayment = async () => {
   if (actionLoading.value || walletPaying.value || !paymentOptions.value.includes('vnpay')) return;
+  const hadFundedVoucher = !!fundedVoucher.value;
+  const held = reservationForAction();
+  if (hadFundedVoucher && !held) return;
   try {
     actionLoading.value = true;
     if (!invoice.value?.id) throw new Error('Chưa có hóa đơn để thanh toán.');
-    const paymentUrl = await ordersApi.createVnpayUrl(invoice.value.id);
+    const paymentUrl = held
+      ? await fundedCheckoutApi.vnpay({ kind: 'SOLO', serviceOrderId: String(order.value?.id), invoiceId: String(invoice.value.id) }, held.id)
+      : await ordersApi.createVnpayUrl(invoice.value.id);
     window.location.href = paymentUrl;
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa mở được trang thanh toán VNPay. Vui lòng thử lại.') };
@@ -1686,7 +1774,13 @@ const parsedReview = computed(() => {
 
         <!-- One list of the ways to pay, one action under it (PO 21/10/2026). -->
         <template v-if="payMethods.length">
-          <VoucherCheckoutChooser :key="invoice?.id" />
+          <VoucherCheckoutChooser
+            :key="invoice?.id"
+            :scope-id="order?.id ?? null"
+            @applied="handleVoucherApplied"
+            @released="clearFundedVoucher"
+            @expired="clearFundedVoucher"
+          />
           <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
             <button
               v-for="method in payMethods"
@@ -1728,7 +1822,6 @@ const parsedReview = computed(() => {
           <p v-else-if="payMethod === 'cash'" class="text-sm text-ink-600" data-testid="pay-cash-note">
             Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.
           </p>
-
           <FhButton
             v-if="payMethod === 'wallet'"
             class="w-full"
@@ -1752,7 +1845,7 @@ const parsedReview = computed(() => {
             class="w-full"
             size="lg"
             data-testid="pay-cash-ok"
-            @click="showPaymentModal = false"
+            @click="confirmCashIntent"
           >Đã hiểu</FhButton>
         </template>
       </div>
