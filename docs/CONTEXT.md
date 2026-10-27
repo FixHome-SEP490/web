@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-27 18:19 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-t21-web-integration-post178-20261027
+> Cập nhật lần cuối: 2026-10-27 21:08 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-t21-f3-wallet-only-20261027
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -301,6 +301,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 
 **Technician partial parts + stable UI (20/10/2026):** Technician parts V3.2: fix initial loading/realtime race which could leave a skeleton until F5, and refresh QR updates without clearing list; stack mobile Add button/note on narrow widths; render catalog detail as labeled fields with Lucide Info icons instead of raw delimited text; editable actual used quantity for QR-enrolled FixHome parts via existing versioned API, with computed return due and manager physical return kept separate. Legacy/non-custody parts keep whole-line controls. Quote info icons standardized. No change to price search, existing invoices, AI, wallet or money flags.
 
+- Service Manager F3 message updated to owner wallet-only refund rule for paid VNPay or CASH voucher invoices; Backend must confirm original paid evidence, then credit wallet NET only.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -367,6 +369,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Khách chọn 1 đến 2 kỹ thuật viên; ví kỹ thuật viên tối thiểu 200.000 ₫ (PO xác nhận 07/10/2026).
 - PO 18/10/2026: thợ thấy đủ chi tiết công việc (mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách hoặc phường/xã) trước khi nhận, trừ địa chỉ cụ thể, số điện thoại và ghi chú riêng của khách; chat khoá khi đơn hoàn tất, mở lại khi khách gửi yêu cầu bảo hành; form đặt lịch không còn thanh kéo mức khẩn cấp; lịch hẹn chọn ngày rồi chọn giờ.
 
+- F3 wallet-only source/UX change remains pending backend PR and Web CI verification; not yet available to DEV users.
+
 ## 8. Việc đang dở và rủi ro đã biết
 
 - Voucher T2: Backend canonical source có GET funded cash reservation cho SOLO/VisitGroup, DTO nullable sentinel, technician assignment/permission checks, và `assertFundedCollectionReady` ở lookup/declaration/confirmation. Web chỉ fallback gross khi nhận đúng sentinel hai field null; HTTP 409/403/503 và phản hồi không hợp lệ không fallback. Customer cash blocker đã bỏ sau khi đường thợ được nối. Backend DEV/runtime readiness, JWT, migration thực tế, callback/refund, PostgreSQL và Mobile parity CHƯA KIỂM CHỨNG; không chạy standalone PostgreSQL tests. Cần manual E2E sau deploy và hard-refresh Web.
@@ -405,6 +409,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Thay đổi ngày 07/10/2026 đã qua gate nhưng CHƯA KIỂM CHỨNG bằng mắt trên trình duyệt từng trang.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.
+
 
 - 2026-10-27 18:19 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Đối chiếu Backend canonical nullable cash DTO; cho phép customer cash, dùng due server, và chỉ sentinel rõ ràng mới fallback gross.
 - 2026-10-27 18:12 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối kỹ thuật viên với lookup cash funded SOLO/VisitGroup và khai theo due server; giữ fail-closed cho tới khi Backend chốt GET và phản hồi không có reservation.
@@ -470,7 +476,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-19 22:20 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Bổ sung ca tối 18–23 giờ VN, nhận đặt hôm nay trước 23:00; public đủ 13 chip danh mục, landing 6 nhóm với mô tả và icon phù hợp; browser fixture đã kiểm tra, Backend thật/Mobile NOT VERIFIED; AI giữ nguyên
 
-- 2026-10-19 18:45 (UTC+7) | foxonworld | foxonworld/fixhome-p012-integration-20261019 | Catalog V2 ưu tiên priceSummary từ API trên card đặt lịch và Services; giá tham khảo có nhãn duyệt báo giá, số kết quả nằm cuối danh sách; không đổi AI hoặc booking submission
 
 
 
