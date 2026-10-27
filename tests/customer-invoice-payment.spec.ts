@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
-vi.mock('../src/api/client', () => ({ default: api, getHttpStatus: () => undefined }));
+vi.mock('../src/api/client', () => ({ default: api, getHttpStatus: () => undefined, registerAuthSessionInvalidator: vi.fn(), registerTokenRefreshed: vi.fn() }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'o1' }, query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ conversations: [] }) }));
 import Page from '../src/pages/customer/CustomerOrderDetailPage.vue';

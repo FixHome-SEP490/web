@@ -412,19 +412,29 @@ describe('NewBookingWizardPage A+ service finder', () => {
     visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
     const wrapper = await renderWizard();
     await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 2; index += 1) {
       await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
       await wrapper.get('[data-testid="booking-description"]').setValue(`Máy số ${index + 1}`);
       await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     }
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy số 3');
+    expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toBe('Lưu máy 3 và tiếp tục');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="visit-consultation"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+
     expect(wrapper.find('[data-testid="visit-consultation"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="booking-service-list"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 3 thiết bị');
-    expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(3);
-    expect(wrapper.get('[data-testid="booking-summary-price"]').find('[data-money="600000"]').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="visit-consultation-open"]').text()).toBe('Liên hệ FixHome hỗ trợ');
+    expect(wrapper.get('[data-testid="visit-device-limit"]').text()).toContain('3/3 thiết bị');
+    expect(wrapper.get('[data-testid="visit-review-consultation"]').text()).toBe('Liên hệ FixHome hỗ trợ');
     expect(createConsultation).not.toHaveBeenCalled();
-    await wrapper.get('[data-testid="visit-consultation-open"]').trigger('click');
+    await wrapper.get('[data-testid="visit-review-consultation"]').trigger('click');
+    await flushPromises();
     expect(wrapper.get('[data-testid="visit-consultation"]').text()).toContain('Cần sửa thêm thiết bị?');
     expect(wrapper.get('[data-testid="visit-consultation-submit"]').attributes('disabled')).toBeDefined();
     expect(createConsultation).not.toHaveBeenCalled();
@@ -458,6 +468,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
   it('requires saving the third device before continuing the shared visit', async () => {
     visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    uploadBookingPhoto.mockResolvedValue({ uploadId: 'photo-third', mimeType: 'image/jpeg', sizeBytes: 3 });
     const wrapper = await renderWizard();
     await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
     for (let index = 0; index < 2; index += 1) {
@@ -468,13 +479,17 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-description"]').setValue('Máy 3');
+    const photoInput = wrapper.get('input[type="file"]');
+    Object.defineProperty(photoInput.element, 'files', { configurable: true, value: [new File(['three'], 'third.png', { type: 'image/png' })] });
+    await photoInput.trigger('change');
+    await flushPromises();
     expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeUndefined();
     expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Lưu máy 3 và tiếp tục');
     expect(wrapper.get('[data-testid="step1-next-bar"]').text()).toBe('Lưu máy 3 và tiếp tục');
     expect(wrapper.find('[data-testid="visit-device-2"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toContain('Thêm thiết bị này vào lượt');
+    expect(wrapper.get('[data-testid="visit-add-device-step1"]').text()).toContain('Lưu máy 3 và tiếp tục');
 
-    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(3);
@@ -487,6 +502,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await wrapper.get('[data-testid="booking-submit"]').trigger('click');
     await flushPromises();
     expect(createVisit.mock.calls[0][0].items).toHaveLength(3);
+    expect(createVisit.mock.calls[0][0].items[2]).toMatchObject({ description: 'Máy 3', photoUploadIds: ['photo-third'] });
     wrapper.unmount();
   });
 

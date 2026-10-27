@@ -106,6 +106,7 @@ describe('account menu items', () => {
       '/app/orders',
       '/app/history',
       '/app/wallet',
+      '/app/vouchers',
       '/app/profile',
     ]);
     const inApp = accountMenuLinks('CUSTOMER', 'customer-app');
@@ -113,6 +114,7 @@ describe('account menu items', () => {
       '/app/history',
       '/app/warranties',
       '/app/wallet',
+      '/app/vouchers',
       '/app/notifications',
       '/app/profile',
     ]);
@@ -229,6 +231,7 @@ describe('customer header', () => {
       '/app/orders',
       '/app/warranties',
       '/app/messages',
+      '/app/vouchers',
     ]);
     const menu = await openAccountMenu(wrapper);
     const history = menu.get('[data-testid="menu-history"]');

@@ -6,14 +6,15 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { Bot, X, Image as ImageIcon, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
-import { aiApi } from '../../api/ai.api';
 import {
   AI_CHAT_MAX_IMAGES,
   AI_MAX_VIDEOS,
   AI_VIDEO_TYPES,
   DESCRIBE_BEFORE_SEND,
   VIDEO_NOT_ANALYSED,
+  photoLabel,
   priceLabel,
+  priceBreakdown,
   quickReplies,
   type AiChatMessage,
   type AiConversation,
@@ -44,6 +45,26 @@ function attachmentsOf(message: AiChatMessage): ChatAttachment[] {
   return (message.attachmentIds ?? []).flatMap((id) => {
     const item = attachmentsById.value.get(id);
     return item ? [item] : [];
+  });
+}
+
+const composer = ref<HTMLTextAreaElement | null>(null);
+
+/** What each sent photo was read as, per message and photo; null until the reply says. */
+const photoLabels = computed(() =>
+  c.messages.map((message: AiChatMessage, messageIndex: number) =>
+    (message.images ?? []).map((_src: string, imageIndex: number) => photoLabel(c.messages, messageIndex, imageIndex)),
+  ),
+);
+
+/** A tap on a photo's label: the composer gets "Ảnh 2 là " for the customer to finish. */
+function correctPhoto(correction: string) {
+  c.input = correction;
+  nextTick(() => {
+    const box = composer.value;
+    if (!box) return;
+    box.focus();
+    box.setSelectionRange(correction.length, correction.length);
   });
 }
 
@@ -113,30 +134,9 @@ function answer(text: string) {
   void c.sendTurn(text, []);
 }
 
-/**
- * "Đúng ý / Chưa đúng" under the newest answer. A "chưa đúng" opens a short
- * optional note; either way the customer is thanked and the verdict goes to
- * the team, who turn the wrong ones into new test conversations.
- */
-type Verdict = 'asking' | 'note' | 'thanked';
-const verdicts = reactive<Record<string, Verdict>>({});
-const notes = reactive<Record<string, string>>({});
-
-function canRate(message: AiChatMessage): boolean {
-  return !!c.sessionId && !!message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable';
-}
-
-function verdictFor(message: AiChatMessage): Verdict | null {
-  if (verdicts[message.id]) return verdicts[message.id];
-  return canRate(message) && !c.isThinking && message.id === latestReplyId.value ? 'asking' : null;
-}
-
-function rate(message: AiChatMessage, verdict: 'right' | 'wrong', note?: string) {
-  verdicts[message.id] = 'thanked';
-  if (c.sessionId) {
-    void aiApi.feedback({ sessionId: c.sessionId, verdict, note, reply: message.text });
-  }
-}
+// No "Đúng ý / Chưa đúng" buttons (PO 26/10/2026). A customer who disagrees
+// says so in the conversation ("sai rồi", "không phải bệnh đó"); the assistant
+// notices, and Backend keeps it with the conversation for the team.
 
 defineExpose({ scrollToEnd });
 </script>
@@ -145,11 +145,25 @@ defineExpose({ scrollToEnd });
   <div class="flex flex-col min-h-0 h-full">
     <!-- Thread -->
     <div ref="thread" class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 bg-ink-50/40" data-testid="ai-thread">
-      <div v-for="message in c.messages" :key="message.id">
+      <div v-for="(message, messageIndex) in c.messages" :key="message.id">
         <div v-if="message.sender === 'user'" class="flex justify-end">
           <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-600 text-white px-3.5 py-2">
             <div v-if="message.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
-              <img v-for="(src, index) in message.images" :key="index" :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
+              <div v-for="(src, index) in message.images" :key="index" class="flex flex-col items-center gap-1 w-20">
+                <img :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
+                <button
+                  v-if="photoLabels[messageIndex]?.[index]"
+                  type="button"
+                  class="max-w-full line-clamp-2 break-words text-center rounded-xl px-2 py-0.5 text-[11px] leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
+                  :class="photoLabels[messageIndex][index]!.uncertain ? 'ring-1 ring-warning-300' : ''"
+                  :title="`Bấm để sửa nếu ảnh ${index + 1} không phải thiết bị này`"
+                  :aria-label="`Ảnh ${index + 1}: ${photoLabels[messageIndex][index]!.text}. Bấm để sửa`"
+                  data-testid="ai-photo-label"
+                  @click="correctPhoto(photoLabels[messageIndex][index]!.correction)"
+                >
+                  {{ photoLabels[messageIndex][index]!.text }}
+                </button>
+              </div>
             </div>
             <div v-if="message.videos?.length" class="flex flex-wrap gap-1.5 mb-1.5" data-testid="ai-message-videos">
               <video
@@ -275,30 +289,10 @@ defineExpose({ scrollToEnd });
                 <span class="text-xs text-ink-500">Chi phí tham khảo</span>
                 <span class="text-sm font-semibold text-ink-900 font-num whitespace-nowrap">{{ priceLabel(message.reply) }}</span>
               </div>
+              <p v-if="priceBreakdown(message.reply)" class="text-xs text-ink-500" data-testid="ai-price-breakdown">{{ priceBreakdown(message.reply) }}</p>
               <p v-if="message.reply.priceEstimate?.requiresAssessment" class="text-xs text-ink-500">Thợ xem tận nơi rồi mới báo giá chính xác ạ.</p>
 
               <p v-if="message.reply.disclaimerVi" class="text-xs text-ink-400 leading-snug">{{ message.reply.disclaimerVi }}</p>
-            </div>
-
-            <div v-if="verdictFor(message)" class="text-xs text-ink-500" data-testid="ai-feedback">
-              <div v-if="verdictFor(message) === 'asking'" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>Câu trả lời này có đúng ý anh/chị không?</span>
-                <button type="button" class="font-semibold text-ink-700 hover:text-brand-700" data-testid="ai-feedback-right" @click="rate(message, 'right')">Đúng ý</button>
-                <button type="button" class="font-semibold text-ink-700 hover:text-danger-700" data-testid="ai-feedback-wrong" @click="verdicts[message.id] = 'note'">Chưa đúng</button>
-              </div>
-              <form v-else-if="verdictFor(message) === 'note'" class="flex items-end gap-2" @submit.prevent="rate(message, 'wrong', notes[message.id])">
-                <textarea
-                  v-model="notes[message.id]"
-                  rows="2"
-                  maxlength="300"
-                  class="flex-1 min-w-0 rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
-                  placeholder="Anh/chị góp ý thêm cho em (không bắt buộc)"
-                  aria-label="Góp ý cho trợ lý"
-                  data-testid="ai-feedback-note"
-                />
-                <button type="submit" class="whitespace-nowrap rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-700" data-testid="ai-feedback-send">Gửi góp ý</button>
-              </form>
-              <p v-else data-testid="ai-feedback-thanks">Em cảm ơn anh/chị, em ghi nhận để học thêm ạ.</p>
             </div>
           </div>
         </div>
@@ -379,6 +373,7 @@ defineExpose({ scrollToEnd });
         <ImageIcon :size="19" />
       </button>
       <textarea
+        ref="composer"
         v-model="c.input"
         rows="1"
         :placeholder="placeholder"

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import FhButton from '../FhButton.vue';
 import FhMoney from '../FhMoney.vue';
 import FhCostBreakdown from '../FhCostBreakdown.vue';
-import type { AdditionalCostRecord } from '../../api/orders.api';
+import type { AdditionalCostRecord, EvidenceType } from '../../api/orders.api';
 import type { VisitOrderDetails } from '../../composables/useVisitOrderDetails';
 import { orderBilling, billingAmount } from '../../utils/order-billing';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
@@ -17,10 +17,25 @@ const emit = defineEmits<{
 const consent = ref<Record<string, boolean>>({});
 // Reuse the same display reconciliation as CustomerOrderDetail; never build a bill here.
 const billing = computed(() => orderBilling(props.details.order, props.details.invoice, props.details.costs));
+const fixedPriceOrder = computed(() => String(props.details.order.pricingMode).toLowerCase() === 'fixed_price');
+const fixedLaborSnapshot = computed(() => {
+  if (!fixedPriceOrder.value || billing.value.final) return null;
+  const unitPrice = billingAmount(props.details.order.fixedUnitPrice);
+  const quantity = Number.isSafeInteger(props.details.order.quantity) && Number(props.details.order.quantity) > 0
+    ? Number(props.details.order.quantity) : 1;
+  const unitSnapshot = unitPrice !== null && unitPrice > 0 ? unitPrice * quantity : null;
+  if (unitSnapshot !== null && Number.isSafeInteger(unitSnapshot)) return unitSnapshot;
+  const laborSnapshot = billingAmount(props.details.order.laborTotal);
+  return laborSnapshot !== null && laborSnapshot > 0 ? laborSnapshot : null;
+});
 const quoteReady = computed(() => canDecideOfficialQuotation(props.details.order));
 const visibleQuote = computed(() => ['sent', 'approved', 'accepted', 'rejected'].includes(String(props.details.order.quotation?.status).toLowerCase()));
 const labels: Record<AdditionalCostRecord['status'], string> = {
   PENDING_APPROVAL: 'Chờ bạn duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối', EXPIRED: 'Hết hạn chờ duyệt', CANCELLED: 'Đã huỷ',
+};
+const evidenceLabels: Record<EvidenceType, string> = {
+  before: 'Ảnh trước sửa chữa', after: 'Ảnh sau sửa chữa',
+  additional: 'Ảnh bổ sung', checkin_face: 'Ảnh check-in',
 };
 const hasExternal = (cost: AdditionalCostRecord) => cost.items.some(item => item.partSource === 'external');
 const canDecide = (cost: AdditionalCostRecord) => props.details.order.status.toUpperCase() === 'UNDER_REPAIR'
@@ -36,6 +51,7 @@ const costTotal = (cost: AdditionalCostRecord) => {
   <div class="mt-4 space-y-5 border-t border-ink-100 pt-4" data-testid="visit-inline-details" :aria-busy="disabled">
     <section v-if="visibleQuote" class="space-y-3" data-testid="visit-inline-quotation">
       <h3 class="text-base font-semibold text-ink-900">{{ quoteReady ? 'Báo giá chờ bạn duyệt' : 'Báo giá của máy này' }}</h3>
+      <p v-if="['approved', 'accepted'].includes(String(details.order.quotation?.status).toLowerCase())" class="text-sm font-medium text-success-700">Đã duyệt báo giá</p>
       <p v-if="String(details.order.quotation?.status).toLowerCase() === 'rejected'" class="text-sm text-ink-600">Đã từ chối báo giá</p>
       <ul class="divide-y divide-ink-100 text-sm">
         <li v-for="(item, index) in details.order.quotation?.items" :key="index" class="flex flex-wrap items-start justify-between gap-2 py-2">
@@ -43,8 +59,11 @@ const costTotal = (cost: AdditionalCostRecord) => {
           <FhMoney :amount="item.lineTotal" class="font-medium text-ink-900" />
         </li>
       </ul>
+      <p v-if="quoteReady && fixedPriceOrder" class="text-sm text-ink-600" data-testid="visit-fixed-price-disclaimer">
+        Tiền công chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá; bạn duyệt trước khi thực hiện.
+      </p>
       <FhCostBreakdown v-if="quoteReady && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
-      <div v-if="quoteReady" class="flex flex-wrap justify-end gap-2">
+      <div v-if="quoteReady" class="grid grid-cols-1 gap-2 sm:flex sm:justify-end">
         <FhButton variant="secondary" size="md" :disabled="disabled" data-testid="visit-quote-reject" @click="emit('quote', 'REJECT')">Từ chối báo giá</FhButton>
         <FhButton size="md" :disabled="disabled" data-testid="visit-quote-approve" @click="emit('quote', 'APPROVE')">Duyệt báo giá</FhButton>
       </div>
@@ -70,7 +89,7 @@ const costTotal = (cost: AdditionalCostRecord) => {
           <input v-model="consent[cost.id]" type="checkbox" class="mt-1 h-5 w-5 shrink-0 accent-brand-600" :disabled="disabled" :data-testid="`visit-external-consent-${cost.id}`" />
           <span>Tôi đã hiểu và đồng ý dùng linh kiện ngoài, không do FixHome cung cấp và không được FixHome bảo hành.</span>
         </label>
-        <div v-if="canDecide(cost)" class="flex flex-wrap justify-end gap-2">
+        <div v-if="canDecide(cost)" class="grid grid-cols-1 gap-2 sm:flex sm:justify-end">
           <FhButton variant="secondary" size="md" :disabled="disabled" :data-testid="`visit-cost-reject-${cost.id}`" @click="emit('cost', cost.id, 'REJECT', false)">Từ chối</FhButton>
           <FhButton size="md" :disabled="disabled || (hasExternal(cost) && !consent[cost.id])" :data-testid="`visit-cost-approve-${cost.id}`" @click="emit('cost', cost.id, 'APPROVE', !!consent[cost.id])">Đồng ý chi phí</FhButton>
         </div>
@@ -78,16 +97,31 @@ const costTotal = (cost: AdditionalCostRecord) => {
     </section>
 
     <section v-if="!quoteReady" class="space-y-3" aria-label="Chi phí của máy này">
-      <h3 class="text-base font-semibold text-ink-900">{{ billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h3>
+      <h3 class="text-base font-semibold text-ink-900">{{ billing.final ? 'Hóa đơn cuối cùng' : fixedPriceOrder ? 'Tiền công theo phạm vi đã xác nhận' : 'Tạm tính' }}</h3>
       <p v-if="details.invoiceError" role="alert" class="text-sm text-danger-700">Chưa tải được hóa đơn cuối cùng. <FhButton variant="ghost" size="md" :disabled="disabled" @click="emit('retry')">Thử lại</FhButton></p>
-      <FhCostBreakdown v-else-if="billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
-      <p v-else class="text-sm text-ink-600">Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.</p>
+      <FhCostBreakdown v-else-if="billing.final && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
+      <p v-else-if="fixedPriceOrder && fixedLaborSnapshot !== null" class="text-sm font-semibold text-ink-900" data-testid="visit-fixed-labor">
+        <FhMoney :amount="fixedLaborSnapshot" />
+      </p>
+      <FhCostBreakdown v-else-if="!fixedPriceOrder && billing.labor !== null && billing.parts !== null && billing.total !== null" :labor-total="billing.labor" :parts-total="billing.parts" :grand-total="billing.total" compact />
+      <p v-else class="text-sm text-ink-600">Chưa có tạm tính. Kỹ thuật viên sẽ kiểm tra và gửi báo giá để bạn duyệt trước khi sửa.</p>
+      <p v-if="fixedPriceOrder" class="text-sm text-ink-600" data-testid="visit-fixed-price-disclaimer">
+        Tiền công chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá; bạn duyệt trước khi thực hiện.
+      </p>
       <p class="text-sm text-ink-600">Thanh toán một lần ở mục Thanh toán cả lượt.</p>
     </section>
     <section v-if="details.evidence.length || details.evidenceError" class="space-y-3">
-      <h3 class="text-base font-semibold text-ink-900">Ảnh và ghi chú của thợ</h3>
+      <h3 class="text-base font-semibold text-ink-900">Ảnh và ghi chú của kỹ thuật viên</h3>
       <p v-if="details.evidenceError" class="text-sm text-ink-600">Chưa tải được ảnh của máy này.</p>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3"><figure v-for="photo in details.evidence" :key="photo.id" class="min-w-0 space-y-1"><img :src="photo.mediaUrl" alt="Ảnh hiện trường của máy này" loading="lazy" class="aspect-square w-full rounded-xl object-cover" /><figcaption class="break-words text-sm text-ink-700">{{ photo.note }}</figcaption></figure></div>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <figure v-for="photo in details.evidence" :key="photo.id" class="min-w-0 space-y-2">
+          <img :src="photo.mediaUrl" :alt="evidenceLabels[photo.type] || 'Ảnh hiện trường của máy này'" loading="lazy" class="aspect-square w-full rounded-xl object-cover" />
+          <figcaption class="space-y-1 break-words text-sm text-ink-700">
+            <span class="block font-medium text-ink-900">{{ evidenceLabels[photo.type] || 'Ảnh hiện trường' }}</span>
+            <span v-if="photo.note" class="block whitespace-pre-line">{{ photo.note }}</span>
+          </figcaption>
+        </figure>
+      </div>
     </section>
   </div>
 </template>

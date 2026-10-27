@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -1661,7 +1662,7 @@ const parsedReview = computed(() => {
       v-if="showPaymentModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
     >
-      <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full p-6 space-y-4 shadow-xl">
+      <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full max-h-[90dvh] overflow-y-auto p-6 space-y-4 shadow-xl">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-ink-900">Thanh toán đơn</h3>
@@ -1685,6 +1686,7 @@ const parsedReview = computed(() => {
 
         <!-- One list of the ways to pay, one action under it (PO 21/10/2026). -->
         <template v-if="payMethods.length">
+          <VoucherCheckoutChooser :key="invoice?.id" />
           <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
             <button
               v-for="method in payMethods"

@@ -24,6 +24,7 @@ import {
   Users,
   Wallet,
   WalletCards,
+  TicketPercent,
 } from 'lucide-vue-next';
 
 export interface ConsoleNavItem {
@@ -88,6 +89,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
         items: [
           item('Thanh toán', '/console/admin/payments', CreditCard),
           payouts,
+          item('Ưu đãi voucher', '/console/admin/vouchers', TicketPercent),
           item('Ví khách hàng', '/console/admin/customer-wallets', WalletCards),
           item('Công nợ nền tảng', '/console/admin/platform-dues', Receipt),
         ],

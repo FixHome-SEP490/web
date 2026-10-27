@@ -12,6 +12,7 @@ import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next'
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
+import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
 import type { ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
@@ -275,6 +276,11 @@ onUnmounted(() => {
 
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
+const failedBookingIds = computed(() => {
+  if (checkoutLoading.value || checkoutError.value) return [];
+  return (visit.value?.items ?? []).flatMap(item => item.booking?.id
+    && checkout.value?.devices.some(device => device.bookingId === item.booking!.id && device.state === 'failed') ? [item.booking.id] : []);
+});
 const held = computed(() => (checkout.value?.devices ?? []).some((device) => device.serviceOrderId));
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
 const canChooseTechnician = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
@@ -314,7 +320,9 @@ const technicianProgress = computed(() => {
   if (statuses.includes('EN_ROUTE')) return 'Đang di chuyển';
   if (statuses.includes('ACCEPTED')) return 'Đã nhận lượt sửa';
   if (statuses.length && statuses.every(status => ['COMPLETED', 'CANCELLED'].includes(status))) return 'Đã có kết quả các máy';
-  return held.value ? 'Chờ cập nhật tiến độ' : matchingState.value === 'MATCHING' ? 'Đang chờ thợ nhận' : 'Chưa có kỹ thuật viên nhận lượt';
+  if (held.value) return 'Chờ cập nhật tiến độ';
+  if (matchingState.value === 'MATCHED') return 'Đã ghép kỹ thuật viên cho lượt';
+  return matchingState.value === 'MATCHING' ? 'Đang chờ thợ nhận' : 'Chưa có kỹ thuật viên nhận lượt';
 });
 function pendingCosts(item: Visit['items'][number]) {
   const orderId = deviceOf(item.booking?.id)?.serviceOrderId;
@@ -430,6 +438,7 @@ async function confirmCancel() {
 type PayMethod = 'wallet' | 'vnpay' | 'cash';
 type CheckoutState = 'waiting' | 'paid' | 'pending_cash' | 'zero_due' | 'wallet_short' | 'vnpay' | 'ready';
 const payMethod = ref<PayMethod>('wallet');
+const cashInstructionsOpen = ref(false);
 const walletBalance = ref<number | null>(null);
 const walletError = ref(false);
 const walletCovers = computed(() => walletBalance.value !== null && checkout.value !== null && walletBalance.value >= checkout.value.total);
@@ -459,6 +468,17 @@ const checkoutState = computed<CheckoutState>(() => {
 watch(payMethods, (methods) => {
   if (!methods.includes(payMethod.value)) payMethod.value = 'wallet';
 });
+watch(payMethod, (method) => {
+  if (method !== 'cash') cashInstructionsOpen.value = false;
+});
+watch(checkoutState, (state) => {
+  if (state !== 'ready') cashInstructionsOpen.value = false;
+});
+function openCashInstructions() {
+  if (checkoutLoading.value || busy.value || payMethod.value !== 'cash' || checkoutState.value !== 'ready' || !checkout.value) return;
+  cashInstructionsOpen.value = true;
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="visit-cash-instructions"]')?.focus());
+}
 async function loadWallet() {
   walletError.value = false;
   walletBalance.value = await customerWalletApi.summary(1, 1).then((wallet) => wallet.balance).catch(() => {
@@ -532,12 +552,12 @@ async function answerCash(agreed: boolean) {
       <header class="space-y-4">
         <div class="space-y-1">
           <h1 class="text-2xl leading-8 font-bold tracking-tight text-ink-900 sm:text-[28px] sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
-          <p class="text-sm text-ink-600">Một kỹ thuật viên · Một lịch hẹn · Thanh toán một lần</p>
+          <p class="text-sm text-ink-600">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
         </div>
         <div class="divide-y divide-ink-200 rounded-2xl border border-ink-200 bg-white px-4 sm:px-6">
           <div class="flex flex-wrap items-center justify-between gap-2 py-4" data-testid="visit-shared-technician">
             <div class="min-w-0 flex-1 basis-48">
-              <h2 class="text-sm font-medium text-ink-600">Kỹ thuật viên của lượt sửa</h2>
+              <h2 class="text-sm font-medium text-ink-600">Kỹ thuật viên phụ trách cả lượt</h2>
               <p v-if="sharedTechnician" class="break-words text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
               <p class="text-sm text-ink-700" role="status">{{ technicianProgress }}</p>
             </div>
@@ -584,6 +604,13 @@ async function answerCash(agreed: boolean) {
 
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
+        <FhButton
+          v-if="failedBookingIds.length > 1"
+          variant="secondary"
+          size="md"
+          data-testid="failed-repair-rebook-all"
+          @click="router.push({ path: '/app/bookings/new', query: { repairFailure: failedBookingIds.join(',') } })"
+        >Đặt lại {{ failedBookingIds.length }} máy không sửa được</FhButton>
         <div class="grid gap-2 sm:grid-cols-3" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
           <button
             v-for="item in visit.items"
@@ -656,6 +683,13 @@ async function answerCash(agreed: boolean) {
             </div>
           </div>
           <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+          <FailedRepairIncident
+            v-if="!checkoutLoading && !checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
+            :key="selectedVisitItem.booking.id"
+            :booking-id="selectedVisitItem.booking.id"
+            @rebook="bookingId => router.push({ path: '/app/bookings/new', query: { repairFailure: bookingId } })"
+            @later="router.push('/app')"
+          />
           <VisitOrderDetails
             v-if="selectedDetails"
             :key="selectedDetails.order.id"
@@ -669,13 +703,13 @@ async function answerCash(agreed: boolean) {
             <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />
             <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
           </div>
-          <component :is="selectedOrderId ? 'router-link' : 'div'" :to="selectedOrderId ? `/app/orders/${selectedOrderId}` : undefined" class="mt-3 inline-flex min-h-11 items-center gap-1 rounded-lg px-1 text-sm font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" data-testid="visit-device-order-link"><template v-if="selectedOrderId">Chi tiết nâng cao của máy {{ selectedVisitItem.sequence }}<ChevronRight :size="16" aria-hidden="true" /></template></component>
+
         </div>
       </section>
 
       <section v-if="!cancelled" class="flex flex-wrap gap-2.5">
         <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
-          {{ matchingState === 'CLOSED' ? 'Chọn thợ khác' : 'Chọn kỹ thuật viên' }}
+          {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
         </FhButton>
         <FhButton v-if="canReschedule" variant="secondary" size="md" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
         <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="md" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
@@ -759,7 +793,17 @@ async function answerCash(agreed: boolean) {
             <p v-else-if="payMethod === 'wallet' && walletBalance !== null && !walletCovers" class="text-ink-600" data-testid="visit-wallet-short">
               Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
             </p>
-            <p v-else-if="payMethod === 'cash'" class="text-ink-600">Đưa tiền cho kỹ thuật viên. Thợ báo số tiền của cả lượt, bạn xác nhận lại tại trang này.</p>
+            <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
+              <p>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
+              <FhButton v-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
+              <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
+                <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt cho cả lượt</h3>
+                <p>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
+                <p>Nút này chỉ mở hướng dẫn. Chưa ghi nhận đã thanh toán và chưa gửi xác nhận tiền mặt lên hệ thống.</p>
+                <p>Đưa số tiền trên trực tiếp cho kỹ thuật viên. Kỹ thuật viên khai báo số tiền đã nhận; sau đó bạn xác nhận đúng số tiền hoặc báo chưa đúng.</p>
+                <FhButton variant="ghost" size="md" data-testid="visit-cash-instructions-close" @click="cashInstructionsOpen = false">Đóng hướng dẫn</FhButton>
+              </section>
+            </div>
             <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="!walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
             <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
         </template>

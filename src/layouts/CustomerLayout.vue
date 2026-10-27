@@ -17,6 +17,7 @@ import {
   ClipboardList,
   ShieldCheck,
   Bot,
+  TicketPercent,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -202,6 +203,7 @@ const navItems = [
   { to: '/app/orders', label: 'Đơn sửa chữa', icon: ClipboardList, exact: false },
   { to: '/app/warranties', label: 'Bảo hành', icon: ShieldCheck, exact: false },
   { to: '/app/messages', label: 'Tin nhắn', icon: MessageSquare, exact: false },
+  { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },
 ];
 
 const tabItems = [
@@ -229,8 +231,11 @@ const handleLogout = async () => {
     :class="hasActionBar ? '[--fh-dock:10rem] lg:[--fh-dock:6rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/90 shadow-2xs">
-      <!-- A little wider than the page so the links and both booking buttons fit. -->
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <!-- A little wider than the page so the links and both booking buttons fit.
+           Five links since "Ưu đãi" (26/10/2026): with their icons they ran 40-60px
+           under "Đặt thợ ngay" at every desktop width, so the icons show only
+           from 2xl, where the bar is wider too (probe-header-fit.mjs). -->
+      <div class="max-w-7xl 2xl:max-w-[90rem] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">
           <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0 group" aria-label="FixHome - Trang chủ">
             <img :src="'/logo.png'" alt="" class="w-9 h-9 object-contain rounded-xl group-hover:scale-105 transition-transform" />
@@ -260,7 +265,7 @@ const handleLogout = async () => {
               :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
               :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
             >
-              <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" />
+              <component :is="item.icon" :size="17" :stroke-width="1.8" class="hidden 2xl:block shrink-0" />
               <span>{{ item.label }}</span>
               <span
                 v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"

@@ -195,13 +195,14 @@ defineExpose({ reload: loadReturns });
         <div v-for="row in group.rows" :key="returnKey(row)" class="space-y-3 border-t border-ink-100 pt-3">
           <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
             <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
-            <div class="flex flex-wrap gap-x-1 gap-y-1 text-sm text-ink-600">
-              <span class="whitespace-nowrap">Cấp <strong class="font-num text-ink-900">{{ row.issuedQty }}</strong></span> ·
-              <span class="whitespace-nowrap">Dùng <strong class="font-num text-ink-900">{{ row.usedQty }}</strong></span> ·
-              <span class="whitespace-nowrap">Khai trả <strong class="font-num text-ink-900">{{ row.declaredQty }}</strong></span> ·
-              <span class="whitespace-nowrap">Đã nhận <strong class="font-num text-ink-900">{{ row.managerAcceptedQty }}</strong></span>
-            </div>
+            <span class="rounded-md bg-warning-50 px-2 py-1 text-sm font-medium text-warning-800" :data-testid="`part-return-pending-${row.partRequestItemId}`">Chờ nhận {{ pendingDeclaredQty(row) }}</span>
           </div>
+          <dl class="flex flex-wrap gap-x-3 gap-y-2 text-sm text-ink-600" :aria-label="`Số lượng ${row.partNameSnapshot}`">
+            <div class="inline-flex items-baseline gap-1"><dt>Cấp{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.issuedQty }}<span aria-hidden="true" class="ml-3 font-sans font-normal text-ink-600">{{ ' · ' }}</span></dd></div>
+            <div class="inline-flex items-baseline gap-1"><dt>Dùng{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.usedQty }}<span aria-hidden="true" class="ml-3 font-sans font-normal text-ink-600">{{ ' · ' }}</span></dd></div>
+            <div class="inline-flex items-baseline gap-1"><dt>Khai trả{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.declaredQty }}<span aria-hidden="true" class="ml-3 font-sans font-normal text-ink-600">{{ ' · ' }}</span></dd></div>
+            <div class="inline-flex items-baseline gap-1"><dt>Đã nhận{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.managerAcceptedQty }}</dd></div>
+          </dl>
           <div v-if="canOperate" class="flex flex-wrap items-end gap-2">
             <div>
               <label :for="`accept-qty-${returnKey(row)}`" class="mb-1 block text-xs font-medium text-ink-700">Số lượng nhận thực tế</label>
@@ -218,7 +219,7 @@ defineExpose({ reload: loadReturns });
                 class="min-h-11 w-24"
               />
             </div>
-            <span :id="`accept-hint-${returnKey(row)}`" class="pb-3 text-sm text-warning-800">Chờ nhận · tối đa {{ maxAcceptQty(row) }}</span>
+            <span :id="`accept-hint-${returnKey(row)}`" class="min-w-0 flex-1 pb-3 text-sm text-ink-600">Nhận thực tế tối đa {{ maxAcceptQty(row) }}</span>
             <FhButton
               data-testid="accept-return"
               variant="primary"

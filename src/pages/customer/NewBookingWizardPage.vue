@@ -40,6 +40,8 @@ import {
   type BookingCatalogService,
 } from '../../components/booking/booking-service-catalog';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
+import FailedRepairBookingForm from '../../components/customer/FailedRepairBookingForm.vue';
+import { useAuthStore } from '../../stores/auth.store';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import type { BookingDeviceAttributes, CatalogPricingPreview } from '../../api/catalog-pricing.api';
 import { useReferenceData } from '../../composables/useCachedQuery';
@@ -60,6 +62,13 @@ import { formatCurrencyVND } from '../../utils/formatters';
 
 const route = useRoute();
 const router = useRouter();
+// Dedicated failed-repair entry: only authenticated server drafts, never URL-prefilled content.
+const isFailedRepairEntry = computed(() => route.query.repairFailure !== undefined);
+const failedRepairSources = computed(() => {
+  const value = route.query.repairFailure;
+  return (typeof value === 'string' ? value.split(',') : []).filter(Boolean);
+});
+const failedRepairCustomerId = computed(() => isFailedRepairEntry.value ? useAuthStore().user?.id ?? '' : '');
 const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-layout-width', () => {});
 
 /**
@@ -70,7 +79,7 @@ const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
 const step = ref(1);
-useStepHistory(step, router, route);
+if (!isFailedRepairEntry.value) useStepHistory(step, router, route);
 watch(step, (currentStep, previous) => {
   setBookingLayoutWidth(currentStep === 2 || (!isAiFlow && currentStep === 1));
   // A new step starts at its top, never mid-page under the header (PO 20/10/2026).
@@ -1123,6 +1132,7 @@ async function loadAddresses() {
 }
 
 onMounted(() => {
+  if (isFailedRepairEntry.value) return;
   applyIncomingDescription();
   void loadCategories();
   void loadAddresses();
@@ -1795,7 +1805,15 @@ async function createAndFindTech() {
 </script>
 
 <template>
+  <FailedRepairBookingForm
+    v-if="isFailedRepairEntry"
+    :source-booking-ids="failedRepairSources"
+    :customer-id="failedRepairCustomerId"
+    @created="result => router.push(result.kind === 'booking' ? `/app/bookings/${result.id}/candidates` : `/app/visits/${result.id}/candidates`)"
+    @later="router.push('/app')"
+  />
   <div
+    v-else
     class="w-full space-y-5 sm:space-y-6"
     :class="(step === 1 && !isAiFlow) || step === 2 ? (visitSummaryPrice.kind === 'partial' ? 'pb-[calc(12rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24') : 'pb-16'"
   >
@@ -2291,14 +2309,14 @@ async function createAndFindTech() {
             >
               <span class="text-ink-700">{{ editingSavedDeviceKey ? 'Bạn đang sửa thiết bị đã lưu.' : 'Thiết bị này sẽ được thêm riêng vào lượt sửa.' }}</span>
               <FhButton
-                v-if="editingSavedDeviceKey || visitDeviceCount <= VISIT_DEVICE_LIMIT"
+                v-if="editingSavedDeviceKey || canAddDevice || canSaveThirdAndContinue"
                 variant="secondary"
                 size="md"
                 :disabled="loading || uploadingPhoto"
                 :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
-                @click="addAnotherDevice"
+                @click="canSaveThirdAndContinue ? goToStep2() : addAnotherDevice()"
               >
-                <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : 'Thêm thiết bị này vào lượt' }}
+                <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveThirdAndContinue ? `Lưu máy ${VISIT_DEVICE_LIMIT} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
               </FhButton>
               <FhButton v-if="editingSavedDeviceKey" variant="ghost" size="md" :disabled="loading || uploadingPhoto" data-testid="visit-device-edit-cancel" @click="cancelSavedDeviceEdit">Hủy sửa</FhButton>
               <span v-else-if="visitDeviceCount > VISIT_DEVICE_LIMIT" class="rounded-lg bg-warning-50 px-3 py-2 text-warning-800" data-testid="visit-device-limit">
@@ -2634,7 +2652,7 @@ async function createAndFindTech() {
           </div>
           <div class="flex justify-between gap-4 text-ink-500">
             <span>Linh kiện, vật tư</span>
-            <span class="text-right">Thợ báo giá nếu cần, bạn duyệt trước</span>
+            <span class="text-right">Kỹ thuật viên báo giá nếu cần; bạn duyệt trước khi thực hiện</span>
           </div>
           <template v-if="summaryPrice.kind === 'firm'">
             <div class="h-px bg-ink-100"></div>
@@ -2643,6 +2661,9 @@ async function createAndFindTech() {
               <span class="text-2xl font-semibold text-brand-700 font-num"><FhMoney :amount="summaryPrice.amount" /></span>
             </div>
           </template>
+          <p v-if="summaryPrice.kind === 'firm'" class="text-xs leading-relaxed text-ink-600" data-testid="confirm-fixed-price-scope">
+            Tiền công theo phạm vi đã xác nhận; chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá, bạn duyệt trước khi thực hiện.
+          </p>
           <p v-else class="text-ink-500" data-testid="confirm-v2-range-note">Thợ kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.</p>
         </section>
 
@@ -2695,7 +2716,7 @@ async function createAndFindTech() {
             <span class="text-ink-700">Thợ báo giá tại nhà</span>
           </div>
           <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">+ {{ visitSummaryPrice.unresolvedCount }} máy chờ khảo sát báo giá. Chưa phải tổng {{ reviewDevices.length }} máy.</p>
-          <p class="text-xs leading-relaxed text-ink-600">Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.</p>
+          <p class="text-xs leading-relaxed text-ink-600">{{ visitSummaryPrice.kind === 'firm' ? 'Tiền công theo phạm vi đã xác nhận; chưa gồm linh kiện FixHome hoặc tiền công phát sinh ngoài phạm vi. Kỹ thuật viên cần gửi báo giá, bạn duyệt trước khi thực hiện.' : 'Chưa gồm linh kiện, vật tư. Kỹ thuật viên gửi báo giá để bạn duyệt trước khi sửa.' }}</p>
         </section>
 
         <div v-if="submitOutcomeUnknown" role="alert" class="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="booking-submit-unknown">

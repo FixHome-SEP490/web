@@ -33,6 +33,18 @@ export interface DetectedDevice {
   nameVi: string;
   confidence: number;
   source?: string | null;
+  /** A guess from a photograph nobody was sure of; the customer can correct it. */
+  uncertain?: boolean;
+}
+
+/** What one photograph of the message was read as (ai-service, 26/10/2026). */
+export interface PhotoReading {
+  /** Its place among the message's photos, from 0. */
+  index: number;
+  /** Null when nothing was recognised in it. */
+  deviceType?: string | null;
+  nameVi?: string | null;
+  uncertain?: boolean;
 }
 
 export interface SuspectedFault {
@@ -68,6 +80,8 @@ export interface AiDeviceSuggestion {
   descriptionVi?: string | null;
   /** Why there is no service, e.g. FixHome does not repair it yet. */
   noteVi?: string | null;
+  /** The appliance of this photograph is a guess. */
+  uncertain?: boolean;
 }
 
 export interface PriceEstimate {
@@ -76,6 +90,20 @@ export interface PriceEstimate {
   max?: number | null;
   currency: string;
   requiresAssessment: boolean;
+  /** The service's own price, as the booking form shows it: `min` is this (PO 26/10/2026). */
+  labourMin?: number | null;
+  /** Its top while the fixed-price variant is not known yet. */
+  labourMax?: number | null;
+  /** The parts the suspected fault usually needs, at FixHome's selling price; `max` adds them. */
+  partsMax?: number | null;
+}
+
+/** The customer said the last answer was wrong; see ai-service `customerDisagreed`. */
+export interface AiDisagreement {
+  kind?: string | null;
+  rejectedVi?: string[];
+  /** This turn's words without the opening "sai rồi", for the booking description. */
+  restVi?: string | null;
 }
 
 export interface Clarification {
@@ -124,7 +152,10 @@ export interface AiReply {
   notesVi?: string[];
   /** Every appliance of the conversation when there is more than one; empty otherwise. */
   devices?: AiDeviceSuggestion[];
+  /** One per photo of the message this replies to, in order: what each was read as. */
+  photos?: PhotoReading[];
   disclaimerVi?: string;
+  customerDisagreed?: AiDisagreement | null;
 }
 
 export type AcknowledgementSituations = Record<string, string[]>;
@@ -212,29 +243,6 @@ export const aiApi = {
       return unwrap<AiReply>(response.data);
     } catch (error) {
       return offline(payload.sessionId, tooFast(error) ? TOO_FAST : undefined);
-    }
-  },
-
-  /**
-   * The customer's verdict on an answer, for the team to learn from. Best
-   * effort: thanking the customer does not depend on it being stored.
-   */
-  async feedback(payload: {
-    sessionId: string;
-    verdict: 'wrong' | 'right';
-    note?: string;
-    reply?: string;
-  }): Promise<boolean> {
-    try {
-      await apiClient.post('/ai/feedback', {
-        sessionId: payload.sessionId,
-        verdict: payload.verdict,
-        note: payload.note?.trim().slice(0, 300) || undefined,
-        reply: payload.reply?.slice(0, 1000) || undefined,
-      });
-      return true;
-    } catch {
-      return false;
     }
   },
 

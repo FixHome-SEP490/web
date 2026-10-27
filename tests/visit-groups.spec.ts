@@ -125,7 +125,7 @@ describe('customer visit page', () => {
     vi.doMock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: (handler: import('../src/services/chat-socket.service').ChatSocketHandlers) => { socketHandlers.add(handler); return () => socketHandlers.delete(handler); } } }));
     vi.doMock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
-    const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
+    const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhCostBreakdown: { props: ['laborTotal', 'partsTotal', 'grandTotal'], template: '<div data-testid="visit-cost-breakdown" :data-labor="laborTotal" :data-parts="partsTotal" :data-total="grandTotal" />' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
     await flushPromises();
     return w;
   }
@@ -156,6 +156,7 @@ describe('customer visit page', () => {
     expect(selector.findAll('[data-testid^="visit-device-select-"]')).toHaveLength(2);
     expect(w.get('[data-testid="visit-device-select-1"]').attributes('aria-pressed')).toBe('true');
     expect(w.get('[data-testid="visit-device-panel-1"]').attributes('aria-labelledby')).toBe('visit-device-select-1');
+    expect(w.find('[data-testid="visit-device-order-link"]').exists()).toBe(false); // All normal device actions remain on the visit page.
     expect(w.get('[data-testid="visit-device-select-1"]').attributes('id')).toBe('visit-device-select-1');
     expect(w.get('[data-testid="visit-device-panel-1"]').text()).toContain('Đã sửa xong');
     expect(w.get('[data-testid="visit-device-panel-1"]').text()).toContain('Máy lạnh');
@@ -185,6 +186,34 @@ describe('customer visit page', () => {
     expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
   });
 
+  it('offers rebooking only for failed B in A succeeded / B failed / C succeeded, without a POST', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0]!.booking, id: 'b3', serviceName: 'Máy C' } }] });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'succeeded' }), device('b2', { state: 'failed' }), device('b3', { state: 'succeeded' })] }));
+    const w = await mountPage();
+    expect(w.find('[data-testid="failed-repair-rebook"]').exists()).toBe(false);
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.findAll('[data-testid="failed-repair-rebook"]')).toHaveLength(1);
+    expect(w.find('[data-testid="failed-repair-rebook-all"]').exists()).toBe(false);
+    await w.get('[data-testid="failed-repair-rebook"]').trigger('click');
+    expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { repairFailure: 'b2' } });
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    const originalHistory = w.get('[data-testid="visit-device-selector"]').text();
+    await w.findAll('button').find(button => button.text() === 'Để sau')!.trigger('click');
+    expect(push).toHaveBeenLastCalledWith('/app');
+    expect(w.get('[data-testid="visit-device-selector"]').text()).toBe(originalHistory);
+    expect(visitApi.cancel).not.toHaveBeenCalled();
+    await w.get('[data-testid="visit-device-select-3"]').trigger('click');
+    expect(w.find('[data-testid="failed-repair-rebook"]').exists()).toBe(false);
+  });
+
+  it('offers one new group of only failed children when multiple devices failed', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: [...visit.items, { ...visit.items[0], id: 'i3', sequence: 3, booking: { ...visit.items[0]!.booking, id: 'b3' } }] });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'failed' }), device('b2', { state: 'failed' }), device('b3', { state: 'succeeded' })] }));
+    const w = await mountPage();
+    await w.get('[data-testid="failed-repair-rebook-all"]').trigger('click');
+    expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { repairFailure: 'b1,b2' } });
+  });
+
   it('shows a failed child outcome even if the parent visit is marked cancelled', async () => {
     visitApi.get.mockResolvedValue({ ...visit, status: 'cancelled' });
     visitApi.checkout.mockResolvedValue(checkout({
@@ -204,7 +233,7 @@ describe('customer visit page', () => {
     visitApi.checkout.mockResolvedValue(checkout({ devices: [], ready: false }));
     const w = await mountPage();
     const toggle = w.get('[data-testid="visit-device-expand-1"]');
-    expect(w.get('[data-testid="visit-device-order-link"]').attributes('href')).toBeUndefined();
+    expect(w.find('[data-testid="visit-device-order-link"]').exists()).toBe(false);
     expect(toggle.attributes('aria-controls')).toBe('visit-device-details-1');
     expect(w.find('#visit-device-details-1').exists()).toBe(true);
     await toggle.trigger('click');
@@ -247,6 +276,82 @@ describe('customer visit page', () => {
     expect(w.get('[data-testid="visit-shared-address"]').text()).toBe('Địa chỉ fixture');
     expect(w.get('header').text()).toContain('Một kỹ thuật viên');
     w.unmount();
+  });
+
+  it('states that one technician handles every device in the group', async () => {
+    const items = [
+      ...visit.items.map(item => ({ ...item, booking: { ...item.booking, status: 'SUBMITTED' } })),
+      { ...visit.items[0]!, id: 'i3', sequence: 3, booking: { ...visit.items[0]!.booking, id: 'b3', status: 'SUBMITTED' } },
+    ];
+    visitApi.get.mockResolvedValue({ ...visit, items });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [], ready: false }));
+    const w = await mountPage();
+    expect(w.get('header').text()).toContain('Một kỹ thuật viên phụ trách cả lượt');
+    expect(w.get('[data-testid="visit-choose-technician"]').text()).toContain('Chọn 1 kỹ thuật viên sửa cả 3 thiết bị');
+    await w.get('[data-testid="visit-choose-technician"]').trigger('click');
+    expect(push).toHaveBeenCalledWith('/app/visits/v1/candidates');
+    w.unmount();
+  });
+
+  it.each([
+    ['ACCEPTED', 'Đã nhận lượt sửa'],
+    ['EN_ROUTE', 'Đang di chuyển'],
+    ['UNDER_REPAIR', 'Đang sửa chữa'],
+  ])('shows shared technician progress from server status %s', async (status, label) => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
+    orders.getOrder.mockImplementation(async id => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status }));
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-shared-technician"]').text()).toContain(label);
+    expect(w.get('[data-testid="visit-device-list"]').text()).toContain('Dịch vụ từng máy');
+    w.unmount();
+  });
+
+  it('explains a matched visit without inventing a technician status before a child order exists', async () => {
+    visitApi.get.mockResolvedValue({ ...visit, items: visit.items.map(item => ({ ...item, booking: { ...item.booking, status: 'MATCHED' } })) });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [], ready: false }));
+    const w = await mountPage();
+    expect(w.get('[data-testid="visit-shared-technician"]').text()).toContain('Đã ghép kỹ thuật viên cho lượt');
+    expect(w.get('[data-testid="visit-shared-technician"]').text()).not.toContain('Chưa có kỹ thuật viên nhận lượt');
+    w.unmount();
+  });
+
+  it('shows fixed labor snapshot before invoice instead of a zero breakdown', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'failed' })] }));
+    orders.getOrder.mockImplementation(async id => ({
+      id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'EN_ROUTE',
+      pricingMode: 'FIXED_PRICE', fixedUnitPrice: 449000, laborTotal: 0, partsTotal: 0, grandTotal: 0,
+    }));
+    const w = await mountPage();
+    const details = w.get('[data-testid="visit-inline-details"]');
+    expect(details.get('[data-testid="visit-fixed-labor"]').text()).toContain('449000');
+    expect(details.find('[data-testid="visit-cost-breakdown"]').exists()).toBe(false);
+    expect(details.text()).toContain('chưa gồm linh kiện FixHome');
+    expect(details.text()).toContain('bạn duyệt trước khi thực hiện');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('says there is no estimate when a fixed labor snapshot is unavailable', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'failed' })] }));
+    orders.getOrder.mockImplementation(async id => ({
+      id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'EN_ROUTE',
+      pricingMode: 'FIXED_PRICE', fixedUnitPrice: null, laborTotal: 0, partsTotal: 0, grandTotal: 0,
+    }));
+    const w = await mountPage();
+    const details = w.get('[data-testid="visit-inline-details"]');
+    expect(details.text()).toContain('Chưa có tạm tính');
+    expect(details.find('[data-testid="visit-cost-breakdown"]').exists()).toBe(false);
+  });
+
+  it('keeps survey labor unpriced until a server quote exists', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'failed' })] }));
+    orders.getOrder.mockImplementation(async id => ({
+      id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'EN_ROUTE',
+      pricingMode: 'INSPECTION_REQUIRED', fixedUnitPrice: null, laborTotal: 0, partsTotal: 0, grandTotal: 0,
+    }));
+    const w = await mountPage();
+    const details = w.get('[data-testid="visit-inline-details"]');
+    expect(details.text()).toContain('Chưa có tạm tính');
+    expect(details.find('[data-testid="visit-cost-breakdown"]').exists()).toBe(false);
   });
 
   it('approves the base quote inline once, refreshes the parent and never navigates', async () => {
@@ -770,6 +875,22 @@ describe('customer visit page', () => {
     await w.get('[data-testid="visit-pay-method-cash"]').trigger('keydown', { key: 'Home' });
     expect(w.get('[data-testid="visit-pay-method-wallet"]').attributes('aria-checked')).toBe('true');
     expect((w.get('[data-testid="visit-pay-wallet"]').element as HTMLButtonElement).disabled).toBe(true);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+  });
+
+  it('opens cash instructions with the exact group amount without declaring payment', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ total: 375000 }));
+    const w = await mountPage();
+    await w.get('[data-testid="visit-pay-method-cash"]').trigger('click');
+    await w.get('[data-testid="visit-cash-intent"]').trigger('click');
+    const instructions = w.get('[data-testid="visit-cash-instructions"]');
+    expect(instructions.text()).toContain('375000');
+    expect(instructions.text()).toContain('Chưa ghi nhận đã thanh toán');
+    expect(instructions.text()).toContain('Kỹ thuật viên khai báo số tiền đã nhận');
+    expect(instructions.text()).toContain('xác nhận đúng số tiền hoặc báo chưa đúng');
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('ready');
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
     expect(visitApi.payWithWallet).not.toHaveBeenCalled();
     expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
   });
