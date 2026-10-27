@@ -58,6 +58,7 @@ const pendingPayload = ref<SupportCaseResolvePayload | null>(null);
 const submitting = ref(false);
 const liableParty = ref<'' | 'technician' | 'customer' | 'platform' | 'shared'>('');
 const amountText = ref<string | number>('');
+const grossRefundText = ref<string | number>('');
 const actionBusy = ref(false);
 
 const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
@@ -182,11 +183,17 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
   }
   const rawAmount = String(amountText.value ?? '').trim();
   const amount = rawAmount === '' ? undefined : Number(rawAmount);
-  if (amount !== undefined && (!Number.isInteger(amount) || amount < 0)) {
+  const rawGross = String(grossRefundText.value ?? '').trim();
+  const grossRefundVnd = rawGross === '' ? undefined : Number(rawGross);
+  if (grossRefundVnd !== undefined && (!Number.isSafeInteger(grossRefundVnd) || grossRefundVnd <= 0 || grossRefundVnd > 2_000_000_000)) {
+    formError.value = 'Giá gốc được duyệt hoàn phải là số nguyên dương hợp lệ.';
+    return null;
+  }
+  if (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0 || amount > 2_000_000_000)) {
     formError.value = 'Số tiền phải là số nguyên không âm.';
     return null;
   }
-  if (refundsToWallet.value && (!amount || amount <= 0)) {
+  if (refundsToWallet.value && (amount === undefined || (amount === 0 && grossRefundVnd === undefined))) {
     formError.value = 'Nhập số tiền hoàn vào ví khách (lớn hơn 0).';
     return null;
   }
@@ -217,6 +224,7 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     reason,
   };
   if (evidenceRefs.length > 0) payload.evidenceRefs = evidenceRefs;
+  if (refundsToWallet.value && grossRefundVnd !== undefined) payload.grossRefundVnd = grossRefundVnd;
   if (usesStandardCodes.value) {
     if (liableParty.value) payload.liableParty = liableParty.value;
     if (amount !== undefined) payload.amount = amount;
@@ -400,7 +408,7 @@ watch(caseId, (id) => {
                 <option value="" disabled>Chọn kết quả</option>
                 <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
-              <span v-if="refundsToWallet" class="font-normal text-warning-800 text-pretty" data-testid="refund-wallet-hint">Tiền vào ví khách ngay khi lưu, khách dùng để thanh toán lần sau. FixHome chịu khoản hoàn; muốn thu lại từ thợ thì quản trị viên điều chỉnh ví thợ. Tổng tiền hoàn của đơn không vượt số khách đã trả.</span>
+              <span v-if="refundsToWallet" class="font-normal text-warning-800 text-pretty" data-testid="refund-wallet-hint">Tiền hoàn vào ví khách là phần thực trả; FixHome chịu khoản hoàn. Với hóa đơn có voucher, quản lý phải nhập thêm giá gốc được duyệt hoàn để Backend đối chiếu trợ giá FixHome. Hoàn VNPay/tiền mặt chưa khả dụng trong quy trình này.</span>
               <span v-if="settlesCash" class="font-normal text-warning-800 text-pretty">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>
@@ -418,6 +426,11 @@ watch(caseId, (id) => {
               <input v-model="amountText" type="number" min="0" step="1000" inputmode="numeric" :class="consoleField" class="h-10" />
             </label>
           </div>
+          <label v-if="refundsToWallet" :class="consoleLabel" data-testid="funded-gross-refund-field">
+            Giá gốc được duyệt hoàn (đơn có voucher, ₫)
+            <input v-model="grossRefundText" data-testid="funded-gross-refund-input" type="number" min="1" max="2000000000" step="1" inputmode="numeric" :class="consoleField" class="h-10" />
+            <span class="text-xs font-normal text-ink-600">Để trống với đơn không có voucher. Khác với tiền hoàn vào ví khách; Backend đối chiếu phần FixHome tài trợ.</span>
+          </label>
           <label :class="consoleLabel">
             Lý do xử lý
             <textarea v-model="resolutionReason" maxlength="2000" rows="5" required :class="consoleTextarea" placeholder="Tối thiểu 10 ký tự" />
