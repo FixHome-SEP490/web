@@ -13,6 +13,7 @@ import { onBookingChange, whileOffline } from '../../services/live-updates';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString, vnDayKey } from '../../utils/vn-time';
 import { SLOT_SHORT, sessionDayLabel, sessionLabel, type BookingSlot, type SessionOption } from '../../utils/booking-session';
+import { useCustomerRebookRouting } from '../../utils/customer-rebook-routing';
 
 const route = useRoute();
 const showRebook = ref(false);
@@ -28,6 +29,11 @@ const loadError = ref('');
 const saving = ref(false);
 const saveError = ref('');
 const booking = ref<BookingItem | null>(null);
+const rebookRouting = useCustomerRebookRouting(
+  computed(() => booking.value?.id ?? null),
+  computed(() => booking.value?.status ?? null),
+  () => { showRebook.value = true; },
+);
 const bookingMedia = computed<BookingMedia[]>(() => {
   if (booking.value?.media?.length) return booking.value.media;
   return (booking.value?.mediaUrls ?? []).map((url, index) => ({
@@ -798,10 +804,14 @@ const confirmMatchingExtension = async () => {
         </div>
 
         <!-- Case 5: Cancelled Rebook action -->
-        <div v-if="booking.status === 'CANCELLED'" class="pt-4 border-t border-ink-100 flex justify-end">
-          <FhButton variant="primary" size="md" data-testid="booking-rebook" class="shadow-xs" @click="showRebook = true">
-            Đặt lại
+        <div v-if="booking.status === 'CANCELLED' && rebookRouting.action.value !== 'unavailable'" class="pt-4 border-t border-ink-100 flex justify-end">
+          <FhButton variant="primary" size="md" data-testid="booking-rebook" class="shadow-xs" :loading="rebookRouting.action.value === 'checking'" :disabled="rebookRouting.action.value === 'checking'" @click="rebookRouting.open()">
+            {{ rebookRouting.action.value === 'repair-failure' ? 'Đặt lại' : rebookRouting.action.value === 'checking' ? 'Đang kiểm tra…' : 'Đặt lại' }}
           </FhButton>
+        </div>
+        <div v-if="booking.status === 'CANCELLED' && rebookRouting.action.value === 'unavailable'" class="pt-4 border-t border-ink-100 flex items-center justify-end gap-2 text-sm text-danger-700" role="alert" data-testid="booking-rebook-check-error">
+          <span>Chưa xác định được cách đặt lại đơn này.</span>
+          <button type="button" class="font-semibold underline" data-testid="booking-rebook-check-retry" @click="rebookRouting.retry()">Thử lại</button>
         </div>
       </section>
 

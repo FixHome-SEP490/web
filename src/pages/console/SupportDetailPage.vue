@@ -108,7 +108,10 @@ async function loadCase(id: string) {
 }
 
 // "Cần thay đổi thợ" cases get their own handling (PO 08/10/2026).
-const isReplacementCase = computed(() => supportCase.value?.caseType === 'technician_replacement' && !!supportCase.value?.serviceOrderId);
+const isReplacementCase = computed(() => !!supportCase.value?.serviceOrderId && (
+  supportCase.value.caseType === 'technician_replacement'
+  || (supportCase.value.caseType === 'mid_job_interruption' && supportCase.value.requestIntent === 'stop_or_replace')
+));
 async function onReplacementDone(message: string) {
   const id = supportCase.value?.id;
   if (!id) return;

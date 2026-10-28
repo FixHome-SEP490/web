@@ -109,6 +109,42 @@ describe('supportCasesApi', () => {
     expect(result.status).toBe('resolved');
   });
 
+  it('reads authoritative interruption options for the selected support case', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope({
+      caseId: 'case-1', caseStatus: 'open', caseVersion: 2, serviceOrderId: 'order-1', visitGroupId: null,
+      requestIntent: 'stop_or_replace',
+      flags: { approvedQuote: false, invoice: false, payment: false, voucher: false, parts: false, incompleteSiblings: false },
+      actions: {
+        DIRECT_REASSIGN_SOLO: { allowed: true, reasons: [] },
+        CLOSE_FOR_REBOOK: { allowed: true, reasons: [] },
+        REJECT_REQUEST: { allowed: true, reasons: [] },
+      },
+    }));
+
+    const options = await supportCasesApi.replacementOptions('case-1');
+
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases/case-1/replacement-options');
+    expect(options.actions.DIRECT_REASSIGN_SOLO.allowed).toBe(true);
+    expect(options.flags.parts).toBe(false);
+  });
+
+  it('sends one versioned interruption command and returns the real order result', async () => {
+    const command = {
+      commandId: 'aa648542-bf1e-41e6-a717-b8b593f8955c', expectedCaseVersion: 2,
+      action: 'REJECT_REQUEST' as const, reason: 'Đã trao đổi với khách và giữ nguyên phương án sửa.',
+    };
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      case: { ...sampleCase, status: 'rejected', requestIntent: 'stop_or_replace', workflowVersion: 3 },
+      order: { id: 'order-1', status: 'UNDER_REPAIR' }, nextAction: 'none',
+    }));
+
+    const result = await supportCasesApi.resolveInterruption('case-1', command);
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/resolve-interruption', command);
+    expect(result.order).toEqual({ id: 'order-1', status: 'UNDER_REPAIR' });
+    expect(result.case.status).toBe('rejected');
+  });
+
   it('fails closed for an invalid envelope instead of accepting data', async () => {
     apiClientMock.get.mockResolvedValueOnce({ data: { data: [sampleCase] } });
 

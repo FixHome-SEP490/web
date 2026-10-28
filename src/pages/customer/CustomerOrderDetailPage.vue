@@ -44,6 +44,7 @@ import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
+import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
 import { isOpenClaim } from '../../utils/warranty-claim';
@@ -55,6 +56,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { afterRunningRead, onOrderChange, onOrderLocation, onResync, whileOffline } from '../../services/live-updates';
 import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { formatRating } from '../../utils/formatters';
+import { useCustomerRebookRouting } from '../../utils/customer-rebook-routing';
 
 const route = useRoute();
 const showRebook = ref(false);
@@ -67,6 +69,11 @@ const queryClient = useQueryClient();
 const actionLoading = ref(false);
 const financialReadReady = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
+const rebookRouting = useCustomerRebookRouting(
+  computed(() => order.value?.bookingId ?? null),
+  computed(() => order.value?.status ?? null),
+  () => { showRebook.value = true; },
+);
 // The technician stepped off before arriving (PO 20/10/2026): the customer picks another one for the same order.
 const awaitingTechnician = computed(() => !!order.value && !order.value.technician
   && ['ACCEPTED', 'EN_ROUTE'].includes(String(order.value.status).toUpperCase()));
@@ -883,7 +890,7 @@ const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCa
 // A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
 const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
 const canCancel = computed(() => !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
-const canRebook = computed(() => order.value?.status === 'COMPLETED' || order.value?.status === 'CANCELLED');
+const canRebook = computed(() => ['legacy', 'repair-failure'].includes(rebookRouting.action.value));
 /** The warranty block shows its own button; the menu only offers the claim when that block is not there. */
 const claimInWarrantyBlock = computed(() => isCompleted.value && orderWarranties.value.length > 0 && hasClaimableCoverage.value);
 const claimInMenu = computed(() => isCompleted.value && isPaid.value && !claimInWarrantyBlock.value);
@@ -985,14 +992,20 @@ const parsedReview = computed(() => {
           Đổi lịch hẹn
         </FhButton>
         <FhButton
-          v-if="canRebook"
+          v-if="canRebook || rebookRouting.action.value === 'checking'"
           variant="secondary"
           size="sm"
+          :loading="rebookRouting.action.value === 'checking'"
+          :disabled="rebookRouting.action.value === 'checking'"
           data-testid="order-rebook"
-          @click="showRebook = true"
+          @click="rebookRouting.open()"
         >
-          Đặt lại thợ
+          {{ rebookRouting.action.value === 'repair-failure' ? 'Đặt lại' : 'Đặt lại thợ' }}
         </FhButton>
+        <div v-if="rebookRouting.action.value === 'unavailable' && String(order.status).toUpperCase() === 'CANCELLED'" class="flex items-center gap-2 text-xs text-danger-700" role="alert" data-testid="order-rebook-check-error">
+          <span>Chưa xác định được cách đặt lại đơn này.</span>
+          <button type="button" class="font-semibold underline" data-testid="order-rebook-check-retry" @click="rebookRouting.retry()">Thử lại</button>
+        </div>
 
         <div v-if="hasMoreMenu" class="relative">
           <button
@@ -1740,6 +1753,7 @@ const parsedReview = computed(() => {
 
       <!-- 8. Complaint about this order (every status) -->
       <div class="order-3">
+        <CustomerStopReplaceRequest :order-id="order.id" :order-status="order.status" />
         <OrderComplaintPanel
           :order-id="orderId"
           :order-status="order.status"

@@ -25,7 +25,7 @@ const order = (extra: Record<string, unknown> = {}) => ({
   completionRequestedAt: '2026-10-09T10:00:00Z', customerConfirmed: false, bookingId: null, ...extra,
 });
 const mountPage = async () => {
-  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
+  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
   await flushPromises();
   return w;
 };
