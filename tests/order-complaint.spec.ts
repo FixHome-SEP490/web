@@ -77,6 +77,19 @@ describe('supportCasesApi own-case calls', () => {
     expect(created).not.toHaveProperty('assignedManagerId');
   });
 
+  it('submits the explicit stop-or-replace action to the authorized order endpoint', async () => {
+    apiClientMock.post.mockResolvedValueOnce(envelope(mineRow({
+      caseType: 'mid_job_interruption', requestIntent: 'stop_or_replace', holdCompletion: true,
+    })));
+
+    const created = await supportCasesApi.requestStopOrReplace('order-1', 'Khách cần dừng để xem lại phương án sửa.');
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/service-orders/order-1/stop-replace-request', {
+      reason: 'Khách cần dừng để xem lại phương án sửa.',
+    });
+    expect(created).toMatchObject({ caseType: 'mid_job_interruption', requestIntent: 'stop_or_replace', holdCompletion: true });
+  });
+
   it('lists and reads own cases through the mine routes and accepts the new case types', async () => {
     apiClientMock.get
       .mockResolvedValueOnce(envelope([mineRow({ caseType: 'property_damage' })], listMeta))

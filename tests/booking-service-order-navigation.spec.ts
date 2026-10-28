@@ -26,7 +26,7 @@ function booking(overrides: Partial<BookingItem> = {}): BookingItem {
 }
 async function render() {
   const wrapper = mount(BookingDetailPage, {
-    global: { stubs: { FhDatePicker: true, FhTimeScrollPicker: true } },
+    global: { stubs: { FhDatePicker: true, FhTimeScrollPicker: true, CustomerCancelledRebookAction: { template: '<button data-testid="cancelled-rebook-action">Đặt lại</button>' } } },
   });
   await flushPromises();
   return wrapper;
@@ -85,6 +85,14 @@ describe('WEB-H02 exact Booking -> ServiceOrder navigation', () => {
     expect(wrapper.find(refresh).exists()).toBe(false);
     await wrapper.find(link).trigger('click');
     expect(push).toHaveBeenCalledWith({ name: 'customer-order-detail', params: { id: 'historical-order' } });
+    wrapper.unmount();
+  });
+
+  it('renders only the classified cancelled action for a cancelled source booking', async () => {
+    getBooking.mockResolvedValue(booking({ status: 'CANCELLED', serviceOrderId: 'historical-order' }));
+    const wrapper = await render();
+    expect(wrapper.findAll('[data-testid="cancelled-rebook-action"]')).toHaveLength(1);
+    expect(wrapper.findAll('button').filter(button => button.text().includes('Đặt lại thợ'))).toHaveLength(0);
     wrapper.unmount();
   });
 

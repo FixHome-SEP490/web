@@ -13,6 +13,7 @@ import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '.
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
 import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
+import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
 import type { FundedReservation } from '../../api/funded-checkout.api';
@@ -923,6 +924,12 @@ async function answerCash(agreed: boolean) {
             @quote="decideChildQuotation(selectedDetails.order.id, $event)"
             @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
             @retry="load"
+          />
+          <CustomerStopReplaceRequest
+            v-if="selectedDetails && childDetailsFresh"
+            :key="`stop-replace-${selectedDetails.order.id}`"
+            :order-id="selectedDetails.order.id"
+            :order-status="selectedDetails.order.status"
           />
           <div v-else-if="selectedOrderId" class="mt-4 space-y-2 border-t border-ink-100 pt-4">
             <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />

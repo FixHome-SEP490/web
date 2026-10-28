@@ -24,7 +24,7 @@ const mountPage = async () => {
     if (path === '/customer/wallet') return { data: { data: { balance: state.balance } } };
     return { data: { data: [] } };
   });
-  const w = mount(Page, { global: { stubs: { OrderComplaintPanel: true, WarrantyClaimModal: true, ReviewTechnicianModal: true, RebookDialog: true, RouterLink: true, VoucherCheckoutChooser: { props: ['scopeId', 'scopeKind'], emits: ['applied'], template: '<div data-testid="solo-voucher-picker" :data-scope-id="scopeId"><button data-testid="apply-test-voucher" @click="$emit(\'applied\', voucher)">Apply</button><button data-testid="apply-zero-test-voucher" @click="$emit(\'applied\', zeroVoucher)">Apply zero</button></div>', data: () => ({ voucher: reservationEvent, zeroVoucher: zeroReservationEvent }) } } } });
+  const w = mount(Page, { global: { stubs: { CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, OrderComplaintPanel: true, WarrantyClaimModal: true, ReviewTechnicianModal: true, RebookDialog: true, RouterLink: true, VoucherCheckoutChooser: { props: ['scopeId', 'scopeKind'], emits: ['applied'], template: '<div data-testid="solo-voucher-picker" :data-scope-id="scopeId"><button data-testid="apply-test-voucher" @click="$emit(\'applied\', voucher)">Apply</button><button data-testid="apply-zero-test-voucher" @click="$emit(\'applied\', zeroVoucher)">Apply zero</button></div>', data: () => ({ voucher: reservationEvent, zeroVoucher: zeroReservationEvent }) } } } });
   await flushPromises();
   return w;
 };

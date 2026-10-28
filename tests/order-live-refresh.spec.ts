@@ -45,7 +45,7 @@ import { LIVE_DEBOUNCE_MS, startLiveUpdates } from '../src/services/live-updates
 const order = (extra: Record<string, unknown> = {}) => ({
   id: 'o1', code: 'FH-1', status: 'UNDER_REPAIR', paymentStatus: 'UNPAID', grandTotal: 400000, bookingId: 'b1', ...extra,
 });
-const stubs = { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true };
+const stubs = { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true };
 let stopLive: () => void = () => undefined;
 
 beforeEach(() => {

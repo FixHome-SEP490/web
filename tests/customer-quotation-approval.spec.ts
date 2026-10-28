@@ -48,7 +48,7 @@ describe.each(['solo', 'visit'] as const)('%s quotation approval', kind => {
     route.params.id = kind === 'visit' ? 'v1' : 'o1';
     const wrapper = mount(kind === 'visit' ? VisitPage : OrderPage, {
       attachTo: document.body,
-      global: { stubs: { RouterLink: true, 'router-link': true, MapTilerMap: true, BookingMediaViewer: true,
+      global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, MapTilerMap: true, BookingMediaViewer: true,
         OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true,
         RebookDialog: true, FailedRepairIncident: true, VoucherCheckoutChooser: true } },
     });

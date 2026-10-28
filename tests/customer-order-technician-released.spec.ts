@@ -24,7 +24,7 @@ const order = (extra: Record<string, unknown> = {}) => ({
   id: 'o1', code: 'FH-1', status: 'ACCEPTED', paymentStatus: 'UNPAID', grandTotal: 199000, bookingId: 'b1', technician: null, ...extra,
 });
 const mountPage = async () => {
-  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
+  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
   await flushPromises();
   return w;
 };

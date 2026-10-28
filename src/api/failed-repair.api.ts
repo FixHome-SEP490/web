@@ -168,6 +168,27 @@ function assertServerDraft(data: unknown, anchor: string, sources: string[]): as
   if (!sources.every(id => seen.has(id))) throw invalidDraft();
 }
 
+/** Probe cancellation evidence using the same owned, verified draft used by the wizard. */
+export async function readRepairFailureSources(anchor: string): Promise<string[] | null> {
+  if (!safeId(anchor)) throw invalidDraft();
+  let data: unknown;
+  try {
+    const response = await apiClient.get<{ data: unknown }>(`/bookings/${anchor}/repair-failure-draft`);
+    data = response.data?.data;
+  } catch (error) {
+    // The authenticated booking detail already established this customer's booking.
+    // The draft endpoint intentionally denies bookings without a verified failure.
+    const status = isRecord(error) && isRecord(error.response) ? error.response.status : null;
+    if (status === 403 || status === 404) return null;
+    throw error;
+  }
+  if (!isRecord(data) || !Array.isArray(data.items)) throw invalidDraft();
+  const sources = data.items.map(item => isRecord(item) && typeof item.sourceBookingId === 'string' ? item.sourceBookingId : '');
+  assertServerDraft(data, anchor, sources);
+  if (!sources.includes(anchor)) throw invalidDraft();
+  return sources;
+}
+
 async function currentPricing(item: RepairFailureDraftDto['items'][number]) {
   const service = await catalogApi.getService(item.serviceId);
   if (service.id !== item.serviceId || service.isActive !== true) throw invalidDraft();

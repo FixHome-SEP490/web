@@ -44,6 +44,8 @@ import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
+import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
+import CustomerCancelledRebookAction from '../../components/customer/CustomerCancelledRebookAction.vue';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
 import { isOpenClaim } from '../../utils/warranty-claim';
@@ -883,7 +885,7 @@ const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCa
 // A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
 const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
 const canCancel = computed(() => !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
-const canRebook = computed(() => order.value?.status === 'COMPLETED' || order.value?.status === 'CANCELLED');
+const canRebook = computed(() => isCompleted.value);
 /** The warranty block shows its own button; the menu only offers the claim when that block is not there. */
 const claimInWarrantyBlock = computed(() => isCompleted.value && orderWarranties.value.length > 0 && hasClaimableCoverage.value);
 const claimInMenu = computed(() => isCompleted.value && isPaid.value && !claimInWarrantyBlock.value);
@@ -993,6 +995,7 @@ const parsedReview = computed(() => {
         >
           Đặt lại thợ
         </FhButton>
+        <CustomerCancelledRebookAction v-if="String(order.status).toUpperCase() === 'CANCELLED'" :booking-id="order.bookingId" :order-id="order.id" :status="order.status" @legacy="showRebook = true" />
 
         <div v-if="hasMoreMenu" class="relative">
           <button
@@ -1740,6 +1743,7 @@ const parsedReview = computed(() => {
 
       <!-- 8. Complaint about this order (every status) -->
       <div class="order-3">
+        <CustomerStopReplaceRequest :order-id="order.id" :order-status="order.status" />
         <OrderComplaintPanel
           :order-id="orderId"
           :order-status="order.status"
