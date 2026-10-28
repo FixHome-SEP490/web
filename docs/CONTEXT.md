@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-28 13:53 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p0-rebook-ui-20261028
+> Cập nhật lần cuối: 2026-10-28 14:36 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p0-rebook-ui-20261028
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -375,7 +375,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
-- Web P0/P1 đổi thợ: đơn `CANCELLED` do sửa thất bại đọc draft server rồi mở `NewBookingWizardPage` qua `repairFailure`; trạng thái bình thường giữ đặt lại thợ cũ. Khách `UNDER_REPAIR` có thể gửi SupportCase `stop_or_replace` cho đúng ServiceOrder và xem trạng thái/kết quả Manager. Manager dùng preflight và `resolve-interruption` nguyên tử; `CLOSE_FOR_REBOOK` chỉ hiện khi Backend cho phép, luồng khách dùng `interruption-draft`/`interruption-rebook` CHƯA NỐI VÀO WIZARD. Test Web và kiểm tra mã Backend riêng chưa chứng minh runtime tích hợp; Backend DEV, trình duyệt đăng nhập và Mobile parity CHƯA KIỂM CHỨNG. Hard-refresh sau tích hợp.
+- Web P0/P1 đổi thợ: CTA `CANCELLED` phân loại lỗi sửa, gián đoạn được Manager đóng `interrupted_for_rebook`, hoặc đặt lại thường trước khi mở đúng một luồng; lỗi phân loại không mở API đặt lại thường. `interruption-draft`/`interruption-rebook` mở từ `NewBookingWizardPage`, xác minh nguồn Booking/ServiceOrder/SupportCase đã đóng, tải địa chỉ và giá hiện tại; khách chọn lịch, thiết bị/biến thể, mô tả và xác nhận trước khi Backend định giá lại. SupportCase `technician_replacement` được chấp nhận khi Backend trả `bookingId=null` nhưng case/order khớp; case khách vẫn cần booking khớp. Retry giữ idempotency trong phiên. Test Web đã chạy; Backend DEV, đăng nhập trình duyệt, hành vi runtime và Mobile parity CHƯA KIỂM CHỨNG. Hard-refresh trước QA.
 
 - Voucher T2: Backend canonical source có GET funded cash reservation cho SOLO/VisitGroup, DTO nullable sentinel, technician assignment/permission checks, và `assertFundedCollectionReady` ở lookup/declaration/confirmation. Web chỉ fallback gross khi nhận đúng sentinel hai field null; HTTP 409/403/503 và phản hồi không hợp lệ không fallback. Customer cash blocker đã bỏ sau khi đường thợ được nối. Backend DEV/runtime readiness, JWT, migration thực tế, callback/refund, PostgreSQL và Mobile parity CHƯA KIỂM CHỨNG; không chạy standalone PostgreSQL tests. Cần manual E2E sau deploy và hard-refresh Web.
 
@@ -415,6 +415,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Admin voucher DRAFT/PUBLISHED/PAUSED/ARCHIVED và Web tương ứng vẫn cần migration Backend mới, review RLS/quyền truy cập và kiểm thử thật. Không bỏ guard để mở tính năng. Vẫn chưa xác minh checkout voucher bằng tài khoản thật, ảnh riêng tư trên DEV hay E2E toàn VisitGroup.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-28 14:36 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Gộp CTA hủy, hỗ trợ case đổi thợ thiếu bookingId qua liên kết Order, xác minh kết quả/idempotency và kiểm thử lại Web; Backend DEV/runtime/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-28 13:53 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Sửa định tuyến đặt lại sau sửa thất bại, thêm yêu cầu dừng/đổi thợ cho khách và dùng lệnh thay thợ nguyên tử; Backend thật, runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-27 23:46 (UTC+7) | foxonworld | foxonworld/fixhome-p0p1-web-integration-20261027 | Ghép Web P0/P1 trên dev mới, thêm Admin voucher bản nháp và responsive header, chạy hồi quy, chưa merge/deploy hoặc chạy migration.
 - 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.
@@ -478,7 +479,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 17:55 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | ServiceOrder theo bước, blocker báo giá đối chiếu PRE_REPAIR theo SKU, ảnh camera theo batch; Backend/browser/Mobile CHƯA KIỂM CHỨNG
 
-- 2026-10-20 17:51 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Bố cục ServiceOrder theo bước, nhóm linh kiện, hoàn thành có blocker và batch ảnh camera; Backend/browser/Mobile CHƯA KIỂM CHỨNG
 
 
 

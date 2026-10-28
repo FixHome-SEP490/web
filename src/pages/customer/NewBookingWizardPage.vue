@@ -41,6 +41,7 @@ import {
 } from '../../components/booking/booking-service-catalog';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import FailedRepairBookingForm from '../../components/customer/FailedRepairBookingForm.vue';
+import InterruptionRebookForm from '../../components/customer/InterruptionRebookForm.vue';
 import { useAuthStore } from '../../stores/auth.store';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
 import type { BookingDeviceAttributes, CatalogPricingPreview } from '../../api/catalog-pricing.api';
@@ -64,6 +65,9 @@ const route = useRoute();
 const router = useRouter();
 // Dedicated failed-repair entry: only authenticated server drafts, never URL-prefilled content.
 const isFailedRepairEntry = computed(() => route.query.repairFailure !== undefined);
+const isInterruptionRebookEntry = computed(() => route.query.interruptionRebook !== undefined);
+const interruptionSourceBookingId = computed(() => typeof route.query.interruptionRebook === 'string' ? route.query.interruptionRebook : '');
+const interruptionCustomerId = computed(() => useAuthStore().user?.id ?? '');
 const failedRepairSources = computed(() => {
   const value = route.query.repairFailure;
   return (typeof value === 'string' ? value.split(',') : []).filter(Boolean);
@@ -79,7 +83,7 @@ const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
 const step = ref(1);
-if (!isFailedRepairEntry.value) useStepHistory(step, router, route);
+if (!isFailedRepairEntry.value && !isInterruptionRebookEntry.value) useStepHistory(step, router, route);
 watch(step, (currentStep, previous) => {
   setBookingLayoutWidth(currentStep === 2 || (!isAiFlow && currentStep === 1));
   // A new step starts at its top, never mid-page under the header (PO 20/10/2026).
@@ -1204,7 +1208,7 @@ async function loadAddresses() {
 }
 
 onMounted(() => {
-  if (isFailedRepairEntry.value) return;
+  if (isFailedRepairEntry.value || isInterruptionRebookEntry.value) return;
   applyIncomingDescription();
   void loadCategories();
   void loadAddresses();
@@ -1897,13 +1901,23 @@ async function createAndFindTech() {
 </script>
 
 <template>
+  <InterruptionRebookForm
+    v-if="isInterruptionRebookEntry && !isFailedRepairEntry"
+    :source-booking-id="interruptionSourceBookingId"
+    :customer-id="interruptionCustomerId"
+    @created="result => router.push(result.kind === 'booking' ? '/app/bookings/' + result.id + '/candidates' : '/app/visits/' + result.id + '/candidates')"
+    @later="router.push('/app')"
+  />
   <FailedRepairBookingForm
-    v-if="isFailedRepairEntry"
+    v-else-if="isFailedRepairEntry && !isInterruptionRebookEntry"
     :source-booking-ids="failedRepairSources"
     :customer-id="failedRepairCustomerId"
     @created="result => router.push(result.kind === 'booking' ? `/app/bookings/${result.id}/candidates` : `/app/visits/${result.id}/candidates`)"
     @later="router.push('/app')"
   />
+  <p v-else-if="isFailedRepairEntry || isInterruptionRebookEntry" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
+    Liên kết đặt lịch không hợp lệ. Hãy mở lại từ chi tiết đơn.
+  </p>
   <div
     v-else
     class="w-full space-y-5 sm:space-y-6"

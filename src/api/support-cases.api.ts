@@ -58,6 +58,7 @@ export interface MySupportCase {
   reason: string;
   description: string | null;
   resolutionReason: string | null;
+  resolutionCode: string | null;
   evidenceRefs: string[] | null;
   isUrgent: boolean;
   respondBy: string | null;
@@ -329,6 +330,7 @@ function normalizeMine(payload: unknown): MySupportCase {
     reason: base.reason,
     description: base.description ?? null,
     resolutionReason: base.resolutionReason ?? null,
+    resolutionCode: base.resolutionCode ?? null,
     evidenceRefs: base.evidenceRefs ?? null,
     isUrgent: base.isUrgent === true,
     respondBy: base.respondBy ?? null,

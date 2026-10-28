@@ -44,7 +44,7 @@ import CustomerWarrantiesPage from '../src/pages/customer/CustomerWarrantiesPage
 const stubs = {
   RouterLink: { template: '<a><slot /></a>' },
   'router-link': { template: '<a><slot /></a>' },
-  CustomerStopReplaceRequest: true,
+  CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true,
   OrderComplaintPanel: true,
   WarrantyClaimCard: true,
   WarrantyClaimModal: true,
