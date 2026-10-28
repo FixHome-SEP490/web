@@ -202,6 +202,111 @@ describe('SupportDetailPage for a complaint', () => {
     wrapper.unmount();
   });
 
+  it('shows the typed technician report and posts a versioned manager responsibility decision', async () => {
+    const typedCase = baseCase({
+      caseType: 'technician_replacement',
+      reason: 'Thao tác khoan sai quy trình làm hỏng dây cấp nguồn.',
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      responsibility: 'pending',
+      responsibilityCommandId: null,
+      responsibilityActorId: null,
+      responsibilityReason: null,
+      responsibilityEvidenceRefs: null,
+      responsibilityDecidedAt: null,
+      workflowVersion: 0,
+      evidenceRefs: ['media-1'],
+    });
+    const resolvedCase = baseCase({
+      ...typedCase,
+      status: 'resolved',
+      responsibility: 'technician_fault',
+      workflowVersion: 2,
+    });
+    apiClientMock.get.mockImplementation(async (path: string) => {
+      if (path === '/support/cases/case-1/replacement-options') return envelope({
+        caseId: 'case-1', caseStatus: 'open', caseVersion: 1, serviceOrderId: 'order-1', visitGroupId: null,
+        requestIntent: null,
+        flags: { approvedQuote: false, invoice: false, payment: false, voucher: false, parts: false, incompleteSiblings: false },
+        actions: {
+          DIRECT_REASSIGN_SOLO: { allowed: false, reasons: ['ASSIGNMENT_CHANGED'] },
+          CLOSE_FOR_REBOOK: { allowed: true, reasons: [] },
+          REJECT_REQUEST: { allowed: true, reasons: [] },
+        },
+      });
+      if (path === '/support/cases/case-1') return envelope(resolvedCase);
+      return envelope([]);
+    });
+    const wrapper = await mountPage(typedCase);
+
+    expect(wrapper.text()).toContain('Đánh giá trách nhiệm');
+    expect(wrapper.text()).toContain('Lỗi thuộc kỹ năng hoặc thao tác kỹ thuật');
+    expect(wrapper.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
+    expect(wrapper.text()).toContain('Báo cáo không tự trừ điểm kỹ thuật viên.');
+    await wrapper.get('[data-testid="responsibility-decision"]').setValue('technician_fault');
+    await wrapper.get('[data-testid="responsibility-reason"]').setValue('Ảnh kiểm tra cho thấy thao tác sai quy trình.');
+
+    apiClientMock.post.mockResolvedValueOnce(envelope(baseCase({
+      caseType: 'technician_replacement',
+      reason: 'Thao tác khoan sai quy trình làm hỏng dây cấp nguồn.',
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      responsibility: 'technician_fault',
+      responsibilityReason: 'Ảnh kiểm tra cho thấy thao tác sai quy trình.',
+      workflowVersion: 1,
+    })));
+    await wrapper.get('[data-testid="responsibility-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/responsibility', {
+      commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      workflowVersion: 0,
+      decision: 'technician_fault',
+      reason: 'Ảnh kiểm tra cho thấy thao tác sai quy trình.',
+    });
+    expect(wrapper.text()).toContain('Lỗi thuộc trách nhiệm kỹ thuật viên');
+    const replacement = wrapper.get('[data-testid="replacement-panel"]');
+    expect(replacement.text()).toContain('Đây là xử lý vận hành của đơn, tách biệt với kết luận trách nhiệm');
+    await replacement.get('[data-testid="replacement-reason"]').setValue('Khách đã xác nhận muốn chọn lịch mới.');
+    await replacement.get('[data-testid="replacement-action-CLOSE_FOR_REBOOK"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="replacement-confirm-dialog"]').text()).toContain('khách cần chọn lịch và xác nhận giá mới');
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      case: {
+        id: 'case-1', status: 'resolved', workflowVersion: 2, requestIntent: null,
+        resolutionCode: 'interrupted_for_rebook', resolutionReason: 'Khách đã xác nhận muốn chọn lịch mới.',
+        serviceOrderId: 'order-1', holdCompletion: false,
+      },
+      order: { id: 'order-1', status: 'CANCELLED' },
+      nextAction: 'interruption_rebook',
+    }));
+    await wrapper.get('[data-testid="replacement-confirm"]').trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenLastCalledWith('/support/cases/case-1/resolve-interruption', expect.objectContaining({
+      action: 'CLOSE_FOR_REBOOK',
+      expectedCaseVersion: 1,
+      reason: 'Khách đã xác nhận muốn chọn lịch mới.',
+    }));
+    expect(wrapper.text()).toContain('khách cần xác nhận lịch và giá mới');
+    wrapper.unmount();
+  });
+
+  it('keeps device-too-old in the non-technician exception responsibility path', async () => {
+    const wrapper = await mountPage(baseCase({
+      caseType: 'technician_replacement',
+      reason: 'Thiết bị đã quá cũ để sửa tại nhà.',
+      reasonClass: 'non_technician_exception',
+      reasonCode: 'device_too_old',
+      responsibility: 'pending',
+      workflowVersion: 0,
+    }));
+    expect(wrapper.text()).toContain('Ngoại lệ thiết bị hoặc khách hàng');
+    expect(wrapper.text()).toContain('Thiết bị đã quá cũ');
+    expect(wrapper.text()).toContain('Chưa có quyết định về điểm uy tín.');
+    wrapper.unmount();
+  });
+
   it('does not offer settling the cash when the cash case is rejected', async () => {
     const wrapper = await mountPage(baseCase({ caseType: 'cash_non_response', isUrgent: false, respondBy: null }));
     const selects = wrapper.findAll('select');

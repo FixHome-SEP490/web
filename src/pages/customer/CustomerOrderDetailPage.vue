@@ -37,6 +37,7 @@ import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
+import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intents.api';
 import type { FundedReservation } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -260,6 +261,12 @@ const cashSettlement = ref<{
   status: 'pending_confirmation' | 'confirmed' | 'disputed';
   technicianNotes?: string;
 } | null>(null);
+const cashIntentCapability = ref<CashIntentCapability | null>(null);
+const cashCreateCommandId = ref<string | null>(null);
+const cashCancelCommandId = ref<string | null>(null);
+const cashFirstEnabled = computed(() => cashIntentCapability.value?.cashFirstEnabled === true);
+const cashCapabilityKnown = computed(() => cashIntentCapability.value !== null);
+const currentCashIntent = computed(() => cashIntentCapability.value?.intent ?? null);
 
 const confirmCashAmount = ref<number | ''>('');
 const cashMismatchNote = ref('');
@@ -318,6 +325,7 @@ interface CustomerOrderBundle {
   order: ServiceOrderItem;
   invoice?: { id?: string; [key: string]: unknown } | null;
   settlement?: CashSettlementView;
+  cashIntent: CashIntentCapability | null;
   evidences: OrderEvidence[];
   booking?: BookingItem | null;
   review?: Review | null;
@@ -351,6 +359,8 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
   const completed = data.status === 'COMPLETED' || (data.status as string) === 'completed';
   const invoice = touched('invoice', 'cash', 'quotation', 'additional_cost', 'part') ? await optional(() => ordersApi.getInvoice(orderId)) : previous?.invoice;
   const settlement = touched('cash', 'invoice') ? await optional(() => ordersApi.getCashSettlement(orderId)) : previous?.settlement;
+  const cashIntent = previous?.cashIntent ?? null;
+  if (touched('cash', 'invoice')) void refreshCashIntent(data.id);
   // Before and after photos from the technician.
   let evidences: OrderEvidence[] = previous?.evidences ?? [];
   if (touched('evidence', 'arrival')) {
@@ -382,6 +392,7 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
     order: data,
     invoice,
     settlement: settlement ? (settlement as unknown as CashSettlementView) : undefined,
+    cashIntent,
     evidences,
     booking,
     review,
@@ -410,6 +421,7 @@ function applyOrderBundle(bundle: CustomerOrderBundle) {
     cashSettlement.value = bundle.settlement;
     confirmCashAmount.value = bundle.settlement.declaredAmount;
   }
+  if (bundle.cashIntent) cashIntentCapability.value = bundle.cashIntent;
   evidences.value = bundle.evidences;
   if (bundle.booking) bookingDetails.value = bundle.booking;
   if (bundle.review !== undefined) existingReview.value = bundle.review;
@@ -732,6 +744,7 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
 type PayMethod = 'wallet' | 'vnpay' | 'cash';
 const PAY_ORDER: PayMethod[] = ['wallet', 'vnpay', 'cash'];
 const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) => paymentOptions.value.includes(method)
+  && (method !== 'cash' || cashCapabilityKnown.value)
   && (method !== 'vnpay' || (activeFundedVoucher.value?.preview.customerDueVnd ?? billing.value.total ?? 0) >= 5000)));
 const payMethod = ref<PayMethod | null>(null);
 let payMethodPicked = false;
@@ -754,7 +767,67 @@ const handlePay = () => {
 };
 
 function confirmCashIntent() {
+  if (cashFirstEnabled.value) {
+    void createCashIntent();
+    return;
+  }
   showPaymentModal.value = false;
+}
+
+function newCashCommandId(): string {
+  return globalThis.crypto.randomUUID();
+}
+
+async function refreshCashIntent(serviceOrderId = order.value?.id ?? orderId) {
+  try {
+    cashIntentCapability.value = await cashIntentsApi.get('SOLO', serviceOrderId);
+  } catch {
+    // Keep the last server-attested state if the follow-up read is unavailable.
+  }
+}
+
+async function createCashIntent() {
+  if (!cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
+    || currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return;
+  const held = reservationForAction();
+  if (fundedVoucher.value && !held) return;
+  cashCreateCommandId.value ??= newCashCommandId();
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    const intent = await cashIntentsApi.create('SOLO', order.value.id, {
+      commandId: cashCreateCommandId.value,
+      ...(held ? { voucherReservationId: held.id } : {}),
+    });
+    cashIntentCapability.value = { cashFirstEnabled: true, intent };
+    cashCreateCommandId.value = null;
+  } catch (error) {
+    await refreshCashIntent();
+    actionMessage.value = { type: 'error', text: userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function cancelCashIntent() {
+  const intent = currentCashIntent.value;
+  if (!cashFirstEnabled.value || intent?.status !== 'pending' || actionLoading.value) return;
+  cashCancelCommandId.value ??= newCashCommandId();
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    const updated = await cashIntentsApi.cancel('SOLO', intent.scopeId, {
+      intentId: intent.id,
+      commandId: cashCancelCommandId.value,
+    });
+    cashIntentCapability.value = { cashFirstEnabled: true, intent: updated };
+    cashCancelCommandId.value = null;
+  } catch (error) {
+    await refreshCashIntent();
+    actionMessage.value = { type: 'error', text: userFacingError(error, 'Chưa huỷ được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+  } finally {
+    actionLoading.value = false;
+  }
 }
 
 const payWithWallet = async () => {
@@ -1837,8 +1910,20 @@ const parsedReview = computed(() => {
         <p v-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
         <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
 
+        <section v-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="cash-intent-pending">
+          <h3 class="font-semibold">Chờ kỹ thuật viên xác nhận tiền mặt</h3>
+          <p>Số tiền khách cần trả theo máy chủ: <strong class="font-num"><FhMoney :amount="currentCashIntent.customerDueVnd" /></strong>.</p>
+          <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
+          <FhButton variant="secondary" size="md" :disabled="actionLoading" :loading="actionLoading" data-testid="cash-intent-cancel" @click="cancelCashIntent">Huỷ yêu cầu tiền mặt</FhButton>
+        </section>
+        <section v-else-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm text-ink-800" data-testid="cash-intent-received">
+          <h3 class="font-semibold">Kỹ thuật viên đã báo nhận tiền mặt</h3>
+          <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="currentCashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái hóa đơn được cập nhật; chưa hiển thị là đã thanh toán.</p>
+        </section>
+        <p v-else-if="cashFirstEnabled && currentCashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700" data-testid="cash-intent-cancelled">Yêu cầu tiền mặt đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
+
         <!-- One list of the ways to pay, one action under it (PO 21/10/2026). -->
-        <template v-if="payMethods.length">
+        <template v-if="payMethods.length && !(cashFirstEnabled && ['pending', 'received'].includes(currentCashIntent?.status ?? ''))">
           <VoucherCheckoutChooser
             :key="invoice?.id"
             :scope-id="order?.id ?? null"
@@ -1885,7 +1970,8 @@ const parsedReview = computed(() => {
             Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
           </p>
           <p v-else-if="payMethod === 'cash'" class="text-sm text-ink-600" data-testid="pay-cash-note">
-            Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.
+            <template v-if="cashFirstEnabled">Gửi yêu cầu tiền mặt để máy chủ chốt số tiền hiện tại; kỹ thuật viên chỉ có thể xác nhận đã nhận sau khi yêu cầu được tạo.</template>
+            <template v-else>Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.</template>
           </p>
           <FhButton
             v-if="payMethod === 'wallet'"
@@ -1911,7 +1997,7 @@ const parsedReview = computed(() => {
             size="lg"
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"
-          >Đã hiểu</FhButton>
+          >{{ cashFirstEnabled ? 'Yêu cầu thanh toán bằng tiền mặt' : 'Đã hiểu' }}</FhButton>
         </template>
       </div>
     </div>

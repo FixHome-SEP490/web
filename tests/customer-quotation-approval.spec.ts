@@ -104,6 +104,25 @@ describe.each(['solo', 'visit'] as const)('%s quotation approval', kind => {
     expect(w.find(approveSelector).exists()).toBe(false);
   });
 
+  it('keeps a solo detail and focused control mounted during a socket refresh', async () => {
+    if (kind !== 'solo') return;
+    const refresh = deferred<ReturnType<typeof envelope>>();
+    const w = await open();
+    const approve = w.get(approveSelector);
+    approve.element.focus();
+    read = async id => id === targetId ? refresh.promise : envelope(structuredClone(states[id]));
+    (listeners.get(targetId) as unknown as (event: { kinds: string[] }) => void)({ kinds: ['status'] });
+    await flushPromises();
+    expect(w.find('[aria-label="Đang tải đơn"]').exists()).toBe(false);
+    expect(w.text()).toContain('FH-o1');
+    expect(document.activeElement).toBe(approve.element);
+    refresh.resolve(envelope(structuredClone(states[targetId])));
+    await flushPromises();
+    expect(w.find('[aria-label="Đang tải đơn"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(approve.element);
+    w.unmount();
+  });
+
   it('keeps keyboard focus at the quotation result after its approval button disappears', async () => {
     const w = await open();
     (w.get(approveSelector).element as HTMLButtonElement).focus();

@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { reactive } from 'vue';
 enableAutoUnmount(afterEach);
 afterEach(() => vi.useRealTimers());
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 const routeState = reactive({ params: { id: 'v1' } });
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.

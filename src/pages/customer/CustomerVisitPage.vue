@@ -21,6 +21,7 @@ import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
 import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
+import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intents.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { sessionLabel, upcomingSessions, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -35,6 +36,11 @@ const visitId = computed(() => String(route.params.id));
 
 const visit = ref<Visit | null>(null);
 const checkout = ref<VisitCheckout | null>(null);
+const cashIntentCapability = ref<CashIntentCapability | null>(null);
+const cashCreateCommandId = ref<string | null>(null);
+const cashCancelCommandId = ref<string | null>(null);
+const cashFirstEnabled = computed(() => cashIntentCapability.value?.cashFirstEnabled === true);
+const cashIntent = computed(() => cashIntentCapability.value?.intent ?? null);
 const loading = ref(true);
 const loadError = ref('');
 const checkoutError = ref('');
@@ -213,7 +219,9 @@ async function readVisit() {
       && typeof nextCheckout.ready === 'boolean' && typeof nextCheckout.paid === 'boolean'
       && (!nextCheckout.pendingCash || billingAmount(nextCheckout.pendingCash.amount) !== null);
     checkout.value = validCheckout ? nextCheckout : null;
+    void refreshCashIntent(groupId);
     if (!validCheckout) checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
+    if (disposed || lookupVersion !== childOrderLookupVersion || groupId !== visitId.value) return;
     if (checkout.value) await loadChildOrderDetails(checkout.value.devices, lookupVersion);
     else {
       child.publish({}, lookupVersion);
@@ -255,6 +263,9 @@ watch(visitId, () => {
     clearFundedVoucher();
   }
   seenCashNotifications.clear();
+  cashIntentCapability.value = null;
+  cashCreateCommandId.value = null;
+  cashCancelCommandId.value = null;
   childOrderLookupVersion = child.clear();
   quotationChecks.value = {};
   approvingOrderId.value = null;
@@ -366,7 +377,7 @@ onUnmounted(() => {
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
 const failedBookingIds = computed(() => {
-  if (checkoutLoading.value || checkoutError.value) return [];
+  if (checkoutError.value) return [];
   return (visit.value?.items ?? []).flatMap(item => item.booking?.id
     && checkout.value?.devices.some(device => device.bookingId === item.booking!.id && device.state === 'failed') ? [item.booking.id] : []);
 });
@@ -605,7 +616,8 @@ const voucherDue = computed(() => activeFundedVoucher.value?.preview.customerDue
 const walletCovers = computed(() => walletBalance.value !== null && checkout.value !== null && walletBalance.value >= voucherDue.value);
 const vnpayAllowed = computed(() => voucherDue.value >= 5000);
 const payMethods = computed<PayMethod[]>(() => (['wallet', 'vnpay', 'cash'] as PayMethod[]).filter((method) =>
-  method !== 'vnpay' || vnpayAllowed.value));
+  (method !== 'cash' || cashIntentCapability.value !== null)
+  && (method !== 'vnpay' || vnpayAllowed.value)));
 function selectPayMethod(method: PayMethod) {
   payMethod.value = method;
 }
@@ -663,6 +675,65 @@ function reservationForAction(): FundedReservation | null | undefined {
     return undefined;
   }
   return held.reservation;
+}
+
+function newCashCommandId(): string { return globalThis.crypto.randomUUID(); }
+
+async function refreshCashIntent(groupId: string) {
+  try {
+    const capability = await cashIntentsApi.get('VISIT_GROUP', groupId);
+    if (!disposed && groupId === visitId.value) cashIntentCapability.value = capability;
+  } catch {
+    // Keep the last server-attested state; an unreadable capability never enables a legacy fallback.
+  }
+}
+
+async function createCashIntent() {
+  const groupId = visitId.value;
+  if (!cashFirstEnabled.value || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
+    || busy.value || checkoutLoading.value || cashIntent.value?.status === 'pending' || cashIntent.value?.status === 'received') return;
+  const held = reservationForAction();
+  if (fundedVoucher.value && !held) return;
+  cashCreateCommandId.value ??= newCashCommandId();
+  busy.value = true;
+  message.value = null;
+  try {
+    const intent = await cashIntentsApi.create('VISIT_GROUP', groupId, {
+      commandId: cashCreateCommandId.value,
+      ...(held ? { voucherReservationId: held.id } : {}),
+    });
+    if (disposed || groupId !== visitId.value) return;
+    cashIntentCapability.value = { cashFirstEnabled: true, intent };
+    cashCreateCommandId.value = null;
+  } catch (error) {
+    await refreshCashIntent(groupId);
+    if (!disposed && groupId === visitId.value) message.value = { type: 'error', text: userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function cancelCashIntent() {
+  const groupId = visitId.value;
+  const intent = cashIntent.value;
+  if (!cashFirstEnabled.value || intent?.status !== 'pending' || busy.value) return;
+  cashCancelCommandId.value ??= newCashCommandId();
+  busy.value = true;
+  message.value = null;
+  try {
+    const updated = await cashIntentsApi.cancel('VISIT_GROUP', groupId, {
+      intentId: intent.id,
+      commandId: cashCancelCommandId.value,
+    });
+    if (disposed || groupId !== visitId.value) return;
+    cashIntentCapability.value = { cashFirstEnabled: true, intent: updated };
+    cashCancelCommandId.value = null;
+  } catch (error) {
+    await refreshCashIntent(groupId);
+    if (!disposed && groupId === visitId.value) message.value = { type: 'error', text: userFacingError(error, 'Chưa huỷ được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
@@ -910,7 +981,7 @@ async function answerCash(agreed: boolean) {
           <p v-if="approvingOrderId && approvingOrderId === selectedOrderId" role="status" class="mt-3 text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
           <FhButton v-if="selectedOrderId && quotationChecks[selectedOrderId] && approvingOrderId !== selectedOrderId" variant="secondary" size="md" :disabled="childDeciding || checkoutLoading" data-testid="quotation-check-status" @click="checkChildQuotation">Kiểm tra trạng thái</FhButton>
           <FailedRepairIncident
-            v-if="!checkoutLoading && !checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
+            v-if="!checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
             :key="selectedVisitItem.booking.id"
             :booking-id="selectedVisitItem.booking.id"
             @rebook="bookingId => router.push({ path: '/app/bookings/new', query: { repairFailure: bookingId } })"
@@ -1024,7 +1095,18 @@ async function answerCash(agreed: boolean) {
             </div>
           </div>
         </template>
+        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-900" data-testid="visit-cash-intent-pending">
+          <h3 class="font-semibold">Chờ kỹ thuật viên xác nhận tiền mặt · Gồm {{ checkout.devices.length }} thiết bị</h3>
+          <p>Số tiền khách cần trả theo máy chủ: <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>.</p>
+          <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
+          <FhButton variant="secondary" size="md" :disabled="busy" :loading="busy" data-testid="visit-cash-intent-cancel" @click="cancelCashIntent">Huỷ yêu cầu tiền mặt</FhButton>
+        </section>
+        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-ink-800" data-testid="visit-cash-intent-received">
+          <h3 class="font-semibold">Kỹ thuật viên đã báo nhận tiền mặt · Gồm {{ checkout.devices.length }} thiết bị</h3>
+          <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái lượt được cập nhật; chưa hiển thị là đã thanh toán.</p>
+        </section>
         <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0">
+            <p v-if="cashFirstEnabled && cashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-ink-700" data-testid="visit-cash-intent-cancelled">Yêu cầu tiền mặt cho {{ checkout.devices.length }} thiết bị đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
             <VoucherCheckoutChooser
               :scope-id="visitId"
               @applied="handleVoucherApplied"
@@ -1072,8 +1154,10 @@ async function answerCash(agreed: boolean) {
               Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
             </p>
             <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
-              <p>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
-              <FhButton v-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
+              <p v-if="cashFirstEnabled">Gửi yêu cầu để máy chủ chốt số tiền hiện tại cho cả lượt {{ checkout.devices.length }} thiết bị. Kỹ thuật viên chỉ xác nhận đã nhận sau khi yêu cầu được tạo.</p>
+              <p v-else>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
+              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu thanh toán bằng tiền mặt</FhButton>
+              <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
               <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
                 <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>
                 <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>

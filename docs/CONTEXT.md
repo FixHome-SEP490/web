@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 00:46 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ux-quickwins-cash-sm-20261029
+> Cập nhật lần cuối: 2026-10-29 01:58 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ux-quickwins-cash-sm-20261029
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -307,6 +307,11 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 
 - P0/P1 mới trên nhánh tích hợp từ Web dev eb1f31c: sửa Apply voucher, quyền báo không sửa được kèm ảnh, báo giá một lần, tổng hóa đơn 3 máy, tạo đơn nhiều thiết bị, cảnh báo trả kho và modal linh kiện; 1.831 test toàn bộ PASS trước phần Admin/header. Chưa merge/deploy hoặc thay đổi dữ liệu DEV.
 
+- Web tích hợp cash intent theo cờ capability, giữ giá trị và trạng thái theo phản hồi Backend; cash của lượt vẫn là một intent toàn nhóm. Đọc capability chạy riêng, lỗi/độ trễ chỉ khóa lựa chọn cash chứ không chặn nội dung đơn/lượt. Báo cáo kỹ thuật viên dùng kết luận trách nhiệm có version riêng với xử lý vận hành thay thợ/đóng để khách đặt lại. B4 chỉ thêm giữ nội dung sự cố terminal trong lúc tải lại lượt và gộp GET checkout đang chạy cùng khóa; browser, Backend DEV và Mobile parity CHƯA KIỂM CHỨNG.
+
+### Lịch sử changelog đã lưu trữ
+- 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -350,6 +355,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Biến môi trường (chỉ tên): `VITE_API_BASE_URL`, `VITE_MAPTILER_KEY`, `VITE_GOOGLE_CLIENT_ID` (để trống thì ẩn nút Google), `VITE_APP_TITLE` (hiện không dùng), `DEV_HTTPS` (bật HTTPS khi dev để gọi thoại qua mạng LAN). Mọi biến `VITE_*` đều công khai trong bundle, không đặt bí mật.
 
 - Web V5.3 hỗ trợ notification `PART_RETURN_DECLARED` tới Service Manager với `referenceType=PART_REQUEST`, `referenceId` là PartRequest ID; chuông mở `/console/part-returns`, không dùng request ID làm order ID. Đã đối chiếu source Backend writer của đợt này; phụ thuộc release Backend cùng đợt, runtime chưa kiểm chứng. Notification chỉ là tín hiệu đọc GET pending, không tự tăng số chờ nhận hay xác nhận trả kho.
+
+- Cash-first capability: `GET /finance/cash-intents/{SOLO|VISIT_GROUP}/:id` qua Axios có outer envelope `response.data.data`; controller body bên trong có hai sibling field `{data: CashIntent|null, cashFirstEnabled: boolean}`. Web fail closed nếu thiếu hoặc sai kiểu capability; `false` giữ luồng tiền mặt legacy, `true` chỉ cho khách tạo intent bằng UUID `commandId` (có thể gửi `voucherReservationId`), khách hủy intent pending, và thợ chỉ báo nhận qua `/:received` khi GET xác nhận `pending`. Số tiền đến hạn và trạng thái lấy từ Backend; UI không tự đánh dấu đã thanh toán.
+- Báo cáo thợ đã định kiểu gửi qua `POST /support/cases/technician-report`; Service Manager kết luận trách nhiệm qua `POST /support/cases/:id/responsibility` kèm `workflowVersion` và UUID `commandId`. Kết luận trách nhiệm tách khỏi thao tác vận hành `resolve-interruption` hiện có, gồm đóng để khách tự đặt lại; Web không tự trừ điểm. Contract đã đối chiếu với Backend PR #169; không sửa API ở Web. Shared DEV/browser và luồng Mobile CHƯA KIỂM CHỨNG.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
 
@@ -417,6 +425,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Admin voucher DRAFT/PUBLISHED/PAUSED/ARCHIVED và Web tương ứng vẫn cần migration Backend mới, review RLS/quyền truy cập và kiểm thử thật. Không bỏ guard để mở tính năng. Vẫn chưa xác minh checkout voucher bằng tài khoản thật, ảnh riêng tư trên DEV hay E2E toàn VisitGroup.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
 - 2026-10-28 14:36 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Gộp CTA hủy, hỗ trợ case đổi thợ thiếu bookingId qua liên kết Order, xác minh kết quả/idempotency và kiểm thử lại Web; Backend DEV/runtime/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-28 13:53 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Sửa định tuyến đặt lại sau sửa thất bại, thêm yêu cầu dừng/đổi thợ cho khách và dùng lệnh thay thợ nguyên tử; Backend thật, runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
@@ -458,7 +467,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
 
-- 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
 
