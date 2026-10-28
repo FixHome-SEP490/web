@@ -703,7 +703,7 @@ async function payWithWallet() {
       ? await fundedCheckoutApi.wallet({ kind: 'VISIT_GROUP', id: groupId }, held.id)
       : await visitGroupsApi.payWithWallet(groupId);
     if (disposed || groupId !== visitId.value) return;
-    message.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví cho cả lượt.` };
+    message.value = { type: 'success', text: `Đã thanh toán ${result.amount.toLocaleString('vi-VN')} ₫ bằng ví.` };
     if (held) clearFundedVoucher();
     await Promise.all([load(), loadWallet()]);
   } catch (err) {
@@ -749,7 +749,7 @@ async function answerCash(agreed: boolean) {
     if (disposed || groupId !== visitId.value) return;
     if (held && agreed) clearFundedVoucher();
     message.value = agreed
-      ? { type: 'success', text: 'Đã xác nhận trả tiền mặt cho cả lượt.' }
+      ? { type: 'success', text: 'Đã xác nhận trả tiền mặt.' }
       : { type: 'success', text: 'Đã báo FixHome kiểm tra lại số tiền mặt.' };
     await load();
   } catch (err) {
@@ -994,7 +994,10 @@ async function answerCash(agreed: boolean) {
       <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
         <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
         <div class="flex flex-col gap-2 border-b border-ink-100 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 id="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán cả lượt</h2>
+          <div>
+            <h2 id="visit-checkout-title" data-testid="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán</h2>
+            <p id="visit-checkout-scope" data-testid="visit-checkout-scope" class="text-xs text-ink-500">Gồm {{ checkout.devices.length }} thiết bị</p>
+          </div>
           <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
           <span v-else-if="checkoutState === 'zero_due'" data-testid="visit-checkout-state" class="font-semibold text-ink-700">Không phát sinh khoản cần thanh toán</span>
           <span v-else-if="checkoutState === 'pending_cash'" data-testid="visit-checkout-state" class="font-semibold text-warning-800">Chờ xác nhận tiền mặt</span>
@@ -1014,7 +1017,7 @@ async function answerCash(agreed: boolean) {
         </template>
         <template v-else-if="checkoutState === 'pending_cash'">
           <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
-            <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho cả lượt. Bạn xác nhận đúng số tiền đã trả.</p>
+            <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho {{ checkout.devices.length }} thiết bị. Bạn xác nhận đúng số tiền đã trả.</p>
             <div class="flex flex-wrap gap-2">
               <FhButton size="md" :loading="busy" :disabled="checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
               <FhButton variant="secondary" size="md" :disabled="busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
@@ -1072,7 +1075,7 @@ async function answerCash(agreed: boolean) {
               <p>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
               <FhButton v-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
               <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
-                <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt cho cả lượt</h3>
+                <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>
                 <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>
                 <p v-else>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
                 <p>Nút này chỉ mở hướng dẫn. Chưa ghi nhận đã thanh toán và chưa gửi xác nhận tiền mặt lên hệ thống.</p>

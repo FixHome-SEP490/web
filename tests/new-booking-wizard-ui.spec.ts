@@ -679,6 +679,25 @@ describe('NewBookingWizardPage A+ service finder', () => {
     expect(setCustomerBookingWidth).toHaveBeenLastCalledWith(false);
   });
 
+  it('explains that a multi-device VisitGroup has one shared repair address', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    for (let index = 0; index < 2; index += 1) {
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="booking-description"]').setValue(`Máy ${index + 1}`);
+      await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    }
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy 3');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    const note = wrapper.get('[data-testid="visit-shared-address-note"]');
+    expect(note.text()).toContain('cùng một địa chỉ');
+    expect(note.text()).toContain('tạo đơn mới');
+    expect(wrapper.findAll('#booking-address-title')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('limits the default catalog to eight, expands it, and shows every match when filtering', async () => {
     const services = Array.from({ length: 12 }, (_, i) => ({ ...sampleCategories[0]!.services[0]!, id: `svc-${i}`, name: `Dịch vụ thử ${i}` }));
     getCategories.mockResolvedValue([{ ...sampleCategories[0], services }]);

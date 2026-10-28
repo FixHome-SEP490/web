@@ -194,9 +194,11 @@ describe('Technician labor warranty on the job page', () => {
   it('keeps the paid completed job visible while waiting for a physical return, and clears the banner on acceptance', async () => {
     const w = await mountPage({ ...base, status: 'COMPLETED', paymentStatus: 'PAID' });
     const parts = w.findComponent({ name: 'TechnicianPartsSection' });
+    parts.vm.$emit('returns-known', true);
+    parts.vm.$emit('return-summary', { needDeclare: 2, awaitingManager: 0 });
     parts.vm.$emit('pending-returns', 2);
     await flushPromises();
-    expect(w.get('[data-testid="pending-parts-returns"]').text()).toContain('Chờ hoàn trả linh kiện');
+    expect(w.get('[data-testid="pending-parts-returns"]').text()).toContain('Còn 2 linh kiện cần trả kho');
     expect(w.get('[data-testid="job-now"]').text()).toContain('Đơn đã hoàn thành');
     parts.vm.$emit('pending-returns', 0);
     await flushPromises();

@@ -60,6 +60,7 @@ const emit = defineEmits<{
   /** Custody per item: what the technician declared used and declared going back. */
   (e: 'custody', byItemId: Map<string, { usedQty: number; declaredQty: number }>): void;
   (e: 'return-summary', value: { needDeclare: number; awaitingManager: number }): void;
+  (e: 'returns-known', value: boolean): void;
 }>();
 
 const loading = ref(true);
@@ -123,6 +124,7 @@ const qrTokenInput = ref('');
 // activated; with the flag off the GET fails and the return UI stays hidden.
 const returnRecords = ref<PartCustodyReturnRecord[]>([]);
 const returnsLoadError = ref(false);
+const returnsKnown = ref(false);
 let returnsLoadVersion = 0;
 const declareTarget = ref<{
   requestId: string;
@@ -365,9 +367,11 @@ const returnSummary = computed(() => returnRecords.value.reduce((totals, record)
 }, { needDeclare: 0, awaitingManager: 0 }));
 watch(returnRecords, records => emit('custody', new Map(records.map(record => [record.partRequestItemId, { usedQty: record.usedQty, declaredQty: record.declaredQty }]))), { immediate: true });
 watch(returnSummary, totals => {
+  if (!returnsKnown.value) return;
   emit('pending-returns', totals.needDeclare + totals.awaitingManager);
   emit('return-summary', totals);
 }, { immediate: true });
+watch(returnsKnown, known => emit('returns-known', known), { immediate: true });
 watch(
   () => [partRequests.value.length, needsAction.value] as const,
   ([count, action]) => emit('summary', { count, needsAction: action }),
@@ -468,6 +472,7 @@ const loadReturns = async () => {
     if (version !== returnsLoadVersion) return false;
     returnRecords.value = records;
     returnsLoadError.value = false;
+    returnsKnown.value = true;
     for (const record of records) {
       if (partialUsageDraft.value[record.partRequestItemId] === undefined) {
         partialUsageDraft.value[record.partRequestItemId] = record.usedQty;
@@ -487,6 +492,7 @@ const loadReturns = async () => {
     return true;
   } catch (err: unknown) {
     if (version !== returnsLoadVersion) return false;
+    returnsKnown.value = false;
     declareTarget.value = null;
     // Feature flag off or no access to the route: hide the return UI and keep
     // the existing QR / usage / part-request flow untouched.

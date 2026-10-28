@@ -366,6 +366,8 @@ const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const showAdditionalCostForm = ref(false);
 const acReviseId = ref<string | null>(null);
 const acReason = ref('');
+const acReasonError = ref('');
+const acReasonInput = ref<HTMLTextAreaElement | null>(null);
 const acItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
 const acEvidenceUrls = ref<string[]>([]);
 const acFulfillmentMethod = ref<'pickup' | 'delivery'>('pickup');
@@ -505,6 +507,7 @@ const complaintPanel = ref<{ openForm: () => void } | null>(null);
 const sections = reactive({ photos: false, parts: false, extra: false });
 const pendingPartsUsage = ref(0);
 const pendingPartsReturns = ref(0);
+const partsReturnsKnown = ref(false);
 const returnsToDeclare = ref(0);
 const returnsAwaitingManager = ref(0);
 const revealParts = async () => {
@@ -790,7 +793,7 @@ const nowStep = computed<NowStep | null>(() => {
       };
     }
     if (visitPay.paid) {
-      return { title: 'Khách đã thanh toán cả lượt', action: { label: 'Làm mới', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value } };
+      return { title: 'Đã thanh toán', hint: `Gồm ${visitPay.devices.length} thiết bị.`, action: { label: 'Làm mới', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value } };
     }
     if (visitPay.pendingCash) {
       return {
@@ -800,9 +803,9 @@ const nowStep = computed<NowStep | null>(() => {
       };
     }
     return {
-      title: 'Thu tiền cả lượt',
-      hint: 'Khách trả qua ví hoặc VNPay trong ứng dụng; nếu khách đưa tiền mặt thì báo đúng tổng của cả lượt.',
-      action: { label: 'Khai báo đã thu tiền mặt cả lượt', run: handleDeclareCash, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
+      title: 'Thanh toán',
+      hint: `Gồm ${visitPay.devices.length} thiết bị. Khách trả qua ví hoặc VNPay; nếu nhận tiền mặt, hãy xác nhận đúng tổng.`,
+      action: { label: 'Xác nhận tiền mặt', run: handleDeclareCash, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
     };
   }
 
@@ -1339,13 +1342,20 @@ const visitReturnDevices = computed(() => {
     ...device, ledger: device.serviceOrderId ? visitReturns.value[device.serviceOrderId] : undefined,
   }));
 });
-const visitReturnTotals = computed(() => visitReturnDevices.value.reduce((total, device) => ({
+// Any backend device state other than `open` has a result; even cancelled or
+// quote-declined children may still owe physically issued parts.
+const visitTerminalReturnDevices = computed(() => visitReturnDevices.value.filter(device => device.state !== 'open'));
+const visitAllDevicesTerminal = computed(() => visitReturnDevices.value.length > 0 && visitTerminalReturnDevices.value.length === visitReturnDevices.value.length);
+const visitTerminalReturnTotals = computed(() => visitTerminalReturnDevices.value.reduce((total, device) => ({
   needDeclare: total.needDeclare + (device.ledger?.summary?.needDeclare ?? 0),
   awaitingManager: total.awaitingManager + (device.ledger?.summary?.awaitingManager ?? 0),
 }), { needDeclare: 0, awaitingManager: 0 }));
-const visitReturnUnknown = computed(() => visitReturnDevices.value.some(device => device.ledger?.state !== 'ready'));
-const visitReturnWarning = computed(() => visitReturnDevices.value.length > 0
-  && (visitReturnUnknown.value || visitReturnTotals.value.needDeclare > 0 || visitReturnTotals.value.awaitingManager > 0));
+const visitReturnUnknown = computed(() => visitTerminalReturnDevices.value.some(device => device.ledger?.state !== 'ready'));
+const visitReturnNeedsAttention = (device: typeof visitReturnDevices.value[number]) => device.ledger?.state !== 'ready'
+  || (device.ledger.summary?.needDeclare ?? 0) > 0 || (device.ledger.summary?.awaitingManager ?? 0) > 0;
+const visitReturnChildDetails = computed(() => visitTerminalReturnDevices.value.filter(visitReturnNeedsAttention));
+const visitReturnWarning = computed(() => visitAllDevicesTerminal.value
+  && (visitReturnUnknown.value || visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
 function onReturnSummary(value: VisitReturnSummary) {
   returnsToDeclare.value = value.needDeclare;
   returnsAwaitingManager.value = value.awaitingManager;
@@ -1663,6 +1673,7 @@ watch(
     acItems.value = [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
     acEvidenceUrls.value = [];
     acReason.value = '';
+    acReasonError.value = '';
     acReviseId.value = null;
     acFulfillmentMethod.value = 'pickup';
     acShippingFee.value = 0;
@@ -1680,6 +1691,7 @@ watch(
     replacementSent.value = false;
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
+    partsReturnsKnown.value = false;
     returnsToDeclare.value = 0;
     returnsAwaitingManager.value = 0;
     partsSummary.value = { count: 0, needsAction: false };
@@ -2121,6 +2133,7 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
   if (!canQuoteAdditional.value || actionLoading.value || acSubmitting.value) return;
   acReviseId.value = revise?.id ?? null;
   acReason.value = revise?.reason ?? '';
+  acReasonError.value = '';
   acFulfillmentMethod.value = revise?.fulfillmentMethod || 'pickup';
   acShippingFee.value = revise?.shippingFee || 0;
   acLegacyParts.value = revise?.items.filter(i => i.type !== 'LABOR' && i.partSource !== 'fixhome') ?? [];
@@ -2168,9 +2181,12 @@ async function handleSubmitAdditionalCost() {
   const id = jobIdRef.value;
   const reviseId = acReviseId.value;
   if (!acReason.value.trim()) {
-    notifyError('Vui lòng ghi lý do phát sinh.');
+    acReasonError.value = 'Vui lòng ghi lý do phát sinh.';
+    await nextTick();
+    acReasonInput.value?.focus();
     return;
   }
+  acReasonError.value = '';
 
   const validItems = acItems.value.filter((i) => {
     const hasDesc = !!i.description?.trim();
@@ -2586,28 +2602,28 @@ const toggleMore = async () => {
         aria-live="polite"
         aria-labelledby="visit-returns-title"
         :aria-busy="visitReturnsLoading"
-        class="space-y-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800"
+        class="space-y-2 rounded-xl border border-danger-200 bg-danger-50 px-3 py-2.5 text-sm text-danger-800"
         data-testid="visit-returns-warning"
       >
-        <h2 id="visit-returns-title" class="flex items-start gap-2 text-base font-semibold"><AlertTriangle :size="20" class="mt-0.5 shrink-0" aria-hidden="true" />Linh kiện của cả lượt chưa hoàn tất trả kho</h2>
-        <p v-if="visitReturnTotals.needDeclare || visitReturnTotals.awaitingManager" class="font-semibold">
-          <span v-if="visitReturnTotals.needDeclare">{{ visitReturnTotals.needDeclare }} linh kiện cần khai trả</span><span v-if="visitReturnTotals.needDeclare && visitReturnTotals.awaitingManager"> · </span><span v-if="visitReturnTotals.awaitingManager">{{ visitReturnTotals.awaitingManager }} linh kiện chờ Quản lý Dịch vụ xác nhận</span>
+        <h2 id="visit-returns-title" class="flex items-start gap-2 font-semibold"><AlertTriangle :size="18" class="mt-0.5 shrink-0" aria-hidden="true" />Cần hoàn tất trả kho linh kiện</h2>
+        <p v-if="visitTerminalReturnTotals.needDeclare || visitTerminalReturnTotals.awaitingManager" class="font-medium">
+          <span v-if="visitTerminalReturnTotals.needDeclare">{{ visitTerminalReturnTotals.needDeclare }} linh kiện cần khai trả</span><span v-if="visitTerminalReturnTotals.needDeclare && visitTerminalReturnTotals.awaitingManager"> · </span><span v-if="visitTerminalReturnTotals.awaitingManager">{{ visitTerminalReturnTotals.awaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận</span>
         </p>
-        <p>Có thể hoàn tất sửa khi còn linh kiện cần trả. Khai trả chưa phải kho đã nhận; Quản lý Dịch vụ xác nhận số lượng thực nhận.</p>
-        <p v-if="visitReturnUnknown">{{ visitReturnsLoading ? 'Đang kiểm tra lại cả lượt. Số đã ghi nhận được giữ lại trong lúc kiểm tra.' : 'Chưa kiểm tra được đầy đủ cả lượt. Số liệu đã đọc trước đó có thể đã thay đổi.' }}</p>
-        <ul class="divide-y divide-danger-200">
-          <template v-for="device in visitReturnDevices" :key="device.bookingId">
-            <li v-if="device.ledger?.state !== 'ready' || device.ledger?.summary?.needDeclare || device.ledger?.summary?.awaitingManager" class="flex flex-wrap items-center justify-between gap-x-3 py-2" :data-testid="`visit-return-device-${device.sequence}`">
-              <div class="min-w-0 flex-[1_1_14rem]">
-                <p class="break-words font-semibold">Máy {{ device.sequence }} · {{ device.serviceName || device.deviceLabel || 'Thiết bị' }}</p>
-                <p v-if="device.ledger?.summary"><span v-if="device.ledger.summary.needDeclare">{{ device.ledger.summary.needDeclare }} cần khai trả<span v-if="device.ledger.summary.awaitingManager"> · </span></span><span v-if="device.ledger.summary.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý nhận thực tế</span></p>
-                <p v-if="device.ledger?.state !== 'ready'">{{ device.ledger?.state === 'loading' ? 'Đang kiểm tra hoàn trả máy này…' : 'Chưa kiểm tra được hoàn trả máy này.' }}</p>
-              </div>
+        <p v-if="visitReturnUnknown" class="text-danger-700">{{ visitReturnsLoading ? 'Đang kiểm tra lại. Số đã đọc trước đó được giữ nguyên.' : 'Chưa xác nhận được đầy đủ tình trạng hoàn trả.' }}</p>
+        <ul v-if="visitReturnUnknown || visitTerminalReturnDevices.some(device => visitReturnNeedsAttention(device))" class="divide-y divide-danger-200">
+          <li v-for="device in visitTerminalReturnDevices.filter(device => visitReturnNeedsAttention(device))" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3 py-1.5" :data-testid="`visit-return-device-${device.sequence}`">
+            <span class="min-w-0">Máy {{ device.sequence }}<template v-if="device.ledger?.summary?.needDeclare || device.ledger?.summary?.awaitingManager"> · <span v-if="device.ledger.summary.needDeclare">{{ device.ledger.summary.needDeclare }} cần khai trả</span><span v-if="device.ledger.summary.needDeclare && device.ledger.summary.awaitingManager">, </span><span v-if="device.ledger.summary.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ xác nhận</span></template><span v-if="device.ledger?.state !== 'ready'"> · Chưa kiểm tra được</span></span>
               <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline underline-offset-4 hover:bg-danger-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" :data-testid="`visit-return-open-${device.sequence}`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
-            </li>
-          </template>
+          </li>
         </ul>
-        <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại cả lượt</button>
+        <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
+      </section>
+      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-label="Linh kiện cần trả kho ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
+        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3">
+          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else> · Chưa xác nhận được tình trạng hoàn trả</span></span>
+          <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
+        </p>
+        <button v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
       </section>
 
       <section
@@ -2723,12 +2739,11 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="pendingPartsReturns > 0 && ((isCompleted && isPaid) || visitDeviceFailed)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
-        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ Quản lý Dịch vụ xác nhận' : 'Chờ hoàn trả linh kiện' }}</p>
-        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện chưa khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế</span>.</p>
-        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ Quản lý Dịch vụ nhận và xác nhận thực tế.</p>
-        <p v-else>Còn {{ pendingPartsReturns }} linh kiện chưa hoàn tất trả kho. Mở chi tiết để kiểm tra.</p>
-        <button type="button" class="mt-2 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
+      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
+        <p class="font-semibold">{{ !partsReturnsKnown ? 'Chưa xác nhận được tình trạng hoàn trả linh kiện.' : returnsToDeclare > 0 ? `Còn ${returnsToDeclare} linh kiện cần trả kho` : `${returnsAwaitingManager} linh kiện đã khai, chờ Quản lý Dịch vụ xác nhận` }}</p>
+        <p v-if="partsReturnsKnown && returnsToDeclare > 0 && returnsAwaitingManager > 0">{{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế.</p>
+        <p v-else-if="!partsReturnsKnown && pendingPartsReturns > 0">Đã ghi nhận {{ pendingPartsReturns }} linh kiện còn nghĩa vụ trả kho.</p>
+        <button type="button" class="mt-1 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
@@ -3298,6 +3313,7 @@ const toggleMore = async () => {
                 @requests-error="onPartRequestsError"
                 @pending-usage="pendingPartsUsage = $event"
                 @pending-returns="pendingPartsReturns = $event"
+                @returns-known="partsReturnsKnown = $event"
                 @custody="custodyByItem = $event"
               />
             </div>
@@ -3360,13 +3376,19 @@ const toggleMore = async () => {
                   </ul>
                 </div>
                 <label class="block">
-                  <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh</span>
+                  <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh <span class="text-danger-600" aria-hidden="true">*</span></span>
                   <textarea
+                    ref="acReasonInput"
                     v-model="acReason"
+                    aria-required="true"
+                    :aria-invalid="acReasonError ? 'true' : undefined"
+                    :aria-describedby="acReasonError ? 'additional-cost-reason-error' : undefined"
                     rows="2"
                     placeholder="Ví dụ: hỏng thêm quạt dàn nóng"
                     class="w-full p-3 bg-white border border-ink-200 rounded-xl text-sm"
+                    @input="acReasonError = ''"
                   ></textarea>
+                  <p v-if="acReasonError" id="additional-cost-reason-error" class="mt-1 text-sm text-danger-700" role="alert" data-testid="additional-cost-reason-error">{{ acReasonError }}</p>
                 </label>
 
                 <div class="space-y-2">

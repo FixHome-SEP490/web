@@ -146,13 +146,13 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     orderId: id, partRequestId: `request-${id}`, partRequestItemId: `item-${id}`, partNameSnapshot: 'Linh kiện fixture',
     issuedQty: issued, usedQty: used, declaredQty: declared, managerAcceptedQty: accepted, outstandingQty: issued - used - accepted, version: 1,
   });
-  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
+  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; deviceStates?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
     mockGet.mockImplementation(async (path: string) => {
       const id = ids.find(id => path === `/service-orders/${id}`);
       if (id) return { data: { data: { ...activeOrder, id, bookingId: `booking-${id}`, visitGroupId: 'visit-p1', status: options.status ?? 'ACCEPTED' } } };
       if (path === '/visit-groups/visit-p1/checkout') return { data: { data: {
         visitGroupId: 'visit-p1', total: 0, waiting: 0, ready: true, paid: false,
-        devices: ids.map((id, i) => ({ sequence: i + 1, bookingId: `booking-${id}`, serviceOrderId: id, serviceName: `Máy fixture ${i + 1}`, state: options.status === 'COMPLETED' ? 'succeeded' : 'open', amount: 0, paid: false })),
+        devices: ids.map((id, i) => ({ sequence: i + 1, bookingId: `booking-${id}`, serviceOrderId: id, serviceName: `Máy fixture ${i + 1}`, state: options.deviceStates?.[i] ?? (options.status === 'COMPLETED' ? 'succeeded' : 'open'), amount: 0, paid: false })),
       } } };
       const partsId = ids.find(id => path === `/service-orders/${id}/part-requests`);
       if (partsId) {
@@ -205,7 +205,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     const w = await render({ status: 'COMPLETED', returns: { [ids[0]]: [ledger(ids[0], 4, 1, 2, 0)], [ids[1]]: [ledger(ids[1], 2, 0, 2, 1)] } });
     let banner = w.get('[data-testid="visit-returns-warning"]');
     expect(banner.text()).toContain('1 linh kiện cần khai trả');
-    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(banner.text()).toContain('3 đã khai, chờ Quản lý Dịch vụ xác nhận');
     expect(banner.get('[data-testid="visit-return-device-1"]').text()).toContain('2 đã khai');
     expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('1 đã khai');
     expect(banner.attributes('role')).toBe('status');
@@ -216,17 +216,42 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     expect(mockPush).toHaveBeenCalledWith({ path: '/tech/jobs/job-test-202', query: { focus: 'parts' } });
     banner = w.get('[data-testid="visit-returns-warning"]');
     expect(banner.text()).toContain('1 linh kiện cần khai trả');
-    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(banner.text()).toContain('3 đã khai, chờ Quản lý Dịch vụ xác nhận');
     expect(w.find('#job-parts').exists()).toBe(true);
     expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('keeps return custody visible per terminal child without a whole-visit banner while a sibling is active', async () => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: ['failed', 'open', 'open'], returns: { [ids[0]]: [ledger(ids[0], 2, 0, 0, 0)] } });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    const detail = w.get('[data-testid="visit-return-child-details"]');
+    expect(detail.text()).toContain('Máy 1');
+    expect(detail.text()).toContain('2 linh kiện cần trả kho');
+    expect(detail.text()).not.toContain('Máy 2');
+    w.unmount();
+  });
+  it.each(['cancelled', 'quote_declined'])('includes a terminal %s child that still owes parts', async terminalState => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: [terminalState, 'open', 'open'], returns: { [ids[0]]: [ledger(ids[0], 3, 1, 1, 0)] } });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · 1 linh kiện cần trả kho');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('1 đã khai, chờ quản lý xác nhận');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
+    w.unmount();
+  });
+  it('keeps a terminal child with an unknown ledger visible in mixed visits without inventing zero', async () => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: ['cancelled', 'open', 'open'], invalidReturns: ids[0] });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · Chưa xác nhận được tình trạng hoàn trả');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
+    expect(w.get('[data-testid="visit-returns-retry"]').exists()).toBe(true);
+    w.unmount();
   });
   it('clears only quantities physically accepted by manager after an authoritative refresh', async () => {
     const returns = { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)], [ids[1]]: [ledger(ids[1], 1, 0, 1, 0)] };
     const w = await render({ status: 'COMPLETED', returns });
-    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('3 linh kiện chờ');
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('3 đã khai, chờ');
     returns[ids[0]] = [ledger(ids[0], 2, 0, 2, 2)];
     window.dispatchEvent(new Event('focus')); await flushPromises();
-    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('1 linh kiện chờ');
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('1 đã khai, chờ');
     expect(w.find('[data-testid="visit-return-device-1"]').exists()).toBe(false);
     returns[ids[1]] = [ledger(ids[1], 1, 0, 1, 1)];
     window.dispatchEvent(new Event('focus')); await flushPromises();
@@ -236,7 +261,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
   it('shows unknown child reads without inventing zero or hiding known pending returns', async () => {
     const w = await render({ status: 'COMPLETED', invalidReturns: ids[1], returns: { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)] } });
     const banner = w.get('[data-testid="visit-returns-warning"]');
-    expect(banner.text()).toContain('2 linh kiện chờ');
+    expect(banner.text()).toContain('2 đã khai, chờ');
     expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
     expect(banner.find('[data-testid="visit-returns-retry"]').exists()).toBe(true);
     expect(mockPost).not.toHaveBeenCalled(); w.unmount();
@@ -278,6 +303,28 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     }
     mockPush.mockClear();
     mockSocketSubscriptions.splice(0);
+  });
+
+  it('marks the additional-cost reason required and focuses it with an inline error before submission', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', quotation: { id: 'quote-1', status: 'approved', items: [] } } } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { attachTo: document.body, global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="repair-additional-quote"]').trigger('click');
+    const form = wrapper.get('[data-testid="additional-cost-form"]');
+    const reason = form.get('textarea');
+    expect(reason.attributes('aria-required')).toBe('true');
+    expect(form.text()).toContain('*');
+    await form.findAll('button').find(button => button.text().includes('Gửi cho khách duyệt'))!.trigger('click');
+    await flushPromises();
+    expect(form.get('[data-testid="additional-cost-reason-error"]').text()).toContain('Vui lòng ghi lý do phát sinh.');
+    expect(reason.attributes('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(reason.element);
+    expect(mockPost).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it('offers repeatable supplemental quotes beside repair actions, then freezes them before payment', async () => {
@@ -751,25 +798,22 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     queryClient.clear();
   });
 
-  it('keeps the held, declare, and Service Manager confirmation custody steps visible after one device fails', async () => {
-    const failedOrder = { ...activeOrder, status: 'CANCELLED', visitGroupId: 'visit-1' };
+  it('shows solo terminal custody warning even before payment is confirmed', async () => {
+    const failedOrder = { ...activeOrder, status: 'COMPLETED', visitGroupId: null };
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: failedOrder } };
-      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
-        visitGroupId: 'visit-1', total: 0, waiting: 0, ready: true, paid: false, pendingCash: null,
-        devices: [{ sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'failed', amount: 0, paid: false }],
-      } } };
       if (path.endsWith('/cash-settlement')) return { data: { data: null } };
       if (path.endsWith('/evidence')) return { data: { data: [] } };
       if (path.startsWith('/bookings/')) return { data: { data: { id: 'booking-101', media: [] } } };
       return { data: { data: [] } };
     });
     const custodyPartsStub = defineComponent({
-      emits: ['pending-returns', 'return-summary'],
+      emits: ['pending-returns', 'return-summary', 'returns-known'],
       setup(_props, { emit }) {
         onMounted(() => {
           emit('pending-returns', 2);
           emit('return-summary', { needDeclare: 1, awaitingManager: 1 });
+          emit('returns-known', true);
         });
         return () => h('div', { 'data-testid': 'parts-section' }, 'Parts');
       },
@@ -780,9 +824,9 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await flushPromises();
 
     const custody = wrapper.get('[data-testid="pending-parts-returns"]');
-    expect(custody.text()).toContain('1 linh kiện chưa khai trả');
+    expect(custody.text()).toContain('Còn 1 linh kiện cần trả kho');
     expect(custody.text()).toContain('1 đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế');
-    expect(custody.text()).toContain('Mở khai trả');
+    expect(custody.text()).toContain('Xem linh kiện');
   });
 
   it('offers releasing the order without losing points only when the server says the technician is on another job (PO 20/10/2026)', async () => {
@@ -1175,7 +1219,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
       await wrapper.get('[data-testid="job-now"]').findAll('button')
         .find((button) => button.text().includes('Khai báo đã thu tiền mặt'))!.trigger('click');
     } else {
-      await now.findAll('button').find((button) => button.text().includes('Khai báo đã thu tiền mặt cả lượt'))!.trigger('click');
+      await now.findAll('button').find((button) => button.text().includes('Xác nhận tiền mặt'))!.trigger('click');
     }
     await flushPromises();
 

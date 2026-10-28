@@ -795,7 +795,8 @@ describe('customer visit page', () => {
     await w.get('[data-testid="visit-pay-wallet"]').trigger('click');
     await flushPromises();
     expect(visitApi.payWithWallet).toHaveBeenCalledWith('v1');
-    expect(w.text()).toContain('Đã thanh toán 250.000 ₫ bằng ví cho cả lượt.');
+    expect(w.text()).toContain('Đã thanh toán 250.000 ₫ bằng ví.');
+    expect(w.get('[data-testid="visit-checkout-title"]').text()).toBe('Thanh toán');
   });
 
   it('finalizes a voucher ZERO amount only through the server closeout', async () => {
@@ -948,6 +949,8 @@ describe('customer visit page', () => {
 
     expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('paid');
     expect(w.get('[data-testid="visit-checkout-state"]').text()).toBe('Đã thanh toán');
+    expect(w.get('[data-testid="visit-checkout-title"]').text()).toBe('Thanh toán');
+    expect(w.get('[data-testid="visit-checkout-scope"]').text()).toContain('Gồm 2 thiết bị');
     expect(w.find('[data-testid="visit-pay-methods"]').exists()).toBe(false);
   });
 
