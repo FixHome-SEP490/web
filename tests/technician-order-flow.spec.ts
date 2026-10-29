@@ -315,7 +315,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, visitGroupId: groupId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/visit-groups/${groupId}/checkout`) return pendingCheckout;
       return { data: { data: [] } };
     });
@@ -1195,7 +1195,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
       }
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) return { data: { success: true, data: {
         voucherReservationId: null, customerDueVnd: null,
       } } };
@@ -1228,13 +1228,13 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, data: { data: currentIntent, cashFirstEnabled: true } } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: currentIntent, meta: { cashFirstEnabled: true } } };
       return { data: { data: [] } };
     });
     const received = { ...intent, status: 'received', receivedAt: '2026-10-29T00:01:00.000Z', receiptId: 'receipt-1' };
     mockPost.mockImplementation(async () => {
       currentIntent = received;
-      return { data: { success: true, data: { data: received } } };
+      return { data: { success: true, statusCode: 200, message: 'Success', data: received } };
     });
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
@@ -1266,13 +1266,13 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         visitGroupId: groupId, total: 300000, waiting: 0, ready: true, paid: false, pendingCash: null,
         devices: [1, 2].map(sequence => ({ sequence, bookingId: `b${sequence}`, deviceLabel: `Thiết bị ${sequence}`, serviceOrderId: null, invoiceId: null, state: 'succeeded', amount: 150000, paid: false })),
       } } };
-      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, data: { data: currentIntent, cashFirstEnabled: true } } };
+      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: currentIntent, meta: { cashFirstEnabled: true } } };
       return { data: { data: [] } };
     });
     const received = { ...intent, status: 'received', receivedAt: '2026-10-29T00:01:00.000Z', receiptId: 'receipt-1' };
     mockPost.mockImplementation(async () => {
       currentIntent = received;
-      return { data: { success: true, data: { data: received } } };
+      return { data: { success: true, statusCode: 200, message: 'Success', data: received } };
     });
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
@@ -1295,7 +1295,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     mockGet.mockImplementation(async (path: string) => {
       if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: true } } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: true } } };
       return { data: { data: [] } };
     });
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
@@ -1325,7 +1325,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
       const intentScopeId = kind === 'VISIT_GROUP' ? groupId : orderId;
-      if (path === `/finance/cash-intents/${kind}/${intentScopeId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+      if (path === `/finance/cash-intents/${kind}/${intentScopeId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (kind === 'VISIT_GROUP' && path === `/visit-groups/${groupId}/checkout`) return { data: { data: {
         visitGroupId: groupId, total: 300000, waiting: 0, ready: true, paid: false, pendingCash, devices: [],
       } } };
@@ -1372,7 +1372,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z',
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) throw { response: { status } };
       return { data: { data: [] } };
     });
@@ -1402,7 +1402,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z',
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
-      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) {
         lookupCount += 1;
         if (lookupCount > 1) return { data: { success: true, data: {

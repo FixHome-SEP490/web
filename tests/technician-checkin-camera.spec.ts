@@ -99,7 +99,7 @@ async function shoot(wrapper: ReturnType<typeof mount>) {
 beforeEach(() => {
   server = { order: { ...baseOrder, arrivalVerified: false }, evidence: [], partRequests: [], checkInResult: { result: 'valid' }, failEvidence: false, failEvidenceFileName: null, failPartRequests: false, failStartRepair: false, beforeUploadFlags: [] };
   mockGet.mockReset().mockImplementation(async (path: string) => {
-    if (path === '/finance/cash-intents/SOLO/job-1') return { data: { success: true, data: { data: null, cashFirstEnabled: false } } };
+    if (path === '/finance/cash-intents/SOLO/job-1') return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
     if (path === '/service-orders/job-1') return { data: { data: server.order } };
     if (path === '/service-orders/job-1/evidence') return { data: { data: server.evidence } };
     if (path === '/service-orders/job-1/part-requests') {

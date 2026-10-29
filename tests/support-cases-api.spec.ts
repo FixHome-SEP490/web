@@ -100,7 +100,7 @@ describe('supportCasesApi', () => {
       caseType: 'technician_replacement',
       reasonClass: 'technician_skill_gap',
       reasonCode: 'skill_gap',
-      responsibility: 'pending',
+      responsibility: 'pending_sm_review',
       responsibilityCommandId: null,
       responsibilityActorId: null,
       responsibilityReason: null,
@@ -148,7 +148,7 @@ describe('supportCasesApi', () => {
       caseType: 'technician_replacement',
       reasonClass: payload.reasonClass,
       reasonCode: payload.reasonCode,
-      responsibility: 'pending',
+      responsibility: 'pending_sm_review',
       workflowVersion: 0,
     }));
 

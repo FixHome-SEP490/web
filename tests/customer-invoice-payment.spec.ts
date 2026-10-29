@@ -18,7 +18,7 @@ const reservationEvent = {
 const zeroReservationEvent = { ...reservationEvent, preview: { ...reservationEvent.preview, customerDueVnd: 0, fixHomeDiscountSubsidyVnd: 300000 } };
 const mountPage = async () => {
   api.get.mockImplementation(async (path: string) => {
-    if (path === '/finance/cash-intents/SOLO/o1') return { data: { success: true, data: state.cashFirstEnabled === null ? { data: state.cashIntent } : { data: state.cashIntent, cashFirstEnabled: state.cashFirstEnabled } } };
+    if (path === '/finance/cash-intents/SOLO/o1') return { data: { success: true, statusCode: 200, message: 'Success', data: state.cashIntent, ...(state.cashFirstEnabled !== null ? { meta: { cashFirstEnabled: state.cashFirstEnabled } } : {}) } };
     if (path === '/service-orders/o1') return { data: { data: { id: 'o1', code: 'FH-TEST', status: 'under_repair', paymentStatus: 'unpaid', completionRequestedAt: '2026-10-20', laborTotal: 0, partsTotal: 0, grandTotal: 0, quotation: state.quote } } };
     if (path.endsWith('/invoice')) return { data: { data: state.invoice } };
     if (path.endsWith('/cash-settlement')) return { data: { data: state.cash } };
@@ -226,12 +226,12 @@ describe('customer invoice payment UI', () => {
     api.post.mockImplementation(async (path: string) => {
       if (path === '/finance/cash-intents/SOLO/o1') {
         state.cashIntent = created;
-        return { data: { success: true, data: { data: created } } };
+        return { data: { success: true, statusCode: 200, message: 'Success', data: created } };
       }
       if (path === '/finance/cash-intents/SOLO/o1/cancel') {
         const cancelled = { ...created, status: 'cancelled' };
         state.cashIntent = cancelled;
-        return { data: { success: true, data: { data: cancelled } } };
+        return { data: { success: true, statusCode: 200, message: 'Success', data: cancelled } };
       }
       throw new Error(`Unexpected POST ${path}`);
     });

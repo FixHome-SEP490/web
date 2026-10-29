@@ -353,7 +353,10 @@ function normalizeSummary(payload: unknown): SupportCaseSummary {
   }
   const reasonClass = optionalEnum(payload, 'reasonClass', TECHNICIAN_REPORT_CLASSES, 'Backend returned an unsupported technician report class.');
   const reasonCode = optionalEnum(payload, 'reasonCode', TECHNICIAN_REPORT_CODES, 'Backend returned an unsupported technician report code.');
-  const responsibility = optionalEnum(payload, 'responsibility', TECHNICIAN_RESPONSIBILITIES, 'Backend returned an unsupported technician responsibility.');
+  // Backend persists 'pending_sm_review'; the Web UI labels its pending stage 'pending'.
+  const responsibility = payload.responsibility === 'pending_sm_review'
+    ? 'pending'
+    : optionalEnum(payload, 'responsibility', TECHNICIAN_RESPONSIBILITIES, 'Backend returned an unsupported technician responsibility.');
   const responsibilityEvidenceRefs = normalizeEvidenceRefs(
     { evidenceRefs: payload.responsibilityEvidenceRefs },
     'Backend returned invalid responsibility evidence references.',

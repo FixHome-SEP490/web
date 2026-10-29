@@ -90,8 +90,9 @@ function normalizeIntent(value: unknown): CashIntent {
 }
 
 function normalizeMutationResponse(value: unknown, message: string): CashIntent {
-  const envelope = unwrapEnvelope(value, message);
-  return normalizeIntent(envelope.data);
+  // Nest TransformInterceptor unwraps the controller's { data: intent } once.
+  // The wire response is { success, statusCode, message, data: intent }.
+  return normalizeIntent(unwrapEnvelope(value, message));
 }
 
 function normalizeScope(scopeKind: CashIntentScopeKind, scopeId: string): string {
@@ -108,15 +109,19 @@ function assertEvidenceRefs(value: unknown): void {
 export const cashIntentsApi = {
   async get(scopeKind: CashIntentScopeKind, scopeId: string): Promise<CashIntentCapability> {
     const response = await apiClient.get<unknown>(normalizeScope(scopeKind, scopeId));
-    const result = unwrapEnvelope(response.data, 'Backend returned an invalid cash intent capability response.');
-    if (typeof result.cashFirstEnabled !== 'boolean' || !(result.data === null || isRecord(result.data))) {
+    // GET returns { success, statusCode, message, data: intent|null,
+    // meta: { cashFirstEnabled } }; unlike mutation responses, data may be null.
+    const envelope = response.data;
+    if (!isRecord(envelope) || envelope.success !== true || !('data' in envelope)
+      || !isRecord(envelope.meta) || typeof envelope.meta.cashFirstEnabled !== 'boolean'
+      || !(envelope.data === null || isRecord(envelope.data))) {
       fail('Backend returned an invalid cash intent capability response.');
     }
-    const intent = result.data === null ? null : normalizeIntent(result.data);
+    const intent = envelope.data === null ? null : normalizeIntent(envelope.data);
     if (intent && (intent.scopeKind !== scopeKind || intent.scopeId !== scopeId)) {
       fail('Backend returned a cash intent for another scope.');
     }
-    return { cashFirstEnabled: result.cashFirstEnabled, intent };
+    return { cashFirstEnabled: (envelope.meta as { cashFirstEnabled: boolean }).cashFirstEnabled, intent };
   },
 
   async create(scopeKind: CashIntentScopeKind, scopeId: string, payload: CreateCashIntentPayload): Promise<CashIntent> {
