@@ -50,10 +50,9 @@ import { queryKeys } from '../../lib/query-keys';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { bookingsApi } from '../../api/bookings.api';
 import { VISIT_DEVICE_LIMIT, visitGroupsApi, type VisitDeviceInput } from '../../api/visit-groups.api';
-import { takeAiVisitDraft } from '../../composables/aiVisitDraft';
-import type { AiDeviceSuggestion } from '../../api/ai.api';
+import { photosByAppliance, setAiVisitDraft, takeAiVisitDraft, type AiVisitDevice } from '../../composables/aiVisitDraft';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { AI_VISIT_DEVICE_LIMIT, DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
@@ -175,9 +174,9 @@ const aiVisitSession = (() => {
   const raw = typeof route.query.aiSession === 'string' ? route.query.aiSession : '';
   return SESSION_ID_PATTERN.test(raw) ? raw : null;
 })();
-const aiVisitDevices = ref<AiDeviceSuggestion[]>(aiVisitSession ? takeAiVisitDraft(aiVisitSession) : []);
-const aiVisitQueue = ref<AiDeviceSuggestion[]>([...aiVisitDevices.value]);
-const aiVisitCurrent = ref<AiDeviceSuggestion | null>(null);
+const aiVisitDevices = ref<AiVisitDevice[]>(aiVisitSession ? takeAiVisitDraft(aiVisitSession) : []);
+const aiVisitQueue = ref<AiVisitDevice[]>([...aiVisitDevices.value]);
+const aiVisitCurrent = ref<AiVisitDevice | null>(null);
 /** Suggested appliances not yet saved: continuing now would drop them without a word. */
 const aiVisitWaiting = computed(() => visitGrouping.value && aiVisitQueue.value.length > 0);
 const visitContactLoaded = ref(false);
@@ -571,8 +570,56 @@ async function startAiConversation() {
   void aiConversation.loadHoldingLines();
   const files = uploadedPhotos.value.flatMap((photo) => photo.file ? [photo.file] : []).slice(0, AI_MAX_IMAGES);
   const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
+  aiFormPhotosSent = prepared.images.map((image) => uploadedPhotos.value.find((photo) => photo.file === image.file)?.localId ?? null);
   // These photos are the form's own and are uploaded with it; only the chat's are kept for the booking.
   await aiConversation.sendTurn(description.value.trim(), prepared.images, { keepImagesForBooking: false });
+}
+
+/** The form's photos the first message carried, in order, so each can follow its appliance into a visit. */
+let aiFormPhotosSent: Array<number | null> = [];
+
+/**
+ * PO 29/10/2026: when the assistant advised on two or three appliances, every
+ * one of them is booked, each under its own service, not only the first. The
+ * chat lists them with the service chosen for each (the customer may change any
+ * of them, or keep to one appliance), and "Đặt thợ ngay" takes them all into
+ * one visit with the services already chosen.
+ */
+const aiVisitServiceOverrides = ref<Record<string, string>>({});
+const aiBookOneOnly = ref(false);
+const aiChosenDevices = computed<AiVisitDevice[]>(() => {
+  if (!visitEnabled.value) return [];
+  return aiConversation.pinnedDevices.value.slice(0, AI_VISIT_DEVICE_LIMIT).map((device) => {
+    const chosen = allServices.value.find((service) => service.id === aiVisitServiceOverrides.value[device.deviceType]);
+    return chosen
+      ? { ...device, service: { serviceCode: chosen.code, nameVi: chosen.name, serviceId: chosen.id, deviceType: device.deviceType } }
+      : device;
+  });
+});
+const aiBooksVisit = computed(() => aiChosenDevices.value.length >= 2 && !aiBookOneOnly.value && !!aiSessionId.value);
+
+function chooseAiDeviceService(deviceType: string, id: string) {
+  if (!id) return;
+  aiVisitServiceOverrides.value = { ...aiVisitServiceOverrides.value, [deviceType]: id };
+}
+
+/** Keep to the first appliance, under the service chosen for it in the list. */
+function bookOneAiDevice() {
+  aiBookOneOnly.value = true;
+  const id = aiChosenDevices.value[0]?.service?.serviceId;
+  if (id && id !== selectedServiceId.value && allServices.value.some((service) => service.id === id)) {
+    selectServiceById(id, { syncCategoryFilter: true });
+  }
+}
+
+/** Every appliance into one visit: the booking form saves each with its service and photos. */
+function leaveAiStepAsVisit() {
+  const id = aiSessionId.value;
+  if (!id) return;
+  const formUploadIds = aiFormPhotosSent.map((localId) => uploadedPhotos.value.find((photo) => photo.localId === localId)?.uploadId ?? null);
+  const photos = photosByAppliance(aiConversation.messages.value, aiConversation.attachments.value, formUploadIds);
+  setAiVisitDraft(id, aiChosenDevices.value.map((device) => ({ ...device, photos: photos.get(device.deviceType) ?? [] })));
+  void router.push({ name: 'new-booking', query: { visit: 'ai', aiSession: id } });
 }
 
 /**
@@ -632,6 +679,8 @@ onMounted(() => {
 /** Start again from the current description and photos, e.g. after editing step 1. */
 async function restartAiConversation() {
   aiConversation.startOver();
+  aiVisitServiceOverrides.value = {};
+  aiBookOneOnly.value = false;
   await startAiConversation();
 }
 
@@ -665,6 +714,10 @@ function startAiStep() {
 
 /** AI form, conversation -> address and time, once a service is chosen. */
 function leaveAiStep() {
+  if (aiBooksVisit.value) {
+    leaveAiStepAsVisit();
+    return;
+  }
   if (!selectedServiceId.value) {
     toast.warning('Trợ lý chưa chọn được dịch vụ. Anh/chị trả lời thêm hoặc chọn dịch vụ ở bên dưới khung chat.');
     return;
@@ -1213,14 +1266,13 @@ onMounted(() => {
   void loadCategories();
   void loadAddresses();
   armStepFooterObserver();
-  if (!isAiFlow) {
-    visitGroupsApi.contact().then((contact) => {
-      visitEnabled.value = contact.enabled;
-      visitHotline.value = contact.hotline;
-    }).catch(() => undefined).finally(() => {
-      visitContactLoaded.value = true;
-    });
-  }
+  // The AI form needs it too: several appliances the assistant advised on are booked as one visit.
+  visitGroupsApi.contact().then((contact) => {
+    visitEnabled.value = contact.enabled;
+    visitHotline.value = contact.hotline;
+  }).catch(() => undefined).finally(() => {
+    visitContactLoaded.value = true;
+  });
 });
 
 /** Once the catalogue and the visit switch are known, the assistant's first appliance goes into the editor. */
@@ -1241,7 +1293,7 @@ watch(
 );
 
 /** The next suggested appliance into the editor; one whose service is gone from the catalogue is skipped. */
-function loadNextAiDevice(): AiDeviceSuggestion | null {
+function loadNextAiDevice(): AiVisitDevice | null {
   while (aiVisitQueue.value.length) {
     const next = aiVisitQueue.value.shift()!;
     const id = next.service?.serviceId;
@@ -1254,12 +1306,41 @@ function loadNextAiDevice(): AiDeviceSuggestion | null {
     const words = (next.descriptionVi ?? '').trim().slice(0, 1000);
     description.value = words;
     userModifiedDescription.value = !!words;
+    // Already uploaded in the chat: shown from the chat's copy, sent by upload id.
+    uploadedPhotos.value = (next.photos ?? []).slice(0, 5).map((photo) => ({
+      localId: nextPhotoLocalId++,
+      previewUrl: photo.previewUrl,
+      uploadId: photo.uploadId,
+      file: null,
+    }));
     aiVisitCurrent.value = next;
     return next;
   }
   aiVisitCurrent.value = null;
   return null;
 }
+
+/**
+ * PO 29/10/2026: the appliances the assistant advised on arrive with their
+ * services already chosen. Each is saved into the visit as soon as its price
+ * is known, unless the price list asks about the machine (type, size) or
+ * something the booking needs is missing: that one stays open for the
+ * customer, and the rest follow once it is saved. Every saved one can still be
+ * edited or removed before sending.
+ */
+const aiVisitDecided = new WeakSet<AiVisitDevice>();
+watch(
+  () => [aiVisitCurrent.value, selectedServiceId.value, isCatalogV2PreviewReady.value, catalogPricingPreview.value] as const,
+  ([current, serviceId, ready, preview]) => {
+    if (!visitGrouping.value || !current || aiVisitDecided.has(current) || current.service?.serviceId !== serviceId || editingSavedDeviceKey.value) return;
+    // A catalogue service waits for its own price.
+    if (isCatalogV2Selection.value && preview?.serviceId !== serviceId) return;
+    aiVisitDecided.add(current);
+    const asksAboutMachine = (preview?.missingAttributes?.length ?? 0) > 0;
+    if (!ready || asksAboutMachine || uploadingPhoto.value || (descriptionRequired.value && !description.value.trim())) return;
+    addAnotherDevice({ quiet: true });
+  },
+);
 
 /** The customer books only what is already saved or open; the rest of the suggestion is dropped on purpose. */
 function skipRemainingAiDevices() {
@@ -1600,7 +1681,7 @@ function priceTextOf(price: SummaryPrice): string {
 }
 
 /** Keep this device in the visit and start the next one with the same address and time. */
-function addAnotherDevice() {
+function addAnotherDevice(options: { quiet?: boolean } = {}) {
   if (!visitGrouping.value && isFixedPrice.value && quantity.value > 1) {
     toast.warning('Trong lượt sửa, mỗi thiết bị cần có mô tả và ảnh riêng. Hãy giảm số lượng về 1 để thêm thiết bị.');
     step.value = 1;
@@ -1659,6 +1740,10 @@ function addAnotherDevice() {
   step.value = 1;
   aiVisitCurrent.value = null;
   const nextAi = aiVisitQueue.value.length ? loadNextAiDevice() : null;
+  if (options.quiet) {
+    if (!nextAi) toast.success(`Đã chọn sẵn ${extraDevices.value.length} thiết bị trợ lý đã tư vấn.`);
+    return;
+  }
   if (nextAi) {
     toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Kiểm tra tiếp ${nextAi.nameVi.toLowerCase()}.`);
     return;
@@ -2134,14 +2219,15 @@ async function createAndFindTech() {
             class="space-y-1.5 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900 text-pretty"
             data-testid="ai-visit-note"
           >
-            <p class="font-semibold">Trợ lý AI gợi ý {{ aiVisitDevices.length }} thiết bị cho lượt này</p>
+            <p class="font-semibold">Trợ lý AI đã chọn sẵn dịch vụ cho {{ aiVisitDevices.length }} thiết bị</p>
             <ol class="space-y-0.5">
               <li v-for="(device, index) in aiVisitDevices" :key="`${device.deviceType}-${index}`" :data-testid="`ai-visit-device-${index}`">
                 {{ index + 1 }}. {{ device.nameVi }}: {{ device.service?.nameVi }}
                 <span v-if="aiVisitCurrent === device" class="font-semibold">(đang kiểm tra)</span>
               </li>
             </ol>
-            <p>Kiểm tra loại máy và thêm ảnh nếu có, rồi bấm "Thêm thiết bị này vào lượt" cho từng thiết bị.</p>
+            <p v-if="aiVisitCurrent">Cho biết thêm về {{ aiVisitCurrent.nameVi.toLowerCase() }} ở bên dưới rồi bấm lưu, các thiết bị còn lại được chọn sẵn tiếp.</p>
+            <p v-else>Kiểm tra lại trong danh sách bên dưới, bấm Sửa nếu cần đổi.</p>
             <button
               v-if="aiVisitQueue.length"
               type="button"
@@ -2617,6 +2703,46 @@ async function createAndFindTech() {
             <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
               <template #pinned>
                 <div
+                  v-if="aiBooksVisit"
+                  class="space-y-2 border-t border-ink-100 bg-ink-50 px-3.5 py-2.5 text-sm"
+                  data-testid="ai-visit-services"
+                >
+                  <p class="text-ink-500">Dịch vụ sẽ đặt cho {{ aiChosenDevices.length }} thiết bị:</p>
+                  <ul class="space-y-1.5">
+                    <li
+                      v-for="(device, index) in aiChosenDevices"
+                      :key="device.deviceType"
+                      class="flex min-w-0 items-center gap-2"
+                      :data-testid="`ai-visit-service-${index}`"
+                    >
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-xs text-ink-500">Máy {{ index + 1 }} · {{ device.nameVi }}</span>
+                        <span class="block truncate font-semibold text-ink-900">{{ device.service?.nameVi }}</span>
+                      </span>
+                      <select
+                        class="h-9 w-20 shrink-0 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-700 disabled:opacity-40"
+                        :aria-label="`Đổi dịch vụ cho máy ${index + 1}: ${device.nameVi}`"
+                        :disabled="aiConversation.isThinking.value"
+                        :data-testid="`ai-visit-service-change-${index}`"
+                        value=""
+                        @change="chooseAiDeviceService(device.deviceType, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
+                      >
+                        <option value="" disabled hidden>Đổi</option>
+                        <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
+                      </select>
+                    </li>
+                  </ul>
+                  <button
+                    type="button"
+                    class="min-h-9 text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700"
+                    data-testid="ai-book-one-only"
+                    @click="bookOneAiDevice"
+                  >
+                    Chỉ đặt {{ aiChosenDevices[0]?.nameVi.toLowerCase() }}
+                  </button>
+                </div>
+                <template v-else>
+                <div
                   v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
                   class="flex flex-wrap items-center gap-3 border-t border-brand-100 bg-brand-50 px-3.5 py-2.5"
                   data-testid="ai-suggested-service"
@@ -2656,7 +2782,17 @@ async function createAndFindTech() {
                       <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
                     </select>
                   </label>
+                  <button
+                    v-if="aiBookOneOnly && aiChosenDevices.length >= 2"
+                    type="button"
+                    class="min-h-9 text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700"
+                    data-testid="ai-book-all"
+                    @click="aiBookOneOnly = false"
+                  >
+                    Đặt cả {{ aiChosenDevices.length }} thiết bị trợ lý đã tư vấn
+                  </button>
                 </div>
+                </template>
               </template>
             </AiConversationThread>
           </div>
@@ -2665,7 +2801,7 @@ async function createAndFindTech() {
             <FhButton variant="ghost" size="md" @click="step = 1">
               <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
             </FhButton>
-            <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || !selectedServiceId" data-testid="ai-continue" @click="leaveAiStep">
+            <FhButton variant="primary" size="md" :disabled="aiConversation.isThinking.value || (!selectedServiceId && !aiBooksVisit)" data-testid="ai-continue" @click="leaveAiStep">
               Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
             </FhButton>
           </div>
