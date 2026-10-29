@@ -88,6 +88,25 @@ describe('interruptionRebookApi', () => {
     await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).resolves.toMatchObject({ items: [{ sourceCaseId: ids.case }] });
   });
 
+  it('accepts a T2 onsite source while the old booking and order stay active', async () => {
+    mocks.getBooking.mockResolvedValueOnce({ id: ids.booking, customerId: 'customer', serviceId: ids.service, status: 'MATCHED', visitGroupId: null });
+    mocks.getOrder.mockResolvedValueOnce({ id: ids.order, bookingId: ids.booking, status: 'UNDER_REPAIR' });
+    mocks.getMine.mockResolvedValueOnce({ id: ids.case, bookingId: ids.booking, serviceOrderId: ids.order, caseType: 'technician_replacement', status: 'open', resolutionCode: null });
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).resolves.toMatchObject({
+      sourceKind: 'onsite', items: [{ sourceBookingId: ids.booking, sourceCaseId: ids.case }],
+    });
+  });
+
+  it.each([
+    { caseType: 'mid_job_interruption', status: 'resolved', resolutionCode: 'interrupted_for_rebook' },
+    { caseType: 'technician_replacement', status: 'open', resolutionCode: null, bookingId: ids.second },
+  ])('rejects an active booking without an exact onsite incident: %o', async sourceCase => {
+    mocks.getBooking.mockResolvedValueOnce({ id: ids.booking, customerId: 'customer', serviceId: ids.service, status: 'MATCHED', visitGroupId: null });
+    mocks.getOrder.mockResolvedValueOnce({ id: ids.order, bookingId: ids.booking, status: 'EN_ROUTE' });
+    mocks.getMine.mockResolvedValueOnce({ id: ids.case, bookingId: ids.booking, serviceOrderId: ids.order, ...sourceCase });
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).rejects.toThrow();
+  });
+
   it.each([
     { caseType: 'technician_replacement', bookingId: ids.second },
     { caseType: 'mid_job_interruption', bookingId: null },

@@ -1,4 +1,4 @@
-import type { SupportCaseStatus, SupportCaseType } from '../../api/support-cases.api';
+import type { SupportCaseStatus, SupportCaseType, SupportCaseSummary } from '../../api/support-cases.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 
@@ -40,6 +40,15 @@ export const resolutionCodeLabels: Record<string, string> = {
 };
 
 export const RESOLUTION_CODES = Object.keys(resolutionCodeLabels);
+export function supportExecutionLabel(row: SupportCaseSummary): string {
+  switch (row.resolutionExecutionKind) {
+    case 'NOT_RECORDED': return 'Chưa ghi nhận kết luận';
+    case 'DECISION_RECORDED': return 'Chỉ ghi nhận kết luận';
+    case 'DOMAIN_ACTION_EXECUTED': return 'Đã thực hiện thao tác nghiệp vụ';
+    case 'ESCALATED_ADMIN': return 'Quản trị viên xem xét; quản lý dịch vụ tiếp tục phụ trách';
+    default: return 'Chưa xác minh việc thực thi';
+  }
+}
 
 /**
  * Cash disputes: the backend settles the cash (invoice paid, platform fee,

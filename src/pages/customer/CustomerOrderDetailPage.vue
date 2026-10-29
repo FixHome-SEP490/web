@@ -46,6 +46,7 @@ import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
+import CustomerContinuationPanel from '../../components/customer/CustomerContinuationPanel.vue';
 import CustomerCancelledRebookAction from '../../components/customer/CustomerCancelledRebookAction.vue';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
@@ -70,8 +71,9 @@ const queryClient = useQueryClient();
 const actionLoading = ref(false);
 const financialReadReady = ref(false);
 const order = ref<ServiceOrderItem | null>(null);
+const workStopped = computed(() => order.value?.workStopped === true || order.value?.operationalDisposition === 'STOPPED');
 // The technician stepped off before arriving (PO 20/10/2026): the customer picks another one for the same order.
-const awaitingTechnician = computed(() => !!order.value && !order.value.technician
+const awaitingTechnician = computed(() => !workStopped.value && !!order.value && !order.value.technician
   && ['ACCEPTED', 'EN_ROUTE'].includes(String(order.value.status).toUpperCase()));
 const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?? [])
   .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
@@ -229,7 +231,8 @@ const laborItems = computed(() => billing.value.items.filter(item => item.type.t
 const partsItems = computed(() => billing.value.items.filter(item => item.type.toUpperCase() !== 'LABOR'));
 const shownLaborTotal = computed(() => billing.value.labor);
 const shownPartsTotal = computed(() => billing.value.parts);
-const paymentOptions = computed(() => paymentChannels(billing.value.total, billing.value.mismatch || !financialReadReady.value || !invoice.value?.id || isPaid.value));
+const oldFinanceReview = computed(() => workStopped.value || !!order.value?.failedWorkFinance);
+const paymentOptions = computed(() => paymentChannels(billing.value.total, oldFinanceReview.value || billing.value.mismatch || !financialReadReady.value || !invoice.value?.id || isPaid.value));
 const paymentBlocked = computed(() => paymentOptions.value.length === 0);
 
 const openLightbox = (ev: OrderEvidence) => {
@@ -239,7 +242,7 @@ const closeLightbox = () => {
   lightboxEvidence.value = null;
 };
 
-const canDecideQuotation = computed(() => canDecideOfficialQuotation(order.value));
+const canDecideQuotation = computed(() => !oldFinanceReview.value && canDecideOfficialQuotation(order.value));
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
@@ -277,6 +280,7 @@ const cashMismatchNote = ref('');
 const timelineSteps = computed<TimelineStep[]>(() => toTimelineSteps(order.value?.timeline ?? []));
 
 const trackingMarkers = computed<MapMarker[]>(() => {
+  if (workStopped.value) return [];
   const markers: MapMarker[] = [];
   if (order.value?.destination) markers.push({ id: 'destination', lat: order.value.destination.lat, lng: order.value.destination.lng, color: '#16a34a' });
   if (order.value?.technicianLocation) markers.push({ id: 'technician', lat: order.value.technicianLocation.lat, lng: order.value.technicianLocation.lng, color: '#2563eb' });
@@ -287,26 +291,33 @@ const trackingMarkers = computed<MapMarker[]>(() => {
 // moves the marker directly; the order is read every 15 s only while the socket
 // is down.
 let trackingPoll: (() => void) | null = null;
-const stopTrackingPoll = () => { trackingPoll?.(); trackingPoll = null; };
+let trackingGeneration = 0;
+const stopTrackingPoll = () => { ++trackingGeneration; trackingPoll?.(); trackingPoll = null; };
 const startTrackingPoll = () => {
   stopTrackingPoll();
+  if (workStopped.value) return;
+  const request = trackingGeneration;
   trackingPoll = whileOffline(async () => {
     try {
       const fresh = await ordersApi.getOrder(orderId);
-      if (order.value) Object.assign(order.value, fresh);
+      if (order.value && !workStopped.value && request === trackingGeneration) Object.assign(order.value, fresh);
     } catch {
       // Ignore transient polling errors; next tick retries.
     }
   }, 15000);
 };
 const stopLiveLocation = onOrderLocation(orderId, (event) => {
-  if (!order.value) return;
+  if (!order.value || workStopped.value) return;
   order.value.technicianLocation = { ...(order.value.technicianLocation ?? {}), lat: event.lat, lng: event.lng, updatedAt: event.updatedAt } as typeof order.value.technicianLocation;
 });
 
-watch(() => order.value?.status, (status) => {
-  if (status === 'EN_ROUTE' || status === 'en_route') startTrackingPoll();
-  else stopTrackingPoll();
+watch(() => [order.value?.status, workStopped.value] as const, ([status, stopped]) => {
+  if (!stopped && (status === 'EN_ROUTE' || status === 'en_route')) startTrackingPoll();
+  else {
+    stopTrackingPoll();
+    showTrackingModal.value = false;
+    if (stopped && order.value) order.value.technicianLocation = null;
+  }
 });
 
 watch(() => order.value?.arrivalVerified, (verified) => {
@@ -414,7 +425,8 @@ const orderQuery = useCachedQuery({
 });
 
 function applyOrderBundle(bundle: CustomerOrderBundle) {
-  order.value = bundle.order;
+  order.value = bundle.order.workStopped === true || bundle.order.operationalDisposition === 'STOPPED'
+    ? { ...bundle.order, technicianLocation: null } : bundle.order;
   financialReadReady.value = bundle.financialReadReady;
   if (bundle.invoice !== undefined) invoice.value = bundle.invoice;
   if (bundle.settlement) {
@@ -611,6 +623,7 @@ const handleRejectQuotation = async () => {
 };
 
 const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'APPROVE' | 'REJECT') => {
+  if (oldFinanceReview.value || acDecidingId.value) return;
   acDecidingId.value = cost.id;
   try {
     const updated = await ordersApi.decideAdditionalCost(cost.id, action);
@@ -787,7 +800,7 @@ async function refreshCashIntent(serviceOrderId = order.value?.id ?? orderId) {
 }
 
 async function createCashIntent() {
-  if (!cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
+  if (oldFinanceReview.value || !cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
     || currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return;
   const held = reservationForAction();
   if (fundedVoucher.value && !held) return;
@@ -887,6 +900,7 @@ const completeNoCharge = async () => {
 };
 
 const confirmCancel = async () => {
+  if (!canCancel.value || actionLoading.value) return;
   try {
     actionLoading.value = true;
     await ordersApi.cancelOrder(orderId, 'Khách hàng huỷ đơn');
@@ -957,7 +971,7 @@ const isCompleted = computed(() => String(order.value?.status ?? '').toUpperCase
 const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
 // A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
 const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
-const canCancel = computed(() => !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
+const canCancel = computed(() => !oldFinanceReview.value && !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
 const canRebook = computed(() => isCompleted.value);
 /** The warranty block shows its own button; the menu only offers the claim when that block is not there. */
 const claimInWarrantyBlock = computed(() => isCompleted.value && orderWarranties.value.length > 0 && hasClaimableCoverage.value);
@@ -965,9 +979,9 @@ const claimInMenu = computed(() => isCompleted.value && isPaid.value && !claimIn
 const hasMoreMenu = computed(() => canCancel.value || claimInMenu.value);
 const reviewPending = computed(() => isCompleted.value && !existingReview.value);
 const showPayAfterCompletion = computed(
-  () => !!order.value?.completionRequestedAt && !isPaid.value && order.value?.status === 'UNDER_REPAIR',
+  () => !oldFinanceReview.value && !!order.value?.completionRequestedAt && !isPaid.value && order.value?.status === 'UNDER_REPAIR',
 );
-const pendingAdditionalCosts = computed(() => additionalCosts.value.filter((c) => c.status === 'PENDING_APPROVAL'));
+const pendingAdditionalCosts = computed(() => oldFinanceReview.value ? [] : additionalCosts.value.filter((c) => c.status === 'PENDING_APPROVAL'));
 const decidedAdditionalCosts = computed(() => additionalCosts.value.filter((c) => c.status !== 'PENDING_APPROVAL'));
 /** Nothing quoted yet: one line instead of a list of zeros. */
 const notQuotedYet = computed(
@@ -1173,9 +1187,9 @@ const parsedReview = computed(() => {
             <p class="text-sm text-ink-500 font-num mt-1">{{ order.code }}</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <FhStatusPill :status="order.status" />
+            <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
             <FhStatusPill
-              v-if="order.status !== 'CANCELLED'"
+              v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
               :status="isPaid ? 'COMPLETED' : 'PENDING'"
               :label="isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'"
             />
@@ -1227,7 +1241,7 @@ const parsedReview = computed(() => {
 
           <div class="flex items-center gap-2 shrink-0">
             <button
-              v-if="(order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
+              v-if="!workStopped && (order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
               type="button"
               class="w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-600 hover:bg-ink-50 transition-colors flex items-center justify-center"
               title="Xem vị trí kỹ thuật viên"
@@ -1540,7 +1554,8 @@ const parsedReview = computed(() => {
           <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
             <div class="pt-4">
               <p v-if="filteredEvidences.length === 0" class="text-sm text-ink-500 text-pretty">
-                <template v-if="order.status === 'EN_ROUTE' || order.status === 'ACCEPTED'">Kỹ thuật viên sẽ chụp ảnh khi tới nơi.</template>
+                <template v-if="workStopped">Công việc đã dừng. Ảnh cũ được giữ để đối chiếu.</template>
+                <template v-else-if="order.status === 'EN_ROUTE' || order.status === 'ACCEPTED'">Kỹ thuật viên sẽ chụp ảnh khi tới nơi.</template>
                 <template v-else-if="order.status === 'UNDER_REPAIR'">Kỹ thuật viên sẽ chụp ảnh sau khi sửa xong.</template>
                 <template v-else>Chưa có ảnh.</template>
               </p>
@@ -1584,9 +1599,9 @@ const parsedReview = computed(() => {
           @click="isCostsExpanded = !isCostsExpanded"
         >
           <div class="flex flex-wrap items-center gap-2.5">
-            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ canDecideQuotation ? 'Báo giá chờ bạn duyệt' : billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h2>
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ oldFinanceReview ? 'Báo giá cũ chỉ để xem lịch sử' : canDecideQuotation ? 'Báo giá chờ bạn duyệt' : billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h2>
             <span
-              v-if="order.status !== 'CANCELLED' && !notQuotedYet"
+              v-if="!oldFinanceReview && order.status !== 'CANCELLED' && !notQuotedYet"
               class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
               :class="isPaid ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-800'"
             >
@@ -1594,7 +1609,7 @@ const parsedReview = computed(() => {
             </span>
           </div>
           <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
-            <span v-if="!notQuotedYet" class="text-sm font-semibold text-ink-900 font-num hidden sm:inline">
+            <span v-if="!oldFinanceReview && !notQuotedYet" class="text-sm font-semibold text-ink-900 font-num hidden sm:inline">
               <FhMoney v-if="(billing.total) !== null" :amount="billing.total" /><span v-else>Chưa xác định</span>
             </span>
             <span class="hidden sm:inline">{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
@@ -1613,7 +1628,8 @@ const parsedReview = computed(() => {
         >
           <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
             <div class="pt-4 space-y-5">
-              <p v-if="notQuotedYet" class="text-ink-600 text-pretty" data-testid="order-not-quoted">
+              <div v-if="oldFinanceReview" data-testid="stopped-work-finance" class="space-y-2 text-ink-700"><p>Báo giá cũ chỉ để xem lịch sử, không phải yêu cầu thanh toán cho công việc đã dừng.</p><p>Số tiền phải trả: Chưa xác định. Hoàn tiền: Chưa xác định.</p><p>FixHome đang đối soát nghĩa vụ cũ. Đặt lịch mới độc lập với việc đối soát và nhận linh kiện cũ.</p></div>
+              <p v-else-if="notQuotedYet" class="text-ink-600 text-pretty" data-testid="order-not-quoted">
                 {{ order.status === 'CANCELLED' ? 'Đơn đã huỷ trước khi có báo giá.' : 'Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.' }}
               </p>
 
@@ -1816,7 +1832,16 @@ const parsedReview = computed(() => {
 
       <!-- 8. Complaint about this order (every status) -->
       <div class="order-3">
-        <CustomerStopReplaceRequest :order-id="order.id" :order-status="order.status" />
+        <CustomerContinuationPanel
+          v-if="order.status === 'EN_ROUTE' || order.status === 'UNDER_REPAIR'"
+          :key="`${order.id}:${order.visitGroupId ?? ''}`"
+          :order-id="order.id"
+          :booking-id="order.bookingId"
+          :visit-group-id="order.visitGroupId ?? null"
+          :order-status="order.status"
+          class="mb-3"
+        />
+        <CustomerStopReplaceRequest v-if="!workStopped" :order-id="order.id" :order-status="order.status" />
         <OrderComplaintPanel
           :order-id="orderId"
           :order-status="order.status"
@@ -1863,7 +1888,7 @@ const parsedReview = computed(() => {
 
     <!-- Tracking Modal -->
     <div
-      v-if="showTrackingModal"
+      v-if="showTrackingModal && !workStopped"
       class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
       @keydown.esc="showTrackingModal = false"
     >

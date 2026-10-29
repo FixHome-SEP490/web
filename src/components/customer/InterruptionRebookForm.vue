@@ -103,9 +103,10 @@ onBeforeUnmount(() => { generation++; });
 <template>
   <section class="mx-auto w-full max-w-3xl space-y-5 pb-8" data-testid="interruption-rebook-form" :aria-busy="loading || busy">
     <header>
-      <p class="text-sm text-ink-600">Đơn sửa trước đã được kết thúc</p>
+      <p class="text-sm text-ink-600">Đơn sửa trước vẫn được lưu trong hồ sơ</p>
       <h1 class="mt-1 text-xl font-semibold text-ink-900 sm:text-2xl">Đặt lịch mới</h1>
       <p class="mt-2 text-sm text-ink-600">Chọn lại lịch, địa chỉ và phạm vi dịch vụ. Giá sẽ được Backend xác nhận theo danh mục hiện tại.</p>
+      <p v-if="draft?.sourceKind === 'onsite'" class="mt-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Đơn cũ chưa bị hủy. Báo giá, thanh toán, ưu đãi và nghĩa vụ linh kiện của đơn cũ vẫn được giữ để đối soát riêng.</p>
     </header>
     <div v-if="loading" class="space-y-3"><FhSkeleton class="h-24 rounded-xl" /><FhSkeleton class="h-40 rounded-xl" /></div>
     <p v-if="error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ error }}</p>

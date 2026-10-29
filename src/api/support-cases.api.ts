@@ -20,6 +20,7 @@ export type SupportCaseType =
 export type SupportCaseStatus = 'open' | 'in_review' | 'resolved' | 'rejected';
 export type SupportCaseFinalStatus = 'resolved' | 'rejected';
 export type SupportCaseRequestIntent = 'stop_or_replace';
+export type ResolutionExecutionKind = 'NOT_RECORDED' | 'DECISION_RECORDED' | 'DOMAIN_ACTION_EXECUTED' | 'EXECUTION_NOT_VERIFIED' | 'ESCALATED_ADMIN';
 export type TechnicianReportReasonClass = 'technician_skill_gap' | 'non_technician_exception';
 export type TechnicianReportReasonCode =
   | 'skill_gap'
@@ -49,6 +50,9 @@ export interface TechnicianResponsibilityPayload {
 }
 
 export interface SupportCaseSummary {
+  resolutionExecutionKind?: ResolutionExecutionKind;
+  needsManualAction?: boolean;
+  nextActor?: 'service_manager' | 'admin' | null;
   id: string;
   caseType: SupportCaseType;
   status: SupportCaseStatus;
@@ -180,6 +184,8 @@ export interface SupportCaseQuery {
 }
 
 export interface SupportCaseResolvePayload {
+  commandId?: string;
+  expectedVersion?: number;
   finalStatus: SupportCaseFinalStatus;
   resolutionCode: string;
   reason: string;
@@ -348,6 +354,12 @@ function normalizeSummary(payload: unknown): SupportCaseSummary {
     invalid('Backend returned an unsupported support case request intent.');
   }
   const workflowVersion = payload.workflowVersion;
+  const executionKind = optionalEnum(payload, 'resolutionExecutionKind',
+    ['NOT_RECORDED', 'DECISION_RECORDED', 'DOMAIN_ACTION_EXECUTED', 'EXECUTION_NOT_VERIFIED', 'ESCALATED_ADMIN'] as const,
+    'Backend returned an invalid support execution state.');
+  const hasExecution = 'resolutionExecutionKind' in payload || 'needsManualAction' in payload || 'nextActor' in payload;
+  if (hasExecution && (!executionKind || typeof payload.needsManualAction !== 'boolean'
+    || !['service_manager', 'admin', null].includes(payload.nextActor as string | null))) invalid('Backend returned invalid support execution metadata.');
   if (workflowVersion !== undefined && (!Number.isSafeInteger(workflowVersion) || (workflowVersion as number) < 0)) {
     invalid('Backend returned an invalid support case workflow version.');
   }
@@ -366,6 +378,8 @@ function normalizeSummary(payload: unknown): SupportCaseSummary {
     id: requiredString(payload.id, 'Backend returned an invalid support case response.'),
     caseType: caseType as SupportCaseType,
     status: status as SupportCaseStatus,
+    ...(hasExecution ? { resolutionExecutionKind: executionKind!, needsManualAction: payload.needsManualAction as boolean,
+      nextActor: payload.nextActor as SupportCaseSummary['nextActor'] } : {}),
     bookingId: optionalString(payload, 'bookingId', 'Backend returned an invalid support case response.'),
     serviceOrderId: optionalString(payload, 'serviceOrderId', 'Backend returned an invalid support case response.'),
     customerId: optionalString(payload, 'customerId', 'Backend returned an invalid support case response.'),
@@ -639,7 +653,7 @@ function assertId(id: string): string {
 function assertResolvePayload(payload: SupportCaseResolvePayload): void {
   const keys = Object.keys(payload);
   if (
-    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs', 'liableParty', 'amount', 'grossRefundVnd'].includes(key)) ||
+    keys.some((key) => !['finalStatus', 'resolutionCode', 'reason', 'evidenceRefs', 'liableParty', 'amount', 'grossRefundVnd', 'commandId', 'expectedVersion'].includes(key)) ||
     (payload.amount !== undefined && (!Number.isSafeInteger(payload.amount) || payload.amount < 0 || payload.amount > 2_000_000_000)) ||
     (payload.grossRefundVnd !== undefined && (!Number.isSafeInteger(payload.grossRefundVnd) || payload.grossRefundVnd <= 0 || payload.grossRefundVnd > 2_000_000_000 || payload.resolutionCode !== 'refund_to_wallet' || payload.finalStatus !== 'resolved')) ||
     !['resolved', 'rejected'].includes(payload.finalStatus) ||
@@ -654,6 +668,10 @@ function assertResolvePayload(payload: SupportCaseResolvePayload): void {
   ) {
     invalid('Invalid support case resolve payload.');
   }
+  if (payload.resolutionCode === 'escalate_admin' && (!isUuidV4(payload.commandId)
+    || !Number.isInteger(payload.expectedVersion) || (payload.expectedVersion ?? -1) < 0 || (payload.expectedVersion ?? 0) >= 2147483647
+    || payload.finalStatus !== 'resolved' || payload.amount !== undefined || payload.liableParty !== undefined || payload.grossRefundVnd !== undefined
+    || payload.evidenceRefs?.some(ref => !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(ref)))) invalid('Invalid support case escalation payload.');
 }
 
 function isUuidV4(value: unknown): value is string {

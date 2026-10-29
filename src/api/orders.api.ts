@@ -3,6 +3,7 @@ import apiClient from './client';
 import { filterParams, readPage, type ListFilter, type PageResult } from './paging';
 import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 import type { BookingSlot } from '../utils/booking-session';
+import { readFailedWorkFinance } from './stopped-work-finance.api';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -19,6 +20,8 @@ export type CanonicalOrderStatus =
   | 'IN_PROGRESS'; // UI transitional alias
 
 export interface HistoricalOrderItem {
+  workStopped?: boolean;
+  operationalDisposition?: 'STOPPED' | 'STOP_REQUIRES_REVIEW';
   id: string;
   code: string;
   status: CanonicalOrderStatus;
@@ -55,8 +58,25 @@ export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
   !['completed', 'cancelled'].includes(String(order.status).toLowerCase());
 /** The pill for an order the technician no longer holds. */
 export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
-  isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
+  order.workStopped === true || order.operationalDisposition === 'STOPPED'
+    ? { status: 'CANCELLED', label: 'Đã dừng công việc' }
+    : isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
+export interface FailedWorkFinance {
+  version: 1;
+  state: 'VERIFIED_WORK_STOPPED_UNBILLED' | 'FINANCIAL_REVIEW_REQUIRED';
+  customerPayableVnd: null;
+  newCollectionAllowed: false;
+  historicalQuoteOnly: true;
+  reviewRequired: true;
+  refundState: 'NOT_DETERMINED';
+  message: string;
+}
 export interface ServiceOrderItem {
+  workStopped?: boolean;
+  assignmentReleased?: boolean;
+  operationalDisposition?: 'STOPPED';
+  oldObligationsReviewRequired?: boolean;
+  failedWorkFinance?: FailedWorkFinance;
   /** scheduled = one morning/afternoon/evening session; urgent = come now. */
   bookingMode?: 'scheduled' | 'urgent';
   slot?: BookingSlot | null;
@@ -340,6 +360,7 @@ export interface QuotationItemPayload {
 
 function normalizeOrder(order: ServiceOrderItem): ServiceOrderItem {
   return { ...order, status: order.status.toUpperCase() as CanonicalOrderStatus,
+    ...(order.failedWorkFinance !== undefined ? { failedWorkFinance: readFailedWorkFinance(order.failedWorkFinance) } : {}),
     paymentStatus: order.paymentStatus.toUpperCase() as ServiceOrderItem['paymentStatus'],
     laborTotal: Number(order.laborTotal), partsTotal: Number(order.partsTotal), grandTotal: Number(order.grandTotal),
     laborWarrantyDays: order.laborWarrantyDays == null ? null : Number(order.laborWarrantyDays),
@@ -361,6 +382,8 @@ function normalizeTechnicianOrder(order: TechnicianOrderItem): TechnicianOrderIt
       status: String(order.status).toUpperCase() as CanonicalOrderStatus,
       createdAt: order.createdAt, completedAt: order.completedAt ?? null,
       cancelledAt: order.cancelledAt ?? null, historical: true,
+      ...(order.workStopped === true && order.operationalDisposition === 'STOPPED'
+        ? { workStopped: true, operationalDisposition: 'STOPPED' as const } : {}),
     };
   }
   return normalizeOrder(order);

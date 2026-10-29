@@ -1038,8 +1038,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const before = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
     await openMoreMenu(before);
-    expect(menuItems(before)).not.toContain('Lỗi kỹ năng hoặc thao tác');
-    expect(menuItems(before)).not.toContain('Ngoại lệ thiết bị hoặc khách hàng');
+    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · kỹ năng');
+    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · ngoại lệ');
     expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
     before.unmount();
 
@@ -1056,11 +1056,11 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await openMoreMenu(wrapper);
     // After check-in the order can no longer be cancelled by the technician.
     expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
-    expect(menuItems(wrapper)).toContain('Lỗi kỹ năng hoặc thao tác');
-    expect(menuItems(wrapper)).toContain('Ngoại lệ thiết bị hoặc khách hàng');
+    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · kỹ năng');
+    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · ngoại lệ');
     expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
     expect(menuItems(wrapper)).not.toContain('Báo cáo vấn đề');
-    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Lỗi kỹ năng hoặc thao tác'))!.trigger('click');
+    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Báo cáo hỗ trợ · kỹ năng'))!.trigger('click');
     const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
     expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
     expect(dialog.attributes('aria-describedby')).toBe('technician-report-description');
@@ -1077,7 +1077,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
       reason: 'Thiếu kỹ năng xử lý dòng máy này.',
       evidenceRefs: ['https://img.test/before.jpg'],
     });
-    expect(wrapper.text()).toContain('Quản lý sẽ liên hệ để thống nhất hướng xử lý hoặc đặt lại lịch nếu cần. Đơn mới không được tự động tạo.');
+    expect(wrapper.text()).toContain('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
     wrapper.unmount();
   });
 
