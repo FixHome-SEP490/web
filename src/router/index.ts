@@ -324,7 +324,7 @@ const routes: RouteRecordRaw[] = [
         path: 'part-returns',
         name: 'console-part-returns',
         component: () => import('../pages/console/ConsolePartReturnsPage.vue'),
-        meta: { title: 'Hoàn trả linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        meta: { title: 'Hoàn trả linh kiện', roles: ['SERVICE_MANAGER'] },
       },
       {
         path: 'part-requests',
@@ -367,7 +367,7 @@ const routes: RouteRecordRaw[] = [
         path: 'support',
         name: 'support-queue',
         component: () => import('../pages/console/SupportQueuePage.vue'),
-        meta: { title: 'Yêu cầu hỗ trợ', roles: ['SERVICE_MANAGER'] },
+        meta: { title: 'Yêu cầu hỗ trợ', roles: ['SERVICE_MANAGER', 'ADMIN'], permission: 'support:read_all' },
       },
       {
         path: 'warranty',
@@ -386,7 +386,7 @@ const routes: RouteRecordRaw[] = [
         path: 'support/:id',
         name: 'support-detail',
         component: () => import('../pages/console/SupportDetailPage.vue'),
-        meta: { title: 'Chi tiết yêu cầu hỗ trợ', roles: ['SERVICE_MANAGER'] },
+        meta: { title: 'Chi tiết yêu cầu hỗ trợ', roles: ['SERVICE_MANAGER', 'ADMIN'], permission: 'support:read_all' },
       },
       {
         path: 'catalog',

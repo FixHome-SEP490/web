@@ -10,6 +10,7 @@ import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import { consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
 import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/auth';
 import {
   FhButton,
   FhCard,
@@ -44,6 +45,10 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
+// Admin's global permission shortcut must never grant manager operations here.
+const canManage = computed(() => auth.userRole === 'SERVICE_MANAGER' && auth.hasPermission('support:resolve'));
+const isAdmin = computed(() => auth.userRole === 'ADMIN');
 const caseId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''));
 const supportCase = ref<SupportCaseDetail | null>(null);
 const loading = ref(true);
@@ -93,7 +98,7 @@ const responsibilityLabels: Record<TechnicianResponsibility, string> = {
 const isTypedTechnicianReport = computed(() => !!supportCase.value?.reasonClass && !!supportCase.value.reasonCode);
 const responsibilityEvidenceRefs = computed(() => responsibilityEvidenceRefsText.value
   .split(/\r?\n/).map((value) => value.trim()).filter(Boolean));
-const canDecideResponsibility = computed(() => isTypedTechnicianReport.value
+const canDecideResponsibility = computed(() => canManage.value && isTypedTechnicianReport.value
   && supportCase.value?.responsibility === 'pending'
   && Number.isSafeInteger(supportCase.value.workflowVersion)
   && (supportCase.value.workflowVersion ?? -1) >= 0);
@@ -118,7 +123,7 @@ const settlesCash = computed(() => !usesStandardCodes.value && resolutionCode.va
 watch(codeLabels, (labels) => {
   if (resolutionCode.value && !(resolutionCode.value in labels)) resolutionCode.value = '';
 });
-const canHold = computed(() => !!supportCase.value?.serviceOrderId && !isTerminal.value);
+const canHold = computed(() => canManage.value && !!supportCase.value?.serviceOrderId && !isTerminal.value);
 const overdue = computed(() =>
   supportCase.value ? isResponseOverdue(supportCase.value.status, supportCase.value.respondBy) : false,
 );
@@ -129,12 +134,15 @@ const isTerminal = computed(() =>
 
 async function loadCase(id: string) {
   const requestId = ++latestRequest;
+  resetActionForms();
   supportCase.value = null;
   loading.value = true;
   error.value = '';
   successMessage.value = '';
   try {
-    supportCase.value = await supportCasesApi.getCase(id);
+    const detail = await supportCasesApi.getCase(id);
+    if (requestId !== latestRequest) return;
+    supportCase.value = detail;
   } catch {
     if (requestId !== latestRequest) return;
     // A failed load shows one plain sentence and a retry, never the server's text.
@@ -144,8 +152,29 @@ async function loadCase(id: string) {
   }
 }
 
+function resetActionForms() {
+  showConfirm.value = false;
+  pendingPayload.value = null;
+  finalStatus.value = 'resolved';
+  resolutionCode.value = '';
+  resolutionReason.value = '';
+  evidenceRefsText.value = '';
+  liableParty.value = '';
+  amountText.value = '';
+  grossRefundText.value = '';
+  formError.value = '';
+  responsibilityDecision.value = '';
+  responsibilityReason.value = '';
+  responsibilityEvidenceRefsText.value = '';
+  resetResponsibilityCommand();
+}
+
+watch(canManage, (allowed) => {
+  if (!allowed) resetActionForms();
+});
+
 // "Cần thay đổi thợ" cases get their own handling (PO 08/10/2026).
-const isReplacementCase = computed(() => !!supportCase.value?.serviceOrderId && (
+const isReplacementCase = computed(() => canManage.value && !!supportCase.value?.serviceOrderId && (
   supportCase.value.caseType === 'technician_replacement'
   || (supportCase.value.caseType === 'mid_job_interruption' && supportCase.value.requestIntent === 'stop_or_replace')
 ));
@@ -157,14 +186,18 @@ async function onReplacementDone(message: string) {
 }
 
 async function runAction(action: () => Promise<SupportCaseDetail>, success: string) {
-  if (actionBusy.value) return;
+  if (!canManage.value || actionBusy.value) return;
+  const requestId = latestRequest;
   actionBusy.value = true;
   error.value = '';
   successMessage.value = '';
   try {
-    supportCase.value = await action();
+    const detail = await action();
+    if (requestId !== latestRequest || !canManage.value) return;
+    supportCase.value = detail;
     successMessage.value = success;
   } catch (reason) {
+    if (requestId !== latestRequest || !canManage.value) return;
     error.value = getSupportErrorMessage(reason, 'Chưa xác nhận được kết quả. Vui lòng tải lại trước khi thực hiện lại.');
   } finally {
     actionBusy.value = false;
@@ -178,6 +211,7 @@ function resetResponsibilityCommand() {
 
 async function submitResponsibilityDecision() {
   const current = supportCase.value;
+  const requestId = latestRequest;
   const reason = responsibilityReason.value.trim();
   const evidenceRefs = responsibilityEvidenceRefs.value;
   if (!current || !canDecideResponsibility.value || responsibilitySubmitting.value) return;
@@ -198,16 +232,19 @@ async function submitResponsibilityDecision() {
   responsibilitySubmitting.value = true;
   error.value = '';
   try {
-    supportCase.value = await supportCasesApi.decideTechnicianResponsibility(current.id, {
+    const detail = await supportCasesApi.decideTechnicianResponsibility(current.id, {
       commandId: responsibilityCommandId.value,
       workflowVersion: current.workflowVersion!,
       decision: responsibilityDecision.value,
       reason,
       ...(evidenceRefs.length ? { evidenceRefs } : {}),
     });
+    if (requestId !== latestRequest || !canManage.value) return;
+    supportCase.value = detail;
     responsibilityCommandId.value = null;
     successMessage.value = 'Đã ghi nhận kết luận trách nhiệm từ Backend.';
   } catch (reasonError) {
+    if (requestId !== latestRequest || !canManage.value) return;
     responsibilityError.value = getSupportErrorMessage(reasonError, 'Chưa lưu được kết luận. Có thể thử lại với cùng mã thao tác.');
   } finally {
     responsibilitySubmitting.value = false;
@@ -228,16 +265,19 @@ const toggleHold = () => {
 
 async function retryCompletion() {
   const orderId = supportCase.value?.serviceOrderId;
-  if (!orderId || actionBusy.value) return;
+  if (!canManage.value || !orderId || actionBusy.value) return;
+  const requestId = latestRequest;
   actionBusy.value = true;
   error.value = '';
   successMessage.value = '';
   try {
     const result = await ordersApi.retryCompletion(orderId);
+    if (requestId !== latestRequest || !canManage.value) return;
     successMessage.value = result.completed
       ? 'Đơn đã được hoàn tất.'
       : 'Đơn chưa đủ điều kiện hoàn tất (thiếu xác nhận của khách hoặc thanh toán).';
   } catch (reason) {
+    if (requestId !== latestRequest || !canManage.value) return;
     error.value = getSupportErrorMessage(reason, 'Chưa kiểm tra lại được, vui lòng thử lại.');
   } finally {
     actionBusy.value = false;
@@ -316,7 +356,7 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
 }
 
 function submitResolution() {
-  if (!supportCase.value || isTerminal.value || submitting.value) return;
+  if (!canManage.value || !supportCase.value || isTerminal.value || submitting.value) return;
   formError.value = '';
   const payload = buildResolvePayload();
   if (!payload) return;
@@ -331,16 +371,20 @@ function cancelResolution() {
 }
 
 async function confirmResolution() {
-  if (!supportCase.value || !pendingPayload.value || submitting.value || isTerminal.value) return;
+  if (!canManage.value || !supportCase.value || !pendingPayload.value || submitting.value || isTerminal.value) return;
+  const requestId = latestRequest;
   submitting.value = true;
   error.value = '';
   formError.value = '';
   try {
-    supportCase.value = await supportCasesApi.resolveCase(supportCase.value.id, pendingPayload.value);
+    const detail = await supportCasesApi.resolveCase(supportCase.value.id, pendingPayload.value);
+    if (requestId !== latestRequest || !canManage.value) return;
+    supportCase.value = detail;
     successMessage.value = 'Đã lưu kết quả xử lý.';
     showConfirm.value = false;
     pendingPayload.value = null;
   } catch (reason) {
+    if (requestId !== latestRequest || !canManage.value) return;
     error.value = getSupportErrorMessage(reason, 'Chưa lưu được kết quả, vui lòng thử lại.');
     showConfirm.value = false;
   } finally {
@@ -394,10 +438,10 @@ watch(caseId, (id) => {
           <p class="mt-2 max-w-3xl text-sm text-ink-700 text-pretty">{{ supportCase.reason }}</p>
         </template>
         <template #actions>
-          <FhButton v-if="!isTerminal && supportCase.status === 'open'" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="startReview">
+          <FhButton v-if="canManage && !isTerminal && supportCase.status === 'open'" size="sm" :loading="actionBusy" :disabled="actionBusy" @click="startReview">
             Nhận xử lý case này
           </FhButton>
-          <ConsoleMoreMenu v-if="canHold || supportCase.serviceOrderId || isCashCase(supportCase.caseType)">
+          <ConsoleMoreMenu v-if="canHold || supportCase.serviceOrderId || (canManage && isCashCase(supportCase.caseType))">
             <ConsoleMenuItem v-if="canHold" :disabled="actionBusy" @click="toggleHold">
               {{ supportCase.holdCompletion ? 'Bỏ giữ hoàn tất đơn' : 'Giữ đơn không tự hoàn tất' }}
             </ConsoleMenuItem>
@@ -408,7 +452,7 @@ watch(caseId, (id) => {
               Xem đơn sửa chữa
             </ConsoleMenuItem>
             <ConsoleMenuItem
-              v-if="isCashCase(supportCase.caseType)"
+              v-if="canManage && isCashCase(supportCase.caseType)"
               @click="router.push(`/console/support/cash/${encodeURIComponent(supportCase.id)}`)"
             >
               Xem đối soát tiền mặt
@@ -416,6 +460,8 @@ watch(caseId, (id) => {
           </ConsoleMoreMenu>
         </template>
       </ConsolePageHeader>
+
+      <p v-if="isAdmin" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
 
       <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
         {{ error }}
@@ -509,7 +555,7 @@ watch(caseId, (id) => {
             <FhButton type="submit" class="w-full sm:w-auto" :disabled="responsibilitySubmitting" :loading="responsibilitySubmitting">Gửi kết luận</FhButton>
           </div>
         </form>
-        <p v-else-if="supportCase.responsibility === 'pending' && !canDecideResponsibility" class="mt-4 text-sm text-warning-800">Thiếu phiên bản quy trình mới nhất. Tải lại hồ sơ trước khi quyết định.</p>
+        <p v-else-if="canManage && supportCase.responsibility === 'pending' && !canDecideResponsibility" class="mt-4 text-sm text-warning-800">Thiếu phiên bản quy trình mới nhất. Tải lại hồ sơ trước khi quyết định.</p>
       </FhCard>
 
       <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" title="Kết quả xử lý">
@@ -522,7 +568,7 @@ watch(caseId, (id) => {
         <p v-if="supportCase.resolutionReason" class="mt-4 border-t border-ink-100 pt-4 text-sm text-ink-800 text-pretty">{{ supportCase.resolutionReason }}</p>
       </FhCard>
 
-      <FhCard v-if="!isTerminal && !isTypedTechnicianReport" title="Ghi nhận kết quả">
+      <FhCard v-if="canManage && !isTerminal && !isTypedTechnicianReport" title="Ghi nhận kết quả">
         <form class="space-y-4" @submit.prevent="submitResolution">
           <div class="grid gap-4 sm:grid-cols-2">
             <label :class="consoleLabel">
@@ -578,6 +624,7 @@ watch(caseId, (id) => {
       </FhCard>
 
       <FhConfirmDialog
+        v-if="canManage"
         :open="showConfirm"
         :loading="submitting"
         :danger="pendingPayload?.finalStatus === 'rejected'"

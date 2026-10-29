@@ -49,7 +49,11 @@ describe('Console sidebar', () => {
     const sm = consoleNavigation('SERVICE_MANAGER').flatMap((g) => g.items.map((i) => i.path));
     const admin = consoleNavigation('ADMIN').flatMap((g) => g.items.map((i) => i.path));
     expect(sm).toEqual(expect.arrayContaining(['/console/support', '/console/cancellations', '/console/reputation']));
-    expect(admin).not.toContain('/console/support');
+    expect(admin).toContain('/console/support');
+    expect(admin).not.toContain('/console/part-returns');
+    expect(sm).toContain('/console/part-returns');
+    expect(admin).not.toContain('/console/cancellations');
+    expect(admin).not.toContain('/console/reputation');
     expect(sm.some((p) => p.startsWith('/console/admin/'))).toBe(false);
     expect(admin).toEqual(expect.arrayContaining(['/console/admin/users', '/console/admin/config', '/console/warranty']));
     expect(consoleNavigation('CUSTOMER')).toEqual([]);
