@@ -47,6 +47,7 @@ const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
 const bookings = item('Gán thợ', '/console/bookings', UserPlus);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
+const support = item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
 const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
 const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', MapPinned);
@@ -62,7 +63,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
       {
         group: 'Hỗ trợ',
         items: [
-          item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy),
+          support,
           warranty,
           item('Huỷ đơn', '/console/cancellations', Ban),
           item('Điểm uy tín', '/console/reputation', Gauge),
@@ -74,7 +75,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
     return [
       {
         group: 'Vận hành',
-        items: [overview, orders, bookings, partRequests, partReturns, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+        items: [overview, orders, bookings, partRequests, support, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
       },
       {
         group: 'Kỹ thuật viên',

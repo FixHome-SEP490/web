@@ -49,6 +49,8 @@ describe.each(['solo', 'visit'] as const)('%s quotation approval', kind => {
     const wrapper = mount(kind === 'visit' ? VisitPage : OrderPage, {
       attachTo: document.body,
       global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, MapTilerMap: true, BookingMediaViewer: true,
+        // Sibling panels are covered by their own specs; keep the single-listener mock focused on approval.
+        CustomerContinuationPanel: true,
         OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true,
         RebookDialog: true, FailedRepairIncident: true, VoucherCheckoutChooser: true } },
     });

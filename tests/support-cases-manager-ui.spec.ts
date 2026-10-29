@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import { createPinia, setActivePinia } from 'pinia';
+import { useAuthStore } from '../src/stores/auth';
+import { UserRole } from '../src/types';
+import FhConfirmDialog from '../src/components/FhConfirmDialog.vue';
+
+beforeEach(() => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  useAuthStore().setAuth('test-token', {
+    id: 'sm-1', fullName: 'Test Manager', email: 'manager@example.test', status: 'ACTIVE',
+    role: UserRole.SERVICE_MANAGER, permissions: ['support:read_all', 'support:resolve'],
+  });
+});
 
 const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../src/api/client', async (importOriginal) => ({
@@ -112,6 +125,136 @@ describe('SupportDetailPage for a complaint', () => {
   const button = (wrapper: Awaited<ReturnType<typeof mountPage>>, label: string) =>
     wrapper.findAll('button').find((b) => b.text() === label);
 
+  it.each(['property_damage', 'cash_mismatch', 'parts_dispute', 'technician_replacement'])(
+    'lets Admin read %s without any manager operation or replacement preflight', async (caseType) => {
+      const auth = useAuthStore();
+      auth.user!.role = UserRole.ADMIN;
+      const wrapper = await mountPage(baseCase({ caseType, evidenceRefs: ['https://example.test/evidence.jpg'],
+        ...(caseType === 'technician_replacement' ? {
+          reasonClass: 'technician_skill_gap', reasonCode: 'skill_gap', responsibility: 'pending', workflowVersion: 0,
+        } : {}),
+      }));
+      try {
+        expect(wrapper.text()).toContain('Thợ làm vỡ gạch');
+        expect(wrapper.text()).toContain('Chỉ xem');
+        expect(wrapper.find('a[href="https://example.test/evidence.jpg"]').exists()).toBe(true);
+        expect(wrapper.findAll('form, textarea, input, select')).toHaveLength(0);
+        for (const label of ['Nhận xử lý case này', 'Giữ đơn không tự hoàn tất', 'Kiểm tra lại hoàn tất đơn', 'Xem đối soát tiền mặt']) {
+          expect(button(wrapper, label)).toBeUndefined();
+        }
+        expect(wrapper.find('[data-testid="replacement-panel"]').exists()).toBe(false);
+        expect(wrapper.findComponent(FhConfirmDialog).exists()).toBe(false);
+        expect(apiClientMock.get.mock.calls.map(([path]) => path)).toEqual(['/support/cases/case-1']);
+        expect(apiClientMock.post).not.toHaveBeenCalled();
+        expect(wrapper.text()).not.toContain('Thiếu phiên bản quy trình');
+      } finally { wrapper.unmount(); }
+    },
+  );
+
+  it('blocks a pending resolution callback if the role changes to Admin', async () => {
+    const wrapper = await mountPage();
+    await wrapper.findAll('select')[1].setValue('warning_issued');
+    await wrapper.get('textarea').setValue('Đã kiểm tra bằng chứng và ghi nhận kết quả.');
+    await wrapper.get('form').trigger('submit');
+    const dialog = wrapper.getComponent(FhConfirmDialog);
+    useAuthStore().user!.role = UserRole.ADMIN;
+    dialog.vm.$emit('confirm');
+    await flushPromises();
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.find('form').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('does not offer manager operations without support resolve permission', async () => {
+    useAuthStore().user!.permissions = ['support:read_all'];
+    const wrapper = await mountPage();
+    try {
+      expect(wrapper.text()).toContain('Thợ làm vỡ gạch');
+      expect(wrapper.find('form').exists()).toBe(false);
+      expect(button(wrapper, 'Nhận xử lý case này')).toBeUndefined();
+      expect(button(wrapper, 'Giữ đơn không tự hoàn tất')).toBeUndefined();
+      expect(apiClientMock.post).not.toHaveBeenCalled();
+    } finally { wrapper.unmount(); }
+  });
+
+  it('clears case data if the server denies an Admin detail read', async () => {
+    useAuthStore().user!.role = UserRole.ADMIN;
+    const wrapper = await mountPage();
+    try {
+      apiClientMock.get.mockRejectedValueOnce({ response: { status: 403, data: { message: 'Private server detail' } } });
+      await wrapper.getComponent(SupportDetailPage).vm.$router.push('/console/support/forbidden-case');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Chưa tải được');
+      expect(wrapper.text()).not.toContain('Thợ làm vỡ gạch');
+      expect(wrapper.text()).not.toContain('Private server detail');
+      expect(wrapper.find('form').exists()).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
+
+  it('does not claim resolution success when the server rejects it', async () => {
+    const wrapper = await mountPage();
+    await wrapper.findAll('select')[1].setValue('warning_issued');
+    await wrapper.get('textarea').setValue('Đã kiểm tra bằng chứng và ghi nhận kết quả.');
+    await wrapper.get('form').trigger('submit');
+    apiClientMock.post.mockRejectedValueOnce(new Error('Forbidden'));
+    wrapper.getComponent(FhConfirmDialog).vm.$emit('confirm');
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Đã lưu kết quả xử lý.');
+    expect(wrapper.get('[role="alert"]').text()).toContain('Chưa lưu được');
+    wrapper.unmount();
+  });
+
+  it('drops a pending resolution when navigating to another case', async () => {
+    const wrapper = await mountPage();
+    await wrapper.findAll('select')[1].setValue('warning_issued');
+    await wrapper.get('textarea').setValue('Kết quả chỉ dành cho yêu cầu hỗ trợ đầu tiên.');
+    await wrapper.get('form').trigger('submit');
+    const dialog = wrapper.getComponent(FhConfirmDialog);
+    apiClientMock.get.mockResolvedValueOnce(envelope(baseCase({ id: 'case-2', reason: 'Yêu cầu hỗ trợ khác' })));
+    await wrapper.getComponent(SupportDetailPage).vm.$router.push('/console/support/case-2');
+    await flushPromises();
+    dialog.vm.$emit('confirm');
+    await flushPromises();
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.getComponent(FhConfirmDialog).props('open')).toBe(false);
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('');
+    wrapper.unmount();
+  });
+
+  it('ignores a late detail response from a previously selected case', async () => {
+    const wrapper = await mountPage();
+    let resolveOld!: (value: unknown) => void;
+    apiClientMock.get.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const router = wrapper.getComponent(SupportDetailPage).vm.$router;
+    await router.push('/console/support/case-2');
+    await flushPromises();
+    apiClientMock.get.mockResolvedValueOnce(envelope(baseCase({ id: 'case-3', reason: 'Nội dung hồ sơ hiện tại' })));
+    await router.push('/console/support/case-3');
+    await flushPromises();
+    resolveOld(envelope(baseCase({ id: 'case-2', reason: 'Nội dung hồ sơ cũ' })));
+    await flushPromises();
+    expect(wrapper.text()).toContain('Nội dung hồ sơ hiện tại');
+    expect(wrapper.text()).not.toContain('Nội dung hồ sơ cũ');
+    wrapper.unmount();
+  });
+
+  it('does not apply a late claim result or success message to another case', async () => {
+    const wrapper = await mountPage();
+    let resolveClaim!: (value: unknown) => void;
+    apiClientMock.post.mockImplementationOnce(() => new Promise(resolve => { resolveClaim = resolve; }));
+    await button(wrapper, 'Nhận xử lý case này')!.trigger('click');
+    apiClientMock.get.mockResolvedValueOnce(envelope(baseCase({ id: 'case-2', reason: 'Hồ sơ đang xem' })));
+    await wrapper.getComponent(SupportDetailPage).vm.$router.push('/console/support/case-2');
+    await flushPromises();
+    resolveClaim(envelope(baseCase({ status: 'in_review', reason: 'Hồ sơ đã rời đi' })));
+    await flushPromises();
+    try {
+      expect(wrapper.text()).toContain('Hồ sơ đang xem');
+      expect(wrapper.text()).not.toContain('Hồ sơ đã rời đi');
+      expect(wrapper.text()).not.toContain('Bạn đã nhận xử lý case này.');
+    } finally { wrapper.unmount(); }
+  });
+
   it('shows urgency, the overdue response time and the intervention tools', async () => {
     const wrapper = await mountPage();
     const text = wrapper.text();
@@ -177,6 +320,37 @@ describe('SupportDetailPage for a complaint', () => {
       liableParty: 'technician',
       amount: 150000,
     });
+    wrapper.unmount();
+  });
+
+  it('T12 records decisions separately and escalates with an exact versioned retry while preserving hold', async () => {
+    const recorded = await mountPage(baseCase({ status: 'resolved', resolutionCode: 'refund_recorded',
+      resolutionExecutionKind: 'DECISION_RECORDED', needsManualAction: true, nextActor: 'service_manager' }));
+    expect(recorded.text()).toContain('Chỉ ghi nhận kết luận');
+    expect(recorded.text()).toContain('chưa thực hiện thao tác nghiệp vụ');
+    recorded.unmount();
+    const wrapper = await mountPage(baseCase({ workflowVersion: 4, holdCompletion: true,
+      resolutionExecutionKind: 'NOT_RECORDED', needsManualAction: false, nextActor: null }));
+    await wrapper.findAll('select')[1].setValue('escalate_admin');
+    await wrapper.get('textarea').setValue('Cần quản trị viên xem xét chứng cứ.');
+    await wrapper.get('form').trigger('submit'); await flushPromises();
+    expect(document.body.textContent).toContain('vẫn đang rà soát');
+    apiClientMock.post.mockRejectedValueOnce(new Error('network'));
+    Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('Gửi kết quả'))!.click();
+    await flushPromises();
+    const sent = apiClientMock.post.mock.calls.at(-1)![1];
+    expect(sent).toEqual({ finalStatus: 'resolved', resolutionCode: 'escalate_admin', reason: 'Cần quản trị viên xem xét chứng cứ.',
+      commandId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i), expectedVersion: 4 });
+    await wrapper.get('form').trigger('submit'); await flushPromises();
+    apiClientMock.post.mockResolvedValueOnce(envelope(baseCase({ status: 'in_review', workflowVersion: 5, holdCompletion: true,
+      resolutionCode: 'escalate_admin', resolutionExecutionKind: 'ESCALATED_ADMIN', needsManualAction: true, nextActor: 'admin' })));
+    Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('Gửi kết quả'))!.click();
+    await flushPromises();
+    expect(apiClientMock.post.mock.calls.at(-1)![1]).toEqual(sent);
+    expect(wrapper.text()).toContain('Đang rà soát');
+    expect(wrapper.text()).toContain('Đang giữ đơn');
+    expect(wrapper.text()).toContain('Quản trị viên xem xét');
+    expect(wrapper.text()).not.toContain('Đã giải quyếtChuyển');
     wrapper.unmount();
   });
 
@@ -363,6 +537,25 @@ describe('SupportDetailPage for a complaint', () => {
 
 describe('SupportQueuePage', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('opens a cash case in the Admin read-only detail instead of the SM cash page', async () => {
+    useAuthStore().user!.role = UserRole.ADMIN;
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/console/support', component: SupportQueuePage },
+      { path: '/console/support/:id', component: { template: '<div />' } },
+      { path: '/console/support/cash/:id', component: { template: '<div />' } },
+      { path: '/console/orders/:id', component: { template: '<div />' } },
+    ] });
+    apiClientMock.get.mockResolvedValueOnce(envelope([baseCase({ caseType: 'cash_mismatch' })], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    await router.push('/console/support');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Chỉ xem');
+    await wrapper.get('button[aria-label^="Mở chi tiết"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/console/support/case-1');
+    wrapper.unmount();
+  });
 
   it('asks for the priority order and flags urgent, overdue and held cases', async () => {
     const router = createRouter({
