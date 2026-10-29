@@ -26,6 +26,8 @@ function setUp(thinking: boolean, devices: unknown[] = []) {
     startOver: vi.fn(),
     loadHoldingLines: vi.fn(),
     customerWords: () => 'máy lạnh không mát',
+    messages: ref([]),
+    attachments: ref([]),
   });
   return mount(AiAssistantWidget, {
     global: { stubs: { AiConversationThread: { template: '<div><slot name="pinned" /></div>' }, transition: false } },
@@ -58,7 +60,10 @@ describe('Booking several appliances from the assistant', () => {
   it('offers one visit for all of them, and still lets the customer book only the first', () => {
     const wrapper = setUp(false, devices);
     expect(wrapper.find('[data-testid="ai-book-visit"]').text()).toContain('Đặt 2 thiết bị');
-    expect(wrapper.find('[data-testid="ai-visit-bar"]').text()).toContain('Máy lạnh, Máy giặt');
+    // PO 29/10/2026: every appliance with the service it will be booked under.
+    expect(wrapper.find('[data-testid="ai-visit-bar"]').text()).toContain('Dịch vụ sẽ đặt cho 2 thiết bị');
+    const lines = wrapper.findAll('[data-testid="ai-visit-bar-services"] li').map((li) => li.text());
+    expect(lines).toEqual(['Máy lạnh: Sửa điều hòa', 'Máy giặt: Sửa máy giặt']);
     expect(wrapper.find('[data-testid="ai-book-technician"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="ai-book-primary"]').exists()).toBe(true);
   });

@@ -6,8 +6,9 @@ import { defineComponent, h } from 'vue';
 // all. The AI one: the customer only describes the problem, the assistant
 // diagnoses it and chooses the service, and only then can the customer change
 // it and book.
-const { createBooking, getCategories, getAddresses, push, route, analyze, ask } = vi.hoisted(() => ({
+const { createBooking, getCategories, getAddresses, push, route, analyze, ask, visitContact } = vi.hoisted(() => ({
   createBooking: vi.fn(),
+  visitContact: vi.fn(),
   getCategories: vi.fn(),
   getAddresses: vi.fn(),
   push: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
   isCatalogV2PricingUnavailableError: (error: unknown) => (error as { response?: { status?: number } } | undefined)?.response?.status === 404,
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
+vi.mock('../src/api/visit-groups.api', () => ({
+  VISIT_DEVICE_LIMIT: 3,
+  visitGroupsApi: { contact: visitContact, create: vi.fn(), consultation: vi.fn() },
+}));
 vi.mock('../src/api/ai.api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/api/ai.api')>();
   return { ...actual, aiApi: { analyze, ask, acknowledgements: vi.fn(async () => ({})) } };
@@ -43,6 +48,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push, back: vi.fn(), replace:
 
 import NewBookingWizardPage from '../src/pages/customer/NewBookingWizardPage.vue';
 import { useSharedAiConversation, resetSharedAiConversation } from '../src/composables/useAiConversation';
+import { takeAiVisitDraft } from '../src/composables/aiVisitDraft';
 
 const ActionButton = defineComponent({
   props: { disabled: Boolean, loading: Boolean },
@@ -78,6 +84,7 @@ async function describeAndAnalyze(wrapper: ReturnType<typeof mount>) {
 
 beforeEach(() => {
   createBooking.mockReset().mockResolvedValue({ id: 'booking-id' });
+  visitContact.mockReset().mockResolvedValue({ enabled: false, deviceLimit: 3, hotline: null });
   analyze.mockReset();
   ask.mockReset();
   getCategories.mockReset().mockResolvedValue([
@@ -242,5 +249,92 @@ describe('Plain booking form', () => {
     expect(ask).not.toHaveBeenCalled();
     expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'svc-fix', description: 'Máy lạnh không mát' }));
     expect(createBooking.mock.calls[0][0]).not.toHaveProperty('aiSessionId');
+  });
+
+  describe('several appliances in one conversation (PO 29/10/2026)', () => {
+    const fan = { serviceCode: 'FAN', nameVi: 'Sửa quạt điện', serviceId: 'svc-fan', deviceType: 'electric_fan' };
+    const induction = { serviceCode: 'IND', nameVi: 'Sửa bếp từ', serviceId: 'svc-induction', deviceType: 'induction_cooker' };
+    const gas = { serviceCode: 'GAS', nameVi: 'Sửa bếp gas', serviceId: 'svc-gas', deviceType: 'gas_stove' };
+    const threeAppliances = () => reply({
+      messageVi: 'Dạ, quạt điện nhà mình có thể bị hỏng tụ khởi động ạ. Về bếp từ: ... Về bếp gas: ...',
+      recommendedServices: [fan, induction, gas],
+      devices: [
+        { deviceType: 'electric_fan', nameVi: 'Quạt điện', isPrimary: true, service: fan, descriptionVi: 'quạt quay chậm' },
+        { deviceType: 'induction_cooker', nameVi: 'Bếp từ', service: induction, descriptionVi: 'bếp từ báo lỗi E' },
+        { deviceType: 'gas_stove', nameVi: 'Bếp gas', service: gas, descriptionVi: 'bếp gas tự tắt lửa' },
+      ],
+    });
+
+    beforeEach(() => {
+      push.mockReset();
+      visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+      getCategories.mockResolvedValue([
+        { id: 'cat-home', name: 'Đèn & quạt', services: [
+          { id: 'svc-fan', name: 'Sửa quạt điện', pricingMode: 'inspection_required', basePrice: 149000 },
+        ] },
+        { id: 'cat-kitchen', name: 'Bếp', services: [
+          { id: 'svc-induction', name: 'Sửa bếp từ', pricingMode: 'inspection_required', basePrice: 249000 },
+          { id: 'svc-gas', name: 'Sửa bếp gas', pricingMode: 'inspection_required', basePrice: 199000 },
+          { id: 'svc-gas-clean', name: 'Vệ sinh bếp gas', pricingMode: 'inspection_required', basePrice: 150000 },
+        ] },
+      ]);
+    });
+
+    it('shows a service for every appliance and books them all, each under its own', async () => {
+      analyze.mockResolvedValueOnce(threeAppliances());
+      const wrapper = await openAiForm();
+      await describeAndAnalyze(wrapper);
+
+      const list = wrapper.get('[data-testid="ai-visit-services"]');
+      expect(list.text()).toContain('Dịch vụ sẽ đặt cho 3 thiết bị');
+      expect(wrapper.get('[data-testid="ai-visit-service-0"]').text()).toContain('Máy 1 · Quạt điện');
+      expect(wrapper.get('[data-testid="ai-visit-service-0"]').text()).toContain('Sửa quạt điện');
+      expect(wrapper.get('[data-testid="ai-visit-service-1"]').text()).toContain('Sửa bếp từ');
+      expect(wrapper.get('[data-testid="ai-visit-service-2"]').text()).toContain('Sửa bếp gas');
+      // The single-service box is not shown beside the list.
+      expect(wrapper.find('[data-testid="ai-current-service"]').exists()).toBe(false);
+
+      // The customer changes the third one only.
+      await wrapper.get('[data-testid="ai-visit-service-change-2"]').setValue('svc-gas-clean');
+      expect(wrapper.get('[data-testid="ai-visit-service-2"]').text()).toContain('Vệ sinh bếp gas');
+      expect(wrapper.get('[data-testid="ai-visit-service-0"]').text()).toContain('Sửa quạt điện');
+
+      expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
+      await wrapper.get('[data-testid="ai-continue"]').trigger('click');
+      expect(push).toHaveBeenCalledWith({ name: 'new-booking', query: { visit: 'ai', aiSession: 'sess-42' } });
+      const handed = takeAiVisitDraft('sess-42');
+      expect(handed.map((device) => [device.nameVi, device.service?.serviceId, device.descriptionVi])).toEqual([
+        ['Quạt điện', 'svc-fan', 'quạt quay chậm'],
+        ['Bếp từ', 'svc-induction', 'bếp từ báo lỗi E'],
+        ['Bếp gas', 'svc-gas-clean', 'bếp gas tự tắt lửa'],
+      ]);
+      expect(createBooking).not.toHaveBeenCalled();
+    }, 10000);
+
+    it('can still book only the first appliance, and go back to all of them', async () => {
+      analyze.mockResolvedValueOnce(threeAppliances());
+      const wrapper = await openAiForm();
+      await describeAndAnalyze(wrapper);
+
+      await wrapper.get('[data-testid="ai-book-one-only"]').trigger('click');
+      expect(wrapper.find('[data-testid="ai-visit-services"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Dịch vụ sẽ đặt:Sửa quạt điện');
+      await wrapper.get('[data-testid="ai-continue"]').trigger('click');
+      expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'new-booking' }));
+      expect(wrapper.find('[data-testid="step2-next"]').exists()).toBe(true);
+
+    }, 10000);
+
+    it('keeps to one service while booking several in one visit is switched off', async () => {
+      visitContact.mockResolvedValue({ enabled: false, deviceLimit: 3, hotline: null });
+      analyze.mockResolvedValueOnce(threeAppliances());
+      const wrapper = await openAiForm();
+      await describeAndAnalyze(wrapper);
+
+      expect(wrapper.find('[data-testid="ai-visit-services"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa quạt điện');
+      await wrapper.get('[data-testid="ai-continue"]').trigger('click');
+      expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'new-booking' }));
+    }, 10000);
   });
 });
