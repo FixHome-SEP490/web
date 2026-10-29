@@ -80,6 +80,8 @@ describe('Customer VisitGroup finalized invoice summary', () => {
     expect(cashIntents.create).toHaveBeenCalledWith('VISIT_GROUP', 'v1', expect.objectContaining({ commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) }));
     expect(w.get('[data-testid="visit-cash-intent-pending"]').text()).toContain('500.000');
     expect(w.get('[data-testid="visit-cash-intent-pending"]').text()).toContain('3 thiết bị');
+    expect(w.get('[data-testid="visit-cash-intent-pending"]').attributes('aria-labelledby')).toBe('visit-cash-intent-pending-title');
+    expect(w.get('#visit-cash-intent-pending-title').text()).toBe('Chờ kỹ thuật viên xác nhận tiền mặt');
     expect(cashIntents.create).toHaveBeenCalledTimes(1);
     await w.get('[data-testid="visit-cash-intent-cancel"]').trigger('click');
     await flushPromises();

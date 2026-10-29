@@ -1910,14 +1910,17 @@ const parsedReview = computed(() => {
         <p v-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
         <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
 
-        <section v-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="cash-intent-pending">
-          <h3 class="font-semibold">Chờ kỹ thuật viên xác nhận tiền mặt</h3>
-          <p>Số tiền khách cần trả theo máy chủ: <strong class="font-num"><FhMoney :amount="currentCashIntent.customerDueVnd" /></strong>.</p>
+        <section v-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" aria-labelledby="cash-intent-pending-title" data-testid="cash-intent-pending">
+          <h4 id="cash-intent-pending-title" class="font-semibold text-balance">Chờ kỹ thuật viên xác nhận tiền mặt</h4>
+          <dl class="border-y border-warning-200 py-3">
+            <dt class="text-warning-800">Số tiền cần trả</dt>
+            <dd class="mt-1"><FhMoney :amount="currentCashIntent.customerDueVnd" emphasis /></dd>
+          </dl>
           <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
-          <FhButton variant="secondary" size="md" :disabled="actionLoading" :loading="actionLoading" data-testid="cash-intent-cancel" @click="cancelCashIntent">Huỷ yêu cầu tiền mặt</FhButton>
+          <FhButton variant="secondary" size="md" class="w-full" :disabled="actionLoading" :loading="actionLoading" data-testid="cash-intent-cancel" @click="cancelCashIntent">Hủy yêu cầu tiền mặt</FhButton>
         </section>
         <section v-else-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm text-ink-800" data-testid="cash-intent-received">
-          <h3 class="font-semibold">Kỹ thuật viên đã báo nhận tiền mặt</h3>
+          <h4 class="font-semibold text-balance">Kỹ thuật viên đã báo nhận tiền mặt</h4>
           <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="currentCashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái hóa đơn được cập nhật; chưa hiển thị là đã thanh toán.</p>
         </section>
         <p v-else-if="cashFirstEnabled && currentCashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700" data-testid="cash-intent-cancelled">Yêu cầu tiền mặt đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
@@ -1997,7 +2000,7 @@ const parsedReview = computed(() => {
             size="lg"
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"
-          >{{ cashFirstEnabled ? 'Yêu cầu thanh toán bằng tiền mặt' : 'Đã hiểu' }}</FhButton>
+          >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>
         </template>
       </div>
     </div>

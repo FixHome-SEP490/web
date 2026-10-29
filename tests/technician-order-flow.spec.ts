@@ -1063,6 +1063,9 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Lỗi kỹ năng hoặc thao tác'))!.trigger('click');
     const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
     expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
+    expect(dialog.attributes('aria-describedby')).toBe('technician-report-description');
+    expect(dialog.get('[data-testid="technician-report-reason"]').attributes('aria-describedby')).toBe('technician-report-reason-hint');
+    expect(dialog.get('#technician-report-reason-hint').text()).toContain('10–2.000 ký tự');
     await dialog.get('[data-testid="technician-report-reason"]').setValue('Thiếu kỹ năng xử lý dòng máy này.');
     await dialog.get('[data-testid="technician-report-evidence"]').setValue(true);
     await dialog.get('[data-testid="technician-report-submit"]').trigger('click');

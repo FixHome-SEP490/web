@@ -1095,14 +1095,21 @@ async function answerCash(agreed: boolean) {
             </div>
           </div>
         </template>
-        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-900" data-testid="visit-cash-intent-pending">
-          <h3 class="font-semibold">Chờ kỹ thuật viên xác nhận tiền mặt · Gồm {{ checkout.devices.length }} thiết bị</h3>
-          <p>Số tiền khách cần trả theo máy chủ: <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>.</p>
+        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-900" aria-labelledby="visit-cash-intent-pending-title" data-testid="visit-cash-intent-pending">
+          <div>
+            <h3 id="visit-cash-intent-pending-title" class="font-semibold text-balance">Chờ kỹ thuật viên xác nhận tiền mặt</h3>
+            <p class="mt-1 text-sm text-warning-800">Gồm {{ checkout.devices.length }} thiết bị</p>
+          </div>
+          <dl class="border-y border-warning-200 py-3">
+            <dt class="text-sm text-warning-800">Số tiền cần trả</dt>
+            <dd class="mt-1"><FhMoney :amount="cashIntent.customerDueVnd" emphasis /></dd>
+          </dl>
           <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
-          <FhButton variant="secondary" size="md" :disabled="busy" :loading="busy" data-testid="visit-cash-intent-cancel" @click="cancelCashIntent">Huỷ yêu cầu tiền mặt</FhButton>
+          <FhButton variant="secondary" size="md" class="w-full sm:w-auto" :disabled="busy" :loading="busy" data-testid="visit-cash-intent-cancel" @click="cancelCashIntent">Hủy yêu cầu tiền mặt</FhButton>
         </section>
         <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-ink-800" data-testid="visit-cash-intent-received">
-          <h3 class="font-semibold">Kỹ thuật viên đã báo nhận tiền mặt · Gồm {{ checkout.devices.length }} thiết bị</h3>
+          <h3 class="font-semibold text-balance">Kỹ thuật viên đã báo nhận tiền mặt</h3>
+          <p class="text-sm text-ink-600">Gồm {{ checkout.devices.length }} thiết bị</p>
           <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái lượt được cập nhật; chưa hiển thị là đã thanh toán.</p>
         </section>
         <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0">
@@ -1156,7 +1163,7 @@ async function answerCash(agreed: boolean) {
             <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
               <p v-if="cashFirstEnabled">Gửi yêu cầu để máy chủ chốt số tiền hiện tại cho cả lượt {{ checkout.devices.length }} thiết bị. Kỹ thuật viên chỉ xác nhận đã nhận sau khi yêu cầu được tạo.</p>
               <p v-else>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
-              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu thanh toán bằng tiền mặt</FhButton>
+              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu trả tiền mặt</FhButton>
               <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
               <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
                 <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>

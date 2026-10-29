@@ -467,11 +467,11 @@ watch(caseId, (id) => {
 
       <FhCard v-if="isTypedTechnicianReport" title="Đánh giá trách nhiệm">
         <p class="mb-4 text-sm text-ink-600">Báo cáo của kỹ thuật viên; kết luận này không thay đổi trạng thái đơn sửa chữa.</p>
-        <dl class="space-y-2.5 text-sm">
-          <div class="flex flex-wrap justify-between gap-2"><dt class="text-ink-500">Nhóm tình huống</dt><dd class="text-right text-ink-900">{{ technicianReportClassLabels[supportCase.reasonClass!] }}</dd></div>
-          <div class="flex flex-wrap justify-between gap-2"><dt class="text-ink-500">Lý do</dt><dd class="text-right text-ink-900">{{ technicianReportCodeLabels[supportCase.reasonCode!] }}</dd></div>
+        <dl class="grid gap-4 text-sm sm:grid-cols-2">
+          <div class="min-w-0"><dt class="text-ink-500">Nhóm tình huống</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportClassLabels[supportCase.reasonClass!] }}</dd></div>
+          <div class="min-w-0"><dt class="text-ink-500">Lý do</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportCodeLabels[supportCase.reasonCode!] }}</dd></div>
         </dl>
-        <div class="mt-4 border-t border-ink-100 pt-4">
+        <div class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4">
           <p class="text-sm font-semibold text-ink-900">{{ responsibilityLabels[supportCase.responsibility ?? 'pending'] }}</p>
           <p v-if="supportCase.responsibilityReason" class="mt-1 text-sm text-ink-700 text-pretty">{{ supportCase.responsibilityReason }}</p>
           <p v-if="supportCase.responsibility === 'pending'" class="mt-1 text-sm text-ink-600 text-pretty">Chưa có quyết định về điểm uy tín. Báo cáo không tự trừ điểm kỹ thuật viên.</p>
@@ -483,28 +483,30 @@ watch(caseId, (id) => {
             </li>
           </ul>
         </div>
-        <form v-if="canDecideResponsibility" data-testid="responsibility-form" class="mt-5 space-y-4 border-t border-ink-100 pt-5" @submit.prevent="submitResponsibilityDecision">
+        <form v-if="canDecideResponsibility" data-testid="responsibility-form" class="mt-5 max-w-3xl space-y-4 border-t border-ink-100 pt-5" @submit.prevent="submitResponsibilityDecision">
           <label :class="consoleLabel">
             Kết luận của quản lý
-            <select v-model="responsibilityDecision" data-testid="responsibility-decision" required :class="consoleField" class="h-10" @change="resetResponsibilityCommand">
+            <select v-model="responsibilityDecision" data-testid="responsibility-decision" required :class="consoleField" class="h-11 w-full" @change="resetResponsibilityCommand">
               <option value="" disabled>Chọn kết luận</option>
               <option value="technician_fault">Lỗi thuộc trách nhiệm kỹ thuật viên</option>
               <option value="no_technician_fault">Không thuộc trách nhiệm kỹ thuật viên</option>
               <option value="inconclusive">Chưa đủ căn cứ kết luận</option>
             </select>
-            <span v-if="responsibilityDecision === 'technician_fault'" class="font-normal text-warning-800 text-pretty">Backend chỉ ghi nhận điểm uy tín sau khi quản lý xác nhận kết luận này.</span>
+            <span v-if="responsibilityDecision === 'technician_fault'" class="font-normal text-warning-800 text-pretty">Điểm uy tín chỉ được ghi nhận sau khi quản lý xác nhận kết luận này.</span>
           </label>
           <label :class="consoleLabel">
             Lý do kết luận
-            <textarea v-model="responsibilityReason" data-testid="responsibility-reason" maxlength="2000" rows="4" required :class="consoleTextarea" placeholder="Tối thiểu 10 ký tự" @input="resetResponsibilityCommand" />
+            <textarea v-model="responsibilityReason" data-testid="responsibility-reason" maxlength="2000" rows="4" required :class="consoleTextarea" aria-describedby="responsibility-reason-hint" @input="resetResponsibilityCommand" />
+            <span id="responsibility-reason-hint" class="font-normal text-ink-600">10–2.000 ký tự, nêu rõ căn cứ cho kết luận.</span>
           </label>
           <label :class="consoleLabel">
-            Bằng chứng bổ sung (không bắt buộc, mỗi dòng một liên kết)
-            <textarea v-model="responsibilityEvidenceRefsText" rows="3" :class="consoleTextarea" @input="resetResponsibilityCommand" />
+            Bằng chứng bổ sung (không bắt buộc)
+            <textarea v-model="responsibilityEvidenceRefsText" rows="3" :class="consoleTextarea" aria-describedby="responsibility-evidence-hint" @input="resetResponsibilityCommand" />
+            <span id="responsibility-evidence-hint" class="font-normal text-ink-600">Mỗi dòng một liên kết, tối đa 20 bằng chứng.</span>
           </label>
           <p v-if="responsibilityError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ responsibilityError }}</p>
           <div class="flex justify-end">
-            <FhButton type="submit" :disabled="responsibilitySubmitting" :loading="responsibilitySubmitting">Gửi quyết định trách nhiệm</FhButton>
+            <FhButton type="submit" class="w-full sm:w-auto" :disabled="responsibilitySubmitting" :loading="responsibilitySubmitting">Gửi kết luận</FhButton>
           </div>
         </form>
         <p v-else-if="supportCase.responsibility === 'pending' && !canDecideResponsibility" class="mt-4 text-sm text-warning-800">Thiếu phiên bản quy trình mới nhất. Tải lại hồ sơ trước khi quyết định.</p>
