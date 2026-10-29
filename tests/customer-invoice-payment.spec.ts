@@ -10,7 +10,7 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'o1' }, query: {
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ conversations: [] }) }));
 vi.mock('../src/api/funded-checkout.api', () => ({ fundedCheckoutApi: funded }));
 import Page from '../src/pages/customer/CustomerOrderDetailPage.vue';
-const state = { invoice: {} as Record<string, unknown>, quote: undefined as Record<string, unknown> | undefined, cash: null as Record<string, unknown> | null, balance: 999999 };
+const state = { invoice: {} as Record<string, unknown>, quote: undefined as Record<string, unknown> | undefined, cash: null as Record<string, unknown> | null, balance: 999999, cashFirstEnabled: false as boolean | null, cashIntent: null as Record<string, unknown> | null };
 const reservationEvent = {
   reservation: { id: 'reservation-1', claimId: 'claim-1', scopeId: 'o1', attemptId: 'attempt-1', state: 'RESERVED', reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z' },
   preview: { scopeId: 'o1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true, reason: 'server-ready', originalGrossVnd: 300000, eligibleBaseVnd: 250000, fixHomeDiscountSubsidyVnd: 50000, customerDueVnd: 250000, reasonCodes: ['DISCOUNT_APPLIED'] },
@@ -18,6 +18,7 @@ const reservationEvent = {
 const zeroReservationEvent = { ...reservationEvent, preview: { ...reservationEvent.preview, customerDueVnd: 0, fixHomeDiscountSubsidyVnd: 300000 } };
 const mountPage = async () => {
   api.get.mockImplementation(async (path: string) => {
+    if (path === '/finance/cash-intents/SOLO/o1') return { data: { success: true, statusCode: 200, message: 'Success', data: state.cashIntent, ...(state.cashFirstEnabled !== null ? { meta: { cashFirstEnabled: state.cashFirstEnabled } } : {}) } };
     if (path === '/service-orders/o1') return { data: { data: { id: 'o1', code: 'FH-TEST', status: 'under_repair', paymentStatus: 'unpaid', completionRequestedAt: '2026-10-20', laborTotal: 0, partsTotal: 0, grandTotal: 0, quotation: state.quote } } };
     if (path.endsWith('/invoice')) return { data: { data: state.invoice } };
     if (path.endsWith('/cash-settlement')) return { data: { data: state.cash } };
@@ -29,7 +30,7 @@ const mountPage = async () => {
   return w;
 };
 describe('customer invoice payment UI', () => {
-  beforeEach(() => { vi.clearAllMocks(); setActivePinia(createPinia()); state.quote = undefined; state.cash = null; state.balance = 999999; state.invoice = { id: 'i1', laborTotal: 0, partsTotal: 0, grandTotal: 0, items: [] }; });
+  beforeEach(() => { vi.clearAllMocks(); setActivePinia(createPinia()); state.quote = undefined; state.cash = null; state.balance = 999999; state.cashFirstEnabled = false; state.cashIntent = null; state.invoice = { id: 'i1', laborTotal: 0, partsTotal: 0, grandTotal: 0, items: [] }; });
   it('blocks a misleading zero invoice and never shows approved parts as billed', async () => {
     state.quote = { id: 'q1', status: 'approved', items: [{ type: 'parts_equipment', quantity: 1, unitPrice: 550000, lineTotal: 550000, description: 'Van dự kiến', partSource: 'fixhome', partCatalogId: 'sku1' }] };
     const w = await mountPage();
@@ -207,6 +208,44 @@ describe('customer invoice payment UI', () => {
     await w.get('[data-testid="pay-cash-ok"]').trigger('click');
     expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(false);
     expect(api.post).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('hides the cash choice when the server capability is missing', async () => {
+    state.cashFirstEnabled = null;
+    const w = await openPayment(300000);
+    expect(w.find('[data-testid="pay-method-cash"]').exists()).toBe(false);
+    expect(w.get('[data-testid="pay-method-wallet"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  it('creates a server-priced cash intent and lets the customer cancel the pending request', async () => {
+    state.cashFirstEnabled = true;
+    state.invoice = { ...state.invoice, laborTotal: 300000, grandTotal: 300000 };
+    const created = { id: '11111111-1111-4111-8111-111111111111', scopeKind: 'SOLO', scopeId: 'o1', status: 'pending', grossVnd: 300000, customerDueVnd: 250000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
+    api.post.mockImplementation(async (path: string) => {
+      if (path === '/finance/cash-intents/SOLO/o1') {
+        state.cashIntent = created;
+        return { data: { success: true, statusCode: 200, message: 'Success', data: created } };
+      }
+      if (path === '/finance/cash-intents/SOLO/o1/cancel') {
+        const cancelled = { ...created, status: 'cancelled' };
+        state.cashIntent = cancelled;
+        return { data: { success: true, statusCode: 200, message: 'Success', data: cancelled } };
+      }
+      throw new Error(`Unexpected POST ${path}`);
+    });
+    const w = await openPayment(300000);
+    await w.get('[data-testid="pay-method-cash"]').trigger('click');
+    await w.get('[data-testid="pay-cash-ok"]').trigger('click');
+    await flushPromises();
+    expect(api.post).toHaveBeenCalledWith('/finance/cash-intents/SOLO/o1', expect.objectContaining({ commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) }));
+    expect(w.get('[data-testid="cash-intent-pending"]').text()).toContain('250.000');
+    expect(w.text()).not.toContain('Đã thanh toán');
+    await w.get('[data-testid="cash-intent-cancel"]').trigger('click');
+    await flushPromises();
+    expect(api.post).toHaveBeenLastCalledWith('/finance/cash-intents/SOLO/o1/cancel', { intentId: '11111111-1111-4111-8111-111111111111', commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) });
+    expect(w.get('[data-testid="cash-intent-cancelled"]').exists()).toBe(true);
     w.unmount();
   });
 

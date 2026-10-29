@@ -2477,6 +2477,9 @@ async function createAndFindTech() {
               <h2 id="booking-address-title" class="text-lg font-semibold text-ink-900">Địa chỉ sửa chữa</h2>
               <span v-if="!addressesLoading && addresses.length > 1" class="text-xs text-ink-500">{{ addresses.length }} địa chỉ đã lưu</span>
             </div>
+            <p v-if="visitGrouping && extraDevices.length > 0" class="text-sm text-ink-600" data-testid="visit-shared-address-note">
+              Các thiết bị trong cùng lượt sửa phải ở cùng một địa chỉ. Nếu cần sửa tại địa chỉ khác, vui lòng tạo đơn mới.
+            </p>
 
             <div v-if="addressesLoading" class="space-y-2" aria-busy="true" aria-label="Đang tải địa chỉ">
               <FhSkeleton height="64px" rounded="lg" />

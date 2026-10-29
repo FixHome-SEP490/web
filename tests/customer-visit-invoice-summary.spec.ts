@@ -5,17 +5,21 @@ import type { VisitCheckout } from '../src/api/visit-groups.api';
 
 enableAutoUnmount(afterEach);
 const route = reactive({ params: { id: 'v1' } });
-const { visits, orders } = vi.hoisted(() => ({
+const { visits, orders, cashIntents, live } = vi.hoisted(() => ({
   visits: { get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), confirmCash: vi.fn(), vnpayUrl: vi.fn() },
   orders: { getOrder: vi.fn(), getInvoice: vi.fn(), getEvidence: vi.fn(), getAdditionalCosts: vi.fn(), approveQuotation: vi.fn() },
+  cashIntents: { get: vi.fn(), create: vi.fn(), cancel: vi.fn() },
+  live: { orderChanges: [] as Array<(event?: unknown) => void> },
 }));
 vi.mock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visits }));
 vi.mock('../src/api/orders.api', () => ({ ordersApi: orders }));
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: cashIntents }));
 vi.mock('../src/api/customer-wallet.api', () => ({ customerWalletApi: { summary: async () => ({ balance: 1000000 }) } }));
 vi.mock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: () => () => undefined } }));
 vi.mock('../src/services/live-updates', () => ({
   LIVE_DEBOUNCE_MS: 150, onBookingChange: () => () => undefined,
-  onOrderChange: () => () => undefined, onResync: () => () => undefined,
+  onOrderChange: (_id: string, handler: (event?: unknown) => void) => { live.orderChanges.push(handler); return () => undefined; },
+  onResync: () => () => undefined,
 }));
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn() }) }));
 import Page from '../src/pages/customer/CustomerVisitPage.vue';
@@ -39,14 +43,18 @@ describe('Customer VisitGroup finalized invoice summary', () => {
   let invoices: Record<string, ReturnType<typeof invoice> | null>;
   async function open() {
     const w = mount(Page, { global: { stubs: { 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, FhBackLink: true,
-      VisitOrderDetails: true, FailedRepairIncident: true, VoucherCheckoutChooser: true, BookingMediaViewer: true,
+      VisitOrderDetails: true, FailedRepairIncident: { props: ['bookingId'], template: '<div data-testid="failed-repair-incident" :data-booking-id="bookingId" />' }, VoucherCheckoutChooser: true, BookingMediaViewer: true,
     } } });
     await flushPromises();
     return w;
   }
   beforeEach(() => {
     vi.clearAllMocks();
+    live.orderChanges.splice(0);
     route.params.id = 'v1';
+    cashIntents.get.mockResolvedValue({ cashFirstEnabled: false, intent: null });
+    cashIntents.create.mockReset();
+    cashIntents.cancel.mockReset();
     snapshot = checkout();
     invoices = { o1: invoice(1), o2: invoice(2), o3: invoice(3) };
     visits.get.mockResolvedValue(group());
@@ -58,6 +66,40 @@ describe('Customer VisitGroup finalized invoice summary', () => {
     orders.getInvoice.mockImplementation(async (id: string) => structuredClone(invoices[id]));
     orders.getEvidence.mockResolvedValue([]);
     orders.getAdditionalCosts.mockResolvedValue([]);
+  });
+
+  it('creates and cancels one server-priced VisitGroup cash request for all three devices', async () => {
+    cashIntents.get.mockResolvedValue({ cashFirstEnabled: true, intent: null });
+    const pending = { id: '11111111-1111-4111-8111-111111111111', scopeKind: 'VISIT_GROUP', scopeId: 'v1', status: 'pending', grossVnd: 600000, customerDueVnd: 500000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
+    cashIntents.create.mockResolvedValue(pending);
+    cashIntents.cancel.mockResolvedValue({ ...pending, status: 'cancelled' });
+    const w = await open();
+    await w.get('[data-testid="visit-pay-method-cash"]').trigger('click');
+    await w.get('[data-testid="visit-cash-intent"]').trigger('click');
+    await flushPromises();
+    expect(cashIntents.create).toHaveBeenCalledWith('VISIT_GROUP', 'v1', expect.objectContaining({ commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) }));
+    expect(w.get('[data-testid="visit-cash-intent-pending"]').text()).toContain('500.000');
+    expect(w.get('[data-testid="visit-cash-intent-pending"]').text()).toContain('3 thiết bị');
+    expect(cashIntents.create).toHaveBeenCalledTimes(1);
+    await w.get('[data-testid="visit-cash-intent-cancel"]').trigger('click');
+    await flushPromises();
+    expect(cashIntents.cancel).toHaveBeenCalledWith('VISIT_GROUP', 'v1', { intentId: pending.id, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) });
+    expect(w.get('[data-testid="visit-cash-intent-cancelled"]').exists()).toBe(true);
+  });
+
+  it('keeps the terminal failed-device action mounted while a realtime refresh is pending', async () => {
+    snapshot.devices[1] = { ...snapshot.devices[1], state: 'failed', amount: 0, invoiceId: null };
+    snapshot.total = 400000;
+    invoices.o2 = null;
+    const w = await open();
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(w.get('[data-testid="failed-repair-incident"]').attributes('data-booking-id')).toBe('b2');
+    expect(live.orderChanges.length).toBeGreaterThan(0);
+    live.orderChanges[0]({ kinds: ['status'] });
+    await flushPromises();
+    expect(w.get('[data-testid="failed-repair-incident"]').exists()).toBe(true);
+    expect(w.get('[data-testid="visit-checkout"]').attributes('aria-busy')).toBe('true');
+    w.unmount();
   });
 
   it('shows all three finalized machines and one gross total above checkout, regardless of selection', async () => {

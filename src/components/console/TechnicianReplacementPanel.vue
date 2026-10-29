@@ -197,6 +197,7 @@ onMounted(load);
 <template>
   <FhCard title="Đổi thợ hoặc xử lý yêu cầu" data-testid="replacement-panel">
     <p class="mb-4 text-sm text-ink-600 text-pretty">Mỗi quyết định được máy chủ kiểm tra và ghi nhận cùng với trạng thái đơn. Tiền, ưu đãi, báo giá và linh kiện không được chuyển sang thợ khác.</p>
+    <p v-if="supportCase.reasonClass" class="mb-4 text-sm text-ink-600 text-pretty">Đây là xử lý vận hành của đơn, tách biệt với kết luận trách nhiệm và điểm uy tín của kỹ thuật viên.</p>
     <FhSkeleton v-if="loading" height="40px" :count="3" />
     <div v-else-if="loadError" class="text-sm text-ink-700" role="alert">{{ CONSOLE_LOAD_ERROR }} <button type="button" class="ml-1 font-medium text-brand-700 hover:underline" @click="load">Thử lại</button></div>
     <template v-else-if="options">

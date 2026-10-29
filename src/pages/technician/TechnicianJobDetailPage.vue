@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { supportCasesApi } from '../../api/support-cases.api';
+import {
+  supportCasesApi,
+  type TechnicianReportReasonClass,
+  type TechnicianReportReasonCode,
+} from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -28,7 +32,6 @@ import {
   Star,
   Banknote,
   Smartphone,
-  UserRoundX,
   Flag,
   Ban,
   FileText,
@@ -60,6 +63,7 @@ import { failedRepairKey } from '../../api/failed-repair.api';
 import { createTechnicianFailedRepairPort } from '../../api/technician-failed-repair.api';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
 import { visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
+import { cashIntentsApi, type CashIntentCapability, type CashIntentScopeKind } from '../../api/cash-intents.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { fundedCheckoutApi, NoActiveFundedCashReservationError, type FundedCashReservation, type FundedCashScope } from '../../api/funded-checkout.api';
@@ -116,6 +120,13 @@ const visitGroupId = computed(() => job.value?.visitGroupId ?? null);
 const fixedVisitBase = computed(() => isFixedPriceOrder.value && !!visitGroupId.value);
 const skipsQuote = computed(() => isFixedPriceOrder.value && !visitGroupId.value);
 const visitCheckout = ref<VisitCheckout | null>(null);
+const cashIntentCapability = ref<CashIntentCapability | null>(null);
+const cashFirstEnabled = computed(() => cashIntentCapability.value?.cashFirstEnabled === true);
+const cashIntent = computed(() => cashIntentCapability.value?.intent ?? null);
+const cashReceiveCommandId = ref<string | null>(null);
+let cashIntentScopeKey = '';
+let cashIntentReadVersion = 0;
+let cashIntentReadInFlight: { key: string; version: number; promise: Promise<void> } | null = null;
 let visitCheckoutReadVersion = 0;
 let prefetchedVisitGroupId: string | null = null;
 let visitPrefetchEpoch = 0;
@@ -219,33 +230,45 @@ async function repairFailureReported() {
   await loadJob(jobIdRef.value, { silent: true });
 }
 
+let visitCheckoutReadInFlight: { orderId: string; groupId: string; promise: Promise<void> } | null = null;
 async function loadVisitCheckout() {
   const groupId = visitGroupId.value;
   const orderId = jobIdRef.value;
-  const version = ++visitCheckoutReadVersion;
   if (!groupId) {
     visitCheckout.value = null;
     clearPrefetchedVisitOrders();
     return;
   }
+  if (visitCheckoutReadInFlight?.orderId === orderId && visitCheckoutReadInFlight.groupId === groupId) {
+    return visitCheckoutReadInFlight.promise;
+  }
+  const version = ++visitCheckoutReadVersion;
   if (prefetchedVisitGroupId && prefetchedVisitGroupId !== groupId) {
     clearPrefetchedVisitOrders();
     visitCheckout.value = null;
   }
   prefetchedVisitGroupId = groupId;
-  const result = await visitGroupsApi.checkout(groupId).catch((error) => {
-    if (getHttpStatus(error) === 403 && version === visitCheckoutReadVersion && orderId === jobIdRef.value && groupId === visitGroupId.value) {
-      clearPrefetchedVisitOrders();
-      visitCheckout.value = null;
+  const request = (async () => {
+    const result = await visitGroupsApi.checkout(groupId).catch((error) => {
+      if (getHttpStatus(error) === 403 && version === visitCheckoutReadVersion && orderId === jobIdRef.value && groupId === visitGroupId.value) {
+        clearPrefetchedVisitOrders();
+        visitCheckout.value = null;
+      }
+      return null;
+    });
+    if (version !== visitCheckoutReadVersion || orderId !== jobIdRef.value || groupId !== visitGroupId.value) return;
+    visitCheckout.value = result?.visitGroupId === groupId ? result : null;
+    if (visitCheckout.value) {
+      if (visitCheckout.value.ready) declaredCashAmount.value = visitCheckout.value.total;
+      prefetchVisitSiblingOrders(visitCheckout.value, orderId, groupId);
+      void refreshVisitReturns();
     }
-    return null;
-  });
-  if (version !== visitCheckoutReadVersion || orderId !== jobIdRef.value || groupId !== visitGroupId.value) return;
-  visitCheckout.value = result?.visitGroupId === groupId ? result : null;
-  if (visitCheckout.value) {
-    if (visitCheckout.value.ready) declaredCashAmount.value = visitCheckout.value.total;
-    prefetchVisitSiblingOrders(visitCheckout.value, orderId, groupId);
-    void refreshVisitReturns();
+  })();
+  visitCheckoutReadInFlight = { orderId, groupId, promise: request };
+  try {
+    await request;
+  } finally {
+    if (visitCheckoutReadInFlight?.promise === request) visitCheckoutReadInFlight = null;
   }
 }
 const fixedPriceTotal = computed(() => {
@@ -366,6 +389,8 @@ const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const showAdditionalCostForm = ref(false);
 const acReviseId = ref<string | null>(null);
 const acReason = ref('');
+const acReasonError = ref('');
+const acReasonInput = ref<HTMLTextAreaElement | null>(null);
 const acItems = ref<QuotationItemPayload[]>([{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }]);
 const acEvidenceUrls = ref<string[]>([]);
 const acFulfillmentMethod = ref<'pickup' | 'delivery'>('pickup');
@@ -505,6 +530,7 @@ const complaintPanel = ref<{ openForm: () => void } | null>(null);
 const sections = reactive({ photos: false, parts: false, extra: false });
 const pendingPartsUsage = ref(0);
 const pendingPartsReturns = ref(0);
+const partsReturnsKnown = ref(false);
 const returnsToDeclare = ref(0);
 const returnsAwaitingManager = ref(0);
 const revealParts = async () => {
@@ -752,7 +778,8 @@ const showQuotationForm = computed(
 );
 /** The payment step asks how the customer pays until a cash declaration exists. */
 const showPaymentChoice = computed(
-  () => completionRequested.value && !isCompleted.value && !isPaid.value && !cashSettled.value,
+  () => completionRequested.value && !isCompleted.value && !isPaid.value && !cashSettled.value
+    && cashIntentCapability.value?.cashFirstEnabled === false,
 );
 
 interface PrimaryAction {
@@ -790,7 +817,7 @@ const nowStep = computed<NowStep | null>(() => {
       };
     }
     if (visitPay.paid) {
-      return { title: 'Khách đã thanh toán cả lượt', action: { label: 'Làm mới', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value } };
+      return { title: 'Đã thanh toán', hint: `Gồm ${visitPay.devices.length} thiết bị.`, action: { label: 'Làm mới', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value } };
     }
     if (visitPay.pendingCash) {
       return {
@@ -799,10 +826,26 @@ const nowStep = computed<NowStep | null>(() => {
         action: { label: 'Kiểm tra lại', run: () => { void loadVisitCheckout(); void refreshJobStatus(); }, icon: RefreshCw, loading: refreshingStatus.value },
       };
     }
+    if (cashIntentCapability.value === null) {
+      return { title: 'Kiểm tra trạng thái tiền mặt', hint: 'Chưa tải được trạng thái do máy chủ cung cấp. Không khai báo tiền mặt khi chưa xác nhận yêu cầu của khách.', action: { label: 'Kiểm tra lại', run: () => { void loadCashIntent(); void loadVisitCheckout(); void refreshJobStatus(); }, icon: RefreshCw, loading: refreshingStatus.value } };
+    }
+    if (cashFirstEnabled.value) {
+      if (cashIntent.value?.status === 'pending') {
+        return {
+          title: 'Yêu cầu tiền mặt của khách',
+          hint: `Khách cần trả ${cashIntent.value.customerDueVnd.toLocaleString('vi-VN')} ₫ cho cả ${visitPay.devices.length} thiết bị.`,
+          action: { label: 'Xác nhận đã nhận tiền mặt', run: handleReceiveCashIntent, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
+        };
+      }
+      if (cashIntent.value?.status === 'received') {
+        return { title: 'Đã báo nhận tiền mặt', hint: `Máy chủ ghi nhận ${cashIntent.value.customerDueVnd.toLocaleString('vi-VN')} ₫ cho cả lượt.`, action: { label: 'Kiểm tra trạng thái', run: () => { void loadCashIntent(); void loadVisitCheckout(); void refreshJobStatus(); }, icon: RefreshCw, loading: refreshingStatus.value } };
+      }
+      return { title: 'Chờ khách tạo yêu cầu tiền mặt', hint: 'Chỉ nhận tiền sau khi khách gửi yêu cầu trên ứng dụng.', action: { label: 'Kiểm tra lại', run: () => { void loadCashIntent(); void loadVisitCheckout(); }, icon: RefreshCw, loading: refreshingStatus.value } };
+    }
     return {
-      title: 'Thu tiền cả lượt',
-      hint: 'Khách trả qua ví hoặc VNPay trong ứng dụng; nếu khách đưa tiền mặt thì báo đúng tổng của cả lượt.',
-      action: { label: 'Khai báo đã thu tiền mặt cả lượt', run: handleDeclareCash, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
+      title: 'Thanh toán',
+      hint: `Gồm ${visitPay.devices.length} thiết bị. Khách trả qua ví hoặc VNPay; nếu nhận tiền mặt, hãy xác nhận đúng tổng.`,
+      action: { label: 'Xác nhận tiền mặt', run: handleDeclareCash, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
     };
   }
 
@@ -820,6 +863,22 @@ const nowStep = computed<NowStep | null>(() => {
         title: cashSettlementStatus.value === 'confirmed' ? 'Khách đã xác nhận tiền mặt' : 'Chờ khách xác nhận tiền mặt',
         action: { label: 'Kiểm tra lại', run: refreshJobStatus, icon: RefreshCw, loading: refreshingStatus.value },
       };
+    }
+    if (cashIntentCapability.value === null) {
+      return { title: 'Kiểm tra trạng thái tiền mặt', hint: 'Chưa tải được trạng thái do máy chủ cung cấp. Không khai báo tiền mặt khi chưa xác nhận yêu cầu của khách.', action: { label: 'Kiểm tra lại', run: () => { void loadCashIntent(); void refreshJobStatus(); }, icon: RefreshCw, loading: refreshingStatus.value } };
+    }
+    if (cashFirstEnabled.value) {
+      if (cashIntent.value?.status === 'pending') {
+        return {
+          title: 'Yêu cầu tiền mặt của khách',
+          hint: `Khách cần trả ${cashIntent.value.customerDueVnd.toLocaleString('vi-VN')} ₫.`,
+          action: { label: 'Xác nhận đã nhận tiền mặt', run: handleReceiveCashIntent, icon: Banknote, disabled: actionLoading.value, loading: actionLoading.value },
+        };
+      }
+      if (cashIntent.value?.status === 'received') {
+        return { title: 'Đã báo nhận tiền mặt', hint: `Máy chủ ghi nhận ${cashIntent.value.customerDueVnd.toLocaleString('vi-VN')} ₫.`, action: { label: 'Kiểm tra trạng thái', run: () => { void loadCashIntent(); void refreshJobStatus(); }, icon: RefreshCw, loading: refreshingStatus.value } };
+      }
+      return { title: 'Chờ khách tạo yêu cầu tiền mặt', hint: 'Chỉ nhận tiền sau khi khách gửi yêu cầu trên ứng dụng.', action: { label: 'Kiểm tra lại', run: () => { void loadCashIntent(); }, icon: RefreshCw, loading: refreshingStatus.value } };
     }
     if (hasCashPayment.value === 'YES') {
       return {
@@ -1087,7 +1146,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
   else if (completionConfirmOpen.value && !actionLoading.value) completionConfirmOpen.value = false;
   else if (departureChoiceOpen.value && !actionLoading.value) departureChoiceOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
-  else if (replacementOpen.value && !replacementSending.value) replacementOpen.value = false;
+  else if (technicianReportOpen.value && !technicianReportSending.value) technicianReportOpen.value = false;
 };
 
 // Everything the job page reads, in one cached answer: a return visit shows it at
@@ -1339,13 +1398,20 @@ const visitReturnDevices = computed(() => {
     ...device, ledger: device.serviceOrderId ? visitReturns.value[device.serviceOrderId] : undefined,
   }));
 });
-const visitReturnTotals = computed(() => visitReturnDevices.value.reduce((total, device) => ({
+// Any backend device state other than `open` has a result; even cancelled or
+// quote-declined children may still owe physically issued parts.
+const visitTerminalReturnDevices = computed(() => visitReturnDevices.value.filter(device => device.state !== 'open'));
+const visitAllDevicesTerminal = computed(() => visitReturnDevices.value.length > 0 && visitTerminalReturnDevices.value.length === visitReturnDevices.value.length);
+const visitTerminalReturnTotals = computed(() => visitTerminalReturnDevices.value.reduce((total, device) => ({
   needDeclare: total.needDeclare + (device.ledger?.summary?.needDeclare ?? 0),
   awaitingManager: total.awaitingManager + (device.ledger?.summary?.awaitingManager ?? 0),
 }), { needDeclare: 0, awaitingManager: 0 }));
-const visitReturnUnknown = computed(() => visitReturnDevices.value.some(device => device.ledger?.state !== 'ready'));
-const visitReturnWarning = computed(() => visitReturnDevices.value.length > 0
-  && (visitReturnUnknown.value || visitReturnTotals.value.needDeclare > 0 || visitReturnTotals.value.awaitingManager > 0));
+const visitReturnUnknown = computed(() => visitTerminalReturnDevices.value.some(device => device.ledger?.state !== 'ready'));
+const visitReturnNeedsAttention = (device: typeof visitReturnDevices.value[number]) => device.ledger?.state !== 'ready'
+  || (device.ledger.summary?.needDeclare ?? 0) > 0 || (device.ledger.summary?.awaitingManager ?? 0) > 0;
+const visitReturnChildDetails = computed(() => visitTerminalReturnDevices.value.filter(visitReturnNeedsAttention));
+const visitReturnWarning = computed(() => visitAllDevicesTerminal.value
+  && (visitReturnUnknown.value || visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
 function onReturnSummary(value: VisitReturnSummary) {
   returnsToDeclare.value = value.needDeclare;
   returnsAwaitingManager.value = value.awaitingManager;
@@ -1478,6 +1544,7 @@ function applyJobBundle(bundle: TechnicianJobBundle) {
   historicalJob.value = null;
   job.value = data;
   if (data.visitGroupId) cacheVisitChildBundle(data.id, bundle, data.visitGroupId);
+  void loadCashIntent(data);
   if (bundle.invoice !== undefined) jobInvoice.value = bundle.invoice;
   isEnRoute.value = data.status !== 'ACCEPTED';
   gpsCheckedIn.value = !!data.arrivalVerified;
@@ -1649,6 +1716,10 @@ watch(
     cashSettled.value = false;
     cashSettlementStatus.value = null;
     hasCashPayment.value = null;
+    cashIntentCapability.value = null;
+    cashReceiveCommandId.value = null;
+    cashIntentScopeKey = '';
+    cashIntentReadVersion += 1;
     stockCatalog.value = new Map();
     quoteStockError.value = '';
     quoteStockLoading.value = false;
@@ -1663,6 +1734,7 @@ watch(
     acItems.value = [{ type: 'LABOR', description: '', quantity: 1, unitPrice: 0 }];
     acEvidenceUrls.value = [];
     acReason.value = '';
+    acReasonError.value = '';
     acReviseId.value = null;
     acFulfillmentMethod.value = 'pickup';
     acShippingFee.value = 0;
@@ -1674,12 +1746,14 @@ watch(
     repairFailedOpen.value = false;
     moreOpen.value = false;
     showWithdrawModal.value = false;
-    replacementOpen.value = false;
-    replacementReason.value = '';
-    replacementError.value = '';
-    replacementSent.value = false;
+    technicianReportOpen.value = false;
+    technicianReportSent.value = false;
+    technicianReportReason.value = '';
+    technicianReportEvidenceRefs.value = [];
+    technicianReportError.value = '';
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
+    partsReturnsKnown.value = false;
     returnsToDeclare.value = 0;
     returnsAwaitingManager.value = 0;
     partsSummary.value = { count: 0, needsAction: false };
@@ -2121,6 +2195,7 @@ function openAdditionalCostForm(revise?: AdditionalCostRecord) {
   if (!canQuoteAdditional.value || actionLoading.value || acSubmitting.value) return;
   acReviseId.value = revise?.id ?? null;
   acReason.value = revise?.reason ?? '';
+  acReasonError.value = '';
   acFulfillmentMethod.value = revise?.fulfillmentMethod || 'pickup';
   acShippingFee.value = revise?.shippingFee || 0;
   acLegacyParts.value = revise?.items.filter(i => i.type !== 'LABOR' && i.partSource !== 'fixhome') ?? [];
@@ -2168,9 +2243,12 @@ async function handleSubmitAdditionalCost() {
   const id = jobIdRef.value;
   const reviseId = acReviseId.value;
   if (!acReason.value.trim()) {
-    notifyError('Vui lòng ghi lý do phát sinh.');
+    acReasonError.value = 'Vui lòng ghi lý do phát sinh.';
+    await nextTick();
+    acReasonInput.value?.focus();
     return;
   }
+  acReasonError.value = '';
 
   const validItems = acItems.value.filter((i) => {
     const hasDesc = !!i.description?.trim();
@@ -2232,40 +2310,95 @@ const AC_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Đã huỷ',
 };
 
-// "Cần thay đổi thợ" (PO 08/10/2026): after check-in, when the job is outside the
-// technician's skills, the Service Manager gets a case to send someone else.
-const replacementOpen = ref(false);
-const replacementReason = ref('');
-const replacementSending = ref(false);
-const replacementSent = ref(false);
-const replacementError = ref('');
-const canAskReplacement = computed(() => gpsCheckedIn.value && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value) && !completionRequested.value);
-const openReplacement = () => {
+const technicianReportOpen = ref(false);
+const technicianReportReasonClass = ref<TechnicianReportReasonClass>('technician_skill_gap');
+const technicianReportReasonCode = ref<TechnicianReportReasonCode>('skill_gap');
+const technicianReportReason = ref('');
+const technicianReportEvidenceRefs = ref<string[]>([]);
+const technicianReportError = ref('');
+const technicianReportSending = ref(false);
+const technicianReportSent = ref(false);
+const technicianReportReasonInput = ref<HTMLTextAreaElement | null>(null);
+const technicianReportEvidence = computed(() => [...new Map(evidences.value
+  .filter((item) => item.mediaUrl?.trim())
+  .map((item) => [item.mediaUrl, item])).values()]);
+const canCreateTypedTechnicianReport = computed(() => gpsCheckedIn.value
+  && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value));
+const technicianReportCodes: { value: TechnicianReportReasonCode; label: string }[] = [
+  { value: 'device_too_old', label: 'Thiết bị đã quá cũ' },
+  { value: 'severe_damage', label: 'Thiết bị hư hỏng nặng' },
+  { value: 'no_compatible_part', label: 'Không có linh kiện phù hợp' },
+  { value: 'manufacturer_warranty_or_workshop', label: 'Cần trung tâm hoặc bảo hành hãng' },
+  { value: 'customer_absent', label: 'Khách không có mặt' },
+  { value: 'customer_cancelled', label: 'Khách đã hủy' },
+  { value: 'dispute_or_other', label: 'Tranh chấp hoặc tình huống khác' },
+];
+function openTechnicianReport(reasonClass: TechnicianReportReasonClass) {
+  if (!canCreateTypedTechnicianReport.value || technicianReportSent.value) return;
   moreOpen.value = false;
-  replacementError.value = '';
-  replacementOpen.value = true;
-};
-const sendReplacement = async () => {
-  const reason = replacementReason.value.trim();
-  if (reason.length < 10) {
-    replacementError.value = 'Ghi rõ vì sao cần đổi thợ, tối thiểu 10 ký tự.';
+  technicianReportReasonClass.value = reasonClass;
+  technicianReportReasonCode.value = reasonClass === 'technician_skill_gap' ? 'skill_gap' : 'device_too_old';
+  technicianReportReason.value = '';
+  technicianReportEvidenceRefs.value = [];
+  technicianReportError.value = '';
+  technicianReportOpen.value = true;
+  void nextTick(() => technicianReportReasonInput.value?.focus());
+}
+
+async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
+  if (!data?.id) return;
+  const scopeKind: CashIntentScopeKind = data.visitGroupId ? 'VISIT_GROUP' : 'SOLO';
+  const scopeId = data.visitGroupId ?? data.id;
+  const key = `${scopeKind}:${scopeId}`;
+  if (cashIntentScopeKey !== key) {
+    cashIntentScopeKey = key;
+    cashIntentCapability.value = null;
+    cashReceiveCommandId.value = null;
+    cashIntentReadVersion += 1;
+  }
+  if (cashIntentReadInFlight?.key === key) return cashIntentReadInFlight.promise;
+  const version = ++cashIntentReadVersion;
+  const promise = (async () => {
+    try {
+      const capability = await cashIntentsApi.get(scopeKind, scopeId);
+      if (mounted && version === cashIntentReadVersion && key === cashIntentScopeKey && jobIdRef.value === data.id) {
+        cashIntentCapability.value = capability;
+      }
+    } catch {
+      // Preserve the last known capability and intent; never infer the flag from an error.
+    } finally {
+      if (cashIntentReadInFlight?.version === version) cashIntentReadInFlight = null;
+    }
+  })();
+  cashIntentReadInFlight = { key, version, promise };
+  return promise;
+}
+async function submitTechnicianReport() {
+  if (!canCreateTypedTechnicianReport.value || technicianReportSending.value) return;
+  const reason = technicianReportReason.value.trim();
+  if (reason.length < 10 || reason.length > 2000) {
+    technicianReportError.value = 'Mô tả cần từ 10 đến 2000 ký tự.';
     return;
   }
-  replacementSending.value = true;
-  replacementError.value = '';
+  technicianReportSending.value = true;
+  technicianReportError.value = '';
   try {
-    await supportCasesApi.createCase({ caseType: 'technician_replacement', reason, serviceOrderId: jobId, isUrgent: true });
-    cache.markChanged(affectedBy.orderChange);
-    replacementSent.value = true;
-    replacementOpen.value = false;
-    notifySuccess('Đã gửi yêu cầu đổi thợ tới quản lý dịch vụ.');
+    await supportCasesApi.createTechnicianReport({
+      serviceOrderId: jobIdRef.value,
+      reasonClass: technicianReportReasonClass.value,
+      reasonCode: technicianReportReasonCode.value,
+      reason,
+      ...(technicianReportEvidenceRefs.value.length ? { evidenceRefs: [...technicianReportEvidenceRefs.value] } : {}),
+    });
+    technicianReportSent.value = true;
+    technicianReportOpen.value = false;
+    notifySuccess('Đã gửi báo cáo cho quản lý. Quản lý sẽ liên hệ để thống nhất hướng xử lý hoặc đặt lại lịch nếu cần. Đơn mới không được tự động tạo.');
   } catch (err) {
-    replacementError.value = userFacingError(err, 'Chưa gửi được. Vui lòng thử lại.');
-    notifyError(replacementError.value);
+    technicianReportError.value = userFacingError(err, 'Chưa gửi được báo cáo. Vui lòng thử lại.');
   } finally {
-    replacementSending.value = false;
+    technicianReportSending.value = false;
   }
-};
+}
 
 const handleCompleteOrder = async () => {
   if (!hasAfterPhoto.value) {
@@ -2315,8 +2448,45 @@ const retryCompletionData = async () => {
   }
 };
 
+function newCashCommandId(): string { return globalThis.crypto.randomUUID(); }
+
+async function handleReceiveCashIntent() {
+  const intent = cashIntent.value;
+  if (!cashFirstEnabled.value || intent?.status !== 'pending' || actionLoading.value) return;
+  const orderId = jobIdRef.value;
+  const scopeKind = intent.scopeKind;
+  const scopeId = intent.scopeId;
+  if (scopeId !== (scopeKind === 'VISIT_GROUP' ? visitGroupId.value : orderId)) return;
+  cashReceiveCommandId.value ??= newCashCommandId();
+  actionLoading.value = true;
+  actionMessage.value = null;
+  try {
+    const updated = await cashIntentsApi.receive(scopeKind, scopeId, {
+      intentId: intent.id,
+      commandId: cashReceiveCommandId.value,
+      receivedAmountVnd: intent.customerDueVnd,
+    });
+    if (orderId !== jobIdRef.value || scopeId !== (scopeKind === 'VISIT_GROUP' ? visitGroupId.value : orderId)) return;
+    cashIntentCapability.value = { cashFirstEnabled: true, intent: updated };
+    if (updated.status !== 'received') {
+      await loadCashIntent();
+      throw new Error('Máy chủ chưa xác nhận kỹ thuật viên đã nhận tiền mặt.');
+    }
+    cashReceiveCommandId.value = null;
+    notifySuccess('Máy chủ đã ghi nhận kỹ thuật viên nhận tiền mặt. Trạng thái thanh toán sẽ được cập nhật từ hóa đơn.');
+    if (scopeKind === 'VISIT_GROUP') void loadVisitCheckout();
+    void loadJob(orderId, { silent: true }).catch(() => undefined);
+  } catch (error) {
+    await loadCashIntent();
+    if (scopeKind === 'VISIT_GROUP') await loadVisitCheckout();
+    notifyError(userFacingError(error, 'Chưa xác nhận được tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.'));
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
 const handleDeclareCash = async () => {
-  if (actionLoading.value) return;
+  if (actionLoading.value || cashIntentCapability.value === null || cashFirstEnabled.value) return;
   if (!visitGroupId.value && hasCashPayment.value !== 'YES') return;
   if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
     notifyError('Vui lòng nhập số tiền mặt đã thu.');
@@ -2524,17 +2694,27 @@ const toggleMore = async () => {
               Làm mới
             </button>
             <button
-              v-if="canAskReplacement && !replacementSent"
+              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
               type="button"
               role="menuitem"
               class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              @click="openReplacement"
+              @click="openTechnicianReport('technician_skill_gap')"
             >
-              <UserRoundX :size="16" class="text-ink-500" />
-              Cần thay đổi thợ
+              <Flag :size="16" class="text-ink-500" />
+              Lỗi kỹ năng hoặc thao tác
             </button>
             <button
-              v-if="canReport"
+              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              @click="openTechnicianReport('non_technician_exception')"
+            >
+              <Flag :size="16" class="text-ink-500" />
+              Ngoại lệ thiết bị hoặc khách hàng
+            </button>
+            <button
+              v-if="canReport && !gpsCheckedIn"
               type="button"
               role="menuitem"
               class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
@@ -2586,28 +2766,28 @@ const toggleMore = async () => {
         aria-live="polite"
         aria-labelledby="visit-returns-title"
         :aria-busy="visitReturnsLoading"
-        class="space-y-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800"
+        class="space-y-2 rounded-xl border border-danger-200 bg-danger-50 px-3 py-2.5 text-sm text-danger-800"
         data-testid="visit-returns-warning"
       >
-        <h2 id="visit-returns-title" class="flex items-start gap-2 text-base font-semibold"><AlertTriangle :size="20" class="mt-0.5 shrink-0" aria-hidden="true" />Linh kiện của cả lượt chưa hoàn tất trả kho</h2>
-        <p v-if="visitReturnTotals.needDeclare || visitReturnTotals.awaitingManager" class="font-semibold">
-          <span v-if="visitReturnTotals.needDeclare">{{ visitReturnTotals.needDeclare }} linh kiện cần khai trả</span><span v-if="visitReturnTotals.needDeclare && visitReturnTotals.awaitingManager"> · </span><span v-if="visitReturnTotals.awaitingManager">{{ visitReturnTotals.awaitingManager }} linh kiện chờ Quản lý Dịch vụ xác nhận</span>
+        <h2 id="visit-returns-title" class="flex items-start gap-2 font-semibold"><AlertTriangle :size="18" class="mt-0.5 shrink-0" aria-hidden="true" />Cần hoàn tất trả kho linh kiện</h2>
+        <p v-if="visitTerminalReturnTotals.needDeclare || visitTerminalReturnTotals.awaitingManager" class="font-medium">
+          <span v-if="visitTerminalReturnTotals.needDeclare">{{ visitTerminalReturnTotals.needDeclare }} linh kiện cần khai trả</span><span v-if="visitTerminalReturnTotals.needDeclare && visitTerminalReturnTotals.awaitingManager"> · </span><span v-if="visitTerminalReturnTotals.awaitingManager">{{ visitTerminalReturnTotals.awaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận</span>
         </p>
-        <p>Có thể hoàn tất sửa khi còn linh kiện cần trả. Khai trả chưa phải kho đã nhận; Quản lý Dịch vụ xác nhận số lượng thực nhận.</p>
-        <p v-if="visitReturnUnknown">{{ visitReturnsLoading ? 'Đang kiểm tra lại cả lượt. Số đã ghi nhận được giữ lại trong lúc kiểm tra.' : 'Chưa kiểm tra được đầy đủ cả lượt. Số liệu đã đọc trước đó có thể đã thay đổi.' }}</p>
-        <ul class="divide-y divide-danger-200">
-          <template v-for="device in visitReturnDevices" :key="device.bookingId">
-            <li v-if="device.ledger?.state !== 'ready' || device.ledger?.summary?.needDeclare || device.ledger?.summary?.awaitingManager" class="flex flex-wrap items-center justify-between gap-x-3 py-2" :data-testid="`visit-return-device-${device.sequence}`">
-              <div class="min-w-0 flex-[1_1_14rem]">
-                <p class="break-words font-semibold">Máy {{ device.sequence }} · {{ device.serviceName || device.deviceLabel || 'Thiết bị' }}</p>
-                <p v-if="device.ledger?.summary"><span v-if="device.ledger.summary.needDeclare">{{ device.ledger.summary.needDeclare }} cần khai trả<span v-if="device.ledger.summary.awaitingManager"> · </span></span><span v-if="device.ledger.summary.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý nhận thực tế</span></p>
-                <p v-if="device.ledger?.state !== 'ready'">{{ device.ledger?.state === 'loading' ? 'Đang kiểm tra hoàn trả máy này…' : 'Chưa kiểm tra được hoàn trả máy này.' }}</p>
-              </div>
+        <p v-if="visitReturnUnknown" class="text-danger-700">{{ visitReturnsLoading ? 'Đang kiểm tra lại. Số đã đọc trước đó được giữ nguyên.' : 'Chưa xác nhận được đầy đủ tình trạng hoàn trả.' }}</p>
+        <ul v-if="visitReturnUnknown || visitTerminalReturnDevices.some(device => visitReturnNeedsAttention(device))" class="divide-y divide-danger-200">
+          <li v-for="device in visitTerminalReturnDevices.filter(device => visitReturnNeedsAttention(device))" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3 py-1.5" :data-testid="`visit-return-device-${device.sequence}`">
+            <span class="min-w-0">Máy {{ device.sequence }}<template v-if="device.ledger?.summary?.needDeclare || device.ledger?.summary?.awaitingManager"> · <span v-if="device.ledger.summary.needDeclare">{{ device.ledger.summary.needDeclare }} cần khai trả</span><span v-if="device.ledger.summary.needDeclare && device.ledger.summary.awaitingManager">, </span><span v-if="device.ledger.summary.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ xác nhận</span></template><span v-if="device.ledger?.state !== 'ready'"> · Chưa kiểm tra được</span></span>
               <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline underline-offset-4 hover:bg-danger-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" :data-testid="`visit-return-open-${device.sequence}`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
-            </li>
-          </template>
+          </li>
         </ul>
-        <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại cả lượt</button>
+        <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
+      </section>
+      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-label="Linh kiện cần trả kho ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
+        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3">
+          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else> · Chưa xác nhận được tình trạng hoàn trả</span></span>
+          <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
+        </p>
+        <button v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
       </section>
 
       <section
@@ -2723,12 +2903,11 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="pendingPartsReturns > 0 && ((isCompleted && isPaid) || visitDeviceFailed)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" role="status">
-        <p class="font-semibold">{{ returnsToDeclare > 0 ? 'Cần khai trả linh kiện' : returnsAwaitingManager > 0 ? 'Chờ Quản lý Dịch vụ xác nhận' : 'Chờ hoàn trả linh kiện' }}</p>
-        <p v-if="returnsToDeclare > 0">Còn {{ returnsToDeclare }} linh kiện chưa khai trả<span v-if="returnsAwaitingManager > 0"> · {{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế</span>.</p>
-        <p v-else-if="returnsAwaitingManager > 0">Đã khai trả {{ returnsAwaitingManager }} linh kiện. Chờ Quản lý Dịch vụ nhận và xác nhận thực tế.</p>
-        <p v-else>Còn {{ pendingPartsReturns }} linh kiện chưa hoàn tất trả kho. Mở chi tiết để kiểm tra.</p>
-        <button type="button" class="mt-2 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">{{ returnsToDeclare > 0 ? 'Mở khai trả' : 'Xem trạng thái trả kho' }}</button>
+      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
+        <p class="font-semibold">{{ !partsReturnsKnown ? 'Chưa xác nhận được tình trạng hoàn trả linh kiện.' : returnsToDeclare > 0 ? `Còn ${returnsToDeclare} linh kiện cần trả kho` : `${returnsAwaitingManager} linh kiện đã khai, chờ Quản lý Dịch vụ xác nhận` }}</p>
+        <p v-if="partsReturnsKnown && returnsToDeclare > 0 && returnsAwaitingManager > 0">{{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế.</p>
+        <p v-else-if="!partsReturnsKnown && pendingPartsReturns > 0">Đã ghi nhận {{ pendingPartsReturns }} linh kiện còn nghĩa vụ trả kho.</p>
+        <button type="button" class="mt-1 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
@@ -2752,8 +2931,8 @@ const toggleMore = async () => {
             <button type="button" class="h-10 font-medium underline" :disabled="actionLoading" @click="pendingEvidenceUpload = null">Bỏ ảnh còn lại</button>
           </div>
         </div>
-        <p v-if="replacementSent" class="mt-3 text-sm text-success-700" role="status">
-          Đã báo quản lý dịch vụ để đổi thợ. Quản lý sẽ liên hệ bạn.
+        <p v-if="technicianReportSent" class="mt-3 text-sm text-success-700" role="status">
+          Quản lý sẽ liên hệ để thống nhất hướng xử lý hoặc đặt lại lịch nếu cần. Đơn mới không được tự động tạo.
         </p>
 
         <p v-if="additionalCosts.length" class="mt-3 text-sm text-ink-700" data-testid="additional-history-summary">Báo giá bổ sung: {{ additionalHistorySummary }}</p>
@@ -3298,6 +3477,7 @@ const toggleMore = async () => {
                 @requests-error="onPartRequestsError"
                 @pending-usage="pendingPartsUsage = $event"
                 @pending-returns="pendingPartsReturns = $event"
+                @returns-known="partsReturnsKnown = $event"
                 @custody="custodyByItem = $event"
               />
             </div>
@@ -3360,13 +3540,19 @@ const toggleMore = async () => {
                   </ul>
                 </div>
                 <label class="block">
-                  <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh</span>
+                  <span class="block mb-1 font-medium text-ink-700">Lý do phát sinh <span class="text-danger-600" aria-hidden="true">*</span></span>
                   <textarea
+                    ref="acReasonInput"
                     v-model="acReason"
+                    aria-required="true"
+                    :aria-invalid="acReasonError ? 'true' : undefined"
+                    :aria-describedby="acReasonError ? 'additional-cost-reason-error' : undefined"
                     rows="2"
                     placeholder="Ví dụ: hỏng thêm quạt dàn nóng"
                     class="w-full p-3 bg-white border border-ink-200 rounded-xl text-sm"
+                    @input="acReasonError = ''"
                   ></textarea>
+                  <p v-if="acReasonError" id="additional-cost-reason-error" class="mt-1 text-sm text-danger-700" role="alert" data-testid="additional-cost-reason-error">{{ acReasonError }}</p>
                 </label>
 
                 <div class="space-y-2">
@@ -3732,35 +3918,41 @@ const toggleMore = async () => {
       </div>
     </div>
 
-    <!-- Dialog: ask the manager for another technician -->
     <div
-      v-if="replacementOpen"
+      v-if="technicianReportOpen"
       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
-      @click.self="!replacementSending && (replacementOpen = false)"
+      @click.self="!technicianReportSending && (technicianReportOpen = false)"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="replacement-title"
-        class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
-        data-testid="replacement-card"
-      >
+      <div role="dialog" aria-modal="true" aria-labelledby="technician-report-title" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto" data-testid="technician-report-dialog">
         <div>
-          <h3 id="replacement-title" class="text-lg font-bold text-ink-900">Cần thay đổi thợ</h3>
-          <p class="mt-1 text-sm text-ink-600">Việc nằm ngoài kỹ năng của bạn? Quản lý sẽ xem xét, không tự trừ điểm.</p>
+          <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
+            {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
+          </h3>
+          <p class="mt-1 text-sm text-ink-600">Quản lý sẽ xem xét báo cáo. Nếu cần đặt lại lịch, quản lý sẽ liên hệ để thống nhất; đơn mới không được tự động tạo.</p>
         </div>
-        <textarea
-          v-model="replacementReason"
-          rows="3"
-          maxlength="1000"
-          aria-label="Lý do cần thay đổi thợ"
-          class="w-full rounded-xl border border-ink-200 px-3 py-2 text-sm"
-          placeholder="Ví dụ: máy công nghiệp, cần thợ điện lạnh công nghiệp"
-        />
-        <p v-if="replacementError" class="text-sm text-danger-700" role="alert">{{ replacementError }}</p>
+        <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
+          Lý do
+          <select v-model="technicianReportReasonCode" data-testid="technician-report-code" class="h-11 w-full rounded-xl border border-ink-300 bg-white px-3 text-sm">
+            <option v-for="option in technicianReportCodes" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <div v-else class="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">Thiếu kỹ năng hoặc thao tác chưa đúng</div>
+        <label class="block space-y-1 text-sm font-medium text-ink-700">
+          Mô tả tình huống
+          <textarea ref="technicianReportReasonInput" v-model="technicianReportReason" data-testid="technician-report-reason" rows="4" maxlength="2000" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm" placeholder="Nêu rõ tình huống để quản lý xem xét" />
+        </label>
+        <fieldset v-if="technicianReportEvidence.length" class="space-y-2">
+          <legend class="text-sm font-medium text-ink-700">Ảnh có sẵn trong đơn (không bắt buộc)</legend>
+          <label v-for="(item, index) in technicianReportEvidence" :key="item.mediaUrl" class="flex items-center gap-2 text-sm text-ink-700">
+            <input v-model="technicianReportEvidenceRefs" type="checkbox" :value="item.mediaUrl" data-testid="technician-report-evidence" class="h-4 w-4 rounded border-ink-300 text-brand-600" />
+            Ảnh {{ index + 1 }}
+            <a :href="item.mediaUrl" target="_blank" rel="noopener noreferrer" class="text-brand-700 underline" @click.stop>mở ảnh</a>
+          </label>
+        </fieldset>
+        <p v-if="technicianReportError" class="text-sm text-danger-700" role="alert">{{ technicianReportError }}</p>
         <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-          <FhButton variant="secondary" :disabled="replacementSending" @click="replacementOpen = false">Đóng</FhButton>
-          <FhButton :loading="replacementSending" @click="sendReplacement">Gửi cho quản lý</FhButton>
+          <FhButton variant="secondary" :disabled="technicianReportSending" @click="technicianReportOpen = false">Đóng</FhButton>
+          <FhButton data-testid="technician-report-submit" :loading="technicianReportSending" :disabled="technicianReportSending" @click="submitTechnicianReport">Gửi báo cáo</FhButton>
         </div>
       </div>
     </div>

@@ -23,6 +23,9 @@ import {
   type SupportCaseDetail,
   type SupportCaseFinalStatus,
   type SupportCaseResolvePayload,
+  type TechnicianReportReasonClass,
+  type TechnicianReportReasonCode,
+  type TechnicianResponsibility,
 } from '../../api/support-cases.api';
 import {
   formatSupportDate,
@@ -60,6 +63,40 @@ const liableParty = ref<'' | 'technician' | 'customer' | 'platform' | 'shared'>(
 const amountText = ref<string | number>('');
 const grossRefundText = ref<string | number>('');
 const actionBusy = ref(false);
+const responsibilityDecision = ref<'' | Exclude<TechnicianResponsibility, 'pending'>>('');
+const responsibilityReason = ref('');
+const responsibilityEvidenceRefsText = ref('');
+const responsibilityError = ref('');
+const responsibilitySubmitting = ref(false);
+const responsibilityCommandId = ref<string | null>(null);
+
+const technicianReportClassLabels: Record<TechnicianReportReasonClass, string> = {
+  technician_skill_gap: 'Lỗi thuộc kỹ năng hoặc thao tác kỹ thuật',
+  non_technician_exception: 'Ngoại lệ thiết bị hoặc khách hàng',
+};
+const technicianReportCodeLabels: Record<TechnicianReportReasonCode, string> = {
+  skill_gap: 'Thiếu kỹ năng hoặc thao tác chưa đúng',
+  device_too_old: 'Thiết bị đã quá cũ',
+  severe_damage: 'Thiết bị hư hỏng nặng',
+  no_compatible_part: 'Không có linh kiện phù hợp',
+  manufacturer_warranty_or_workshop: 'Cần trung tâm hoặc bảo hành hãng',
+  customer_absent: 'Khách không có mặt',
+  customer_cancelled: 'Khách đã hủy',
+  dispute_or_other: 'Tranh chấp hoặc tình huống khác',
+};
+const responsibilityLabels: Record<TechnicianResponsibility, string> = {
+  pending: 'Chờ quản lý đánh giá',
+  technician_fault: 'Lỗi thuộc trách nhiệm kỹ thuật viên',
+  no_technician_fault: 'Không thuộc trách nhiệm kỹ thuật viên',
+  inconclusive: 'Chưa đủ căn cứ kết luận',
+};
+const isTypedTechnicianReport = computed(() => !!supportCase.value?.reasonClass && !!supportCase.value.reasonCode);
+const responsibilityEvidenceRefs = computed(() => responsibilityEvidenceRefsText.value
+  .split(/\r?\n/).map((value) => value.trim()).filter(Boolean));
+const canDecideResponsibility = computed(() => isTypedTechnicianReport.value
+  && supportCase.value?.responsibility === 'pending'
+  && Number.isSafeInteger(supportCase.value.workflowVersion)
+  && (supportCase.value.workflowVersion ?? -1) >= 0);
 
 const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
 // Settling cash only makes sense when the case is resolved, not rejected.
@@ -131,6 +168,49 @@ async function runAction(action: () => Promise<SupportCaseDetail>, success: stri
     error.value = getSupportErrorMessage(reason, 'Chưa xác nhận được kết quả. Vui lòng tải lại trước khi thực hiện lại.');
   } finally {
     actionBusy.value = false;
+  }
+}
+
+function resetResponsibilityCommand() {
+  responsibilityCommandId.value = null;
+  responsibilityError.value = '';
+}
+
+async function submitResponsibilityDecision() {
+  const current = supportCase.value;
+  const reason = responsibilityReason.value.trim();
+  const evidenceRefs = responsibilityEvidenceRefs.value;
+  if (!current || !canDecideResponsibility.value || responsibilitySubmitting.value) return;
+  responsibilityError.value = '';
+  if (!responsibilityDecision.value) {
+    responsibilityError.value = 'Chọn kết luận trách nhiệm.';
+    return;
+  }
+  if (reason.length < 10 || reason.length > 2000) {
+    responsibilityError.value = 'Lý do kết luận cần từ 10 đến 2000 ký tự.';
+    return;
+  }
+  if (evidenceRefs.length > 20 || evidenceRefs.some((value) => value.length > 500)) {
+    responsibilityError.value = 'Tối đa 20 bằng chứng, mỗi mục không quá 500 ký tự.';
+    return;
+  }
+  responsibilityCommandId.value ??= crypto.randomUUID();
+  responsibilitySubmitting.value = true;
+  error.value = '';
+  try {
+    supportCase.value = await supportCasesApi.decideTechnicianResponsibility(current.id, {
+      commandId: responsibilityCommandId.value,
+      workflowVersion: current.workflowVersion!,
+      decision: responsibilityDecision.value,
+      reason,
+      ...(evidenceRefs.length ? { evidenceRefs } : {}),
+    });
+    responsibilityCommandId.value = null;
+    successMessage.value = 'Đã ghi nhận kết luận trách nhiệm từ Backend.';
+  } catch (reasonError) {
+    responsibilityError.value = getSupportErrorMessage(reasonError, 'Chưa lưu được kết luận. Có thể thử lại với cùng mã thao tác.');
+  } finally {
+    responsibilitySubmitting.value = false;
   }
 }
 
@@ -385,6 +465,51 @@ watch(caseId, (id) => {
         :support-case="supportCase"
       />
 
+      <FhCard v-if="isTypedTechnicianReport" title="Đánh giá trách nhiệm">
+        <p class="mb-4 text-sm text-ink-600">Báo cáo của kỹ thuật viên; kết luận này không thay đổi trạng thái đơn sửa chữa.</p>
+        <dl class="space-y-2.5 text-sm">
+          <div class="flex flex-wrap justify-between gap-2"><dt class="text-ink-500">Nhóm tình huống</dt><dd class="text-right text-ink-900">{{ technicianReportClassLabels[supportCase.reasonClass!] }}</dd></div>
+          <div class="flex flex-wrap justify-between gap-2"><dt class="text-ink-500">Lý do</dt><dd class="text-right text-ink-900">{{ technicianReportCodeLabels[supportCase.reasonCode!] }}</dd></div>
+        </dl>
+        <div class="mt-4 border-t border-ink-100 pt-4">
+          <p class="text-sm font-semibold text-ink-900">{{ responsibilityLabels[supportCase.responsibility ?? 'pending'] }}</p>
+          <p v-if="supportCase.responsibilityReason" class="mt-1 text-sm text-ink-700 text-pretty">{{ supportCase.responsibilityReason }}</p>
+          <p v-if="supportCase.responsibility === 'pending'" class="mt-1 text-sm text-ink-600 text-pretty">Chưa có quyết định về điểm uy tín. Báo cáo không tự trừ điểm kỹ thuật viên.</p>
+          <p v-if="supportCase.responsibilityDecidedAt" class="mt-2 text-xs text-ink-500">Quyết định lúc {{ formatSupportDate(supportCase.responsibilityDecidedAt) }}</p>
+          <ul v-if="supportCase.responsibilityEvidenceRefs?.length" class="mt-3 space-y-1 text-sm">
+            <li v-for="(refValue, idx) in supportCase.responsibilityEvidenceRefs" :key="refValue">
+              <a v-if="isSafeEvidenceLink(refValue)" :href="refValue" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline" @click.prevent="openEvidence(refValue)">Bằng chứng quyết định {{ idx + 1 }}</a>
+              <span v-else class="break-all text-ink-700">{{ refValue }}</span>
+            </li>
+          </ul>
+        </div>
+        <form v-if="canDecideResponsibility" data-testid="responsibility-form" class="mt-5 space-y-4 border-t border-ink-100 pt-5" @submit.prevent="submitResponsibilityDecision">
+          <label :class="consoleLabel">
+            Kết luận của quản lý
+            <select v-model="responsibilityDecision" data-testid="responsibility-decision" required :class="consoleField" class="h-10" @change="resetResponsibilityCommand">
+              <option value="" disabled>Chọn kết luận</option>
+              <option value="technician_fault">Lỗi thuộc trách nhiệm kỹ thuật viên</option>
+              <option value="no_technician_fault">Không thuộc trách nhiệm kỹ thuật viên</option>
+              <option value="inconclusive">Chưa đủ căn cứ kết luận</option>
+            </select>
+            <span v-if="responsibilityDecision === 'technician_fault'" class="font-normal text-warning-800 text-pretty">Backend chỉ ghi nhận điểm uy tín sau khi quản lý xác nhận kết luận này.</span>
+          </label>
+          <label :class="consoleLabel">
+            Lý do kết luận
+            <textarea v-model="responsibilityReason" data-testid="responsibility-reason" maxlength="2000" rows="4" required :class="consoleTextarea" placeholder="Tối thiểu 10 ký tự" @input="resetResponsibilityCommand" />
+          </label>
+          <label :class="consoleLabel">
+            Bằng chứng bổ sung (không bắt buộc, mỗi dòng một liên kết)
+            <textarea v-model="responsibilityEvidenceRefsText" rows="3" :class="consoleTextarea" @input="resetResponsibilityCommand" />
+          </label>
+          <p v-if="responsibilityError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ responsibilityError }}</p>
+          <div class="flex justify-end">
+            <FhButton type="submit" :disabled="responsibilitySubmitting" :loading="responsibilitySubmitting">Gửi quyết định trách nhiệm</FhButton>
+          </div>
+        </form>
+        <p v-else-if="supportCase.responsibility === 'pending' && !canDecideResponsibility" class="mt-4 text-sm text-warning-800">Thiếu phiên bản quy trình mới nhất. Tải lại hồ sơ trước khi quyết định.</p>
+      </FhCard>
+
       <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" title="Kết quả xử lý">
         <dl class="space-y-2.5 text-sm">
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Kết quả</dt><dd class="text-right text-ink-900">{{ resolutionLabel(supportCase.resolutionCode) }}</dd></div>
@@ -395,7 +520,7 @@ watch(caseId, (id) => {
         <p v-if="supportCase.resolutionReason" class="mt-4 border-t border-ink-100 pt-4 text-sm text-ink-800 text-pretty">{{ supportCase.resolutionReason }}</p>
       </FhCard>
 
-      <FhCard v-if="!isTerminal" title="Ghi nhận kết quả">
+      <FhCard v-if="!isTerminal && !isTypedTechnicianReport" title="Ghi nhận kết quả">
         <form class="space-y-4" @submit.prevent="submitResolution">
           <div class="grid gap-4 sm:grid-cols-2">
             <label :class="consoleLabel">

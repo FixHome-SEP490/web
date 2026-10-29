@@ -146,13 +146,13 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     orderId: id, partRequestId: `request-${id}`, partRequestItemId: `item-${id}`, partNameSnapshot: 'Linh kiện fixture',
     issuedQty: issued, usedQty: used, declaredQty: declared, managerAcceptedQty: accepted, outstandingQty: issued - used - accepted, version: 1,
   });
-  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
+  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; deviceStates?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
     mockGet.mockImplementation(async (path: string) => {
       const id = ids.find(id => path === `/service-orders/${id}`);
       if (id) return { data: { data: { ...activeOrder, id, bookingId: `booking-${id}`, visitGroupId: 'visit-p1', status: options.status ?? 'ACCEPTED' } } };
       if (path === '/visit-groups/visit-p1/checkout') return { data: { data: {
         visitGroupId: 'visit-p1', total: 0, waiting: 0, ready: true, paid: false,
-        devices: ids.map((id, i) => ({ sequence: i + 1, bookingId: `booking-${id}`, serviceOrderId: id, serviceName: `Máy fixture ${i + 1}`, state: options.status === 'COMPLETED' ? 'succeeded' : 'open', amount: 0, paid: false })),
+        devices: ids.map((id, i) => ({ sequence: i + 1, bookingId: `booking-${id}`, serviceOrderId: id, serviceName: `Máy fixture ${i + 1}`, state: options.deviceStates?.[i] ?? (options.status === 'COMPLETED' ? 'succeeded' : 'open'), amount: 0, paid: false })),
       } } };
       const partsId = ids.find(id => path === `/service-orders/${id}/part-requests`);
       if (partsId) {
@@ -205,7 +205,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     const w = await render({ status: 'COMPLETED', returns: { [ids[0]]: [ledger(ids[0], 4, 1, 2, 0)], [ids[1]]: [ledger(ids[1], 2, 0, 2, 1)] } });
     let banner = w.get('[data-testid="visit-returns-warning"]');
     expect(banner.text()).toContain('1 linh kiện cần khai trả');
-    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(banner.text()).toContain('3 đã khai, chờ Quản lý Dịch vụ xác nhận');
     expect(banner.get('[data-testid="visit-return-device-1"]').text()).toContain('2 đã khai');
     expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('1 đã khai');
     expect(banner.attributes('role')).toBe('status');
@@ -216,17 +216,42 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     expect(mockPush).toHaveBeenCalledWith({ path: '/tech/jobs/job-test-202', query: { focus: 'parts' } });
     banner = w.get('[data-testid="visit-returns-warning"]');
     expect(banner.text()).toContain('1 linh kiện cần khai trả');
-    expect(banner.text()).toContain('3 linh kiện chờ Quản lý Dịch vụ xác nhận');
+    expect(banner.text()).toContain('3 đã khai, chờ Quản lý Dịch vụ xác nhận');
     expect(w.find('#job-parts').exists()).toBe(true);
     expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+  it('keeps return custody visible per terminal child without a whole-visit banner while a sibling is active', async () => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: ['failed', 'open', 'open'], returns: { [ids[0]]: [ledger(ids[0], 2, 0, 0, 0)] } });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    const detail = w.get('[data-testid="visit-return-child-details"]');
+    expect(detail.text()).toContain('Máy 1');
+    expect(detail.text()).toContain('2 linh kiện cần trả kho');
+    expect(detail.text()).not.toContain('Máy 2');
+    w.unmount();
+  });
+  it.each(['cancelled', 'quote_declined'])('includes a terminal %s child that still owes parts', async terminalState => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: [terminalState, 'open', 'open'], returns: { [ids[0]]: [ledger(ids[0], 3, 1, 1, 0)] } });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · 1 linh kiện cần trả kho');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('1 đã khai, chờ quản lý xác nhận');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
+    w.unmount();
+  });
+  it('keeps a terminal child with an unknown ledger visible in mixed visits without inventing zero', async () => {
+    const w = await render({ status: 'UNDER_REPAIR', deviceStates: ['cancelled', 'open', 'open'], invalidReturns: ids[0] });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · Chưa xác nhận được tình trạng hoàn trả');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
+    expect(w.get('[data-testid="visit-returns-retry"]').exists()).toBe(true);
+    w.unmount();
   });
   it('clears only quantities physically accepted by manager after an authoritative refresh', async () => {
     const returns = { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)], [ids[1]]: [ledger(ids[1], 1, 0, 1, 0)] };
     const w = await render({ status: 'COMPLETED', returns });
-    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('3 linh kiện chờ');
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('3 đã khai, chờ');
     returns[ids[0]] = [ledger(ids[0], 2, 0, 2, 2)];
     window.dispatchEvent(new Event('focus')); await flushPromises();
-    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('1 linh kiện chờ');
+    expect(w.get('[data-testid="visit-returns-warning"]').text()).toContain('1 đã khai, chờ');
     expect(w.find('[data-testid="visit-return-device-1"]').exists()).toBe(false);
     returns[ids[1]] = [ledger(ids[1], 1, 0, 1, 1)];
     window.dispatchEvent(new Event('focus')); await flushPromises();
@@ -236,7 +261,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
   it('shows unknown child reads without inventing zero or hiding known pending returns', async () => {
     const w = await render({ status: 'COMPLETED', invalidReturns: ids[1], returns: { [ids[0]]: [ledger(ids[0], 2, 0, 2, 0)] } });
     const banner = w.get('[data-testid="visit-returns-warning"]');
-    expect(banner.text()).toContain('2 linh kiện chờ');
+    expect(banner.text()).toContain('2 đã khai, chờ');
     expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
     expect(banner.find('[data-testid="visit-returns-retry"]').exists()).toBe(true);
     expect(mockPost).not.toHaveBeenCalled(); w.unmount();
@@ -278,6 +303,54 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     }
     mockPush.mockClear();
     mockSocketSubscriptions.splice(0);
+  });
+
+  it('coalesces overlapping VisitGroup checkout reads from a manual refresh and job reload', async () => {
+    installQueryClient(createTestQueryClient({ queries: { gcTime: 60_000 } }));
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    const groupId = '55555555-5555-4555-8555-555555555555';
+    mockRouteControl.current!.params.id = orderId;
+    let resolveCheckout!: (value: unknown) => void;
+    const pendingCheckout = new Promise<unknown>(resolve => { resolveCheckout = resolve; });
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, visitGroupId: groupId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
+      if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
+      if (path === `/visit-groups/${groupId}/checkout`) return pendingCheckout;
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    const refresh = wrapper.get('[data-testid="job-now"]').findAll('button').find(button => button.text().includes('Kiểm tra lại'));
+    expect(refresh).toBeDefined();
+    await refresh!.trigger('click');
+    await flushPromises();
+    expect(mockGet.mock.calls.filter(([path]) => path === `/visit-groups/${groupId}/checkout`)).toHaveLength(1);
+    resolveCheckout({ data: { data: { visitGroupId: groupId, total: 300000, waiting: 0, ready: true, paid: false, pendingCash: null, devices: [] } } });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('marks the additional-cost reason required and focuses it with an inline error before submission', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === '/service-orders/job-test-101') return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', quotation: { id: 'quote-1', status: 'approved', items: [] } } } };
+      if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { attachTo: document.body, global: { stubs } });
+    await flushPromises();
+    await wrapper.get('[data-testid="repair-additional-quote"]').trigger('click');
+    const form = wrapper.get('[data-testid="additional-cost-form"]');
+    const reason = form.get('textarea');
+    expect(reason.attributes('aria-required')).toBe('true');
+    expect(form.text()).toContain('*');
+    await form.findAll('button').find(button => button.text().includes('Gửi cho khách duyệt'))!.trigger('click');
+    await flushPromises();
+    expect(form.get('[data-testid="additional-cost-reason-error"]').text()).toContain('Vui lòng ghi lý do phát sinh.');
+    expect(reason.attributes('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(reason.element);
+    expect(mockPost).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it('offers repeatable supplemental quotes beside repair actions, then freezes them before payment', async () => {
@@ -751,25 +824,22 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     queryClient.clear();
   });
 
-  it('keeps the held, declare, and Service Manager confirmation custody steps visible after one device fails', async () => {
-    const failedOrder = { ...activeOrder, status: 'CANCELLED', visitGroupId: 'visit-1' };
+  it('shows solo terminal custody warning even before payment is confirmed', async () => {
+    const failedOrder = { ...activeOrder, status: 'COMPLETED', visitGroupId: null };
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: failedOrder } };
-      if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
-        visitGroupId: 'visit-1', total: 0, waiting: 0, ready: true, paid: false, pendingCash: null,
-        devices: [{ sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'failed', amount: 0, paid: false }],
-      } } };
       if (path.endsWith('/cash-settlement')) return { data: { data: null } };
       if (path.endsWith('/evidence')) return { data: { data: [] } };
       if (path.startsWith('/bookings/')) return { data: { data: { id: 'booking-101', media: [] } } };
       return { data: { data: [] } };
     });
     const custodyPartsStub = defineComponent({
-      emits: ['pending-returns', 'return-summary'],
+      emits: ['pending-returns', 'return-summary', 'returns-known'],
       setup(_props, { emit }) {
         onMounted(() => {
           emit('pending-returns', 2);
           emit('return-summary', { needDeclare: 1, awaitingManager: 1 });
+          emit('returns-known', true);
         });
         return () => h('div', { 'data-testid': 'parts-section' }, 'Parts');
       },
@@ -780,9 +850,9 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await flushPromises();
 
     const custody = wrapper.get('[data-testid="pending-parts-returns"]');
-    expect(custody.text()).toContain('1 linh kiện chưa khai trả');
+    expect(custody.text()).toContain('Còn 1 linh kiện cần trả kho');
     expect(custody.text()).toContain('1 đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế');
-    expect(custody.text()).toContain('Mở khai trả');
+    expect(custody.text()).toContain('Xem linh kiện');
   });
 
   it('offers releasing the order without losing points only when the server says the technician is on another job (PO 20/10/2026)', async () => {
@@ -953,27 +1023,32 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     wrapper.unmount();
   });
 
-  it('offers "Cần thay đổi thợ" only after check-in and sends it to the manager', async () => {
+  it('offers typed technician report categories only after check-in and submits the exact report contract', async () => {
     let arrived = false;
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') {
-        return { data: { data: { ...activeOrder, status: 'EN_ROUTE', arrivalVerified: arrived } } };
+        return { data: { data: { ...activeOrder, status: 'UNDER_REPAIR', arrivalVerified: arrived } } };
       }
       if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
+      if (path === '/service-orders/job-test-101/evidence') {
+        return { data: { data: [{ id: 'before-1', type: 'before', mediaUrl: 'https://img.test/before.jpg' }] } };
+      }
       return { data: { data: [] } };
     });
     const before = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
     await openMoreMenu(before);
-    expect(menuItems(before)).not.toContain('Cần thay đổi thợ');
+    expect(menuItems(before)).not.toContain('Lỗi kỹ năng hoặc thao tác');
+    expect(menuItems(before)).not.toContain('Ngoại lệ thiết bị hoặc khách hàng');
     expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
     before.unmount();
 
     arrived = true;
     mockPost.mockResolvedValue({ data: { success: true, statusCode: 201, message: 'Created', data: {
       id: 'case-1', caseType: 'technician_replacement', status: 'open', bookingId: null, serviceOrderId: 'job-test-101',
-      reason: 'x', description: null, resolutionCode: null, resolutionReason: null, resolvedAt: null, isUrgent: true,
-      respondBy: null, holdCompletion: false, createdAt: '2026-10-09T00:00:00Z', updatedAt: '2026-10-09T00:00:00Z',
+      reason: 'Thiếu kỹ năng xử lý dòng máy này.', description: null, resolutionCode: null, resolutionReason: null, resolvedAt: null,
+      isUrgent: true, respondBy: null, holdCompletion: false, responsibility: 'pending',
+      createdAt: '2026-10-09T00:00:00Z', updatedAt: '2026-10-09T00:00:00Z',
     } } });
     const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
@@ -981,16 +1056,25 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await openMoreMenu(wrapper);
     // After check-in the order can no longer be cancelled by the technician.
     expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
-    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Cần thay đổi thợ'))!.trigger('click');
-    const card = wrapper.get('[data-testid="replacement-card"]');
-    await card.get('textarea').setValue('Máy là loại công nghiệp, ngoài kỹ năng');
-    await card.findAll('button').find((b) => b.text().includes('Gửi cho quản lý'))!.trigger('click');
-    await flushPromises();
-    expect(mockPost).toHaveBeenCalledWith('/support/cases', expect.objectContaining({ caseType: 'technician_replacement', serviceOrderId: 'job-test-101', isUrgent: true }));
-    expect(wrapper.text()).toContain('Đã báo quản lý dịch vụ');
-    expect(wrapper.find('[data-testid="replacement-card"]').exists()).toBe(false);
-    await openMoreMenu(wrapper);
+    expect(menuItems(wrapper)).toContain('Lỗi kỹ năng hoặc thao tác');
+    expect(menuItems(wrapper)).toContain('Ngoại lệ thiết bị hoặc khách hàng');
     expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
+    expect(menuItems(wrapper)).not.toContain('Báo cáo vấn đề');
+    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Lỗi kỹ năng hoặc thao tác'))!.trigger('click');
+    const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
+    expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
+    await dialog.get('[data-testid="technician-report-reason"]').setValue('Thiếu kỹ năng xử lý dòng máy này.');
+    await dialog.get('[data-testid="technician-report-evidence"]').setValue(true);
+    await dialog.get('[data-testid="technician-report-submit"]').trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/support/cases/technician-report', {
+      serviceOrderId: 'job-test-101',
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      reason: 'Thiếu kỹ năng xử lý dòng máy này.',
+      evidenceRefs: ['https://img.test/before.jpg'],
+    });
+    expect(wrapper.text()).toContain('Quản lý sẽ liên hệ để thống nhất hướng xử lý hoặc đặt lại lịch nếu cần. Đơn mới không được tự động tạo.');
     wrapper.unmount();
   });
 
@@ -1111,6 +1195,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
       }
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) return { data: { success: true, data: {
         voucherReservationId: null, customerDueVnd: null,
       } } };
@@ -1134,6 +1219,95 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     wrapper.unmount();
   });
 
+  it('receives cash only for a server-attested pending SOLO intent at the server amount', async () => {
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    const intentId = '11111111-1111-4111-8111-111111111111';
+    mockRouteControl.current!.params.id = orderId;
+    const intent = { id: intentId, scopeKind: 'SOLO', scopeId: orderId, status: 'pending', grossVnd: 150000, customerDueVnd: 125000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
+    let currentIntent = intent;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
+      if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: currentIntent, meta: { cashFirstEnabled: true } } };
+      return { data: { data: [] } };
+    });
+    const received = { ...intent, status: 'received', receivedAt: '2026-10-29T00:01:00.000Z', receiptId: 'receipt-1' };
+    mockPost.mockImplementation(async () => {
+      currentIntent = received;
+      return { data: { success: true, statusCode: 200, message: 'Success', data: received } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('125.000');
+    const receive = wrapper.get('[data-testid="job-now"]').findAll('button').find((button) => button.text().includes('Xác nhận đã nhận tiền mặt'));
+    expect(receive).toBeDefined();
+    await receive!.trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith(`/finance/cash-intents/SOLO/${orderId}/received`, {
+      intentId, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i), receivedAmountVnd: 125000,
+    });
+    expect(mockPost).not.toHaveBeenCalledWith(expect.stringContaining('/cash-settlement/declare'), expect.anything());
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Đã báo nhận tiền mặt');
+    expect(wrapper.get('[data-testid="job-now"]').text()).not.toContain('Đã thanh toán');
+    wrapper.unmount();
+  });
+
+  it('receives cash once for a server-attested VisitGroup intent and uses its whole-group amount', async () => {
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    const groupId = '55555555-5555-4555-8555-555555555555';
+    const intentId = '11111111-1111-4111-8111-111111111111';
+    mockRouteControl.current!.params.id = orderId;
+    const intent = { id: intentId, scopeKind: 'VISIT_GROUP', scopeId: groupId, status: 'pending', grossVnd: 300000, customerDueVnd: 250000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
+    let currentIntent = intent;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', visitGroupId: groupId, arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
+      if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/visit-groups/${groupId}/checkout`) return { data: { data: {
+        visitGroupId: groupId, total: 300000, waiting: 0, ready: true, paid: false, pendingCash: null,
+        devices: [1, 2].map(sequence => ({ sequence, bookingId: `b${sequence}`, deviceLabel: `Thiết bị ${sequence}`, serviceOrderId: null, invoiceId: null, state: 'succeeded', amount: 150000, paid: false })),
+      } } };
+      if (path === `/finance/cash-intents/VISIT_GROUP/${groupId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: currentIntent, meta: { cashFirstEnabled: true } } };
+      return { data: { data: [] } };
+    });
+    const received = { ...intent, status: 'received', receivedAt: '2026-10-29T00:01:00.000Z', receiptId: 'receipt-1' };
+    mockPost.mockImplementation(async () => {
+      currentIntent = received;
+      return { data: { success: true, statusCode: 200, message: 'Success', data: received } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('250.000');
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('2 thiết bị');
+    await wrapper.get('[data-testid="job-now"]').findAll('button').find(button => button.text().includes('Xác nhận đã nhận tiền mặt'))!.trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith(`/finance/cash-intents/VISIT_GROUP/${groupId}/received`, {
+      intentId, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i), receivedAmountVnd: 250000,
+    });
+    expect(mockPost).not.toHaveBeenCalledWith(expect.stringContaining(`/finance/cash-intents/SOLO/${orderId}/received`), expect.anything());
+    expect(wrapper.get('[data-testid="job-now"]').text()).toContain('Đã báo nhận tiền mặt');
+    expect(wrapper.get('[data-testid="job-now"]').text()).not.toContain('Đã thanh toán');
+    wrapper.unmount();
+  });
+
+  it('does not show technician cash declaration before the customer creates an intent', async () => {
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    mockRouteControl.current!.params.id = orderId;
+    mockGet.mockImplementation(async (path: string) => {
+      if (path === `/service-orders/${orderId}`) return { data: { data: { ...activeOrder, id: orderId, status: 'UNDER_REPAIR', arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z' } } };
+      if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: true } } };
+      return { data: { data: [] } };
+    });
+    const wrapper = mount(TechnicianJobDetailPage, { global: { stubs } });
+    await flushPromises();
+    const now = wrapper.get('[data-testid="job-now"]');
+    expect(now.text()).toContain('Chờ khách tạo yêu cầu tiền mặt');
+    expect(now.text()).not.toContain('Khai báo đã thu tiền mặt');
+    expect(now.text()).not.toContain('Có thu tiền mặt');
+    expect(mockPost).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it.each([
     ['SOLO', '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444',
       `/finance/funded/solo/33333333-3333-4333-8333-333333333333/cash/reservation`,
@@ -1150,6 +1324,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         arrivalVerified: true, beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z',
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      const intentScopeId = kind === 'VISIT_GROUP' ? groupId : orderId;
+      if (path === `/finance/cash-intents/${kind}/${intentScopeId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (kind === 'VISIT_GROUP' && path === `/visit-groups/${groupId}/checkout`) return { data: { data: {
         visitGroupId: groupId, total: 300000, waiting: 0, ready: true, paid: false, pendingCash, devices: [],
       } } };
@@ -1175,7 +1351,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
       await wrapper.get('[data-testid="job-now"]').findAll('button')
         .find((button) => button.text().includes('Khai báo đã thu tiền mặt'))!.trigger('click');
     } else {
-      await now.findAll('button').find((button) => button.text().includes('Khai báo đã thu tiền mặt cả lượt'))!.trigger('click');
+      await now.findAll('button').find((button) => button.text().includes('Xác nhận tiền mặt'))!.trigger('click');
     }
     await flushPromises();
 
@@ -1196,6 +1372,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z',
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) throw { response: { status } };
       return { data: { data: [] } };
     });
@@ -1225,6 +1402,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
         beforeEvidenceCount: 1, afterEvidenceCount: 1, completionRequestedAt: '2026-10-01T10:00:00Z',
       } } };
       if (path === `/service-orders/${orderId}/cash-settlement`) return { data: { data: null } };
+      if (path === `/finance/cash-intents/SOLO/${orderId}`) return { data: { success: true, statusCode: 200, message: 'Success', data: null, meta: { cashFirstEnabled: false } } };
       if (path === `/finance/funded/solo/${orderId}/cash/reservation`) {
         lookupCount += 1;
         if (lookupCount > 1) return { data: { success: true, data: {
