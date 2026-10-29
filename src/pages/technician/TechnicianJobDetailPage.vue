@@ -3923,33 +3923,36 @@ const toggleMore = async () => {
       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
       @click.self="!technicianReportSending && (technicianReportOpen = false)"
     >
-      <div role="dialog" aria-modal="true" aria-labelledby="technician-report-title" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto" data-testid="technician-report-dialog">
+      <div role="dialog" aria-modal="true" aria-labelledby="technician-report-title" aria-describedby="technician-report-description" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto" data-testid="technician-report-dialog">
         <div>
           <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
             {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
           </h3>
-          <p class="mt-1 text-sm text-ink-600">Quản lý sẽ xem xét báo cáo. Nếu cần đặt lại lịch, quản lý sẽ liên hệ để thống nhất; đơn mới không được tự động tạo.</p>
+          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Quản lý sẽ xem xét báo cáo. Nếu cần đặt lại lịch, quản lý sẽ liên hệ để thống nhất; đơn mới không được tự động tạo.</p>
         </div>
         <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
           Lý do
-          <select v-model="technicianReportReasonCode" data-testid="technician-report-code" class="h-11 w-full rounded-xl border border-ink-300 bg-white px-3 text-sm">
+          <select v-model="technicianReportReasonCode" data-testid="technician-report-code" class="h-11 w-full rounded-xl border border-ink-300 bg-white px-3 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
             <option v-for="option in technicianReportCodes" :key="option.value" :value="option.value">{{ option.label }}</option>
           </select>
         </label>
         <div v-else class="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">Thiếu kỹ năng hoặc thao tác chưa đúng</div>
         <label class="block space-y-1 text-sm font-medium text-ink-700">
           Mô tả tình huống
-          <textarea ref="technicianReportReasonInput" v-model="technicianReportReason" data-testid="technician-report-reason" rows="4" maxlength="2000" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm" placeholder="Nêu rõ tình huống để quản lý xem xét" />
+          <textarea ref="technicianReportReasonInput" v-model="technicianReportReason" data-testid="technician-report-reason" rows="4" maxlength="2000" aria-required="true" :aria-describedby="technicianReportError ? 'technician-report-reason-hint technician-report-error' : 'technician-report-reason-hint'" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Nêu rõ tình huống để quản lý xem xét" />
+          <span id="technician-report-reason-hint" class="block text-xs font-normal text-ink-600">10–2.000 ký tự</span>
         </label>
         <fieldset v-if="technicianReportEvidence.length" class="space-y-2">
           <legend class="text-sm font-medium text-ink-700">Ảnh có sẵn trong đơn (không bắt buộc)</legend>
-          <label v-for="(item, index) in technicianReportEvidence" :key="item.mediaUrl" class="flex items-center gap-2 text-sm text-ink-700">
-            <input v-model="technicianReportEvidenceRefs" type="checkbox" :value="item.mediaUrl" data-testid="technician-report-evidence" class="h-4 w-4 rounded border-ink-300 text-brand-600" />
-            Ảnh {{ index + 1 }}
-            <a :href="item.mediaUrl" target="_blank" rel="noopener noreferrer" class="text-brand-700 underline" @click.stop>mở ảnh</a>
-          </label>
+          <div v-for="(item, index) in technicianReportEvidence" :key="item.mediaUrl" class="flex items-center gap-3 border-b border-ink-100 text-sm text-ink-700">
+            <label class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3">
+              <input v-model="technicianReportEvidenceRefs" type="checkbox" :value="item.mediaUrl" data-testid="technician-report-evidence" class="h-4 w-4 shrink-0 rounded border-ink-300 text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2" />
+              Ảnh {{ index + 1 }}
+            </label>
+            <a :href="item.mediaUrl" target="_blank" rel="noopener noreferrer" :aria-label="`Mở ảnh ${index + 1} trong tab mới`" class="inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-brand-700 underline underline-offset-4 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" @click.stop>Mở ảnh</a>
+          </div>
         </fieldset>
-        <p v-if="technicianReportError" class="text-sm text-danger-700" role="alert">{{ technicianReportError }}</p>
+        <p v-if="technicianReportError" id="technician-report-error" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{{ technicianReportError }}</p>
         <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <FhButton variant="secondary" :disabled="technicianReportSending" @click="technicianReportOpen = false">Đóng</FhButton>
           <FhButton data-testid="technician-report-submit" :loading="technicianReportSending" :disabled="technicianReportSending" @click="submitTechnicianReport">Gửi báo cáo</FhButton>

@@ -241,6 +241,8 @@ describe('customer invoice payment UI', () => {
     await flushPromises();
     expect(api.post).toHaveBeenCalledWith('/finance/cash-intents/SOLO/o1', expect.objectContaining({ commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) }));
     expect(w.get('[data-testid="cash-intent-pending"]').text()).toContain('250.000');
+    expect(w.get('[data-testid="cash-intent-pending"]').attributes('aria-labelledby')).toBe('cash-intent-pending-title');
+    expect(w.get('#cash-intent-pending-title').text()).toBe('Chờ kỹ thuật viên xác nhận tiền mặt');
     expect(w.text()).not.toContain('Đã thanh toán');
     await w.get('[data-testid="cash-intent-cancel"]').trigger('click');
     await flushPromises();
