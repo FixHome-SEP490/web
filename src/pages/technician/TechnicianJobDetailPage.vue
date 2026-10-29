@@ -59,6 +59,8 @@ import {
   type EvidenceType,
 } from '../../api/orders.api';
 import FailedRepairDialog from '../../components/technician/FailedRepairDialog.vue';
+import CannotContinueDialog from '../../components/technician/CannotContinueDialog.vue';
+import { createCannotContinuePort, type CustomerContinuation } from '../../api/platform-continuation.api';
 import { failedRepairKey } from '../../api/failed-repair.api';
 import { createTechnicianFailedRepairPort } from '../../api/technician-failed-repair.api';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
@@ -105,6 +107,10 @@ const queryClient = useQueryClient();
 
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
+const cannotContinuePort = createCannotContinuePort();
+const cannotContinueOpen = ref(false);
+const interruptionByOrder = ref<Record<string, CustomerContinuation>>({});
+const recordedInterruption = computed(() => interruptionByOrder.value[jobIdRef.value] ?? null);
 provide(failedRepairKey, createTechnicianFailedRepairPort());
 // Re-evaluated every 30 s so the depart button lights up on time without a reload.
 const nowTick = ref(Date.now());
@@ -163,6 +169,9 @@ const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((eve
     // clearQueryCache() runs on logout/account switch; invalidate in-flight
     // sibling reads too, so a late response cannot repopulate the new session.
     clearPrefetchedVisitOrders();
+    cannotContinuePort.reset();
+    cannotContinueOpen.value = false;
+    interruptionByOrder.value = {};
   }
 });
 
@@ -216,7 +225,7 @@ const failedRepairParts = computed(() => heldParts.value.map(request => ({
   id: request.id,
   label: request.items.map(item => (item.partNameSnapshot ?? 'Linh kiện') + ' ×' + item.quantity).join(', ') || 'Linh kiện',
 })));
-const canReportRepairFailed = computed(() => isRepairing.value && !completionRequested.value && !jobInvoice.value
+const canReportRepairFailed = computed(() => !recordedInterruption.value && isRepairing.value && !completionRequested.value && !jobInvoice.value
   && (skipsQuote.value || String(job.value?.quotation?.status).toLowerCase() === 'approved'));
 function openRepairFailed() {
   if (!canReportRepairFailed.value) return;
@@ -798,6 +807,11 @@ interface NowStep {
 /** What the technician has to do now: one line and at most one primary button. */
 const nowStep = computed<NowStep | null>(() => {
   if (!job.value) return null;
+  if (recordedInterruption.value) return {
+    title: 'Đã ghi nhận gián đoạn',
+    hint: 'Đơn chưa được hủy. Khai số linh kiện thực trả để quản lý dịch vụ kiểm đếm và nhận thực tế; báo giá và tiền cũ được giữ để đối soát riêng.',
+    action: { label: 'Xem linh kiện', run: revealParts, icon: Info },
+  };
   const s = statusUpper.value;
 
   if (s === 'CANCELLED') return { title: 'Đơn đã huỷ' };
@@ -1744,6 +1758,7 @@ watch(
     completionConfirmOpen.value = false;
     departureDevices.value = [];
     repairFailedOpen.value = false;
+    cannotContinueOpen.value = false;
     moreOpen.value = false;
     showWithdrawModal.value = false;
     technicianReportOpen.value = false;
@@ -2322,8 +2337,29 @@ const technicianReportReasonInput = ref<HTMLTextAreaElement | null>(null);
 const technicianReportEvidence = computed(() => [...new Map(evidences.value
   .filter((item) => item.mediaUrl?.trim())
   .map((item) => [item.mediaUrl, item])).values()]);
-const canCreateTypedTechnicianReport = computed(() => gpsCheckedIn.value
+const canCreateTypedTechnicianReport = computed(() => !recordedInterruption.value && gpsCheckedIn.value
   && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value));
+const canStopOnsite = computed(() => canCreateTypedTechnicianReport.value && !completionRequested.value && !actionLoading.value);
+function openCannotContinue() {
+  if (!canStopOnsite.value) return;
+  moreOpen.value = false;
+  cannotContinueOpen.value = true;
+}
+async function showCannotContinueParts() {
+  cannotContinueOpen.value = false;
+  await nextTick();
+  revealParts();
+}
+async function interruptionRecorded(result: CustomerContinuation) {
+  const source = result.customerContinuation.source;
+  if (!mounted || source?.serviceOrderId !== jobIdRef.value || source.bookingId !== job.value?.bookingId) return;
+  interruptionByOrder.value[source.serviceOrderId] = result;
+  cannotContinueOpen.value = false;
+  repairFailedOpen.value = false;
+  notifySuccess('Đã ghi nhận gián đoạn. Đơn chưa được hủy; tiền và linh kiện cũ vẫn cần đối soát riêng.');
+  cache.markChanged(affectedBy.orderChange);
+  await loadJob(source.serviceOrderId, { silent: true }).catch(() => undefined);
+}
 const technicianReportCodes: { value: TechnicianReportReasonCode; label: string }[] = [
   { value: 'device_too_old', label: 'Thiết bị đã quá cũ' },
   { value: 'severe_damage', label: 'Thiết bị hư hỏng nặng' },
@@ -2375,6 +2411,7 @@ async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
 }
 async function submitTechnicianReport() {
   if (!canCreateTypedTechnicianReport.value || technicianReportSending.value) return;
+  const sourceId = jobIdRef.value;
   const reason = technicianReportReason.value.trim();
   if (reason.length < 10 || reason.length > 2000) {
     technicianReportError.value = 'Mô tả cần từ 10 đến 2000 ký tự.';
@@ -2384,19 +2421,20 @@ async function submitTechnicianReport() {
   technicianReportError.value = '';
   try {
     await supportCasesApi.createTechnicianReport({
-      serviceOrderId: jobIdRef.value,
+      serviceOrderId: sourceId,
       reasonClass: technicianReportReasonClass.value,
       reasonCode: technicianReportReasonCode.value,
       reason,
       ...(technicianReportEvidenceRefs.value.length ? { evidenceRefs: [...technicianReportEvidenceRefs.value] } : {}),
     });
+    if (!mounted || sourceId !== jobIdRef.value) return;
     technicianReportSent.value = true;
     technicianReportOpen.value = false;
-    notifySuccess('Đã gửi báo cáo cho quản lý. Quản lý sẽ liên hệ để thống nhất hướng xử lý hoặc đặt lại lịch nếu cần. Đơn mới không được tự động tạo.');
+    notifySuccess('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
   } catch (err) {
-    technicianReportError.value = userFacingError(err, 'Chưa gửi được báo cáo. Vui lòng thử lại.');
+    if (mounted && sourceId === jobIdRef.value) technicianReportError.value = userFacingError(err, 'Chưa gửi được báo cáo. Vui lòng thử lại.');
   } finally {
-    technicianReportSending.value = false;
+    if (mounted && sourceId === jobIdRef.value) technicianReportSending.value = false;
   }
 }
 
@@ -2694,24 +2732,37 @@ const toggleMore = async () => {
               Làm mới
             </button>
             <button
-              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
+              v-if="canStopOnsite"
               type="button"
               role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              @click="openTechnicianReport('technician_skill_gap')"
+              class="w-full min-h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left"
+              data-testid="job-cannot-continue-menu"
+              @click="openCannotContinue"
             >
-              <Flag :size="16" class="text-ink-500" />
-              Lỗi kỹ năng hoặc thao tác
+              <Ban :size="16" class="shrink-0" />
+              Không thể tiếp tục công việc
             </button>
             <button
               v-if="canCreateTypedTechnicianReport && !technicianReportSent"
               type="button"
               role="menuitem"
               class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              data-testid="job-technician-report-skill"
+              @click="openTechnicianReport('technician_skill_gap')"
+            >
+              <Flag :size="16" class="text-ink-500" />
+              Báo cáo hỗ trợ · kỹ năng
+            </button>
+            <button
+              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              data-testid="job-technician-report-exception"
               @click="openTechnicianReport('non_technician_exception')"
             >
               <Flag :size="16" class="text-ink-500" />
-              Ngoại lệ thiết bị hoặc khách hàng
+              Báo cáo hỗ trợ · ngoại lệ
             </button>
             <button
               v-if="canReport && !gpsCheckedIn"
@@ -3830,6 +3881,21 @@ const toggleMore = async () => {
       </section>
     </div>
 
+    <CannotContinueDialog
+      v-if="cannotContinueOpen"
+      :key="`${jobIdRef}:${job?.bookingId ?? ''}`"
+      :order-id="jobIdRef"
+      :booking-id="job?.bookingId ?? ''"
+      :visit-group-id="visitGroupId"
+      :allowed="canStopOnsite"
+      :parts="failedRepairParts"
+      :parts-known="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
+      :port="cannotContinuePort"
+      @close="cannotContinueOpen = false"
+      @parts="showCannotContinueParts"
+      @recorded="interruptionRecorded"
+    />
+
     <FailedRepairDialog
       v-if="repairFailedOpen"
       :key="jobIdRef"
@@ -3928,7 +3994,7 @@ const toggleMore = async () => {
           <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
             {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
           </h3>
-          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Quản lý sẽ xem xét báo cáo. Nếu cần đặt lại lịch, quản lý sẽ liên hệ để thống nhất; đơn mới không được tự động tạo.</p>
+          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Chỉ gửi báo cáo hỗ trợ; công việc vẫn tiếp tục. Báo cáo này không dừng hoặc hủy đơn. Nếu bạn không thể tiếp tục, đóng và chọn hành động riêng “Không thể tiếp tục công việc”.</p>
         </div>
         <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
           Lý do

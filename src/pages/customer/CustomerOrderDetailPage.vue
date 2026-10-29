@@ -46,6 +46,7 @@ import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
 import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
+import CustomerContinuationPanel from '../../components/customer/CustomerContinuationPanel.vue';
 import CustomerCancelledRebookAction from '../../components/customer/CustomerCancelledRebookAction.vue';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
@@ -1816,6 +1817,15 @@ const parsedReview = computed(() => {
 
       <!-- 8. Complaint about this order (every status) -->
       <div class="order-3">
+        <CustomerContinuationPanel
+          v-if="order.status === 'EN_ROUTE' || order.status === 'UNDER_REPAIR'"
+          :key="`${order.id}:${order.visitGroupId ?? ''}`"
+          :order-id="order.id"
+          :booking-id="order.bookingId"
+          :visit-group-id="order.visitGroupId ?? null"
+          :order-status="order.status"
+          class="mb-3"
+        />
         <CustomerStopReplaceRequest :order-id="order.id" :order-status="order.status" />
         <OrderComplaintPanel
           :order-id="orderId"

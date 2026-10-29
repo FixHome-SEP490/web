@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 01:58 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ux-quickwins-cash-sm-20261029
+> Cập nhật lần cuối: 2026-10-29 13:30 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-platform-first-web-tech-customer-t4-20261029
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,13 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Gián đoạn có xác minh T4 (29/10/2026)
+
+- Thợ đã check-in và đơn ở `EN_ROUTE`/`UNDER_REPAIR` có thêm mục “Không thể tiếp tục công việc” gửi `POST /service-orders/:id/cannot-continue` với lý do typed, mô tả và tối đa 3 ảnh chứng cứ; `commandId` UUID được giữ trong bộ nhớ trang cho đơn đó để thử lại đúng lệnh, lỗi 4xx khóa lệnh còn lỗi mạng/5xx chỉ cho thử lại cùng nội dung. Hai mục “Báo cáo hỗ trợ · kỹ năng/ngoại lệ” vẫn chỉ báo cáo, không dừng đơn; “Không sửa được máy này” giữ nguyên tuyến `/repair-failed`.
+- Ghi nhận này chỉ là ý định gián đoạn đã xác minh: đơn cũ **chưa bị hủy**, không đổi trạng thái terminal, không hoàn tiền, không đóng báo giá và không đụng sổ linh kiện. Web kiểm tra fail-closed `version`, `terminalTransitionApplied=false`, `serviceOrderStatus`, `oldObligations` (`physicalReturnAcceptance=MANUAL_SERVICE_MANAGER_ONLY`, `legacyPartReturnState=NOT_VERIFIED`) và nguồn đơn/booking/lượt trước khi hiện bất cứ điều gì.
+- Khách thấy `CustomerContinuationPanel` trên chi tiết đơn đang `EN_ROUTE`/`UNDER_REPAIR`, đọc `GET /service-orders/:id/customer-continuation`; chỉ khi server trả `eligible=true` và `independentNewBookingAllowed=true` mới có CTA mở `/app/bookings/new` (booking mới, không dùng lại báo giá/tiền/ưu đãi cũ). `prefilledRebookAvailable=true` không bật điền sẵn vì chưa có endpoint nháp; UI ghi rõ chưa sẵn sàng. Lỗi đọc giữ dữ liệu đơn cũ, không hiện số 0 giả và không hiện CTA.
+- Hợp đồng chi tiết ở `docs/PLATFORM-FIRST-T4-WEB-CONTRACT.md`. T2 (hủy/hoàn tiền/đặt lại có điền sẵn) vẫn chờ hợp đồng Backend, Web không tự tạo API.
 
 ### Voucher T2 (26/10/2026)
 
@@ -385,6 +392,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Gián đoạn có xác minh T4 mới qua test Web và các cổng lint/typecheck/build; chưa kiểm chứng trên trình duyệt với tài khoản thợ/khách, Backend DEV, Socket.IO thật hay Mobile parity. Luồng T2 (hủy đơn/hoàn tiền/đặt lại có điền sẵn) chưa có hợp đồng Backend nên Web không mở. Hard-refresh trước QA.
+
 - Web P0/P1 đổi thợ: CTA `CANCELLED` phân loại lỗi sửa, gián đoạn được Manager đóng `interrupted_for_rebook`, hoặc đặt lại thường trước khi mở đúng một luồng; lỗi phân loại không mở API đặt lại thường. `interruption-draft`/`interruption-rebook` mở từ `NewBookingWizardPage`, xác minh nguồn Booking/ServiceOrder/SupportCase đã đóng, tải địa chỉ và giá hiện tại; khách chọn lịch, thiết bị/biến thể, mô tả và xác nhận trước khi Backend định giá lại. SupportCase `technician_replacement` được chấp nhận khi Backend trả `bookingId=null` nhưng case/order khớp; case khách vẫn cần booking khớp. Retry giữ idempotency trong phiên. Test Web đã chạy; Backend DEV, đăng nhập trình duyệt, hành vi runtime và Mobile parity CHƯA KIỂM CHỨNG. Hard-refresh trước QA.
 
 - Voucher T2: Backend canonical source có GET funded cash reservation cho SOLO/VisitGroup, DTO nullable sentinel, technician assignment/permission checks, và `assertFundedCollectionReady` ở lookup/declaration/confirmation. Web chỉ fallback gross khi nhận đúng sentinel hai field null; HTTP 409/403/503 và phản hồi không hợp lệ không fallback. Customer cash blocker đã bỏ sau khi đường thợ được nối. Backend DEV/runtime readiness, JWT, migration thực tế, callback/refund, PostgreSQL và Mobile parity CHƯA KIỂM CHỨNG; không chạy standalone PostgreSQL tests. Cần manual E2E sau deploy và hard-refresh Web.
@@ -425,6 +434,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Admin voucher DRAFT/PUBLISHED/PAUSED/ARCHIVED và Web tương ứng vẫn cần migration Backend mới, review RLS/quyền truy cập và kiểm thử thật. Không bỏ guard để mở tính năng. Vẫn chưa xác minh checkout voucher bằng tài khoản thật, ảnh riêng tư trên DEV hay E2E toàn VisitGroup.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-29 13:30 (UTC+7) | foxonworld | foxonworld/fixhome-platform-first-web-tech-customer-t4-20261029 | Thêm luồng gián đoạn có xác minh cho thợ/khách T4: lệnh typed idempotent, giữ nguyên đơn cũ và fail-closed, CTA booking mới độc lập; lint/typecheck/1985 test/build PASS, browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
 - 2026-10-28 14:36 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Gộp CTA hủy, hỗ trợ case đổi thợ thiếu bookingId qua liên kết Order, xác minh kết quả/idempotency và kiểm thử lại Web; Backend DEV/runtime/Mobile CHƯA KIỂM CHỨNG.
@@ -485,8 +495,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 
 - 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
-
-- 2026-10-20 18:47 (UTC+7) | foxonworld | foxonworld/tech-job-v3-web-20261020 | Thêm action khôi phục bắt đầu sửa đơn giá cố định sau ảnh BEFORE bị gián đoạn; chỉ hiện khi đã check-in, có ảnh và không còn upload chờ
 
 
 
