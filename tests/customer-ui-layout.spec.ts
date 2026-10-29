@@ -31,6 +31,7 @@ vi.mock('../src/api/catalog.api', () => ({ catalogApi: { getServices: api.getSer
 vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: vi.fn().mockRejectedValue(new Error('x')) } }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: api.getByOrder } }));
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'o1' }, query: {} }),
   useRouter: () => ({ push: api.push, replace: vi.fn(), back: vi.fn() }),
@@ -44,6 +45,7 @@ import CustomerWarrantiesPage from '../src/pages/customer/CustomerWarrantiesPage
 const stubs = {
   RouterLink: { template: '<a><slot /></a>' },
   'router-link': { template: '<a><slot /></a>' },
+  CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true,
   OrderComplaintPanel: true,
   WarrantyClaimCard: true,
   WarrantyClaimModal: true,

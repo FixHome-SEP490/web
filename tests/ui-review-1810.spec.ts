@@ -20,6 +20,7 @@ vi.mock('../src/api/orders.api', () => ({
 vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: api.getBooking }, isFullBookingWithMedia: () => false }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: vi.fn().mockResolvedValue(null) } }));
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'o1' }, query: {} }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
@@ -46,7 +47,7 @@ import { useFillViewport } from '../src/composables/useFillViewport';
 const order = (extra: Record<string, unknown> = {}) => ({
   id: 'o1', code: 'FH-1', status: 'UNDER_REPAIR', paymentStatus: 'UNPAID', grandTotal: 400000, bookingId: 'b1', ...extra,
 });
-const stubs = { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true };
+const stubs = { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true };
 let stopLive: () => void = () => undefined;
 
 beforeEach(() => {

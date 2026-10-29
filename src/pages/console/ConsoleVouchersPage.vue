@@ -23,6 +23,12 @@ const busy = ref(false);
 let loadSequence = 0;
 let criteriaSequence = 0;
 let sessionSequence = 0;
+const pendingCommands = new Map<string, string>();
+function commandIdFor(key: string): string {
+  let id = pendingCommands.get(key);
+  if (!id) { id = crypto.randomUUID(); pendingCommands.set(key, id); }
+  return id;
+}
 
 async function load() {
   const sequence = ++loadSequence;
@@ -75,6 +81,7 @@ async function loadCriteria() {
 watch(adminId, () => {
   sessionSequence++;
   busy.value = false;
+  pendingCommands.clear();
   feedback.value = '';
   void load();
   void loadCriteria();
@@ -100,7 +107,29 @@ async function runAction(action: () => Promise<void>, success: string) {
   }
 }
 function createCampaign(draft: VoucherCampaignDraft) {
-  return runAction(async () => { await voucherAdapter.createCampaign(draft); await load(); }, 'Đã lưu chiến dịch ưu đãi.');
+  const key = `create:${JSON.stringify(draft)}`;
+  return runAction(async () => { await voucherAdapter.createCampaign(draft, commandIdFor(key)); pendingCommands.delete(key); await load(); }, 'Đã lưu chiến dịch ưu đãi.');
+}
+function updateDraftCampaign(id: string, draft: VoucherCampaignDraft) {
+  const row = campaigns.value.find(c => c.id === id);
+  if (row?.campaignLifecycle !== 'DRAFT' || !row.campaignVersion) return;
+  const key = `edit:${id}:${row.campaignVersion}:${JSON.stringify(draft)}`;
+  return runAction(async () => {
+    const updated = await voucherAdapter.updateDraftCampaign(id, draft, row.campaignVersion!, commandIdFor(key));
+    pendingCommands.delete(key);
+    campaigns.value = campaigns.value.map(c => c.id === id ? updated : c);
+  }, 'Đã lưu thay đổi bản nháp.');
+}
+function transitionCampaign(id: string, next: 'PUBLISHED' | 'PAUSED' | 'ARCHIVED') {
+  const row = campaigns.value.find(c => c.id === id);
+  if (!row?.campaignVersion || row.campaignLifecycle === 'ARCHIVED') return;
+  const key = `lifecycle:${id}:${row.campaignVersion}:${next}`;
+  const session = sessionSequence;
+  return runAction(async () => {
+    const updated = await voucherAdapter.transitionCampaign(id, next, row.campaignVersion!, commandIdFor(key));
+    pendingCommands.delete(key);
+    if (session === sessionSequence) campaigns.value = campaigns.value.map(c => c.id === id ? updated : c);
+  }, next === 'PUBLISHED' ? 'Đã phát hành hoặc mở lại chiến dịch.' : next === 'PAUSED' ? 'Đã tạm dừng chiến dịch.' : 'Đã lưu trữ chiến dịch.');
 }
 function setCampaignStatus(id: string, active: boolean) {
   const session = sessionSequence;
@@ -121,6 +150,7 @@ function setCampaignStatus(id: string, active: boolean) {
       :feedback="feedback" :feedback-error="feedbackError"
       :categories="categories" :services="services" :criteria-error="criteriaError" :criteria-loading="criteriaLoading"
       @retry="load" @retry-criteria="loadCriteria" @create-campaign="createCampaign" @set-campaign-status="setCampaignStatus"
+      @update-draft-campaign="updateDraftCampaign" @transition-campaign="transitionCampaign"
     />
   </div>
 </template>

@@ -19,4 +19,9 @@ describe('Admin console routes (PO 09/10/2026)', () => {
     expect(route('console-warranty')?.path).toBe('/console/warranty');
     expect(route('console-warranty')?.meta.roles).toEqual(['SERVICE_MANAGER', 'ADMIN']);
   });
+
+  it('keeps part returns, including legacy manual review, service-manager only', () => {
+    expect(route('console-part-returns')?.path).toBe('/console/part-returns');
+    expect(route('console-part-returns')?.meta.roles).toEqual(['SERVICE_MANAGER']);
+  });
 });

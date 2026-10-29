@@ -10,6 +10,7 @@ const { partRequestsApi, partsCatalogApi, apiClientMock, auth } = vi.hoisted(() 
     getAll: vi.fn(),
     getReturnsByOrderId: vi.fn(),
     getPendingReturns: vi.fn(),
+    getLegacyManualReview: vi.fn(),
     declareReturn: vi.fn(),
     acceptReturn: vi.fn(),
   },
@@ -84,6 +85,22 @@ const returnRecord = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const legacyRecord = (overrides: Record<string, unknown> = {}) => ({
+  kind: 'legacy_manual_review',
+  receiptState: 'UNKNOWN',
+  orderId: '11111111-1111-4111-8111-111111111111',
+  partRequestId: '22222222-2222-4222-8222-222222222222',
+  partRequestItemId: '33333333-3333-4333-8333-333333333333',
+  technicianId: '44444444-4444-4444-8444-444444444444',
+  requestType: 'pre_repair',
+  requestStatus: 'received',
+  handedOverAt: '2026-10-01T03:00:00.000Z',
+  partCatalogId: '55555555-5555-4555-8555-555555555555',
+  partNameSnapshot: 'Van xả cũ',
+  issuedQty: 2,
+  ...overrides,
+});
+
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -101,6 +118,7 @@ beforeEach(() => {
   partRequestsApi.getByOrderId.mockResolvedValue([]);
   partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
   partRequestsApi.getPendingReturns.mockResolvedValue([]);
+  partRequestsApi.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
   partRequestsApi.getAll.mockResolvedValue({ data: [], total: 0 });
 });
 
@@ -555,5 +573,187 @@ describe('Hoàn trả linh kiện (BUG DETECTOR 10)', () => {
     expect(wrapper.get('[data-testid="part-returns-link"]').text()).toContain('1 dòng linh kiện đã khai trả đang chờ nhận');
     expect(wrapper.find('[data-testid="part-returns-queue"]').exists()).toBe(false);
     wrapper.unmount();
+  });
+});
+
+describe('Linh kiện lịch sử cần xác minh (T3c, SM-only)', () => {
+  const mountReturns = (routerLink = { template: '<a><slot /></a>' }) =>
+    mount(ConsolePartReturnsPage, { global: { stubs: { RouterLink: routerLink } } });
+
+  it('shows a separate legacy group with the unknown state and no accepted/remaining quantities', async () => {
+    const legacy = legacyRecord();
+    partRequestsApi.getLegacyManualReview.mockResolvedValue({ data: [legacy], total: 1, page: 1, pageSize: 20 });
+
+    const wrapper = mountReturns({ props: ['to'], template: '<a :href="to"><slot /></a>' });
+    await flushPromises();
+
+    const group = wrapper.get('[data-testid="legacy-part-returns"]');
+    const text = normalized(group);
+    expect(text).toContain('Linh kiện lịch sử cần xác minh');
+    expect(text).toContain('Chưa có chứng từ custody');
+    expect(text).toContain('xác minh thủ công');
+    expect(text).toContain('Van xả cũ');
+    expect(group.get('[data-testid="legacy-receipt-state"]').text()).toBe('Chưa xác định (UNKNOWN)');
+
+    const row = group.get('[data-testid="legacy-part-return"]');
+    expect(normalized(row)).toContain('Số lượng đã cấp theo lịch sử');
+    expect(row.get('[data-testid="legacy-issued-qty"]').text()).toBe('2');
+    expect(row.get('a').attributes('href')).toBe(`/console/orders/${legacy.orderId}`);
+    expect(normalized(row)).toContain('PR-22222222');
+    // Legacy rows are evidence to review by hand: no return, acceptance or discrepancy command.
+    expect(normalized(row)).not.toContain('Đã nhận');
+    expect(normalized(row)).not.toContain('Khai trả');
+    expect(normalized(row)).not.toContain('Còn lại');
+    expect(row.find('[data-testid="accept-return"]').exists()).toBe(false);
+    expect(row.findAll('button')).toHaveLength(0);
+
+    // The tracked queue keeps its own empty state and never claims everything was returned.
+    expect(wrapper.get('[data-testid="part-returns-queue"]').exists()).toBe(true);
+    expect(normalized(wrapper)).toContain('trống không có nghĩa là mọi linh kiện đã được trả đủ');
+    wrapper.unmount();
+  });
+
+  it('shows an honest empty state when no legacy handover needs manual review', async () => {
+    partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
+
+    const wrapper = mountReturns();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="legacy-part-returns-empty"]').text()).toContain('Không có linh kiện lịch sử nào cần xác minh');
+    expect(wrapper.find('[data-testid="legacy-part-return"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="accept-return"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it.each([403, 503])('hides only the legacy group when that read is unavailable (%i) and keeps the tracked queue', async (status) => {
+    partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
+    partRequestsApi.getLegacyManualReview.mockRejectedValue({ response: { status } });
+
+    const wrapper = mountReturns();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="part-returns-queue"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="part-return-group"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="accept-return"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="legacy-part-returns"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="legacy-part-returns-alert"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="legacy-part-returns-error"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps the tracked queue usable after a legacy failure and recovers on retry', async () => {
+    partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
+    partRequestsApi.getLegacyManualReview
+      .mockRejectedValueOnce(new Error('mạng lỗi'))
+      .mockResolvedValueOnce({ data: [legacyRecord()], total: 1, page: 1, pageSize: 20 });
+
+    const wrapper = mountReturns();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="part-returns-queue"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="part-return-group"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="legacy-part-returns-error"]').text()).toContain('Chưa tải được linh kiện lịch sử cần xác minh.');
+
+    await wrapper.get('[data-testid="legacy-part-returns-error"] button').trigger('click');
+    await flushPromises();
+
+    expect(partRequestsApi.getLegacyManualReview).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('[data-testid="legacy-part-return"]').text()).toContain('Van xả cũ');
+    expect(wrapper.get('[data-testid="accept-return"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('pages the legacy list on the server and states how many rows remain', async () => {
+    partRequestsApi.getLegacyManualReview
+      .mockResolvedValueOnce({ data: [legacyRecord()], total: 25, page: 1, pageSize: 20 })
+      .mockResolvedValueOnce({
+        data: [legacyRecord({ partRequestItemId: '66666666-6666-4666-8666-666666666666', partNameSnapshot: 'Tụ điện' })],
+        total: 25,
+        page: 2,
+        pageSize: 20,
+      });
+
+    const wrapper = mountReturns();
+    await flushPromises();
+
+    expect(normalized(wrapper)).toContain('Trang 1/2');
+    expect(normalized(wrapper)).toContain('Còn 5 dòng ở trang sau.');
+
+    await wrapper.get('[data-testid="pagination-page-2"]').trigger('click');
+    await flushPromises();
+
+    expect(partRequestsApi.getLegacyManualReview).toHaveBeenLastCalledWith({ page: 2, pageSize: 20 });
+    expect(normalized(wrapper)).toContain('Trang 2/2');
+    expect(normalized(wrapper)).toContain('Tụ điện');
+    expect(normalized(wrapper)).not.toContain('Còn 5 dòng ở trang sau.');
+    wrapper.unmount();
+  });
+
+  it('never queries legacy records for an account that cannot operate returns', async () => {
+    auth.hasRole.mockReturnValue(false);
+
+    const wrapper = mountReturns();
+    await flushPromises();
+
+    expect(partRequestsApi.getLegacyManualReview).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="legacy-part-returns"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="part-returns-queue"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe('part-requests.api legacy manual review contract (T3b/T3c)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('GET /part-returns/legacy-manual-review maps the T3b page with bounded pagination', async () => {
+    const { partRequestsApi: api } = await loadActualApi();
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: [legacyRecord()], meta: { total: 1, page: 1, pageSize: 20 } },
+    });
+
+    const page = await api.getLegacyManualReview();
+
+    expect(apiClientMock.get).toHaveBeenCalledWith('/part-returns/legacy-manual-review', {
+      params: { page: 1, pageSize: 20 },
+    });
+    expect(page).toEqual({ data: [legacyRecord()], total: 1, page: 1, pageSize: 20 });
+  });
+
+  it('clamps page and pageSize to the Backend bounds and never changes the endpoint', async () => {
+    const { partRequestsApi: api } = await loadActualApi();
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: [], meta: { total: 0, page: 1_000_000, pageSize: 100 } },
+    });
+
+    await api.getLegacyManualReview({ page: 1_000_001, pageSize: 500 });
+
+    expect(apiClientMock.get).toHaveBeenCalledWith('/part-returns/legacy-manual-review', {
+      params: { page: 1_000_000, pageSize: 100 },
+    });
+  });
+
+  it('accepts an empty page', async () => {
+    const { partRequestsApi: api } = await loadActualApi();
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: [], meta: { total: 0, page: 1, pageSize: 20 } },
+    });
+
+    await expect(api.getLegacyManualReview()).resolves.toEqual({ data: [], total: 0, page: 1, pageSize: 20 });
+  });
+
+  it.each([
+    ['the wrong kind', { data: [legacyRecord({ kind: 'tracked_return' })], meta: { total: 1, page: 1, pageSize: 20 } }],
+    ['an accepted receipt state', { data: [legacyRecord({ receiptState: 'ACCEPTED' })], meta: { total: 1, page: 1, pageSize: 20 } }],
+    ['a non-positive issued quantity', { data: [legacyRecord({ issuedQty: 0 })], meta: { total: 1, page: 1, pageSize: 20 } }],
+    ['an invalid handover time', { data: [legacyRecord({ handedOverAt: 'not-a-date' })], meta: { total: 1, page: 1, pageSize: 20 } }],
+    ['pagination that does not match the request', { data: [legacyRecord()], meta: { total: 1, page: 2, pageSize: 20 } }],
+    ['a total smaller than the page', { data: [legacyRecord()], meta: { total: 0, page: 1, pageSize: 20 } }],
+  ])('rejects a payload with %s', async (_label, body) => {
+    const { partRequestsApi: api, LegacyManualReviewPayloadError } = await loadActualApi();
+    apiClientMock.get.mockResolvedValueOnce({ data: body });
+
+    await expect(api.getLegacyManualReview()).rejects.toBeInstanceOf(LegacyManualReviewPayloadError);
   });
 });

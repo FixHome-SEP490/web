@@ -1,4 +1,4 @@
-import { vouchersApi, type VoucherCampaign, type VoucherClaim, type VoucherPolicy, type GeneralVoucher } from '../../api/vouchers.api';
+import { vouchersApi, type VoucherCampaign, type VoucherCampaignLifecycle, type VoucherClaim, type VoucherPolicy, type GeneralVoucher, type CreateVoucherCampaign } from '../../api/vouchers.api';
 
 export type VoucherKind = 'GENERAL' | 'PERSONAL';
 export type VoucherDiscountType = 'PERCENT' | 'FIXED';
@@ -10,6 +10,8 @@ export const VOUCHER_CAMPAIGN_SUCCESS_LIMIT = 100;
 export interface VoucherOffer {
   id: string;
   campaignActive?: boolean;
+  campaignLifecycle?: VoucherCampaignLifecycle;
+  campaignVersion?: number;
   redeemed?: number;
   categoryIds?: string[];
   serviceIds?: string[];
@@ -57,9 +59,11 @@ export interface VoucherAdapter {
   readonly connected: boolean;
   loadCustomerSnapshot(customerId: string): Promise<VoucherCustomerSnapshot>;
   loadAdminSnapshot(): Promise<VoucherAdminSnapshot>;
-  claimGeneralVoucher(voucherId: string): Promise<void>;
+  claimGeneralVoucher(voucherId: string): Promise<VoucherClaim>;
   validateManualCode(code: string): Promise<VoucherOffer>;
-  createCampaign(draft: VoucherCampaignDraft): Promise<void>;
+  createCampaign(draft: VoucherCampaignDraft, commandId?: string): Promise<void>;
+  updateDraftCampaign(id: string, draft: VoucherCampaignDraft, version: number, commandId: string): Promise<VoucherOffer>;
+  transitionCampaign(id: string, status: 'PUBLISHED' | 'PAUSED' | 'ARCHIVED', version: number, commandId: string): Promise<VoucherOffer>;
   setCampaignActive(id: string, active: boolean): Promise<VoucherOffer>;
   issuePersonalVoucher(input: { customerId: string; sourceVisitId: string }): Promise<void>;
 }
@@ -87,7 +91,10 @@ export function campaignOffer(campaign: VoucherCampaign): VoucherOffer {
   return {
     ...offerPolicy(campaign.policy), id: campaign.id, code: campaign.code,
     title: campaign.name, description: '', kind: campaign.kind,
-    campaignActive: campaign.active, status: campaign.active ? 'ACTIVE' : 'PAUSED',
+    campaignActive: campaign.active,
+    campaignLifecycle: campaign.status ?? (campaign.active ? 'PUBLISHED' : 'PAUSED'),
+    campaignVersion: campaign.version,
+    status: campaign.active ? 'ACTIVE' : 'PAUSED',
     startsAt: campaign.startsAt, expiresAt: campaign.endsAt,
     redeemed: campaign.redeemed, successfulRedemptionLimit: campaign.quota,
     // Holds are not exposed. quota - redeemed is NOT remaining availability.
@@ -97,15 +104,23 @@ export function campaignOffer(campaign: VoucherCampaign): VoucherOffer {
 }
 
 export function claimOffer(claim: VoucherClaim, customerId: string): VoucherOffer {
+  const startsAt = Date.parse(claim.campaign.startsAt);
+  const expiresAt = Date.parse(claim.campaign.endsAt);
+  const now = Date.now();
+  const status = !Number.isFinite(startsAt) || !Number.isFinite(expiresAt) ? 'UNKNOWN'
+    : expiresAt < now ? 'EXPIRED'
+      : startsAt > now ? 'SCHEDULED'
+        : claim.campaign.active ? 'ACTIVE' : 'PAUSED';
   return {
     ...offerPolicy(claim.policySnapshot), id: claim.id, code: claim.campaign.code,
     title: claim.campaign.name, description: '', kind: claim.campaign.kind,
-    status: claim.campaign.active ? 'UNKNOWN' : 'PAUSED',
+    status,
     startsAt: claim.campaign.startsAt, expiresAt: claim.campaign.endsAt,
-    ownerCustomerId: customerId, walletStatus: claim.status === 'REDEEMED' ? 'USED' : 'AVAILABLE',
+    ownerCustomerId: customerId,
+    walletStatus: claim.status === 'REDEEMED' ? 'USED' : status === 'EXPIRED' ? 'EXPIRED' : 'AVAILABLE',
     perCustomerLimit: claim.campaign.kind === 'GENERAL' ? 1 : null,
     successfulRedemptionLimit: null, remainingSuccessfulRedemptions: null,
-    eligibility: { eligible: false, reasons: ['Điều kiện sử dụng sẽ được kiểm tra khi áp dụng ưu đãi được hỗ trợ.'] },
+    eligibility: { eligible: false, reasons: ['Điều kiện sử dụng sẽ được xác nhận từ máy chủ khi xem trước.'] },
   };
 }
 
@@ -119,6 +134,19 @@ export function generalOffer(campaign: GeneralVoucher): VoucherOffer {
   };
 }
 
+function campaignTerms(draft: VoucherCampaignDraft): CreateVoucherCampaign {
+  const errors = validateVoucherCampaignDraft(draft);
+  if (errors.length) throw new Error(errors[0]);
+  return {
+    code: draft.code.trim().toUpperCase(), name: draft.title.trim(), kind: draft.kind ?? 'GENERAL',
+    discount: draft.discountType, value: draft.discountValue, capVnd: draft.capVnd,
+    minimumVnd: draft.minSpendVnd ?? 0, categoryIds: draft.categoryIds ?? [], serviceIds: draft.serviceIds ?? [],
+    startsAt: `${draft.startsOn}${draft.startsOn.includes('T') ? ':00' : 'T00:00:00'}+07:00`,
+    endsAt: `${draft.endsOn}${draft.endsOn.includes('T') ? ':00' : 'T23:59:59'}+07:00`,
+    quota: draft.successfulRedemptionLimit,
+  };
+}
+
 export const voucherAdapter: VoucherAdapter = {
   connected: true,
   async loadCustomerSnapshot(customerId) {
@@ -127,21 +155,20 @@ export const voucherAdapter: VoucherAdapter = {
   async loadAdminSnapshot() {
     return { campaigns: (await vouchersApi.campaigns()).map(campaignOffer), auditEvents: [] };
   },
-  async claimGeneralVoucher(code) { await vouchersApi.claim(code); },
+  async claimGeneralVoucher(code) { return vouchersApi.claim(code); },
   async validateManualCode(code) {
     // This is CLAIM, not a read-only validation or a financial APPLY.
     return claimOffer(await vouchersApi.claim(code), '');
   },
-  async createCampaign(draft) {
-    const errors = validateVoucherCampaignDraft(draft);
-    if (errors.length) throw new Error(errors[0]);
-    await vouchersApi.create({
-      code: draft.code.trim().toUpperCase(), name: draft.title.trim(), kind: draft.kind ?? 'GENERAL',
-      discount: draft.discountType, value: draft.discountValue, capVnd: draft.capVnd,
-      minimumVnd: draft.minSpendVnd ?? 0, categoryIds: draft.categoryIds ?? [], serviceIds: draft.serviceIds ?? [],
-      startsAt: `${draft.startsOn}${draft.startsOn.includes('T') ? ':00' : 'T00:00:00'}+07:00`, endsAt: `${draft.endsOn}${draft.endsOn.includes('T') ? ':00' : 'T23:59:59'}+07:00`,
-      quota: draft.successfulRedemptionLimit,
-    });
+  async createCampaign(draft, commandId) {
+    const terms = campaignTerms(draft);
+    await vouchersApi.create({ ...terms, ...(commandId ? { commandId } : {}) });
+  },
+  async updateDraftCampaign(id, draft, version, commandId) {
+    return campaignOffer(await vouchersApi.updateCampaign(id, { ...campaignTerms(draft), version, commandId }));
+  },
+  async transitionCampaign(id, status, version, commandId) {
+    return campaignOffer(await vouchersApi.transitionCampaign(id, { status, version, commandId }));
   },
   async setCampaignActive(id, active) { return campaignOffer(await vouchersApi.setActive(id, active)); },
   async issuePersonalVoucher() { throw new VoucherIntegrationUnavailableError(); },

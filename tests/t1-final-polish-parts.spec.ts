@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 
 const { api } = vi.hoisted(() => ({ api: {
   getByOrderId: vi.fn(), getReturnsByOrderId: vi.fn(), getPendingReturns: vi.fn(),
+  getLegacyManualReview: vi.fn(),
   declareReturn: vi.fn(), acceptReturn: vi.fn(),
 } }));
 vi.mock('../src/api/part-requests.api', async original => ({
@@ -32,6 +33,7 @@ beforeEach(() => {
   }]);
   api.getReturnsByOrderId.mockResolvedValue([{ ...ledger }]);
   api.getPendingReturns.mockResolvedValue([{ ...ledger }]);
+  api.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
 });
 
 describe('T1 parts declaration accessibility', () => {

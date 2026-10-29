@@ -13,6 +13,7 @@ vi.mock('../src/api/orders.api', () => ({
 vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: vi.fn().mockRejectedValue(new Error('x')) } }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: vi.fn().mockResolvedValue(null) } }));
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'o1' }, query: {} }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
@@ -25,7 +26,7 @@ const order = (extra: Record<string, unknown> = {}) => ({
   completionRequestedAt: '2026-10-09T10:00:00Z', customerConfirmed: false, bookingId: null, ...extra,
 });
 const mountPage = async () => {
-  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
+  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: { template: '<button data-testid="cancelled-rebook-action">Đặt lại</button>' }, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
   await flushPromises();
   return w;
 };
@@ -51,5 +52,13 @@ describe('Customer order after the technician completed', () => {
     expect((await mountPage()).find('[data-testid="pay-after-completion"]').exists()).toBe(false);
     getOrder.mockResolvedValue(order({ paymentStatus: 'PAID' }));
     expect((await mountPage()).find('[data-testid="pay-after-completion"]').exists()).toBe(false);
+  });
+
+  it('uses one classified cancelled action and never renders the completed-order legacy CTA', async () => {
+    getOrder.mockResolvedValue(order({ status: 'CANCELLED', bookingId: 'b1' }));
+    const w = await mountPage();
+    expect(w.findAll('[data-testid="cancelled-rebook-action"]')).toHaveLength(1);
+    expect(w.find('[data-testid="order-rebook"]').exists()).toBe(false);
+    expect(w.findAll('button').filter(button => button.text().includes('Đặt lại thợ'))).toHaveLength(0);
   });
 });

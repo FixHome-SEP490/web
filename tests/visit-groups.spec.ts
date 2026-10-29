@@ -3,10 +3,11 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { reactive } from 'vue';
 enableAutoUnmount(afterEach);
 afterEach(() => vi.useRealTimers());
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 const routeState = reactive({ params: { id: 'v1' } });
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.
-const { client, visitApi, orders, wallet, push, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
+const { client, visitApi, orders, wallet, funded, push, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
   client: { get: vi.fn(), post: vi.fn() },
   visitApi: {
     get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), vnpayUrl: vi.fn(), confirmCash: vi.fn(),
@@ -14,6 +15,7 @@ const { client, visitApi, orders, wallet, push, orderListeners, bookingListeners
   },
   orders: { getOrder: vi.fn(), getAdditionalCosts: vi.fn(), getInvoice: vi.fn(), getEvidence: vi.fn(), approveQuotation: vi.fn(), rejectQuotation: vi.fn(), decideAdditionalCost: vi.fn() },
   wallet: { summary: vi.fn() },
+  funded: { wallet: vi.fn(), vnpay: vi.fn(), zero: vi.fn(), confirmCash: vi.fn() },
   push: vi.fn(),
   orderListeners: new Map<string, () => void>(),
   bookingListeners: new Map<string, () => void>(),
@@ -109,6 +111,7 @@ describe('customer visit page', () => {
     vi.doMock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visitApi }));
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
+    vi.doMock('../src/api/funded-checkout.api', () => ({ fundedCheckoutApi: funded }));
     vi.doMock('../src/services/live-updates', () => ({
       LIVE_DEBOUNCE_MS: 150,
       onBookingChange: (bookingId: string, callback: () => void) => {
@@ -125,13 +128,14 @@ describe('customer visit page', () => {
     vi.doMock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: (handler: import('../src/services/chat-socket.service').ChatSocketHandlers) => { socketHandlers.add(handler); return () => socketHandlers.delete(handler); } } }));
     vi.doMock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
-    const w = mount(page, { global: { stubs: { FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhCostBreakdown: { props: ['laborTotal', 'partsTotal', 'grandTotal'], template: '<div data-testid="visit-cost-breakdown" :data-labor="laborTotal" :data-parts="partsTotal" :data-total="grandTotal" />' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
+    const w = mount(page, { global: { stubs: { CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhCostBreakdown: { props: ['laborTotal', 'partsTotal', 'grandTotal'], template: '<div data-testid="visit-cost-breakdown" :data-labor="laborTotal" :data-parts="partsTotal" :data-total="grandTotal" />' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, VoucherCheckoutChooser: { props: ['scopeId', 'scopeKind'], emits: ['applied'], template: '<div data-testid="visit-voucher-picker" :data-scope-id="scopeId"><button data-testid="apply-test-voucher" @click="$emit(\'applied\', voucher)">Apply</button><button data-testid="apply-cash-test-voucher" @click="applyCashVoucher">Apply cash voucher</button></div>', data: () => ({ voucher: { reservation: { id: 'reservation-1', claimId: 'claim-1', scopeId: 'v1', attemptId: 'attempt-1', state: 'RESERVED', reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z' }, preview: { scopeId: 'v1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true, reason: 'server-ready', originalGrossVnd: 250000, eligibleBaseVnd: 250000, fixHomeDiscountSubsidyVnd: 250000, customerDueVnd: 0, reasonCodes: ['DISCOUNT_APPLIED'] } } }), methods: { applyCashVoucher() { this.$emit('applied', { ...this.voucher, preview: { ...this.voucher.preview, customerDueVnd: 125000 } }); } } }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
     await flushPromises();
     return w;
   }
 
   beforeEach(() => {
     Object.values(visitApi).forEach((fn) => fn.mockReset());
+    Object.values(funded).forEach((fn) => fn.mockReset());
     routeState.params.id = 'v1';
     orderListeners.clear();
     bookingListeners.clear();
@@ -183,7 +187,9 @@ describe('customer visit page', () => {
     await w.get('[data-testid="visit-device-expand-2"]').trigger('click');
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-booking-id'))).toEqual(['b2']);
     expect(w.findAll('[data-testid="visit-booking-media"]').map((media) => media.attributes('data-media-count'))).toEqual(['1']);
-    expect(w.get('[data-testid="visit-checkout"]').text()).toContain('250000');
+    expect(w.get('[data-testid="visit-invoice-unpaid"]').text()).toBe('250000');
+    expect(w.get('[data-testid="visit-checkout"]').find('[data-testid="visit-voucher-picker"]').exists()).toBe(true);
+    expect(w.get('[data-testid="visit-voucher-picker"]').attributes('data-scope-id')).toBe('v1');
   });
 
   it('offers rebooking only for failed B in A succeeded / B failed / C succeeded, without a POST', async () => {
@@ -790,7 +796,20 @@ describe('customer visit page', () => {
     await w.get('[data-testid="visit-pay-wallet"]').trigger('click');
     await flushPromises();
     expect(visitApi.payWithWallet).toHaveBeenCalledWith('v1');
-    expect(w.text()).toContain('Đã thanh toán 250.000 ₫ bằng ví cho cả lượt.');
+    expect(w.text()).toContain('Đã thanh toán 250.000 ₫ bằng ví.');
+    expect(w.get('[data-testid="visit-checkout-title"]').text()).toBe('Thanh toán');
+  });
+
+  it('finalizes a voucher ZERO amount only through the server closeout', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    funded.zero.mockResolvedValue({ paid: true, amount: 0, settlementId: 'settlement-1' });
+    const w = await mountPage();
+    await w.get('[data-testid="apply-test-voucher"]').trigger('click');
+    await flushPromises();
+    expect(funded.zero).toHaveBeenCalledWith({ kind: 'VISIT_GROUP', id: 'v1' }, 'reservation-1');
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+    expect(w.text()).toContain('Máy chủ đã xác nhận tất toán voucher với số tiền khách hàng cần trả là 0 ₫.');
   });
 
   it('waits for every device before asking to pay', async () => {
@@ -895,6 +914,22 @@ describe('customer visit page', () => {
     expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
   });
 
+  it('allows a voucher funded visit to choose cash and shows the preview server due', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ total: 250000 }));
+    const w = await mountPage();
+    await w.get('[data-testid="apply-cash-test-voucher"]').trigger('click');
+    await w.get('[data-testid="visit-pay-method-cash"]').trigger('click');
+    await w.get('[data-testid="visit-cash-intent"]').trigger('click');
+
+    const instructions = w.get('[data-testid="visit-cash-instructions"]');
+    expect(instructions.text()).toContain('125000');
+    expect(instructions.text()).not.toContain('250000');
+    expect(w.find('[data-testid="visit-cash-method-unavailable"]').exists()).toBe(false);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
   it('offers a wallet read retry without presenting a read error as zero balance', async () => {
     visitApi.checkout.mockResolvedValue(checkout());
     wallet.summary.mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValue({ balance: 1000000 });
@@ -915,6 +950,8 @@ describe('customer visit page', () => {
 
     expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('paid');
     expect(w.get('[data-testid="visit-checkout-state"]').text()).toBe('Đã thanh toán');
+    expect(w.get('[data-testid="visit-checkout-title"]').text()).toBe('Thanh toán');
+    expect(w.get('[data-testid="visit-checkout-scope"]').text()).toContain('Gồm 2 thiết bị');
     expect(w.find('[data-testid="visit-pay-methods"]').exists()).toBe(false);
   });
 

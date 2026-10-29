@@ -19,11 +19,15 @@ import {
   isResponseOverdue,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
+  supportExecutionLabel,
 } from './support-cases.utils';
 import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/auth';
 
 const router = useRouter();
 const route = useRoute();
+const auth = useAuthStore();
+const isAdmin = computed(() => auth.userRole === 'ADMIN');
 const columns: ConsoleColumn[] = [
   { key: 'type', label: 'Loại' },
   { key: 'status', label: 'Trạng thái' },
@@ -108,7 +112,7 @@ function resetFilters() {
 }
 
 function openCase(item: SupportCaseSummary) {
-  const path = isCashCase(item.caseType)
+  const path = !isAdmin.value && isCashCase(item.caseType)
     ? `/console/support/cash/${encodeURIComponent(item.id)}`
     : `/console/support/${encodeURIComponent(item.id)}`;
   void router.push(path);
@@ -134,6 +138,7 @@ watch(page, (nextPage, previousPage) => {
 <template>
   <div class="space-y-5">
     <ConsolePageHeader title="Yêu cầu hỗ trợ" :count="loading || error ? null : total" />
+    <p v-if="isAdmin" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
 
     <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="applySearch">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo lý do, mã yêu cầu" label="Tìm yêu cầu hỗ trợ" />
@@ -185,6 +190,7 @@ watch(page, (nextPage, previousPage) => {
           <span v-if="row.isUrgent && (row.status === 'open' || row.status === 'in_review')" class="whitespace-nowrap rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Cần xử lý ngay</span>
           <span v-if="isResponseOverdue(row.status, row.respondBy)" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">Quá hạn phản hồi</span>
           <span v-if="row.holdCompletion" class="whitespace-nowrap rounded bg-info-50 px-1.5 py-0.5 text-xs font-medium text-info-600">Đang giữ đơn</span>
+          <span v-if="row.resolutionCode || row.resolutionExecutionKind" class="text-xs text-ink-600">{{ supportExecutionLabel(row) }}</span>
         </div>
       </template>
       <template #cell-reason="{ row }">

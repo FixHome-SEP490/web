@@ -25,15 +25,52 @@ const emit = defineEmits<{
   retry: []; retryCriteria: [];
   createCampaign: [draft: VoucherCampaignDraft];
   setCampaignStatus: [id: string, active: boolean];
+  updateDraftCampaign: [id: string, draft: VoucherCampaignDraft];
+  transitionCampaign: [id: string, next: 'PUBLISHED' | 'PAUSED' | 'ARCHIVED'];
 }>();
 const activeTab = ref<'campaigns' | 'compensation'>('campaigns');
 const showCreate = ref(false);
+const editingCampaignId = ref<string | null>(null);
+function localDatetime(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.valueOf())) return '';
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d).replace(' ', 'T');
+}
 const attempted = ref(false);
 const draft = reactive<VoucherCampaignDraft>({
   title: '', code: '', kind: 'GENERAL', discountType: 'PERCENT', discountValue: 0,
   capVnd: null, minSpendVnd: 0, startsOn: '', endsOn: '', successfulRedemptionLimit: 100,
   perCustomerLimit: 1, scope: ['LABOR', 'PARTS'], categoryIds: [], serviceIds: [],
 });
+function editCampaign(campaign: VoucherOffer) {
+  if (campaign.campaignLifecycle !== 'DRAFT' || !campaign.campaignVersion || !canWrite.value) return;
+  Object.assign(draft, {
+    title: campaign.title, code: campaign.code, kind: campaign.kind,
+    discountType: campaign.discount.type, discountValue: campaign.discount.value,
+    capVnd: campaign.discount.capVnd, minSpendVnd: campaign.minSpendVnd ?? 0,
+    startsOn: localDatetime(campaign.startsAt), endsOn: localDatetime(campaign.expiresAt),
+    successfulRedemptionLimit: campaign.successfulRedemptionLimit ?? 100,
+    perCustomerLimit: 1, scope: ['LABOR', 'PARTS'],
+    categoryIds: [...(campaign.categoryIds ?? [])], serviceIds: [...(campaign.serviceIds ?? [])],
+  });
+  editingCampaignId.value = campaign.id;
+  showCreate.value = true;
+  attempted.value = false;
+}
+function toggleEditor() {
+  if (showCreate.value) { showCreate.value = false; editingCampaignId.value = null; return; }
+  editingCampaignId.value = null;
+  showCreate.value = true;
+  attempted.value = false;
+}
+function campaignLifecycleLabel(c: VoucherOffer): string {
+  return c.campaignLifecycle === 'DRAFT' ? 'Bản nháp'
+    : c.campaignLifecycle === 'ARCHIVED' ? 'Đã lưu trữ'
+      : c.campaignLifecycle === 'PAUSED' || (!c.campaignLifecycle && c.status === 'PAUSED') ? 'Tạm dừng' : 'Đang phát hành';
+}
 const normalizedDraft = computed(() => ({ ...draft,
   capVnd: draft.capVnd === null || String(draft.capVnd) === '' ? null : draft.capVnd,
   minSpendVnd: String(draft.minSpendVnd) === '' ? 0 : draft.minSpendVnd,
@@ -48,7 +85,9 @@ const canWrite = computed(() => props.canManage && props.connected && props.stat
 function save() {
   attempted.value = true;
   if (!canWrite.value || errors.value.length || props.criteriaLoading || props.criteriaError) return;
-  emit('createCampaign', { ...normalizedDraft.value, categoryIds: [...(draft.categoryIds ?? [])], serviceIds: [...(draft.serviceIds ?? [])], scope: ['LABOR', 'PARTS'] });
+  const submitted = { ...normalizedDraft.value, categoryIds: [...(draft.categoryIds ?? [])], serviceIds: [...(draft.serviceIds ?? [])], scope: ['LABOR', 'PARTS'] as VoucherCampaignDraft['scope'] };
+  if (editingCampaignId.value) emit('updateDraftCampaign', editingCampaignId.value, submitted);
+  else emit('createCampaign', submitted);
 }
 function tabKey(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -60,7 +99,7 @@ function tabKey(event: KeyboardEvent) {
 
 <template>
   <div class="voucher-admin min-w-0 space-y-5" data-testid="console-voucher-workspace">
-    <p class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-900" role="note" data-testid="voucher-funding-gate">Bạn có thể cấu hình và bật/tắt chiến dịch. Áp dụng giảm giá khi thanh toán chưa khả dụng; hóa đơn và công nợ hiện tại được giữ nguyên.</p>
+    <p class="rounded-[var(--radius-sm)] border border-brand-100 bg-brand-50 px-4 py-3 text-sm leading-6 text-ink-700" role="note" data-testid="voucher-funding-gate">Tạo bản nháp, sau đó bấm Phát hành để khách sử dụng. Số lượng là lượt thanh toán thành công; một khách chỉ dùng mã chung một lần. Thanh toán chỉ giảm giá khi máy chủ xác nhận đủ điều kiện.</p>
     <div role="tablist" aria-label="Quản lý ưu đãi" class="flex gap-2 border-b border-ink-200 pb-2" @keydown="tabKey">
       <button v-for="tab in (['campaigns', 'compensation'] as const)" :key="tab" type="button" role="tab" :id="`admin-voucher-tab-${tab}`" :data-console-voucher-tab="tab" :aria-label="tab === 'campaigns' ? 'Chiến dịch' : 'Cấp cá nhân'" :aria-controls="`admin-voucher-panel-${tab}`" :aria-selected="activeTab === tab" :tabindex="activeTab === tab ? 0 : -1" class="voucher-tab" @click="activeTab = tab">
         <TicketPercent v-if="tab === 'campaigns'" :size="18" aria-hidden="true" /><Gift v-else :size="18" aria-hidden="true" />
@@ -72,10 +111,10 @@ function tabKey(event: KeyboardEvent) {
       <template v-if="activeTab === 'campaigns'">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div><h2 class="text-lg font-semibold text-ink-900">Chiến dịch ưu đãi</h2><p class="mt-1 text-sm text-ink-600">Tối đa 100 chiến dịch mới nhất. Điều khoản đã lưu không thể chỉnh sửa.</p></div>
-          <FhButton variant="primary" size="md" :disabled="!canWrite" :aria-expanded="showCreate" aria-controls="voucher-create-form" @click="showCreate = !showCreate"><Plus :size="18" aria-hidden="true" />{{ showCreate ? 'Đóng biểu mẫu' : 'Tạo chiến dịch' }}</FhButton>
+          <FhButton variant="primary" size="md" :disabled="!canWrite" :aria-expanded="showCreate" aria-controls="voucher-create-form" @click="toggleEditor"><Plus :size="18" aria-hidden="true" />{{ showCreate ? 'Đóng biểu mẫu' : 'Tạo chiến dịch' }}</FhButton>
         </div>
         <form v-if="showCreate && canWrite" id="voucher-create-form" class="space-y-5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4 sm:p-6" :aria-busy="busy" novalidate @submit.prevent="save">
-          <div><h3 class="text-base font-semibold text-ink-900">Tạo chiến dịch ưu đãi</h3><p class="mt-1 text-sm text-ink-600">Thông tin được lưu khi dịch vụ xác nhận thành công.</p></div>
+          <div><h3 class="text-base font-semibold text-ink-900">{{ editingCampaignId ? 'Sửa bản nháp' : 'Tạo bản nháp' }}</h3><p class="mt-1 text-sm text-ink-600">Thông tin được lưu khi dịch vụ xác nhận thành công.</p></div>
           <fieldset :disabled="!canWrite" class="grid min-w-0 gap-4 sm:grid-cols-2">
             <legend class="sr-only">Điều khoản chiến dịch</legend>
             <label class="sm:col-span-2" for="voucher-campaign-title">Tên chiến dịch<input id="voucher-campaign-title" v-model="draft.title" required maxlength="120" class="voucher-field" autocomplete="off" /></label>
@@ -101,7 +140,7 @@ function tabKey(event: KeyboardEvent) {
           </fieldset>
           <div v-if="criteriaError" role="alert" class="text-sm text-danger-800"><p>{{ criteriaError }}</p><FhButton variant="secondary" size="md" @click="$emit('retryCriteria')">Thử lại điều kiện</FhButton></div>
           <ul v-if="attempted && errors.length" id="voucher-form-errors" role="alert" class="space-y-1 text-sm text-danger-800"><li v-for="error in errors" :key="error">{{ error }}</li></ul>
-          <div class="flex flex-wrap items-center justify-between gap-4 border-t border-ink-100 pt-4"><p class="text-sm text-ink-600">{{ draft.discountType === 'PERCENT' ? `${draft.discountValue}%` : formatVoucherAmount(draft.discountValue) }} · Tiền công và linh kiện</p><FhButton type="submit" size="md" aria-label="Lưu chiến dịch" :loading="busy" :disabled="!canWrite || criteriaLoading || Boolean(criteriaError)" :aria-describedby="attempted && errors.length ? 'voucher-form-errors' : undefined">Lưu chiến dịch</FhButton></div>
+          <div class="flex flex-wrap items-center justify-between gap-4 border-t border-ink-100 pt-4"><p class="text-sm text-ink-600">{{ draft.discountType === 'PERCENT' ? `${draft.discountValue}%` : formatVoucherAmount(draft.discountValue) }} · Tiền công và linh kiện</p><FhButton type="submit" size="md" aria-label="Lưu bản nháp" :loading="busy" :disabled="!canWrite || criteriaLoading || Boolean(criteriaError)" :aria-describedby="attempted && errors.length ? 'voucher-form-errors' : undefined">{{ editingCampaignId ? 'Lưu bản nháp' : 'Tạo bản nháp' }}</FhButton></div>
         </form>
         <VoucherStatePanel v-if="state !== 'ready' && state !== 'empty'" :state="state" :message="message" @retry="$emit('retry')" />
         <VoucherStatePanel v-else-if="!campaigns.length" state="empty" title="Chưa có chiến dịch" message="Tạo chiến dịch đầu tiên để thiết lập điều kiện ưu đãi." />
@@ -109,7 +148,7 @@ function tabKey(event: KeyboardEvent) {
           <li v-for="campaign in campaigns" :key="campaign.id" class="space-y-4 p-4 sm:p-5">
             <div class="flex flex-wrap items-start justify-between gap-4">
               <div class="min-w-0"><h3 class="text-base font-semibold text-ink-900 wrap-anywhere">{{ campaign.title }}</h3><p class="mt-1 text-sm text-ink-600 wrap-anywhere">{{ campaign.code }} · {{ campaign.kind === 'GENERAL' ? 'Ưu đãi chung' : 'Ưu đãi cá nhân' }}</p></div>
-              <span class="rounded-full px-3 py-1 text-xs font-medium" :class="campaign.status === 'ACTIVE' ? 'bg-success-50 text-success-800' : 'bg-ink-100 text-ink-700'">{{ campaign.status === 'ACTIVE' ? 'Đang bật' : 'Tạm dừng' }}</span>
+              <span class="rounded-full px-3 py-1 text-xs font-medium" :class="campaign.campaignLifecycle === 'PUBLISHED' || (!campaign.campaignLifecycle && campaign.status === 'ACTIVE') ? 'bg-success-50 text-success-800' : 'bg-ink-100 text-ink-700'">{{ campaignLifecycleLabel(campaign) }}</span>
             </div>
             <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
               <div><dt class="text-ink-600">Mức ưu đãi</dt><dd class="mt-1 font-medium">{{ campaign.discount.type === 'PERCENT' ? `${campaign.discount.value}%` : formatVoucherAmount(campaign.discount.value) }}<span v-if="campaign.discount.capVnd !== null" class="block text-xs font-normal text-ink-600">Tối đa {{ formatVoucherAmount(campaign.discount.capVnd) }}</span></dd></div>
@@ -117,7 +156,12 @@ function tabKey(event: KeyboardEvent) {
               <div><dt class="text-ink-600">Thời gian (Việt Nam)</dt><dd class="mt-1">{{ formatVoucherDate(campaign.startsAt) }} – {{ formatVoucherDate(campaign.expiresAt) }}</dd></div>
               <div><dt class="text-ink-600">Đã thanh toán thành công</dt><dd class="mt-1 font-num font-semibold">{{ campaign.redeemed ?? 'Chưa xác nhận' }} / {{ campaign.successfulRedemptionLimit ?? '—' }}</dd><progress v-if="campaign.redeemed !== undefined && campaign.successfulRedemptionLimit" :value="campaign.redeemed" :max="campaign.successfulRedemptionLimit" :aria-label="`Tiến độ ${campaign.title}`" class="mt-2 h-1.5 w-full accent-brand-600" /></div>
             </dl>
-            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3"><p class="text-xs leading-5 text-ink-600">Chiến dịch đã phát hành · {{ campaign.categoryIds?.length || 'Tất cả' }} danh mục · {{ campaign.serviceIds?.length || 'Tất cả' }} dịch vụ. Số chỗ đang giữ chưa được cung cấp.</p><FhButton variant="secondary" size="md" :disabled="!canWrite" :aria-label="`${campaign.status === 'ACTIVE' ? 'Tạm dừng' : 'Bật'} ${campaign.title}`" @click="emit('setCampaignStatus', campaign.id, campaign.status !== 'ACTIVE')">{{ campaign.status === 'ACTIVE' ? 'Tạm dừng' : 'Bật chiến dịch' }}</FhButton></div>
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3"><p class="text-xs leading-5 text-ink-600">{{ campaign.campaignLifecycle === 'DRAFT' ? 'Bản nháp chưa phát hành' : campaign.campaignLifecycle === 'ARCHIVED' ? 'Chiến dịch đã lưu trữ' : 'Chiến dịch đã phát hành' }} · {{ campaign.categoryIds?.length || 'Tất cả' }} danh mục · {{ campaign.serviceIds?.length || 'Tất cả' }} dịch vụ. Số chỗ đang giữ chưa được cung cấp.</p><div class="flex flex-wrap gap-2">
+  <FhButton v-if="campaign.campaignLifecycle === 'DRAFT'" variant="secondary" size="md" :disabled="!canWrite || !campaign.campaignVersion" @click="editCampaign(campaign)">Sửa bản nháp</FhButton>
+  <FhButton v-if="campaign.campaignLifecycle === 'DRAFT'" variant="primary" size="md" :disabled="!canWrite || !campaign.campaignVersion" @click="emit('transitionCampaign', campaign.id, 'PUBLISHED')">Phát hành</FhButton>
+  <FhButton v-if="campaign.campaignLifecycle === 'DRAFT'" variant="secondary" size="md" :disabled="!canWrite || !campaign.campaignVersion" @click="emit('transitionCampaign', campaign.id, 'ARCHIVED')">Bỏ bản nháp</FhButton>
+  <FhButton v-if="['PUBLISHED', 'PAUSED'].includes(campaign.campaignLifecycle ?? '') && campaign.campaignVersion" variant="secondary" size="md" :disabled="!canWrite" @click="emit('transitionCampaign', campaign.id, 'ARCHIVED')">Lưu trữ</FhButton>
+  <FhButton v-if="campaign.campaignLifecycle === 'PUBLISHED' || campaign.campaignLifecycle === 'PAUSED' || (!campaign.campaignLifecycle && ['ACTIVE', 'PAUSED'].includes(campaign.status))" variant="secondary" size="md" :disabled="!canWrite" :aria-label="`${campaign.status === 'ACTIVE' ? 'Tạm dừng' : 'Bật'} ${campaign.title}`" @click="emit('setCampaignStatus', campaign.id, campaign.status !== 'ACTIVE')">{{ campaign.status === 'ACTIVE' ? 'Tạm dừng' : 'Bật chiến dịch' }}</FhButton></div></div>
           </li>
         </ul>
       </template>

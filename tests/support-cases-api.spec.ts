@@ -94,6 +94,32 @@ describe('supportCasesApi', () => {
     expect(result.serviceOrder?.grandTotal).toBe(300000);
   });
 
+  it('normalizes typed technician responsibility fields from Backend detail', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope({
+      ...sampleCase,
+      caseType: 'technician_replacement',
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      responsibility: 'pending_sm_review',
+      responsibilityCommandId: null,
+      responsibilityActorId: null,
+      responsibilityReason: null,
+      responsibilityEvidenceRefs: null,
+      responsibilityDecidedAt: null,
+      workflowVersion: 0,
+    }));
+
+    const result = await supportCasesApi.getCase('case-1');
+
+    expect(result).toMatchObject({
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      responsibility: 'pending',
+      workflowVersion: 0,
+      responsibilityEvidenceRefs: null,
+    });
+  });
+
   it('sends the exact resolve payload and returns the normalized detail', async () => {
     const payload: SupportCaseResolvePayload = {
       finalStatus: 'resolved',
@@ -107,6 +133,89 @@ describe('supportCasesApi', () => {
 
     expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/resolve', payload);
     expect(result.status).toBe('resolved');
+  });
+
+  it('creates a typed technician report with the locked backend classification and evidence refs', async () => {
+    const payload = {
+      serviceOrderId: '7b367e43-fc40-481a-906d-8ca8cdbd6176',
+      reasonClass: 'non_technician_exception' as const,
+      reasonCode: 'no_compatible_part' as const,
+      reason: 'Không có linh kiện phù hợp để hoàn tất sửa chữa tại nhà.',
+      evidenceRefs: ['media-1'],
+    };
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      ...sampleCase,
+      caseType: 'technician_replacement',
+      reasonClass: payload.reasonClass,
+      reasonCode: payload.reasonCode,
+      responsibility: 'pending_sm_review',
+      workflowVersion: 0,
+    }));
+
+    const result = await supportCasesApi.createTechnicianReport(payload);
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/technician-report', payload);
+    expect(result).toMatchObject({ id: 'case-1', status: 'open', responsibility: 'pending' });
+  });
+
+  it('sends an idempotent versioned responsibility decision and returns the server decision', async () => {
+    const payload = {
+      commandId: 'e1b8910e-0472-4e1f-a682-b94d4f8594ac',
+      workflowVersion: 0,
+      decision: 'technician_fault' as const,
+      reason: 'Đối chiếu ảnh cho thấy thao tác khoan không đúng quy trình.',
+      evidenceRefs: ['media-2'],
+    };
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      ...sampleCase,
+      caseType: 'technician_replacement',
+      reasonClass: 'technician_skill_gap',
+      reasonCode: 'skill_gap',
+      responsibility: 'technician_fault',
+      responsibilityReason: payload.reason,
+      workflowVersion: 1,
+    }));
+
+    const result = await supportCasesApi.decideTechnicianResponsibility('case-1', payload);
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/responsibility', payload);
+    expect(result).toMatchObject({ responsibility: 'technician_fault', workflowVersion: 1 });
+  });
+
+  it('reads authoritative interruption options for the selected support case', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope({
+      caseId: 'case-1', caseStatus: 'open', caseVersion: 2, serviceOrderId: 'order-1', visitGroupId: null,
+      requestIntent: 'stop_or_replace',
+      flags: { approvedQuote: false, invoice: false, payment: false, voucher: false, parts: false, incompleteSiblings: false },
+      actions: {
+        DIRECT_REASSIGN_SOLO: { allowed: true, reasons: [] },
+        CLOSE_FOR_REBOOK: { allowed: true, reasons: [] },
+        REJECT_REQUEST: { allowed: true, reasons: [] },
+      },
+    }));
+
+    const options = await supportCasesApi.replacementOptions('case-1');
+
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases/case-1/replacement-options');
+    expect(options.actions.DIRECT_REASSIGN_SOLO.allowed).toBe(true);
+    expect(options.flags.parts).toBe(false);
+  });
+
+  it('sends one versioned interruption command and returns the real order result', async () => {
+    const command = {
+      commandId: 'aa648542-bf1e-41e6-a717-b8b593f8955c', expectedCaseVersion: 2,
+      action: 'REJECT_REQUEST' as const, reason: 'Đã trao đổi với khách và giữ nguyên phương án sửa.',
+    };
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      case: { ...sampleCase, status: 'rejected', requestIntent: 'stop_or_replace', workflowVersion: 3 },
+      order: { id: 'order-1', status: 'UNDER_REPAIR' }, nextAction: 'none',
+    }));
+
+    const result = await supportCasesApi.resolveInterruption('case-1', command);
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/support/cases/case-1/resolve-interruption', command);
+    expect(result.order).toEqual({ id: 'order-1', status: 'UNDER_REPAIR' });
+    expect(result.case.status).toBe('rejected');
   });
 
   it('fails closed for an invalid envelope instead of accepting data', async () => {

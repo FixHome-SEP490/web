@@ -13,6 +13,7 @@ vi.mock('../src/api/orders.api', () => ({
 vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi: { getByOrderId: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking } }));
 vi.mock('../src/api/reviews.api', () => ({ reviewsApi: { getByOrder: vi.fn().mockResolvedValue(null) } }));
+vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'o1' }, query: {} }),
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
@@ -24,7 +25,7 @@ const order = (extra: Record<string, unknown> = {}) => ({
   id: 'o1', code: 'FH-1', status: 'ACCEPTED', paymentStatus: 'UNPAID', grandTotal: 199000, bookingId: 'b1', technician: null, ...extra,
 });
 const mountPage = async () => {
-  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
+  const w = mount(CustomerOrderDetailPage, { global: { stubs: { RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, OrderComplaintPanel: true, WarrantyClaimCard: true, WarrantyClaimModal: true, RebookDialog: true, ChatThread: true } } });
   await flushPromises();
   return w;
 };

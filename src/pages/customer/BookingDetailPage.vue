@@ -7,6 +7,7 @@ import { BookingMediaViewer, FhBackLink, FhButton, FhConfirmDialog, FhMoney, FhS
 import { deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
+import CustomerCancelledRebookAction from '../../components/customer/CustomerCancelledRebookAction.vue';
 import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { ordersApi } from '../../api/orders.api';
 import { onBookingChange, whileOffline } from '../../services/live-updates';
@@ -798,10 +799,8 @@ const confirmMatchingExtension = async () => {
         </div>
 
         <!-- Case 5: Cancelled Rebook action -->
-        <div v-if="booking.status === 'CANCELLED'" class="pt-4 border-t border-ink-100 flex justify-end">
-          <FhButton variant="primary" size="md" data-testid="booking-rebook" class="shadow-xs" @click="showRebook = true">
-            Đặt lại
-          </FhButton>
+        <div v-if="booking.status === 'CANCELLED' && booking.serviceOrderId" class="pt-4 border-t border-ink-100">
+          <CustomerCancelledRebookAction :booking-id="booking.id" :order-id="booking.serviceOrderId" :status="booking.status" @legacy="showRebook = true" />
         </div>
       </section>
 

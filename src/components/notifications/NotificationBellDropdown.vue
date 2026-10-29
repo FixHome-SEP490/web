@@ -119,8 +119,19 @@ const handleItemClick = async (item: NotificationItem) => {
   isOpen.value = false;
 
   const role = (authStore.userRole || '').toUpperCase();
-  const refType = (item.referenceType || '').toUpperCase();
+  const refType = (item.referenceType || '').trim().toUpperCase();
   const itemType = (item.type || '').toUpperCase();
+
+  // A support reference identifies a case, never an order, regardless of the event name.
+  // Customers and technicians have no console access; do not fetch private staff context.
+  if (refType === 'SUPPORT_CASE') {
+    if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
+      router.push(item.referenceId ? `/console/support/${encodeURIComponent(item.referenceId)}` : '/console/support');
+    } else {
+      router.push(role === 'TECHNICIAN' ? '/tech/jobs' : role === 'CUSTOMER' ? '/app/notifications' : '/403');
+    }
+    return;
+  }
 
   // 1. TECHNICIAN navigation
   if (role === 'TECHNICIAN') {
@@ -130,16 +141,20 @@ const handleItemClick = async (item: NotificationItem) => {
       else toast.error('Không mở được máy liên quan. Vui lòng tải lại thông báo và thử lại.');
       return;
     }
+    if (refType === 'CONVERSATION' || itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
+      router.push('/tech/messages');
+      return;
+    }
     if (refType.includes('BOOKING') || itemType.includes('INVITATION')) {
       router.push('/tech/invitations');
       return;
     }
-    if (item.referenceId) {
-      router.push(`/tech/jobs/${item.referenceId}`);
+    if (refType === 'VISIT_GROUP' || refType === 'PART_REQUEST') {
+      router.push('/tech/jobs');
       return;
     }
-    if (itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
-      router.push('/tech/messages');
+    if (item.referenceId) {
+      router.push(`/tech/jobs/${encodeURIComponent(item.referenceId)}`);
       return;
     }
     router.push('/tech/jobs');
@@ -156,7 +171,7 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/console/part-requests');
       return;
     }
-    if (itemType.includes('CANCEL') || itemType.includes('DISPUTE')) {
+    if (role === 'SERVICE_MANAGER' && (itemType.includes('CANCEL') || itemType.includes('DISPUTE'))) {
       router.push('/console/cancellations');
       return;
     }
@@ -164,15 +179,27 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/console/bookings');
       return;
     }
+    if (refType === 'VISIT_GROUP' || refType === 'CONVERSATION') {
+      router.push('/console/orders');
+      return;
+    }
     if (item.referenceId) {
-      router.push(`/console/orders/${item.referenceId}`);
+      router.push(`/console/orders/${encodeURIComponent(item.referenceId)}`);
       return;
     }
     router.push('/console/orders');
     return;
   }
 
-  // 3. CUSTOMER navigation (Default)
+  // 3. CUSTOMER navigation
+  if (role !== 'CUSTOMER') {
+    router.push('/403');
+    return;
+  }
+  if (refType === 'CONVERSATION' || itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
+    router.push('/app/messages');
+    return;
+  }
   const customerPath = await resolveCustomerNotificationPath(item);
   if (customerPath) {
     router.push(customerPath);
@@ -180,11 +207,6 @@ const handleItemClick = async (item: NotificationItem) => {
   }
   if (itemType === 'PART_REQUEST_READY') {
     toast.error('Không mở được thiết bị liên quan. Vui lòng tải lại thông báo và thử lại.');
-    return;
-  }
-
-  if (itemType.includes('CHAT') || item.message?.toLowerCase().includes('tin nhắn')) {
-    router.push('/app/messages');
     return;
   }
 
