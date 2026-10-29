@@ -13,6 +13,16 @@ function result() {
     customerContinuation: { eligible: true, independentNewBookingAllowed: true, prefilledRebookAvailable: false, requiresNewSchedule: true, requiresPricingRevalidation: true, requiresCustomerConfirmation: true, source: { serviceOrderId: orderId, bookingId, incidentId, visitGroupId: null } } };
 }
 const input = () => ({ reasonClass: 'technician_skill_gap' as const, reasonCode: 'skill_gap' as const, reason: '  Chưa đủ kỹ năng sửa thiết bị này.  ', photoEvidenceIds: [] });
+const t2 = (patch: Record<string, unknown> = {}) => {
+  const data = result();
+  data.customerContinuation.prefilledRebookAvailable = true;
+  Object.assign(data.customerContinuation, {
+    draftPath: `/api/v1/bookings/${bookingId}/interruption-draft`,
+    confirmationPath: `/api/v1/bookings/${bookingId}/interruption-rebook`,
+    targetKind: 'booking', sourceCount: 1,
+  }, patch);
+  return data;
+};
 beforeEach(() => { get.mockReset(); post.mockReset(); });
 
 describe('T1 continuation boundary', () => {
@@ -68,5 +78,63 @@ describe('T1 continuation boundary', () => {
     await expect(api.send(orderId, bookingId, null, input())).rejects.toThrow();
     expect(post.mock.calls[0]![0]).toBe(`/service-orders/${orderId}/cannot-continue`);
     expect(api.pending(orderId)?.commandId).toBeTruthy();
+  });
+});
+
+describe('T2 prefilled rebook metadata', () => {
+  it('accepts the exact T2 draft/confirmation metadata for the viewed source', async () => {
+    get.mockResolvedValue(envelope(t2()));
+    await expect(customerContinuationApi.get(orderId, bookingId, null)).resolves.toMatchObject({
+      customerContinuation: {
+        prefilledRebookAvailable: true,
+        prefilledRebook: {
+          draftPath: `/api/v1/bookings/${bookingId}/interruption-draft`,
+          confirmationPath: `/api/v1/bookings/${bookingId}/interruption-rebook`,
+          targetKind: 'booking', sourceCount: 1,
+        },
+        source: { serviceOrderId: orderId, bookingId },
+      },
+    });
+  });
+  it('accepts an exact multi-source group draft', async () => {
+    const groupId = '40000000-0000-4000-8000-000000000001';
+    const data = t2({ targetKind: 'visit_group', sourceCount: 2 });
+    data.customerContinuation.source.visitGroupId = groupId;
+    get.mockResolvedValue(envelope(data));
+    await expect(customerContinuationApi.get(orderId, bookingId, groupId)).resolves.toMatchObject({
+      customerContinuation: { prefilledRebook: { targetKind: 'visit_group', sourceCount: 2 } },
+    });
+  });
+  it.each([
+    { draftPath: 'https://example.test/interruption-draft' },
+    { draftPath: `/api/v1/bookings/${orderId}/interruption-draft` },
+    { confirmationPath: 'https://example.test/interruption-rebook' },
+    { confirmationPath: `/api/v1/bookings/${orderId}/interruption-rebook` },
+    { targetKind: 'visit_group' },
+    { sourceCount: 0 }, { sourceCount: 4 }, { sourceCount: 1.5 }, { sourceCount: '1' },
+    { draftPath: undefined }, { confirmationPath: undefined }, { targetKind: undefined }, { sourceCount: undefined },
+  ])('fails closed on malformed or foreign T2 metadata %j', async patch => {
+    get.mockResolvedValue(envelope(t2(patch)));
+    await expect(customerContinuationApi.get(orderId, bookingId, null)).rejects.toThrow();
+  });
+  it('requires metadata when prefill is available and rejects it when unavailable', async () => {
+    const missing = result();
+    missing.customerContinuation.prefilledRebookAvailable = true;
+    get.mockResolvedValue(envelope(missing));
+    await expect(customerContinuationApi.get(orderId, bookingId, null)).rejects.toThrow();
+    const t1WithMetadata = result();
+    Object.assign(t1WithMetadata.customerContinuation, {
+      draftPath: `/api/v1/bookings/${bookingId}/interruption-draft`,
+      confirmationPath: `/api/v1/bookings/${bookingId}/interruption-rebook`,
+      targetKind: 'booking', sourceCount: 1,
+    });
+    get.mockResolvedValue(envelope(t1WithMetadata));
+    await expect(customerContinuationApi.get(orderId, bookingId, null)).rejects.toThrow();
+  });
+  it('rejects T2 metadata whose source is outside the viewed booking/order', async () => {
+    const data = t2();
+    data.customerContinuation.source.bookingId = '40000000-0000-4000-8000-000000000001';
+    get.mockResolvedValue(envelope(data));
+    await expect(customerContinuationApi.get(orderId, bookingId, null)).rejects.toThrow();
   });
 });

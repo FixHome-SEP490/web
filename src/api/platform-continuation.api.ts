@@ -13,7 +13,11 @@ export interface CannotContinueCommand extends CannotContinueInput { commandId: 
 export interface ContinuationSource {
   serviceOrderId: string; bookingId: string; incidentId: string; visitGroupId: string | null;
 }
-/** Verified against Backend 6ed7f73. Future terminal/draft contracts require explicit integration. */
+/** Exact optional metadata returned by Backend T2 while a verified source still forms a draft. */
+export interface PrefilledRebookSource {
+  draftPath: string; confirmationPath: string; targetKind: 'booking' | 'visit_group'; sourceCount: number;
+}
+/** T1 verified against Backend 6ed7f73; T2 draft metadata verified against Backend 81627d4. */
 export interface CustomerContinuation {
   version: 1;
   incidentId: string | null;
@@ -26,6 +30,8 @@ export interface CustomerContinuation {
   };
   customerContinuation: {
     eligible: boolean; independentNewBookingAllowed: boolean; prefilledRebookAvailable: boolean;
+    /** Present only when prefilledRebookAvailable is true. Paths are validated, never navigated to. */
+    prefilledRebook?: PrefilledRebookSource;
     requiresNewSchedule: true; requiresPricingRevalidation: true; requiresCustomerConfirmation: true;
     source: ContinuationSource | null;
   };
@@ -44,14 +50,22 @@ function readResult(data: unknown, orderId: string, bookingId: string, groupId: 
     || typeof next.eligible !== 'boolean' || typeof next.independentNewBookingAllowed !== 'boolean'
     || typeof next.prefilledRebookAvailable !== 'boolean' || next.requiresNewSchedule !== true
     || next.requiresPricingRevalidation !== true || next.requiresCustomerConfirmation !== true) throw invalid();
+  const hasPrefillMetadata = 'draftPath' in next || 'confirmationPath' in next || 'targetKind' in next || 'sourceCount' in next;
   if (next.eligible) {
     const source = next.source;
     if (!uuid(data.incidentId) || data.serviceOutcome !== 'VERIFIED_INTERRUPTION_RECORDED'
       || !['en_route', 'under_repair'].includes(String(data.serviceOrderStatus)) || old.reviewRequired !== true
       || !record(source) || source.serviceOrderId !== orderId || source.bookingId !== bookingId
       || source.incidentId !== data.incidentId || source.visitGroupId !== groupId) throw invalid();
+    if (next.prefilledRebookAvailable) {
+      // T2: only the exact draft/confirmation paths for this owned booking are accepted. No navigation uses them.
+      if (!Number.isInteger(next.sourceCount) || (next.sourceCount as number) < 1 || (next.sourceCount as number) > 3
+        || next.targetKind !== (next.sourceCount === 1 ? 'booking' : 'visit_group')
+        || next.draftPath !== `/api/v1/bookings/${bookingId}/interruption-draft`
+        || next.confirmationPath !== `/api/v1/bookings/${bookingId}/interruption-rebook`) throw invalid();
+    } else if (hasPrefillMetadata) throw invalid();
   } else if (data.incidentId !== null || data.serviceOutcome !== null || next.source !== null
-    || next.independentNewBookingAllowed || next.prefilledRebookAvailable || old.reviewRequired) throw invalid();
+    || next.independentNewBookingAllowed || next.prefilledRebookAvailable || old.reviewRequired || hasPrefillMetadata) throw invalid();
   // Return only the reviewed fields. No server-supplied URLs or arbitrary draft paths are consumed.
   return {
     version: 1, incidentId: data.incidentId as string | null, serviceOutcome: data.serviceOutcome as CustomerContinuation['serviceOutcome'],
@@ -59,7 +73,11 @@ function readResult(data: unknown, orderId: string, bookingId: string, groupId: 
     oldObligations: { reviewRequired: old.reviewRequired, quotePreserved: true, moneyPreserved: true, partsPreserved: true,
       physicalReturnAcceptance: 'MANUAL_SERVICE_MANAGER_ONLY', legacyPartReturnState: 'NOT_VERIFIED' },
     customerContinuation: { eligible: next.eligible, independentNewBookingAllowed: next.independentNewBookingAllowed,
-      prefilledRebookAvailable: next.prefilledRebookAvailable, requiresNewSchedule: true, requiresPricingRevalidation: true,
+      prefilledRebookAvailable: next.prefilledRebookAvailable,
+      ...(next.prefilledRebookAvailable ? { prefilledRebook: {
+        draftPath: next.draftPath as string, confirmationPath: next.confirmationPath as string,
+        targetKind: next.targetKind as PrefilledRebookSource['targetKind'], sourceCount: next.sourceCount as number } } : {}),
+      requiresNewSchedule: true, requiresPricingRevalidation: true,
       requiresCustomerConfirmation: true, source: next.eligible ? { serviceOrderId: orderId, bookingId,
         incidentId: data.incidentId as string, visitGroupId: groupId } : null },
   };

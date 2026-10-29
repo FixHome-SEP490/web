@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import FhButton from '../FhButton.vue';
 import FhSkeleton from '../FhSkeleton.vue';
@@ -45,8 +45,20 @@ onBeforeUnmount(() => {
   disposed = true; ++generation; stopOrder(); stopResync(); stopCache();
   window.removeEventListener('focus', wake); window.removeEventListener('online', wake); document.removeEventListener('visibilitychange', wake);
 });
+const prefill = computed(() => {
+  const next = result.value?.customerContinuation;
+  if (!next?.eligible || !next.prefilledRebookAvailable || !next.prefilledRebook || !next.source) return null;
+  // The read model already checks this; keep the UI gate on the viewed booking/order as well.
+  return next.source.bookingId === props.bookingId && next.source.serviceOrderId === props.orderId ? next.source : null;
+});
 function newBooking() {
   if (!loading.value && result.value?.customerContinuation.eligible && result.value.customerContinuation.independentNewBookingAllowed) void router.push('/app/bookings/new');
+}
+function rebookPrefilled() {
+  const source = prefill.value;
+  if (loading.value || !source) return;
+  // Existing wizard entry; only the verified source booking ID travels, never a server-supplied path.
+  void router.push({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId } });
 }
 </script>
 
@@ -62,8 +74,12 @@ function newBooking() {
       <p>Đơn cũ chưa được hủy. Báo giá, thanh toán và nghĩa vụ linh kiện của đơn cũ được giữ nguyên để đối soát riêng.</p>
       <p>Khai trả linh kiện chưa phải xác nhận đã nhận kho. Quản lý dịch vụ phải kiểm đếm và nhận thực tế; linh kiện cũ chưa có sổ theo dõi vẫn cần kiểm tra.</p>
       <p>Bạn có thể đặt lịch mới độc lập, không cần chờ xử lý đơn cũ. Hãy chọn lịch và xác nhận giá mới; tiền và ưu đãi cũ không chuyển sang đơn mới.</p>
-      <FhButton v-if="result.customerContinuation.independentNewBookingAllowed" size="md" data-testid="continuation-new-booking" @click="newBooking">Đặt lịch mới</FhButton>
-      <p class="text-ink-600">Đặt lại với thông tin điền sẵn chưa sẵn sàng.</p>
+      <p v-if="prefill">Đặt lại dịch vụ sẽ mở biểu mẫu với thông tin mô tả của đơn cũ. Bạn vẫn chọn lịch, địa chỉ và xác nhận giá mới; đơn cũ chưa bị hủy và giữ nguyên báo giá, thanh toán, ưu đãi cùng nghĩa vụ linh kiện.</p>
+      <p v-else class="text-ink-600">Đặt lại với thông tin điền sẵn chưa sẵn sàng.</p>
+      <div class="flex flex-wrap gap-2">
+        <FhButton v-if="prefill" size="md" data-testid="continuation-prefill" @click="rebookPrefilled">Đặt lại dịch vụ</FhButton>
+        <FhButton v-if="result.customerContinuation.independentNewBookingAllowed" :variant="prefill ? 'secondary' : 'primary'" size="md" data-testid="continuation-new-booking" @click="newBooking">Đặt lịch mới</FhButton>
+      </div>
     </template>
   </section>
 </template>

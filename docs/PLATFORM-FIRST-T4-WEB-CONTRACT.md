@@ -2,8 +2,10 @@
 
 Tài liệu này ghi lại phần Web của lượt T4: thợ ghi nhận **ý định không thể tiếp tục** sau khi đã
 check-in hợp lệ, và khách thấy trạng thái gián đoạn đã được server xác minh để tự đặt lịch mới độc
-lập. Nguồn chân lý nghiệp vụ là Backend T1 (`docs/PLATFORM-FIRST-T1-BACKEND-CONTRACT.md` bên repo
-`backend`); Web chỉ hiển thị và gửi lệnh, không tự suy ra hủy đơn, hoàn tiền hay đặt lại lịch.
+lập hoặc **đặt lại có điền sẵn** qua đường nháp/ xác nhận đã có. Nguồn chân lý nghiệp vụ là Backend
+T1 (`docs/PLATFORM-FIRST-T1-BACKEND-CONTRACT.md`) và T2
+(`docs/PLATFORM-FIRST-T2-BACKEND-CONTRACT.md`) bên repo `backend`; Web chỉ hiển thị và gửi lệnh,
+không tự suy ra hủy đơn, hoàn tiền hay đặt lại lịch.
 
 ## 1. Phạm vi và nguyên tắc
 
@@ -11,8 +13,9 @@ lập. Nguồn chân lý nghiệp vụ là Backend T1 (`docs/PLATFORM-FIRST-T1-B
   không hoàn tiền, không đóng báo giá và không đụng sổ linh kiện.
 - Phản hồi server là nguồn duy nhất để bật UI. Web **fail-closed**: thiếu trường, sai enum, sai
   `serviceOrderId`/`bookingId`/`visitGroupId` hoặc phiên bản lạ thì coi như chưa xác nhận.
-- Không có endpoint nháp đặt lại, nên Web **không** điền sẵn dữ liệu từ đơn cũ và **không** dùng lại
-  báo giá/giá/ưu đãi cũ. Đặt lịch mới là một booking mới hoàn toàn.
+- T2 dùng lại endpoint nháp/ xác nhận đã có (`interruption-draft`, `interruption-rebook`) cho nguồn
+  T1 đã xác minh. Web **không** dùng lại báo giá/giá/ưu đãi cũ; biểu mẫu chỉ mang mô tả, thiết bị và
+  thuộc tính mô tả sang, còn lịch và giá do khách chọn lại và Backend tính lại.
 - Không có cổng duyệt Service Manager, không có lệnh hủy mới và không thay đổi luồng hoàn trả linh
   kiện hiện có. Trạng thái `legacyPartReturnState` luôn là `NOT_VERIFIED`.
 
@@ -24,9 +27,11 @@ Base URL của `apiClient` là `/api/v1`; các đường dẫn dưới đây là
 | --- | --- | --- |
 | Ghi ý định dừng | `POST /service-orders/:id/cannot-continue` | Body typed, có `commandId` UUID v4 |
 | Đọc nguồn gián đoạn cho khách | `GET /service-orders/:id/customer-continuation` | Chỉ đọc; không ghi |
+| Đọc nháp đặt lại T2 | `GET /bookings/:id/interruption-draft` | Endpoint đã có, dùng lại bởi `InterruptionRebookForm` |
+| Xác nhận đặt lại T2 | `POST /bookings/:id/interruption-rebook` | Lịch/địa chỉ/giá mới, idempotent theo nguồn |
 | Tải ảnh chứng cứ | `POST /service-orders/:id/evidence` (`type=additional`) | Dùng lại `uploadFailedRepairEvidence` |
 
-Mã nguồn: `src/api/platform-continuation.api.ts`.
+Mã nguồn: `src/api/platform-continuation.api.ts`, `src/api/interruption-rebook.api.ts`.
 
 ### 2.1 Lệnh `cannot-continue`
 
@@ -72,7 +77,11 @@ Mã nguồn: `src/api/platform-continuation.api.ts`.
   "customerContinuation": {
     "eligible": true,
     "independentNewBookingAllowed": true,
-    "prefilledRebookAvailable": false,
+    "prefilledRebookAvailable": true,
+    "draftPath": "/api/v1/bookings/UUID/interruption-draft",
+    "confirmationPath": "/api/v1/bookings/UUID/interruption-rebook",
+    "targetKind": "booking | visit_group",
+    "sourceCount": 1,
     "requiresNewSchedule": true,
     "requiresPricingRevalidation": true,
     "requiresCustomerConfirmation": true,
@@ -98,8 +107,13 @@ Kiểm tra ở `readResult` (fail-closed):
   `source` phải khớp chính xác đơn/booking/lượt đang mở.
 - Khi `eligible = false`: không được có `incidentId`, `serviceOutcome`, `source`, không được bật
   `independentNewBookingAllowed`/`prefilledRebookAvailable` và `reviewRequired` phải là `false`.
-- Web chỉ dùng lại các trường đã duyệt; không mở URL, đường dẫn nháp hay bất kỳ trường lạ nào do
-  server trả về.
+- Khi `prefilledRebookAvailable = true` (T2): `sourceCount` là số nguyên `1..3`, `targetKind` phải là
+  `booking` khi một nguồn và `visit_group` khi nhiều nguồn, `draftPath`/`confirmationPath` phải đúng
+  chính xác booking đang xem (`/api/v1/bookings/<bookingId>/...`). Thiếu một trường hoặc có URL ngoài
+  thì fail-closed.
+- Khi `prefilledRebookAvailable = false`: bốn trường T2 phải vắng mặt; T1 vẫn hợp lệ khi không có chúng.
+- Web chỉ dùng lại các trường đã duyệt; không mở URL hay đường dẫn nháp do server trả về. CTA điền
+  sẵn chỉ điều hướng bằng `source.bookingId` đã đối chiếu, không dùng `draftPath`/`confirmationPath`.
 
 ## 3. Hành vi theo vai trò và giai đoạn
 
@@ -127,15 +141,23 @@ Kiểm tra ở `readResult` (fail-closed):
   lập không chuyển tiền hay ưu đãi cũ.
 - Nút “Đặt lịch mới” chỉ hiện và chỉ điều hướng khi server trả `independentNewBookingAllowed = true`;
   đích là `/app/bookings/new` (booking mới, không mang dữ liệu đơn cũ).
-- `prefilledRebookAvailable = true` **không** bật CTA điền sẵn vì chưa có endpoint nháp đã duyệt. UI
-  ghi “Đặt lại với thông tin điền sẵn chưa sẵn sàng.”
+- Nút “Đặt lại dịch vụ” chỉ hiện khi `eligible = true`, `prefilledRebookAvailable = true`, metadata T2
+  hợp lệ và `source.bookingId`/`source.serviceOrderId` trùng đúng booking/đơn đang xem. Nút điều
+  hướng tới `/app/bookings/new?interruptionRebook=<source.bookingId>` để dùng `InterruptionRebookForm`
+  đã có; không mở `draftPath`/`confirmationPath` do server trả về và không tự tạo booking.
+- Khi điền sẵn không khả dụng, UI ghi ngắn “Đặt lại với thông tin điền sẵn chưa sẵn sàng.” và vẫn giữ
+  nút đặt lịch mới độc lập nếu server cho phép. Khi điền sẵn khả dụng, nút độc lập vẫn còn.
+- Biểu mẫu đặt lại chỉ mang mô tả/thiết bị/thuộc tính mô tả; khách chọn lịch, địa chỉ và phạm vi/giá
+  mới. Với nguồn T2 tại nhà, biểu mẫu ghi rõ đơn cũ **chưa bị hủy** và giữ báo giá, thanh toán, ưu
+  đãi cùng nghĩa vụ linh kiện để đối soát; không hiện hay cấp voucher.
 - Lỗi đọc hiện thông báo giữ nguyên dữ liệu đơn cũ và nút “Thử lại”; không hiện số tiền 0 giả, không
   hiện CTA. Phản hồi đến muộn của thiết bị trước bị bỏ qua bằng số thế hệ và khóa phạm vi.
 
 ## 4. Không làm trong lượt này
 
-- Không thêm API T2 (hủy/hoàn tiền/đặt lại có điền sẵn) khi Backend chưa có hợp đồng.
-- Không dùng lại báo giá, giá, voucher hay lịch cũ; không tạo booking giả.
+- Không thêm endpoint, migration hay hợp đồng mới; chỉ dùng `interruption-draft`/`interruption-rebook`
+  đã có theo T2.
+- Không dùng lại báo giá, giá, voucher hay lịch cũ; không tạo booking giả và không cấp voucher.
 - Không thêm cổng duyệt Service Manager, không đổi quyền, enum hay hợp đồng Backend/Mobile.
 - Không đổi bố cục rộng của trang công việc/chi tiết đơn ngoài việc gắn hai thành phần mới.
 
@@ -145,6 +167,12 @@ Kiểm tra ở `readResult` (fail-closed):
   `tests/platform-first-technician-page.spec.ts`, `tests/platform-first-customer.spec.ts`: phủ payload
   typed, `commandId` ổn định, khóa/thử lại, fail-closed, gating theo vai trò/giai đoạn và không gọi
   `/cancel` hay `/repair-failed` từ luồng mới.
+- `tests/platform-first-continuation-api.spec.ts` bổ sung T2: metadata đúng cho một/nhiều nguồn, sai
+  path/URL ngoài, sai `targetKind`/`sourceCount`, thiếu metadata khi bật, metadata khi tắt và nguồn
+  ngoài booking/đơn đang xem.
+- `tests/platform-first-customer.spec.ts` bổ sung CTA “Đặt lại dịch vụ” và đúng query
+  `interruptionRebook=<bookingId>`; `tests/interruption-rebook-api.spec.ts` phủ nguồn T2 đang hoạt
+  động (booking `MATCHED`, đơn `EN_ROUTE`/`UNDER_REPAIR`) và từ chối case/booking không khớp.
 - `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` và `git diff --check` là cổng bắt
   buộc; kết quả của lần chạy gần nhất được ghi ở `docs/CONTEXT.md` mục 9.
 - Browser thật với tài khoản thợ/khách, Backend DEV, Socket.IO thật và parity Mobile: **CHƯA KIỂM

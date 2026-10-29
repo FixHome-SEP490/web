@@ -40,7 +40,9 @@ const source = { serviceOrderId: '10000000-0000-4000-8000-000000000001', booking
 function receipt(eligible = true, prefill = false) {
   return { version: 1, incidentId: eligible ? source.incidentId : null, serviceOutcome: eligible ? 'VERIFIED_INTERRUPTION_RECORDED' : null, serviceOrderStatus: 'under_repair', terminalTransitionApplied: false,
     oldObligations: { reviewRequired: eligible, quotePreserved: true, moneyPreserved: true, partsPreserved: true, physicalReturnAcceptance: 'MANUAL_SERVICE_MANAGER_ONLY', legacyPartReturnState: 'NOT_VERIFIED' },
-    customerContinuation: { eligible, independentNewBookingAllowed: eligible, prefilledRebookAvailable: prefill, requiresNewSchedule: true, requiresPricingRevalidation: true, requiresCustomerConfirmation: true, source: eligible ? source : null } };
+    customerContinuation: { eligible, independentNewBookingAllowed: eligible, prefilledRebookAvailable: prefill,
+      ...(prefill ? { draftPath: `/api/v1/bookings/${source.bookingId}/interruption-draft`, confirmationPath: `/api/v1/bookings/${source.bookingId}/interruption-rebook`, targetKind: 'booking', sourceCount: 1 } : {}),
+      requiresNewSchedule: true, requiresPricingRevalidation: true, requiresCustomerConfirmation: true, source: eligible ? source : null } };
 }
 const props = { orderId: source.serviceOrderId, bookingId: source.bookingId, visitGroupId: null, orderStatus: 'UNDER_REPAIR' };
 beforeEach(() => { get.mockReset(); post.mockReset(); push.mockReset(); getOrder.mockReset(); setActivePinia(createPinia()); });
@@ -54,11 +56,16 @@ it('offers independent NEW booking with preserved obligations and no prefill pro
   expect(push).toHaveBeenCalledWith('/app/bookings/new');
   expect(post).not.toHaveBeenCalled();
 });
-it('does not enable prefill from a flag without a verified draft contract', async () => {
+it('offers the verified prefill CTA with the exact source booking query and keeps the independent NEW button', async () => {
   get.mockResolvedValue({ data: { data: receipt(true, true) } });
   const w = mount(CustomerContinuationPanel, { props }); await flushPromises();
-  expect(w.find('[data-testid="continuation-prefill"]').exists()).toBe(false);
+  const cta = w.get('[data-testid="continuation-prefill"]');
+  expect(cta.text()).toContain('Đặt lại dịch vụ');
   expect(w.find('[data-testid="continuation-new-booking"]').exists()).toBe(true);
+  expect(w.text()).not.toContain('chưa sẵn sàng');
+  await cta.trigger('click');
+  expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId } });
+  expect(push).not.toHaveBeenCalledWith(expect.stringContaining('http'));
 });
 it('shows no source CTA for report-only/noneligible and no fake zero on errors', async () => {
   get.mockResolvedValue({ data: { data: receipt(false) } });

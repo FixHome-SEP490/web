@@ -25,9 +25,12 @@ export interface InterruptionDraftItem {
   previousTechnicianId: string;
   pricing: CatalogPricingPreview;
 }
+export type InterruptionSourceKind = 'cancelled' | 'onsite';
 export interface InterruptionDraft {
   anchorBookingId: string;
   sourceVisitGroupId: string | null;
+  /** T2 onsite sources keep the old order active; manager-close sources ended it. */
+  sourceKind: InterruptionSourceKind;
   targetKind: 'booking' | 'visit_group';
   addressId: string | null;
   addressText: string | null;
@@ -62,7 +65,7 @@ function unwrap(payload: unknown): unknown {
   return payload.data;
 }
 
-function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDraft, 'addresses' | 'items'> & {
+function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDraft, 'addresses' | 'items' | 'sourceKind'> & {
   rawItems: Array<Omit<InterruptionDraftItem, 'serviceName' | 'deviceLabel' | 'selectedVariantCode' | 'pricing'>>;
 } {
   if (!isRecord(value) || !isRecord(value.confirmation) || value.confirmation.available !== true
@@ -109,21 +112,32 @@ export const interruptionRebookApi = {
     if (!asId(anchor) || !owner) throw invalid();
     const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft');
     const raw = normalizeRawDraft(unwrap(response.data), anchor);
+    const kinds: InterruptionSourceKind[] = [];
     const [addresses, linked] = await Promise.all([
       profileApi.getAddresses(),
       Promise.all(raw.rawItems.map(async item => {
         const [booking, order, sourceCase] = await Promise.all([
           bookingsApi.getBooking(item.sourceBookingId), ordersApi.getOrder(item.sourceOrderId), supportCasesApi.getMine(item.sourceCaseId),
         ]);
-        const supportedCaseType = sourceCase.caseType === 'mid_job_interruption' || sourceCase.caseType === 'technician_replacement';
-        const caseBookingMatches = sourceCase.bookingId === item.sourceBookingId
-          || (sourceCase.bookingId === null && sourceCase.caseType === 'technician_replacement');
         if (booking.id !== item.sourceBookingId || booking.customerId !== owner || booking.serviceId !== item.serviceId
-          || booking.status !== 'CANCELLED' || (booking.visitGroupId ?? null) !== raw.sourceVisitGroupId
-          || order.id !== item.sourceOrderId || order.bookingId !== item.sourceBookingId || String(order.status).toUpperCase() !== 'CANCELLED'
-          || sourceCase.id !== item.sourceCaseId || !caseBookingMatches || !supportedCaseType
-          || sourceCase.serviceOrderId !== item.sourceOrderId
-          || sourceCase.status !== 'resolved' || sourceCase.resolutionCode !== 'interrupted_for_rebook') throw invalid();
+          || (booking.visitGroupId ?? null) !== raw.sourceVisitGroupId
+          || order.id !== item.sourceOrderId || order.bookingId !== item.sourceBookingId
+          || sourceCase.id !== item.sourceCaseId || sourceCase.serviceOrderId !== item.sourceOrderId) throw invalid();
+        const orderStatus = String(order.status).toUpperCase();
+        if (booking.status === 'CANCELLED' && orderStatus === 'CANCELLED') {
+          // Manager-close source: the old booking/order are closed and the case carries the resolution.
+          const supportedCaseType = sourceCase.caseType === 'mid_job_interruption' || sourceCase.caseType === 'technician_replacement';
+          const caseBookingMatches = sourceCase.bookingId === item.sourceBookingId
+            || (sourceCase.bookingId === null && sourceCase.caseType === 'technician_replacement');
+          if (!caseBookingMatches || !supportedCaseType
+            || sourceCase.status !== 'resolved' || sourceCase.resolutionCode !== 'interrupted_for_rebook') throw invalid();
+          kinds.push('cancelled');
+        } else if (booking.status === 'MATCHED' && ['EN_ROUTE', 'UNDER_REPAIR'].includes(orderStatus)) {
+          // T2 onsite source: the old order is still active. The server re-verifies the T1 receipt and
+          // the SM case status is not authority, so only ownership and exact links are checked here.
+          if (sourceCase.caseType !== 'technician_replacement' || sourceCase.bookingId !== item.sourceBookingId) throw invalid();
+          kinds.push('onsite');
+        } else throw invalid();
         const [service, pricing] = await Promise.all([
           catalogApi.getService(item.serviceId),
           catalogPricingApi.getPreview(item.serviceId, item.deviceAttributes),
@@ -138,7 +152,8 @@ export const interruptionRebookApi = {
     ]);
     const ownedAddresses = addresses.filter(address => address.userId === owner);
     const draft: InterruptionDraft = {
-      anchorBookingId: raw.anchorBookingId, sourceVisitGroupId: raw.sourceVisitGroupId, targetKind: raw.targetKind,
+      anchorBookingId: raw.anchorBookingId, sourceVisitGroupId: raw.sourceVisitGroupId,
+      sourceKind: kinds.includes('onsite') ? 'onsite' : 'cancelled', targetKind: raw.targetKind,
       addressId: raw.addressId, addressText: raw.addressText, customerNote: raw.customerNote,
       addresses: ownedAddresses, items: linked,
     };
