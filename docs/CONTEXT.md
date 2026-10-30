@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 14:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-chat-multi-service
+> Cập nhật lần cuối: 2026-10-30 10:50 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-bug-detector-vnpay-cash-ux-u6-20261030
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -104,6 +104,7 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - `/app/vouchers` (CUSTOMER) đọc ví và ưu đãi chung, nhận mã qua REST; có link thanh trên và menu tài khoản. `/console/admin/vouchers` (ADMIN) tạo chiến dịch GENERAL/PERSONAL, chọn danh mục/dịch vụ, thời gian Việt Nam và quota; bật/tắt, xem counter thanh toán thành công do server lưu, tìm khách đang hoạt động và cấp PERSONAL với `grantId` giữ nguyên khi thử lại kết quả chưa rõ. Điều khoản đã lưu bất biến.
 - `api/vouchers.api.ts` dùng Axios/JWT chung và kiểm tra response. Checkout lượt và hộp thanh toán đơn chỉ cho APPLY khi `GET /vouchers/checkout-preview/:claimId/:scopeId` trả `paymentAvailable=true`; `POST /vouchers/apply` gửi claim/scope/attempt ID, giữ cùng `attemptId` khi retry chưa rõ kết quả, theo expiry của server và chỉ truyền reservation ID sang rail funded. Web không tự tính giảm giá hoặc sửa hóa đơn T1, hoa hồng/công nợ. D1 gồm tiền công và cả linh kiện. Readiness được quyết định phía Backend; DEV runtime chưa kiểm chứng, Web giữ fail-closed khi server báo chưa sẵn sàng.
 - SOLO giữ chỗ theo ServiceOrder ID; Wallet/VNPay/ZERO dùng Invoice ID. VisitGroup dùng ID lượt. Backend canonical `fixhome-t21-final-merge-post-toan-20261027` có hai GET `cash/reservation`, giới hạn cho technician và trả `{ voucherReservationId, customerDueVnd }`; cả hai giá trị `null` là sentinel duy nhất cho không có hold. Web dùng due server khi khai funded cash và chỉ sentinel này mới cho phép legacy gross cash. HTTP 409/403/503, payload lệch hoặc thiếu dữ liệu đều fail-closed. Customer UI cho phép chọn cash cùng voucher và giữ reservation để xác nhận theo funded route.
+- Với cash intent trên trang chi tiết đơn, HTTP 409 từ lệnh tạo có thông điệp backend liên quan giao dịch/thanh toán/đối soát hiện cảnh báo cần đối soát; không kết luận giao dịch đã huỷ hoặc NOT_SETTLED. 409 không liên quan và lỗi mạng/5xx tiếp tục qua thông báo lỗi chung. Cash intent vẫn được đọc lại từ Backend; timeout, quay lại trình duyệt hay PENDING không mở khoá thanh toán cash. Bằng chứng provider settlement/NOT_SETTLED và quy tắc tài chính có thẩm quyền CHƯA KIỂM CHỨNG; chưa đổi nghiệp vụ.
 
 Trang công việc của thợ (PO 10/10/2026): trong danh sách 5 bước (sau "Xem thêm") bấm từng bước đã làm để xem chi tiết (giờ xuất phát theo `timeline`, check-in và ảnh trước sửa, báo giá và trạng thái duyệt hoặc giá cố định, giờ hoàn thành và ảnh sau sửa, tổng tiền và tình trạng thanh toán). Hiện "Khách mô tả" (mô tả của booking, trước đây không hiện). Booking đặt qua AI (`booking.aiSummary` có giá trị) có nút "Xem tóm tắt vấn đề từ AI" mở `components/technician/AiSummaryDialog.vue`: lời khách, ảnh khách gửi, AI nhận định (thiết bị, có thể là, đã trao đổi (`aiSummary.notes`: khách đã thử gì, đã loại gì, đang nghi gì), đã khuyên khách, giá tham khảo, dịch vụ gợi ý, kết luận) và ghi chú gợi ý sơ bộ. Hội thoại đầy đủ khách-AI chưa có (backend chỉ lưu bản tóm tắt). Hai form đặt lịch dùng chung `NewBookingWizardPage`: `router-view` của khu khách gắn `key` bằng `utils/booking-form-key.ts` để chuyển giữa "Đặt thợ ngay" và "Chẩn đoán bằng AI" thì dựng lại đúng form.
 
@@ -442,6 +443,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-30 10:50 (UTC+7) | foxonworld | foxonworld/fixhome-bug-detector-vnpay-cash-ux-u6-20261030 | Trang chi tiết đơn cảnh báo đối soát khi cash intent nhận 409 giao dịch thanh toán; không suy luận đã huỷ/NOT_SETTLED, kiểm tra provider CHƯA KIỂM CHỨNG.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
@@ -502,7 +504,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 
-- 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
 
 
 
