@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 14:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-chat-multi-service
+> Cập nhật lần cuối: 2026-10-29 23:03 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-bug-detector-console-timeline-u2-20261029
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -174,6 +174,8 @@ V5.3 bổ sung linh kiện: detail kỹ thuật viên dùng ledger theo PartRequ
 - Chỉ admin: kỹ thuật viên, duyệt xác minh danh tính (kỹ thuật viên và khách hàng), danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
 ### Giao diện console làm lại (10/10/2026, nhánh `feat/console-ui-redesign`)
+
+- BUG_DETECTOR_33_TIMELINE (local-only, not merged): ConsoleOrderDetailPage now displays canonical Vietnamese order-status labels including IN_PROGRESS as primary, with individual original backend reason accessible through collapsed per-entry details for authorized Admin/Service Manager. Actor, time and ordering remain unchanged; short displayed notes use a heuristic that does not guarantee full PII removal. Authenticated browser E2E not yet verified.
 
 Theo luật UI của PO ngày 10/10/2026, giữ nguyên màu, font, API và `data-testid`. Thành phần dùng chung ở `src/components/console/`: `ConsolePageHeader` (tiêu đề trái, tối đa một nút chính và menu "⋯" `ConsoleMoreMenu`/`ConsoleMenuItem` bên phải), `ConsoleTable` (bảng gọn, cột phụ ẩn bớt ở màn hẹp bằng `hideBelow` để 1024 px không cuộn ngang, skeleton `ConsoleTableSkeleton` khi tải), `ConsoleLoadError` (chỉ "Chưa tải được, vui lòng thử lại." và nút "Thử lại"; câu tiếng Việt rõ nghĩa của server qua `userFacingError` được giữ), `ConsoleTabs`, `ConsolePagination`, `ConsoleSearch`, lớp CSS chung `console-ui.ts`, nhãn tiếng Việt cho mã ở `console-labels.ts` và `audit-labels.ts`, khung ngữ cảnh case `SupportCaseContext`. Menu bên (`console-navigation.ts`) chia nhóm theo vai trò, mỗi trang một lần, nhãn ngắn; tiêu đề route console bỏ tiếng Anh và tab trình duyệt theo mẫu "{Tiêu đề} | FixHome". Tổng quan còn một hàng số liệu và danh sách "Cần xử lý" (mục dẫn sang trang chỉ dành cho quản lý dịch vụ thì admin chỉ thấy số). Mọi trang danh sách dùng bảng thay chồng thẻ, bỏ đoạn giải thích dài, bỏ hiện UUID, mã enum, mã lỗi cổng thanh toán và chữ "Backend"; trang khu vực phục vụ bỏ dữ liệu giả khi lỗi tải. Test `tests/console-ui-shell.spec.ts`.
 
@@ -442,6 +444,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-29 23:03 (UTC+7) | foxonworld | foxonworld/fixhome-bug-detector-console-timeline-u2-20261029 | BUG_DETECTOR_33_TIMELINE: normalized Console status labels and exposed preserved raw audit reason only under collapsed authorized staff details; unmerged local QA PASS, authenticated browser E2E pending.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
@@ -449,8 +452,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-28 13:53 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Sửa định tuyến đặt lại sau sửa thất bại, thêm yêu cầu dừng/đổi thợ cho khách và dùng lệnh thay thợ nguyên tử; Backend thật, runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-27 23:46 (UTC+7) | foxonworld | foxonworld/fixhome-p0p1-web-integration-20261027 | Ghép Web P0/P1 trên dev mới, thêm Admin voucher bản nháp và responsive header, chạy hồi quy, chưa merge/deploy hoặc chạy migration.
 - 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.
-
-
 - 2026-10-27 18:19 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Đối chiếu Backend canonical nullable cash DTO; cho phép customer cash, dùng due server, và chỉ sentinel rõ ràng mới fallback gross.
 - 2026-10-27 18:12 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối kỹ thuật viên với lookup cash funded SOLO/VisitGroup và khai theo due server; giữ fail-closed cho tới khi Backend chốt GET và phản hồi không có reservation.
 - 2026-10-27 17:52 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối chooser với reservation và funded Wallet/VNPay/Cash-confirm/ZERO; giữ APPLY fail-closed theo preview Backend, khóa cash khi luồng thợ chưa gửi reservation; rails thật CHƯA KIỂM CHỨNG.
@@ -458,12 +459,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
-
 - 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
-
 - 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
-
 - 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
 - 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
@@ -472,44 +470,17 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-23 21:18 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Web Multi-Service V5.3: summary giá typed, review tối đa 3 máy, điều hướng/cache child, PART_REQUEST_READY/custody và checkout states; 163 test files/1.450 tests, lint/typecheck/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
 - 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.
-
 - 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
-
 - 2026-10-22 22:54 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Review an toàn CustomerVisit: chỉ dùng cùng gate báo giá của OrderDetail (EN_ROUTE và SENT); ẩn hành động huỷ/đổi lịch nếu chưa đọc đủ trạng thái child, không suy đoán khi API lỗi; bổ sung 2 test, focused 18 PASS, typecheck/lint PASS; xác minh full CI sau khi push.
-
 - 2026-10-22 22:51 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thẻ lượt gọn theo máy, media mở theo yêu cầu; một CTA từ child có báo giá SENT, giới hạn 3 lần đọc, ẩn đổi lịch/hủy khi đang chờ status hoặc child UNDER_REPAIR; npm test 1.414, typecheck/lint/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
-
 - 2026-10-22 21:46 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Editor thiết bị hỗ trợ sửa/lưu/hủy, bỏ/hoàn tác và review chung; 2–3 máy gửi một VisitGroup, một máy về Booking thường; tư vấn chỉ gửi theo thao tác; 1.409 test/typecheck/lint/build PASS; Browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
-
 - 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
-
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
-
-
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
-
 - 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch
-
 - 2026-10-21 00:21 (UTC+7) | ToanAltF4 | feat/customer-payment-methods | Hộp Thanh toán đơn của khách: ví/VNPay/tiền mặt gom thành một danh sách chọn một, ví hiện số dư nhỏ (tự chuyển VNPay khi không đủ), VNPay có logo nhỏ, một nút chính đổi theo lựa chọn
-
 - 2026-10-21 00:07 (UTC+7) | ToanAltF4 | fix/booking-back-steps | Nút Quay lại và back của trình duyệt/điện thoại đi lùi từng bước đặt lịch (mỗi bước một mục lịch sử ?step=N, use-step-history.ts), bước 1 bỏ nút Quay lại
-
 - 2026-10-20 23:44 (UTC+7) | ToanAltF4 | feat/customer-booking-redesign | Làm lại giao diện đặt lịch của khách (PO duyệt 20/10): bước 1 hai cột, danh sách dịch vụ gập lại sau khi chọn, thẻ Máy của bạn, khung Yêu cầu của bạn bên phải (thanh dưới trên điện thoại), bước 2 địa chỉ + Hẹn lịch/Tới ngay, bước xác nhận có nút Sửa từng dòng; giá rút gọn (199k – 449k, Tham khảo 249k); tìm kiếm hiểu máy lạnh/máy nước nóng/TV; hộp Đặt lại thợ trung tính, chọn ngày dạng thanh như app; trang chi tiết yêu cầu hiện thiết bị, tiền công, tình trạng; bỏ 5 component cũ không còn dùng
-
 - 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
-
 - 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
-
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
-
-- 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
-
-
-
-
-
-
-
-
-
-\n
