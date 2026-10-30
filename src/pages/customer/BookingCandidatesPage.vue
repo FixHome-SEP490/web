@@ -18,7 +18,7 @@ import {
   FhMoney,
   TechnicianProfileModal,
 } from '../../components';
-import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
+import { bookingsApi, type TechnicianCandidate, type CandidateEmptyReason } from '../../api/bookings.api';
 import { visitGroupsApi } from '../../api/visit-groups.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
@@ -41,6 +41,39 @@ const loadError = ref('');
 const sending = ref(false);
 const sendError = ref('');
 const candidates = ref<TechnicianCandidate[]>([]);
+const emptyReason = ref<CandidateEmptyReason | null>(null);
+let latestLoadId = 0;
+
+const emptyState = computed(() => {
+  switch (emptyReason.value) {
+    case 'OUTSIDE_COVERAGE':
+      return {
+        title: 'Địa chỉ nằm ngoài khu vực phục vụ',
+        description: 'Chưa có kỹ thuật viên phù hợp phục vụ tại địa chỉ đã đặt. Vui lòng xem lại địa chỉ hoặc tạo yêu cầu mới với vị trí khác.',
+        action: 'Xem địa chỉ đặt lịch',
+      };
+    case 'BOOKING_LOCATION_MISSING':
+      return {
+        title: 'Chưa xác định được vị trí đặt lịch',
+        description: 'Yêu cầu chưa có vị trí chính xác đã xác nhận. Vui lòng kiểm tra lại địa chỉ và tạo yêu cầu mới với vị trí đầy đủ.',
+        action: 'Xem yêu cầu',
+      };
+    case 'TIME_UNAVAILABLE':
+      return {
+        title: 'Chưa có thợ rảnh trong giờ hẹn này',
+        description: 'Các thợ phù hợp với địa chỉ đều bận hoặc không làm việc trong giờ hẹn đã chọn. Hãy xem lại lịch hẹn.',
+        action: 'Xem lịch hẹn',
+      };
+    default:
+      return {
+        title: 'Chưa có kỹ thuật viên phù hợp',
+        description: 'Hiện chưa tìm được thợ đáp ứng đầy đủ điều kiện của yêu cầu này. Bạn có thể kiểm tra lại địa chỉ, dịch vụ và thời gian.',
+        action: 'Xem yêu cầu',
+      };
+  }
+});
+
+
 const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
 
@@ -63,6 +96,7 @@ const handleModalToggleSelect = (id: string) => {
 };
 
 const loadCandidates = async () => {
+  const loadId = ++latestLoadId;
   if (!bookingId) {
     loadError.value = 'Không xác định được đơn đặt lịch. Vui lòng tạo lại yêu cầu đặt thợ.';
     loading.value = false;
@@ -70,16 +104,23 @@ const loadCandidates = async () => {
   }
   loading.value = true;
   loadError.value = '';
+  emptyReason.value = null;
   try {
-    const list = isVisit ? await visitGroupsApi.candidates(bookingId) : await bookingsApi.getCandidates(bookingId);
-    candidates.value = list;
+    const result = isVisit
+      ? { candidates: await visitGroupsApi.candidates(bookingId), emptyReason: null }
+      : await bookingsApi.getCandidatesWithDiagnostics(bookingId);
+    if (loadId !== latestLoadId) return;
+    candidates.value = result.candidates;
+    emptyReason.value = result.candidates.length ? null : result.emptyReason;
     // The customer may choose one or two technicians; selection order is invitation priority.
     selectedIds.value = [];
   } catch {
+    if (loadId !== latestLoadId) return;
     candidates.value = [];
+    emptyReason.value = null;
     loadError.value = 'Không thể tải danh sách kỹ thuật viên phù hợp. Vui lòng thử lại.';
   } finally {
-    loading.value = false;
+    if (loadId === latestLoadId) loading.value = false;
   }
 };
 
@@ -234,9 +275,9 @@ const successMessage = computed(() => selectedCount.value === 1
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
-      title="Chưa có kỹ thuật viên nhận được giờ hẹn này"
-      description="Kỹ thuật viên chỉ nhận đơn trong ca làm và khi còn trống lịch. Hãy đổi sang buổi khác rồi tìm lại."
-      action-text="Đổi giờ hẹn"
+      :title="emptyState.title"
+      :description="emptyState.description"
+      :action-text="emptyState.action"
       @action="router.push(backTarget)"
     />
 

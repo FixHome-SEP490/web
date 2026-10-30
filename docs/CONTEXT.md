@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 14:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-chat-multi-service
+> Cập nhật lần cuối: 2026-10-30 08:12 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-bug-detector-empty-candidates-u5-20261030
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -396,6 +396,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - F3 wallet-only source/UX change remains pending backend PR and Web CI verification; not yet available to DEV users.
 
 ## 8. Việc đang dở và rủi ro đã biết
+- BUG41_CANDIDATE_EMPTY_DIAGNOSTICS (LOCAL, chưa merge DEV): BookingCandidatesPage cho đơn đơn lẻ gọi API ?diagnostics=1, copy và CTA riêng theo thiếu vị trí/ngoài vùng/lịch/không rõ, không ép khách đổi giờ nếu thực tế ngoài vùng. VisitGroup không nhận diagnostic solo, dùng hướng dẫn trung tính; mất mạng hiển thị lỗi riêng; kết quả yêu cầu cũ không ghi đè request mới. Web bookingsApi.getCandidates cũ vẫn giữ cho các client khác. Test focused/typecheck PASS; signed-in browser E2E chưa chạy.
+
 
 - T13 tích hợp local Web AI PR #186 với platform-first `244756b`, chỉ chạy bộ kiểm tra tối thiểu được owner cho phép. Toàn bộ header và lịch sử mục 9 giữ nguyên theo chỉ thị owner; bàn giao/time/commit/test mới ở `docs/PLATFORM-FIRST-T13-WEB-AI-INTEGRATION.md`. Backend DEV, browser/E2E, CI, full suite, lint/build và Mobile CHƯA KIỂM CHỨNG.
 
@@ -442,6 +444,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-30 08:12 (UTC+7) | foxonworld | foxonworld/fixhome-bug-detector-empty-candidates-u5-20261030 | BUG41_CANDIDATE_EMPTY_DIAGNOSTICS: Web giải thích nguyên nhân không có thợ dựa trên Backend; VisitGroup không giả định lịch, có fail-safe lỗi mạng; chỉ LOCAL.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
@@ -502,7 +505,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 
-- 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
 
 
 
