@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { computed, ref, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { CheckCircle2, XCircle } from 'lucide-vue-next';
+import { CheckCircle2, Clock3, XCircle } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '../../components';
 import { ordersApi } from '../../api/orders.api';
 import { useAuthStore } from '../../stores/auth';
@@ -11,53 +11,81 @@ const router = useRouter();
 const authStore = useAuthStore();
 const isTechnician = authStore.user?.role === 'TECHNICIAN';
 
-// VNPay's own response code (signature-verified server-side) tells us whether
-// the bank accepted the charge, but paymentStatus only flips once the async
-// IPN webhook lands — poll the order for a few seconds so we never show
-// "success" while the order still reads UNPAID.
-const vnpayOk = route.query.payment === 'success';
-const orderId = typeof route.query.orderId === 'string' ? route.query.orderId : '';
+// Return query values are untrusted. They can start a server check, but only
+// the order's paymentStatus can confirm a successful invoice payment.
+const vnpayOk = computed(() => route.query.payment === 'success');
+const orderId = computed(() => typeof route.query.orderId === 'string' ? route.query.orderId.trim() : '');
 
 type Phase = 'checking' | 'paid' | 'pending' | 'failed';
-const phase = ref<Phase>(vnpayOk && orderId ? 'checking' : vnpayOk ? 'paid' : 'failed');
+const phase = ref<Phase>('failed');
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
-const pollDeadline = Date.now() + 15000;
+let pollDeadline = 0;
+let pollGeneration = 0;
 
-const pollOrder = async () => {
+const pollOrder = async (id: string, generation: number) => {
   try {
-    const order = await ordersApi.getOrder(orderId);
+    const order = await ordersApi.getOrder(id);
+    if (generation !== pollGeneration) return;
     if (order.paymentStatus === 'PAID') {
       phase.value = 'paid';
       return;
     }
   } catch {
+    if (generation !== pollGeneration) return;
     // Keep polling; the order may not be readable yet right after redirect.
   }
-  if (Date.now() < pollDeadline) {
-    pollTimer = setTimeout(pollOrder, 2000);
+  const remaining = pollDeadline - Date.now();
+  if (remaining > 0) {
+    pollTimer = setTimeout(() => void pollOrder(id, generation), Math.min(2000, remaining));
   } else {
     phase.value = 'pending';
   }
 };
 
-onMounted(() => {
-  if (phase.value === 'checking') pollOrder();
-});
+watch([() => route.query.payment, () => route.query.orderId], () => {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = null;
+  pollGeneration += 1;
+
+  if (!vnpayOk.value) {
+    phase.value = 'failed';
+    return;
+  }
+
+  const id = orderId.value;
+  if (!id) {
+    phase.value = 'pending';
+    return;
+  }
+
+  phase.value = 'checking';
+  pollDeadline = Date.now() + 15000;
+  void pollOrder(id, pollGeneration);
+}, { immediate: true, flush: 'sync' });
+
 let redirectCountdownTimer: ReturnType<typeof setInterval> | null = null;
 const countdown = ref(3);
 
-const navigateToReview = () => {
+const clearRedirectCountdown = () => {
   if (redirectCountdownTimer) clearInterval(redirectCountdownTimer);
-  if (orderId && !isTechnician) {
-    router.push(`/app/orders/${orderId}?autoReview=true`);
+  redirectCountdownTimer = null;
+};
+
+const navigateToReview = () => {
+  clearRedirectCountdown();
+  if (phase.value !== 'paid') return;
+  if (orderId.value && !isTechnician) {
+    router.push(`/app/orders/${orderId.value}?autoReview=true`);
   } else {
     router.push(isTechnician ? '/tech/wallet' : '/app/orders');
   }
 };
 
-watch(phase, (newPhase: Phase) => {
-  if (newPhase === 'paid' && orderId && !isTechnician) {
+watch([phase, orderId], ([newPhase, id]) => {
+  clearRedirectCountdown();
+  if (newPhase === 'paid' && id && !isTechnician) {
+    countdown.value = 3;
     redirectCountdownTimer = setInterval(() => {
       countdown.value -= 1;
       if (countdown.value <= 0) {
@@ -65,11 +93,12 @@ watch(phase, (newPhase: Phase) => {
       }
     }, 1000);
   }
-});
+}, { flush: 'sync' });
 
 onUnmounted(() => {
   if (pollTimer) clearTimeout(pollTimer);
-  if (redirectCountdownTimer) clearInterval(redirectCountdownTimer);
+  pollGeneration += 1;
+  clearRedirectCountdown();
 });
 </script>
 
@@ -78,7 +107,7 @@ onUnmounted(() => {
     <div class="bg-white rounded-2xl max-w-sm w-full p-8 space-y-5 shadow-xl text-center border border-ink-100">
       <div v-if="phase === 'checking'" class="mx-auto w-12" aria-hidden="true"><FhSkeleton width="48px" height="48px" rounded="full" /></div>
       <CheckCircle2 v-else-if="phase === 'paid'" :size="48" class="text-emerald-600 mx-auto" />
-      <CheckCircle2 v-else-if="phase === 'pending'" :size="48" class="text-amber-500 mx-auto" />
+      <Clock3 v-else-if="phase === 'pending'" :size="48" class="text-amber-500 mx-auto" />
       <XCircle v-else :size="48" class="text-rose-600 mx-auto" />
 
       <div class="space-y-1">
@@ -86,7 +115,7 @@ onUnmounted(() => {
           {{
             phase === 'checking' ? 'Đang xác nhận thanh toán...'
             : phase === 'paid' ? 'Thanh toán thành công!'
-            : phase === 'pending' ? 'VNPay đã ghi nhận, đang chờ xác nhận'
+            : phase === 'pending' ? 'Chưa xác nhận được kết quả thanh toán'
             : 'Thanh toán chưa hoàn tất'
           }}
         </h1>
@@ -100,7 +129,7 @@ onUnmounted(() => {
               ? `Hóa đơn đã được thanh toán thành công. Tự động chuyển tới trang đánh giá dịch vụ sau ${countdown}s...`
             : phase === 'paid'
               ? 'Hóa đơn của bạn đã được ghi nhận thanh toán qua VNPay.'
-            : phase === 'pending' ? 'Giao dịch đã được VNPay chấp nhận nhưng hệ thống chưa cập nhật kịp. Vui lòng kiểm tra lại đơn hàng sau ít phút.'
+            : phase === 'pending' ? 'Vui lòng kiểm tra trạng thái đơn hàng trước khi thanh toán lại.'
             : 'Giao dịch VNPay không thành công hoặc đã bị hủy. Bạn có thể thử lại từ trang đơn hàng.'
           }}
         </p>
