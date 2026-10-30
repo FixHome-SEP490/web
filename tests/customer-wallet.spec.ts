@@ -43,6 +43,14 @@ describe('Customer wallet page', () => {
     expect(rows[2]).toContain('Nạp ví');
   });
 
+  const expectUnverifiedPayment = (text: string) => {
+    expect(text).toContain('chưa được xác minh');
+    expect(text).not.toContain('Nạp tiền thành công');
+    expect(text).not.toContain('Đã nạp');
+    expect(text).not.toContain('chưa thành công');
+    expect(text).not.toContain('tiền chưa bị trừ');
+  };
+
   it('labels a withdrawal as money out and its refund as money in', async () => {
     summary.mockResolvedValue({
       ...wallet,
@@ -99,14 +107,91 @@ describe('Customer wallet page', () => {
     expect(w.text()).toContain('chưa mở');
   });
 
-  it('tells the customer how the VNPay top-up ended', async () => {
-    route.query = { payment: 'failed' };
-    const failed = mount(CustomerWalletPage);
+  it.each([
+    ['forged success with an arbitrary amount', { payment: 'success', amount: '17' }],
+    ['forged success with a matching transaction amount', { payment: 'success', amount: '1000000' }],
+    ['forged success with a very large amount', { payment: 'success', amount: '999999999999' }],
+    ['forged failed return', { payment: 'failed', amount: '200000' }],
+  ])('shows an unverified state for %s', async (_description, query) => {
+    route.query = query;
+    const w = mount(CustomerWalletPage);
     await flushPromises();
-    expect(failed.get('[data-testid="topup-result"]').text()).toContain('chưa thành công');
+
+    const result = w.get('[data-testid="topup-result"]');
+    expect(result.attributes('role')).toBe('status');
+    expectUnverifiedPayment(result.text());
+    expect(w.get('[data-testid="wallet-payment-refresh"]').text()).toContain('Làm mới');
+  });
+
+  it('does not show a payment result when there is no return query', async () => {
+    route.query = {};
+    const w = mount(CustomerWalletPage);
+    await flushPromises();
+
+    expect(w.find('[data-testid="topup-result"]').exists()).toBe(false);
+    expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
+  });
+
+  it('shows the wallet loading state, then keeps the payment unverified after summary resolves', async () => {
+    let resolveSummary!: (value: typeof wallet) => void;
+    summary.mockReset().mockReturnValue(new Promise((resolve) => { resolveSummary = resolve; }));
     route.query = { payment: 'success', amount: '200000' };
-    const ok = mount(CustomerWalletPage);
+    const w = mount(CustomerWalletPage);
     await flushPromises();
-    expect(ok.get('[data-testid="topup-result"]').text().replace(/\s/g, '')).toContain('200.000');
+
+    const result = w.get('[data-testid="topup-result"]');
+    expect(result.text()).toContain('Đang tải số dư và lịch sử ví');
+    expectUnverifiedPayment(result.text());
+    resolveSummary(wallet);
+    await flushPromises();
+
+    expect(result.text()).toContain('Giao dịch nạp tiền chưa được xác minh');
+    expectUnverifiedPayment(result.text());
+  });
+
+  it('keeps a return unverified after a summary error and offers an accessible retry', async () => {
+    summary.mockReset().mockRejectedValueOnce(new Error('401 Unauthorized')).mockResolvedValueOnce(wallet);
+    route.query = { payment: 'failed', amount: '200000' };
+    const w = mount(CustomerWalletPage);
+    await flushPromises();
+
+    const result = w.get('[data-testid="topup-result"]');
+    expect(result.text()).toContain('Chưa tải được số dư và lịch sử ví');
+    expectUnverifiedPayment(result.text());
+    expect(w.text()).toContain('Chưa tải được ví');
+    const retry = w.get('[data-testid="wallet-payment-refresh"]');
+    expect(retry.attributes('aria-label')).toBe('Làm mới số dư và lịch sử ví');
+    await retry.trigger('click');
+    await flushPromises();
+
+    expect(summary).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
+    expectUnverifiedPayment(w.get('[data-testid="topup-result"]').text());
+  });
+
+  it('does not match a pending return to later balance changes or duplicate same-amount entries', async () => {
+    const pendingWallet = { ...wallet, balance: 500000, transactions: [], meta: { ...wallet.meta, total: 0 } };
+    const creditedWallet = {
+      ...wallet,
+      balance: 900000,
+      transactions: [
+        { id: 'late-2', type: 'top_up', amount: 200000, balanceAfter: 900000, description: 'Nạp ví qua VNPay', createdAt: '2026-10-29T10:02:00Z' },
+        { id: 'late-1', type: 'top_up', amount: 200000, balanceAfter: 700000, description: 'Nạp ví qua VNPay', createdAt: '2026-10-29T10:01:00Z' },
+      ],
+      meta: { ...wallet.meta, total: 2 },
+    };
+    summary.mockReset().mockResolvedValueOnce(pendingWallet).mockResolvedValueOnce(creditedWallet);
+    route.query = { payment: 'success', amount: '200000' };
+    const w = mount(CustomerWalletPage);
+    await flushPromises();
+
+    expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('500.000');
+    expectUnverifiedPayment(w.get('[data-testid="topup-result"]').text());
+    await w.get('[data-testid="wallet-payment-refresh"]').trigger('click');
+    await flushPromises();
+
+    expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('900.000');
+    expect(w.get('[data-testid="wallet-transactions"]').findAll('li')).toHaveLength(2);
+    expectUnverifiedPayment(w.get('[data-testid="topup-result"]').text());
   });
 });
