@@ -69,6 +69,12 @@ export interface VisitGroupPageItem {
   items: VisitGroupPageDevice[];
 }
 
+/** A VisitGroup page row returned only by the authenticated technician assigned-page endpoint. */
+export interface VisitGroupAssignedPageItem extends VisitGroupPageItem {
+  /** Present only for the technician's active assignment; null means no authorized address was returned. */
+  assignedAddressSummary?: string | null;
+}
+
 export interface VisitGroupPageDevice {
   itemId: string;
   sequence: number;
@@ -202,7 +208,7 @@ export const visitGroupsApi = {
   },
 
   /** Visits assigned to the signed-in technician; the response contains only authorized orders. */
-  async assignedPage(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}): Promise<PageResult<VisitGroupPageItem>> {
+  async assignedPage(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}): Promise<PageResult<VisitGroupAssignedPageItem>> {
     const res = await apiClient.get<unknown>('/visit-groups/assigned-page', { params: assignedPageParams(page, pageSize, filter) });
     return readPage(res.data, { page, pageSize });
   },
