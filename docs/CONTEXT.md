@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-29 14:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-chat-multi-service
+> Cập nhật lần cuối: 2026-10-30 11:17 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/bug-detector-web-release-integration-20261030
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -321,6 +321,11 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 ### Lịch sử changelog đã lưu trữ
 - 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 
+### Tích hợp BUG DETECTOR Web (2026-10-30, đang chờ PR)
+
+- Nhánh tích hợp local gom #16/#17 (nhãn và địa chỉ chỉ từ danh sách lượt được giao), #41 (lý do trống theo diagnostics tùy chọn), #39 (copy an toàn khi Backend trả 409 chờ thanh toán), #38 (chỉ xác nhận VNPay khi API đơn trả `PAID`), #33 (nhãn timeline tiếng Việt), #35 (phân loại lỗi AI và fallback đặt dịch vụ thủ công), #40 (copy KYC chờ duyệt) và banner nạp ví chưa xác minh. Không đổi backend, migration, nghiệp vụ thanh toán hay provider.
+- Các thay đổi và test đã tích hợp ở source Web; chưa có kết quả gate trong context này. Backend #17 address contract, signed-in E2E, runtime trình duyệt và Backend DEV CHƯA KIỂM CHỨNG. PR/CI/dev deploy đang chờ.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -370,6 +375,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - Cash-first capability: `GET /finance/cash-intents/{SOLO|VISIT_GROUP}/:id` qua Axios có outer envelope `response.data.data`; controller body bên trong có hai sibling field `{data: CashIntent|null, cashFirstEnabled: boolean}`. Web fail closed nếu thiếu hoặc sai kiểu capability; `false` giữ luồng tiền mặt legacy, `true` chỉ cho khách tạo intent bằng UUID `commandId` (có thể gửi `voucherReservationId`), khách hủy intent pending, và thợ chỉ báo nhận qua `/:received` khi GET xác nhận `pending`. Số tiền đến hạn và trạng thái lấy từ Backend; UI không tự đánh dấu đã thanh toán.
 - Báo cáo thợ đã định kiểu gửi qua `POST /support/cases/technician-report`; Service Manager kết luận trách nhiệm qua `POST /support/cases/:id/responsibility` kèm `workflowVersion` và UUID `commandId`. Kết luận trách nhiệm tách khỏi thao tác vận hành `resolve-interruption` hiện có, gồm đóng để khách tự đặt lại; Web không tự trừ điểm. Contract đã đối chiếu với Backend PR #169; không sửa API ở Web. Shared DEV/browser và luồng Mobile CHƯA KIỂM CHỨNG.
+
+- Candidate diagnostics: solo Booking opt-in reads `GET /bookings/:id/technician-candidates?diagnostics=1`; the existing candidate array remains under `data`, with an optional coarse `emptyReason` (`BOOKING_LOCATION_MISSING`, `OUTSIDE_COVERAGE`, `TIME_UNAVAILABLE`, `UNAVAILABLE`) consumed only when the array is empty. Legacy candidate reads remain unchanged for other clients. This Web integration does not change Backend and the response contract/runtime CHƯA KIỂM CHỨNG against the Backend release.
+- Technician assigned VisitGroup rows may include optional `assignedAddressSummary`; Web displays it only on `GET /visit-groups/assigned-page` and only when non-blank. Backend #17 response compatibility is under repair; this optional-field Web client behavior is CHƯA KIỂM CHỨNG with that Backend revision.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
 
@@ -442,6 +450,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-10-30 11:17 (UTC+7) | foxonworld | foxonworld/bug-detector-web-release-integration-20261030 | Tích hợp các patch Web #16/#17/#33/#35/#38/#39/#40/#41 và wallet; kiểm tra liên repository, PR/CI/deploy còn chờ.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
@@ -502,7 +511,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 21:42 (UTC+7) | foxonworld | foxonworld/tech-job-v31-simplify-20261020 | Technician UX V3.1: bỏ popup lặp sau PRE_REPAIR, cập nhật USED/RETURNED tại chỗ, phân biệt trạng thái khai trả, bỏ thông báo đồng bộ nền đỏ và thu gọn picker/báo giá/danh sách.
 
-- 2026-10-20 21:31 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Thợ: thẻ + mục menu Không kịp tới, nhả đơn (GET/POST /service-orders/:id/overrun-release, không trừ điểm); khách: trang đơn hiện Thợ không kịp tới + Chọn thợ khác khi đơn chưa có thợ, thông báo TECHNICIAN_RELEASED mở /app/bookings/:id/candidates?released=1
 
 
 

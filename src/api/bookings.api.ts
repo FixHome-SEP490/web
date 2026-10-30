@@ -128,6 +128,17 @@ export interface MatchingExtensionResult {
   extendedInvitationCount: number;
 }
 
+export type CandidateEmptyReason =
+  | 'BOOKING_LOCATION_MISSING'
+  | 'OUTSIDE_COVERAGE'
+  | 'TIME_UNAVAILABLE'
+  | 'UNAVAILABLE';
+
+export interface CandidateSearchResult {
+  candidates: TechnicianCandidate[];
+  emptyReason: CandidateEmptyReason | null;
+}
+
 export interface TechnicianCandidate {
   id: string;
   technicianId?: string;
@@ -449,6 +460,23 @@ export const bookingsApi = {
       if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
       return { ...candidate, id: candidate.userId.trim() };
     });
+  },
+
+  /** Opt-in diagnostics without changing the legacy array response consumed by Mobile. */
+  async getCandidatesWithDiagnostics(bookingId: string): Promise<CandidateSearchResult> {
+    const res = await apiClient.get<{ data: TechnicianCandidate[]; emptyReason?: CandidateEmptyReason | null }>(
+      `/bookings/${bookingId}/technician-candidates?diagnostics=1`,
+      { timeout: CANDIDATES_TIMEOUT_MS },
+    );
+    const candidates = res.data.data.map(candidate => {
+      if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
+      return { ...candidate, id: candidate.userId.trim() };
+    });
+    const allowed: CandidateEmptyReason[] = [
+      'BOOKING_LOCATION_MISSING', 'OUTSIDE_COVERAGE', 'TIME_UNAVAILABLE', 'UNAVAILABLE',
+    ];
+    const reason = res.data.emptyReason;
+    return { candidates, emptyReason: candidates.length === 0 && reason && allowed.includes(reason) ? reason : null };
   },
 
   async sendShortlist(bookingId: string, technicianIds: string[]): Promise<void> {

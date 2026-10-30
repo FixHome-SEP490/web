@@ -17,6 +17,7 @@ vi.mock('vue-router', () => ({
 vi.mock('../src/api/bookings.api', () => ({
   bookingsApi: {
     getCandidates: vi.fn(),
+    getCandidatesWithDiagnostics: vi.fn(),
     sendShortlist: vi.fn(),
   },
 }));
@@ -62,6 +63,9 @@ describe('Technician Selection and Profile Modal Feature', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(bookingsApi.getCandidates).mockResolvedValue(mockCandidates);
+    vi.mocked(bookingsApi.getCandidatesWithDiagnostics).mockImplementation(async () => ({
+      candidates: await bookingsApi.getCandidates('booking-test-123'), emptyReason: null,
+    }));
     vi.mocked(reviewsApi.getByTechnician).mockResolvedValue({
       data: [
         {

@@ -5,7 +5,7 @@
 // after a one-time identity check (CustomerWithdrawPanel).
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertCircle, ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, RefreshCw, Wallet } from 'lucide-vue-next';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, CreditCard, RefreshCw, Wallet } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import CustomerWithdrawPanel from '../../components/customer/CustomerWithdrawPanel.vue';
 import CustomerWithdrawalHistory from '../../components/customer/CustomerWithdrawalHistory.vue';
@@ -33,6 +33,7 @@ const {
   loading,
   error,
   load,
+  refreshing,
   result,
   changingPage,
   prefetch,
@@ -54,17 +55,33 @@ const balance = computed(() => result.value?.balance ?? 0);
 const balanceLoaded = computed(() => result.value !== null);
 const totalPages = computed(() => pageCount(total.value, PAGE_SIZE));
 const loadError = computed(() => (error.value ? userFacingError(error.value, 'Chưa tải được ví, vui lòng thử lại.') : ''));
+const paymentStatusMessage = computed(() => {
+  if (loadError.value) {
+    return {
+      title: 'Chưa tải được số dư và lịch sử ví',
+      description: 'Trạng thái giao dịch nạp tiền này chưa được xác minh.',
+    };
+  }
+  if (loading.value || refreshing.value) {
+    return {
+      title: 'Đang tải số dư và lịch sử ví',
+      description: 'Trạng thái giao dịch nạp tiền này chưa được xác minh.',
+    };
+  }
+  return {
+    title: 'Giao dịch nạp tiền chưa được xác minh',
+    description: 'Số dư và lịch sử ví bên dưới là dữ liệu tài khoản, không xác nhận khoản nạp cụ thể.',
+  };
+});
 
 const amountText = ref('');
 const topUpError = ref('');
 const redirecting = ref(false);
 
-// Back from VNPay: ?payment=success|failed&amount=...
-const paymentResult = computed(() => {
+// A VNPay return query is editable and does not prove this payment's outcome.
+const hasPaymentReturn = computed(() => {
   const status = route.query?.payment;
-  if (status !== 'success' && status !== 'failed') return null;
-  const amount = Number(route.query?.amount);
-  return { ok: status === 'success', amount: Number.isFinite(amount) ? amount : null };
+  return status === 'success' || status === 'failed';
 });
 
 const ACTIONS = [
@@ -107,35 +124,31 @@ async function topUp() {
       </p>
     </div>
 
-    <!-- VNPay payment result banner -->
+    <!-- A return query is not a payment confirmation. -->
     <div
-      v-if="paymentResult?.ok"
+      v-if="hasPaymentReturn"
       role="status"
       data-testid="topup-result"
-      class="rounded-2xl border border-success-200 bg-success-50/90 p-4 text-sm text-success-800 flex items-start gap-3 shadow-xs"
+      :aria-busy="loading || refreshing"
+      class="rounded-2xl border border-brand-200 bg-brand-50/90 p-4 text-sm text-brand-800 flex flex-col sm:flex-row sm:items-start gap-3 shadow-xs"
     >
-      <CheckCircle2 :size="20" class="text-success-600 shrink-0 mt-0.5" />
-      <div class="space-y-0.5">
-        <p class="font-bold">Nạp tiền thành công!</p>
-        <p class="text-pretty">
-          Đã nạp<template v-if="paymentResult.amount"> <span class="font-bold font-num"><FhMoney :amount="paymentResult.amount" /></span></template> vào ví. Số dư cập nhật khi VNPay xác nhận, thường trong vài giây.
-        </p>
+      <div class="flex items-start gap-3 min-w-0 flex-1">
+        <RefreshCw :size="20" class="text-brand-600 shrink-0 mt-0.5" aria-hidden="true" />
+        <div class="space-y-0.5">
+          <p class="font-bold">{{ paymentStatusMessage.title }}</p>
+          <p class="text-pretty">{{ paymentStatusMessage.description }}</p>
+        </div>
       </div>
-    </div>
-
-    <div
-      v-else-if="paymentResult"
-      role="alert"
-      data-testid="topup-result"
-      class="rounded-2xl border border-danger-200 bg-danger-50/90 p-4 text-sm text-danger-800 flex items-start gap-3 shadow-xs"
-    >
-      <AlertCircle :size="20" class="text-danger-600 shrink-0 mt-0.5" />
-      <div class="space-y-0.5">
-        <p class="font-bold">Giao dịch nạp ví chưa thành công</p>
-        <p class="text-pretty">
-          Giao dịch nạp ví chưa thành công, tiền chưa bị trừ. Bạn có thể thử lại.
-        </p>
-      </div>
+      <FhButton
+        variant="secondary"
+        size="sm"
+        data-testid="wallet-payment-refresh"
+        aria-label="Làm mới số dư và lịch sử ví"
+        :disabled="loading || refreshing"
+        @click="load"
+      >
+        Làm mới
+      </FhButton>
     </div>
 
     <!-- Balance and top-up: one surface -->
@@ -265,7 +278,7 @@ async function topUp() {
       </div>
       <div v-else-if="loadError" class="flex flex-wrap items-center justify-between gap-3 py-1">
         <p class="text-sm text-ink-700">{{ loadError }}</p>
-        <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
+        <FhButton v-if="!hasPaymentReturn" variant="secondary" size="sm" @click="load">Thử lại</FhButton>
       </div>
       <p v-else-if="transactions.length === 0" class="text-sm text-ink-500">Chưa có giao dịch nào.</p>
       <ul

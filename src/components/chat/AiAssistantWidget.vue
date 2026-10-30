@@ -32,7 +32,7 @@ const conversation = useSharedAiConversation();
 
 /** Pages that hold the assistant conversation themselves (the booking form). */
 const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
-const { turnCount, pinnedService, pinnedDevices, sessionId, startOver, loadHoldingLines, customerWords, isThinking, messages, attachments } = conversation;
+const { turnCount, pinnedService, pinnedDevices, sessionId, lastReply, startOver, loadHoldingLines, customerWords, isThinking, messages, attachments } = conversation;
 
 /**
  * The booking card shows only once the assistant has finished answering. While
@@ -43,6 +43,15 @@ const { turnCount, pinnedService, pinnedDevices, sessionId, startOver, loadHoldi
 const showBooking = computed(() => !!pinnedService.value && !isThinking.value);
 /** Two or three appliances the assistant suggested booking as one visit. */
 const showVisit = computed(() => pinnedDevices.value.length >= 2 && !!sessionId.value && !isThinking.value);
+/** Keep the manual booking route available when an AI failure left no suggestion to pin. */
+const showManualBooking = computed(() => {
+  const reply = lastReply.value;
+  const reason = reply?.failureReason;
+  const unavailable = reply?.status === 'unavailable' || reply?.aiAvailable === false;
+  return !isThinking.value && !pinnedService.value &&
+    reason !== 'validation' && reason !== 'rate_limited' &&
+    (unavailable || reason === 'service_unavailable' || reason === 'image_transport' || reason === 'request_failed');
+});
 
 async function toggle() {
   const nextOpen = !isOpen.value;
@@ -75,6 +84,11 @@ function goToBooking() {
       desc: customerWords() || undefined,
     },
   });
+}
+
+function goToManualBooking() {
+  isOpen.value = false;
+  void router.push({ name: 'new-booking' });
 }
 
 /** Every suggested appliance into one visit, each with its service and the photos read as it (PO 29/10/2026). */
@@ -219,6 +233,18 @@ function goToVisit() {
                   >
                     <CalendarPlus :size="14" />
                     Đặt thợ
+                  </button>
+                </div>
+                <div v-else-if="showManualBooking" data-testid="ai-manual-booking-bar" class="flex items-center justify-between gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                  <p class="text-xs font-semibold text-brand-700">Tiếp tục đặt lịch bằng cách chọn dịch vụ</p>
+                  <button
+                    type="button"
+                    data-testid="ai-book-manual"
+                    class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 whitespace-nowrap"
+                    @click="goToManualBooking"
+                  >
+                    <CalendarPlus :size="14" />
+                    Chọn dịch vụ
                   </button>
                 </div>
                 </transition>

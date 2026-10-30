@@ -41,6 +41,7 @@ import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intent
 import type { FundedReservation } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { pendingPaymentCashNotice } from '../../utils/pending-payment-cash-notice';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -816,7 +817,8 @@ async function createCashIntent() {
     cashCreateCommandId.value = null;
   } catch (error) {
     await refreshCashIntent();
-    actionMessage.value = { type: 'error', text: userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+    actionMessage.value = { type: 'error', text: pendingPaymentCashNotice(error)
+      ?? userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
   } finally {
     actionLoading.value = false;
   }
@@ -2023,6 +2025,8 @@ const parsedReview = computed(() => {
             v-else-if="payMethod === 'cash'"
             class="w-full"
             size="lg"
+            :disabled="actionLoading || walletPaying"
+            :loading="actionLoading"
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"
           >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>

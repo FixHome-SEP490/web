@@ -34,6 +34,26 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({data:{data:[{id:'address'}]}});
     expect(await profileApi.getAddresses()).toEqual([{id:'address'}]);
   });
+  it('opts into coarse empty reasons without changing the native candidates array contract', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'OUTSIDE_COVERAGE' } });
+    expect(await bookingsApi.getCandidatesWithDiagnostics('b')).toEqual({
+      candidates: [], emptyReason: 'OUTSIDE_COVERAGE',
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/bookings/b/technician-candidates?diagnostics=1', { timeout: 60000 },
+    );
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [{
+      userId: 'user-tech', technicianId: 'profile-tech', fullName: 'Thợ',
+    }], emptyReason: 'OUTSIDE_COVERAGE' } });
+    const found = await bookingsApi.getCandidatesWithDiagnostics('b');
+    expect(found.candidates[0].id).toBe('user-tech');
+    expect(found.emptyReason).toBeNull();
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'FAKE_REASON' } });
+    expect((await bookingsApi.getCandidatesWithDiagnostics('b')).emptyReason).toBeNull();
+  });
+
   it('uses quotation decisions and multipart evidence accepted by Backend', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({data:{data:{}}});
     await ordersApi.approveQuotation('q');

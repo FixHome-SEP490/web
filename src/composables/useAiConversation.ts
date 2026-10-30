@@ -574,75 +574,78 @@ export function useAiConversation(options: AiConversationOptions = {}) {
       ...(videos.length ? { videos: videos.map((video) => video.url) } : {}),
       ...(sentNow.length ? { attachmentIds: sentNow.map((item) => item.id) } : {}),
     });
-    messages.value.push({ id: nextId(), sender: 'bot', text: holdingLineFor(situation), isAcknowledgement: true });
+    messages.value.push({
+      id: nextId(),
+      sender: 'bot',
+      text: holdingLineFor(situation),
+      isAcknowledgement: true,
+    });
+    // Read it back through the reactive array so later progress copy updates
+    // notify Vue effects and the rendered conversation thread.
+    const acknowledgement = messages.value[messages.value.length - 1]!;
     isThinking.value = true;
     updated();
 
-    const ask = (payload: string[]) =>
-      isQuestion
-        ? aiApi.ask({ question: text, sessionId: sessionId.value })
-        : aiApi.analyze({ description: text, images: payload, sessionId: sessionId.value });
+    try {
+      const ask = (payload: string[]) =>
+        isQuestion
+          ? aiApi.ask({ question: text, sessionId: sessionId.value })
+          : aiApi.analyze({ description: text, images: payload, sessionId: sessionId.value });
 
-    const [firstTry] = await Promise.all([
-      ask(images.map((i) => i.dataUrl)),
-      new Promise((resolve) => setTimeout(resolve, options.dwellMs ?? ACKNOWLEDGEMENT_DWELL_MS)),
-    ]);
+      const [firstTry] = await Promise.all([
+        ask(images.map((i) => i.dataUrl)),
+        new Promise((resolve) => setTimeout(resolve, options.dwellMs ?? ACKNOWLEDGEMENT_DWELL_MS)),
+      ]);
 
-    // A send that fails with photographs attached is usually the photographs. On
-    // a weak connection the request never completes and the customer is told the
-    // assistant is unreachable when the assistant is fine. One retry at roughly
-    // a tenth of the bytes turns that into an answer.
-    let reply = firstTry;
-    if (reply.status === 'unavailable' && images.length > 0) {
-      messages.value.push({
-        id: nextId(),
-        sender: 'bot',
-        text: 'Mạng hơi yếu nên ảnh chưa gửi được, em thử lại với ảnh nhẹ hơn nhé...',
-        isAcknowledgement: true,
-      });
-      updated();
-      const smaller = await shrinkForRetry(images);
-      if (smaller.length > 0) reply = await ask(smaller);
-    }
-
-    if (reply.sessionId) sessionId.value = reply.sessionId;
-    turnCount.value += 1;
-    lastReply.value = reply;
-
-    const offered = reply.recommendedServices?.[0];
-    const current = pinnedService.value;
-    const keepsSpecific =
-      !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
-    if (offered && !keepsSpecific) pinnedService.value = offered;
-    if (Array.isArray(reply.devices)) {
-      const devices = bookableDevices(reply);
-      pinnedDevices.value = devices.length >= 2 ? devices : [];
-    }
-
-    const shown = reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply);
-    const pace = options.revealMs ?? defaultRevealMs();
-    const steps = pace > 0 ? revealSteps(shown) : [shown];
-    if (steps.length === 1) {
-      messages.value.push({ id: nextId(), sender: 'bot', text: shown, reply });
-    } else {
-      // Written out piece by piece; the details under it (price, services,
-      // questions) and every button come only once the whole text is there.
-      isRevealing.value = true;
-      messages.value.push({ id: nextId(), sender: 'bot', text: '' });
-      const live = messages.value[messages.value.length - 1];
-      for (const step of steps) {
-        // Started over meanwhile: this reply belongs to a conversation that is gone.
-        if (!messages.value.includes(live)) break;
-        live.text = step;
+      let reply = firstTry;
+      if (reply.failureReason === 'image_transport' && images.length > 0) {
+        acknowledgement.text = 'Ảnh chưa gửi được, đang thử gửi bản nhẹ hơn…';
         updated();
-        if (step !== shown) await new Promise((resolve) => setTimeout(resolve, pace));
+        const smaller = await shrinkForRetry(images);
+        if (smaller.length > 0) reply = await ask(smaller);
       }
-      live.text = shown;
-      live.reply = reply;
+
+      if (reply.sessionId) sessionId.value = reply.sessionId;
+      turnCount.value += 1;
+      lastReply.value = reply;
+
+      const offered = reply.recommendedServices?.[0];
+      const current = pinnedService.value;
+      const keepsSpecific =
+        !!current && !FALLBACK_SERVICE_CODES.has(current.serviceCode) && FALLBACK_SERVICE_CODES.has(offered?.serviceCode ?? '');
+      if (offered && !keepsSpecific) pinnedService.value = offered;
+      if (Array.isArray(reply.devices)) {
+        const devices = bookableDevices(reply);
+        pinnedDevices.value = devices.length >= 2 ? devices : [];
+      }
+
+      const shown = reply.messageVi?.trim() || reply.answerVi?.trim() || composeFromFields(reply);
+      const pace = options.revealMs ?? defaultRevealMs();
+      const steps = pace > 0 ? revealSteps(shown) : [shown];
+      if (steps.length === 1) {
+        messages.value.push({ id: nextId(), sender: 'bot', text: shown, reply });
+      } else {
+        // Written out piece by piece; the details under it (price, services,
+        // questions) and every button come only once the whole text is there.
+        isRevealing.value = true;
+        messages.value.push({ id: nextId(), sender: 'bot', text: '' });
+        const live = messages.value[messages.value.length - 1];
+        for (const step of steps) {
+          // Started over meanwhile: this reply belongs to a conversation that is gone.
+          if (!messages.value.includes(live)) break;
+          live.text = step;
+          updated();
+          if (step !== shown) await new Promise((resolve) => setTimeout(resolve, pace));
+        }
+        live.text = shown;
+        live.reply = reply;
+        isRevealing.value = false;
+      }
+    } finally {
       isRevealing.value = false;
+      isThinking.value = false;
+      updated();
     }
-    isThinking.value = false;
-    updated();
   }
 
   /** Send what is in the composer. */
