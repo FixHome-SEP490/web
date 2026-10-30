@@ -401,7 +401,7 @@ const uploadKycDocuments = async (): Promise<boolean> => {
       throw err;
     }
 
-    toast.success('Đã tải lên và xác thực hồ sơ KYC thành công!');
+    toast.success('Đã gửi hồ sơ xác thực. Vui lòng chờ duyệt.');
     return true;
   } catch (err: unknown) {
     const errorMsg = getErrorMessage(err, 'Tải ảnh xác thực KYC thất bại. Vui lòng thử lại.');

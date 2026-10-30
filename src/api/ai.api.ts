@@ -5,6 +5,7 @@
 // host and port change every time, and a new rental must not mean a new build.
 
 import apiClient from './client';
+import { userFacingError } from '../utils/user-facing-error';
 
 /** The service refuses a fourth image. */
 export const AI_MAX_IMAGES = 3;
@@ -128,10 +129,19 @@ export type AiStatus =
   | 'no_grounding'
   | 'unavailable';
 
+export type AiFailureReason =
+  | 'service_unavailable'
+  | 'image_transport'
+  | 'validation'
+  | 'rate_limited'
+  | 'request_failed';
+
 export interface AiReply {
   sessionId: string | null;
   status: AiStatus;
   aiAvailable?: boolean;
+  /** Client-side classification used to decide whether an image-only retry is safe. */
+  failureReason?: AiFailureReason;
   /** Prose. Diagnosis fills messageVi; a question fills answerVi. */
   messageVi?: string | null;
   answerVi?: string | null;
@@ -181,21 +191,61 @@ function unwrap<T>(payload: unknown): T {
 /** Too many messages in a minute: said plainly, never as an error code. */
 const TOO_FAST =
   'Anh/chị nhắn hơi nhanh, em chưa kịp xử lý hết ạ. Anh/chị đợi khoảng một phút rồi gửi lại giúp em nhé.';
+const AI_UNAVAILABLE =
+  'Trợ lý đang tạm thời không khả dụng. Bạn có thể chọn dịch vụ thủ công để tiếp tục đặt lịch.';
+const IMAGE_TRANSPORT_FAILED =
+  'Ảnh chưa gửi được. Vui lòng thử gửi lại hoặc tiếp tục đặt lịch bằng cách chọn dịch vụ thủ công.';
+const INVALID_DESCRIPTION = 'Mô tả chưa hợp lệ. Vui lòng kiểm tra lại nội dung rồi thử lại.';
+const REQUEST_FAILED = 'Trợ lý chưa thể xử lý yêu cầu. Bạn có thể chọn dịch vụ thủ công để tiếp tục đặt lịch.';
 
-function tooFast(error: unknown): boolean {
-  return (error as { response?: { status?: number } })?.response?.status === 429;
+function httpStatus(error: unknown): number | undefined {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status;
+  return typeof status === 'number' ? status : undefined;
 }
 
-/** What to say when even our own backend is unreachable. */
-function offline(sessionId?: string | null, sentenceOverride?: string): AiReply {
-  const sentence =
-    sentenceOverride ??
-    'Hiện chưa kết nối được tới trợ lý ạ. Anh/chị kiểm tra lại mạng giúp em, ' +
-      'hoặc vẫn có thể đặt thợ bình thường.';
+function imageTransportFailure(error: unknown, hasImages: boolean): boolean {
+  // A 413 is an explicit payload rejection at the request boundary; timeouts
+  // are ambiguous because the AI service may already have processed the POST.
+  return hasImages && httpStatus(error) === 413;
+}
+
+function failureReason(error: unknown, hasImages: boolean): AiFailureReason {
+  const status = httpStatus(error);
+  if (status === 429) return 'rate_limited';
+  if (status === 400 || status === 422) return 'validation';
+  if (imageTransportFailure(error, hasImages)) return 'image_transport';
+  const code = (error as { code?: unknown } | null)?.code;
+  if (status === 408 || (status !== undefined && status >= 500)) return 'service_unavailable';
+  if (status === undefined && ['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'].includes(String(code))) {
+    return 'service_unavailable';
+  }
+  return 'request_failed';
+}
+
+/** Classify the failed route without treating every photo request as a transport failure. */
+function offline(sessionId: string | null | undefined, error: unknown, hasImages: boolean): AiReply {
+  const reason = failureReason(error, hasImages);
+  const fallback =
+    reason === 'rate_limited'
+      ? TOO_FAST
+      : reason === 'validation'
+        ? INVALID_DESCRIPTION
+        : reason === 'image_transport'
+          ? IMAGE_TRANSPORT_FAILED
+          : reason === 'service_unavailable'
+            ? AI_UNAVAILABLE
+            : REQUEST_FAILED;
+  const sentence = reason === 'rate_limited' ? TOO_FAST : userFacingError(error, fallback);
   return {
     sessionId: sessionId ?? null,
     status: 'unavailable',
-    aiAvailable: false,
+    aiAvailable:
+      reason === 'service_unavailable'
+        ? false
+        : reason === 'validation' || reason === 'rate_limited'
+          ? true
+          : undefined,
+    failureReason: reason,
     messageVi: sentence,
     answerVi: sentence,
     suspectedFaults: [],
@@ -228,7 +278,7 @@ export const aiApi = {
       );
       return unwrap<AiReply>(response.data);
     } catch (error) {
-      return offline(payload.sessionId, tooFast(error) ? TOO_FAST : undefined);
+      return offline(payload.sessionId, error, (payload.images?.length ?? 0) > 0);
     }
   },
 
@@ -242,7 +292,7 @@ export const aiApi = {
       );
       return unwrap<AiReply>(response.data);
     } catch (error) {
-      return offline(payload.sessionId, tooFast(error) ? TOO_FAST : undefined);
+      return offline(payload.sessionId, error, false);
     }
   },
 
