@@ -56,9 +56,11 @@ function scenario() {
   const envelope = (data: unknown) => ({ data: { data } });
   const forbidden = () => new Error('Synthetic 403 forbidden');
   mockGet.mockImplementation(async (path: string) => {
-    if (path === `/bookings/${bookingId}/technician-candidates`) {
+    if (path === `/bookings/${bookingId}/technician-candidates` || path === `/bookings/${bookingId}/technician-candidates?diagnostics=1`) {
       if (actor !== 'customer' || status !== 'submitted') throw forbidden();
-      return envelope(candidates);
+      return path.endsWith('?diagnostics=1')
+        ? { data: { data: candidates, emptyReason: null } }
+        : envelope(candidates);
     }
     if (path === `/bookings/${bookingId}`) {
       if (actor !== 'customer' && actor !== winner) throw forbidden();

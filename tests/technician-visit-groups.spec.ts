@@ -81,6 +81,96 @@ describe('TechnicianJobsPage grouped visits', () => {
     expect(enRoute).toHaveBeenCalledWith('v1-o1');
   });
 
+  it('shows date and address as consistently labeled text without decorative metadata icons', async () => {
+    getTechnicianJobsPage.mockResolvedValue(page([{
+      id: 'order-16', code: 'FH-16', bookingId: 'booking-16', serviceName: 'Sửa máy lạnh',
+      status: 'ACCEPTED', scheduledAt: '2026-10-23T02:00:00Z', customerName: 'Khách A',
+      customerPhone: null, addressSummary: 'Quận 1', laborTotal: 100000, partsTotal: 0, grandTotal: 100000,
+    }], 1));
+    const wrapper = await mountPage();
+    const card = wrapper.get('[data-testid="technician-job-order-16"]');
+    expect(card.text()).toContain('Ngày hẹn');
+    expect(card.text()).toContain('Địa chỉ');
+    expect(card.find('.lucide-calendar').exists()).toBe(false);
+    expect(card.find('.lucide-map-pin').exists()).toBe(false);
+  });
+
+  it('preserves distinct per-device visit statuses without inventing an address', async () => {
+    const mixed = group('mixed', 'en_route');
+    mixed.items[1].orderStatus = 'under_repair';
+    assignedPage.mockResolvedValue(page([mixed], 1));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    expect(wrapper.get('[data-testid="technician-visit-device-mixed-1"]').text()).toContain('Đang di chuyển');
+    expect(wrapper.get('[data-testid="technician-visit-device-mixed-2"]').text()).toContain('Đang sửa chữa');
+    expect(wrapper.get('[data-testid="technician-visit-group-mixed"]').text()).not.toContain('Địa chỉ riêng tư');
+  });
+
+  it('shows assigned technician address only when explicitly sent by Backend assigned-page', async () => {
+    assignedPage.mockResolvedValue(page([{ ...group('v1'), assignedAddressSummary: '12 Đường kiểm thử, Quận 1' }], 1));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    expect(wrapper.get('[data-testid="technician-visit-address"]').text()).toContain('12 Đường kiểm thử, Quận 1');
+    expect(wrapper.get('[data-testid="technician-visit-group-v1"]').text()).not.toContain('Địa chỉ riêng tư');
+  });
+
+  it('does not render an address line for a blank assigned address', async () => {
+    assignedPage.mockResolvedValue(page([{ ...group('v1'), assignedAddressSummary: '  ' }], 1));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    expect(wrapper.find('[data-testid="technician-visit-address"]').exists()).toBe(false);
+  });
+
+  it('exposes named list controls and the parent status to assistive technology', async () => {
+    const wrapper = await mountPage();
+    const listSwitch = wrapper.get('[data-testid="jobs-list-switch-visits"]');
+    await listSwitch.trigger('click');
+    const groupCard = wrapper.get('[data-testid="technician-visit-group-v1"]');
+    expect(listSwitch.attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[aria-label="Chọn loại danh sách công việc"]').exists()).toBe(true);
+    expect(groupCard.get('[aria-label="Thiết bị trong lượt sửa"]').exists()).toBe(true);
+    expect(groupCard.get('[aria-label="Trạng thái lượt sửa: Đã nhận lịch"]').exists()).toBe(true);
+    expect(groupCard.get('[data-testid="technician-visit-open-v1"]').text()).toContain('Mở công việc');
+  });
+
+  it('shows a distinct empty state when the technician has no assigned visits', async () => {
+    assignedPage.mockResolvedValue(page([], 0));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    expect(wrapper.get('[data-testid="technician-visit-groups-empty"]').text()).toContain('Chưa có lượt sửa nhiều thiết bị được phân công');
+    expect(wrapper.findAll('[data-testid^="technician-visit-group-"]')).toHaveLength(0);
+  });
+
+  it('keeps an announced loading state until assigned visits arrive', async () => {
+    let resolvePage!: (result: ReturnType<typeof page>) => void;
+    assignedPage.mockReturnValue(new Promise((resolve) => { resolvePage = resolve; }));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    const loading = wrapper.get('[aria-label="Đang tải lượt sửa nhiều thiết bị"]');
+    expect(loading.attributes('aria-busy')).toBe('true');
+    resolvePage(page([], 0));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="technician-visit-groups-empty"]').exists()).toBe(true);
+  });
+
+  it('requests the next server page without flattening the visit into child jobs', async () => {
+    assignedPage.mockResolvedValue(page([group('v1')], 21, 1, 20));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click');
+    await flushPromises();
+    expect(assignedPage).toHaveBeenLastCalledWith(2, 20, { tab: 'all' });
+    expect(wrapper.findAll('[data-testid^="technician-visit-group-"]')).toHaveLength(1);
+  });
+
+  it('keeps device labels readable and action targets at least 44px high', async () => {
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    const card = wrapper.get('[data-testid="technician-visit-group-v1"]');
+    expect(card.get('[data-testid="technician-visit-device-v1-1"] span').classes()).not.toContain('truncate');
+    expect(card.get('[data-testid="technician-visit-open-v1"]').classes()).toContain('h-11');
+  });
+
   it('keeps the legacy job list and tabs when the jobs view is selected', async () => {
     getTechnicianJobsPage.mockResolvedValue(page([{
       id: 'order-1', code: 'FH-1', bookingId: 'booking-1', serviceName: 'Sửa máy lạnh',
