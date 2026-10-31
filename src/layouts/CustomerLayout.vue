@@ -9,6 +9,7 @@ import { useNotificationsStore } from '../stores/notifications.store';
 import { useCallStore } from '../stores/call.store';
 import {
   CalendarPlus,
+  ChevronDown,
   ShieldAlert,
   Bell,
   User,
@@ -48,8 +49,16 @@ let chatPoll: (() => void) | null = null;
 
 // ── Tab sliding indicator animation (Desktop & Mobile) ──
 const desktopNavRef = ref<HTMLElement | null>(null);
+const compactDesktopNavRef = ref<HTMLElement | null>(null);
+const compactDesktopOverflowButtonRef = ref<HTMLElement | null>(null);
+const compactDesktopOverflowPanelRef = ref<HTMLElement | null>(null);
 const navItemRefs = ref<Record<string, HTMLElement | null>>({});
 const navIndicatorStyle = ref<Record<string, string>>({ opacity: '0' });
+const desktopOverflowOpen = ref(false);
+const wideDesktopMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  ? window.matchMedia('(min-width: 1440px)')
+  : null;
+const isWideDesktop = ref(wideDesktopMedia?.matches ?? false);
 
 const mobileNavRef = ref<HTMLElement | null>(null);
 const mobileTabRefs = ref<Record<string, HTMLElement | null>>({});
@@ -80,12 +89,15 @@ function updateNavIndicator() {
   const activeItem = navItems.find((item) =>
     item.exact ? currentPath === item.to : currentPath.startsWith(item.to)
   );
-  if (!activeItem || !desktopNavRef.value) {
+  const nav = isWideDesktop.value ? desktopNavRef.value : compactDesktopNavRef.value;
+  const el = isWideDesktop.value
+    ? activeItem && navItemRefs.value[activeItem.to]
+    : compactDesktopOverflowButtonRef.value;
+  if (!activeItem || !nav || !el) {
     navIndicatorStyle.value = { opacity: '0' };
     return;
   }
-  const el = navItemRefs.value[activeItem.to];
-  if (!el || el.offsetWidth === 0) {
+  if (el.offsetWidth === 0) {
     navIndicatorStyle.value = { opacity: '0' };
     return;
   }
@@ -126,6 +138,40 @@ function updateAllIndicators() {
   updateMobileIndicator();
 }
 
+function closeDesktopOverflow(returnFocus = false) {
+  desktopOverflowOpen.value = false;
+  if (returnFocus) {
+    void nextTick(() => compactDesktopOverflowButtonRef.value?.focus());
+  }
+}
+
+function onDesktopOverflowTriggerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowDown') return;
+  event.preventDefault();
+  desktopOverflowOpen.value = true;
+  void nextTick(() => compactDesktopOverflowPanelRef.value?.querySelector<HTMLElement>('a')?.focus());
+}
+
+function onDesktopOverflowDocumentClick(event: MouseEvent) {
+  const nav = compactDesktopNavRef.value;
+  if (desktopOverflowOpen.value && nav && !event.composedPath().includes(nav)) {
+    closeDesktopOverflow();
+  }
+}
+
+function onDesktopOverflowDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && desktopOverflowOpen.value) {
+    event.preventDefault();
+    closeDesktopOverflow(true);
+  }
+}
+
+function onWideDesktopChange(event: MediaQueryListEvent) {
+  isWideDesktop.value = event.matches;
+  closeDesktopOverflow();
+  void nextTick(updateAllIndicators);
+}
+
 onMounted(async () => {
   chatStore.initSocket();
   // Listening for calls is separate from opening the chat widget: a call has to
@@ -149,6 +195,9 @@ onMounted(async () => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateAllIndicators);
   }
+  document.addEventListener('click', onDesktopOverflowDocumentClick);
+  document.addEventListener('keydown', onDesktopOverflowDocumentKeydown);
+  wideDesktopMedia?.addEventListener('change', onWideDesktopChange);
   void nextTick(() => {
     updateAllIndicators();
     setTimeout(updateAllIndicators, 60);
@@ -163,6 +212,9 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateAllIndicators);
   }
+  document.removeEventListener('click', onDesktopOverflowDocumentClick);
+  document.removeEventListener('keydown', onDesktopOverflowDocumentKeydown);
+  wideDesktopMedia?.removeEventListener('change', onWideDesktopChange);
 });
 
 watch(
@@ -178,6 +230,7 @@ watch(
 watch(
   () => router.currentRoute.value?.path,
   () => {
+    closeDesktopOverflow();
     void nextTick(updateAllIndicators);
   }
 );
@@ -206,6 +259,11 @@ const navItems = [
   { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },
 ];
 
+const compactDesktopNavActive = computed(() => {
+  const currentPath = router.currentRoute.value?.path || '';
+  return navItems.some((item) => item.exact ? currentPath === item.to : currentPath.startsWith(item.to));
+});
+
 const tabItems = [
   { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
   { to: '/app/orders', label: 'Đơn của tôi', icon: ClipboardList, exact: false },
@@ -231,7 +289,7 @@ const handleLogout = async () => {
     :class="hasActionBar ? '[--fh-dock:10rem] lg:[--fh-dock:6rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/90 shadow-2xs">
-      <!-- A little wider than the page so the links and both booking buttons fit. -->
+      <!-- The desktop nav collapses before the booking actions and account controls compete for width. -->
       <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">
           <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0 group" aria-label="FixHome - Trang chủ">
@@ -240,9 +298,11 @@ const handleLogout = async () => {
           </router-link>
 
           <nav
+            v-show="isWideDesktop"
             ref="desktopNavRef"
-            class="hidden lg:flex items-center h-16 gap-1 text-sm font-medium text-ink-600 relative"
+            class="hidden min-[1440px]:flex items-center h-16 gap-1 text-sm font-medium text-ink-600 relative"
             aria-label="Điều hướng chính"
+            data-testid="customer-desktop-nav"
           >
             <!-- Sliding active indicator bar -->
             <div
@@ -271,6 +331,64 @@ const handleLogout = async () => {
                 {{ unread }}
               </span>
             </router-link>
+          </nav>
+
+          <nav
+            v-show="!isWideDesktop"
+            ref="compactDesktopNavRef"
+            class="hidden lg:flex items-center h-16 relative"
+            aria-label="Điều hướng chính"
+          >
+            <div
+              class="pointer-events-none absolute bottom-0 left-0 h-[3px] bg-brand-600 rounded-t-sm transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              :style="navIndicatorStyle"
+              aria-hidden="true"
+            />
+            <button
+              ref="compactDesktopOverflowButtonRef"
+              type="button"
+              class="h-9 px-3 rounded-xl inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              :class="compactDesktopNavActive ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'"
+              :aria-label="desktopOverflowOpen ? 'Đóng điều hướng thêm' : 'Mở điều hướng thêm'"
+              aria-controls="customer-desktop-nav-overflow"
+              :aria-expanded="desktopOverflowOpen"
+              data-testid="customer-desktop-nav-overflow-trigger"
+              @click="desktopOverflowOpen = !desktopOverflowOpen"
+              @keydown="onDesktopOverflowTriggerKeydown"
+            >
+              <span>Thêm</span>
+              <ChevronDown :size="16" :class="desktopOverflowOpen ? 'rotate-180' : ''" aria-hidden="true" />
+            </button>
+            <div
+              v-show="desktopOverflowOpen"
+              id="customer-desktop-nav-overflow"
+              ref="compactDesktopOverflowPanelRef"
+              class="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-xl border border-ink-200 bg-white py-1 text-sm text-ink-700 shadow-(--shadow-e3)"
+              data-testid="customer-desktop-nav-overflow"
+            >
+              <template v-if="desktopOverflowOpen">
+                <router-link
+                  v-for="item in navItems"
+                  :key="item.to"
+                  :to="item.to"
+                  class="flex h-10 items-center gap-3 px-3 whitespace-nowrap hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600"
+                  :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
+                  :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
+                  @mouseenter="prefetchRoute(item.to)"
+                  @focus="prefetchRoute(item.to)"
+                  @click="closeDesktopOverflow()"
+                >
+                  <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
+                  <span>{{ item.label }}</span>
+                  <span
+                    v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
+                    class="ml-auto min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center leading-none shadow-2xs"
+                  >
+                    {{ unread }}
+                  </span>
+                </router-link>
+              </template>
+            </div>
           </nav>
         </div>
 
