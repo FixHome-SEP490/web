@@ -2,10 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const { partRequestsApi, partsCatalogApi } = vi.hoisted(() => ({
-  partRequestsApi: { getByOrderId: vi.fn(), createPreRepair: vi.fn(), receiveByQr: vi.fn(), updateItemUsage: vi.fn() },
+  partRequestsApi: {
+    getByOrderId: vi.fn(),
+    createPreRepair: vi.fn(),
+    receiveByQr: vi.fn(),
+    updateItemUsage: vi.fn(),
+    getReturnsByOrderId: vi.fn(),
+  },
   partsCatalogApi: { getCatalog: vi.fn() },
 }));
-vi.mock('../src/api/part-requests.api', () => ({ partRequestsApi }));
+vi.mock('../src/api/part-requests.api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/api/part-requests.api')>();
+  // Keep the real helpers (idempotency key, unavailable-error mapping).
+  return { ...actual, partRequestsApi };
+});
 vi.mock('../src/api/parts-catalog.api', () => ({ partsCatalogApi }));
 
 import TechnicianPartsSection from '../src/components/TechnicianPartsSection.vue';
@@ -29,6 +39,8 @@ describe('TechnicianPartsSection inside the job page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     partsCatalogApi.getCatalog.mockResolvedValue({ data: [] });
+    // P1 return feature idle by default in these tests.
+    partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
   });
 
   it('tells the page when a request waits for the technician (parts ready to pick up)', async () => {

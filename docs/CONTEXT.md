@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-10-18 12:59 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/po-batch-2026-10-18
+> Cập nhật lần cuối: 2026-10-19 00:40 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-p1-parts-return-20261018
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -248,6 +248,12 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Gọi thoại: nút "Loa to / Loa nhỏ" giữa Micro và Kết thúc; trình duyệt không chuyển được loa trong của điện thoại nên web đổi âm lượng giọng bên kia (100% hoặc 35%), mỗi cuộc gọi bắt đầu loa to.
 - Test: `tests/technician-invitation-preview.spec.ts`, `rebook-and-sessions.spec.ts`, `new-booking-wizard-ui.spec.ts`, `chat-attachments-and-lock.spec.ts`, `live-updates.spec.ts`, `order-live-refresh.spec.ts`, `booking-matching-poll.spec.ts`, `call-speaker-toggle.spec.ts`, `ai-video-attachments.spec.ts`, `ai-booking-attachments.spec.ts`, `upload-retry.spec.ts`, `video-prep.spec.ts`.
 
+### Hoàn trả linh kiện FixHome (P1, owner lock 19/10/2026, nhánh `foxonworld/fixhome-p1-parts-return-20261018`)
+
+- Kỹ thuật viên khai trả ngay trong `TechnicianPartsSection.vue` (trang việc): dòng linh kiện FixHome đã nhận qua QR có thêm cột "Hoàn trả" hiện số Cấp/Dùng/Cần trả, chip "Đang chờ quản lý xác nhận" hoặc "Đã nhận", nút "Khai trả" mở form nhập số lượng (số nguyên 1..phần chưa khai trả) gửi `POST /part-requests/:id/items/:itemId/declare-return`; khai trả chưa phải là đã trả xong.
+- Quản lý dịch vụ nhận tại trang Yêu cầu linh kiện (`ConsolePartRequestsPage.vue`): khối "Chờ nhận linh kiện hoàn trả" đọc `GET /part-returns/pending`, hiện tên linh kiện, mã `PR-`, link đơn, tham chiếu kỹ thuật viên và các số Cấp/Dùng/Khai trả/Đã nhận; chỉ nhập "Số lượng nhận thực tế" (mặc định và tối đa bằng phần đang chờ nhận) rồi bấm "Đã nhận" gửi `POST .../accept-return`; nhận một phần thì phần còn lại vẫn nằm trong hàng chờ. Không có nút tranh chấp/phạt/ghi nợ và không tự báo đã thanh toán.
+- Cả hai chỗ dùng `expectedVersion` và `idempotencyKey` (chặn bấm hai lần; lỗi 409 thì đọc lại số liệu). Backend chưa bật (403/404/501) thì phần hoàn trả tự ẩn, luồng QR/dùng/hoàn trả cũ không đổi; lỗi mạng khác chỉ hiện dòng "Chưa tải được…" kèm nút "Thử lại". Test `tests/part-returns.spec.ts`.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -276,6 +282,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
 - Khách rút ví (backend nhánh `feat/customer-withdrawal-kyc`): `GET /customer/verification`, `POST /customer/verification/upload-url`, `POST /customer/verification`, `GET /customer/verification/documents/:id/access`, `GET /customer/wallet/withdrawal-info`, `GET /customer/wallet/banks`, `GET|PUT /customer/wallet/bank-account`, `POST|GET /customer/wallet/withdrawals` (`page`, `limit`); admin `GET /admin/customer-verifications` (`status` `pending|verified|rejected`, `search`, `page`, `limit`), `GET /admin/customer-verifications/:id`, `.../documents/:documentId/access`, `PATCH .../approve`, `PATCH .../reject` (`rejectionReason`). Loại giao dịch ví khách thêm `withdrawal`, `withdrawal_refund`. CHƯA KIỂM CHỨNG với `backend` thật.
 - Quản lý xem lệnh rút của khách (quản lý dịch vụ và admin, `backend` làm song song): `GET /service-manager/customer-withdrawals` (`page`, `limit`, `status` `PROCESSING|SUCCESS|FAILED`, `search`) trả lệnh kèm `customer {id, fullName, email, phoneNumber}` và số tài khoản đã che; `GET /service-manager/customer-withdrawals/payout-overview` (tổng của khách, `sourceBalance` là ví nguồn chung với kỹ thuật viên); `POST /service-manager/customer-withdrawals/:id/reconcile` trả lệnh kèm `message`. CHƯA KIỂM CHỨNG với `backend` thật.
+- Hoàn trả linh kiện FixHome (P1, owner lock 19/10/2026): `GET /service-orders/:orderId/part-returns` và `GET /part-returns/pending` trả `{partRequestId, partRequestItemId, partNameSnapshot, issuedQty, usedQty, declaredQty, managerAcceptedQty, outstandingQty, version}` (bản chờ trả có thể kèm `orderId`, `technicianId`, `technicianName`); `POST /part-requests/:requestId/items/:itemId/declare-return` và `.../accept-return` nhận `{quantity, expectedVersion, idempotencyKey}`. `idempotencyKey` khớp `^[A-Za-z0-9._:-]{8,128}$`, `quantity` nguyên 1..100; chỉ kỹ thuật viên giữ linh kiện được khai trả, chỉ quản lý dịch vụ được nhận thực tế. `backend` mới có phần nghiệp vụ, route HTTP chưa có; web CHƯA KIỂM CHỨNG.
 - Biến môi trường (chỉ tên): `VITE_API_BASE_URL`, `VITE_MAPTILER_KEY`, `VITE_GOOGLE_CLIENT_ID` (để trống thì ẩn nút Google), `VITE_APP_TITLE` (hiện không dùng), `DEV_HTTPS` (bật HTTPS khi dev để gọi thoại qua mạng LAN). Mọi biến `VITE_*` đều công khai trong bundle, không đặt bí mật.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
@@ -304,6 +311,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - Thông báo nhận đẩy qua socket (`notification:new`); chưa có push lên điện thoại.
 - Đợt 18/10/2026 phụ thuộc backend nhánh `feat/po-batch-2026-10-18` (migration 037 và 038): với backend cũ, video, link xem và đính kèm chat trả 404, lời mời không có mô tả/ảnh/khoảng cách (web tự ẩn các dòng đó), không có sự kiện realtime (các màn chỉ cập nhật bằng polling dự phòng khi socket rớt, còn khi socket nối thì chờ sự kiện). Nén video trên máy chạy theo tốc độ phần cứng, máy yếu có thể mất cả phút cho một clip 60 giây (khách vẫn nhắn tiếp được); CHƯA đo trên điện thoại thật. Chunk `video-shrink` khoảng 137 KB gzip, `mediabunny-aac-encoder` khoảng 260 KB gzip, chỉ tải khi cần.
+- Hoàn trả linh kiện FixHome (P1) mới qua test web (`tests/part-returns.spec.ts`, 17 test); CHƯA KIỂM CHỨNG với `backend` thật vì route HTTP Phase B chưa có, và `mobile` chưa có phần này.
 - Khách rút ví và xác minh danh tính (`feat/customer-withdrawal-kyc`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. `mobile` chưa có (PO để mobile làm sau).
 - Tab "Khách hàng" trong rút tiền của console (`feat/staff-customer-withdrawals`) mới qua lint, typecheck, test và build; CHƯA KIỂM CHỨNG trên trình duyệt với `backend` thật. Tiêu đề trang và mục menu vẫn là "Ví kỹ thuật viên".
 - Tìm kiếm ở `CustomerOrdersPage` phải đọc toàn bộ các trạng thái đang chọn rồi lọc ở web vì hai endpoint `/my` chưa hỗ trợ `search`; cần chuyển lại sang tìm kiếm phía backend khi contract được bổ sung để tránh nhiều request với tài khoản có lịch sử dài.
@@ -318,6 +326,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-10-19 00:40 (UTC+7) | foxonworld | foxonworld/fixhome-p1-parts-return-20261018 | Hoàn trả linh kiện FixHome P1: thợ khai trả trong trang việc, quản lý dịch vụ nhận thực tế ở trang Yêu cầu linh kiện (nhận một phần vẫn chờ phần còn lại), ẩn khi backend chưa bật, test part-returns
 - 2026-10-18 12:59 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Sửa sau rà soát và test trình duyệt: dòng tiến độ gửi luôn hiện trên ô soạn, không gửi lại khi chỉ đang chờ server, nén video có giới hạn thời gian, sự kiện booking không bị bỏ khi đang mở hộp thoại, đọc phần đổi sau lần đọc đầy đủ đang chạy, trình xem video có Thử lại
 - 2026-10-18 12:19 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Realtime thật (live-updates: chỉ đọc lại phần đổi, vị trí thợ không gọi API, polling chỉ khi socket rớt); trợ lý AI 3 ảnh + 2 video, nén video trên máy (mediabunny), tải nền có tiến độ, thử lại khi mạng yếu; chat gửi video có tiến độ, Thử lại/Bỏ; xem video bằng link stream
 - 2026-10-18 03:22 (UTC+7) | ToanAltF4 | feat/po-batch-2026-10-18 | Đợt PO 18/10/2026: lời mời có mô tả, ảnh, video, tóm tắt AI, giá, khoảng cách; bỏ thanh kéo mức khẩn cấp; lịch chọn ngày rồi giờ; trợ lý AI nhận video gửi kèm thợ; chat gửi ảnh/video và khoá khi đơn hoàn tất; order:updated realtime; nút loa to/loa nhỏ khi gọi
@@ -357,4 +366,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-10 01:42 (UTC+7) | ToanAltF4 | feat/avatar-upload | Ảnh đại diện chọn từ máy rồi tải lên (POST /media/upload, Cloudinary), bỏ ô dán link: hộp AvatarDialog dùng chung cho hồ sơ khách, hồ sơ thợ và menu tài khoản của quản lý/admin trên thanh bên; ảnh cắt vuông 512 px, xoay đúng chiều (squareAvatar trong utils/image-for-ai.ts); lỗi chỉ báo thử lại
 - 2026-10-10 01:27 (UTC+7) | ToanAltF4 | feat/technician-default-warranty | Hồ sơ thợ có khối Bảo hành công mặc định (lưu qua PUT /technicians/me/warranty-default, tuỳ chọn áp cho mọi dịch vụ); ô bảo hành của từng dịch vụ để trống thì theo mặc định thay vì tự điền 30; form báo giá có ô Bảo hành công điền sẵn theo đơn, gửi warrantyDays cho mọi dòng công; khách thấy Bảo hành N ngày ở dòng tiền công (cả đơn giá cố định); bước báo giá của đơn giá cố định hiện bảo hành công
 - 2026-10-10 01:09 (UTC+7) | ToanAltF4 | feat/tech-step-details-ai-summary | Thợ: chi tiết từng bước, tóm tắt AI; sửa chuyển giữa hai form đặt lịch
-- 2026-10-10 00:58 (UTC+7) | ToanAltF4 | feat/console-ui-redesign | Làm lại giao diện console: tiêu đề, menu, bảng, lỗi tải thống nhất, bỏ mã thô

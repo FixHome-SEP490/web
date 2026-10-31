@@ -20,12 +20,16 @@ import {
   Tag,
   Clock,
   Layers,
+  Undo2,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
 import { userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
+  createIdempotencyKey,
+  isPartReturnsUnavailableError,
   type PartRequest,
+  type PartCustodyReturnRecord,
   type FulfillmentMethod,
 } from '../api/part-requests.api';
 import { partsCatalogApi } from '../api/parts-catalog.api';
@@ -94,6 +98,46 @@ const CATEGORY_TABS = [
 // QR Handover modal/input state
 const showQrInput = ref<string | null>(null); // requestId
 const qrTokenInput = ref('');
+
+// P1 parts custody (owner lock 19/10/2026): what this order still owes back to
+// FixHome. Data exists only for FixHome parts QR-received after the feature is
+// activated; with the flag off the GET fails and the return UI stays hidden.
+const returnRecords = ref<PartCustodyReturnRecord[]>([]);
+const returnsLoadError = ref(false);
+let returnsLoadVersion = 0;
+const declareTarget = ref<{
+  requestId: string;
+  itemId: string;
+  itemName: string;
+  maxQty: number;
+  version: number;
+} | null>(null);
+const declareQty = ref(1);
+const declareSubmitting = ref(false);
+
+const returnByItemId = computed(() => {
+  const map = new Map<string, PartCustodyReturnRecord>();
+  for (const record of returnRecords.value) map.set(record.partRequestItemId, record);
+  return map;
+});
+
+const returnFor = (itemId: string) => returnByItemId.value.get(itemId);
+const requestHasReturns = (pr: PartRequest) =>
+  pr.items.some((item) => returnByItemId.value.has(item.id));
+
+/** Declared but not physically accepted yet: the manager still has to confirm. */
+const pendingDeclaredQty = (record: PartCustodyReturnRecord) =>
+  Math.max(0, record.declaredQty - record.managerAcceptedQty);
+
+/** What the technician may declare now: the return-due quantity not declared yet. */
+const canDeclareMoreQty = (record: PartCustodyReturnRecord) =>
+  Math.max(0, record.outstandingQty - pendingDeclaredQty(record));
+
+const declareValid = computed(() => {
+  const target = declareTarget.value;
+  const quantity = Number(declareQty.value);
+  return !!target && Number.isInteger(quantity) && quantity >= 1 && quantity <= target.maxQty;
+});
 
 const isAccepted = computed(() => props.orderStatus?.toUpperCase() === 'ACCEPTED');
 const isUnderRepair = computed(() => props.orderStatus?.toUpperCase() === 'UNDER_REPAIR');
@@ -173,6 +217,22 @@ const loadPartRequests = async () => {
       userFacingError(err, 'Không thể tải danh sách yêu cầu linh kiện.');
   } finally {
     loading.value = false;
+  }
+};
+
+const loadReturns = async () => {
+  const version = ++returnsLoadVersion;
+  try {
+    const records = await partRequestsApi.getReturnsByOrderId(props.orderId);
+    if (version !== returnsLoadVersion) return;
+    returnRecords.value = records;
+    returnsLoadError.value = false;
+  } catch (err: unknown) {
+    if (version !== returnsLoadVersion) return;
+    returnRecords.value = [];
+    // Feature flag off or no access to the route: hide the return UI and keep
+    // the existing QR / usage / part-request flow untouched.
+    returnsLoadError.value = !isPartReturnsUnavailableError(err);
   }
 };
 
@@ -310,6 +370,7 @@ const handleClickOutside = (e: MouseEvent) => {
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
   void loadPartRequests();
+  void loadReturns();
   void loadCatalog();
 });
 
@@ -407,6 +468,56 @@ const handleUpdateUsage = async (
   }
 };
 
+const openDeclareReturn = (
+  requestId: string,
+  itemId: string,
+  itemName: string,
+  record: PartCustodyReturnRecord,
+) => {
+  const maxQty = canDeclareMoreQty(record);
+  if (maxQty < 1 || declareSubmitting.value) return;
+  declareTarget.value = { requestId, itemId, itemName, maxQty, version: record.version };
+  declareQty.value = 1;
+  actionError.value = null;
+  actionSuccess.value = null;
+};
+
+const submitDeclareReturn = async () => {
+  const target = declareTarget.value;
+  if (!target || declareSubmitting.value) return;
+  const quantity = Number(declareQty.value);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > target.maxQty) {
+    actionError.value = `Số lượng trả phải là số nguyên từ 1 đến ${target.maxQty}.`;
+    return;
+  }
+
+  declareSubmitting.value = true;
+  actionError.value = null;
+  actionSuccess.value = null;
+  try {
+    await partRequestsApi.declareReturn(target.requestId, target.itemId, {
+      quantity,
+      expectedVersion: target.version,
+      idempotencyKey: createIdempotencyKey('declare'),
+    });
+    declareTarget.value = null;
+    actionSuccess.value =
+      'Đã gửi khai trả linh kiện. Quản lý dịch vụ sẽ nhận và xác nhận số lượng thực tế.';
+    await Promise.all([loadPartRequests(), loadReturns()]);
+    emit('parts-updated');
+  } catch (err: unknown) {
+    actionError.value = userFacingError(
+      err,
+      'Không gửi được khai trả linh kiện. Vui lòng thử lại.',
+    );
+    // Version đã cũ (người khác vừa cập nhật): đọc lại số liệu trước khi gửi lại.
+    const status = (err as { response?: { status?: number } } | null)?.response?.status;
+    if (status === 409) await loadReturns();
+  } finally {
+    declareSubmitting.value = false;
+  }
+};
+
 const formatStatusText = (status: string) => {
   switch (status.toLowerCase()) {
     case 'requested':
@@ -463,6 +574,20 @@ const getStatusBadgeClass = (status: string) => {
       >
         <AlertCircle :size="15" class="text-danger-600 shrink-0" />
         <span>{{ actionError }}</span>
+      </div>
+
+      <div
+        v-if="returnsLoadError"
+        class="p-2.5 rounded-lg bg-ink-50 border border-ink-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-600"
+      >
+        <span>Chưa tải được thông tin hoàn trả linh kiện.</span>
+        <button
+          type="button"
+          class="font-semibold text-brand-700 hover:underline"
+          @click="loadReturns"
+        >
+          Thử lại
+        </button>
       </div>
 
       <!-- Action: Create Pre-Repair Request (Only in ACCEPTED state) -->
@@ -1011,6 +1136,7 @@ const getStatusBadgeClass = (status: string) => {
                     <th class="p-2 text-right">Đơn giá</th>
                     <th class="p-2 text-right">Thành tiền</th>
                     <th class="p-2 text-center">Trạng thái sử dụng</th>
+                    <th v-if="requestHasReturns(pr)" class="p-2 text-center">Hoàn trả</th>
                     <th v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right">Thao tác sau sửa</th>
                   </tr>
                 </thead>
@@ -1057,6 +1183,41 @@ const getStatusBadgeClass = (status: string) => {
                         Chưa ghi nhận
                       </span>
                     </td>
+                    <!-- P1 custody: issued / used / still to return, and Khai trả -->
+                    <td v-if="requestHasReturns(pr)" class="p-2 text-center align-top">
+                      <template v-for="record in [returnFor(item.id)]" :key="record ? `ret-${record.partRequestItemId}` : `ret-missing-${item.id}`">
+                        <div v-if="record" class="space-y-1">
+                          <div class="whitespace-nowrap font-num text-[11px] text-ink-700">
+                            Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả {{ record.outstandingQty }}
+                          </div>
+                          <div
+                            v-if="pendingDeclaredQty(record) > 0"
+                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-warning-200 bg-warning-50 px-2 py-0.5 text-[10px] font-semibold text-warning-700"
+                          >
+                            <Clock :size="10" />
+                            Đang chờ quản lý xác nhận
+                          </div>
+                          <div
+                            v-else-if="record.outstandingQty === 0"
+                            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-200 bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-700"
+                          >
+                            <CheckCircle2 :size="10" />
+                            Đã nhận
+                          </div>
+                          <button
+                            v-if="canDeclareMoreQty(record) > 0"
+                            type="button"
+                            data-testid="open-declare-return"
+                            class="whitespace-nowrap rounded border border-brand-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
+                            :disabled="declareSubmitting"
+                            @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)"
+                          >
+                            <Undo2 :size="11" class="mr-1 inline" />Khai trả
+                          </button>
+                        </div>
+                        <span v-else class="text-[10px] text-ink-400">-</span>
+                      </template>
+                    </td>
                     <!-- Action buttons during repair completion -->
                     <td v-if="isUnderRepair && pr.status === 'received'" class="p-2 text-right space-x-1">
                       <button
@@ -1090,6 +1251,56 @@ const getStatusBadgeClass = (status: string) => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <!-- P1: khai trả phần chưa dùng; quản lý dịch vụ vẫn phải nhận và xác nhận thực tế -->
+          <div
+            v-if="declareTarget && declareTarget.requestId === pr.id"
+            class="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3"
+          >
+            <p class="text-xs font-semibold text-ink-900">
+              Khai trả linh kiện: {{ declareTarget.itemName }}
+              <span class="font-normal text-ink-500">(tối đa {{ declareTarget.maxQty }})</span>
+            </p>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label
+                  :for="`declare-qty-${declareTarget.itemId}`"
+                  class="mb-1 block text-[11px] font-semibold text-ink-700"
+                >Số lượng trả</label>
+                <input
+                  :id="`declare-qty-${declareTarget.itemId}`"
+                  v-model.number="declareQty"
+                  type="number"
+                  inputmode="numeric"
+                  min="1"
+                  step="1"
+                  :max="declareTarget.maxQty"
+                  class="w-20 rounded border border-ink-300 bg-white p-1.5 text-xs text-ink-900 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                />
+              </div>
+              <FhButton
+                data-testid="submit-declare-return"
+                variant="primary"
+                size="sm"
+                :loading="declareSubmitting"
+                :disabled="declareSubmitting || !declareValid"
+                @click="submitDeclareReturn"
+              >
+                <Send :size="13" class="mr-1" /> Gửi khai trả
+              </FhButton>
+              <FhButton
+                variant="ghost"
+                size="sm"
+                :disabled="declareSubmitting"
+                @click="declareTarget = null"
+              >
+                Huỷ
+              </FhButton>
+            </div>
+            <p class="text-[11px] text-ink-500">
+              Quản lý dịch vụ sẽ nhận linh kiện và xác nhận số lượng thực tế. Khai trả chưa phải là đã trả xong.
+            </p>
           </div>
         </div>
       </div>

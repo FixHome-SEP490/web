@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
 import { Copy, Check, X } from 'lucide-vue-next';
-import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
+import { FhMoney, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
@@ -14,10 +14,13 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import {
   partRequestsApi,
+  createIdempotencyKey,
+  isPartReturnsUnavailableError,
   type PartRequest,
   type PartRequestStatus,
   type PartRequestType,
   type FulfillmentMethod,
+  type PartCustodyReturnRecord,
 } from '../../api/part-requests.api';
 import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeString } from '../../utils/vn-time';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -44,6 +47,95 @@ const qrModalRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
 const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
+
+// P1 hoàn trả linh kiện (owner lock 19/10/2026): kỹ thuật viên khai trả, quản lý
+// dịch vụ kiểm tra thực tế và bấm "Đã nhận". Nhận thiếu thì phần còn lại vẫn chờ.
+const returnQueue = ref<PartCustodyReturnRecord[]>([]);
+const returnsLoading = ref(true);
+const returnsUnavailable = ref(false);
+const returnsLoadError = ref(false);
+let returnsLoadVersion = 0;
+const acceptDrafts = ref<Record<string, number>>({});
+const acceptingKey = ref<string | null>(null);
+
+const returnKey = (row: PartCustodyReturnRecord) =>
+  `${row.partRequestId}:${row.partRequestItemId}`;
+
+/** Khai trả nhưng chưa được nhận thực tế: đây là phần quản lý còn phải xác nhận. */
+const pendingDeclaredQty = (row: PartCustodyReturnRecord) =>
+  Math.max(0, row.declaredQty - row.managerAcceptedQty);
+
+/** Số nhận thực tế tối đa: không quá phần đang chờ nhận của dòng này. */
+const maxAcceptQty = (row: PartCustodyReturnRecord) =>
+  Math.max(0, Math.min(row.outstandingQty, pendingDeclaredQty(row)));
+
+const returnRequestCode = (row: PartCustodyReturnRecord) =>
+  `PR-${row.partRequestId.substring(0, 8).toUpperCase()}`;
+
+/** Reference for the counter: name when the Backend has it, otherwise a short code. */
+const technicianRef = (row: PartCustodyReturnRecord) => {
+  const name = row.technicianId ? (row.technicianName ?? '').trim() : '';
+  if (name) return name;
+  return row.technicianId ? `KT-${row.technicianId.substring(0, 8).toUpperCase()}` : '—';
+};
+
+const loadReturns = async () => {
+  const version = ++returnsLoadVersion;
+  returnsLoading.value = true;
+  returnsUnavailable.value = false;
+  returnsLoadError.value = false;
+  try {
+    const rows = await partRequestsApi.getPendingReturns();
+    if (version !== returnsLoadVersion) return;
+    returnQueue.value = rows;
+    const drafts: Record<string, number> = {};
+    for (const row of rows) drafts[returnKey(row)] = maxAcceptQty(row);
+    acceptDrafts.value = drafts;
+  } catch (err: unknown) {
+    if (version !== returnsLoadVersion) return;
+    returnQueue.value = [];
+    acceptDrafts.value = {};
+    // Cờ tính năng đang tắt hoặc không có quyền: ẩn mục hoàn trả, không chặn trang.
+    if (isPartReturnsUnavailableError(err)) returnsUnavailable.value = true;
+    else returnsLoadError.value = true;
+  } finally {
+    if (version === returnsLoadVersion) returnsLoading.value = false;
+  }
+};
+
+const handleAcceptReturn = async (row: PartCustodyReturnRecord) => {
+  if (!canOperate.value || acceptingKey.value) return;
+  const key = returnKey(row);
+  const maxQty = maxAcceptQty(row);
+  const quantity = Number(acceptDrafts.value[key]);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxQty) {
+    showToast('error', `Số lượng nhận thực tế phải là số nguyên từ 1 đến ${maxQty}.`);
+    return;
+  }
+
+  acceptingKey.value = key;
+  try {
+    await partRequestsApi.acceptReturn(row.partRequestId, row.partRequestItemId, {
+      quantity,
+      expectedVersion: row.version,
+      idempotencyKey: createIdempotencyKey('accept'),
+    });
+    showToast(
+      'success',
+      quantity < pendingDeclaredQty(row)
+        ? 'Đã ghi nhận số lượng nhận thực tế. Phần còn lại vẫn chờ nhận.'
+        : 'Đã ghi nhận số linh kiện đã nhận.',
+    );
+    await loadReturns();
+  } catch (err: unknown) {
+    showToast('error', userFacingError(err, 'Chưa ghi nhận được linh kiện hoàn trả, vui lòng thử lại.'));
+    // Dòng đã bị người khác cập nhật: đọc lại để lấy đúng số và phiên bản.
+    const status = (err as { response?: { status?: number } } | null)?.response?.status;
+    if (status === 409) await loadReturns();
+  } finally {
+    acceptingKey.value = null;
+  }
+};
 watch(qrModalRequest, async (request) => {
   qrImage.value = '';
   if (!request?.qrToken) return;
@@ -100,6 +192,7 @@ const loadData = async () => {
 
 onMounted(() => {
   void loadData();
+  void loadReturns();
 });
 
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
@@ -313,6 +406,90 @@ const getUsageBadgeClass = (status: string) => {
         <X :size="16" aria-hidden="true" />
       </button>
     </div>
+
+    <!-- P1: chờ nhận linh kiện hoàn trả (ẩn khi Backend chưa bật tính năng) -->
+    <section
+      v-if="!returnsUnavailable"
+      data-testid="part-returns-queue"
+      class="rounded-[var(--radius-md)] border border-ink-200 bg-white"
+      aria-label="Linh kiện chờ nhận hoàn trả"
+    >
+      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3">
+        <div class="flex items-center gap-2">
+          <h2 class="text-base font-semibold text-ink-900">Chờ nhận linh kiện hoàn trả</h2>
+          <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-sm text-ink-500">{{ returnQueue.length }}</span>
+        </div>
+        <FhButton variant="ghost" size="sm" :disabled="returnsLoading" @click="loadReturns">Làm mới</FhButton>
+      </header>
+
+      <div v-if="returnsLoading" class="space-y-2 px-5 py-4" aria-busy="true" aria-label="Đang tải linh kiện chờ nhận">
+        <FhSkeleton height="14px" width="30%" />
+        <FhSkeleton height="40px" rounded="md" />
+        <FhSkeleton height="40px" rounded="md" />
+      </div>
+
+      <div v-else-if="returnsLoadError" class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm text-ink-600">
+        <span>Chưa tải được danh sách chờ nhận.</span>
+        <FhButton variant="secondary" size="sm" @click="loadReturns">Thử lại</FhButton>
+      </div>
+
+      <p v-else-if="returnQueue.length === 0" class="px-5 py-4 text-sm text-ink-500">
+        Không có linh kiện nào đang chờ xác nhận hoàn trả.
+      </p>
+
+      <ul v-else class="divide-y divide-ink-100">
+        <li v-for="row in returnQueue" :key="returnKey(row)" class="space-y-2 px-5 py-4">
+          <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <div class="min-w-0">
+              <div class="font-medium text-ink-900">{{ row.partNameSnapshot }}</div>
+              <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
+                <span class="font-num">{{ returnRequestCode(row) }}</span>
+                <router-link
+                  v-if="row.orderId"
+                  :to="`/console/orders/${row.orderId}`"
+                  class="text-brand-700 hover:underline"
+                >Xem đơn</router-link>
+                <span>Kỹ thuật viên: <span class="font-num">{{ technicianRef(row) }}</span></span>
+              </div>
+            </div>
+            <div class="whitespace-nowrap font-num text-xs text-ink-600">
+              Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Khai trả {{ row.declaredQty }} · Đã nhận {{ row.managerAcceptedQty }}
+            </div>
+          </div>
+
+          <div v-if="canOperate" class="flex flex-wrap items-end gap-2">
+            <div>
+              <label
+                :for="`accept-qty-${returnKey(row)}`"
+                class="mb-1 block text-xs font-medium text-ink-700"
+              >Số lượng nhận thực tế</label>
+              <input
+                :id="`accept-qty-${returnKey(row)}`"
+                v-model.number="acceptDrafts[returnKey(row)]"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                :max="maxAcceptQty(row)"
+                :class="consoleField"
+                class="w-24"
+              />
+            </div>
+            <span class="pb-2 text-xs text-ink-500">tối đa {{ maxAcceptQty(row) }}</span>
+            <FhButton
+              data-testid="accept-return"
+              variant="primary"
+              size="sm"
+              class="mb-1.5"
+              :loading="acceptingKey === returnKey(row)"
+              :disabled="!!acceptingKey || returnsLoading"
+              @click="handleAcceptReturn(row)"
+            >Đã nhận</FhButton>
+          </div>
+          <p v-else class="text-xs text-ink-500">Chỉ quản lý dịch vụ xác nhận được số linh kiện đã nhận.</p>
+        </li>
+      </ul>
+    </section>
 
     <ConsoleLoadError v-if="loadError" @retry="loadData" />
     <ConsoleTable
