@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { tidyAddressText } from '../../utils/address-text';
+import { addressFieldError, normalizeAddressText } from '../../utils/address-input';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
@@ -651,13 +652,22 @@ const handleSaveLocation = async () => {
     showFeedback('Vui lòng tìm địa chỉ hoặc chọn vị trí trên bản đồ.', 'error');
     return;
   }
+  // Same address text rule as the API (bug 29, PO 01/11/2026).
+  const textError = addressFieldError('Địa chỉ cụ thể', locationLine1.value, { max: 255, required: true }) ||
+    addressFieldError('Phường, xã', locationWard.value, { max: 100 }) ||
+    addressFieldError('Quận, huyện', locationDistrict.value, { max: 100 }) ||
+    addressFieldError('Tỉnh, thành phố', locationProvince.value, { max: 100 });
+  if (textError) {
+    showFeedback(textError, 'error');
+    return;
+  }
   savingLocation.value = true;
   try {
     const addressDto = {
-      line1: locationLine1.value.trim(),
-      ward: locationWard.value || undefined,
-      district: locationDistrict.value || locationWard.value || locationProvince.value,
-      province: locationProvince.value,
+      line1: normalizeAddressText(locationLine1.value),
+      ward: locationWard.value ? normalizeAddressText(locationWard.value) : undefined,
+      district: normalizeAddressText(locationDistrict.value || locationWard.value || locationProvince.value),
+      province: normalizeAddressText(locationProvince.value),
       lat: Number(locationLat.value),
       lng: Number(locationLng.value),
       isDefault: true,
