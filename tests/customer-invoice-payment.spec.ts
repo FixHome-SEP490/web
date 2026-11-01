@@ -118,10 +118,16 @@ describe('customer invoice payment UI', () => {
     w.unmount();
   });
 
-  it('marks SOLO ZERO as complete only after the funded server closeout succeeds', async () => {
+  it('requires explicit SOLO ZERO confirmation before funded server closeout', async () => {
     funded.zero.mockResolvedValueOnce({ paid: true, amount: 0, settlementId: 'settlement-1' });
     const w = await openPayment(300000);
     await w.get('[data-testid="apply-zero-test-voucher"]').trigger('click');
+    await flushPromises();
+    expect(funded.zero).not.toHaveBeenCalled();
+    expect(funded.wallet).not.toHaveBeenCalled();
+    expect(funded.vnpay).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+    await w.get('[data-testid="order-confirm-zero"]').trigger('click');
     await flushPromises();
     expect(funded.zero).toHaveBeenCalledWith({ kind: 'SOLO', serviceOrderId: 'o1', invoiceId: 'i1' }, 'reservation-1');
     expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(false);
@@ -129,14 +135,25 @@ describe('customer invoice payment UI', () => {
     w.unmount();
   });
 
-  it('does not close or report success when SOLO ZERO closeout is rejected', async () => {
-    funded.zero.mockRejectedValueOnce({ response: { status: 503 } });
+  it.each([403, 409, 503])('keeps the ZERO reservation on explicit rejection %s and retries only on click', async status => {
+    funded.zero.mockReset().mockRejectedValueOnce({ response: { status } }).mockResolvedValueOnce({ paid: true, amount: 0, settlementId: 'settlement-1' });
     const w = await openPayment(300000);
     await w.get('[data-testid="apply-zero-test-voucher"]').trigger('click');
     await flushPromises();
+    expect(funded.zero).not.toHaveBeenCalled();
+    expect(funded.wallet).not.toHaveBeenCalled();
+    expect(funded.vnpay).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+    await w.get('[data-testid="order-confirm-zero"]').trigger('click');
+    await flushPromises();
     expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(true);
     expect(w.text()).not.toContain('Máy chủ đã xác nhận tất toán voucher');
-    expect(w.text()).toContain('chưa xác nhận được tất toán 0 ₫');
+    expect(w.text()).toContain(status === 403 ? 'không có quyền' : 'chưa xác nhận được tất toán 0 ₫');
+    expect(funded.zero).toHaveBeenCalledTimes(1);
+    await w.get('[data-testid="order-confirm-zero"]').trigger('click');
+    await flushPromises();
+    expect(funded.zero).toHaveBeenCalledTimes(2);
+    expect(funded.zero.mock.calls[0]).toEqual(funded.zero.mock.calls[1]);
     w.unmount();
   });
 

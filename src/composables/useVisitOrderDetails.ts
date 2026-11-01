@@ -14,7 +14,7 @@ export interface VisitOrderDetails {
 }
 
 /** Customer-only orchestration; amounts and decisions still come from existing APIs. */
-export function useVisitOrderDetails(visitId: () => string, refresh: () => Promise<void>) {
+export function useVisitOrderDetails(visitId: () => string, refresh: () => Promise<void>, isStopped: (orderId: string) => boolean = () => false) {
   const details = ref<Record<string, VisitOrderDetails>>({});
   const fresh = ref(false);
   const deciding = ref(false);
@@ -63,14 +63,15 @@ export function useVisitOrderDetails(visitId: () => string, refresh: () => Promi
   }
 
   function canDecideCost(bundle: VisitOrderDetails, cost: AdditionalCostRecord) {
-    return bundle.order.status.toUpperCase() === 'UNDER_REPAIR' && !bundle.order.completionRequestedAt
+    return !isStopped(bundle.order.id) && !bundle.order.workStopped && bundle.order.operationalDisposition !== 'STOPPED'
+      && bundle.order.status.toUpperCase() === 'UNDER_REPAIR' && !bundle.order.completionRequestedAt
       && cost.serviceOrderId === bundle.order.id && cost.status === 'PENDING_APPROVAL'
       && (!cost.expiresAt || new Date(cost.expiresAt).getTime() > Date.now());
   }
 
   async function decide(orderId: string, action: 'APPROVE' | 'REJECT', costId?: string, externalConsent = false) {
     const bundle = details.value[orderId];
-    if (deciding.value || !fresh.value || !bundle) return;
+    if (deciding.value || !fresh.value || !bundle || isStopped(orderId)) return;
     const cost = costId ? bundle.costs.find(candidate => candidate.id === costId) : null;
     if (costId ? !cost || !canDecideCost(bundle, cost)
       || (action === 'APPROVE' && cost.items.some(item => item.partSource === 'external') && !externalConsent)

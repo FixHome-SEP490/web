@@ -97,8 +97,6 @@ describe('checkout voucher boundary', () => {
       data: { success: true, data: path === '/vouchers/wallet' ? [walletClaim] : preview('claim-1', 'order-1') },
     }) as never);
     const wrapper = mountChooser(pinia);
-    expect(apiClient.get).not.toHaveBeenCalled();
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     expect(apiClient.get).toHaveBeenCalledWith('/vouchers/wallet');
     expect(wrapper.find('[data-testid="voucher-selection-sheet"]').exists()).toBe(true);
@@ -130,7 +128,6 @@ describe('checkout voucher boundary', () => {
       data: { success: true, data: path === '/vouchers/wallet' ? [walletClaim] : preview('claim-1', 'order-1') },
     }) as never);
     const wrapper = mountChooser(pinia, null);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -159,7 +156,6 @@ describe('checkout voucher boundary', () => {
         reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z',
       } } });
     const wrapper = mountChooser(pinia, scope);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -187,7 +183,6 @@ describe('checkout voucher boundary', () => {
     }) as never);
     const wrapper = mountChooser(pinia, 'order-1', { voucherClaimId: 'claim-1' });
     expect(wrapper.get('[data-testid="voucher-wallet-link"]').attributes('data-return-to')).toBe('/app/orders/order-1');
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-voucher-id="claim-1"]').attributes('aria-pressed')).toBe('true');
     expect(routeReplace).toHaveBeenCalledWith({ path: '/app/orders/order-1', query: {}, hash: '' });
@@ -210,7 +205,6 @@ describe('checkout voucher boundary', () => {
     let resolveReserve!: (value: unknown) => void;
     vi.mocked(apiClient.post).mockReturnValue(new Promise((resolve) => { resolveReserve = resolve; }) as never);
     const wrapper = mountChooser(pinia, scope);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -234,7 +228,8 @@ describe('checkout voucher boundary', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/vouchers/apply', { claimId, scopeId: scope, attemptId });
     expect(wrapper.emitted('applied')).toHaveLength(1);
     expect(wrapper.findComponent(VoucherSelectionSheet).props('serverReservation')).toMatchObject({ voucherId: claimId });
-    expect(sheet.text()).toContain('Voucher đã được giữ chỗ');
+    expect(wrapper.find('[data-testid="voucher-selection-sheet"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Voucher đã được giữ chỗ');
     uuid.mockRestore();
     wrapper.unmount();
   });
@@ -258,7 +253,6 @@ describe('checkout voucher boundary', () => {
       } } })
       .mockResolvedValueOnce({ data: { success: true, data: { id: reservationId, state: 'RELEASED' } } });
     const wrapper = mountChooser(pinia, oldScope);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -285,7 +279,6 @@ describe('checkout voucher boundary', () => {
       data: { success: true, data: path === '/vouchers/wallet' ? [ownedClaim] : preview(claimId, scope, 250000, 50000, true) },
     }) as never);
     const wrapper = mountChooser(pinia, scope);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -320,7 +313,6 @@ describe('checkout voucher boundary', () => {
       throw { response: { status } };
     });
     const wrapper = mountChooser(pinia);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -345,7 +337,6 @@ describe('checkout voucher boundary', () => {
     }) as never);
     vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { status } });
     const wrapper = mountChooser(pinia, scope);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -366,7 +357,6 @@ describe('checkout voucher boundary', () => {
       return Promise.resolve({ data: { success: true, data: preview('claim-2', 'order-1', 300000, 25000) } }) as never;
     });
     const wrapper = mountChooser(pinia);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     const options = wrapper.findAll('[data-testid="voucher-selection-option"]');
     await options[0]!.trigger('click');
@@ -389,7 +379,6 @@ describe('checkout voucher boundary', () => {
       throw { code: 'ERR_NETWORK' };
     });
     const wrapper = mountChooser(pinia);
-    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
@@ -407,8 +396,7 @@ describe('checkout voucher boundary', () => {
     vi.mocked(apiClient.post).mockClear();
     const wrapper = mountChooser(pinia);
     try {
-      await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
-      await flushPromises();
+        await flushPromises();
       expect(apiClient.get).not.toHaveBeenCalled();
       const sheet = wrapper.get('[data-testid="voucher-selection-sheet"]');
       expect(sheet.text()).toContain('Đang ngoại tuyến');

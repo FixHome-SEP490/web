@@ -731,6 +731,7 @@ function reservationForAction(): FundedReservation | null | undefined {
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
+  if (workStopped.value || paymentBlocked.value || actionLoading.value || walletPaying.value) return;
   if (value.reservation.scopeId !== order.value?.id || value.preview.scopeId !== order.value?.id
     || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
     actionMessage.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho hóa đơn này.' };
@@ -738,7 +739,11 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
   }
   fundedVoucher.value = value;
   actionMessage.value = null;
-  if (value.preview.customerDueVnd !== 0) return;
+}
+
+async function confirmZeroCheckout() {
+  if (actionLoading.value || walletPaying.value || paymentBlocked.value || workStopped.value
+    || activeFundedVoucher.value?.preview.customerDueVnd !== 0) return;
   const held = reservationForAction();
   if (!held || !invoice.value?.id || !order.value?.id) return;
   actionLoading.value = true;
@@ -787,6 +792,7 @@ const handlePay = () => {
 };
 
 function confirmCashIntent() {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (cashFirstEnabled.value) {
     void createCashIntent();
     return;
@@ -807,6 +813,7 @@ async function refreshCashIntent(serviceOrderId = order.value?.id ?? orderId) {
 }
 
 async function createCashIntent() {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (oldFinanceReview.value || !cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
     || currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return;
   const held = reservationForAction();
@@ -856,6 +863,7 @@ async function cancelCashIntent() {
 }
 
 const payWithWallet = async () => {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (!invoice.value?.id || walletPaying.value || actionLoading.value || !walletCovers.value || !paymentOptions.value.includes('wallet')) return;
   const hadFundedVoucher = !!fundedVoucher.value;
   const held = reservationForAction();
@@ -877,6 +885,7 @@ const payWithWallet = async () => {
 };
 
 const confirmPayment = async () => {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (actionLoading.value || walletPaying.value || !paymentOptions.value.includes('vnpay')) return;
   const hadFundedVoucher = !!fundedVoucher.value;
   const held = reservationForAction();
@@ -1971,6 +1980,8 @@ const parsedReview = computed(() => {
             @released="clearFundedVoucher"
             @expired="clearFundedVoucher"
           />
+          <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="actionLoading || walletPaying" :loading="actionLoading" data-testid="order-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+          <template v-else>
           <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
             <button
               v-for="method in payMethods"
@@ -2046,6 +2057,7 @@ const parsedReview = computed(() => {
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"
           >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>
+          </template>
         </template>
       </div>
     </div>

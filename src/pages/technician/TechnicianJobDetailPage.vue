@@ -125,6 +125,7 @@ const visitGroupId = computed(() => job.value?.visitGroupId ?? null);
 const fixedVisitBase = computed(() => isFixedPriceOrder.value && !!visitGroupId.value);
 const skipsQuote = computed(() => isFixedPriceOrder.value && !visitGroupId.value);
 const visitCheckout = ref<VisitCheckout | null>(null);
+const historicalSiblingLinks = ref<Array<{ id: string; sequence: number }>>([]);
 const cashIntentCapability = ref<CashIntentCapability | null>(null);
 const cashFirstEnabled = computed(() => cashIntentCapability.value?.cashFirstEnabled === true);
 const cashIntent = computed(() => cashIntentCapability.value?.intent ?? null);
@@ -140,7 +141,7 @@ const siblingOrderPrefetches = new Map<string, Promise<void>>();
 const visitChildBundles = ref<Record<string, TechnicianJobBundle>>({});
 let visitPartRequestReadVersion = 0;
 type VisitReturnSummary = { needDeclare: number; awaitingManager: number };
-const visitReturns = ref<Record<string, { state: 'loading' | 'ready' | 'error'; summary: VisitReturnSummary | null }>>({});
+const visitReturns = ref<Record<string, { state: 'loading' | 'ready' | 'unknown' | 'error'; summary: VisitReturnSummary | null }>>({});
 const visitReturnsGroupId = ref<string | null>(null);
 const visitReturnsLoading = ref(false);
 let visitReturnsReadVersion = 0;
@@ -168,6 +169,7 @@ const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((eve
     // clearQueryCache() runs on logout/account switch; invalidate in-flight
     // sibling reads too, so a late response cannot repopulate the new session.
     clearPrefetchedVisitOrders();
+    historicalSiblingLinks.value = [];
     cannotContinuePort.reset();
     groupStopPort.reset();
     cannotContinueOpen.value = false;
@@ -1387,6 +1389,13 @@ async function refreshVisitReturns() {
     const seen = new Set<string>();
     const summary = { needDeclare: 0, awaitingManager: 0 };
     if (!Array.isArray(records)) throw new Error('Invalid return ledger');
+    // Server explicitly attests only a missing ledger for the verified former assignee.
+    // UNKNOWN is not evidence of an empty/cleared warehouse obligation.
+    if (records.length === 1 && records[0] && typeof records[0] === 'object'
+      && records[0].orderId === id && 'receiptState' in records[0] && records[0].receiptState === 'UNKNOWN'
+      && 'returnStatus' in records[0] && records[0].returnStatus === 'unknown') {
+      return { state: 'unknown' as const, summary: null };
+    }
     for (const record of records) {
       if (!record || record.orderId !== id || !record.partRequestId || !record.partRequestItemId || seen.has(record.partRequestItemId)
         || ![record.issuedQty, record.usedQty, record.declaredQty, record.managerAcceptedQty, record.outstandingQty].every(value => Number.isSafeInteger(value) && value >= 0)
@@ -1398,11 +1407,11 @@ async function refreshVisitReturns() {
       summary.needDeclare += record.outstandingQty - waiting;
       summary.awaitingManager += waiting;
     }
-    return summary;
+    return { state: 'ready' as const, summary };
   }));
   if (version !== visitReturnsReadVersion || epoch !== visitPrefetchEpoch || groupId !== visitGroupId.value || visitCheckout.value?.visitGroupId !== groupId) return;
   visitReturns.value = Object.fromEntries(results.map((result, index) => [ids[index]!, result.status === 'fulfilled'
-    ? { state: 'ready', summary: result.value }
+    ? result.value
     : { state: 'error', summary: visitReturns.value[ids[index]!]?.summary ?? null }]));
   visitReturnsLoading.value = false;
 }
@@ -1425,7 +1434,7 @@ const visitReturnNeedsAttention = (device: typeof visitReturnDevices.value[numbe
   || (device.ledger.summary?.needDeclare ?? 0) > 0 || (device.ledger.summary?.awaitingManager ?? 0) > 0;
 const visitReturnChildDetails = computed(() => visitTerminalReturnDevices.value.filter(visitReturnNeedsAttention));
 const visitReturnWarning = computed(() => visitAllDevicesTerminal.value
-  && (visitReturnUnknown.value || visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
+  && (visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
 function onReturnSummary(value: VisitReturnSummary) {
   returnsToDeclare.value = value.needDeclare;
   returnsAwaitingManager.value = value.awaitingManager;
@@ -1546,8 +1555,16 @@ const jobQuery = useCachedQuery({
 function applyJobBundle(bundle: TechnicianJobBundle) {
   if (bundle.historical) {
     if (bundle.historical.id !== jobIdRef.value) return;
+    if (visitCheckout.value) historicalSiblingLinks.value = visitCheckout.value.devices.flatMap(device => {
+      const id = device.serviceOrderId;
+      const sibling = id && visitCheckout.value ? authorizedVisitChildBundle(id, visitCheckout.value.visitGroupId)?.job : null;
+      return sibling && id !== bundle.historical?.id && !sibling.workStopped && sibling.operationalDisposition !== 'STOPPED'
+        && ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'].includes(sibling.status.toUpperCase())
+        ? [{ id: sibling.id, sequence: device.sequence }] : [];
+    });
     historicalJob.value = bundle.historical;
     job.value = null;
+    bookingForMedia.value = null;
     ++visitCheckoutReadVersion;
     visitCheckout.value = null;
     stopLocationPing();
@@ -1705,6 +1722,7 @@ watch(
     // full-page skeleton while the route's query observer catches up.
     job.value = null;
     historicalJob.value = null;
+    historicalSiblingLinks.value = [];
     evidences.value = [];
     completionPartRequests.value = null;
     quotationItems.value = [];
@@ -2686,6 +2704,10 @@ const toggleMore = async () => {
       <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
       <p v-if="historicalJob.workStopped" class="text-sm text-ink-600">Công việc đã dừng và phân công đã được nhả. Nghĩa vụ tiền và linh kiện cũ được đối soát riêng.</p>
       <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>
+      <nav class="flex flex-wrap gap-2" aria-label="Tiếp tục công việc">
+        <FhButton v-for="sibling in historicalSiblingLinks" :key="sibling.id" size="md" :data-testid="`historical-sibling-${sibling.sequence}`" @click="router.push({ path: `/tech/jobs/${sibling.id}` })">Tiếp tục máy {{ sibling.sequence }}</FhButton>
+        <FhButton variant="secondary" size="md" data-testid="historical-jobs" @click="router.push({ path: '/tech/jobs' })">Danh sách công việc</FhButton>
+      </nav>
     </div>
 
     <!-- Could not load at all: one friendly line and a retry -->
@@ -2807,9 +2829,9 @@ const toggleMore = async () => {
         </ul>
         <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
       </section>
-      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-label="Linh kiện cần trả kho ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
-        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3">
-          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else> · Chưa xác nhận được tình trạng hoàn trả</span></span>
+      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status" aria-label="Tình trạng linh kiện ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
+        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" :data-testid="`visit-return-device-${device.sequence}`" class="flex flex-wrap items-center justify-between gap-x-3">
+          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else-if="device.ledger?.state === 'unknown'"> ? Ch?a c? s? theo d?i linh ki?n cho m?y n?y; qu?n l? d?ch v? c?n ??i so?t</span><span v-else> · Chưa kiểm tra được nghĩa vụ linh kiện (nhờ quản lý dịch vụ hoặc thử lại)</span></span>
           <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
         </p>
         <button v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>

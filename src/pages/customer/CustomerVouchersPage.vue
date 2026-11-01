@@ -141,7 +141,7 @@ async function claimCode(code: string) {
             <span class="block text-sm font-semibold text-ink-900">{{ offer.title }}</span>
             <span class="block text-xs leading-5 text-ink-600">{{ offer.code }} · {{ offer.kind === 'GENERAL' ? 'Ưu đãi chung' : 'Ưu đãi cá nhân' }}</span>
           </span>
-          <FhButton variant="secondary" size="md" class="w-full sm:w-auto" @click="returnToCheckout(offer.id)">Chọn cho thanh toán</FhButton>
+          <FhButton variant="secondary" size="md" class="w-full sm:w-auto" @click="returnToCheckout(offer.id)">Sử dụng</FhButton>
         </li>
       </ul>
       <p v-else class="mt-3 text-sm text-ink-700" role="status">Ví chưa có voucher đang dùng được. Bạn có thể lưu một ưu đãi chung bên dưới rồi quay lại lượt thanh toán.</p>

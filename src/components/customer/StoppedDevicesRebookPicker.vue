@@ -20,22 +20,27 @@ const valid = computed(() => !props.disabled && !checking.value && !error.value 
 
 async function refresh() {
   const current = ++generation;
-  selected.value = [];
-  availableIds.value = [];
   checking.value = true;
   error.value = false;
-  if (props.disabled || !props.devices.length) return;
+  if (!props.devices.length) { checking.value = false; return; }
   try {
     const ids = await interruptionRebookApi.listAvailableStoppedSources(props.groupId, props.devices.map(device => device.bookingId));
-    if (current === generation) availableIds.value = ids;
+    if (current === generation) {
+      availableIds.value = ids;
+      selected.value = selected.value.filter(id => ids.includes(id));
+      if (!selected.value.length && ids.length === 1) selected.value = [...ids];
+    }
   } catch {
     if (current === generation) error.value = true;
   } finally {
     if (current === generation) checking.value = false;
   }
 }
-watch(() => [props.groupId, props.devices.map(device => device.bookingId).join(','), props.disabled],
-  () => { void refresh(); }, { immediate: true });
+watch([() => props.groupId, () => props.devices.map(device => device.bookingId).join(',')],
+  (next, previous) => {
+    if (!previous || next[0] !== previous[0]) { selected.value = []; availableIds.value = []; }
+    void refresh();
+  }, { immediate: true });
 onBeforeUnmount(() => { ++generation; });
 
 function rebook() {
@@ -60,10 +65,10 @@ function rebook() {
       </p>
       <p v-if="!availableDevices.length" role="status">Không còn máy đủ điều kiện đặt lại từ lượt này.</p>
     </template>
-    <p>Chỉ các máy được máy chủ xác minh mới có thể chọn. Bạn chọn lịch và xác nhận giá mới; không cần chờ đối soát đơn cũ.</p>
+    <p>Chọn lịch và xác nhận giá mới cho máy đã chọn.</p>
     <div class="flex flex-wrap gap-2">
-      <FhButton variant="secondary" size="md" :disabled="disabled || checking" data-testid="stopped-rebook-refresh" @click="refresh">{{ error ? 'Thử kiểm tra lại' : 'Cập nhật máy có thể đặt lại' }}</FhButton>
-      <FhButton variant="secondary" size="md" :disabled="!valid" data-testid="stopped-rebook-continue" @click="rebook">Tiếp tục với {{ selected.length }} máy đã chọn</FhButton>
+      <FhButton variant="secondary" size="md" :disabled="disabled || checking" data-testid="stopped-rebook-refresh" @click="refresh">{{ error ? 'Thử kiểm tra lại' : 'Kiểm tra lại' }}</FhButton>
+      <FhButton variant="primary" size="md" :disabled="!valid" data-testid="stopped-rebook-continue" @click="rebook">Đặt lịch mới cho {{ selected.length }} máy đã chọn</FhButton>
     </div>
   </fieldset>
 </template>
