@@ -44,19 +44,22 @@ const candidates = ref<TechnicianCandidate[]>([]);
 const emptyReason = ref<CandidateEmptyReason | null>(null);
 let latestLoadId = 0;
 
+// A visit reads the same reasons as one booking (bug 41); only the words naming it differ.
+const requestWord = isVisit ? 'lượt sửa' : 'yêu cầu';
+const viewRequestLabel = isVisit ? 'Xem lượt sửa' : 'Xem yêu cầu';
 const emptyState = computed(() => {
   switch (emptyReason.value) {
     case 'OUTSIDE_COVERAGE':
       return {
         title: 'Địa chỉ nằm ngoài khu vực phục vụ',
-        description: 'FixHome chưa có kỹ thuật viên phục vụ tại địa chỉ đã đặt. Bạn có thể đặt lại yêu cầu này với một địa chỉ khác.',
+        description: `FixHome chưa có kỹ thuật viên phục vụ tại địa chỉ đã đặt. Bạn có thể đặt lại ${requestWord} này với một địa chỉ khác.`,
         action: 'Đặt lại với địa chỉ khác',
       };
     case 'BOOKING_LOCATION_MISSING':
       return {
         title: 'Chưa xác định được vị trí đặt lịch',
-        description: 'Yêu cầu chưa có vị trí chính xác đã xác nhận. Vui lòng kiểm tra lại địa chỉ và tạo yêu cầu mới với vị trí đầy đủ.',
-        action: 'Xem yêu cầu',
+        description: `${isVisit ? 'Lượt sửa' : 'Yêu cầu'} chưa có vị trí chính xác đã xác nhận. Vui lòng kiểm tra lại địa chỉ và đặt lại với vị trí đầy đủ.`,
+        action: viewRequestLabel,
       };
     case 'TIME_UNAVAILABLE':
       return {
@@ -67,8 +70,10 @@ const emptyState = computed(() => {
     default:
       return {
         title: 'Chưa có kỹ thuật viên phù hợp',
-        description: 'Hiện chưa tìm được thợ đáp ứng đầy đủ điều kiện của yêu cầu này. Bạn có thể kiểm tra lại địa chỉ, dịch vụ và thời gian.',
-        action: 'Xem yêu cầu',
+        description: isVisit
+          ? 'Hiện chưa tìm được thợ nhận sửa được mọi máy trong lượt này. Bạn có thể kiểm tra lại địa chỉ, các máy và thời gian.'
+          : 'Hiện chưa tìm được thợ đáp ứng đầy đủ điều kiện của yêu cầu này. Bạn có thể kiểm tra lại địa chỉ, dịch vụ và thời gian.',
+        action: viewRequestLabel,
       };
   }
 });
@@ -76,12 +81,20 @@ const emptyState = computed(() => {
 
 // Only a found technician makes the "ready" badge true (bug 41: it showed over the empty list).
 const showsReadyBadge = computed(() => !loading.value && !loadError.value && candidates.value.length > 0);
+// Nothing to choose, nothing to send: the "Đã chọn 0/2, Gửi lời mời" bar shows only over a list.
+const showsActionBar = showsReadyBadge;
 
 const rebooking = ref(false);
 // Out of area: start a new request for the same service and description, the customer picks
 // another address in the form. The current request is left as it is, it can be cancelled there.
 const rebookElsewhere = async () => {
   if (!bookingId || rebooking.value) return;
+  // A visit holds several devices the form cannot be filled with from a link: the form opens
+  // empty and the customer adds the devices again at the new address.
+  if (isVisit) {
+    await router.push({ name: 'new-booking' });
+    return;
+  }
   rebooking.value = true;
   const query: Record<string, string> = {};
   try {
@@ -134,7 +147,7 @@ const loadCandidates = async () => {
   emptyReason.value = null;
   try {
     const result = isVisit
-      ? { candidates: await visitGroupsApi.candidates(bookingId), emptyReason: null }
+      ? await visitGroupsApi.candidatesWithDiagnostics(bookingId)
       : await bookingsApi.getCandidatesWithDiagnostics(bookingId);
     if (loadId !== latestLoadId) return;
     candidates.value = result.candidates;
@@ -313,7 +326,7 @@ const successMessage = computed(() => selectedCount.value === 1
       @action="handleEmptyAction"
     >
       <template v-if="emptyReason === 'OUTSIDE_COVERAGE'" #extra>
-        <FhButton variant="ghost" size="sm" class="mt-2" :disabled="rebooking" @click="router.push(backTarget)">Xem yêu cầu</FhButton>
+        <FhButton variant="ghost" size="sm" class="mt-2" :disabled="rebooking" @click="router.push(backTarget)">{{ viewRequestLabel }}</FhButton>
       </template>
     </FhEmptyState>
 
@@ -484,7 +497,11 @@ const successMessage = computed(() => selectedCount.value === 1
     </div>
 
     <!-- Floating Sticky Action Bar -->
-    <div class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)">
+    <div
+      v-if="showsActionBar"
+      data-testid="candidates-action-bar"
+      class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)"
+    >
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
         <div class="flex items-center gap-2.5">
           <div class="flex items-center gap-1.5">
