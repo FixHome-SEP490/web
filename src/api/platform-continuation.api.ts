@@ -3,7 +3,7 @@ import { userFacingError } from '../utils/user-facing-error';
 import { uploadFailedRepairEvidence } from './failed-repair.api';
 import type { TechnicianReportReasonClass, TechnicianReportReasonCode } from './support-cases.api';
 
-export type CannotContinueReasonCode = Exclude<TechnicianReportReasonCode, 'customer_absent' | 'customer_cancelled'>;
+export type CannotContinueReasonCode = Exclude<TechnicianReportReasonCode, 'customer_absent' | 'customer_unreachable' | 'customer_cancelled'>;
 export interface CannotContinueInput {
   reasonClass: TechnicianReportReasonClass;
   reasonCode: CannotContinueReasonCode;

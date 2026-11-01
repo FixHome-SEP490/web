@@ -7,7 +7,7 @@ import { isSessionUpcoming, upcomingSessions, type BookingSlot } from '../../uti
 import { formatCurrencyVND } from '../../utils/formatters';
 import { userFacingError } from '../../utils/user-facing-error';
 
-const props = defineProps<{ sourceBookingId: string; customerId: string }>();
+const props = defineProps<{ sourceBookingId: string; customerId: string; sourceBookingIds?: string[] }>();
 const emit = defineEmits<{ created: [result: { kind: 'booking' | 'visit'; id: string }]; later: [] }>();
 const draft = ref<InterruptionDraft | null>(null);
 const loading = ref(false);
@@ -38,7 +38,7 @@ async function load() {
   pending = null;
   draft.value = null;
   try {
-    const result = await interruptionRebookApi.readDraft(props.sourceBookingId, props.customerId);
+    const result = await interruptionRebookApi.readDraft(props.sourceBookingId, props.customerId, props.sourceBookingIds ?? [props.sourceBookingId]);
     if (current !== generation) return;
     draft.value = result;
     addressId.value = result.addressId || result.addresses.find(item => item.isDefault)?.id || result.addresses[0]?.id || '';
@@ -105,7 +105,7 @@ onBeforeUnmount(() => { generation++; });
     <header>
       <p class="text-sm text-ink-600">Đơn sửa trước vẫn được lưu trong hồ sơ</p>
       <h1 class="mt-1 text-xl font-semibold text-ink-900 sm:text-2xl">Đặt lịch mới</h1>
-      <p class="mt-2 text-sm text-ink-600">Chọn lại lịch, địa chỉ và phạm vi dịch vụ. Giá sẽ được Backend xác nhận theo danh mục hiện tại.</p>
+      <p class="mt-2 text-sm text-ink-600">Chọn lại lịch, địa chỉ và phạm vi dịch vụ. Giá sẽ được hệ thống xác nhận theo danh mục hiện tại.</p>
       <p v-if="draft?.sourceKind === 'onsite'" class="mt-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Đơn cũ chưa bị hủy. Báo giá, thanh toán, ưu đãi và nghĩa vụ linh kiện của đơn cũ vẫn được giữ để đối soát riêng.</p>
     </header>
     <div v-if="loading" class="space-y-3"><FhSkeleton class="h-24 rounded-xl" /><FhSkeleton class="h-40 rounded-xl" /></div>
@@ -141,7 +141,7 @@ onBeforeUnmount(() => { generation++; });
       <label class="block space-y-1 text-sm font-medium text-ink-800"><span>Ghi chú mới cho thợ (không bắt buộc)</span><textarea v-model="customerNote" rows="2" maxlength="1000" class="w-full rounded-xl border border-ink-300 p-3" :disabled="busy || uncertain" data-testid="interruption-customer-note" /></label>
       <label class="flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">
         <input v-model="accepted" type="checkbox" class="mt-0.5" :disabled="busy || uncertain" data-testid="interruption-reprice-consent" />
-        <span>Tôi xác nhận đây là yêu cầu đặt lịch mới, với lịch và phạm vi/giá hiện tại đã chọn. Backend sẽ kiểm tra lại giá trước khi tạo đơn.</span>
+        <span>Tôi xác nhận đây là yêu cầu đặt lịch mới, với lịch và phạm vi/giá hiện tại đã chọn. Hệ thống sẽ kiểm tra lại giá trước khi tạo đơn.</span>
       </label>
       <p v-if="cannotBook" role="alert" class="text-sm text-danger-700">Cần có địa chỉ của bạn và lựa chọn dịch vụ hiện tại để tiếp tục. Hãy cập nhật địa chỉ hoặc thử tải hồ sơ lại.</p>
       <div class="flex flex-wrap justify-end gap-2">

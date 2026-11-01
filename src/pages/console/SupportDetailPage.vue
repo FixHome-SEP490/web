@@ -5,6 +5,7 @@ import { ordersApi } from '../../api/orders.api';
 import { getHttpStatus } from '../../api/client';
 import TechnicianReplacementPanel from '../../components/console/TechnicianReplacementPanel.vue';
 import SupportCaseContext from '../../components/console/SupportCaseContext.vue';
+import GroupStopIncidentsPanel from '../../components/console/GroupStopIncidentsPanel.vue';
 import StoppedWorkFinancePanel from '../../components/console/StoppedWorkFinancePanel.vue';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -93,6 +94,7 @@ const technicianReportCodeLabels: Record<TechnicianReportReasonCode, string> = {
   no_compatible_part: 'Không có linh kiện phù hợp',
   manufacturer_warranty_or_workshop: 'Cần trung tâm hoặc bảo hành hãng',
   customer_absent: 'Khách không có mặt',
+  customer_unreachable: 'Không liên lạc được khách',
   customer_cancelled: 'Khách đã hủy',
   dispute_or_other: 'Tranh chấp hoặc tình huống khác',
 };
@@ -542,6 +544,7 @@ watch(caseId, (id) => {
         v-if="supportCase.booking || supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement"
         :support-case="supportCase"
       />
+      <GroupStopIncidentsPanel v-if="supportCase.serviceOrderId && ['customer_absent', 'customer_unreachable'].includes(supportCase.reasonCode ?? '')" :key="supportCase.id" :order-id="supportCase.serviceOrderId" />
       <StoppedWorkFinancePanel v-if="supportCase.serviceOrderId" :order-id="supportCase.serviceOrderId" />
 
       <FhCard v-if="isTypedTechnicianReport" title="Đánh giá trách nhiệm">

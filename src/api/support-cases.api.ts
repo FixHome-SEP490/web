@@ -30,6 +30,7 @@ export type TechnicianReportReasonCode =
   | 'no_compatible_part'
   | 'manufacturer_warranty_or_workshop'
   | 'customer_absent'
+  | 'customer_unreachable'
   | 'customer_cancelled'
   | 'dispute_or_other';
 export type TechnicianResponsibility = 'pending' | 'technician_fault' | 'no_technician_fault' | 'inconclusive';
@@ -268,7 +269,7 @@ const CASE_STATUSES: readonly SupportCaseStatus[] = ['open', 'in_review', 'resol
 const TECHNICIAN_REPORT_CLASSES: readonly TechnicianReportReasonClass[] = ['technician_skill_gap', 'non_technician_exception'];
 const TECHNICIAN_REPORT_CODES: readonly TechnicianReportReasonCode[] = [
   'skill_gap', 'device_too_old', 'severe_damage', 'no_compatible_part',
-  'manufacturer_warranty_or_workshop', 'customer_absent', 'customer_cancelled', 'dispute_or_other',
+  'manufacturer_warranty_or_workshop', 'customer_absent', 'customer_unreachable', 'customer_cancelled', 'dispute_or_other',
 ];
 const TECHNICIAN_RESPONSIBILITIES: readonly TechnicianResponsibility[] = [
   'pending', 'technician_fault', 'no_technician_fault', 'inconclusive',

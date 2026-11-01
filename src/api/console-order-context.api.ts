@@ -28,6 +28,7 @@ export interface ConsoleOrderTimelineEntry {
 }
 
 export interface ConsoleOrderContext {
+  visitGroupId?: string | null;
   id: string;
   code: string;
   bookingId: string;
@@ -110,6 +111,7 @@ function normalizeTimeline(payload: unknown): ConsoleOrderTimelineEntry[] | unde
 function normalizeConsoleOrderContext(payload: unknown): ConsoleOrderContext {
   if (!isRecord(payload)) invalid('Backend returned an invalid service order response.');
   const context: ConsoleOrderContext = {
+    ...(payload.visitGroupId === null || typeof payload.visitGroupId === 'string' ? { visitGroupId: payload.visitGroupId } : {}),
     id: requiredString(payload.id, 'Backend returned an invalid service order response.'),
     code: requiredString(payload.code, 'Backend returned an invalid service order response.'),
     bookingId: requiredString(payload.bookingId, 'Backend returned an invalid service order response.'),

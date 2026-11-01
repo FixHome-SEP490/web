@@ -66,6 +66,10 @@ const router = useRouter();
 const isFailedRepairEntry = computed(() => route.query.repairFailure !== undefined);
 const isInterruptionRebookEntry = computed(() => route.query.interruptionRebook !== undefined);
 const interruptionSourceBookingId = computed(() => typeof route.query.interruptionRebook === 'string' ? route.query.interruptionRebook : '');
+const interruptionSources = computed(() => {
+  const value = route.query.sourceBookingIds;
+  return typeof value === 'string' ? value.split(',') : value === undefined ? undefined : [];
+});
 const interruptionCustomerId = computed(() => useAuthStore().user?.id ?? '');
 const failedRepairSources = computed(() => {
   const value = route.query.repairFailure;
@@ -1992,7 +1996,9 @@ async function createAndFindTech() {
 <template>
   <InterruptionRebookForm
     v-if="isInterruptionRebookEntry && !isFailedRepairEntry"
+    :key="`${interruptionSourceBookingId}:${interruptionSources?.join(',') ?? ''}`"
     :source-booking-id="interruptionSourceBookingId"
+    :source-booking-ids="interruptionSources"
     :customer-id="interruptionCustomerId"
     @created="result => router.push(result.kind === 'booking' ? '/app/bookings/' + result.id + '/candidates' : '/app/visits/' + result.id + '/candidates')"
     @later="router.push('/app')"

@@ -14,6 +14,7 @@ import BookingSessionPicker from '../../components/customer/BookingSessionPicker
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
 import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
 import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
+import StoppedDevicesRebookPicker from '../../components/customer/StoppedDevicesRebookPicker.vue';
 import CustomerContinuationPanel from '../../components/customer/CustomerContinuationPanel.vue';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
@@ -913,6 +914,7 @@ async function answerCash(agreed: boolean) {
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
         <div v-if="interruptedDevices.length" role="status" class="space-y-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" data-testid="visit-interrupted">
+          <StoppedDevicesRebookPicker :group-id="visitId" :devices="interruptedDevices" :disabled="checkoutLoading || !childDetailsFresh" />
           <p>{{ interruptedDevices.length }} máy đã dừng sửa. Chọn máy để kiểm tra quyền đặt lại hoặc đặt lịch mới; các máy còn lại giữ kết quả riêng. Đơn cũ chưa được hủy, tiền và linh kiện cũ cần đối soát riêng.</p>
           <FhButton variant="secondary" size="md" :disabled="checkoutLoading" @click="load">Kiểm tra trạng thái mới nhất</FhButton>
         </div>

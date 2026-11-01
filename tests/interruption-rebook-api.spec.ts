@@ -160,4 +160,42 @@ describe('interruptionRebookApi', () => {
     })).rejects.toThrow();
     expect(mocks.post).not.toHaveBeenCalled();
   });
+
+  it.each([1, 2])('requests and confirms exactly %s selected stopped devices from a three-device visit', async count => {
+    const data = rawDraft(count);
+    data.sourceVisitGroupId = ids.group;
+    const sources = data.items.map((item, index) => ({ ...item,
+      sourceOrderId: index ? '90000000-0000-4000-8000-000000000001' : ids.order,
+      sourceCaseId: index ? '90000000-0000-4000-8000-000000000002' : ids.case,
+    }));
+    data.items = sources;
+    mocks.get.mockResolvedValueOnce(ok(data));
+    mocks.getBooking.mockImplementation(async (id: string) => ({ id, customerId: 'customer', serviceId: ids.service, status: 'MATCHED', visitGroupId: ids.group }));
+    mocks.getOrder.mockImplementation(async (id: string) => ({ id, bookingId: sources.find(row => row.sourceOrderId === id)!.sourceBookingId, status: 'UNDER_REPAIR' }));
+    mocks.getMine.mockImplementation(async (id: string) => {
+      const row = sources.find(row => row.sourceCaseId === id)!;
+      return { id, bookingId: row.sourceBookingId, serviceOrderId: row.sourceOrderId, caseType: 'technician_replacement', status: 'open' };
+    });
+    const selected = sources.map(row => row.sourceBookingId);
+    const draft = await interruptionRebookApi.readDraft(ids.booking, 'customer', selected);
+    expect(draft.items.map(row => row.sourceBookingId)).toEqual(selected);
+    expect(mocks.get).toHaveBeenCalledWith(`/bookings/${ids.booking}/interruption-draft`, { params: { sourceBookingIds: selected.join(',') } });
+    const created = sources.map((source, index) => ({ sourceBookingId: source.sourceBookingId, sourceCaseId: source.sourceCaseId,
+      bookingId: index ? '90000000-0000-4000-8000-000000000004' : '90000000-0000-4000-8000-000000000003' }));
+    mocks.post.mockReset().mockResolvedValueOnce(ok({ targetKind: data.targetKind, bookingId: count === 1 ? created[0]!.bookingId : null,
+      visitGroupId: count === 2 ? ids.second : null, items: created }));
+    await interruptionRebookApi.confirm(ids.booking, 'customer', { idempotencyKey: 'subset-command', addressId: ids.address,
+      date: '2090-01-02', slot: 'morning', items: sources.map(row => ({ sourceBookingId: row.sourceBookingId, sourceCaseId: row.sourceCaseId, selectedVariantCode: 'AC-01-01' })) });
+    expect(mocks.post.mock.calls[0]![1].items.map((row: { sourceBookingId: string }) => row.sourceBookingId)).toEqual(selected);
+  });
+
+  it('rejects extra/unselected sources and invalid explicit subsets before confirmation', async () => {
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [])).rejects.toThrow();
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.booking, ids.booking])).rejects.toThrow();
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.second])).rejects.toThrow();
+    expect(mocks.get).not.toHaveBeenCalled();
+    mocks.get.mockResolvedValueOnce(ok(rawDraft(2)));
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.booking])).rejects.toThrow();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
 });

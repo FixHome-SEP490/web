@@ -58,7 +58,7 @@ function rebookPrefilled() {
   const source = prefill.value;
   if (loading.value || !source) return;
   // Existing wizard entry; only the verified source booking ID travels, never a server-supplied path.
-  void router.push({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId } });
+  void router.push({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId, sourceBookingIds: source.bookingId } });
 }
 </script>
 

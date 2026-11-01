@@ -172,7 +172,7 @@ describe('customer visit page', () => {
     const w = await mountPage();
     expect(continuationGet).toHaveBeenCalledWith('o-b1', 'b1', 'v1');
     await w.get('[data-testid="continuation-prefill"]').trigger('click');
-    expect(push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: 'b1' } });
+    expect(push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: 'b1', sourceBookingIds: 'b1' } });
     let finish!: (data: unknown) => void;
     continuationGet.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     await w.get('[data-testid="visit-device-select-2"]').trigger('click');

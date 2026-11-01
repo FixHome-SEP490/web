@@ -59,6 +59,7 @@ interface ReadContext {
   draft: InterruptionDraft;
 }
 const contexts = new Map<string, ReadContext>();
+const reads = new Map<string, number>();
 
 function unwrap(payload: unknown): unknown {
   if (!isRecord(payload) || payload.success !== true || !Number.isInteger(payload.statusCode) || !('data' in payload)) throw invalid();
@@ -107,11 +108,15 @@ function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDra
 }
 
 export const interruptionRebookApi = {
-  async readDraft(anchor: string, owner: string): Promise<InterruptionDraft> {
+  async readDraft(anchor: string, owner: string, sourceBookingIds?: string[]): Promise<InterruptionDraft> {
+    const generation = (reads.get(anchor) ?? 0) + 1;
+    reads.set(anchor, generation);
     contexts.delete(anchor);
-    if (!asId(anchor) || !owner) throw invalid();
-    const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft');
+    if (!asId(anchor) || !owner || (sourceBookingIds && (sourceBookingIds.length < 1 || sourceBookingIds.length > 3
+      || sourceBookingIds.some(id => !asId(id)) || new Set(sourceBookingIds).size !== sourceBookingIds.length || !sourceBookingIds.includes(anchor)))) throw invalid();
+    const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft', ...(sourceBookingIds ? [{ params: { sourceBookingIds: sourceBookingIds.join(',') } }] : []));
     const raw = normalizeRawDraft(unwrap(response.data), anchor);
+    if (sourceBookingIds && (raw.rawItems.length !== sourceBookingIds.length || raw.rawItems.some(item => !sourceBookingIds.includes(item.sourceBookingId)))) throw invalid();
     const kinds: InterruptionSourceKind[] = [];
     const [addresses, linked] = await Promise.all([
       profileApi.getAddresses(),
@@ -157,6 +162,7 @@ export const interruptionRebookApi = {
       addressId: raw.addressId, addressText: raw.addressText, customerNote: raw.customerNote,
       addresses: ownedAddresses, items: linked,
     };
+    if (reads.get(anchor) !== generation) throw invalid();
     contexts.set(anchor, { owner, draft });
     return draft;
   },
