@@ -35,7 +35,8 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     expect(await profileApi.getAddresses()).toEqual([{id:'address'}]);
   });
   it('opts into coarse empty reasons without changing the native candidates array contract', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'OUTSIDE_COVERAGE' } });
+    // The real HTTP body: the reason rides in meta next to data (bug 41).
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
     expect(await bookingsApi.getCandidatesWithDiagnostics('b')).toEqual({
       candidates: [], emptyReason: 'OUTSIDE_COVERAGE',
     });
@@ -45,12 +46,15 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
 
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [{
       userId: 'user-tech', technicianId: 'profile-tech', fullName: 'Thợ',
-    }], emptyReason: 'OUTSIDE_COVERAGE' } });
+    }], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
     const found = await bookingsApi.getCandidatesWithDiagnostics('b');
     expect(found.candidates[0].id).toBe('user-tech');
     expect(found.emptyReason).toBeNull();
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'FAKE_REASON' } });
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'FAKE_REASON' } } });
+    expect((await bookingsApi.getCandidatesWithDiagnostics('b')).emptyReason).toBeNull();
+    // A field next to data never reaches the client through the envelope, it is not read.
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'OUTSIDE_COVERAGE' } });
     expect((await bookingsApi.getCandidatesWithDiagnostics('b')).emptyReason).toBeNull();
   });
 

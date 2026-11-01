@@ -28,6 +28,12 @@ describe('technician visit device status', () => {
     expect(projectTechnicianVisitDeviceStatus('open', { status: 'UNDER_REPAIR' }, [{ status }]).label).toBe(label);
   });
 
+  it('shows a device of an arrived visit as waiting for its repair, not as travelling (bug 17)', () => {
+    expect(projectTechnicianVisitDeviceStatus('open', { status: 'EN_ROUTE', arrivalVerified: true }, []).label).toBe('Đã đến, chờ sửa');
+    expect(projectTechnicianVisitDeviceStatus('open', { status: 'EN_ROUTE', arrivalVerified: false }, []).label).toBe('Chưa cập nhật');
+    expect(projectTechnicianVisitDeviceStatus('open', { status: 'UNDER_REPAIR', arrivalVerified: true }, []).label).toBe('Đang sửa');
+  });
+
   it('shows repair progress only when the child order and its parts read are confirmed', () => {
     expect(projectTechnicianVisitDeviceStatus('open', { status: 'UNDER_REPAIR' }, []).label).toBe('Đang sửa');
     expect(projectTechnicianVisitDeviceStatus('open', { status: 'UNDER_REPAIR' }, null).label).toBe('Chưa cập nhật');

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-01 18:30 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/audit-filter-and-cash-dialog-notice
+> Cập nhật lần cuối: 2026-11-01 18:39 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/out-of-area-candidates-visit-arrival
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -376,7 +376,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Cash-first capability: `GET /finance/cash-intents/{SOLO|VISIT_GROUP}/:id` qua Axios có outer envelope `response.data.data`; controller body bên trong có hai sibling field `{data: CashIntent|null, cashFirstEnabled: boolean}`. Web fail closed nếu thiếu hoặc sai kiểu capability; `false` giữ luồng tiền mặt legacy, `true` chỉ cho khách tạo intent bằng UUID `commandId` (có thể gửi `voucherReservationId`), khách hủy intent pending, và thợ chỉ báo nhận qua `/:received` khi GET xác nhận `pending`. Số tiền đến hạn và trạng thái lấy từ Backend; UI không tự đánh dấu đã thanh toán.
 - Báo cáo thợ đã định kiểu gửi qua `POST /support/cases/technician-report`; Service Manager kết luận trách nhiệm qua `POST /support/cases/:id/responsibility` kèm `workflowVersion` và UUID `commandId`. Kết luận trách nhiệm tách khỏi thao tác vận hành `resolve-interruption` hiện có, gồm đóng để khách tự đặt lại; Web không tự trừ điểm. Contract đã đối chiếu với Backend PR #169; không sửa API ở Web. Shared DEV/browser và luồng Mobile CHƯA KIỂM CHỨNG.
 
-- Candidate diagnostics: solo Booking opt-in reads `GET /bookings/:id/technician-candidates?diagnostics=1`; the existing candidate array remains under `data`, with an optional coarse `emptyReason` (`BOOKING_LOCATION_MISSING`, `OUTSIDE_COVERAGE`, `TIME_UNAVAILABLE`, `UNAVAILABLE`) consumed only when the array is empty. Legacy candidate reads remain unchanged for other clients. This Web integration does not change Backend and the response contract/runtime CHƯA KIỂM CHỨNG against the Backend release.
+- Candidate diagnostics: solo Booking opt-in reads `GET /bookings/:id/technician-candidates?diagnostics=1`; the candidate array stays under `data` and the coarse reason is `meta.emptyReason` (`BOOKING_LOCATION_MISSING`, `OUTSIDE_COVERAGE`, `TIME_UNAVAILABLE`, `UNAVAILABLE`, null), consumed only when the array is empty. A top-level `emptyReason` is never read: the Backend envelope drops it (bug 41, 01/11/2026). `OUTSIDE_COVERAGE` shows "Địa chỉ nằm ngoài khu vực phục vụ" with "Đặt lại với địa chỉ khác" (opens `new-booking` with the same `serviceId` and `desc`, the old request is left as is) and "Xem yêu cầu". The header badge "Đang có thợ sẵn sàng nhận đơn" shows only when at least one technician is listed. Legacy candidate reads remain unchanged for other clients.
+- VisitGroup list devices may carry `arrivedAt` (`my-page`, `assigned-page`): a device whose order is still `accepted` or `en_route` after the visit check-in reads "Đã đến, chờ sửa" and the parent "Đã đến nơi" until a repair starts (`src/utils/visit-arrival.ts`, bug 17); the technician device navigator reads the order `arrivalVerified` the same way and the customer visit page says "Kỹ thuật viên đã đến". No order state is added.
 - Technician assigned VisitGroup rows may include optional `assignedAddressSummary`; Web displays it only on `GET /visit-groups/assigned-page` and only when non-blank. Backend #17 response compatibility is under repair; this optional-field Web client behavior is CHƯA KIỂM CHỨNG with that Backend revision.
 
 ## 6. Chạy, kiểm thử và cổng chất lượng
@@ -450,6 +451,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt
 - 2026-11-01 18:30 (UTC+7) | ToanAltF4 | fix/audit-filter-and-cash-dialog-notice | Nhật ký thao tác: ô Mã người thực hiện chờ ngừng gõ 400 ms rồi mới gọi API, không gửi mã chưa đủ 36 ký tự (lỗi 31). Hộp thoại thanh toán: lỗi 409 khi chọn tiền mặt lúc còn giao dịch VNPay chờ xử lý giờ hiện ngay trong hộp thoại và khoá nút Yêu cầu trả tiền mặt; pendingPaymentCashNotice đọc đúng error.message của API (lỗi 39, phần web).
 - 2026-10-30 11:17 (UTC+7) | foxonworld | foxonworld/bug-detector-web-release-integration-20261030 | Tích hợp các patch Web #16/#17/#33/#35/#38/#39/#40/#41 và wallet; kiểm tra liên repository, PR/CI/deploy còn chờ.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
@@ -508,7 +510,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
 
-- 2026-10-20 21:56 (UTC+7) | ToanAltF4 | feat/technician-overrun-release | Gộp dev (technician UX V3.1 của foxonworld) vào nhánh nhả đơn; giữ cả hai thay đổi
 
 
 
