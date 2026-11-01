@@ -25,6 +25,7 @@ import { useQueryChoice, useQueryPage } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
+import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -156,20 +157,22 @@ function visitItemStatus(item: VisitGroupPageDevice) {
   if (item.outcome === 'succeeded' || item.orderStatus?.toLowerCase() === 'completed') return 'Hoàn thành';
   if (item.orderStatus?.toLowerCase() === 'cancelled' || item.bookingStatus.toLowerCase() === 'cancelled') return 'Đã hủy';
   if (item.orderStatus?.toLowerCase() === 'under_repair') return 'Đang sửa chữa';
+  if (isArrivedWaiting(item)) return VISIT_DEVICE_ARRIVED_LABEL;
   if (item.orderStatus?.toLowerCase() === 'en_route') return 'Đang di chuyển';
   if (item.orderStatus?.toLowerCase() === 'accepted') return 'Đã nhận đơn';
   if (item.bookingStatus.toLowerCase() === 'closed') return 'Chưa tìm được thợ';
   return 'Đang tìm thợ';
 }
 
-function visitGroupStatus(status: VisitGroupAssignedPageItem['status']) {
+function visitGroupStatus(group: VisitGroupAssignedPageItem) {
+  if (isVisitArrived(group)) return VISIT_GROUP_ARRIVED_LABEL;
   const labels = {
     submitted: 'Đang chờ xử lý', matching: 'Đang tìm thợ', no_technician: 'Chưa có thợ phù hợp',
     accepted: 'Đã nhận lịch', en_route: 'Đang di chuyển', under_repair: 'Đang sửa chữa',
     completed: 'Hoàn thành', cancelled: 'Đã hủy', failed: 'Có thiết bị chưa sửa',
     quote_declined: 'Có báo giá chưa được nhận', mixed: 'Kết quả nhiều trạng thái',
   } satisfies Record<VisitGroupAssignedPageItem['status'], string>;
-  return labels[status];
+  return labels[group.status];
 }
 
 const handleChatWithCustomer = async (job: ServiceOrderItem) => {
@@ -303,7 +306,7 @@ onUnmounted(() => {
                 <p class="mt-1 text-sm text-ink-500">Lịch hẹn <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
                 <p v-if="group.assignedAddressSummary?.trim()" class="mt-1 break-words text-sm text-ink-600" data-testid="technician-visit-address">Địa chỉ: {{ group.assignedAddressSummary }}</p>
               </div>
-              <span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group.status)}`">{{ visitGroupStatus(group.status) }}</span>
+              <span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group)}`">{{ visitGroupStatus(group) }}</span>
             </div>
             <ul class="grid gap-2 sm:grid-cols-2" aria-label="Thiết bị trong lượt sửa">
               <li v-for="item in group.items" :key="item.itemId" :data-testid="`technician-visit-device-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl bg-ink-50 px-3 py-2 text-sm">

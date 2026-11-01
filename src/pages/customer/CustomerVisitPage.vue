@@ -417,6 +417,8 @@ const technicianProgress = computed(() => {
   if (childOrderStatusLoading.value) return 'Đang cập nhật tiến độ';
   const statuses = Object.values(childOrderStatuses.value).map(status => status.toUpperCase());
   if (statuses.includes('UNDER_REPAIR')) return 'Đang sửa chữa';
+  // One check-in covers the visit, the other devices stay EN_ROUTE until their repair starts (bug 17).
+  if (statuses.includes('EN_ROUTE') && Object.values(orderDetails.value).some(bundle => bundle.order.arrivalVerified)) return 'Kỹ thuật viên đã đến';
   if (statuses.includes('EN_ROUTE')) return 'Đang di chuyển';
   if (statuses.includes('ACCEPTED')) return 'Đã nhận lượt sửa';
   if (statuses.length && statuses.every(status => ['COMPLETED', 'CANCELLED'].includes(status))) return 'Đã có kết quả các máy';

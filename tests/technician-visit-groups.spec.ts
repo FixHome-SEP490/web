@@ -106,6 +106,26 @@ describe('TechnicianJobsPage grouped visits', () => {
     expect(wrapper.get('[data-testid="technician-visit-group-mixed"]').text()).not.toContain('Địa chỉ riêng tư');
   });
 
+  it('reads an arrived visit as arrived for every device still waiting for its repair (bug 17)', async () => {
+    const at = '2026-11-01T11:20:00Z';
+    const arrived = { ...group('arrived', 'under_repair'), status: 'under_repair' };
+    arrived.items = arrived.items.map((item, index) => ({ ...item, orderStatus: index === 0 ? 'under_repair' : 'en_route', arrivedAt: at }));
+    const waiting = { ...group('waiting', 'en_route'), status: 'en_route' };
+    waiting.items = waiting.items.map((item) => ({ ...item, orderStatus: 'en_route', arrivedAt: at }));
+    const travelling = { ...group('travelling', 'en_route'), status: 'en_route' };
+    travelling.items = travelling.items.map((item) => ({ ...item, orderStatus: 'en_route', arrivedAt: null }));
+    assignedPage.mockResolvedValue(page([arrived, waiting, travelling], 3));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="jobs-list-switch-visits"]').trigger('click');
+    expect(wrapper.get('[data-testid="technician-visit-device-arrived-1"]').text()).toContain('Đang sửa chữa');
+    expect(wrapper.get('[data-testid="technician-visit-device-arrived-2"]').text()).toContain('Đã đến, chờ sửa');
+    expect(wrapper.get('[data-testid="technician-visit-device-arrived-2"]').text()).not.toContain('Đang di chuyển');
+    expect(wrapper.get('[data-testid="technician-visit-group-arrived"]').find('[aria-label="Trạng thái lượt sửa: Đang sửa chữa"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="technician-visit-group-waiting"]').find('[aria-label="Trạng thái lượt sửa: Đã đến nơi"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="technician-visit-device-travelling-2"]').text()).toContain('Đang di chuyển');
+    expect(wrapper.get('[data-testid="technician-visit-group-travelling"]').find('[aria-label="Trạng thái lượt sửa: Đang di chuyển"]').exists()).toBe(true);
+  });
+
   it('shows assigned technician address only when explicitly sent by Backend assigned-page', async () => {
     assignedPage.mockResolvedValue(page([{ ...group('v1'), assignedAddressSummary: '12 Đường kiểm thử, Quận 1' }], 1));
     const wrapper = await mountPage();

@@ -464,7 +464,8 @@ export const bookingsApi = {
 
   /** Opt-in diagnostics without changing the legacy array response consumed by Mobile. */
   async getCandidatesWithDiagnostics(bookingId: string): Promise<CandidateSearchResult> {
-    const res = await apiClient.get<{ data: TechnicianCandidate[]; emptyReason?: CandidateEmptyReason | null }>(
+    // The reason comes in meta: the response envelope keeps only data, meta and message (bug 41).
+    const res = await apiClient.get<{ data: TechnicianCandidate[]; meta?: { emptyReason?: CandidateEmptyReason | null } }>(
       `/bookings/${bookingId}/technician-candidates?diagnostics=1`,
       { timeout: CANDIDATES_TIMEOUT_MS },
     );
@@ -475,7 +476,7 @@ export const bookingsApi = {
     const allowed: CandidateEmptyReason[] = [
       'BOOKING_LOCATION_MISSING', 'OUTSIDE_COVERAGE', 'TIME_UNAVAILABLE', 'UNAVAILABLE',
     ];
-    const reason = res.data.emptyReason;
+    const reason = res.data.meta?.emptyReason;
     return { candidates, emptyReason: candidates.length === 0 && reason && allowed.includes(reason) ? reason : null };
   },
 

@@ -34,6 +34,7 @@ import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch, useQue
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
+import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const PAGE_SIZE = 10;
 
@@ -313,6 +314,7 @@ function visitItemStatus(item: VisitGroupPageDevice) {
   if (item.orderStatus?.toUpperCase() === 'CANCELLED' || item.bookingStatus.toUpperCase() === 'CANCELLED') {
     return { label: 'Đã hủy', tone: 'bg-ink-100 text-ink-600' };
   }
+  if (isArrivedWaiting(item)) return { label: VISIT_DEVICE_ARRIVED_LABEL, tone: 'bg-brand-50 text-brand-700' };
   switch (item.orderStatus?.toUpperCase()) {
     case 'ACCEPTED': return { label: 'Đã nhận đơn', tone: 'bg-brand-50 text-brand-700' };
     case 'EN_ROUTE': return { label: 'Đang di chuyển', tone: 'bg-warning-50 text-warning-800' };
@@ -325,8 +327,9 @@ function visitItemStatus(item: VisitGroupPageDevice) {
   }
 }
 
-function visitGroupStatus(status: VisitGroupPageItem['status']) {
-  switch (status) {
+function visitGroupStatus(group: VisitGroupPageItem) {
+  if (isVisitArrived(group)) return { label: VISIT_GROUP_ARRIVED_LABEL, tone: 'bg-brand-50 text-brand-700' };
+  switch (group.status) {
     case 'submitted': return { label: 'Đang chờ xử lý', tone: 'bg-ink-100 text-ink-700' };
     case 'matching': return { label: 'Đang tìm thợ', tone: 'bg-brand-50 text-brand-700' };
     case 'no_technician': return { label: 'Chưa có thợ phù hợp', tone: 'bg-warning-50 text-warning-800' };
@@ -601,8 +604,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
                 <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
                 <p class="mt-1 text-xs text-ink-500 font-num">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
               </div>
-              <span :class="`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${visitGroupStatus(group.status).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group.status).label}`">
-                {{ visitGroupStatus(group.status).label }}
+              <span :class="`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
+                {{ visitGroupStatus(group).label }}
               </span>
             </div>
             <p :data-testid="`visit-group-time-${group.id}`" class="text-sm text-ink-600">

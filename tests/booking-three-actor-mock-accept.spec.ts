@@ -59,7 +59,7 @@ function scenario() {
     if (path === `/bookings/${bookingId}/technician-candidates` || path === `/bookings/${bookingId}/technician-candidates?diagnostics=1`) {
       if (actor !== 'customer' || status !== 'submitted') throw forbidden();
       return path.endsWith('?diagnostics=1')
-        ? { data: { data: candidates, emptyReason: null } }
+        ? { data: { data: candidates, meta: { emptyReason: null } } }
         : envelope(candidates);
     }
     if (path === `/bookings/${bookingId}`) {

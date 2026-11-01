@@ -49,8 +49,8 @@ const emptyState = computed(() => {
     case 'OUTSIDE_COVERAGE':
       return {
         title: 'Địa chỉ nằm ngoài khu vực phục vụ',
-        description: 'Chưa có kỹ thuật viên phù hợp phục vụ tại địa chỉ đã đặt. Vui lòng xem lại địa chỉ hoặc tạo yêu cầu mới với vị trí khác.',
-        action: 'Xem địa chỉ đặt lịch',
+        description: 'FixHome chưa có kỹ thuật viên phục vụ tại địa chỉ đã đặt. Bạn có thể đặt lại yêu cầu này với một địa chỉ khác.',
+        action: 'Đặt lại với địa chỉ khác',
       };
     case 'BOOKING_LOCATION_MISSING':
       return {
@@ -73,6 +73,33 @@ const emptyState = computed(() => {
   }
 });
 
+
+// Only a found technician makes the "ready" badge true (bug 41: it showed over the empty list).
+const showsReadyBadge = computed(() => !loading.value && !loadError.value && candidates.value.length > 0);
+
+const rebooking = ref(false);
+// Out of area: start a new request for the same service and description, the customer picks
+// another address in the form. The current request is left as it is, it can be cancelled there.
+const rebookElsewhere = async () => {
+  if (!bookingId || rebooking.value) return;
+  rebooking.value = true;
+  const query: Record<string, string> = {};
+  try {
+    const booking = await bookingsApi.getBooking(bookingId);
+    if (booking.serviceId) query.serviceId = booking.serviceId;
+    if (booking.description?.trim()) query.desc = booking.description.trim().slice(0, 1000);
+  } catch {
+    // The form still opens, the customer chooses the service again.
+  } finally {
+    rebooking.value = false;
+  }
+  await router.push({ name: 'new-booking', query });
+};
+
+const handleEmptyAction = () => {
+  if (emptyReason.value === 'OUTSIDE_COVERAGE') void rebookElsewhere();
+  else router.push(backTarget.value);
+};
 
 const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
@@ -209,7 +236,11 @@ const successMessage = computed(() => selectedCount.value === 1
             Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong buổi bạn chọn
           </p>
         </div>
-        <div class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0">
+        <div
+          v-if="showsReadyBadge"
+          data-testid="candidates-ready-badge"
+          class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+        >
           <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
           Đang có thợ sẵn sàng nhận đơn
         </div>
@@ -278,8 +309,13 @@ const successMessage = computed(() => selectedCount.value === 1
       :title="emptyState.title"
       :description="emptyState.description"
       :action-text="emptyState.action"
-      @action="router.push(backTarget)"
-    />
+      data-testid="candidates-empty"
+      @action="handleEmptyAction"
+    >
+      <template v-if="emptyReason === 'OUTSIDE_COVERAGE'" #extra>
+        <FhButton variant="ghost" size="sm" class="mt-2" :disabled="rebooking" @click="router.push(backTarget)">Xem yêu cầu</FhButton>
+      </template>
+    </FhEmptyState>
 
     <!-- Candidates Cards -->
     <div v-else class="space-y-3.5">

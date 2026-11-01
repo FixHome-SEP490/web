@@ -87,6 +87,8 @@ export interface VisitGroupPageDevice {
   orderId: string | null;
   orderCode: string | null;
   orderStatus: string | null;
+  /** First valid check-in of the technician holding this order; null before arrival (bug 17). */
+  arrivedAt?: string | null;
 }
 
 export type VisitGroupReadStatus =
