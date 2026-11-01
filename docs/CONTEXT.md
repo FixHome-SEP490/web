@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-01 22:10 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-group-stop-web-20261101
+> Cập nhật lần cuối: 2026-11-01 22:42 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/address-strict-text-coords
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -410,6 +410,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 7. Quyết định đã chốt
 
+- Địa chỉ lưu (PO 01/11/2026, lỗi 29): form địa chỉ của khách (trang hồ sơ) và vị trí làm việc của thợ kiểm trước khi gửi đúng luật backend trong `src/utils/address-input.ts` (bản sao của `backend/src/shared/validation/address.validators.ts`, câu chữ giống hệt): bắt buộc đủ vĩ độ và kinh độ, ô chữ chỉ nhận chữ (kể cả tiếng Việt có dấu), số, khoảng trắng và dấu thường gặp của địa chỉ, từ chối emoji, ký tự vô hình, ký tự điều khiển, thẻ HTML, chữ được chuẩn hoá NFC và gộp khoảng trắng trước khi gửi. Lỗi hiện ngay dưới ô (tên gợi nhớ, địa chỉ cụ thể, toạ độ), lỗi server hiện trong form chứ không chỉ toast. Địa chỉ cũ chưa có toạ độ phải chọn vị trí trước khi lưu bất kỳ thay đổi nào.
+
 - Không có dữ liệu hay luồng giả (PO 07/10/2026): mọi màn hình chỉ hiện dữ liệu thật của `backend`; chỗ chưa có dữ liệu thì bỏ hoặc hiện trạng thái trống trung thực.
 - Chẩn đoán AI bắt buộc có mô tả, ảnh không bắt buộc (BRX-064).
 
@@ -476,6 +478,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
 - 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.
 - 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
 - 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ
@@ -515,4 +518,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
-- 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch

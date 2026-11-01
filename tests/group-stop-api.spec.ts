@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../src/api/client', () => ({ default: mocks, getHttpStatus: (e: { response?: { status: number } }) => e.response?.status }));
 import { createGroupStopPort, groupStopApi } from '../src/api/group-stop.api';
+import { interruptionRebookApi } from '../src/api/interruption-rebook.api';
 const group = '11111111-1111-4111-8111-111111111111';
 const order = '22222222-2222-4222-8222-222222222222';
 const booking = '33333333-3333-4333-8333-333333333333';
@@ -63,5 +64,34 @@ describe('atomic group stop', () => {
     await expect(port.send(group, { ...input, reason: 'short' })).rejects.toThrow();
     await expect(port.send(group, { ...input, photoEvidenceIds: ['bad'] })).rejects.toThrow();
     expect(mocks.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('read-only source availability for stopped visit devices', () => {
+  beforeEach(() => vi.resetAllMocks());
+  const secondBooking = '55555555-5555-4555-8555-555555555555';
+  const draft = (anchor: string, ids: string[]) => ({ data: { success: true, statusCode: 200, data: {
+    sourceVisitGroupId: group, confirmation: { available: true },
+    items: ids.map(sourceBookingId => ({ sourceBookingId })),
+  } } });
+  it('skips a consumed anchor and only returns server-confirmed remaining machines', async () => {
+    mocks.get.mockRejectedValueOnce({ response: { status: 403 } })
+      .mockResolvedValueOnce(draft(secondBooking, [secondBooking]));
+    expect(await interruptionRebookApi.listAvailableStoppedSources(group, [booking, secondBooking])).toEqual([secondBooking]);
+    expect(mocks.get.mock.calls.map(([url]) => url)).toEqual([
+      `/bookings/${booking}/interruption-draft`, `/bookings/${secondBooking}/interruption-draft`,
+    ]);
+  });
+  it('fails closed for network/malformed responses and never claims unsupported source IDs', async () => {
+    mocks.get.mockRejectedValueOnce(new Error('network'));
+    await expect(interruptionRebookApi.listAvailableStoppedSources(group, [booking])).rejects.toThrow();
+    mocks.get.mockResolvedValueOnce(draft(booking, [booking, secondBooking]));
+    await expect(interruptionRebookApi.listAvailableStoppedSources(group, [booking])).rejects.toThrow();
+    mocks.get.mockResolvedValueOnce(draft(booking, [order]));
+    await expect(interruptionRebookApi.listAvailableStoppedSources(group, [booking])).rejects.toThrow();
+  });
+  it('returns an empty selection only when every candidate is denied by the server', async () => {
+    mocks.get.mockRejectedValue({ response: { status: 403 } });
+    expect(await interruptionRebookApi.listAvailableStoppedSources(group, [booking])).toEqual([]);
   });
 });

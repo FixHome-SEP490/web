@@ -110,7 +110,10 @@ const columns: ConsoleColumn[] = [
       </template>
 
       <template #cell-status="{ row }">
-        <FhStatusPill :status="row.status" class="whitespace-nowrap" />
+        <span v-if="row.workStopped === true && row.operationalDisposition === 'STOPPED'"
+          class="inline-block rounded-md bg-warning-50 px-2 py-1 text-sm font-medium text-warning-800"
+          data-testid="console-order-stopped">Đã dừng sửa · cần đối soát</span>
+        <FhStatusPill v-else :status="row.status" class="whitespace-nowrap" />
         <router-link :to="{ path: '/console/support', query: { serviceOrderId: row.id } }" class="mt-1 block text-sm text-brand-700 underline">Yêu cầu hỗ trợ của đơn</router-link>
       </template>
     </ConsoleTable>

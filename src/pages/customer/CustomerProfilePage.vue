@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { tidyAddressText } from '../../utils/address-text';
+import { addressFieldError, addressLocationError, normalizeAddressText } from '../../utils/address-input';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { MapPin, Plus, Trash2, Check, Pencil, Camera, X, ShieldCheck } from 'lucide-vue-next';
 import {
   FhButton,
@@ -62,6 +63,10 @@ const editingAddressId = ref<string | null>(null);
 const originalAddress = ref<UserAddress | null>(null);
 const editLocationVerified = ref(false);
 const addressError = ref('');
+// Lỗi theo từng ô, hiện ngay dưới ô đó (lỗi 29, PO 01/11/2026).
+const labelError = ref('');
+const line1Error = ref('');
+const locationError = ref('');
 const savingAddress = ref(false);
 const addressForm = ref({
   label: 'Nhà riêng',
@@ -92,6 +97,29 @@ const validCoordinates = (lat: number | '', lng: number | '') =>
   lat !== '' && lng !== '' && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)) &&
   Math.abs(Number(lat)) <= 90 && Math.abs(Number(lng)) <= 180;
 
+const clearAddressFieldErrors = () => {
+  labelError.value = '';
+  line1Error.value = '';
+  locationError.value = '';
+};
+watch(() => addressForm.value.label, () => { labelError.value = ''; });
+watch(() => addressForm.value.line1, () => { line1Error.value = ''; });
+watch([addressLat, addressLng], () => { locationError.value = ''; });
+
+/**
+ * Same rule as the API: plain address text and both coordinates. Area names come from the map
+ * lookup, so a bad one is reported under the address line where the person picked it.
+ */
+const checkAddressFields = (opts: { location: boolean }): boolean => {
+  labelError.value = addressFieldError('Tên gợi nhớ', addressForm.value.label, { max: 100 });
+  line1Error.value = addressFieldError('Địa chỉ cụ thể', addressForm.value.line1, { max: 255, required: true }) ||
+    addressFieldError('Phường, xã', addressForm.value.ward, { max: 100 }) ||
+    addressFieldError('Quận, huyện', addressForm.value.district, { max: 100 }) ||
+    addressFieldError('Tỉnh, thành phố', addressForm.value.province, { max: 100 });
+  locationError.value = opts.location ? addressLocationError(addressLat.value, addressLng.value) : '';
+  return !labelError.value && !line1Error.value && !locationError.value;
+};
+
 const resetAddressForm = () => {
   addressGeoEpoch++;
   if (searchDebounce) clearTimeout(searchDebounce);
@@ -107,6 +135,7 @@ const resetAddressForm = () => {
   searchingByCoords.value = false;
   editLocationVerified.value = false;
   addressError.value = '';
+  clearAddressFieldErrors();
   originalAddress.value = null;
   editingAddressId.value = null;
   mapCenter.value = { lat: 21.0285, lng: 105.8542 };
@@ -346,17 +375,19 @@ const handleAddAddress = async () => {
     toast.warning('Chưa xác định được tỉnh/thành. Vui lòng chọn lại vị trí trên bản đồ hoặc tìm địa chỉ khác.');
     return;
   }
+  addressError.value = '';
+  if (!checkAddressFields({ location: true })) return;
   try {
     await profileApi.createAddress({
-      lat: addressLat.value === '' ? undefined : Number(addressLat.value),
-      lng: addressLng.value === '' ? undefined : Number(addressLng.value),
-      label: addressForm.value.label,
-      line1: addressForm.value.line1,
-      ward: addressForm.value.ward || undefined,
+      lat: Number(addressLat.value),
+      lng: Number(addressLng.value),
+      label: normalizeAddressText(addressForm.value.label),
+      line1: normalizeAddressText(addressForm.value.line1),
+      ward: addressForm.value.ward ? normalizeAddressText(addressForm.value.ward) : undefined,
       // Many post-reform Vietnamese addresses have no separate district level; fall back
       // to ward/province so the backend's required field is still satisfied.
-      district: addressForm.value.district || addressForm.value.ward || addressForm.value.province,
-      province: addressForm.value.province,
+      district: normalizeAddressText(addressForm.value.district || addressForm.value.ward || addressForm.value.province),
+      province: normalizeAddressText(addressForm.value.province),
       isDefault: addressForm.value.isDefault,
     });
     showAddressModal.value = false;
@@ -374,7 +405,8 @@ const handleAddAddress = async () => {
     };
     await loadAddresses();
   } catch (err) {
-    toast.error(userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.'));
+    // Shown inside the form, next to what the person has to fix.
+    addressError.value = userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.');
   }
 };
 
@@ -409,13 +441,17 @@ const handleSaveAddress = async () => {
     addressError.value = 'Địa chỉ hoặc vị trí đã thay đổi. Vui lòng xác nhận lại vị trí trên bản đồ trước khi lưu.';
     return;
   }
+  // An address saved before 01/11 without a pin is refused by the API on any change until it is
+  // pinned, so ask for the pin here instead of sending.
+  const storedPin = original.lat != null && original.lng != null;
+  if (!checkAddressFields({ location: locationChanged || !storedPin })) return;
   const dto = locationChanged ? {
-    label: addressForm.value.label.trim(), isDefault: addressForm.value.isDefault,
-    line1, ward: addressForm.value.ward,
+    label: normalizeAddressText(addressForm.value.label), isDefault: addressForm.value.isDefault,
+    line1: normalizeAddressText(line1), ward: normalizeAddressText(addressForm.value.ward),
     district: original.district, province: original.province,
     lat: lat!, lng: lng!,
   } : {
-    label: addressForm.value.label.trim(), isDefault: addressForm.value.isDefault,
+    label: normalizeAddressText(addressForm.value.label), isDefault: addressForm.value.isDefault,
   };
   savingAddress.value = true;
   try {
@@ -423,8 +459,8 @@ const handleSaveAddress = async () => {
     addresses.value = addresses.value.map(addr => addr.id === original.id ? updated : addr);
     closeAddressModalAfterSave();
     await loadAddresses();
-  } catch {
-    addressError.value = 'Không thể lưu địa chỉ. Vui lòng thử lại.';
+  } catch (err) {
+    addressError.value = userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.');
   } finally {
     savingAddress.value = false;
   }
@@ -675,7 +711,9 @@ const confirmDelete = async () => {
               type="text"
               class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
               placeholder="Nhà riêng, Văn phòng, Nhà bố mẹ..."
+              :aria-invalid="labelError ? 'true' : undefined"
             />
+            <p v-if="labelError" data-testid="saved-address-label-error" role="alert" class="mt-1 text-xs text-danger-700">{{ labelError }}</p>
           </div>
 
           <div class="space-y-2">
@@ -686,6 +724,7 @@ const confirmDelete = async () => {
                 type="text"
                 placeholder="Tìm địa chỉ, ví dụ: Số 25 Ngõ 12 Đội Cấn"
                 class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
+                :aria-invalid="line1Error ? 'true' : undefined"
                 @input="onAddressSearchInput"
               />
               <ul
@@ -702,6 +741,7 @@ const confirmDelete = async () => {
                 </li>
               </ul>
             </div>
+            <p v-if="line1Error" data-testid="saved-address-line1-error" role="alert" class="text-xs text-danger-700">{{ line1Error }}</p>
             <p v-if="addressForm.ward || addressForm.province" class="text-xs text-ink-500 flex items-center gap-1">
               <MapPin :size="12" class="shrink-0" />
               <span>{{ [addressForm.ward, addressForm.province].filter(Boolean).join(', ') }}</span>
@@ -723,6 +763,7 @@ const confirmDelete = async () => {
               <input v-model.number="addressLat" data-testid="saved-address-lat" @input="invalidateEditLocation" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
               <input v-model.number="addressLng" data-testid="saved-address-lng" @input="invalidateEditLocation" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
             </div>
+            <p v-if="locationError" data-testid="saved-address-location-error" role="alert" class="text-xs text-danger-700">{{ locationError }}</p>
             <FhButton
               variant="ghost"
               size="sm"

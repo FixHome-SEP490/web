@@ -159,6 +159,22 @@ describe('Console orders', () => {
   });
 });
 
+describe('Console stopped-work status', () => {
+  it('shows a server-proven stop instead of the historical under_repair label and leaves active orders unchanged', async () => {
+    mockGet.mockResolvedValue(listed([
+      order('stopped', 'under_repair', { workStopped: true, operationalDisposition: 'STOPPED' }),
+      order('active', 'under_repair', { workStopped: false }),
+    ], 2));
+    const wrapper = mount(ConsoleOrdersPage, { global: { stubs } });
+    await flushPromises();
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.find('[data-testid="console-order-stopped"]').text()).toContain('Đã dừng sửa');
+    expect(rows[0]!.text()).not.toContain('Đang sửa chữa');
+    expect(rows[1]!.find('[data-testid="console-order-stopped"]').exists()).toBe(false);
+  });
+});
+
 describe('Console cancellations', () => {
   it('asks for a page at a time and shows the pager', async () => {
     const row = (id: string) => ({ id, serviceOrderId: 'o', actor: 'customer', actorUserId: 'u', reason: 'x', stateAtCancel: 'accepted', strikeApplied: false, compensationStatus: 'pending_review', createdAt: '2026-10-01T10:00:00Z', actorName: 'A', orderCode: `FH-${id}` });
