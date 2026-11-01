@@ -217,7 +217,10 @@ const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT)
 // and advances in one action, without ever creating a fourth draft.
 const canSaveThirdAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
   && extraDevices.value.length === VISIT_DEVICE_LIMIT - 1 && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveThirdAndContinue.value)
+const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+  && extraDevices.value.length > 0 && extraDevices.value.length < VISIT_DEVICE_LIMIT
+  && !!selectedServiceId.value && !editingSavedDeviceKey.value);
+const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value)
   ? isCatalogV2PreviewReady.value && !loading.value && !uploadingPhoto.value
   : !editingSavedDeviceKey.value && (
   selectedServiceId.value
@@ -1556,14 +1559,15 @@ function toggleSymptom(symptom: string) {
 
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
-  if (singleSwitchOpen.value) return;
+  if (step.value !== 1 || singleSwitchOpen.value || loading.value || uploadingPhoto.value) return;
   if (editingSavedDeviceKey.value) {
     addAnotherDevice();
     return;
   }
-  if (canSaveThirdAndContinue.value) {
-    addAnotherDevice();
-    if (extraDevices.value.length === VISIT_DEVICE_LIMIT && !selectedServiceId.value) step.value = 2;
+  if (canSaveAndContinue.value) {
+    const savedCount = extraDevices.value.length;
+    addAnotherDevice({ continuing: true });
+    if (extraDevices.value.length === savedCount + 1 && !selectedServiceId.value) step.value = 2;
     return;
   }
   if (!selectedServiceId.value && visitGrouping.value && extraDevices.value.length >= 2) {
@@ -1681,7 +1685,7 @@ function priceTextOf(price: SummaryPrice): string {
 }
 
 /** Keep this device in the visit and start the next one with the same address and time. */
-function addAnotherDevice(options: { quiet?: boolean } = {}) {
+function addAnotherDevice(options: { quiet?: boolean; continuing?: boolean } = {}) {
   if (!visitGrouping.value && isFixedPrice.value && quantity.value > 1) {
     toast.warning('Trong lượt sửa, mỗi thiết bị cần có mô tả và ảnh riêng. Hãy giảm số lượng về 1 để thêm thiết bị.');
     step.value = 1;
@@ -1748,7 +1752,7 @@ function addAnotherDevice(options: { quiet?: boolean } = {}) {
     toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Kiểm tra tiếp ${nextAi.nameVi.toLowerCase()}.`);
     return;
   }
-  toast.success(extraDevices.value.length === VISIT_DEVICE_LIMIT
+  toast.success(options.continuing ? `Đã lưu ${extraDevices.value.length} thiết bị.` : extraDevices.value.length === VISIT_DEVICE_LIMIT
     ? `Đã lưu đủ ${VISIT_DEVICE_LIMIT} thiết bị.`
     : `Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
 }
@@ -2549,7 +2553,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveThirdAndContinue ? `Lưu máy ${VISIT_DEVICE_LIMIT} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"

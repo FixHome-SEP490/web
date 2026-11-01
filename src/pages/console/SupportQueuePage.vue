@@ -9,6 +9,7 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import {
   supportCasesApi,
+  SupportCaseContractError,
   type SupportCaseStatus,
   type SupportCaseSummary,
   type SupportCaseType,
@@ -23,6 +24,8 @@ import {
 } from './support-cases.utils';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
+import { getHttpStatus } from '../../api/client';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const router = useRouter();
 const route = useRoute();
@@ -65,13 +68,13 @@ const pageSize = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const loading = ref(true);
-const error = ref(false);
+const error = ref('');
 let latestRequest = 0;
 
 async function loadCases() {
   const requestId = ++latestRequest;
   loading.value = true;
-  error.value = false;
+  error.value = '';
   try {
     const response = await supportCasesApi.listCases({
       page: page.value,
@@ -84,11 +87,18 @@ async function loadCases() {
     if (requestId !== latestRequest) return;
     cases.value = response.data;
     total.value = response.meta.total;
-  } catch {
+  } catch (failure) {
     if (requestId !== latestRequest) return;
     cases.value = [];
     total.value = 0;
-    error.value = true;
+    const status = getHttpStatus(failure);
+    const fallback = failure instanceof SupportCaseContractError
+      ? 'Dữ liệu danh sách hỗ trợ không đúng định dạng. Thử lại; nếu vẫn lỗi, báo nhóm hỗ trợ kiểm tra phản hồi danh sách.'
+      : 'Chưa tải được danh sách hỗ trợ. Kiểm tra kết nối rồi thử lại.';
+    error.value = userFacingError(failure, fallback);
+    if (status === 403) error.value += ' Cần tài khoản quản lý dịch vụ hoặc quản trị viên có quyền xem tất cả yêu cầu hỗ trợ.';
+    // Only the numeric transport status is diagnostic; never expose response bodies or parser internals.
+    if (status !== undefined) error.value += ` (HTTP ${status})`;
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -166,7 +176,7 @@ watch(page, (nextPage, previousPage) => {
       </button>
     </form>
 
-    <ConsoleLoadError v-if="error" @retry="loadCases" />
+    <ConsoleLoadError v-if="error" :message="error" @retry="loadCases" />
     <ConsoleTable
       v-else
       :columns="columns"

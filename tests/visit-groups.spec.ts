@@ -7,7 +7,7 @@ vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().m
 const routeState = reactive({ params: { id: 'v1' } });
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.
-const { client, visitApi, orders, wallet, funded, push, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
+const { client, visitApi, orders, wallet, funded, push, continuationGet, orderCallbacks, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
   client: { get: vi.fn(), post: vi.fn() },
   visitApi: {
     get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), vnpayUrl: vi.fn(), confirmCash: vi.fn(),
@@ -17,6 +17,8 @@ const { client, visitApi, orders, wallet, funded, push, orderListeners, bookingL
   wallet: { summary: vi.fn() },
   funded: { wallet: vi.fn(), vnpay: vi.fn(), zero: vi.fn(), confirmCash: vi.fn() },
   push: vi.fn(),
+  continuationGet: vi.fn(),
+  orderCallbacks: new Map<string, Set<() => void>>(),
   orderListeners: new Map<string, () => void>(),
   bookingListeners: new Map<string, () => void>(),
   resyncListeners: new Set<() => void>(),
@@ -108,6 +110,7 @@ describe('customer visit page', () => {
 
   async function mountPage() {
     vi.resetModules();
+    vi.doMock('../src/api/platform-continuation.api', () => ({ customerContinuationApi: { get: continuationGet } }));
     vi.doMock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visitApi }));
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
@@ -119,8 +122,11 @@ describe('customer visit page', () => {
         return () => bookingListeners.delete(bookingId);
       },
       onOrderChange: (orderId: string, callback: () => void) => {
-        orderListeners.set(orderId, callback);
-        return () => orderListeners.delete(orderId);
+        const callbacks = orderCallbacks.get(orderId) ?? new Set<() => void>();
+        callbacks.add(callback);
+        orderCallbacks.set(orderId, callbacks);
+        orderListeners.set(orderId, () => { for (const listener of callbacks) listener(); });
+        return () => { callbacks.delete(callback); if (!callbacks.size) { orderCallbacks.delete(orderId); orderListeners.delete(orderId); } };
       },
       onResync: (callback: () => void) => { resyncListeners.add(callback); return () => resyncListeners.delete(callback); },
       whileOffline: () => () => undefined,
@@ -138,6 +144,8 @@ describe('customer visit page', () => {
     Object.values(funded).forEach((fn) => fn.mockReset());
     routeState.params.id = 'v1';
     orderListeners.clear();
+    orderCallbacks.clear();
+    continuationGet.mockReset().mockRejectedValue(new Error('Continuation unavailable'));
     bookingListeners.clear();
     resyncListeners.clear();
     socketHandlers.clear();
@@ -151,6 +159,30 @@ describe('customer visit page', () => {
     push.mockClear();
     wallet.summary.mockResolvedValue({ balance: 1000000 });
     visitApi.get.mockResolvedValue(visit);
+  });
+
+  it('reads verified continuation for the selected child only and clears it when switching machines', async () => {
+    visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
+    orders.getOrder.mockImplementation(async id => ({ id, bookingId: id.slice(2), visitGroupId: 'v1', status: 'UNDER_REPAIR' }));
+    continuationGet.mockImplementation(async (orderId, bookingId, visitGroupId) => ({
+      workStopped: true,
+      customerContinuation: { eligible: true, independentNewBookingAllowed: true, prefilledRebookAvailable: true,
+        prefilledRebook: { targetKind: 'booking', sourceCount: 1 }, source: { serviceOrderId: orderId, bookingId, visitGroupId } },
+    }));
+    const w = await mountPage();
+    expect(continuationGet).toHaveBeenCalledWith('o-b1', 'b1', 'v1');
+    await w.get('[data-testid="continuation-prefill"]').trigger('click');
+    expect(push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: 'b1' } });
+    let finish!: (data: unknown) => void;
+    continuationGet.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await w.get('[data-testid="visit-device-select-2"]').trigger('click');
+    expect(continuationGet).toHaveBeenLastCalledWith('o-b2', 'b2', 'v1');
+    expect(w.find('[data-testid="continuation-prefill"]').exists()).toBe(false);
+    finish({ customerContinuation: { eligible: false } });
+    await flushPromises();
+    expect(w.find('[data-testid="continuation-new-booking"]').exists()).toBe(false);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.cancel).not.toHaveBeenCalled();
   });
 
   it('shows a single machine selector and only the selected machine panel', async () => {

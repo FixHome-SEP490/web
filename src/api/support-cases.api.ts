@@ -276,8 +276,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export class SupportCaseContractError extends Error {}
+
 function invalid(message: string): never {
-  throw new Error(message);
+  throw new SupportCaseContractError(message);
 }
 
 function requiredString(value: unknown, message: string): string {

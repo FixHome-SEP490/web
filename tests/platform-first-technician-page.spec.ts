@@ -73,6 +73,11 @@ it('hides cannot-continue before check-in and keeps objective repair-failed acce
   expect(checkedIn.find('[data-testid="job-repair-failed-menu"]').exists()).toBe(true);
 });
 
+it('shows arrived waiting in detail after check-in while the device remains en route', async () => {
+  const w = await render({ status: 'en_route', arrivalVerified: true });
+  expect(w.text()).toContain('Đã đến, chờ sửa');
+});
+
 it('reports a refused command without claiming cancellation or success', async () => {
   post.mockRejectedValue({ response: { status: 403 } });
   const w = await render();
@@ -85,7 +90,8 @@ it('reports a refused command without claiming cancellation or success', async (
   await flushPromises();
   expect(post).toHaveBeenCalledTimes(1);
   await flushPromises();
-  expect(w.get('[data-testid="cannot-continue-dialog"]').text()).toContain('Quyền hoặc trạng thái');
+  expect(w.get('[data-testid="cannot-continue-dialog"]').text()).toContain('không có quyền');
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
   expect(w.text()).not.toContain('Đã ghi nhận gián đoạn');
   expect(post.mock.calls.every(([path]) => path === '/service-orders/order-B/cannot-continue')).toBe(true);
 });

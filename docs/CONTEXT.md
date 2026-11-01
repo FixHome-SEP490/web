@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-01 18:39 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/out-of-area-candidates-visit-arrival
+> Cập nhật lần cuối: 2026-11-01 20:15 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-demo-recovery-hotfix-20261101
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,11 +92,18 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ## 3. Trạng thái hiện tại
 
+### Web recovery hotfix demo (01/11/2026)
+
+- Form thủ công cho máy 2 hoặc 3 dùng CTA “Lưu máy N và tiếp tục”, qua cùng validation giá, mô tả và ảnh riêng trước khi sang địa chỉ; vẫn có thể lưu máy 2 để thêm máy 3. Không tạo máy thứ tư hoặc thay payload booking.
+- Trang lượt gắn `CustomerContinuationPanel` cho child đang chọn khi chi tiết đã đọc mới, dùng đúng order/booking/group. Chỉ phản hồi continuation đã xác minh mới mở đặt lại/đặt mới; chuyển máy không giữ CTA của máy cũ. Yêu cầu khách dừng/đổi thợ vẫn là quản lý xem xét.
+- Hàng đợi hỗ trợ phân biệt lỗi phiên, quyền, kết nối/máy chủ và contract; giữ nút thử lại, chỉ hiện HTTP status an toàn, không hiện payload/parser nội bộ hoặc giả danh sách trống. Đã đối chiếu controller/DTO/envelope Backend; chưa tái hiện parser defect cụ thể.
+- Chi tiết công việc hiện “Đã đến, chờ sửa” khi `EN_ROUTE` và `arrivalVerified`; không đổi enum. Lỗi cannot-continue giữ chẩn đoán tiếng Việt an toàn, hướng dẫn tải lại để đối chiếu. Lỗi 4xx không xác định validation khóa cả khi mở lại dialog; lỗi mạng/5xx chỉ cho thử lại cùng lệnh và nội dung, không tự gửi lại. Không đổi Backend, tiền, ưu đãi hoặc nghĩa vụ linh kiện.
+
 ### Gián đoạn có xác minh T4 (29/10/2026)
 
-- Thợ đã check-in và đơn ở `EN_ROUTE`/`UNDER_REPAIR` có thêm mục “Không thể tiếp tục công việc” gửi `POST /service-orders/:id/cannot-continue` với lý do typed, mô tả và tối đa 3 ảnh chứng cứ; `commandId` UUID được giữ trong bộ nhớ trang cho đơn đó để thử lại đúng lệnh, lỗi 4xx khóa lệnh còn lỗi mạng/5xx chỉ cho thử lại cùng nội dung. Hai mục “Báo cáo hỗ trợ · kỹ năng/ngoại lệ” vẫn chỉ báo cáo, không dừng đơn; “Không sửa được máy này” giữ nguyên tuyến `/repair-failed`.
+- Thợ đã check-in và đơn ở `EN_ROUTE`/`UNDER_REPAIR` có mục “Không thể tiếp tục máy đang chọn” gửi `POST /service-orders/:id/cannot-continue` với lý do typed, mô tả và tối đa 3 ảnh chứng cứ; `commandId` UUID được giữ trong bộ nhớ trang cho đơn đó để thử lại đúng lệnh. Lỗi 400/422 cho sửa validation; lỗi mạng/5xx/408 chỉ cho thử lại cùng nội dung; các lỗi 4xx khác khóa lệnh cả khi mở lại dialog. Hai mục “Nhờ quản lý hỗ trợ · kỹ năng/ngoại lệ (vẫn tiếp tục)” chỉ báo cáo, không dừng đơn; “Không sửa được máy này” giữ nguyên tuyến `/repair-failed`.
 - T8/T9: `workStopped=true`, `assignmentReleased=true`, `operationalDisposition=STOPPED` biểu thị đã dừng và nhả phân công, dù enum đơn vẫn `EN_ROUTE`/`UNDER_REPAIR` để giữ lịch sử. Khách/thợ hiện đã dừng, khóa thao tác tiến trình/thu mới và dừng vị trí đang chạy. `failedWorkFinance` giữ số tiền phải trả `null`, chưa xác định hoàn tiền; báo giá cũ chỉ để xem lịch sử. Không tự tạo hóa đơn 0 hoặc suy ra miễn phí. Nghĩa vụ linh kiện/tiền cũ không chặn khách đặt lại từ nguồn hợp lệ.
-- Khách thấy `CustomerContinuationPanel` trên chi tiết đơn đang `EN_ROUTE`/`UNDER_REPAIR`, đọc `GET /service-orders/:id/customer-continuation`; chỉ khi server trả `eligible=true` và `independentNewBookingAllowed=true` mới có CTA mở `/app/bookings/new` (booking mới, không dùng lại báo giá/tiền/ưu đãi cũ). Khi T2 trả `prefilledRebookAvailable=true` cùng metadata đúng nguồn, panel có thêm CTA “Đặt lại dịch vụ” mở `/app/bookings/new?interruptionRebook=<source.bookingId>` để dùng biểu mẫu nháp đã có; Web không mở URL server hay tự tạo booking. Khi điền sẵn không khả dụng, panel ghi ngắn chưa sẵn sàng và vẫn giữ CTA độc lập. Lỗi đọc giữ dữ liệu đơn cũ, không hiện số 0 giả và không hiện CTA.
+- Khách thấy `CustomerContinuationPanel` trên chi tiết đơn và child đang chọn ở trang lượt khi đơn ở `EN_ROUTE`/`UNDER_REPAIR`, đọc `GET /service-orders/:id/customer-continuation`; chỉ khi server trả `eligible=true` và `independentNewBookingAllowed=true` mới có CTA mở `/app/bookings/new` (booking mới, không dùng lại báo giá/tiền/ưu đãi cũ). Khi T2 trả `prefilledRebookAvailable=true` cùng metadata đúng nguồn, panel có thêm CTA “Đặt lại dịch vụ” mở `/app/bookings/new?interruptionRebook=<source.bookingId>` để dùng biểu mẫu nháp đã có; Web không mở URL server hay tự tạo booking. Khi điền sẵn không khả dụng, panel ghi ngắn chưa sẵn sàng và vẫn giữ CTA độc lập. Lỗi đọc giữ dữ liệu đơn cũ, không hiện số 0 giả và không hiện CTA.
 - Hợp đồng chi tiết ở `docs/PLATFORM-FIRST-T4-WEB-CONTRACT.md`; T2 Backend ở `docs/PLATFORM-FIRST-T2-BACKEND-CONTRACT.md` (local commit `81627d4`, chưa tích hợp DEV). T2 chỉ dùng lại `interruption-draft`/`interruption-rebook` đã có, không hủy đơn cũ, không hoàn tiền, không cấp voucher và không đụng báo giá/thanh toán/linh kiện cũ; đơn cũ vẫn chưa `CANCELLED`.
 
 ### Voucher T2 (26/10/2026)
@@ -406,6 +413,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Hotfix demo 01/11: runtime có đăng nhập Customer/Service Manager/Technician trên DEV CHƯA KIỂM CHỨNG vì chưa có phiên được cấp cho task. Cần tái hiện GET danh sách hỗ trợ và POST cannot-continue với đúng phân công/check-in hiện tại để xác định HTTP thực tế. Kiểm thử Mobile và browser theo viewport cũng CHƯA KIỂM CHỨNG; source Backend chỉ đọc, không triển khai liên repo trong task này.
+
 - T13 tích hợp local Web AI PR #186 với platform-first `244756b`, chỉ chạy bộ kiểm tra tối thiểu được owner cho phép. Toàn bộ header và lịch sử mục 9 giữ nguyên theo chỉ thị owner; bàn giao/time/commit/test mới ở `docs/PLATFORM-FIRST-T13-WEB-AI-INTEGRATION.md`. Backend DEV, browser/E2E, CI, full suite, lint/build và Mobile CHƯA KIỂM CHỨNG.
 
 - Gián đoạn có xác minh T4 mới qua test Web và các cổng lint/typecheck/build; chưa kiểm chứng trên trình duyệt với tài khoản thợ/khách, Backend DEV, Socket.IO thật hay Mobile parity. T2 Backend mới là commit local `81627d4` trong worktree riêng, chưa tích hợp DEV hay kiểm chứng runtime; Web đã có CTA điền sẵn theo contract đó nhưng chưa có E2E đăng nhập. Hard-refresh trước QA.
@@ -451,6 +460,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+
+- 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
 - 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt
 - 2026-11-01 18:30 (UTC+7) | ToanAltF4 | fix/audit-filter-and-cash-dialog-notice | Nhật ký thao tác: ô Mã người thực hiện chờ ngừng gõ 400 ms rồi mới gọi API, không gửi mã chưa đủ 36 ký tự (lỗi 31). Hộp thoại thanh toán: lỗi 409 khi chọn tiền mặt lúc còn giao dịch VNPay chờ xử lý giờ hiện ngay trong hộp thoại và khoá nút Yêu cầu trả tiền mặt; pendingPaymentCashNotice đọc đúng error.message của API (lỗi 39, phần web).
 - 2026-10-30 11:17 (UTC+7) | foxonworld | foxonworld/bug-detector-web-release-integration-20261030 | Tích hợp các patch Web #16/#17/#33/#35/#38/#39/#40/#41 và wallet; kiểm tra liên repository, PR/CI/deploy còn chờ.
@@ -508,7 +519,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 - 2026-10-20 23:44 (UTC+7) | ToanAltF4 | feat/customer-booking-redesign | Làm lại giao diện đặt lịch của khách (PO duyệt 20/10): bước 1 hai cột, danh sách dịch vụ gập lại sau khi chọn, thẻ Máy của bạn, khung Yêu cầu của bạn bên phải (thanh dưới trên điện thoại), bước 2 địa chỉ + Hẹn lịch/Tới ngay, bước xác nhận có nút Sửa từng dòng; giá rút gọn (199k – 449k, Tham khảo 249k); tìm kiếm hiểu máy lạnh/máy nước nóng/TV; hộp Đặt lại thợ trung tính, chọn ngày dạng thanh như app; trang chi tiết yêu cầu hiện thiết bị, tiền công, tình trạng; bỏ 5 component cũ không còn dùng
 
-- 2026-10-20 23:16 (UTC+7) | foxonworld | foxonworld/tech-parts-ux-v32-20261020 | Fix stuck skeleton race, mobile parts layout, structured Info details, versioned partial usage editor; keep old status API fallback.
 
 
 

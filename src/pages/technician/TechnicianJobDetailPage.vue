@@ -5,6 +5,7 @@ import {
   type TechnicianReportReasonCode,
 } from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
+import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
@@ -2713,7 +2714,7 @@ const toggleMore = async () => {
           <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
             <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
-            <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
+            <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
           </div>
         </div>
 
@@ -2748,29 +2749,29 @@ const toggleMore = async () => {
               @click="openCannotContinue"
             >
               <Ban :size="16" class="shrink-0" />
-              Không thể tiếp tục công việc
+              Không thể tiếp tục máy đang chọn
             </button>
             <button
               v-if="canCreateTypedTechnicianReport && !technicianReportSent"
               type="button"
               role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
               data-testid="job-technician-report-skill"
               @click="openTechnicianReport('technician_skill_gap')"
             >
-              <Flag :size="16" class="text-ink-500" />
-              Báo cáo hỗ trợ · kỹ năng
+              <Flag :size="16" class="shrink-0 text-ink-500" />
+              Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)
             </button>
             <button
               v-if="canCreateTypedTechnicianReport && !technicianReportSent"
               type="button"
               role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
+              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
               data-testid="job-technician-report-exception"
               @click="openTechnicianReport('non_technician_exception')"
             >
-              <Flag :size="16" class="text-ink-500" />
-              Báo cáo hỗ trợ · ngoại lệ
+              <Flag :size="16" class="shrink-0 text-ink-500" />
+              Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)
             </button>
             <button
               v-if="canReport && !gpsCheckedIn"
@@ -4002,7 +4003,7 @@ const toggleMore = async () => {
           <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
             {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
           </h3>
-          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Chỉ gửi báo cáo hỗ trợ; công việc vẫn tiếp tục. Báo cáo này không dừng hoặc hủy đơn. Nếu bạn không thể tiếp tục, đóng và chọn hành động riêng “Không thể tiếp tục công việc”.</p>
+          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Quản lý dịch vụ sẽ xem xét báo cáo; công việc vẫn tiếp tục. Nếu không thể tiếp tục máy đang chọn, đóng và chọn “Không thể tiếp tục máy đang chọn”.</p>
         </div>
         <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
           Lý do

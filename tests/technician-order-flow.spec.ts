@@ -1038,8 +1038,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const before = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
     await openMoreMenu(before);
-    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · kỹ năng');
-    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · ngoại lệ');
+    expect(menuItems(before)).not.toContain('Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)');
+    expect(menuItems(before)).not.toContain('Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)');
     expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
     before.unmount();
 
@@ -1056,11 +1056,11 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await openMoreMenu(wrapper);
     // After check-in the order can no longer be cancelled by the technician.
     expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
-    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · kỹ năng');
-    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · ngoại lệ');
+    expect(menuItems(wrapper)).toContain('Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)');
+    expect(menuItems(wrapper)).toContain('Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)');
     expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
     expect(menuItems(wrapper)).not.toContain('Báo cáo vấn đề');
-    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Báo cáo hỗ trợ · kỹ năng'))!.trigger('click');
+    await wrapper.get('[data-testid="job-technician-report-skill"]').trigger('click');
     const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
     expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
     expect(dialog.attributes('aria-describedby')).toBe('technician-report-description');
