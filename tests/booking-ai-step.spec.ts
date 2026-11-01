@@ -280,6 +280,36 @@ describe('Plain booking form', () => {
       ]);
     });
 
+    it.each([2, 3])('keeps %i services outside the long transcript with mobile disclosure and an unobstructed next action', async (count) => {
+      const data = threeAppliances();
+      const longAnswer = 'Bạn có thể kiểm tra thiết bị theo hướng dẫn an toàn. '.repeat(100) + 'Kết thúc hướng dẫn.';
+      analyze.mockResolvedValueOnce({ ...data, messageVi: longAnswer, devices: data.devices.slice(0, count), recommendedServices: data.recommendedServices.slice(0, count) });
+      const wrapper = await openAiForm();
+      await describeAndAnalyze(wrapper);
+      const chat = wrapper.get('[data-testid="ai-booking-chat"]');
+      expect(chat.text()).toContain(longAnswer);
+      expect(chat.find('[data-testid="ai-visit-services"]').exists()).toBe(false);
+      expect(chat.find('[data-testid="ai-continue"]').exists()).toBe(false);
+      expect(chat.classes()).toContain('min-h-0');
+      const toggle = wrapper.get('[data-testid="ai-services-toggle"]');
+      expect(toggle.text()).toContain(`${count} thiết bị`);
+      expect(toggle.attributes('aria-expanded')).toBe('false');
+      const panel = wrapper.get('#ai-booking-services');
+      expect(panel.classes()).toContain('hidden');
+      expect(panel.classes()).toContain('lg:block');
+      await toggle.trigger('click');
+      expect(toggle.attributes('aria-expanded')).toBe('true');
+      expect(panel.classes()).not.toContain('hidden');
+      await wrapper.get(`[data-testid="ai-visit-service-change-${count - 1}"]`).setValue('svc-gas-clean');
+      await toggle.trigger('click');
+      await toggle.trigger('click');
+      expect(wrapper.get(`[data-testid="ai-visit-service-${count - 1}"]`).text()).toContain('Vệ sinh bếp gas');
+      expect(wrapper.get('[data-testid="ai-thread"]').text()).toContain('Kết thúc hướng dẫn.');
+      expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
+      expect(analyze).toHaveBeenCalledTimes(1);
+      wrapper.unmount();
+    }, 10000);
+
     it('shows a service for every appliance and books them all, each under its own', async () => {
       analyze.mockResolvedValueOnce(threeAppliances());
       const wrapper = await openAiForm();
