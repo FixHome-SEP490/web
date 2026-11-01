@@ -42,7 +42,7 @@ describe('Customer VisitGroup finalized invoice summary', () => {
   let snapshot: ReturnType<typeof checkout>;
   let invoices: Record<string, ReturnType<typeof invoice> | null>;
   async function open() {
-    const w = mount(Page, { global: { stubs: { 'router-link': true, CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, FhBackLink: true,
+    const w = mount(Page, { global: { stubs: { 'router-link': true, CustomerStopReplaceRequest: true, CustomerContinuationPanel: true, CustomerCancelledRebookAction: true, FhBackLink: true,
       VisitOrderDetails: true, FailedRepairIncident: { props: ['bookingId'], template: '<div data-testid="failed-repair-incident" :data-booking-id="bookingId" />' }, VoucherCheckoutChooser: true, BookingMediaViewer: true,
     } } });
     await flushPromises();

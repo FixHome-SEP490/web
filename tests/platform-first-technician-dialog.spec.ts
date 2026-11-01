@@ -32,8 +32,8 @@ it('requires explicit STOP confirmation and reason, distinct from objective fail
   expect(w.emitted('recorded')).toHaveLength(1);
   expect(post.mock.calls.some(([p]) => p.endsWith('/cancel') || p.endsWith('/repair-failed'))).toBe(false);
 });
-it('locks payload and replays the same command after network failure, including reopen', async () => {
-  const p = props(); post.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(receipt());
+it.each([undefined, 503])('locks payload and replays the same command after uncertain failure %s, including reopen', async status => {
+  const p = props(); post.mockRejectedValueOnce(status ? { response: { status } } : new Error('network')).mockResolvedValueOnce(receipt());
   const w = mount(CannotContinueDialog, { props: p, global: { stubs: { Teleport: true } } }); await ready(w);
   await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
   expect(w.get('textarea').attributes('disabled')).toBeDefined();
@@ -71,7 +71,23 @@ it('cannot submit without an eligible checked-in job; forbidden response does no
   await w.setProps({ allowed: true }); post.mockRejectedValue({ response: { status: 403 } });
   await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
   expect(w.emitted('recorded')).toBeUndefined();
-  expect(w.text()).toContain('Quyền hoặc trạng thái');
+  expect(w.text()).toContain('không có quyền');
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
+});
+it('keeps a conflict locked when reopened and never sends a second command', async () => {
+  const p = props();
+  post.mockRejectedValue({ response: { status: 409, data: { error: { message: 'Cần check-in hợp lệ của lần phân công hiện tại tại nhà khách.' } } } });
+  const w = mount(CannotContinueDialog, { props: p, global: { stubs: { Teleport: true } } });
+  await ready(w);
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(w.text()).toContain('Cần check-in hợp lệ');
+  expect(w.text()).toContain('tải lại công việc');
+  w.unmount();
+  const again = mount(CannotContinueDialog, { props: p, global: { stubs: { Teleport: true } } });
+  expect(again.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
+  await again.get('[data-testid="cannot-continue-submit"]').trigger('click');
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(again.emitted('recorded')).toBeUndefined();
 });
 it('does not emit success or restore old files after unmount while upload/send is pending', async () => {
   let finish!: (r: unknown) => void; post.mockReturnValue(new Promise(resolve => { finish = resolve; }));

@@ -19,10 +19,10 @@ const reasonCode = ref<CannotContinueReasonCode>(pending?.reasonCode ?? 'skill_g
 const reason = ref(pending?.reason ?? '');
 const confirmedIntent = ref(!!pending);
 const locked = ref(!!pending);
-const retryAllowed = ref(true);
+const retryAllowed = ref(props.port.retryAllowed(props.orderId));
 const busy = ref(false);
 const uploading = ref(false);
-const error = ref('');
+const error = ref(retryAllowed.value ? '' : 'Yêu cầu trước chưa được chấp nhận.');
 const camera = ref(false);
 const dialog = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -123,11 +123,11 @@ async function submit() {
     <div class="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 sm:items-center sm:p-4" @click.self="close" @keydown="keydown">
       <section ref="dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="cannot-continue-title" aria-describedby="cannot-continue-hint" :aria-busy="busy || uploading" class="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-ink-700 shadow-(--shadow-e3) outline-none sm:rounded-2xl sm:p-6" data-testid="cannot-continue-dialog">
         <header class="flex items-start justify-between gap-2">
-          <h2 id="cannot-continue-title" class="text-lg font-semibold text-ink-900">Không thể tiếp tục công việc</h2>
+          <h2 id="cannot-continue-title" class="text-lg font-semibold text-ink-900">Không thể tiếp tục máy đang chọn</h2>
           <button type="button" :disabled="busy || uploading" aria-label="Đóng" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-600" @click="close"><X :size="20" /></button>
         </header>
         <p id="cannot-continue-hint">Gửi ý định dừng vì bạn không thể tiếp tục. Ghi nhận này chưa đồng nghĩa đơn đã hủy. Báo giá, tiền và nghĩa vụ linh kiện cũ được giữ để đối soát; không tự hoàn tiền.</p>
-        <p>Chỉ cần hỗ trợ và vẫn tiếp tục được: dùng “Báo cáo hỗ trợ”. Thiết bị thực sự không thể sửa: dùng “Không sửa được máy này”.</p>
+        <p>Chỉ cần hỗ trợ và vẫn tiếp tục được: dùng “Nhờ quản lý hỗ trợ”. Thiết bị thực sự không thể sửa: dùng “Không sửa được máy này”. Các máy khác trong lượt không bị dừng bởi yêu cầu này.</p>
         <fieldset :disabled="locked || busy" class="space-y-3">
           <label class="block space-y-1"><span class="font-medium">Nhóm lý do</span><select v-model="reasonClass" class="min-h-11 w-full rounded-xl border border-ink-300 bg-white px-3 focus:ring-2 focus:ring-brand-600" @change="changeClass"><option value="technician_skill_gap">Thiếu kỹ năng hoặc lỗi thao tác</option><option value="non_technician_exception">Ngoại lệ khác</option></select></label>
           <label v-if="reasonClass === 'non_technician_exception'" class="block space-y-1"><span class="font-medium">Lý do</span><select v-model="reasonCode" class="min-h-11 w-full rounded-xl border border-ink-300 bg-white px-3 focus:ring-2 focus:ring-brand-600"><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
@@ -149,7 +149,7 @@ async function submit() {
           <FhButton variant="secondary" size="md" :disabled="busy || uploading" data-testid="cannot-continue-parts" @click="emit('parts')">Mở phần linh kiện</FhButton>
         </div>
         <label class="flex min-h-11 cursor-pointer items-start gap-3"><input v-model="confirmedIntent" type="checkbox" :disabled="locked || busy" class="mt-1 h-4 w-4 shrink-0 accent-brand-600 focus-visible:ring-2 focus-visible:ring-brand-600" data-testid="cannot-continue-confirm-intent" /><span>Tôi xác nhận không thể tiếp tục, không chỉ yêu cầu hỗ trợ.</span></label>
-        <p v-if="error" role="alert" class="text-danger-700">{{ error }}</p>
+        <p v-if="error" role="alert" class="text-danger-700">{{ error }}<template v-if="!retryAllowed"> Đóng hộp này và tải lại công việc để đối chiếu trước khi thao tác tiếp.</template></p>
         <footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><FhButton variant="secondary" size="md" :disabled="busy || uploading" @click="close">Quay lại</FhButton><FhButton variant="danger" size="md" :disabled="!ready" :loading="busy" data-testid="cannot-continue-submit" @click="submit">{{ locked ? 'Thử lại cùng nội dung' : 'Xác nhận không thể tiếp tục' }}</FhButton></footer>
       </section>
     </div>

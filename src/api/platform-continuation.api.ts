@@ -1,4 +1,5 @@
 import apiClient, { getHttpStatus } from './client';
+import { userFacingError } from '../utils/user-facing-error';
 import { uploadFailedRepairEvidence } from './failed-repair.api';
 import type { TechnicianReportReasonClass, TechnicianReportReasonCode } from './support-cases.api';
 
@@ -101,10 +102,10 @@ export const customerContinuationApi = {
 };
 
 export class CannotContinueError extends Error {
-  constructor(readonly locked: boolean, readonly uncertain: boolean) {
-    super(uncertain ? 'Chưa xác nhận được kết quả. Thử lại cùng nội dung để kiểm tra, không gửi yêu cầu khác.'
+  constructor(readonly locked: boolean, readonly uncertain: boolean, message?: string) {
+    super(message ?? (uncertain ? 'Chưa xác nhận được kết quả. Thử lại cùng nội dung để kiểm tra, không gửi yêu cầu khác.'
       : locked ? 'Quyền hoặc trạng thái đơn đã thay đổi. Vui lòng tải lại công việc để kiểm tra.'
-        : 'Chưa gửi được yêu cầu. Kiểm tra lý do và ảnh chứng cứ rồi thử lại.');
+        : 'Chưa gửi được yêu cầu. Kiểm tra lý do và ảnh chứng cứ rồi thử lại.'));
   }
 }
 const reasonCodes: readonly CannotContinueReasonCode[] = ['skill_gap', 'device_too_old', 'severe_damage', 'no_compatible_part', 'manufacturer_warranty_or_workshop', 'dispute_or_other'];
@@ -125,7 +126,7 @@ export async function uploadCannotContinueEvidence(orderId: string, file: File) 
 
 /** Per-page memory; exact pending commands survive dialog reopen/device switching, never localStorage. */
 export function createCannotContinuePort() {
-  const pending = new Map<string, { command: CannotContinueCommand; editable: boolean; bookingId: string; groupId: string | null }>();
+  const pending = new Map<string, { command: CannotContinueCommand; editable: boolean; retryAllowed: boolean; bookingId: string; groupId: string | null }>();
   const confirmed = new Map<string, CustomerContinuation>();
   const running = new Set<string>();
   let epoch = 0;
@@ -134,6 +135,7 @@ export function createCannotContinuePort() {
       const command = pending.get(id)?.command;
       return command ? { ...command, photoEvidenceIds: [...command.photoEvidenceIds] } : null;
     },
+    retryAllowed(id: string): boolean { return pending.get(id)?.retryAllowed ?? true; },
     reset() { ++epoch; pending.clear(); confirmed.clear(); running.clear(); },
     async send(orderId: string, bookingId: string, groupId: string | null, input: CannotContinueInput): Promise<CustomerContinuation> {
       if (!orderId || !bookingId) throw new CannotContinueError(false, false);
@@ -144,7 +146,8 @@ export function createCannotContinuePort() {
         && JSON.stringify(normalize(prior.command)) === JSON.stringify(normalized);
       if (prior && !same && !prior.editable) throw new CannotContinueError(true, true);
       if (same && confirmed.has(orderId)) return confirmed.get(orderId)!;
-      const entry = same ? prior : { command: { ...normalized, commandId: crypto.randomUUID() }, editable: false, bookingId, groupId };
+      if (prior && !prior.retryAllowed) throw new CannotContinueError(true, false);
+      const entry = same ? prior : { command: { ...normalized, commandId: crypto.randomUUID() }, editable: false, retryAllowed: true, bookingId, groupId };
       pending.set(orderId, entry); running.add(orderId);
       const requestEpoch = epoch;
       try {
@@ -156,8 +159,15 @@ export function createCannotContinuePort() {
       } catch (error) {
         const status = getHttpStatus(error);
         const editable = status === 400 || status === 422;
-        if (requestEpoch === epoch) entry.editable = editable;
-        throw new CannotContinueError(!editable, status === undefined || status >= 500 || status === 408);
+        const uncertain = status === undefined || status >= 500 || status === 408;
+        if (requestEpoch === epoch) { entry.editable = editable; entry.retryAllowed = editable || uncertain; }
+        const fallback = status === 409
+          ? 'Trạng thái máy hoặc phân công đã thay đổi. Đóng hộp này và tải lại công việc để kiểm tra gián đoạn, check-in và người đang được giao.'
+          : status === 404 ? 'Không còn tìm thấy công việc này. Đóng hộp này và tải lại danh sách công việc.'
+            : status === 429 ? 'Bạn gửi yêu cầu quá nhanh. Đóng hộp này và kiểm tra trạng thái công việc trước khi thử lại.'
+              : 'Chưa gửi được yêu cầu. Kiểm tra lý do và ảnh chứng cứ rồi thử lại.';
+        const message = uncertain ? undefined : userFacingError(error, fallback);
+        throw new CannotContinueError(!editable, uncertain, message);
       } finally { if (requestEpoch === epoch) running.delete(orderId); }
     },
   };

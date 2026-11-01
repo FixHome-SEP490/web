@@ -14,6 +14,7 @@ import BookingSessionPicker from '../../components/customer/BookingSessionPicker
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
 import FailedRepairIncident from '../../components/customer/FailedRepairIncident.vue';
 import CustomerStopReplaceRequest from '../../components/customer/CustomerStopReplaceRequest.vue';
+import CustomerContinuationPanel from '../../components/customer/CustomerContinuationPanel.vue';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
 import type { FundedReservation } from '../../api/funded-checkout.api';
@@ -1009,6 +1010,14 @@ async function answerCash(agreed: boolean) {
             <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
           </div>
 
+          <CustomerContinuationPanel
+            v-if="selectedDetails && childDetailsFresh && ['EN_ROUTE', 'UNDER_REPAIR'].includes(selectedDetails.order.status)"
+            :key="`continuation-${selectedDetails.order.id}`"
+            :order-id="selectedDetails.order.id"
+            :booking-id="selectedVisitItem.booking?.id ?? null"
+            :visit-group-id="visitId"
+            :order-status="selectedDetails.order.status"
+          />
         </div>
       </section>
 

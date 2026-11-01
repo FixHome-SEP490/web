@@ -538,6 +538,40 @@ describe('SupportDetailPage for a complaint', () => {
 describe('SupportQueuePage', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each([
+    [401, 'đăng nhập lại'],
+    [403, 'quyền xem tất cả'],
+    [500, 'Chưa tải được danh sách hỗ trợ'],
+  ])('shows actionable HTTP %s errors, never an empty list, and retries', async (status, message) => {
+    apiClientMock.get.mockRejectedValueOnce({ response: { status, data: { message: 'SQL secret stack' } } });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/console/support', component: SupportQueuePage }] });
+    await router.push('/console/support');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain(message);
+    expect(wrapper.get('[role="alert"]').text()).toContain(`HTTP ${status}`);
+    expect(wrapper.text()).not.toContain('SQL secret stack');
+    expect(wrapper.text()).not.toContain('Không có yêu cầu nào phù hợp');
+    apiClientMock.get.mockResolvedValueOnce(envelope([baseCase()], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    await wrapper.get('[data-testid="console-load-error"] button').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label^="Mở chi tiết"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('distinguishes invalid response contracts without exposing parser details', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope([{ broken: 'private payload' }], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/console/support', component: SupportQueuePage }] });
+    await router.push('/console/support');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('không đúng định dạng');
+    expect(wrapper.text()).not.toContain('private payload');
+    expect(wrapper.text()).not.toContain('Không có yêu cầu nào phù hợp');
+    wrapper.unmount();
+  });
+
   it('opens a cash case in the Admin read-only detail instead of the SM cash page', async () => {
     useAuthStore().user!.role = UserRole.ADMIN;
     const router = createRouter({ history: createMemoryHistory(), routes: [

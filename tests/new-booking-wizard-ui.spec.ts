@@ -651,6 +651,31 @@ describe('NewBookingWizardPage A+ service finder', () => {
     wrapper.unmount();
   });
 
+  it('saves machine 2 and continues once from the summary, preserving its own description', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy thứ nhất');
+    await wrapper.get('[data-testid="visit-add-device-step1"]').trigger('click');
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy thứ hai');
+    const next = wrapper.get('[data-testid="step1-next"]');
+    expect(next.text()).toBe('Lưu máy 2 và tiếp tục');
+    expect(next.attributes('disabled')).toBeUndefined();
+    await next.trigger('click');
+    await next.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="booking-summary-devices"]').findAll('li')).toHaveLength(2);
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(createVisit).toHaveBeenCalledTimes(1);
+    expect(createVisit.mock.calls[0][0].items.map((item: { description: string }) => item.description)).toEqual(['Máy thứ nhất', 'Máy thứ hai']);
+    wrapper.unmount();
+  });
+
   it('requires saving the third device before continuing the shared visit', async () => {
     visitContact.mockResolvedValue({ enabled: true, deviceLimit: 3, hotline: null });
     uploadBookingPhoto.mockResolvedValue({ uploadId: 'photo-third', mimeType: 'image/jpeg', sizeBytes: 3 });
