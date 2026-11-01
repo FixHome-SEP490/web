@@ -22,6 +22,7 @@ const OUTCOME_LABELS: Record<Exclude<VisitDeviceState, 'open'>, Pick<TechnicianV
   failed: { label: 'Không sửa được', tone: 'danger' },
   quote_declined: { label: 'Khách không duyệt báo giá', tone: 'attention' },
   cancelled: { label: 'Đã huỷ', tone: 'neutral' },
+  interrupted: { label: 'Đã dừng sửa', tone: 'attention' },
 };
 
 function custodyLabel(summary?: TechnicianVisitCustodySummary | null): string | null {

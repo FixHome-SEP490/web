@@ -142,7 +142,7 @@ function assignedPageParams(page: number, pageSize: number, filter: VisitGroupsA
   return { ...pageParams(page, pageSize), ...(filter.tab ? { tab: filter.tab } : {}) };
 }
 
-export type VisitDeviceState = 'succeeded' | 'failed' | 'quote_declined' | 'cancelled' | 'open';
+export type VisitDeviceState = 'succeeded' | 'failed' | 'quote_declined' | 'cancelled' | 'interrupted' | 'open';
 
 export interface VisitCheckout {
   visitGroupId: string;
@@ -157,12 +157,14 @@ export interface VisitCheckout {
     invoiceId: string | null;
     amount: number;
     paid: boolean;
+    financialFollowupRequired?: boolean;
   }>;
   total: number;
   waiting: number;
   ready: boolean;
   paid: boolean;
   pendingCash: { id: string; amount: number; declaredAt: string } | null;
+  financialFollowupRequired?: boolean;
 }
 
 const URGENCY = { LOW: 'low', NORMAL: 'medium', HIGH: 'high', EMERGENCY: 'critical' } as const;

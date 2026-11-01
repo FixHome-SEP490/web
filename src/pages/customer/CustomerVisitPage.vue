@@ -377,6 +377,9 @@ onUnmounted(() => {
 
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
+const interruptedDevices = computed(() => checkout.value?.devices.filter(device => device.state === 'interrupted') ?? []);
+const financialFollowupRequired = computed(() => checkout.value?.financialFollowupRequired === true
+  || checkout.value?.devices.some(device => device.financialFollowupRequired === true) === true);
 const failedBookingIds = computed(() => {
   if (checkoutError.value) return [];
   return (visit.value?.items ?? []).flatMap(item => item.booking?.id
@@ -416,7 +419,10 @@ const sharedAddress = computed(() => lead.value?.addressSummary?.trim()
 const technicianProgress = computed(() => {
   if (cancelled.value) return 'Lượt sửa đã kết thúc';
   if (childOrderStatusLoading.value) return 'Đang cập nhật tiến độ';
-  const statuses = Object.values(childOrderStatuses.value).map(status => status.toUpperCase());
+  if (checkout.value?.devices.length && checkout.value.devices.every(device => device.state !== 'open')) return 'Đã có kết quả các máy';
+  const statuses = Object.entries(childOrderStatuses.value)
+    .filter(([id]) => !checkout.value?.devices.some(device => device.serviceOrderId === id && device.state === 'interrupted'))
+    .map(([, status]) => status.toUpperCase());
   if (statuses.includes('UNDER_REPAIR')) return 'Đang sửa chữa';
   // One check-in covers the visit, the other devices stay EN_ROUTE until their repair starts (bug 17).
   if (statuses.includes('EN_ROUTE') && Object.values(orderDetails.value).some(bundle => bundle.order.arrivalVerified)) return 'Kỹ thuật viên đã đến';
@@ -440,6 +446,7 @@ async function openQuotation(item: Visit['items'][number]) {
 }
 
 const STATE_LABEL: Record<VisitDeviceState, string> = {
+  interrupted: 'Đã dừng sửa',
   succeeded: 'Đã sửa xong',
   failed: 'Không sửa được, không tính tiền sửa',
   quote_declined: 'Bạn không duyệt báo giá, không tính tiền',
@@ -462,6 +469,7 @@ function invoiceSummaryRow(item: Visit['items'][number]) {
     || visit.value?.items.filter(candidate => candidate.booking?.id === bookingId).length !== 1) return unknown;
   const device = matches[0]!;
   if (device.state === 'open') return { ...unknown, status: 'Chờ chốt hóa đơn' };
+  if (device.state === 'interrupted') return { ...unknown, status: 'Đã dừng sửa · Tiền cũ cần đối soát' };
   if (['failed', 'quote_declined', 'cancelled'].includes(device.state)) {
     return billingAmount(device.amount) === 0 && !device.invoiceId
       ? { ...unknown, amount: 0, status: STATE_LABEL[device.state] } : unknown;
@@ -637,6 +645,7 @@ function onPayMethodKey(event: KeyboardEvent, method: PayMethod) {
 }
 const checkoutState = computed<CheckoutState>(() => {
   const current = checkout.value;
+  if (financialFollowupRequired.value) return 'waiting';
   if (current?.paid) return 'paid';
   if (!current || current.waiting > 0 || !current.ready) return 'waiting';
   if (current.pendingCash) return 'pending_cash';
@@ -693,7 +702,7 @@ async function refreshCashIntent(groupId: string) {
 
 async function createCashIntent() {
   const groupId = visitId.value;
-  if (!cashFirstEnabled.value || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
+  if (financialFollowupRequired.value || !cashFirstEnabled.value || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
     || busy.value || checkoutLoading.value || cashIntent.value?.status === 'pending' || cashIntent.value?.status === 'received') return;
   const held = reservationForAction();
   if (fundedVoucher.value && !held) return;
@@ -740,6 +749,7 @@ async function cancelCashIntent() {
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
+  if (financialFollowupRequired.value || checkoutLoading.value) return;
   if (value.reservation.scopeId !== visitId.value || value.preview.scopeId !== visitId.value
     || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
     message.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho lượt thanh toán này.' };
@@ -902,6 +912,10 @@ async function answerCash(agreed: boolean) {
 
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
+        <div v-if="interruptedDevices.length" role="status" class="space-y-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" data-testid="visit-interrupted">
+          <p>{{ interruptedDevices.length }} máy đã dừng sửa. Chọn máy để kiểm tra quyền đặt lại hoặc đặt lịch mới; các máy còn lại giữ kết quả riêng. Đơn cũ chưa được hủy, tiền và linh kiện cũ cần đối soát riêng.</p>
+          <FhButton variant="secondary" size="md" :disabled="checkoutLoading" @click="load">Kiểm tra trạng thái mới nhất</FhButton>
+        </div>
         <FhButton
           v-if="failedBookingIds.length > 1"
           variant="secondary"
@@ -1074,6 +1088,7 @@ async function answerCash(agreed: boolean) {
         <FhButton variant="secondary" size="md" data-testid="visit-checkout-retry" @click="load">Thử lại</FhButton>
       </section>
       <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
+        <p v-if="financialFollowupRequired" role="status" data-testid="visit-financial-followup" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-warning-800">Có máy đã dừng sửa và chứng từ cũ cần đối soát. Số tiền phải trả hoặc hoàn tiền: Chưa xác định. Chưa thực hiện thanh toán mới cho lượt này; việc đặt lại chỉ mở khi đã xác minh đủ điều kiện.</p>
         <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
         <div class="flex flex-col gap-2 border-b border-ink-100 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
           <div>

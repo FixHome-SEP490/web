@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { reactive } from 'vue';
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../src/api/client', () => ({ default: { get, post, patch: vi.fn(), delete: vi.fn() }, getHttpStatus: (e: { response?: { status?: number } }) => e?.response?.status }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'order-B' }, query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+const route = reactive({ params: { id: 'order-B' }, query: {} });
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: async (target: { path: string }) => { route.params.id = target.path.split('/').at(-1)!; }, replace: vi.fn() }) }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ openConversationForBooking: vi.fn(), toggleWidget: vi.fn(), conversations: [] }) }));
 import TechnicianJobDetailPage from '../src/pages/technician/TechnicianJobDetailPage.vue';
 enableAutoUnmount(afterEach);
@@ -25,6 +27,13 @@ const reason = 'Tôi không đủ kỹ năng xử lý thiết bị này.';
 async function render(overrides: Record<string, unknown> = {}) {
   get.mockImplementation(async (path: string) => {
     if (path === '/service-orders/order-B') return { data: { data: order(overrides) } };
+    if (overrides.visitGroupId && /^\/service-orders\/order-[CD]$/.test(path)) {
+      const id = path.split('/').at(-1)!;
+      return { data: { data: { ...order(overrides), id, bookingId: id.replace('order-', 'booking-') } } };
+    }
+    if (overrides.visitGroupId && path.endsWith('/checkout')) return { data: { data: { visitGroupId: overrides.visitGroupId, ready: false, waiting: 3, total: 0, paid: false, pendingCash: null,
+      devices: ['B', 'C', 'D'].map((key, i) => ({ sequence: i + 1, bookingId: `booking-${key}`, serviceOrderId: `order-${key}`, deviceLabel: null, serviceName: 'Fixture', state: 'open', invoiceId: null, amount: 0, paid: false })),
+    } } };
     if (path === '/bookings/booking-B') return { data: { data: { id: 'booking-B', status: 'matched', media: [] } } };
     if (path === '/service-orders/order-B/part-requests') return { data: { data: [] } };
     if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
@@ -34,14 +43,31 @@ async function render(overrides: Record<string, unknown> = {}) {
   await flushPromises();
   return w;
 }
-beforeEach(() => { get.mockReset(); post.mockReset(); });
+beforeEach(() => { route.params.id = 'order-B'; get.mockReset(); post.mockReset(); });
+
+it('selects machine 2 in the report form and stops only that machine with its own source', async () => {
+  const w = await render({ visitGroupId: 'visit-1' });
+  await w.get('[data-testid="job-more-button"]').trigger('click');
+  await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+  expect(w.get('[data-testid="report-device"]').findAll('option').map(item => item.text())).toEqual(['Máy 1', 'Máy 2', 'Máy 3']);
+  await w.get('[data-testid="report-device"]').setValue('order-C'); await flushPromises();
+  expect(route.params.id).toBe('order-C');
+  expect(w.get('[data-testid="report-device"]').element.value).toBe('order-C');
+  await w.get('[data-testid="report-reason-code"]').setValue('manufacturer_warranty_or_workshop');
+  await w.get('[data-testid="cannot-continue-dialog"] textarea').setValue(reason);
+  await w.get('[data-testid="cannot-continue-confirm-intent"]').setValue(true);
+  post.mockRejectedValue({ response: { status: 403 } });
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenCalledWith('/service-orders/order-C/cannot-continue', expect.objectContaining({ reasonCode: 'manufacturer_warranty_or_workshop', reasonClass: 'non_technician_exception', reason }));
+});
 
 it('offers cannot-continue only after a valid check-in and posts exactly one typed command', async () => {
   post.mockResolvedValue(receipt());
   const w = await render();
   await w.get('[data-testid="job-more-button"]').trigger('click');
-  // Report-only stays a separate, non-stopping action.
-  expect(w.find('[data-testid="job-technician-report-skill"]').exists()).toBe(true);
+  expect(w.find('[data-testid="job-technician-report-skill"]').exists()).toBe(false);
+  expect(w.get('[data-testid="job-cannot-continue-menu"]').text()).toBe('Báo cáo vấn đề sửa chữa');
   await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
   const dialog = w.get('[data-testid="cannot-continue-dialog"]');
   expect(dialog.attributes('aria-busy')).toBe('false');

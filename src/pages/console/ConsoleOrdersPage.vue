@@ -60,6 +60,7 @@ const columns: ConsoleColumn[] = [
 <template>
   <div class="space-y-5">
     <ConsolePageHeader title="Đơn sửa chữa" :count="loading || loadError ? null : total" />
+    <router-link to="/console/support" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline">Xem yêu cầu hỗ trợ và sự cố</router-link>
 
     <div class="flex flex-wrap items-center gap-2">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm mã đơn, khách hàng, dịch vụ" label="Tìm đơn sửa chữa" :maxlength="SEARCH_MAX_LENGTH" />
@@ -110,6 +111,7 @@ const columns: ConsoleColumn[] = [
 
       <template #cell-status="{ row }">
         <FhStatusPill :status="row.status" class="whitespace-nowrap" />
+        <router-link :to="{ path: '/console/support', query: { serviceOrderId: row.id } }" class="mt-1 block text-sm text-brand-700 underline">Yêu cầu hỗ trợ của đơn</router-link>
       </template>
     </ConsoleTable>
     <ConsolePagination

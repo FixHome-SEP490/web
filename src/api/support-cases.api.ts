@@ -4,6 +4,7 @@ import type { PaginationMeta } from '../types';
 export type SupportCaseType =
   | 'matching_exhausted'
   | 'arrival_abnormal'
+  | 'technician_delay'
   | 'cash_non_response'
   | 'cash_mismatch'
   | 'cancellation_review'
@@ -248,6 +249,7 @@ export interface SupportCaseListResponse {
 const CASE_TYPES: readonly SupportCaseType[] = [
   'matching_exhausted',
   'arrival_abnormal',
+  'technician_delay',
   'cash_non_response',
   'cash_mismatch',
   'cancellation_review',

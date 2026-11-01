@@ -42,6 +42,7 @@ const columns: ConsoleColumn[] = [
 const caseTypes: SupportCaseType[] = [
   'matching_exhausted',
   'arrival_abnormal',
+  'technician_delay',
   'cash_non_response',
   'cash_mismatch',
   'cancellation_review',
@@ -63,6 +64,7 @@ const queryValue = <T extends string>(value: unknown, allowed: readonly T[]): T 
   typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : '';
 const caseTypeFilter = ref<SupportCaseType | ''>(queryValue(route?.query?.caseType, caseTypes));
 const statusFilter = ref<SupportCaseStatus | ''>(queryValue(route?.query?.status, statuses));
+const serviceOrderIdFilter = computed(() => typeof route.query.serviceOrderId === 'string' ? route.query.serviceOrderId.trim() : '');
 const page = ref(1);
 const pageSize = 10;
 const total = ref(0);
@@ -81,6 +83,7 @@ async function loadCases() {
       limit: pageSize,
       caseType: caseTypeFilter.value || undefined,
       status: statusFilter.value || undefined,
+      serviceOrderId: serviceOrderIdFilter.value || undefined,
       search: searchQuery.value.trim() || undefined,
       sort: 'priority',
     });
@@ -139,6 +142,7 @@ watch([caseTypeFilter, statusFilter], () => {
     void loadCases();
   }
 });
+watch(serviceOrderIdFilter, applySearch);
 
 watch(page, (nextPage, previousPage) => {
   if (nextPage !== previousPage) void loadCases();
@@ -149,6 +153,7 @@ watch(page, (nextPage, previousPage) => {
   <div class="space-y-5">
     <ConsolePageHeader title="Yêu cầu hỗ trợ" :count="loading || error ? null : total" />
     <p v-if="isAdmin" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
+    <p v-if="serviceOrderIdFilter" class="text-sm text-ink-600" role="status">Đang xem yêu cầu hỗ trợ của một đơn. <router-link :to="`/console/orders/${encodeURIComponent(serviceOrderIdFilter)}`" class="text-brand-700 underline">Xem đơn sửa chữa</router-link> · <router-link to="/console/support" class="text-brand-700 underline">Xem tất cả yêu cầu</router-link></p>
 
     <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="applySearch">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo lý do, mã yêu cầu" label="Tìm yêu cầu hỗ trợ" />

@@ -5,6 +5,7 @@ import { vnDateTimeString } from '../../utils/vn-time';
 export const supportCaseTypeLabels: Record<SupportCaseType, string> = {
   matching_exhausted: 'Không ghép được thợ',
   arrival_abnormal: 'Bất thường khi đến nơi',
+  technician_delay: 'Kỹ thuật viên đến trễ',
   cash_non_response: 'Không phản hồi tiền mặt',
   cash_mismatch: 'Lệch đối soát tiền mặt',
   cancellation_review: 'Rà soát huỷ đơn',

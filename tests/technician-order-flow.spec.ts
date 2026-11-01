@@ -88,6 +88,7 @@ const activeOrder = {
 };
 
 const stubs = {
+  Teleport: true,
   FhButton: {
     props: ['disabled', 'loading', 'variant'],
     template: '<button :disabled="disabled" :data-variant="variant"><slot /></button>',
@@ -1056,19 +1057,17 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await openMoreMenu(wrapper);
     // After check-in the order can no longer be cancelled by the technician.
     expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
-    expect(menuItems(wrapper)).toContain('Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)');
-    expect(menuItems(wrapper)).toContain('Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)');
+    expect(menuItems(wrapper)).toContain('Báo cáo vấn đề sửa chữa');
     expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
     expect(menuItems(wrapper)).not.toContain('Báo cáo vấn đề');
-    await wrapper.get('[data-testid="job-technician-report-skill"]').trigger('click');
-    const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
+    await wrapper.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+    const dialog = wrapper.findComponent({ name: 'CannotContinueDialog' });
+    await dialog.get('[data-testid="report-mode"]').setValue('support');
     expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
-    expect(dialog.attributes('aria-describedby')).toBe('technician-report-description');
-    expect(dialog.get('[data-testid="technician-report-reason"]').attributes('aria-describedby')).toBe('technician-report-reason-hint');
-    expect(dialog.get('#technician-report-reason-hint').text()).toContain('10–2.000 ký tự');
-    await dialog.get('[data-testid="technician-report-reason"]').setValue('Thiếu kỹ năng xử lý dòng máy này.');
-    await dialog.get('[data-testid="technician-report-evidence"]').setValue(true);
-    await dialog.get('[data-testid="technician-report-submit"]').trigger('click');
+    expect(dialog.get('textarea').attributes('aria-describedby')).toBe('cannot-continue-reason-hint');
+    await dialog.get('textarea').setValue('Thiếu kỹ năng xử lý dòng máy này.');
+    await dialog.get('[data-testid="report-support-evidence"]').setValue(true);
+    await dialog.get('[data-testid="cannot-continue-submit"]').trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledWith('/support/cases/technician-report', {
       serviceOrderId: 'job-test-101',

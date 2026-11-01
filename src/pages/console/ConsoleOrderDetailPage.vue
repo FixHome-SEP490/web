@@ -12,6 +12,7 @@ import {
 } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import StoppedWorkFinancePanel from '../../components/console/StoppedWorkFinancePanel.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import { orderStatusLabel, paymentStatusLabel, roleLabel } from '../../components/console/console-labels';
@@ -172,6 +173,12 @@ const timelineSteps = computed<TimelineStep[]>(() => {
           </ConsoleMoreMenu>
         </template>
       </ConsolePageHeader>
+
+      <div class="space-y-2 text-sm">
+        <p class="text-ink-600">Trang chỉ đọc. Trạng thái lịch sử của đơn chưa xác nhận việc đã dừng hay hủy; xem yêu cầu hỗ trợ và đối soát riêng.</p>
+        <router-link :to="{ path: '/console/support', query: { serviceOrderId: order.id } }" class="inline-flex min-h-11 items-center font-medium text-brand-700 underline" data-testid="order-support-link">Yêu cầu hỗ trợ của đơn này</router-link>
+      </div>
+      <StoppedWorkFinancePanel :key="order.id" :order-id="order.id" />
 
       <div class="grid gap-6 lg:grid-cols-3">
         <div class="space-y-6 lg:col-span-2">
