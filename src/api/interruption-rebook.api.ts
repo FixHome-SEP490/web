@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient, { getHttpStatus } from './client';
 import { bookingsApi } from './bookings.api';
 import { ordersApi } from './orders.api';
 import { supportCasesApi } from './support-cases.api';
@@ -59,6 +59,7 @@ interface ReadContext {
   draft: InterruptionDraft;
 }
 const contexts = new Map<string, ReadContext>();
+const reads = new Map<string, number>();
 
 function unwrap(payload: unknown): unknown {
   if (!isRecord(payload) || payload.success !== true || !Number.isInteger(payload.statusCode) || !('data' in payload)) throw invalid();
@@ -107,11 +108,41 @@ function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDra
 }
 
 export const interruptionRebookApi = {
-  async readDraft(anchor: string, owner: string): Promise<InterruptionDraft> {
+  /** Read-only server proof: consumed source bookings are omitted from the draft.
+   * A consumed anchor is denied, so try the other stopped machines in this visit.
+   * Network or malformed responses are never treated as valid/empty source lists.
+   */
+  async listAvailableStoppedSources(groupId: string, candidateIds: string[]): Promise<string[]> {
+    if (!asId(groupId) || !candidateIds.length || candidateIds.length > 3 ||
+      candidateIds.some(id => !asId(id)) || new Set(candidateIds).size !== candidateIds.length) throw invalid();
+    for (const anchor of candidateIds) {
+      try {
+        const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft');
+        const raw = unwrap(response.data);
+        if (!isRecord(raw) || raw.sourceVisitGroupId !== groupId || !isRecord(raw.confirmation) ||
+          raw.confirmation.available !== true || !Array.isArray(raw.items) ||
+          raw.items.length < 1 || raw.items.length > candidateIds.length) throw invalid();
+        const ids = raw.items.map(item => isRecord(item) ? item.sourceBookingId : null);
+        if (!ids.includes(anchor) || ids.some(id => !asId(id) || !candidateIds.includes(id)) ||
+          new Set(ids).size !== ids.length) throw invalid();
+        return ids as string[];
+      } catch (error) {
+        if (getHttpStatus(error) === 403 || getHttpStatus(error) === 404) continue;
+        throw error;
+      }
+    }
+    // All eligible-looking anchors were rejected by the server.
+    return [];
+  },
+  async readDraft(anchor: string, owner: string, sourceBookingIds?: string[]): Promise<InterruptionDraft> {
+    const generation = (reads.get(anchor) ?? 0) + 1;
+    reads.set(anchor, generation);
     contexts.delete(anchor);
-    if (!asId(anchor) || !owner) throw invalid();
-    const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft');
+    if (!asId(anchor) || !owner || (sourceBookingIds && (sourceBookingIds.length < 1 || sourceBookingIds.length > 3
+      || sourceBookingIds.some(id => !asId(id)) || new Set(sourceBookingIds).size !== sourceBookingIds.length || !sourceBookingIds.includes(anchor)))) throw invalid();
+    const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft', ...(sourceBookingIds ? [{ params: { sourceBookingIds: sourceBookingIds.join(',') } }] : []));
     const raw = normalizeRawDraft(unwrap(response.data), anchor);
+    if (sourceBookingIds && (raw.rawItems.length !== sourceBookingIds.length || raw.rawItems.some(item => !sourceBookingIds.includes(item.sourceBookingId)))) throw invalid();
     const kinds: InterruptionSourceKind[] = [];
     const [addresses, linked] = await Promise.all([
       profileApi.getAddresses(),
@@ -157,6 +188,7 @@ export const interruptionRebookApi = {
       addressId: raw.addressId, addressText: raw.addressText, customerNote: raw.customerNote,
       addresses: ownedAddresses, items: linked,
     };
+    if (reads.get(anchor) !== generation) throw invalid();
     contexts.set(anchor, { owner, draft });
     return draft;
   },

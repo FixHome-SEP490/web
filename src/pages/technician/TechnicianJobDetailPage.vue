@@ -55,6 +55,7 @@ import {
   type EvidenceType,
 } from '../../api/orders.api';
 import FailedRepairDialog from '../../components/technician/FailedRepairDialog.vue';
+import { createGroupStopPort, type GroupStopResult } from '../../api/group-stop.api';
 import CannotContinueDialog from '../../components/technician/CannotContinueDialog.vue';
 import { createCannotContinuePort, type CustomerContinuation } from '../../api/platform-continuation.api';
 import { failedRepairKey } from '../../api/failed-repair.api';
@@ -104,6 +105,7 @@ const queryClient = useQueryClient();
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
 const cannotContinuePort = createCannotContinuePort();
+const groupStopPort = createGroupStopPort();
 const cannotContinueOpen = ref(false);
 const interruptionByOrder = ref<Record<string, CustomerContinuation>>({});
 const recordedInterruption = computed(() => interruptionByOrder.value[jobIdRef.value] ?? null);
@@ -167,6 +169,7 @@ const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((eve
     // sibling reads too, so a late response cannot repopulate the new session.
     clearPrefetchedVisitOrders();
     cannotContinuePort.reset();
+    groupStopPort.reset();
     cannotContinueOpen.value = false;
     interruptionByOrder.value = {};
   }
@@ -2336,6 +2339,29 @@ const reportDevices = computed(() => {
       ? [{ id, label: `Máy ${device.sequence}${device.deviceLabel ? ` · ${device.deviceLabel}` : ''}` }] : [];
   });
 });
+const reportGroupDevices = computed(() => {
+  const groupId = visitGroupId.value;
+  if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return [];
+  return visitCheckout.value.devices.map(device => {
+    const child = device.serviceOrderId ? authorizedVisitChildBundle(device.serviceOrderId, groupId)?.job : null;
+    const protectedDevice = device.state !== 'open' || device.paid || !!child?.completionRequestedAt
+      || ['COMPLETED', 'CANCELLED'].includes(String(child?.status).toUpperCase());
+    return { id: device.bookingId, label: `Máy ${device.sequence}${device.deviceLabel ? ` · ${device.deviceLabel}` : ''}`,
+      disposition: protectedDevice ? 'protected' as const : child && child.arrivalVerified && !child.workStopped
+        && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(child.status).toUpperCase()) ? 'active' as const : 'unknown' as const };
+  });
+});
+async function groupInterruptionRecorded(result: GroupStopResult) {
+  if (!mounted || result.groupId !== visitGroupId.value || !result.stopped.some(child => child.orderId === jobIdRef.value)) return;
+  cannotContinueOpen.value = false;
+  repairFailedOpen.value = false;
+  if (job.value?.id === jobIdRef.value) job.value = { ...job.value, workStopped: true, assignmentReleased: true, operationalDisposition: 'STOPPED' };
+  stopLocationPing();
+  cache.markChanged(affectedBy.orderChange);
+  clearPrefetchedVisitOrders();
+  notifySuccess(`Đã dừng ${result.stopped.length} máy, giữ nguyên ${result.preserved.length} máy. Tiền và linh kiện cũ cần đối soát riêng.`);
+  await loadJob(jobIdRef.value, { silent: true }).catch(() => undefined);
+}
 const reportEvidence = computed(() => evidences.value.filter(item => item.mediaUrl?.trim())
   .map((item, index) => ({ url: item.mediaUrl, label: `Ảnh hiện trường ${index + 1}` })));
 const canCreateTypedTechnicianReport = computed(() => !recordedInterruption.value && gpsCheckedIn.value
@@ -3839,6 +3865,10 @@ const toggleMore = async () => {
       :parts="failedRepairParts"
       :parts-known="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
       :port="cannotContinuePort"
+      :group-port="groupStopPort"
+      :group-devices="reportGroupDevices"
+      :customer-phone="job?.customerPhone"
+      @group-recorded="groupInterruptionRecorded"
       unified
       :support-allowed="canCreateTypedTechnicianReport && !technicianReportSent"
       :devices="reportDevices"
