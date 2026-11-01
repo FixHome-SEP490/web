@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Search, X } from 'lucide-vue-next';
 import { FhSkeleton } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
@@ -34,6 +34,10 @@ const resourceOptions = Object.entries(auditResourceLabels)
   .map(([value, label]) => ({ value, label }))
   .sort(byLabel);
 
+// Same shape the backend accepts: 8-4-4-4-12 hex, seeded accounts included.
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACTOR_FILTER_DELAY_MS = 400;
+
 const resourceTypeFilter = ref('');
 const actorUserIdFilter = ref('');
 const actionFilter = ref('');
@@ -49,12 +53,19 @@ const selected = ref<AuditLogRecord | null>(null);
 const detailLoading = ref(false);
 const detailError = ref('');
 
+// A partial id is never sent: the server answers 400 for it.
+const actorIncomplete = computed(() => {
+  const value = actorUserIdFilter.value.trim();
+  return value !== '' && !UUID_SHAPE.test(value);
+});
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
 // Plain Vietnamese reasons from the server are kept; codes and English never show.
 const getErrorMessage = (reason: unknown, fallback: string) => userFacingError(reason, fallback);
 
 const loadLogs = async () => {
+  if (actorIncomplete.value) return;
   const requestId = ++latestRequest;
   loading.value = true;
   error.value = '';
@@ -83,13 +94,27 @@ onMounted(() => {
   void loadLogs();
 });
 
-watch([resourceTypeFilter, actorUserIdFilter, actionFilter], () => {
+let actorTimer: ReturnType<typeof setTimeout> | undefined;
+const reloadFromFirstPage = () => {
   if (page.value !== 1) {
     page.value = 1;
   } else {
     void loadLogs();
   }
+};
+
+watch([resourceTypeFilter, actionFilter], () => {
+  clearTimeout(actorTimer);
+  reloadFromFirstPage();
 });
+
+// Typing an id used to send one request per key. Wait until typing pauses.
+watch(actorUserIdFilter, () => {
+  clearTimeout(actorTimer);
+  if (actorIncomplete.value) return;
+  actorTimer = setTimeout(reloadFromFirstPage, ACTOR_FILTER_DELAY_MS);
+});
+onBeforeUnmount(() => clearTimeout(actorTimer));
 
 watch(page, (nextPage, previousPage) => {
   if (nextPage !== previousPage) void loadLogs();
@@ -161,8 +186,13 @@ const formatSnapshot = (value: unknown) => {
           placeholder="Mã người thực hiện"
           aria-label="Lọc theo mã người thực hiện"
           :class="consoleSearchField"
+          :aria-invalid="actorIncomplete"
+          :aria-describedby="actorIncomplete ? 'audit-actor-hint' : undefined"
         />
       </div>
+      <p v-if="actorIncomplete" id="audit-actor-hint" class="w-full text-xs text-ink-500">
+        Nhập đủ mã 36 ký tự để lọc.
+      </p>
     </div>
 
     <ConsoleLoadError v-if="error" :message="error" @retry="loadLogs" />

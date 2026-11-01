@@ -25,6 +25,11 @@ vi.mock('vue-router', () => ({
 }));
 import CustomerOrderDetailPage from '../src/pages/customer/CustomerOrderDetailPage.vue';
 
+// The global exception filter of the backend puts the reason in error.message.
+const conflict = (message: string, status = 409) => ({
+  response: { status, data: { success: false, statusCode: status, error: { code: status === 409 ? 'CONFLICT' : 'PAYMENT_PROVIDER_UNAVAILABLE', message }, timestamp: '2026-11-01T10:00:00.000Z', path: '/api/v1/finance/cash-intents/SOLO/o1' } },
+});
+
 const mountPage = async () => {
   const wrapper = mount(CustomerOrderDetailPage, { global: { stubs: {
     RouterLink: true, 'router-link': true, CustomerStopReplaceRequest: true,
@@ -48,7 +53,7 @@ describe('BUG #39 — customer cash intent pending conflict UI', () => {
   });
 
   it('shows the backend pending-payment 409 without suggesting cash or claiming cancellation', async () => {
-    cashCreate.mockRejectedValue({ response: { status: 409, data: { message: 'Có giao dịch thanh toán đang xử lý.' } } });
+    cashCreate.mockRejectedValue(conflict('Có giao dịch thanh toán đang xử lý. Vui lòng kiểm tra lại.'));
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="pay-after-completion"] button').trigger('click');
     await flushPromises();
@@ -56,14 +61,22 @@ describe('BUG #39 — customer cash intent pending conflict UI', () => {
     await wrapper.get('[data-testid="pay-cash-ok"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Đơn đang có giao dịch thanh toán cần đối soát.');
+    const dialog = wrapper.get('[role="dialog"][aria-label="Thanh toán đơn"]');
+    const notice = dialog.get('[data-testid="pay-dialog-error"]');
+    expect(notice.attributes('role')).toBe('alert');
+    expect(notice.text()).toContain('Đơn đang có giao dịch thanh toán cần đối soát.');
+    expect(notice.text()).toContain('tránh trả hai lần');
+    // The button that cannot succeed is not left active under the message.
+    expect((dialog.get('[data-testid="pay-cash-ok"]').element as HTMLButtonElement).disabled).toBe(true);
+    await dialog.get('[data-testid="pay-cash-ok"]').trigger('click');
+    expect(cashCreate).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).not.toContain('Đã hủy giao dịch');
     expect(wrapper.text()).not.toContain('Bạn có thể trả tiền mặt ngay');
     expect(cashGet).toHaveBeenCalled();
   });
 
   it('keeps an unrelated backend 409 on the ordinary error path', async () => {
-    cashCreate.mockRejectedValue({ response: { status: 409, data: { message: 'Mã thao tác đã được dùng.' } } });
+    cashCreate.mockRejectedValue(conflict('Mã thao tác đã được dùng.'));
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="pay-after-completion"] button').trigger('click');
     await flushPromises();
@@ -72,11 +85,12 @@ describe('BUG #39 — customer cash intent pending conflict UI', () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain('cần đối soát');
-    expect(wrapper.text()).toContain('Mã thao tác đã được dùng.');
+    expect(wrapper.get('[data-testid="pay-dialog-error"]').text()).toContain('Mã thao tác đã được dùng.');
+    expect((wrapper.get('[data-testid="pay-cash-ok"]').element as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('does not label a network or 503 failure as a pending payment conflict', async () => {
-    cashCreate.mockRejectedValue({ response: { status: 503, data: { message: 'unavailable' } } });
+    cashCreate.mockRejectedValue(conflict('unavailable', 503));
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="pay-after-completion"] button').trigger('click');
     await flushPromises();
@@ -85,7 +99,26 @@ describe('BUG #39 — customer cash intent pending conflict UI', () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain('cần đối soát');
-    expect(wrapper.text()).toContain('Chưa tạo được yêu cầu tiền mặt.');
+    expect(wrapper.get('[data-testid="pay-dialog-error"]').text()).toContain('Chưa tạo được yêu cầu tiền mặt.');
+  });
+
+  it('clears the dialog message when the customer picks another way to pay and on reopening', async () => {
+    cashCreate.mockRejectedValue(conflict('Có giao dịch thanh toán đang xử lý. Vui lòng kiểm tra lại.'));
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="pay-after-completion"] button').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="pay-method-cash"]').trigger('click');
+    await wrapper.get('[data-testid="pay-cash-ok"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pay-dialog-error"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="pay-method-vnpay"]').trigger('click');
+    expect(wrapper.find('[data-testid="pay-dialog-error"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="Đóng"]').trigger('click');
+    await wrapper.get('[data-testid="pay-after-completion"] button').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="pay-method-cash"]').trigger('click');
+    expect(wrapper.find('[data-testid="pay-dialog-error"]').exists()).toBe(false);
+    expect((wrapper.get('[data-testid="pay-cash-ok"]').element as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('disables the cash action while the create request is pending', async () => {
