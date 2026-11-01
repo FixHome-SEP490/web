@@ -373,6 +373,28 @@ export function isFullBookingWithMedia(
 /** How long the technician list may take before the page offers "Thử lại". */
 export const CANDIDATES_TIMEOUT_MS = 60000;
 
+const CANDIDATE_EMPTY_REASONS: CandidateEmptyReason[] = [
+  'BOOKING_LOCATION_MISSING', 'OUTSIDE_COVERAGE', 'TIME_UNAVAILABLE', 'UNAVAILABLE',
+];
+
+/**
+ * The body of a technician-candidates call made with diagnostics=1, for one booking or a whole
+ * visit: the list in data, the coarse reason it is empty in meta.emptyReason. An unknown reason,
+ * or one sent beside a non-empty list, is dropped.
+ */
+export function readCandidateSearch(body: {
+  data: TechnicianCandidate[];
+  meta?: { emptyReason?: CandidateEmptyReason | null };
+}): CandidateSearchResult {
+  const candidates = body.data.map(candidate => {
+    // Backend shortlist accepts User IDs, never TechnicianProfile IDs.
+    if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
+    return { ...candidate, id: candidate.userId.trim() };
+  });
+  const reason = body.meta?.emptyReason;
+  return { candidates, emptyReason: candidates.length === 0 && reason && CANDIDATE_EMPTY_REASONS.includes(reason) ? reason : null };
+}
+
 export const bookingsApi = {
   async createBooking(dto: CreateBookingDto): Promise<BookingItem> {
     const res = await apiClient.post<{ data: BookingItem }>('/bookings', {
@@ -469,15 +491,7 @@ export const bookingsApi = {
       `/bookings/${bookingId}/technician-candidates?diagnostics=1`,
       { timeout: CANDIDATES_TIMEOUT_MS },
     );
-    const candidates = res.data.data.map(candidate => {
-      if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
-      return { ...candidate, id: candidate.userId.trim() };
-    });
-    const allowed: CandidateEmptyReason[] = [
-      'BOOKING_LOCATION_MISSING', 'OUTSIDE_COVERAGE', 'TIME_UNAVAILABLE', 'UNAVAILABLE',
-    ];
-    const reason = res.data.meta?.emptyReason;
-    return { candidates, emptyReason: candidates.length === 0 && reason && allowed.includes(reason) ? reason : null };
+    return readCandidateSearch(res.data);
   },
 
   async sendShortlist(bookingId: string, technicianIds: string[]): Promise<void> {

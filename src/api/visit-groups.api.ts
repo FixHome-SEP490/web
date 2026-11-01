@@ -3,8 +3,8 @@
 // skill takes them all and the customer pays once for the devices repaired.
 import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
 import type { BookingDeviceAttributes } from './catalog-pricing.api';
-import type { BookingItem, TechnicianCandidate } from './bookings.api';
-import { CANDIDATES_TIMEOUT_MS, normalizeBooking } from './bookings.api';
+import type { BookingItem, CandidateEmptyReason, CandidateSearchResult, TechnicianCandidate } from './bookings.api';
+import { CANDIDATES_TIMEOUT_MS, normalizeBooking, readCandidateSearch } from './bookings.api';
 import { readPage, type PageResult } from './paging';
 import apiClient from './client';
 
@@ -223,6 +223,15 @@ export const visitGroupsApi = {
       if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
       return { ...candidate, id: candidate.userId.trim() };
     });
+  },
+
+  /** The same list with the reason it is empty, read like a single booking's (bug 41). */
+  async candidatesWithDiagnostics(id: string): Promise<CandidateSearchResult> {
+    const res = await apiClient.get<{ data: TechnicianCandidate[]; meta?: { emptyReason?: CandidateEmptyReason | null } }>(
+      `/visit-groups/${id}/technician-candidates?diagnostics=1`,
+      { timeout: CANDIDATES_TIMEOUT_MS },
+    );
+    return readCandidateSearch(res.data);
   },
 
   async shortlist(id: string, technicianIds: string[]): Promise<void> {
