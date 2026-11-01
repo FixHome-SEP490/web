@@ -20,6 +20,13 @@ describe('BUG #39 — VNPay pending cannot be assumed NOT_SETTLED', () => {
     expect(pendingPaymentCashNotice({ response: { status: 503, data: { message: 'unavailable' } } })).toBeNull();
     expect(pendingPaymentCashNotice(new Error('offline'))).toBeNull();
   });
+  it('reads the real API error envelope, where the reason is in error.message', () => {
+    const envelope = { success: false, statusCode: 409, error: { code: 'CONFLICT', message: 'Có giao dịch thanh toán đang xử lý. Vui lòng kiểm tra lại.' } };
+    expect(pendingPaymentCashNotice({ response: { status: 409, data: envelope } })).toContain('đối soát');
+    expect(pendingPaymentCashNotice({ response: { status: 409, data: { ...envelope, error: { code: 'CONFLICT', message: 'Lượt sửa có thanh toán đang xử lý.' } } } })).toContain('đối soát');
+    expect(pendingPaymentCashNotice({ response: { status: 409, data: { ...envelope, error: { code: 'CONFLICT', message: 'Mã thao tác đã được dùng.' } } } })).toBeNull();
+    expect(pendingPaymentCashNotice({ response: { status: 503, data: envelope } })).toBeNull();
+  });
   it('recognizes multiple safe server response messages', () => {
     expect(pendingPaymentCashNotice({ response: { status: 409, data: { message: ['payment pending', 'check again'] } } })).toContain('đối soát');
   });
