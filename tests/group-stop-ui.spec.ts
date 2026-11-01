@@ -129,3 +129,17 @@ it('fails closed on source verification errors and ignores stale source results 
   expect(w.get('[role="alert"]').text()).toContain('Chưa kiểm tra');
   expect(w.get('[data-testid="stopped-rebook-continue"]').attributes('disabled')).toBeDefined();
 });
+
+it('keeps the selected stopped subset through same-visit refresh and parent loading state', async () => {
+  const devices = [{ bookingId, sequence: 1, deviceLabel: 'Synthetic device' }, { bookingId: second, sequence: 2, deviceLabel: null }];
+  const w = mount(StoppedDevicesRebookPicker, { props: { groupId, disabled: false, devices } });
+  await flushPromises();
+  await w.findAll('input')[1]!.setValue(true);
+  mocks.sources.mockClear();
+  await w.setProps({ disabled: true }); await w.setProps({ disabled: false, devices: [...devices] });
+  expect(mocks.sources).not.toHaveBeenCalled();
+  await w.get('[data-testid="stopped-rebook-refresh"]').trigger('click'); await flushPromises();
+  expect((w.findAll('input')[1]!.element as HTMLInputElement).checked).toBe(true);
+  await w.get('[data-testid="stopped-rebook-continue"]').trigger('click');
+  expect(mocks.push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: second, sourceBookingIds: second } });
+});

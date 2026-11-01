@@ -55,11 +55,17 @@ const childOrderStatusUnavailable = ref(false);
 const expandedDevices = ref<Record<string, boolean>>({});
 const selectedVisitItemId = ref<string | null>(null);
 const checkoutLoading = ref(false);
-const child = useVisitOrderDetails(() => visitId.value, load);
+const child = useVisitOrderDetails(() => visitId.value, load, isStoppedOrder);
 const { details: orderDetails, fresh: childDetailsFresh, deciding: childDeciding, feedback: childFeedback } = child;
 const quotationChecks = ref<Record<string, string>>({});
 const approvingOrderId = ref<string | null>(null);
 const quotationFeedbackElement = ref<HTMLElement | null>(null);
+
+function isStoppedOrder(orderId: string) {
+  const order = orderDetails.value[orderId]?.order;
+  return order?.workStopped === true || order?.operationalDisposition === 'STOPPED'
+    || checkout.value?.devices.some(device => device.serviceOrderId === orderId && device.state === 'interrupted') === true;
+}
 
 async function focusQuotationFeedback(groupId: string, orderId: string, opener: Element | null) {
   await nextTick();
@@ -90,7 +96,7 @@ async function confirmChildQuotation(groupId: string, orderId: string, quotation
 }
 
 async function decideChildQuotation(orderId: string, action: 'APPROVE' | 'REJECT') {
-  if (childDeciding.value || quotationChecks.value[orderId] || checkoutLoading.value) return;
+  if (isStoppedOrder(orderId) || childDeciding.value || quotationChecks.value[orderId] || checkoutLoading.value) return;
   if (action === 'REJECT') return child.decide(orderId, action);
   const order = orderDetails.value[orderId]?.order;
   if (!childDetailsFresh.value || !canDecideOfficialQuotation(order) || !order?.quotation?.id) return;
@@ -183,7 +189,7 @@ async function loadChildOrderDetails(devices: VisitCheckout['devices'], lookupVe
     nextDetails[childOrder.serviceOrderId] = result.value;
     nextStatuses[childOrder.serviceOrderId] = result.value.order.status;
     // Same Backend gate as CustomerOrderDetail: EN_ROUTE + an official SENT quotation.
-    if (canDecideOfficialQuotation(result.value.order)) {
+    if (!isStoppedOrder(childOrder.serviceOrderId) && canDecideOfficialQuotation(result.value.order)) {
       nextQuotationOrderIds[childOrder.sequence] = childOrder.serviceOrderId;
     }
   });
@@ -220,20 +226,17 @@ async function readVisit() {
       && Number.isSafeInteger(nextCheckout.waiting) && nextCheckout.waiting >= 0
       && typeof nextCheckout.ready === 'boolean' && typeof nextCheckout.paid === 'boolean'
       && (!nextCheckout.pendingCash || billingAmount(nextCheckout.pendingCash.amount) !== null);
-    checkout.value = validCheckout ? nextCheckout : null;
+    if (validCheckout) checkout.value = nextCheckout;
     void refreshCashIntent(groupId);
     if (!validCheckout) checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
     if (disposed || lookupVersion !== childOrderLookupVersion || groupId !== visitId.value) return;
-    if (checkout.value) await loadChildOrderDetails(checkout.value.devices, lookupVersion);
+    if (validCheckout && checkout.value) await loadChildOrderDetails(checkout.value.devices, lookupVersion);
     else {
-      child.publish({}, lookupVersion);
       childOrderStatusUnavailable.value = true;
     }
   } catch (err) {
     if (disposed || lookupVersion !== childOrderLookupVersion) return;
     loadError.value = userFacingError(err, 'Không tải được lượt sửa. Vui lòng thử lại.');
-    checkout.value = null;
-    child.publish({}, lookupVersion);
     childOrderStatusUnavailable.value = true;
   } finally {
     if (!disposed && lookupVersion === childOrderLookupVersion) {
@@ -646,7 +649,7 @@ function onPayMethodKey(event: KeyboardEvent, method: PayMethod) {
 }
 const checkoutState = computed<CheckoutState>(() => {
   const current = checkout.value;
-  if (financialFollowupRequired.value) return 'waiting';
+  if (financialFollowupRequired.value || checkoutError.value || loadError.value) return 'waiting';
   if (current?.paid) return 'paid';
   if (!current || current.waiting > 0 || !current.ready) return 'waiting';
   if (current.pendingCash) return 'pending_cash';
@@ -702,6 +705,7 @@ async function refreshCashIntent(groupId: string) {
 }
 
 async function createCashIntent() {
+  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   const groupId = visitId.value;
   if (financialFollowupRequired.value || !cashFirstEnabled.value || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
     || busy.value || checkoutLoading.value || cashIntent.value?.status === 'pending' || cashIntent.value?.status === 'received') return;
@@ -750,7 +754,7 @@ async function cancelCashIntent() {
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
-  if (financialFollowupRequired.value || checkoutLoading.value) return;
+  if (financialFollowupRequired.value || checkoutLoading.value || checkoutError.value || loadError.value) return;
   if (value.reservation.scopeId !== visitId.value || value.preview.scopeId !== visitId.value
     || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
     message.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho lượt thanh toán này.' };
@@ -758,7 +762,12 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
   }
   fundedVoucher.value = value;
   message.value = null;
-  if (value.preview.customerDueVnd !== 0) return;
+}
+
+async function confirmZeroCheckout() {
+  if (busy.value || checkoutLoading.value || checkoutError.value || loadError.value || financialFollowupRequired.value
+    || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
+    || activeFundedVoucher.value?.preview.customerDueVnd !== 0) return;
   const held = reservationForAction();
   if (!held) return;
   busy.value = true;
@@ -777,6 +786,7 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
 }
 
 async function payWithWallet() {
+  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due' || !walletCovers.value) return;
   busy.value = true;
   const groupId = visitId.value;
@@ -799,6 +809,7 @@ async function payWithWallet() {
   }
 }
 async function payWithVnpay() {
+  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || !vnpayAllowed.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due') return;
   busy.value = true;
   const groupId = visitId.value;
@@ -817,6 +828,7 @@ async function payWithVnpay() {
   }
 }
 async function answerCash(agreed: boolean) {
+  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || checkoutState.value !== 'pending_cash') return;
   busy.value = true;
   const groupId = visitId.value;
@@ -852,12 +864,13 @@ async function answerCash(agreed: boolean) {
     <FhBackLink class="min-h-11" label="Đơn của tôi" @click="router.push('/app/orders')" />
 
     <FhSkeleton v-if="loading" class="h-40 rounded-2xl" />
-    <div v-else-if="loadError" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
+    <div v-else-if="loadError && !visit" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
       {{ loadError }}
       <FhButton variant="secondary" size="md" class="ml-2" @click="load">Thử lại</FhButton>
     </div>
 
     <template v-else-if="visit">
+      <div v-if="loadError" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ loadError }} Hiện dữ liệu đã đọc trước đó; thao tác cần xác minh lại. <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></div>
       <header class="space-y-4">
         <div class="space-y-1">
           <h1 class="text-2xl leading-8 font-bold tracking-tight text-ink-900 sm:text-[28px] sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
@@ -913,10 +926,9 @@ async function answerCash(agreed: boolean) {
 
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
-        <div v-if="interruptedDevices.length" role="status" class="space-y-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800" data-testid="visit-interrupted">
-          <StoppedDevicesRebookPicker :group-id="visitId" :devices="interruptedDevices" :disabled="checkoutLoading || !childDetailsFresh" />
-          <p>{{ interruptedDevices.length }} máy đã dừng sửa. Chọn máy để kiểm tra quyền đặt lại hoặc đặt lịch mới; các máy còn lại giữ kết quả riêng. Đơn cũ chưa được hủy, tiền và linh kiện cũ cần đối soát riêng.</p>
-          <FhButton variant="secondary" size="md" :disabled="checkoutLoading" @click="load">Kiểm tra trạng thái mới nhất</FhButton>
+        <div v-if="interruptedDevices.length" role="status" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700" data-testid="visit-interrupted">
+          <StoppedDevicesRebookPicker :group-id="visitId" :devices="interruptedDevices" :disabled="!!checkoutError || !!loadError" />
+          <p>Máy đã dừng được đặt lịch mới riêng. Các máy còn lại tiếp tục theo tiến độ bên dưới. Tiền và linh kiện cũ được đối soát riêng.</p>
         </div>
         <FhButton
           v-if="failedBookingIds.length > 1"
@@ -1010,24 +1022,25 @@ async function answerCash(agreed: boolean) {
             v-if="selectedDetails"
             :key="selectedDetails.order.id"
             :details="selectedDetails"
-            :disabled="!childDetailsFresh || childDeciding || checkoutLoading || !!quotationChecks[selectedDetails.order.id]"
+            :stopped="isStoppedOrder(selectedDetails.order.id)"
+            :disabled="isStoppedOrder(selectedDetails.order.id) || !childDetailsFresh || childDeciding || checkoutLoading || !!quotationChecks[selectedDetails.order.id]"
             @quote="decideChildQuotation(selectedDetails.order.id, $event)"
             @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
             @retry="load"
           />
           <CustomerStopReplaceRequest
-            v-if="selectedDetails && childDetailsFresh"
+            v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id)"
             :key="`stop-replace-${selectedDetails.order.id}`"
             :order-id="selectedDetails.order.id"
             :order-status="selectedDetails.order.status"
           />
-          <div v-else-if="selectedOrderId" class="mt-4 space-y-2 border-t border-ink-100 pt-4">
+          <div v-if="selectedOrderId && !selectedDetails" class="mt-4 space-y-2 border-t border-ink-100 pt-4">
             <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />
             <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
           </div>
 
           <CustomerContinuationPanel
-            v-if="selectedDetails && childDetailsFresh && ['EN_ROUTE', 'UNDER_REPAIR'].includes(selectedDetails.order.status)"
+            v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id) && ['EN_ROUTE', 'UNDER_REPAIR'].includes(selectedDetails.order.status)"
             :key="`continuation-${selectedDetails.order.id}`"
             :order-id="selectedDetails.order.id"
             :booking-id="selectedVisitItem.booking?.id ?? null"
@@ -1148,6 +1161,8 @@ async function answerCash(agreed: boolean) {
               @released="clearFundedVoucher"
               @expired="clearFundedVoucher"
             />
+            <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+            <template v-else>
             <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="visit-pay-methods">
               <button
                 v-for="method in payMethods"
@@ -1204,6 +1219,7 @@ async function answerCash(agreed: boolean) {
             </div>
             <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="!walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
             <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
+            </template>
         </template>
       </section>
     </template>

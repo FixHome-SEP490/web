@@ -132,3 +132,37 @@ it('traps keyboard focus and returns focus when closed', async () => {
   await dialog.trigger('keydown', { key: 'Escape' }); expect(w.emitted('close')).toHaveLength(1);
   w.unmount(); expect(document.activeElement).toBe(opener); opener.remove();
 });
+
+it.each([[409, 'trạng thái'], [403, 'quyền'], [503, 'tạm thời']])('keeps two failed private photos explicit for HTTP %s, permits stop only after removal', async (status, message) => {
+  post.mockRejectedValue({ response: { status } });
+  const w = mount(CannotContinueDialog, { props: props(), global: { stubs: { Teleport: true } } });
+  const files = [1, 2].map(i => new File(['photo'], `photo${i}.png`, { type: 'image/png' }));
+  Object.defineProperty(w.get('input[type=file]').element, 'files', { value: files, configurable: true });
+  await w.get('input[type=file]').trigger('change'); await flushPromises(); await ready(w);
+  expect(post).toHaveBeenCalledTimes(2);
+  expect(w.text()).toContain(message);
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
+  expect(w.emitted('recorded')).toBeUndefined();
+  await w.get('button[aria-label="Xóa ảnh 2"]').trigger('click');
+  await w.get('button[aria-label="Xóa ảnh 1"]').trigger('click');
+  post.mockResolvedValue(receipt());
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(post.mock.calls.at(-1)![1].photoEvidenceIds).toEqual([]);
+  expect(w.emitted('recorded')).toHaveLength(1);
+});
+
+it('retries only the failed image and submits both private evidence IDs', async () => {
+  const secondEvidenceId = '40000000-0000-4000-8000-000000000002';
+  post.mockResolvedValueOnce({ data: { data: { id: evidenceId } } }).mockRejectedValueOnce({ response: { status: 503 } });
+  const w = mount(CannotContinueDialog, { props: props(), global: { stubs: { Teleport: true } } });
+  Object.defineProperty(w.get('input[type=file]').element, 'files', { value: [1, 2].map(i => new File(['photo'], `photo${i}.png`, { type: 'image/png' })), configurable: true });
+  await w.get('input[type=file]').trigger('change'); await flushPromises(); await ready(w);
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
+  post.mockResolvedValueOnce({ data: { data: { id: secondEvidenceId } } });
+  await w.findAll('button').find(button => button.text() === 'Thử lại ảnh')!.trigger('click'); await flushPromises();
+  expect(post).toHaveBeenCalledTimes(3);
+  post.mockResolvedValueOnce(receipt());
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(post.mock.calls.at(-1)![1].photoEvidenceIds).toEqual([evidenceId, secondEvidenceId]);
+  expect(w.emitted('recorded')).toHaveLength(1);
+});

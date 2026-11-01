@@ -32,7 +32,7 @@ async function render(overrides: Record<string, unknown> = {}) {
       return { data: { data: { ...order(overrides), id, bookingId: id.replace('order-', 'booking-') } } };
     }
     if (overrides.visitGroupId && path.endsWith('/checkout')) return { data: { data: { visitGroupId: overrides.visitGroupId, ready: false, waiting: 3, total: 0, paid: false, pendingCash: null,
-      devices: ['B', 'C', 'D'].map((key, i) => ({ sequence: i + 1, bookingId: `booking-${key}`, serviceOrderId: `order-${key}`, deviceLabel: null, serviceName: 'Fixture', state: 'open', invoiceId: null, amount: 0, paid: false })),
+      devices: (overrides.twoDevices ? ['B', 'C'] : ['B', 'C', 'D']).map((key, i) => ({ sequence: i + 1, bookingId: `booking-${key}`, serviceOrderId: `order-${key}`, deviceLabel: null, serviceName: 'Fixture', state: 'open', invoiceId: null, amount: 0, paid: false })),
     } } };
     if (path === '/bookings/booking-B') return { data: { data: { id: 'booking-B', status: 'matched', media: [] } } };
     if (path === '/service-orders/order-B/part-requests') return { data: { data: [] } };
@@ -120,4 +120,35 @@ it('reports a refused command without claiming cancellation or success', async (
   expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
   expect(w.text()).not.toContain('Đã ghi nhận gián đoạn');
   expect(post.mock.calls.every(([path]) => path === '/service-orders/order-B/cannot-continue')).toBe(true);
+});
+
+it('keeps machine 1 reachable after machine 2 becomes released history without exposing customer PII', async () => {
+  const w = await render({ visitGroupId: 'visit-1', twoDevices: true });
+  await w.get('[data-testid="job-more-button"]').trigger('click');
+  await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+  await w.get('[data-testid="report-device"]').setValue('order-C'); await flushPromises();
+  let stopped = false;
+  const original = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) => {
+    if (stopped && path === '/service-orders/order-C') return { data: { data: { id: 'order-C', code: 'FH-C', status: 'under_repair', historical: true, workStopped: true, operationalDisposition: 'STOPPED', createdAt: '2026-11-01T00:00:00Z' } } };
+    return original(path);
+  });
+  post.mockImplementation(async () => {
+    stopped = true;
+    const result = receipt();
+    result.data.data.customerContinuation.source = { serviceOrderId: 'order-C', bookingId: 'booking-C', incidentId: '30000000-0000-4000-8000-000000000001', visitGroupId: 'visit-1' } as never;
+    Object.assign(result.data.data, { workStopped: true, assignmentReleased: true, operationalDisposition: 'STOPPED' });
+    return result;
+  });
+  await w.get('[data-testid="cannot-continue-dialog"] textarea').setValue(reason);
+  await w.get('[data-testid="cannot-continue-confirm-intent"]').setValue(true);
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  const history = w.get('[data-testid="technician-historical-detail"]');
+  expect(history.text()).not.toContain('Fixture');
+  expect(history.find('a[href^="tel:"]').exists()).toBe(false);
+  expect(history.get('[data-testid="historical-jobs"]').text()).toContain('Danh sách công việc');
+  await history.get('[data-testid="historical-sibling-1"]').trigger('click'); await flushPromises();
+  expect(route.params.id).toBe('order-B');
+  expect(w.find('[data-testid="technician-historical-detail"]').exists()).toBe(false);
+  expect(w.get('[data-testid="job-now"]').exists()).toBe(true);
 });

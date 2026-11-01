@@ -59,6 +59,7 @@ const ready = computed(() => (mode.value === 'support' && !groupScope.value ? pr
   && photos.value.every(photo => !!photo.evidenceId));
 let disposed = false;
 const sourceOrderId = props.orderId;
+const failedPhotos = computed(() => photos.value.some(photo => !!photo.error));
 const current = () => !disposed && sourceOrderId === props.orderId;
 let previousFocus: HTMLElement | null = null;
 let previousOverflow = '';
@@ -92,7 +93,14 @@ async function upload(photo: typeof photos.value[number]) {
   try {
     const data = await uploadCannotContinueEvidence(sourceOrderId, photo.file);
     if (current()) photo.evidenceId = data.evidenceId;
-  } catch (err) { if (current()) photo.error = userFacingError(err, 'Chưa tải được ảnh. Thử lại hoặc xóa ảnh này.'); }
+  } catch (err) {
+    if (!current()) return;
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    photo.error = status === 409 ? 'Chưa tải ảnh: trạng thái hoặc check-in đã thay đổi. Tải lại công việc để kiểm tra, hoặc xóa ảnh này.'
+      : status === 403 ? 'Chưa tải ảnh: bạn không có quyền tải ảnh cho đơn này. Kiểm tra phân công, hoặc xóa ảnh này.'
+      : status === 503 ? 'Dịch vụ ảnh tạm thời chưa sẵn sàng. Thử lại hoặc xóa ảnh này.'
+      : userFacingError(err, 'Chưa tải được ảnh. Thử lại hoặc xóa ảnh này.');
+  }
 }
 async function addFiles(files: File[]) {
   camera.value = false;
@@ -203,6 +211,7 @@ async function submit() {
           <div class="flex flex-wrap gap-2"><FhButton ref="cameraButton" variant="secondary" size="md" :disabled="locked || busy || uploading || photos.length >= 3" @click="camera = true"><Camera :size="18" />Chụp ảnh</FhButton><FhButton variant="secondary" size="md" :disabled="locked || busy || uploading || photos.length >= 3" @click="fileInput?.click()"><ImagePlus :size="18" />Tải ảnh</FhButton></div>
           <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" aria-label="Chọn ảnh chứng cứ" :disabled="locked || busy || uploading" @change="filesChanged" />
           <p v-if="uploading" role="status">Đang tải ảnh…</p>
+          <p v-if="failedPhotos" role="status">Ảnh chưa gửi thành công. Thử lại từng ảnh hoặc xóa ảnh lỗi để tiếp tục không kèm ảnh đó; ảnh không bắt buộc.</p>
           <ul v-if="photos.length" class="grid grid-cols-3 gap-2"><li v-for="(photo, index) in photos" :key="photo.url" class="min-w-0"><img :src="photo.url" :alt="`Ảnh chứng cứ ${index + 1}`" class="aspect-square w-full rounded-xl object-cover" /><button type="button" :disabled="locked || busy || uploading" :aria-label="`Xóa ảnh ${index + 1}`" class="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg focus-visible:ring-2 focus-visible:ring-brand-600" @click="removePhoto(index)"><Trash2 :size="16" />Xóa</button><p v-if="photo.error" role="alert" class="break-words text-danger-700">{{ photo.error }}</p><FhButton v-if="photo.error" variant="secondary" size="md" :disabled="locked || busy || uploading" @click="retryPhoto(index)">Thử lại ảnh</FhButton></li></ul>
         </fieldset>
         <fieldset v-if="mode === 'support' && !groupScope && evidence?.length" :disabled="busy" class="space-y-2"><legend class="font-medium">Ảnh đã có (không bắt buộc)</legend><label v-for="item in evidence" :key="item.url" class="flex min-h-11 items-center gap-3"><input v-model="supportEvidence" type="checkbox" :value="item.url" data-testid="report-support-evidence" />{{ item.label }}</label></fieldset>

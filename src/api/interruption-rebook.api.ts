@@ -7,10 +7,29 @@ import { catalogPricingApi, type BookingDeviceAttributes, type CatalogPricingPre
 import { profileApi, type UserAddress } from './profile.api';
 import type { BookingSlot } from '../utils/booking-session';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Legacy User IDs generated before UUID v4 adoption are accepted only in this user field.
+const USER_UUID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-0[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-const invalid = () => new Error('Dữ liệu đặt lịch mới chưa được xác nhận. Vui lòng tải lại từ đơn đã gián đoạn.');
+class InterruptionContractError extends Error {}
+const invalid = () => new InterruptionContractError('Dữ liệu đặt lịch mới chưa được xác nhận. Vui lòng tải lại từ đơn đã gián đoạn.');
 const asId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
+
+type DraftPhase = 'draft' | 'booking' | 'order' | 'case' | 'links' | 'address' | 'catalog';
+const PHASE_LABELS: Record<DraftPhase, string> = {
+  draft: 'hồ sơ đặt lại', booking: 'yêu cầu đặt lịch cũ', order: 'đơn sửa chữa cũ',
+  case: 'hồ sơ gián đoạn', links: 'liên kết nguồn đặt lại', address: 'địa chỉ', catalog: 'dịch vụ và giá hiện tại',
+};
+export class InterruptionDraftReadError extends Error {
+  constructor(readonly phase: DraftPhase, readonly status: number | null, readonly failure: 'CONTRACT' | 'UNVERIFIED' = 'UNVERIFIED') {
+    super(`Chưa xác minh được ${PHASE_LABELS[phase]}. ${status === 403 ? 'Bạn chưa có quyền đọc hồ sơ này.' : status === 401 ? 'Vui lòng đăng nhập lại.' : 'Vui lòng thử tải lại từ đơn đã gián đoạn.'}`);
+  }
+  get diagnostic() { return `REBOOK_${this.phase.toUpperCase()}_${this.status ?? this.failure}`; }
+}
+async function readPhase<T>(phase: DraftPhase, action: () => Promise<T> | T): Promise<T> {
+  try { return await action(); }
+  catch (error) { throw error instanceof InterruptionDraftReadError ? error : new InterruptionDraftReadError(phase, getHttpStatus(error) ?? null, error instanceof InterruptionContractError ? 'CONTRACT' : 'UNVERIFIED'); }
+}
 
 export interface InterruptionDraftItem {
   sourceBookingId: string;
@@ -90,7 +109,7 @@ function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDra
       || (item.selectedVariantCode !== null && typeof item.selectedVariantCode !== 'string')
       || (item.deviceAttributes !== null && !isRecord(item.deviceAttributes))
       || item.quantity !== 1 || !Array.isArray(item.photos) || item.photos.length !== 0
-      || !asId(item.previousTechnicianId)) throw invalid();
+      || (typeof item.previousTechnicianId !== 'string' || !USER_UUID.test(item.previousTechnicianId))) throw invalid();
     seenBookings.add(item.sourceBookingId); seenOrders.add(item.sourceOrderId); seenCases.add(item.sourceCaseId);
     return {
       sourceBookingId: item.sourceBookingId, sourceOrderId: item.sourceOrderId, sourceCaseId: item.sourceCaseId,
@@ -140,45 +159,53 @@ export const interruptionRebookApi = {
     contexts.delete(anchor);
     if (!asId(anchor) || !owner || (sourceBookingIds && (sourceBookingIds.length < 1 || sourceBookingIds.length > 3
       || sourceBookingIds.some(id => !asId(id)) || new Set(sourceBookingIds).size !== sourceBookingIds.length || !sourceBookingIds.includes(anchor)))) throw invalid();
-    const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft', ...(sourceBookingIds ? [{ params: { sourceBookingIds: sourceBookingIds.join(',') } }] : []));
-    const raw = normalizeRawDraft(unwrap(response.data), anchor);
-    if (sourceBookingIds && (raw.rawItems.length !== sourceBookingIds.length || raw.rawItems.some(item => !sourceBookingIds.includes(item.sourceBookingId)))) throw invalid();
+    const raw = await readPhase('draft', async () => {
+      const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft', ...(sourceBookingIds ? [{ params: { sourceBookingIds: sourceBookingIds.join(',') } }] : []));
+      return normalizeRawDraft(unwrap(response.data), anchor);
+    });
+    await readPhase('links', () => {
+      if (sourceBookingIds && (raw.rawItems.length !== sourceBookingIds.length || raw.rawItems.some(item => !sourceBookingIds.includes(item.sourceBookingId)))) throw invalid();
+    });
     const kinds: InterruptionSourceKind[] = [];
     const [addresses, linked] = await Promise.all([
-      profileApi.getAddresses(),
+      readPhase('address', () => profileApi.getAddresses()),
       Promise.all(raw.rawItems.map(async item => {
         const [booking, order, sourceCase] = await Promise.all([
-          bookingsApi.getBooking(item.sourceBookingId), ordersApi.getOrder(item.sourceOrderId), supportCasesApi.getMine(item.sourceCaseId),
+          readPhase('booking', () => bookingsApi.getBooking(item.sourceBookingId)), readPhase('order', () => ordersApi.getOrder(item.sourceOrderId)), readPhase('case', () => supportCasesApi.getMine(item.sourceCaseId)),
         ]);
-        if (booking.id !== item.sourceBookingId || booking.customerId !== owner || booking.serviceId !== item.serviceId
-          || (booking.visitGroupId ?? null) !== raw.sourceVisitGroupId
-          || order.id !== item.sourceOrderId || order.bookingId !== item.sourceBookingId
-          || sourceCase.id !== item.sourceCaseId || sourceCase.serviceOrderId !== item.sourceOrderId) throw invalid();
-        const orderStatus = String(order.status).toUpperCase();
-        if (booking.status === 'CANCELLED' && orderStatus === 'CANCELLED') {
-          // Manager-close source: the old booking/order are closed and the case carries the resolution.
-          const supportedCaseType = sourceCase.caseType === 'mid_job_interruption' || sourceCase.caseType === 'technician_replacement';
-          const caseBookingMatches = sourceCase.bookingId === item.sourceBookingId
-            || (sourceCase.bookingId === null && sourceCase.caseType === 'technician_replacement');
-          if (!caseBookingMatches || !supportedCaseType
-            || sourceCase.status !== 'resolved' || sourceCase.resolutionCode !== 'interrupted_for_rebook') throw invalid();
-          kinds.push('cancelled');
-        } else if (booking.status === 'MATCHED' && ['EN_ROUTE', 'UNDER_REPAIR'].includes(orderStatus)) {
-          // T2 onsite source: the old order is still active. The server re-verifies the T1 receipt and
-          // the SM case status is not authority, so only ownership and exact links are checked here.
-          if (sourceCase.caseType !== 'technician_replacement' || sourceCase.bookingId !== item.sourceBookingId) throw invalid();
-          kinds.push('onsite');
-        } else throw invalid();
-        const [service, pricing] = await Promise.all([
-          catalogApi.getService(item.serviceId),
-          catalogPricingApi.getPreview(item.serviceId, item.deviceAttributes),
-        ]);
-        if (service.id !== item.serviceId || service.isActive !== true || pricing.serviceId !== item.serviceId
-          || pricing.serviceCode !== service.code || (pricing.status === 'FIXED_PRICE' && pricing.possibleVariants.length === 0)) throw invalid();
-        return {
-          ...item, serviceName: service.name, deviceLabel: raw.rawItems.length > 1 ? 'Thiết bị' : service.name,
-          selectedVariantCode: null, pricing,
-        };
+        await readPhase('links', () => {
+          if (booking.id !== item.sourceBookingId || booking.customerId !== owner || booking.serviceId !== item.serviceId
+            || (booking.visitGroupId ?? null) !== raw.sourceVisitGroupId
+            || order.id !== item.sourceOrderId || order.bookingId !== item.sourceBookingId
+            || sourceCase.id !== item.sourceCaseId || sourceCase.serviceOrderId !== item.sourceOrderId) throw invalid();
+          const orderStatus = String(order.status).toUpperCase();
+          if (booking.status === 'CANCELLED' && orderStatus === 'CANCELLED') {
+            // Manager-close source: the old booking/order are closed and the case carries the resolution.
+            const supportedCaseType = sourceCase.caseType === 'mid_job_interruption' || sourceCase.caseType === 'technician_replacement';
+            const caseBookingMatches = sourceCase.bookingId === item.sourceBookingId
+              || (sourceCase.bookingId === null && sourceCase.caseType === 'technician_replacement');
+            if (!caseBookingMatches || !supportedCaseType
+              || sourceCase.status !== 'resolved' || sourceCase.resolutionCode !== 'interrupted_for_rebook') throw invalid();
+            kinds.push('cancelled');
+          } else if (booking.status === 'MATCHED' && ['EN_ROUTE', 'UNDER_REPAIR'].includes(orderStatus)) {
+            // T2 onsite source: the old order is still active. The server re-verifies the T1 receipt and
+            // the SM case status is not authority, so only ownership and exact links are checked here.
+            if (sourceCase.caseType !== 'technician_replacement' || sourceCase.bookingId !== item.sourceBookingId) throw invalid();
+            kinds.push('onsite');
+          } else throw invalid();
+        });
+        return readPhase('catalog', async () => {
+          const [service, pricing] = await Promise.all([
+            catalogApi.getService(item.serviceId),
+            catalogPricingApi.getPreview(item.serviceId, item.deviceAttributes),
+          ]);
+          if (service.id !== item.serviceId || service.isActive !== true || pricing.serviceId !== item.serviceId
+            || pricing.serviceCode !== service.code || (pricing.status === 'FIXED_PRICE' && pricing.possibleVariants.length === 0)) throw invalid();
+          return {
+            ...item, serviceName: service.name, deviceLabel: raw.rawItems.length > 1 ? 'Thiết bị' : service.name,
+            selectedVariantCode: null, pricing,
+          };
+        });
       })),
     ]);
     const ownedAddresses = addresses.filter(address => address.userId === owner);

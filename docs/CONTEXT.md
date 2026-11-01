@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-01 22:42 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/address-strict-text-coords
+> Cập nhật lần cuối: 2026-11-02 01:10 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-qa-seven-issues-web-20261102
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,15 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Sửa bảy lỗi demo Web (02/11/2026)
+
+- Áp dụng voucher chỉ giữ chỗ. Cả chi tiết đơn và lượt sửa có nút “Xác nhận tất toán 0 ₫”; chỉ bấm nút này mới gọi ZERO hiện có, giữ kiểm tra biên nhận/ledger. Lỗi không thành công, không chuyển sang ví/VNPay/tiền mặt tự động; thử lại giữ reservation cũ. Bảng chọn mở khi vào thanh toán, ví ưu đãi là link phụ bên trong; voucher đã lưu có “Sử dụng” khi returnTo hợp lệ. Funding chưa sẵn sàng vẫn khóa voucher và cho chọn thanh toán không voucher.
+- Ảnh chứng cứ riêng tư phân biệt lỗi quyền/trạng thái/dịch vụ tạm ngừng; có thử lại/xóa từng ảnh. Ảnh lỗi chưa xóa vẫn chặn gửi; sau khi chủ động xóa có thể gửi không kèm ảnh tùy chọn. Không đổi endpoint upload hoặc giả ảnh thành công.
+- Lượt khách giữ panel/selection khi đọc lại, không dựng lại continuation theo cờ fresh; nguồn máy dừng có một CTA đặt mới theo subset đã xác minh. Máy dừng khóa duyệt báo giá/phát sinh dù enum cũ còn EN_ROUTE/UNDER_REPAIR. Lỗi đọc ngầm giữ dữ liệu cũ để xem, khóa thao tác cần xác minh.
+- Trang công việc lịch sử có đường tới danh sách công việc; chỉ thêm link máy còn hoạt động từ bundle cùng lượt đã đọc có quyền, không giữ PII trong link lịch sử. Linh kiện chưa đọc được hiện trung tính, khác nghĩa vụ trả kho có bằng chứng; không thay yêu cầu quản lý nhận thực tế.
+- Đặt lại nhận previousTechnicianId legacy UUID v0 hoặc v4; booking/order/case vẫn UUID v4, kiểm tra ownership/liên kết/giá/receipt giữ nguyên. Lỗi draft, booking, order, case, address, catalog và đối chiếu nguồn có chẩn đoán phase an toàn. Fixture được sinh bằng buildInterruptionDraft Backend với persistence giả trong bộ nhớ, gồm hai máy dừng và subset một máy, không dùng DB.
+- Đã kiểm tra Chromium cục bộ với adapter API giả lập ở 360/768/1440 px: hai màn ZERO chỉ chạy sau xác nhận, retry 503 giữ reservation, không tràn ngang/lỗi JavaScript; funding chưa sẵn sàng còn rail thường; hai ảnh 503 có thể xóa; focus/Escape của sheet. Không phải E2E Backend thật. Runtime đăng nhập DEV, provider ảnh, readiness funding, ACL cựu phân công và Mobile parity: CHƯA KIỂM CHỨNG. Không migration, không sửa Backend hoặc AI.
 
 ### Báo cáo thợ và quan sát sự cố Phase 1 (01/11/2026)
 
@@ -478,6 +487,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-02 01:10 (UTC+7) | foxonworld | foxonworld/fixhome-qa-seven-issues-web-20261102 | Sửa bảy lỗi demo Web: xác nhận ZERO tường minh, ảnh lỗi, điều hướng máy lịch sử, trạng thái dừng/đặt lại UUID legacy, voucher readiness và nghĩa vụ linh kiện; ghi giới hạn QA.
 - 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
 - 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.
 - 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
@@ -517,4 +527,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-22 21:46 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Editor thiết bị hỗ trợ sửa/lưu/hủy, bỏ/hoàn tác và review chung; 2–3 máy gửi một VisitGroup, một máy về Booking thường; tư vấn chỉ gửi theo thao tác; 1.409 test/typecheck/lint/build PASS; Browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
 - 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
-- 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai

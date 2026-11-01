@@ -8,7 +8,7 @@ import type { VisitOrderDetails } from '../../composables/useVisitOrderDetails';
 import { orderBilling, billingAmount } from '../../utils/order-billing';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 
-const props = defineProps<{ details: VisitOrderDetails; disabled: boolean }>();
+const props = defineProps<{ details: VisitOrderDetails; disabled: boolean; stopped?: boolean }>();
 const emit = defineEmits<{
   quote: [action: 'APPROVE' | 'REJECT'];
   cost: [id: string, action: 'APPROVE' | 'REJECT', externalConsent: boolean];
@@ -28,7 +28,8 @@ const fixedLaborSnapshot = computed(() => {
   const laborSnapshot = billingAmount(props.details.order.laborTotal);
   return laborSnapshot !== null && laborSnapshot > 0 ? laborSnapshot : null;
 });
-const quoteReady = computed(() => canDecideOfficialQuotation(props.details.order));
+const stopped = computed(() => props.stopped || props.details.order.workStopped === true || props.details.order.operationalDisposition === 'STOPPED');
+const quoteReady = computed(() => !stopped.value && canDecideOfficialQuotation(props.details.order));
 const visibleQuote = computed(() => ['sent', 'approved', 'accepted', 'rejected'].includes(String(props.details.order.quotation?.status).toLowerCase()));
 const labels: Record<AdditionalCostRecord['status'], string> = {
   PENDING_APPROVAL: 'Chờ bạn duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối', EXPIRED: 'Hết hạn chờ duyệt', CANCELLED: 'Đã huỷ',
@@ -38,7 +39,7 @@ const evidenceLabels: Record<EvidenceType, string> = {
   additional: 'Ảnh bổ sung', checkin_face: 'Ảnh check-in',
 };
 const hasExternal = (cost: AdditionalCostRecord) => cost.items.some(item => item.partSource === 'external');
-const canDecide = (cost: AdditionalCostRecord) => props.details.order.status.toUpperCase() === 'UNDER_REPAIR'
+const canDecide = (cost: AdditionalCostRecord) => !stopped.value && props.details.order.status.toUpperCase() === 'UNDER_REPAIR'
   && !props.details.order.completionRequestedAt && cost.status === 'PENDING_APPROVAL'
   && (!cost.expiresAt || new Date(cost.expiresAt).getTime() > Date.now());
 const costTotal = (cost: AdditionalCostRecord) => {
