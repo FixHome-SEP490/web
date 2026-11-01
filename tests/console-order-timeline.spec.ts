@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 
 const mocks = vi.hoisted(() => ({
   getConsoleOrderContext: vi.fn(),
-  authStore: { userRole: 'ADMIN' as string },
+  authStore: { userRole: 'ADMIN' as string, hasPermission: () => true },
   route: { params: { id: 'order-1' } },
 }));
 
@@ -49,11 +49,20 @@ const mountPage = () => mount(ConsoleOrderDetailPage, {
       ConsoleLoadError: true,
       ConsoleMoreMenu: { template: '<div><slot /></div>' },
       ConsoleMenuItem: { template: '<button><slot /></button>' },
+      'router-link': { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' },
     },
   },
 });
 
 describe('Service Manager console order timeline', () => {
+  it.each(['ADMIN', 'SERVICE_MANAGER'])('%s can reach order-scoped cases and the authorized finance read panel', async role => {
+    mocks.authStore.userRole = role;
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="order-support-link"]').attributes('data-to')).toBe(JSON.stringify({ path: '/console/support', query: { serviceOrderId: 'order-1' } }));
+    expect(wrapper.find('[data-testid="staff-stopped-work-finance"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
   beforeEach(() => {
     mocks.authStore.userRole = 'ADMIN';
     mocks.route.params.id = 'order-1';

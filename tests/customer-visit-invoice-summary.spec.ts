@@ -68,6 +68,26 @@ describe('Customer VisitGroup finalized invoice summary', () => {
     orders.getAdditionalCosts.mockResolvedValue([]);
   });
 
+  it.each(['group', 'device'])('shows an interrupted device after refresh without a free/cancelled claim and blocks %s financial follow-up', async scope => {
+    const w = await open();
+    snapshot.devices[1] = { ...snapshot.devices[1], state: 'interrupted', amount: 0, invoiceId: null };
+    if (scope === 'group') snapshot.financialFollowupRequired = true;
+    else snapshot.devices[1].financialFollowupRequired = true;
+    // Even inconsistent ready/zero metadata must not turn follow-up into free closeout.
+    snapshot.ready = true;
+    snapshot.total = 0;
+    live.orderChanges[0]!();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    await flushPromises();
+    expect(w.text()).toContain('Đã dừng sửa');
+    expect(w.get('[data-testid="visit-financial-followup"]').text()).toContain('Chưa xác định');
+    expect(w.get('[data-testid="visit-invoice-row-2"]').text()).not.toContain('0₫');
+    expect(w.find('[data-testid="visit-zero-due"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+    expect(w.find('[data-testid="visit-pay-vnpay"]').exists()).toBe(false);
+    expect(visits.payWithWallet).not.toHaveBeenCalled();
+  });
+
   it('creates and cancels one server-priced VisitGroup cash request for all three devices', async () => {
     cashIntents.get.mockResolvedValue({ cashFirstEnabled: true, intent: null });
     const pending = { id: '11111111-1111-4111-8111-111111111111', scopeKind: 'VISIT_GROUP', scopeId: 'v1', status: 'pending', grossVnd: 600000, customerDueVnd: 500000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };

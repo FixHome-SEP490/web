@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-01 20:36 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/visit-candidates-empty-state
+> Cập nhật lần cuối: 2026-11-01 21:09 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-support-staff-visibility-p0-20261101
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,6 +92,14 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ## 3. Trạng thái hiện tại
 
+### Báo cáo thợ và quan sát sự cố Phase 1 (01/11/2026)
+
+- Hàng đợi hỗ trợ nhận `technician_delay` trong danh sách trộn và chi tiết, có nhãn/bộ lọc; enum lạ vẫn bị từ chối. Case trễ do hệ thống tạo chỉ đọc, kể cả quản lý dịch vụ. Đối chiếu nguồn Backend `05b611b`.
+- Trang lượt khách nhận `VisitDeviceState.interrupted`, hiện máy đã dừng và nút kiểm tra trạng thái; không biến số tiền máy dừng thành 0 hay trạng thái đơn thành hủy. Cờ `financialFollowupRequired` của cả lượt hoặc từng máy khóa thu mới và hiện số tiền/hoàn tiền chưa xác định. Đặt lại vẫn qua `CustomerContinuationPanel` và nguồn đủ điều kiện do server xác nhận, không chuyển tiền/ưu đãi cũ.
+- Bảng đơn và chi tiết console liên kết hàng đợi hỗ trợ theo `serviceOrderId`; chi tiết dùng lại `StoppedWorkFinancePanel` đọc có quyền. Admin chỉ đọc, không mở rộng quyền xử lý. Không suy ra đơn đã dừng chỉ từ loại case hoặc trạng thái lịch sử.
+- Kỹ thuật viên sau check-in có một mục “Báo cáo vấn đề sửa chữa”: chọn máy đang mở đã có chi tiết được cấp quyền, lý do và dừng riêng máy hoặc nhờ quản lý hỗ trợ trong cùng form. Dừng dùng port `cannotContinue` cũ, giữ command/retry theo đơn; hỗ trợ dùng `technician-report`. Chuyển máy bỏ form cũ, đọc đúng dữ liệu máy mới; ảnh và nghĩa vụ linh kiện không chuyển giữa máy. `repair-failed` giữ riêng.
+- Khách vắng mặt/không liên lạc được chỉ hiện trường hợp bị chặn “Cần xác minh, chưa hỗ trợ dừng cả lượt”; không gửi nhiều lệnh dừng child và không báo đã hủy. Không sửa Backend/DB hoặc checkout chính thức.
+
 ### Web recovery hotfix demo (01/11/2026)
 
 - Form thủ công cho máy 2 hoặc 3 dùng CTA “Lưu máy N và tiếp tục”, qua cùng validation giá, mô tả và ảnh riêng trước khi sang địa chỉ; vẫn có thể lưu máy 2 để thêm máy 3. Không tạo máy thứ tư hoặc thay payload booking.
@@ -101,7 +109,7 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ### Gián đoạn có xác minh T4 (29/10/2026)
 
-- Thợ đã check-in và đơn ở `EN_ROUTE`/`UNDER_REPAIR` có mục “Không thể tiếp tục máy đang chọn” gửi `POST /service-orders/:id/cannot-continue` với lý do typed, mô tả và tối đa 3 ảnh chứng cứ; `commandId` UUID được giữ trong bộ nhớ trang cho đơn đó để thử lại đúng lệnh. Lỗi 400/422 cho sửa validation; lỗi mạng/5xx/408 chỉ cho thử lại cùng nội dung; các lỗi 4xx khác khóa lệnh cả khi mở lại dialog. Hai mục “Nhờ quản lý hỗ trợ · kỹ năng/ngoại lệ (vẫn tiếp tục)” chỉ báo cáo, không dừng đơn; “Không sửa được máy này” giữ nguyên tuyến `/repair-failed`.
+- Form “Báo cáo vấn đề sửa chữa” sau check-in giữ `POST /service-orders/:id/cannot-continue` với lý do typed, mô tả và tối đa 3 ảnh chứng cứ khi chọn dừng riêng máy; `commandId` UUID được giữ trong bộ nhớ trang cho đơn đó để thử lại đúng lệnh. Lỗi 400/422 cho sửa validation; lỗi mạng/5xx/408 chỉ cho thử lại cùng nội dung; các lỗi 4xx khác khóa lệnh cả khi mở lại dialog. Chế độ nhờ quản lý hỗ trợ chỉ báo cáo, không dừng đơn; “Không sửa được máy này” giữ nguyên tuyến `/repair-failed`.
 - T8/T9: `workStopped=true`, `assignmentReleased=true`, `operationalDisposition=STOPPED` biểu thị đã dừng và nhả phân công, dù enum đơn vẫn `EN_ROUTE`/`UNDER_REPAIR` để giữ lịch sử. Khách/thợ hiện đã dừng, khóa thao tác tiến trình/thu mới và dừng vị trí đang chạy. `failedWorkFinance` giữ số tiền phải trả `null`, chưa xác định hoàn tiền; báo giá cũ chỉ để xem lịch sử. Không tự tạo hóa đơn 0 hoặc suy ra miễn phí. Nghĩa vụ linh kiện/tiền cũ không chặn khách đặt lại từ nguồn hợp lệ.
 - Khách thấy `CustomerContinuationPanel` trên chi tiết đơn và child đang chọn ở trang lượt khi đơn ở `EN_ROUTE`/`UNDER_REPAIR`, đọc `GET /service-orders/:id/customer-continuation`; chỉ khi server trả `eligible=true` và `independentNewBookingAllowed=true` mới có CTA mở `/app/bookings/new` (booking mới, không dùng lại báo giá/tiền/ưu đãi cũ). Khi T2 trả `prefilledRebookAvailable=true` cùng metadata đúng nguồn, panel có thêm CTA “Đặt lại dịch vụ” mở `/app/bookings/new?interruptionRebook=<source.bookingId>` để dùng biểu mẫu nháp đã có; Web không mở URL server hay tự tạo booking. Khi điền sẵn không khả dụng, panel ghi ngắn chưa sẵn sàng và vẫn giữ CTA độc lập. Lỗi đọc giữ dữ liệu đơn cũ, không hiện số 0 giả và không hiện CTA.
 - Hợp đồng chi tiết ở `docs/PLATFORM-FIRST-T4-WEB-CONTRACT.md`; T2 Backend ở `docs/PLATFORM-FIRST-T2-BACKEND-CONTRACT.md` (local commit `81627d4`, chưa tích hợp DEV). T2 chỉ dùng lại `interruption-draft`/`interruption-rebook` đã có, không hủy đơn cũ, không hoàn tiền, không cấp voucher và không đụng báo giá/thanh toán/linh kiện cũ; đơn cũ vẫn chưa `CANCELLED`.
@@ -177,7 +185,7 @@ V5.3 bổ sung linh kiện: detail kỹ thuật viên dùng ledger theo PartRequ
 ### Console (`/console`)
 
 - Cả quản lý dịch vụ và admin: tổng quan, đơn, booking (gán thợ thủ công), yêu cầu linh kiện, ví và rút tiền, khu vực phục vụ.
-- Chỉ quản lý dịch vụ: huỷ đơn, vi phạm, hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành.
+- Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành. Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
 - Chỉ admin: kỹ thuật viên, duyệt xác minh danh tính (kỹ thuật viên và khách hàng), danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
 ### Giao diện console làm lại (10/10/2026, nhánh `feat/console-ui-redesign`)
@@ -413,6 +421,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Phase 1 báo cáo thợ: dừng cả lượt vì `customer_absent`/`customer_unreachable` vẫn bị chặn. Cần Backend một transaction idempotent cho nhóm và quyết định bằng chứng đến nơi/liên lạc, thời gian chờ, tranh chấp, trách nhiệm phí; không tự đặt ngưỡng hoặc miễn tiền/linh kiện. Browser có đăng nhập bốn vai trò, socket/thông báo thật, Backend DEV và Mobile parity NOT VERIFIED. Source Mobile checkout hiện có không chứa luồng tương ứng; chưa sửa Mobile. Hard-refresh trước QA bản Web được coordinator tích hợp.
+
 - Hotfix demo 01/11: runtime có đăng nhập Customer/Service Manager/Technician trên DEV CHƯA KIỂM CHỨNG vì chưa có phiên được cấp cho task. Cần tái hiện GET danh sách hỗ trợ và POST cannot-continue với đúng phân công/check-in hiện tại để xác định HTTP thực tế. Kiểm thử Mobile và browser theo viewport cũng CHƯA KIỂM CHỨNG; source Backend chỉ đọc, không triển khai liên repo trong task này.
 
 - T13 tích hợp local Web AI PR #186 với platform-first `244756b`, chỉ chạy bộ kiểm tra tối thiểu được owner cho phép. Toàn bộ header và lịch sử mục 9 giữ nguyên theo chỉ thị owner; bàn giao/time/commit/test mới ở `docs/PLATFORM-FIRST-T13-WEB-AI-INTEGRATION.md`. Backend DEV, browser/E2E, CI, full suite, lint/build và Mobile CHƯA KIỂM CHỨNG.
@@ -461,6 +471,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
 - 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ
 - 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
 - 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt
@@ -473,8 +484,6 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-28 13:53 (UTC+7) | foxonworld | foxonworld/fixhome-p0-rebook-ui-20261028 | Sửa định tuyến đặt lại sau sửa thất bại, thêm yêu cầu dừng/đổi thợ cho khách và dùng lệnh thay thợ nguyên tử; Backend thật, runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-27 23:46 (UTC+7) | foxonworld | foxonworld/fixhome-p0p1-web-integration-20261027 | Ghép Web P0/P1 trên dev mới, thêm Admin voucher bản nháp và responsive header, chạy hồi quy, chưa merge/deploy hoặc chạy migration.
 - 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.
-
-
 - 2026-10-27 18:19 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Đối chiếu Backend canonical nullable cash DTO; cho phép customer cash, dùng due server, và chỉ sentinel rõ ràng mới fallback gross.
 - 2026-10-27 18:12 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối kỹ thuật viên với lookup cash funded SOLO/VisitGroup và khai theo due server; giữ fail-closed cho tới khi Backend chốt GET và phản hồi không có reservation.
 - 2026-10-27 17:52 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối chooser với reservation và funded Wallet/VNPay/Cash-confirm/ZERO; giữ APPLY fail-closed theo preview Backend, khóa cash khi luồng thợ chưa gửi reservation; rails thật CHƯA KIỂM CHỨNG.
@@ -482,12 +491,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
-
 - 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
-
 - 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
-
 - 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
 - 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
@@ -496,39 +502,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-23 21:18 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Web Multi-Service V5.3: summary giá typed, review tối đa 3 máy, điều hướng/cache child, PART_REQUEST_READY/custody và checkout states; 163 test files/1.450 tests, lint/typecheck/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
 - 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.
-
 - 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
-
 - 2026-10-22 22:54 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Review an toàn CustomerVisit: chỉ dùng cùng gate báo giá của OrderDetail (EN_ROUTE và SENT); ẩn hành động huỷ/đổi lịch nếu chưa đọc đủ trạng thái child, không suy đoán khi API lỗi; bổ sung 2 test, focused 18 PASS, typecheck/lint PASS; xác minh full CI sau khi push.
-
 - 2026-10-22 22:51 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thẻ lượt gọn theo máy, media mở theo yêu cầu; một CTA từ child có báo giá SENT, giới hạn 3 lần đọc, ẩn đổi lịch/hủy khi đang chờ status hoặc child UNDER_REPAIR; npm test 1.414, typecheck/lint/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
-
 - 2026-10-22 21:46 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Editor thiết bị hỗ trợ sửa/lưu/hủy, bỏ/hoàn tác và review chung; 2–3 máy gửi một VisitGroup, một máy về Booking thường; tư vấn chỉ gửi theo thao tác; 1.409 test/typecheck/lint/build PASS; Browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG
-
 - 2026-10-22 20:04 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Thêm opt-in đặt nhiều thiết bị ở bước 1 với mô tả/ảnh riêng từng Booking, hiện chi tiết và tiến độ theo máy ở trang lượt, và liệt kê đủ máy trong lời mời thợ; Mobile/Backend DEV CHƯA KIỂM CHỨNG
-
 - 2026-10-21 22:08 (UTC+7) | ToanAltF4 | feat/visit-groups-web | Đặt nhiều máy (PO 21/10): form đặt lịch thủ công có Thêm thiết bị khác (tối đa 3, đủ thì khoá nút và báo tối đa 3 thiết bị, không hotline; chỉ hiện khi backend bật visit_group.enabled), trang /app/visits/:id (từng máy và kết quả, chọn thợ cả lượt, đổi lịch 1 lần, huỷ cả lượt, thanh toán một lần ví/VNPay/xác nhận tiền mặt), /app/visits/:id/candidates; chi tiết booking của máy trong lượt chuyển sang trang lượt; chi tiết đơn của máy trong lượt thanh toán/huỷ/đổi lịch qua lượt; thợ: lời mời hiện mọi máy, máy giá cố định trong lượt vẫn báo giá (điền sẵn giá niêm yết), nút Không sửa được (chip lý do, ghi chú, Đã lắp/Trả lại kho), báo tiền mặt cả lượt, rút cả lượt
-
-
 - 2026-10-21 00:44 (UTC+7) | ToanAltF4 | fix/booking-media-grid | Ảnh khách gửi (BookingMediaViewer, mọi role): bỏ khung ảnh to trùng lặp, lưới Ảnh mô tả, bấm ảnh mở lớn (lightbox, mũi tên chuyển ảnh), bấm ra ngoài/Esc/X thì đóng; giữ nhãn cảnh báo ảnh cũ công khai
-
 - 2026-10-21 00:30 (UTC+7) | ToanAltF4 | feat/landing-anchors-content | Landing: header Giới thiệu/Dịch vụ/AI/Cách hoạt động/Vì sao chọn FixHome đều cuộn trong landing (chỉ Xem tất cả dịch vụ sang /services); sửa nội dung cho đúng hệ thống (5 ảnh, buổi tối, giá theo loại máy, ví/VNPay/tiền mặt, KYC video, thợ không kịp tới); CTA Cách hoạt động mở form đặt lịch
-
 - 2026-10-21 00:21 (UTC+7) | ToanAltF4 | feat/customer-payment-methods | Hộp Thanh toán đơn của khách: ví/VNPay/tiền mặt gom thành một danh sách chọn một, ví hiện số dư nhỏ (tự chuyển VNPay khi không đủ), VNPay có logo nhỏ, một nút chính đổi theo lựa chọn
-
-- 2026-10-21 00:07 (UTC+7) | ToanAltF4 | fix/booking-back-steps | Nút Quay lại và back của trình duyệt/điện thoại đi lùi từng bước đặt lịch (mỗi bước một mục lịch sử ?step=N, use-step-history.ts), bước 1 bỏ nút Quay lại
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-\n

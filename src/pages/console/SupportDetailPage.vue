@@ -50,7 +50,8 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 // Admin's global permission shortcut must never grant manager operations here.
-const canManage = computed(() => auth.userRole === 'SERVICE_MANAGER' && auth.hasPermission('support:resolve'));
+const canManage = computed(() => auth.userRole === 'SERVICE_MANAGER' && auth.hasPermission('support:resolve')
+  && supportCase.value?.caseType !== 'technician_delay');
 const isAdmin = computed(() => auth.userRole === 'ADMIN');
 const caseId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''));
 const supportCase = ref<SupportCaseDetail | null>(null);
@@ -457,6 +458,7 @@ watch(caseId, (id) => {
     </template>
 
     <template v-else-if="supportCase">
+      <p v-if="supportCase.caseType === 'technician_delay'" class="text-sm text-ink-600" role="status">Chỉ xem. Đây là thông báo hệ thống về kỹ thuật viên đến trễ; không thực hiện hủy đơn hoặc quyết định tài chính tại đây.</p>
       <ConsolePageHeader :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
         <template #badges>
           <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />

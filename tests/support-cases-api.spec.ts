@@ -48,6 +48,15 @@ const envelope = (data: unknown, meta?: unknown) => ({
 });
 
 describe('supportCasesApi', () => {
+  it('accepts technician_delay alongside replacement and cash cases without weakening unknown-type rejection', async () => {
+    const rows = ['technician_delay', 'technician_replacement', 'cash_mismatch'].map((caseType, i) => ({ ...sampleCase, id: `case-${i}`, caseType }));
+    apiClientMock.get.mockResolvedValueOnce(envelope(rows, { page: 1, limit: 10, total: 3, totalPages: 1 }));
+    expect((await supportCasesApi.listCases()).data.map(row => row.caseType)).toEqual(rows.map(row => row.caseType));
+    apiClientMock.get.mockResolvedValueOnce(envelope({ ...sampleCase, caseType: 'technician_delay' }));
+    expect((await supportCasesApi.getCase('case-1')).caseType).toBe('technician_delay');
+    apiClientMock.get.mockResolvedValueOnce(envelope([...rows, { ...sampleCase, caseType: 'unknown_future_type' }], { page: 1, limit: 10, total: 4, totalPages: 1 }));
+    await expect(supportCasesApi.listCases()).rejects.toThrow('unsupported support case type');
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

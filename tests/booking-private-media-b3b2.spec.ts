@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getBooking: vi.fn(),
   getBookingMediaContent: vi.fn(),
   getConsoleOrderContext: vi.fn(),
-  authStore: { userRole: 'ADMIN' as string },
+  authStore: { userRole: 'ADMIN' as string, hasPermission: () => true },
   routeProxy: { current: null as null | { params: { id: string } } },
 }));
 

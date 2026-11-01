@@ -1,9 +1,4 @@
 <script setup lang="ts">
-import {
-  supportCasesApi,
-  type TechnicianReportReasonClass,
-  type TechnicianReportReasonCode,
-} from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
@@ -1163,7 +1158,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
   else if (completionConfirmOpen.value && !actionLoading.value) completionConfirmOpen.value = false;
   else if (departureChoiceOpen.value && !actionLoading.value) departureChoiceOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
-  else if (technicianReportOpen.value && !technicianReportSending.value) technicianReportOpen.value = false;
 };
 
 // Everything the job page reads, in one cached answer: a return visit shows it at
@@ -1764,11 +1758,7 @@ watch(
     cannotContinueOpen.value = false;
     moreOpen.value = false;
     showWithdrawModal.value = false;
-    technicianReportOpen.value = false;
     technicianReportSent.value = false;
-    technicianReportReason.value = '';
-    technicianReportEvidenceRefs.value = [];
-    technicianReportError.value = '';
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
     partsReturnsKnown.value = false;
@@ -2333,23 +2323,26 @@ const AC_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Đã huỷ',
 };
 
-const technicianReportOpen = ref(false);
-const technicianReportReasonClass = ref<TechnicianReportReasonClass>('technician_skill_gap');
-const technicianReportReasonCode = ref<TechnicianReportReasonCode>('skill_gap');
-const technicianReportReason = ref('');
-const technicianReportEvidenceRefs = ref<string[]>([]);
-const technicianReportError = ref('');
-const technicianReportSending = ref(false);
 const technicianReportSent = ref(false);
-const technicianReportReasonInput = ref<HTMLTextAreaElement | null>(null);
-const technicianReportEvidence = computed(() => [...new Map(evidences.value
-  .filter((item) => item.mediaUrl?.trim())
-  .map((item) => [item.mediaUrl, item])).values()]);
+const reportTargetOrderId = ref<string | null>(null);
+const reportDevices = computed(() => {
+  const groupId = visitGroupId.value;
+  if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return [];
+  return visitCheckout.value.devices.slice(0, 3).flatMap(device => {
+    const id = device.serviceOrderId;
+    const child = id ? authorizedVisitChildBundle(id, groupId)?.job : null;
+    return id && child && child.arrivalVerified && !child.workStopped && device.state === 'open'
+      && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(child.status).toUpperCase())
+      ? [{ id, label: `Máy ${device.sequence}${device.deviceLabel ? ` · ${device.deviceLabel}` : ''}` }] : [];
+  });
+});
+const reportEvidence = computed(() => evidences.value.filter(item => item.mediaUrl?.trim())
+  .map((item, index) => ({ url: item.mediaUrl, label: `Ảnh hiện trường ${index + 1}` })));
 const canCreateTypedTechnicianReport = computed(() => !recordedInterruption.value && gpsCheckedIn.value
   && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value));
 const canStopOnsite = computed(() => canCreateTypedTechnicianReport.value && !completionRequested.value && !actionLoading.value);
 function openCannotContinue() {
-  if (!canStopOnsite.value) return;
+  if (!canCreateTypedTechnicianReport.value) return;
   moreOpen.value = false;
   cannotContinueOpen.value = true;
 }
@@ -2368,25 +2361,22 @@ async function interruptionRecorded(result: CustomerContinuation) {
   cache.markChanged(affectedBy.orderChange);
   await loadJob(source.serviceOrderId, { silent: true }).catch(() => undefined);
 }
-const technicianReportCodes: { value: TechnicianReportReasonCode; label: string }[] = [
-  { value: 'device_too_old', label: 'Thiết bị đã quá cũ' },
-  { value: 'severe_damage', label: 'Thiết bị hư hỏng nặng' },
-  { value: 'no_compatible_part', label: 'Không có linh kiện phù hợp' },
-  { value: 'manufacturer_warranty_or_workshop', label: 'Cần trung tâm hoặc bảo hành hãng' },
-  { value: 'customer_absent', label: 'Khách không có mặt' },
-  { value: 'customer_cancelled', label: 'Khách đã hủy' },
-  { value: 'dispute_or_other', label: 'Tranh chấp hoặc tình huống khác' },
-];
-function openTechnicianReport(reasonClass: TechnicianReportReasonClass) {
-  if (!canCreateTypedTechnicianReport.value || technicianReportSent.value) return;
-  moreOpen.value = false;
-  technicianReportReasonClass.value = reasonClass;
-  technicianReportReasonCode.value = reasonClass === 'technician_skill_gap' ? 'skill_gap' : 'device_too_old';
-  technicianReportReason.value = '';
-  technicianReportEvidenceRefs.value = [];
-  technicianReportError.value = '';
-  technicianReportOpen.value = true;
-  void nextTick(() => technicianReportReasonInput.value?.focus());
+async function selectReportDevice(orderId: string) {
+  if (!reportDevices.value.some(device => device.id === orderId) || orderId === jobIdRef.value) return;
+  cannotContinueOpen.value = false;
+  reportTargetOrderId.value = orderId;
+  await router.push({ path: `/tech/jobs/${orderId}`, query: route.query });
+}
+watch([() => job.value?.id, canCreateTypedTechnicianReport], () => {
+  if (reportTargetOrderId.value === job.value?.id && job.value?.id === jobIdRef.value && canCreateTypedTechnicianReport.value) {
+    reportTargetOrderId.value = null;
+    cannotContinueOpen.value = true;
+  }
+});
+function technicianSupportReported() {
+  technicianReportSent.value = true;
+  cannotContinueOpen.value = false;
+  notifySuccess('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
 }
 
 async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
@@ -2417,35 +2407,6 @@ async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
   cashIntentReadInFlight = { key, version, promise };
   return promise;
 }
-async function submitTechnicianReport() {
-  if (!canCreateTypedTechnicianReport.value || technicianReportSending.value) return;
-  const sourceId = jobIdRef.value;
-  const reason = technicianReportReason.value.trim();
-  if (reason.length < 10 || reason.length > 2000) {
-    technicianReportError.value = 'Mô tả cần từ 10 đến 2000 ký tự.';
-    return;
-  }
-  technicianReportSending.value = true;
-  technicianReportError.value = '';
-  try {
-    await supportCasesApi.createTechnicianReport({
-      serviceOrderId: sourceId,
-      reasonClass: technicianReportReasonClass.value,
-      reasonCode: technicianReportReasonCode.value,
-      reason,
-      ...(technicianReportEvidenceRefs.value.length ? { evidenceRefs: [...technicianReportEvidenceRefs.value] } : {}),
-    });
-    if (!mounted || sourceId !== jobIdRef.value) return;
-    technicianReportSent.value = true;
-    technicianReportOpen.value = false;
-    notifySuccess('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
-  } catch (err) {
-    if (mounted && sourceId === jobIdRef.value) technicianReportError.value = userFacingError(err, 'Chưa gửi được báo cáo. Vui lòng thử lại.');
-  } finally {
-    if (mounted && sourceId === jobIdRef.value) technicianReportSending.value = false;
-  }
-}
-
 const handleCompleteOrder = async () => {
   if (!hasAfterPhoto.value) {
     notifyError('Chụp ít nhất một ảnh sau sửa trước khi gửi hoàn thành.');
@@ -2741,37 +2702,15 @@ const toggleMore = async () => {
               Làm mới
             </button>
             <button
-              v-if="canStopOnsite"
+              v-if="canCreateTypedTechnicianReport"
               type="button"
               role="menuitem"
-              class="w-full min-h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left"
+              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
               data-testid="job-cannot-continue-menu"
               @click="openCannotContinue"
             >
-              <Ban :size="16" class="shrink-0" />
-              Không thể tiếp tục máy đang chọn
-            </button>
-            <button
-              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
-              type="button"
-              role="menuitem"
-              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="job-technician-report-skill"
-              @click="openTechnicianReport('technician_skill_gap')"
-            >
               <Flag :size="16" class="shrink-0 text-ink-500" />
-              Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)
-            </button>
-            <button
-              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
-              type="button"
-              role="menuitem"
-              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="job-technician-report-exception"
-              @click="openTechnicianReport('non_technician_exception')"
-            >
-              <Flag :size="16" class="shrink-0 text-ink-500" />
-              Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)
+              Báo cáo vấn đề sửa chữa
             </button>
             <button
               v-if="canReport && !gpsCheckedIn"
@@ -3900,6 +3839,12 @@ const toggleMore = async () => {
       :parts="failedRepairParts"
       :parts-known="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
       :port="cannotContinuePort"
+      unified
+      :support-allowed="canCreateTypedTechnicianReport && !technicianReportSent"
+      :devices="reportDevices"
+      :evidence="reportEvidence"
+      @device="selectReportDevice"
+      @supported="technicianSupportReported"
       @close="cannotContinueOpen = false"
       @parts="showCannotContinueParts"
       @recorded="interruptionRecorded"
@@ -3993,47 +3938,6 @@ const toggleMore = async () => {
       </div>
     </div>
 
-    <div
-      v-if="technicianReportOpen"
-      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
-      @click.self="!technicianReportSending && (technicianReportOpen = false)"
-    >
-      <div role="dialog" aria-modal="true" aria-labelledby="technician-report-title" aria-describedby="technician-report-description" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto" data-testid="technician-report-dialog">
-        <div>
-          <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
-            {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
-          </h3>
-          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Quản lý dịch vụ sẽ xem xét báo cáo; công việc vẫn tiếp tục. Nếu không thể tiếp tục máy đang chọn, đóng và chọn “Không thể tiếp tục máy đang chọn”.</p>
-        </div>
-        <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
-          Lý do
-          <select v-model="technicianReportReasonCode" data-testid="technician-report-code" class="h-11 w-full rounded-xl border border-ink-300 bg-white px-3 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-            <option v-for="option in technicianReportCodes" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-        </label>
-        <div v-else class="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">Thiếu kỹ năng hoặc thao tác chưa đúng</div>
-        <label class="block space-y-1 text-sm font-medium text-ink-700">
-          Mô tả tình huống
-          <textarea ref="technicianReportReasonInput" v-model="technicianReportReason" data-testid="technician-report-reason" rows="4" maxlength="2000" aria-required="true" :aria-describedby="technicianReportError ? 'technician-report-reason-hint technician-report-error' : 'technician-report-reason-hint'" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Nêu rõ tình huống để quản lý xem xét" />
-          <span id="technician-report-reason-hint" class="block text-xs font-normal text-ink-600">10–2.000 ký tự</span>
-        </label>
-        <fieldset v-if="technicianReportEvidence.length" class="space-y-2">
-          <legend class="text-sm font-medium text-ink-700">Ảnh có sẵn trong đơn (không bắt buộc)</legend>
-          <div v-for="(item, index) in technicianReportEvidence" :key="item.mediaUrl" class="flex items-center gap-3 border-b border-ink-100 text-sm text-ink-700">
-            <label class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3">
-              <input v-model="technicianReportEvidenceRefs" type="checkbox" :value="item.mediaUrl" data-testid="technician-report-evidence" class="h-4 w-4 shrink-0 rounded border-ink-300 text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2" />
-              Ảnh {{ index + 1 }}
-            </label>
-            <a :href="item.mediaUrl" target="_blank" rel="noopener noreferrer" :aria-label="`Mở ảnh ${index + 1} trong tab mới`" class="inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-brand-700 underline underline-offset-4 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" @click.stop>Mở ảnh</a>
-          </div>
-        </fieldset>
-        <p v-if="technicianReportError" id="technician-report-error" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{{ technicianReportError }}</p>
-        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-          <FhButton variant="secondary" :disabled="technicianReportSending" @click="technicianReportOpen = false">Đóng</FhButton>
-          <FhButton data-testid="technician-report-submit" :loading="technicianReportSending" :disabled="technicianReportSending" @click="submitTechnicianReport">Gửi báo cáo</FhButton>
-        </div>
-      </div>
-    </div>
 
     <!-- Photo preview -->
     <div

@@ -15,6 +15,36 @@ const receipt = () => ({ data: { data: { version: 1, incidentId, serviceOutcome:
   oldObligations: { reviewRequired: true, quotePreserved: true, moneyPreserved: true, partsPreserved: true, physicalReturnAcceptance: 'MANUAL_SERVICE_MANAGER_ONLY', legacyPartReturnState: 'NOT_VERIFIED' },
   customerContinuation: { eligible: true, independentNewBookingAllowed: true, prefilledRebookAvailable: false, requiresNewSchedule: true, requiresPricingRevalidation: true, requiresCustomerConfirmation: true, source: { serviceOrderId: orderId, bookingId, incidentId, visitGroupId: null } } } } });
 beforeEach(() => { post.mockReset(); });
+it.each(['customer_absent', 'customer_unreachable'])('blocks unsupported group reason %s without any POST or success', async code => {
+  const w = mount(CannotContinueDialog, { props: { ...props(), unified: true, visitGroupId: 'visit-1' }, global: { stubs: { Teleport: true } } });
+  await w.get('[data-testid="report-reason-code"]').setValue(code);
+  await ready(w);
+  expect(w.text()).toContain('Cần xác minh, chưa hỗ trợ dừng cả lượt');
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click');
+  expect(post).not.toHaveBeenCalled();
+  expect(w.emitted('recorded')).toBeUndefined();
+});
+it('uses the same form for support-only without calling a stopping endpoint', async () => {
+  const w = mount(CannotContinueDialog, { props: { ...props(), unified: true, supportAllowed: true }, global: { stubs: { Teleport: true } } });
+  await w.get('[data-testid="report-mode"]').setValue('support');
+  await w.get('textarea').setValue(reason);
+  post.mockResolvedValue({ data: { success: true, statusCode: 201, message: 'OK', data: {
+    id: incidentId, serviceOrderId: orderId, caseType: 'technician_replacement', status: 'open', reason,
+    createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
+  } } });
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenCalledWith('/support/cases/technician-report', expect.objectContaining({ serviceOrderId: orderId, reasonCode: 'skill_gap', reason }));
+  expect(w.emitted('supported')).toHaveLength(1);
+  expect(w.emitted('recorded')).toBeUndefined();
+});
+it('only permits selecting supplied devices before any pending command or evidence', async () => {
+  const w = mount(CannotContinueDialog, { props: { ...props(), unified: true, devices: [{ id: orderId, label: 'Máy 1' }, { id: 'other-order', label: 'Máy 2' }] }, global: { stubs: { Teleport: true } } });
+  await w.get('[data-testid="report-device"]').setValue('other-order');
+  expect(w.emitted('device')).toEqual([['other-order']]);
+  expect(post).not.toHaveBeenCalled();
+});
 async function ready(w: ReturnType<typeof mount>) {
   await w.get('textarea').setValue(reason);
   await w.get('[data-testid="cannot-continue-confirm-intent"]').setValue(true);
