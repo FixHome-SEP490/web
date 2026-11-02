@@ -154,6 +154,26 @@ describe('Public service discovery', () => {
     wrapper.unmount();
   });
 
+  it('keeps search and filters above an accessible service grid with a visible result count', async () => {
+    const services = Array.from({ length: 4 }, (_, index) => service({
+      id: `service-${index + 1}`,
+      name: `Dịch vụ ${index + 1}`,
+    }));
+    mockPublicCatalog({ services, total: 4 });
+    const wrapper = mount(ServicesPage, await setup());
+    await flushPromises();
+
+    const hero = wrapper.get('.services-hero');
+    expect(hero.get('input[type="search"]').exists()).toBe(true);
+    expect(hero.get('[data-testid="spotlight-categories"]').attributes('aria-label')).toBe('Danh mục dịch vụ');
+    expect(wrapper.get('.results-count').text()).toContain('4');
+    expect(wrapper.get('.service-grid').attributes('role')).toBe('list');
+    expect(wrapper.get('.service-grid').attributes('aria-label')).toBe('Danh sách dịch vụ');
+    expect(wrapper.get('.service-grid').findAll('[role="listitem"]')).toHaveLength(4);
+
+    wrapper.unmount();
+  });
+
   it('keeps technical scope in detail and uses a human description on the public card', async () => {
     const scope = 'PHẠM VI CẦN XÁC MINH: S1, S2, S3 theo thiết bị';
     mockPublicCatalog({ services: [service({ scopeDescription: scope })], detail: service({ scopeDescription: scope }) });
