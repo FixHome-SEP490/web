@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { reactive } from 'vue';
 enableAutoUnmount(afterEach);
-vi.mock('../src/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'synthetic-customer' } }) }));
+const authSession = reactive({ userRole: 'CUSTOMER', user: { id: 'synthetic-customer' } });
+vi.mock('../src/stores/auth', () => ({ useAuthStore: () => authSession }));
 afterEach(() => vi.useRealTimers());
 vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: { get: vi.fn().mockResolvedValue({ cashFirstEnabled: false, intent: null }), create: vi.fn(), cancel: vi.fn() } }));
-const routeState = reactive({ params: { id: 'v1' } });
+const routeState = reactive({ params: { id: 'v1' }, query: {}, fullPath: '/app/visits/v1' });
 
 // Several devices in one visit (PO 21/10/2026): one technician, one payment.
 const { client, visitApi, orders, wallet, funded, push, continuationGet, orderCallbacks, orderListeners, bookingListeners, resyncListeners, socketHandlers } = vi.hoisted(() => ({
@@ -16,7 +17,7 @@ const { client, visitApi, orders, wallet, funded, push, continuationGet, orderCa
   },
   orders: { getOrder: vi.fn(), getAdditionalCosts: vi.fn(), getInvoice: vi.fn(), getEvidence: vi.fn(), approveQuotation: vi.fn(), rejectQuotation: vi.fn(), decideAdditionalCost: vi.fn() },
   wallet: { summary: vi.fn() },
-  funded: { wallet: vi.fn(), vnpay: vi.fn(), zero: vi.fn(), confirmCash: vi.fn() },
+  funded: { reserve: vi.fn(), wallet: vi.fn(), vnpay: vi.fn(), zero: vi.fn(), confirmCash: vi.fn() },
   push: vi.fn(),
   continuationGet: vi.fn(),
   orderCallbacks: new Map<string, Set<() => void>>(),
@@ -29,7 +30,7 @@ const { client, visitApi, orders, wallet, funded, push, continuationGet, orderCa
 describe('visit-groups api', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.doMock('../src/api/client', () => ({ default: client }));
+    vi.doMock('../src/api/client', () => ({ default: client, getHttpStatus: (error: { response?: { status?: number } }) => error?.response?.status }));
     client.get.mockReset();
     client.post.mockReset();
   });
@@ -109,13 +110,13 @@ describe('customer visit page', () => {
     ...extra,
   });
 
-  async function mountPage() {
+  async function mountPage(realChooser = false) {
     vi.resetModules();
     vi.doMock('../src/api/platform-continuation.api', () => ({ customerContinuationApi: { get: continuationGet } }));
     vi.doMock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visitApi }));
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
-    vi.doMock('../src/api/funded-checkout.api', () => ({ fundedCheckoutApi: funded }));
+    vi.doMock('../src/api/funded-checkout.api', async importOriginal => ({ ...await importOriginal<typeof import('../src/api/funded-checkout.api')>(), fundedCheckoutApi: funded }));
     vi.doMock('../src/services/live-updates', () => ({
       LIVE_DEBOUNCE_MS: 150,
       onBookingChange: (bookingId: string, callback: () => void) => {
@@ -135,12 +136,19 @@ describe('customer visit page', () => {
     vi.doMock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: (handler: import('../src/services/chat-socket.service').ChatSocketHandlers) => { socketHandlers.add(handler); return () => socketHandlers.delete(handler); } } }));
     vi.doMock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ push }) }));
     const page = (await import('../src/pages/customer/CustomerVisitPage.vue')).default;
-    const w = mount(page, { global: { stubs: { CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhCostBreakdown: { props: ['laborTotal', 'partsTotal', 'grandTotal'], template: '<div data-testid="visit-cost-breakdown" :data-labor="laborTotal" :data-parts="partsTotal" :data-total="grandTotal" />' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, VoucherCheckoutChooser: { props: ['scopeId', 'scopeKind'], emits: ['applied'], template: '<div data-testid="visit-voucher-picker" :data-scope-id="scopeId"><button data-testid="apply-test-voucher" @click="$emit(\'applied\', voucher)">Apply</button><button data-testid="apply-cash-test-voucher" @click="applyCashVoucher">Apply cash voucher</button></div>', data: () => ({ voucher: { reservation: { id: 'reservation-1', claimId: 'claim-1', scopeId: 'v1', attemptId: 'attempt-1', state: 'RESERVED', reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z' }, preview: { scopeId: 'v1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true, reason: 'server-ready', originalGrossVnd: 250000, eligibleBaseVnd: 250000, fixHomeDiscountSubsidyVnd: 250000, customerDueVnd: 0, reasonCodes: ['DISCOUNT_APPLIED'] } } }), methods: { applyCashVoucher() { this.$emit('applied', { ...this.voucher, preview: { ...this.voucher.preview, customerDueVnd: 125000 } }); } } }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
+    const w = mount(page, { global: { stubs: { CustomerStopReplaceRequest: true, CustomerCancelledRebookAction: true, FhSkeleton: true, FhBackLink: true, FhMoney: { props: ['amount'], template: '<span>{{ amount }}</span>' }, FhCostBreakdown: { props: ['laborTotal', 'partsTotal', 'grandTotal'], template: '<div data-testid="visit-cost-breakdown" :data-labor="laborTotal" :data-parts="partsTotal" :data-total="grandTotal" />' }, FhButton: { template: '<button v-bind="$attrs"><slot /></button>' }, BookingSessionPicker: true, BookingMediaViewer: { props: ['bookingId', 'media', 'embedded'], template: '<div data-testid="visit-booking-media" :data-booking-id="bookingId" :data-media-count="media.length" />' }, Teleport: true, VoucherCheckoutChooser: realChooser ? false : { props: ['scopeId', 'scopeKind'], emits: ['applied', 'terminal'], template: '<div data-testid="visit-voucher-picker" :data-scope-id="scopeId"><button data-testid="apply-test-voucher" @click="$emit(\'applied\', voucher)">Apply</button><button data-testid="apply-cash-test-voucher" @click="applyCashVoucher">Apply cash voucher</button></div>', data: () => ({ voucher: { reservation: { id: 'reservation-1', claimId: 'claim-1', scopeId: 'v1', attemptId: 'attempt-1', state: 'RESERVED', reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z' }, preview: { scopeId: 'v1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true, reason: 'server-ready', originalGrossVnd: 250000, eligibleBaseVnd: 250000, fixHomeDiscountSubsidyVnd: 250000, customerDueVnd: 0, reasonCodes: ['DISCOUNT_APPLIED'] } } }), methods: { applyCashVoucher() { this.$emit('applied', { ...this.voucher, preview: { ...this.voucher.preview, customerDueVnd: 125000 } }); } } }, 'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' } } } });
+    if (realChooser) {
+      const { fundedCheckoutApi: transport } = await vi.importActual<typeof import('../src/api/funded-checkout.api')>('../src/api/funded-checkout.api');
+      funded.reserve.mockImplementation(transport.reserve);
+    }
     await flushPromises();
     return w;
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    authSession.user = { id: 'synthetic-customer' };
+    const { cashIntentsApi } = await import('../src/api/cash-intents.api');
+    vi.mocked(cashIntentsApi.get).mockResolvedValue({ cashFirstEnabled: false, intent: null });
     Object.values(visitApi).forEach((fn) => fn.mockReset());
     Object.values(funded).forEach((fn) => fn.mockReset());
     routeState.params.id = 'v1';
@@ -161,6 +169,114 @@ describe('customer visit page', () => {
     wallet.summary.mockResolvedValue({ balance: 1000000 });
     visitApi.get.mockResolvedValue(visit);
   });
+
+
+  it.each(['RESERVED', 'EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'] as const)('blocks every parent money action through timeout/remount until authoritative %s', async terminalState => {
+    routeState.params.id = '11111111-1111-4111-8111-111111111111';
+    visitApi.get.mockResolvedValue({ ...visit, id: routeState.params.id });
+    visitApi.checkout.mockResolvedValue(checkout({ visitGroupId: routeState.params.id }));
+    client.post.mockReset();
+    vi.doMock('../src/api/client', () => ({ default: client, getHttpStatus: (error: { response?: { status?: number } }) => error?.response?.status }));
+    const { cashIntentsApi } = await import('../src/api/cash-intents.api');
+    vi.mocked(cashIntentsApi.get).mockResolvedValue({ cashFirstEnabled: true, intent: null });
+    const claim = { id: '22222222-2222-4222-8222-222222222222', campaignId: 'campaign-recovery', status: 'CLAIMED', redeemedAt: null,
+      policySnapshot: { discount: 'FIXED', value: 50000, capVnd: null, minimumVnd: 100000, categoryIds: [], serviceIds: [], components: ['LABOR', 'PARTS'] },
+      campaign: { code: 'RECOVER', name: 'Recovery', kind: 'PERSONAL', active: true, startsAt: '2026-01-01T00:00:00Z', endsAt: '2035-12-31T23:59:59Z' } };
+    const quote = { scopeId: routeState.params.id, claimId: claim.id, previewOnly: true, paymentAvailable: true, reason: null,
+      originalGrossVnd: 300000, eligibleBaseVnd: 300000, fixHomeDiscountSubsidyVnd: 50000, customerDueVnd: 250000, reasonCodes: ['DISCOUNT_APPLIED'] };
+    const freshPreview = vi.fn().mockResolvedValue(quote);
+    vi.doMock('../src/api/vouchers.api', () => ({ vouchersApi: { wallet: vi.fn().mockResolvedValue([claim]), checkoutPreview: freshPreview } }));
+    let reject!: (reason: unknown) => void;
+    let committed: { claimId: string; scopeId: string; attemptId: string } | undefined;
+    const { fundedCheckoutApi: transport } = await vi.importActual<typeof import('../src/api/funded-checkout.api')>('../src/api/funded-checkout.api');
+    funded.reserve.mockImplementation(transport.reserve);
+    client.post.mockImplementation((path, body) => {
+      expect(path).toBe('/vouchers/apply');
+      committed = body; // Server committed, transport has not answered.
+      return new Promise((_resolve, fail) => { reject = fail; });
+    });
+    let w = await mountPage(true);
+    await w.get('[data-testid="voucher-selection-option"]').trigger('click');
+    await flushPromises();
+    await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    const checkBlocked = async () => {
+      expect(w.find('[data-testid="voucher-reservation-pending"]').exists()).toBe(true);
+      const setup = w.vm.$.setupState as Record<string, (...args: unknown[]) => unknown>;
+      for (const name of ['createCashIntent', 'confirmZeroCheckout', 'payWithWallet', 'payWithVnpay', 'answerCash', 'openCashInstructions']) await setup[name](true);
+      await flushPromises();
+      for (const [method, testId] of [['wallet', 'visit-pay-wallet'], ['vnpay', 'visit-pay-vnpay'], ['cash', 'visit-cash-intent']]) {
+        setup.selectPayMethod(method);
+        await flushPromises();
+        const action = w.get(`[data-testid="${testId}"]`);
+        expect(action.attributes('disabled')).toBeDefined();
+        await action.trigger('click');
+      }
+      expect(funded.wallet).not.toHaveBeenCalled();
+      expect(funded.vnpay).not.toHaveBeenCalled();
+      expect(funded.zero).not.toHaveBeenCalled();
+      expect(funded.confirmCash).not.toHaveBeenCalled();
+      expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+      expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+      expect(visitApi.confirmCash).not.toHaveBeenCalled();
+      expect(cashIntentsApi.create).not.toHaveBeenCalled();
+    };
+    await checkBlocked(); // BEFORE the pending request rejects.
+    await w.get('[data-testid="voucher-selection-close"]').trigger('click');
+    await checkBlocked();
+    w.unmount();
+    w = await mountPage(true);
+    await checkBlocked();
+    expect(w.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeDefined();
+    await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    expect(funded.reserve).toHaveBeenCalledTimes(1);
+    reject(new Error('timeout after server commit'));
+    await flushPromises();
+    freshPreview.mockRejectedValue({ response: { status: 409 } });
+    await checkBlocked();
+    await w.get('[data-testid="voucher-selection-close"]').trigger('click');
+    await checkBlocked();
+    w.unmount();
+    w = await mountPage(true);
+    await checkBlocked();
+    await w.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    expect(w.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeUndefined();
+    expect(freshPreview).toHaveBeenCalledTimes(1);
+    expect(funded.reserve).toHaveBeenCalledTimes(1);
+    client.post.mockRejectedValue(new Error('still uncertain'));
+    await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    await flushPromises();
+    expect(funded.reserve).toHaveBeenCalledTimes(2);
+    expect(funded.reserve.mock.calls[1]).toEqual([committed!.claimId, committed!.scopeId, committed!.attemptId]);
+    expect(client.post.mock.calls).toEqual([['/vouchers/apply', committed], ['/vouchers/apply', committed]]);
+    await checkBlocked();
+    client.post.mockResolvedValue({ data: { success: true, data: { ...committed,
+      id: '33333333-3333-4333-8333-333333333333', state: terminalState,
+      reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' } } });
+    await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="voucher-reservation-pending"]').exists()).toBe(false);
+    expect(w.find('[data-testid="voucher-terminal-reconciliation"]').exists()).toBe(['REDEEMED', 'REFUNDED'].includes(terminalState));
+    expect(client.post.mock.calls).toEqual(Array.from({ length: 3 }, () => ['/vouchers/apply', committed]));
+    expect(funded.reserve.mock.calls.every(call => JSON.stringify(call) === JSON.stringify([committed!.claimId, committed!.scopeId, committed!.attemptId]))).toBe(true);
+    expect(funded.wallet).not.toHaveBeenCalled();
+    expect(funded.vnpay).not.toHaveBeenCalled();
+    expect(funded.zero).not.toHaveBeenCalled();
+    expect(funded.confirmCash).not.toHaveBeenCalled();
+    authSession.user = { id: 'other-customer' };
+    await flushPromises();
+    const afterOwnerChange = client.post.mock.calls.length;
+    const setup = w.vm.$.setupState as Record<string, (...args: unknown[]) => unknown>;
+    for (const name of ['createCashIntent', 'confirmZeroCheckout', 'payWithWallet', 'payWithVnpay', 'answerCash']) await setup[name](true);
+    expect(client.post).toHaveBeenCalledTimes(afterOwnerChange);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled();
+    expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+    expect(visitApi.confirmCash).not.toHaveBeenCalled();
+    expect(cashIntentsApi.create).not.toHaveBeenCalled();
+    w.unmount();
+    freshPreview.mockRestore();
+    vi.mocked(cashIntentsApi.get).mockResolvedValue({ cashFirstEnabled: false, intent: null });
+  }, 20000);
 
   it('reads verified continuation for the selected child only and clears it when switching machines', async () => {
     visitApi.checkout.mockResolvedValue(checkout({ devices: [device('b1', { state: 'open' }), device('b2', { state: 'open' })] }));
@@ -1071,6 +1187,36 @@ describe('customer visit page', () => {
      expect(w.find('[data-testid="visit-confirm-zero"]').exists()).toBe(true);
    } finally { w.unmount(); vi.useRealTimers(); }
  });
+
+  it.each(['REDEEMED', 'REFUNDED'])('blocks collection on %s and reads checkout again without any payment request', async terminalState => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    const pay = w.get('[data-testid="visit-pay-wallet"]');
+    const reads = visitApi.checkout.mock.calls.length;
+    w.findComponent('[data-testid="visit-voucher-picker"]').vm.$emit('terminal', { id: 'reservation-1', claimId: 'claim-1', scopeId: 'v1', attemptId: 'attempt-1', state: terminalState });
+    await flushPromises();
+    expect(visitApi.checkout.mock.calls.length).toBeGreaterThan(reads);
+    expect(w.get('[data-testid="voucher-terminal-reconciliation"]').text()).toContain('đối chiếu');
+    await pay.trigger('click'); await flushPromises();
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled(); expect(visitApi.vnpayUrl).not.toHaveBeenCalled();
+    expect(funded.wallet).not.toHaveBeenCalled(); expect(funded.zero).not.toHaveBeenCalled();
+    expect(w.find('[data-testid="visit-pay-wallet"]').exists()).toBe(false);
+  });
+
+  it('does not infer paid from a terminal receipt or failed checkout, and only shows paid after a fresh checkout confirms', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    const w = await mountPage();
+    visitApi.checkout.mockRejectedValue(new Error('unreadable checkout'));
+    w.findComponent('[data-testid="visit-voucher-picker"]').vm.$emit('terminal', { id: 'reservation-1', claimId: 'claim-1', scopeId: 'v1', attemptId: 'attempt-1', state: 'REDEEMED' });
+    await flushPromises();
+    expect(w.find('[data-testid="voucher-terminal-reconciliation"]').exists()).toBe(true);
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).not.toBe('paid');
+    visitApi.checkout.mockResolvedValue(checkout({ paid: true }));
+    await w.get('[data-testid="voucher-terminal-reconciliation"] button').trigger('click'); await flushPromises();
+    expect(w.get('[data-testid="visit-checkout"]').attributes('data-checkout-state')).toBe('paid');
+    expect(w.find('[data-testid="voucher-terminal-reconciliation"]').exists()).toBe(false);
+    expect(visitApi.payWithWallet).not.toHaveBeenCalled(); expect(funded.wallet).not.toHaveBeenCalled(); expect(funded.zero).not.toHaveBeenCalled();
+  });
 });
 
 describe('technician invitation for a visit', () => {

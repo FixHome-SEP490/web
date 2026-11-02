@@ -7,6 +7,8 @@
  * visit here; each device's order page shows its own quote and photos.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useQueryClient } from '@tanstack/vue-query';
+import { queryKeys } from '../../lib/query-keys';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
@@ -19,7 +21,7 @@ import StoppedDevicesRebookPicker from '../../components/customer/StoppedDevices
 import CustomerContinuationPanel from '../../components/customer/CustomerContinuationPanel.vue';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
-import type { FundedReservation } from '../../api/funded-checkout.api';
+import type { FundedReservation, FundedTerminalReceipt } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
@@ -36,6 +38,7 @@ import { chatSocketService } from '../../services/chat-socket.service';
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const queryClient = useQueryClient();
 const rebookVerificationVersion = ref(0);
 const visitId = computed(() => String(route.params.id));
 
@@ -611,9 +614,53 @@ type CheckoutState = 'waiting' | 'paid' | 'pending_cash' | 'zero_due' | 'wallet_
 const payMethod = ref<PayMethod>('wallet');
 const cashInstructionsOpen = ref(false);
 const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
-const activeFundedVoucher = computed(() => fundedVoucher.value
+const voucherTerminal = ref<FundedTerminalReceipt | null>(null);
+const voucherReconciliationLoading = ref(false);
+// The chooser caches evidence BEFORE POST. Keep collection blocked across modal remounts.
+type ParentVoucherAttempt = {
+  attemptId: string; offer: { id: string; ownerCustomerId: string };
+  preview: VoucherCheckoutPreview; reservation: FundedReservation | null; terminal?: FundedTerminalReceipt; requestPending?: boolean;
+};
+const voucherCacheVersion = ref(0);
+const stopVoucherCache = queryClient.getQueryCache().subscribe(event => {
+  if (event.query.queryKey[0] === queryKeys.voucherAttempts.all[0]) voucherCacheVersion.value++;
+});
+onUnmounted(stopVoucherCache);
+const savedVoucherAttempt = computed(() => {
+  void voucherCacheVersion.value;
+  const owner = auth.user?.id;
+  return owner ? queryClient.getQueryData<ParentVoucherAttempt>(queryKeys.voucherAttempts.scope(owner, visitId.value)) : undefined;
+});
+const savedFundedVoucher = computed(() => {
+  const saved = savedVoucherAttempt.value;
+  const held = saved?.reservation;
+  return saved && !saved.terminal && held?.state === 'RESERVED'
+    && saved.offer.ownerCustomerId === auth.user?.id && held.scopeId === visitId.value
+    && held.claimId === saved.offer.id && held.attemptId === saved.attemptId
+    && saved.preview.scopeId === held.scopeId && saved.preview.claimId === held.claimId
+    && saved.preview.paymentAvailable === true ? { reservation: held, preview: saved.preview } : null;
+});
+const voucherAttemptPending = computed(() => !!savedVoucherAttempt.value
+  && !savedVoucherAttempt.value.terminal
+  && (savedVoucherAttempt.value.requestPending === true || !savedFundedVoucher.value));
+const voucherContextChanged = ref(false);
+const voucherCollectionBlocked = computed(() => voucherAttemptPending.value || voucherContextChanged.value);
+watch(() => auth.user?.id, () => {
+  fundedVoucher.value = null;
+  voucherTerminal.value = null;
+  // A mounted invoice belongs to its original session. Re-enter the page to
+  // obtain a backend-authoritative checkout for the new account.
+  voucherContextChanged.value = true;
+}, { flush: 'sync' });
+watch(savedVoucherAttempt, (saved, previous) => {
+  // Infinite retention: removal comes from an authoritative unused terminal or logout.
+  if (!saved && previous) fundedVoucher.value = null;
+}, { flush: 'sync' });
+const voucherReconciliationRequired = computed(() => (voucherTerminal.value ?? savedVoucherAttempt.value?.terminal)?.scopeId === visitId.value
+  && ['REDEEMED', 'REFUNDED'].includes((voucherTerminal.value ?? savedVoucherAttempt.value?.terminal)?.state ?? ''));
+const activeFundedVoucher = computed(() => savedFundedVoucher.value ?? (!savedVoucherAttempt.value && fundedVoucher.value
   && fundedVoucher.value.reservation.scopeId === visitId.value
-  ? fundedVoucher.value : null);
+  ? fundedVoucher.value : null));
 const walletBalance = ref<number | null>(null);
 const walletError = ref(false);
 const voucherDue = computed(() => activeFundedVoucher.value?.preview.customerDueVnd ?? checkout.value?.total ?? 0);
@@ -640,6 +687,7 @@ const checkoutState = computed<CheckoutState>(() => {
   const current = checkout.value;
   if (financialFollowupRequired.value || checkoutError.value || loadError.value) return 'waiting';
   if (current?.paid) return 'paid';
+  if (voucherReconciliationRequired.value) return 'waiting';
   if (!current || current.waiting > 0 || !current.ready) return 'waiting';
   if (current.pendingCash) return 'pending_cash';
   if (current.total <= 0) return 'zero_due';
@@ -657,6 +705,7 @@ watch(checkoutState, (state) => {
   if (state !== 'ready') cashInstructionsOpen.value = false;
 });
 function openCashInstructions() {
+  if (voucherCollectionBlocked.value) return;
   if (checkoutLoading.value || busy.value || payMethod.value !== 'cash' || checkoutState.value !== 'ready' || !checkout.value) return;
   cashInstructionsOpen.value = true;
   void nextTick(() => document.querySelector<HTMLElement>('[data-testid="visit-cash-instructions"]')?.focus());
@@ -672,7 +721,7 @@ onMounted(loadWallet);
 
 function clearFundedVoucher() { fundedVoucher.value = null; }
 function reservationForAction(): FundedReservation | null | undefined {
-  const held = fundedVoucher.value;
+  const held = activeFundedVoucher.value;
   if (!held) return null;
   if (held.reservation.scopeId !== visitId.value) {
     clearFundedVoucher();
@@ -694,12 +743,13 @@ async function refreshCashIntent(groupId: string) {
 }
 
 async function createCashIntent() {
-  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   const groupId = visitId.value;
   if (financialFollowupRequired.value || !cashFirstEnabled.value || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
     || busy.value || checkoutLoading.value || cashIntent.value?.status === 'pending' || cashIntent.value?.status === 'received') return;
   const held = reservationForAction();
-  if (fundedVoucher.value && !held) return;
+  if (activeFundedVoucher.value && !held) return;
   cashCreateCommandId.value ??= newCashCommandId();
   busy.value = true;
   message.value = null;
@@ -720,6 +770,7 @@ async function createCashIntent() {
 }
 
 async function cancelCashIntent() {
+  if (voucherCollectionBlocked.value) return;
   const groupId = visitId.value;
   const intent = cashIntent.value;
   if (!cashFirstEnabled.value || intent?.status !== 'pending' || busy.value) return;
@@ -742,6 +793,21 @@ async function cancelCashIntent() {
   }
 }
 
+async function handleVoucherTerminal(receipt: FundedTerminalReceipt) {
+  if (!['EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'].includes(receipt.state)) return;
+  if (disposed || receipt.scopeId !== visitId.value) return;
+  const held = fundedVoucher.value?.reservation;
+  if (held && (held.id !== receipt.id || held.claimId !== receipt.claimId || held.attemptId !== receipt.attemptId)) return;
+  if (receipt.state === 'EXPIRED' || receipt.state === 'RELEASED') { clearFundedVoucher(); return; }
+  voucherTerminal.value = receipt;
+  clearFundedVoucher();
+  if (voucherReconciliationLoading.value) return;
+  voucherReconciliationLoading.value = true;
+  try { await load(); }
+  finally { voucherReconciliationLoading.value = false; }
+  // Only the fresh checkout may report paid; an unpaid/failed read keeps collection blocked.
+}
+
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
   if (financialFollowupRequired.value || checkoutLoading.value || checkoutError.value || loadError.value) return;
   if (value.reservation.scopeId !== visitId.value || value.preview.scopeId !== visitId.value
@@ -754,7 +820,8 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
 }
 
 async function confirmZeroCheckout() {
-  if (busy.value || checkoutLoading.value || checkoutError.value || loadError.value || financialFollowupRequired.value
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || busy.value || checkoutLoading.value || checkoutError.value || loadError.value || financialFollowupRequired.value
     || !checkout.value?.ready || checkout.value.paid || checkout.value.pendingCash
     || activeFundedVoucher.value?.preview.customerDueVnd !== 0) return;
   const held = reservationForAction();
@@ -775,11 +842,12 @@ async function confirmZeroCheckout() {
 }
 
 async function payWithWallet() {
-  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due' || !walletCovers.value) return;
   busy.value = true;
   const groupId = visitId.value;
-  const hadFundedVoucher = !!fundedVoucher.value;
+  const hadFundedVoucher = !!activeFundedVoucher.value;
   const held = reservationForAction();
   if (hadFundedVoucher && !held) { busy.value = false; return; }
   try {
@@ -798,11 +866,12 @@ async function payWithWallet() {
   }
 }
 async function payWithVnpay() {
-  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || !vnpayAllowed.value || checkoutState.value === 'waiting' || checkoutState.value === 'paid' || checkoutState.value === 'pending_cash' || checkoutState.value === 'zero_due') return;
   busy.value = true;
   const groupId = visitId.value;
-  const hadFundedVoucher = !!fundedVoucher.value;
+  const hadFundedVoucher = !!activeFundedVoucher.value;
   const held = reservationForAction();
   if (hadFundedVoucher && !held) { busy.value = false; return; }
   try {
@@ -817,11 +886,12 @@ async function payWithVnpay() {
   }
 }
 async function answerCash(agreed: boolean) {
-  if (checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (checkoutLoading.value || busy.value || checkoutState.value !== 'pending_cash') return;
   busy.value = true;
   const groupId = visitId.value;
-  const held = fundedVoucher.value?.reservation ?? null;
+  const held = activeFundedVoucher.value?.reservation ?? null;
   if (held && held.scopeId !== groupId) {
     busy.value = false;
     message.value = { type: 'error', text: 'Mã giữ voucher không khớp với lượt này. Chưa gửi xác nhận tiền mặt.' };
@@ -1085,6 +1155,12 @@ async function answerCash(agreed: boolean) {
         </dl>
         <p v-if="invoiceSummary.pending" class="mt-3 text-xs text-ink-600">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
       </section>
+    <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>
+    <p v-if="voucherAttemptPending" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-reservation-pending">Kết quả giữ voucher chưa rõ. Hãy mở voucher và kiểm tra lại yêu cầu cũ trước khi thanh toán; chưa thể trả bằng ví, VNPay hoặc tiền mặt.</p>
+      <section v-if="voucherReconciliationRequired && !checkout?.paid" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
+        Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu thanh toán từ máy chủ; chưa thể thu thêm.
+        <FhButton variant="secondary" size="sm" :disabled="voucherReconciliationLoading" @click="(voucherTerminal ?? savedVoucherAttempt?.terminal) && handleVoucherTerminal((voucherTerminal ?? savedVoucherAttempt?.terminal)!)">Kiểm tra thanh toán</FhButton>
+      </section>
       <section v-if="checkoutError" role="alert" class="space-y-2 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800" data-testid="visit-checkout-error">
         <h2 class="font-semibold">Thông tin thanh toán chưa sẵn sàng</h2>
         <p>{{ checkoutError }}</p>
@@ -1103,7 +1179,7 @@ async function answerCash(agreed: boolean) {
           <span v-else-if="checkoutState === 'pending_cash'" data-testid="visit-checkout-state" class="font-semibold text-warning-800">Chờ xác nhận tiền mặt</span>
           <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
           <div v-else class="sm:text-right">
-            <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
+            <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ voucherAttemptPending ? 'Chờ xác minh voucher' : checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
             <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
           </div>
         </div>
@@ -1119,8 +1195,8 @@ async function answerCash(agreed: boolean) {
           <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
             <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho {{ checkout.devices.length }} thiết bị. Bạn xác nhận đúng số tiền đã trả.</p>
             <div class="flex flex-wrap gap-2">
-              <FhButton size="md" :loading="busy" :disabled="checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
-              <FhButton variant="secondary" size="md" :disabled="busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
+              <FhButton size="md" :loading="busy" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
+              <FhButton variant="secondary" size="md" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
             </div>
           </div>
         </template>
@@ -1141,15 +1217,16 @@ async function answerCash(agreed: boolean) {
           <p class="text-sm text-ink-600">Gồm {{ checkout.devices.length }} thiết bị</p>
           <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái lượt được cập nhật; chưa hiển thị là đã thanh toán.</p>
         </section>
-        <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0">
+        <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0 && !voucherReconciliationRequired">
             <p v-if="cashFirstEnabled && cashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-ink-700" data-testid="visit-cash-intent-cancelled">Yêu cầu tiền mặt cho {{ checkout.devices.length }} thiết bị đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
             <VoucherCheckoutChooser
               :scope-id="visitId"
               @applied="handleVoucherApplied"
+              @terminal="handleVoucherTerminal"
               @released="clearFundedVoucher"
               @expired="clearFundedVoucher"
             />
-            <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+            <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
             <template v-else>
             <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="visit-pay-methods">
               <button
@@ -1194,8 +1271,8 @@ async function answerCash(agreed: boolean) {
             <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
               <p v-if="cashFirstEnabled">Gửi yêu cầu để máy chủ chốt số tiền hiện tại cho cả lượt {{ checkout.devices.length }} thiết bị. Kỹ thuật viên chỉ xác nhận đã nhận sau khi yêu cầu được tạo.</p>
               <p v-else>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
-              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu trả tiền mặt</FhButton>
-              <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
+              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu trả tiền mặt</FhButton>
+              <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
               <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
                 <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>
                 <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>
@@ -1205,8 +1282,8 @@ async function answerCash(agreed: boolean) {
                 <FhButton variant="ghost" size="md" data-testid="visit-cash-instructions-close" @click="cashInstructionsOpen = false">Đóng hướng dẫn</FhButton>
               </section>
             </div>
-            <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="!walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
-            <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
+            <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || !walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
+            <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
             </template>
         </template>
       </section>

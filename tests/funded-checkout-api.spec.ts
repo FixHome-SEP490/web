@@ -133,3 +133,18 @@ it('uses response Date rather than reservedAt for replayed holds, and leaves mis
  expect(held.receivedAtMs).toEqual(expect.any(Number));
  reply(dto); expect((await fundedCheckoutApi.reserve(claim, scopeId, attempt)).serverTimeAtResponse).toBeUndefined();
 });
+
+describe('authoritative immutable reservation terminal receipts', () => {
+  const receipt = (state: string) => ({ id, claimId: claim, scopeId, attemptId: attempt, state,
+    reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' });
+  it.each(['EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'])('returns a typed %s terminal only after identity validation', async state => {
+    const terminal = receipt(state); reply(terminal);
+    await expect(fundedCheckoutApi.reserve(claim, scopeId, attempt, id)).rejects.toMatchObject({
+      code: 'VOUCHER_RESERVATION_' + state, receipt: terminal,
+    });
+  });
+  it.each(['id', 'claimId', 'scopeId', 'attemptId'])('never accepts a terminal receipt with mismatched %s', async field => {
+    reply({ ...receipt('REDEEMED'), [field]: '66666666-6666-4666-8666-666666666666' });
+    await expect(fundedCheckoutApi.reserve(claim, scopeId, attempt, id)).rejects.not.toHaveProperty('receipt');
+  });
+});

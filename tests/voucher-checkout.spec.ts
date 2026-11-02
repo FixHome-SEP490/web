@@ -10,6 +10,9 @@ import apiClient from '../src/api/client';
 import { vouchersApi } from '../src/api/vouchers.api';
 import { useAuthStore } from '../src/stores/auth.store';
 import { UserRole } from '../src/types';
+import { authApi } from '../src/api/auth.api';
+import { queryClient } from '../src/lib/query-client';
+import { installQueryClient } from './support/query-client';
 vi.mock('../src/api/client', () => ({ default: { get: vi.fn(), post: vi.fn() }, getHttpStatus: (error: { response?: { status?: number } }) => error?.response?.status, registerAuthSessionInvalidator: vi.fn(), registerTokenRefreshed: vi.fn() }));
 
 const walletClaim = {
@@ -460,4 +463,237 @@ it('checks the same held attempt and only forgets it after server EXPIRED, never
  expect(vi.mocked(apiClient.post).mock.calls[2]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
  expect(vi.mocked(apiClient.post).mock.calls.every(([path]) => path === '/vouchers/apply')).toBe(true);
  w.unmount();
+});
+
+describe('ambiguous reservation recovery after quota was consumed', () => {
+  const claimId = '22222222-2222-4222-8222-222222222222';
+  const scopeId = '33333333-3333-4333-8333-333333333333';
+  const heldId = '55555555-5555-4555-8555-555555555555';
+
+  async function loseSuccessfulReservation(previewAfter: 'ineligible' | '409') {
+    vi.clearAllMocks();
+    installQueryClient(queryClient);
+    const pinia = createPinia(); setActivePinia(pinia); const auth = signIn();
+    let held: Record<string, unknown> | null = null;
+    const originalPreview = preview(claimId, scopeId, 250000, 50000, true);
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => {
+      if (path === '/vouchers/wallet') return { data: { success: true, data: [{ ...walletClaim, id: claimId }] } };
+      if (held && previewAfter === '409') throw { response: { status: 409 } };
+      return { data: { success: true, data: held ? preview(claimId, scopeId) : originalPreview } };
+    });
+    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
+      expect(path).toBe('/vouchers/apply');
+      if (!held) {
+        held = { ...body, id: heldId, state: 'RESERVED', reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' };
+        throw { code: 'ECONNABORTED' }; // Server committed; its response was lost.
+      }
+      expect(body).toEqual({ claimId, scopeId, attemptId: held.attemptId });
+      return { data: { success: true, data: held } };
+    });
+    const first = mountChooser(pinia, scopeId); await flushPromises();
+    await first.get('[data-testid="voucher-selection-option"]').trigger('click'); await flushPromises();
+    await first.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+    expect(first.emitted('applied')).toBeUndefined();
+    first.unmount();
+    return { pinia, auth, originalPreview };
+  }
+
+  it.each(['ineligible', '409'] as const)('replays the original identity after remount despite a new %s preview', async outcome => {
+    const { pinia, originalPreview } = await loseSuccessfulReservation(outcome);
+    const again = mountChooser(pinia, scopeId);
+    try {
+      await flushPromises();
+      const retry = again.get('[data-testid="voucher-selection-apply"]');
+      expect(retry.attributes('disabled')).toBeUndefined();
+      expect(again.get('[data-testid="voucher-selection-option"]').attributes('disabled')).toBeDefined();
+      again.getComponent(VoucherSelectionSheet).vm.$emit('select', 'another-claim');
+      await nextTick();
+      expect(again.get('[data-voucher-id="' + claimId + '"]').attributes('aria-pressed')).toBe('true');
+      await retry.trigger('click'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+      expect(again.emitted('applied')?.[0]?.[0]).toMatchObject({ reservation: { id: heldId }, preview: originalPreview });
+      expect(again.emitted('released')).toBeUndefined();
+    } finally { again.unmount(); }
+  });
+
+  it('cannot replay the saved attempt for another scope or owner, or after logout', async () => {
+    const { pinia, auth } = await loseSuccessfulReservation('409');
+    const again = mountChooser(pinia, scopeId);
+    try {
+      await flushPromises();
+      await again.setProps({ scopeId: '66666666-6666-4666-8666-666666666666' }); await flushPromises();
+      await again.get('[data-testid="checkout-voucher-apply"]').trigger('click');
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      await again.setProps({ scopeId }); await flushPromises();
+      expect(again.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeUndefined();
+      auth.setAuth('another-test-session', { id: 'customer-2', role: UserRole.CUSTOMER } as Parameters<typeof auth.setAuth>[1]);
+      await flushPromises();
+      again.getComponent(VoucherSelectionSheet).vm.$emit('apply'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      const otherOwner = mountChooser(pinia, scopeId);
+      try {
+        await flushPromises();
+        expect(otherOwner.getComponent(VoucherSelectionSheet).props('selectedId')).toBe('');
+        otherOwner.getComponent(VoucherSelectionSheet).vm.$emit('apply'); await flushPromises();
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+      } finally { otherOwner.unmount(); }
+      const logout = vi.spyOn(authApi, 'logout').mockResolvedValue(undefined);
+      await auth.logout(); logout.mockRestore(); await flushPromises();
+      again.getComponent(VoucherSelectionSheet).vm.$emit('apply'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      expect(again.emitted('applied')).toBeUndefined();
+      signIn();
+      const signedInAgain = mountChooser(pinia, scopeId);
+      try {
+        await flushPromises();
+        expect(signedInAgain.getComponent(VoucherSelectionSheet).props('selectedId')).toBe('');
+        signedInAgain.getComponent(VoucherSelectionSheet).vm.$emit('apply'); await flushPromises();
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+      } finally { signedInAgain.unmount(); }
+    } finally { again.unmount(); }
+  });
+});
+
+describe('terminal voucher recovery and scoped in-flight attempts', () => {
+  const claimId = '22222222-2222-4222-8222-222222222222';
+  const scopeA = '33333333-3333-4333-8333-333333333333';
+  const scopeB = '66666666-6666-4666-8666-666666666666';
+  const id = '55555555-5555-4555-8555-555555555555';
+  function setup() {
+    vi.clearAllMocks(); installQueryClient(queryClient);
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({ data: { success: true, data:
+      path === '/vouchers/wallet' ? [{ ...walletClaim, id: claimId }] : preview(claimId, path.endsWith(scopeB) ? scopeB : scopeA, 250000, 50000, true) } }));
+    return pinia;
+  }
+  const receipt = (scopeId: string, attemptId: string, state = 'RESERVED') => ({ id, claimId, scopeId, attemptId, state,
+    reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' });
+  async function start(w: ReturnType<typeof mountChooser>) {
+    await flushPromises();
+    await w.get('[data-testid="voucher-selection-option"]').trigger('click'); await flushPromises();
+    await w.get('[data-testid="voucher-selection-apply"]').trigger('click');
+  }
+  it.each(['EXPIRED', 'RELEASED'])('forgets %s only on authoritative receipt and never automatically reserves again', async state => {
+    const pinia = setup();
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => ({ data: { success: true, data: receipt(body.scopeId, body.attemptId, state) } }));
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w); await flushPromises();
+      expect(w.emitted(state === 'EXPIRED' ? 'expired' : 'released')).toHaveLength(1);
+      expect(queryClient.getQueryData(['voucher-attempts', 'customer-1', scopeA])).toBeUndefined();
+      expect(w.emitted('applied')).toBeUndefined();
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      expect(w.get('[data-testid="voucher-selection-option"]').attributes('disabled')).toBeUndefined();
+      expect(w.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeUndefined();
+    } finally { w.unmount(); }
+  });
+  it.each(['REDEEMED', 'REFUNDED'])('blocks %s across remount and asks parent to reconcile instead of retaining a hold or paying gross', async state => {
+    const pinia = setup();
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => ({ data: { success: true, data: receipt(body.scopeId, body.attemptId, state) } }));
+    const w = mountChooser(pinia, scopeA);
+    await start(w); await flushPromises();
+    expect(w.emitted('terminal')?.[0]?.[0]).toMatchObject({ state, scopeId: scopeA });
+    expect(w.emitted('applied')).toBeUndefined();
+    w.unmount();
+    const again = mountChooser(pinia, scopeA);
+    try {
+      await flushPromises();
+      expect(again.emitted('terminal')?.[0]?.[0]).toMatchObject({ state, scopeId: scopeA });
+      expect(again.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeDefined();
+      again.getComponent(VoucherSelectionSheet).vm.$emit('apply'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      expect(again.getComponent(VoucherSelectionSheet).props('serverReservation')).toBeNull();
+      expect(again.text()).toContain('đối chiếu');
+    } finally { again.unmount(); }
+  });
+  it('keeps A cached while B independently reserves, drops late A UI effects, and restores A on return', async () => {
+    const pinia = setup();
+    let finishA!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => {
+      if (body.scopeId === scopeA) return await new Promise(resolve => { finishA = resolve; }) as never;
+      return { data: { success: true, data: receipt(body.scopeId, body.attemptId) } };
+    });
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w);
+      const originalA = vi.mocked(apiClient.post).mock.calls[0]![1];
+      await w.setProps({ scopeId: scopeB }); await flushPromises();
+      await start(w); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(2);
+      expect(w.emitted('applied')).toHaveLength(1);
+      expect(w.emitted('applied')?.[0]?.[0]).toMatchObject({ reservation: { scopeId: scopeB } });
+      finishA({ data: { success: true, data: receipt(scopeA, originalA.attemptId) } }); await flushPromises();
+      expect(w.emitted('applied')).toHaveLength(1);
+      await w.setProps({ scopeId: scopeA }); await flushPromises();
+      expect(w.emitted('applied')?.at(-1)?.[0]).toMatchObject({ reservation: { scopeId: scopeA, attemptId: originalA.attemptId } });
+      expect(apiClient.post).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(apiClient.post).mock.calls.every(([path]) => path === '/vouchers/apply')).toBe(true);
+    } finally { w.unmount(); }
+  });
+
+  it.each(['EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'])('reconciles an existing hold to %s without a new identity or money action', async state => {
+    const pinia = setup(); let terminalState = 'RESERVED';
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => ({ data: { success: true, data: receipt(body.scopeId, body.attemptId, terminalState) } }));
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w); await flushPromises(); terminalState = state;
+      await w.get('[data-testid="checkout-voucher-reconcile"]').trigger('click'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+      expect(w.emitted('applied')).toHaveLength(1);
+      expect(w.emitted('terminal')?.at(-1)?.[0]).toMatchObject({ state, id, scopeId: scopeA });
+      expect(w.getComponent(VoucherSelectionSheet).props('serverReservation')).toBeNull();
+      if (state === 'REDEEMED' || state === 'REFUNDED') expect(w.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeDefined();
+      else expect(queryClient.getQueryData(['voucher-attempts', 'customer-1', scopeA])).toBeUndefined();
+    } finally { w.unmount(); }
+  });
+  it.each(['EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'])('keeps a late %s for A out of B, then restores the correct A outcome', async state => {
+    const pinia = setup(); let finishA!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(async () => await new Promise(resolve => { finishA = resolve; }) as never);
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w); const body = vi.mocked(apiClient.post).mock.calls[0]![1];
+      await w.setProps({ scopeId: scopeB }); await flushPromises();
+      finishA({ data: { success: true, data: receipt(scopeA, body.attemptId, state) } }); await flushPromises();
+      expect(w.emitted('terminal')).toBeUndefined(); expect(w.emitted('applied')).toBeUndefined();
+      await w.setProps({ scopeId: scopeA }); await flushPromises();
+      if (state === 'REDEEMED' || state === 'REFUNDED') {
+        expect(w.emitted('terminal')?.at(-1)?.[0]).toMatchObject({ state, scopeId: scopeA });
+        expect(w.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeDefined();
+      } else expect(w.getComponent(VoucherSelectionSheet).props('selectedId')).toBe('');
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+    } finally { w.unmount(); }
+  });
+  it('restores an uncertain A attempt after visiting B and replays its exact identity only on click', async () => {
+    const pinia = setup(); vi.mocked(apiClient.post).mockRejectedValue({ code: 'ECONNABORTED' });
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w); await flushPromises();
+      await w.setProps({ scopeId: scopeB }); await flushPromises();
+      expect(w.getComponent(VoucherSelectionSheet).props('selectedId')).toBe('');
+      await w.setProps({ scopeId: scopeA }); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      await w.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+      expect(apiClient.post).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+    } finally { w.unmount(); }
+  });
+
+  it('does not issue a second A POST when switching back before its first response finishes', async () => {
+    const pinia = setup(); let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(async () => await new Promise(resolve => { finish = resolve; }) as never);
+    const w = mountChooser(pinia, scopeA);
+    try {
+      await start(w); const body = vi.mocked(apiClient.post).mock.calls[0]![1];
+      await w.setProps({ scopeId: scopeB }); await flushPromises();
+      await w.setProps({ scopeId: scopeA }); await flushPromises();
+      const retry = w.get('[data-testid="voucher-selection-apply"]');
+      expect(retry.attributes('disabled')).toBeDefined();
+      await retry.trigger('click'); expect(apiClient.post).toHaveBeenCalledTimes(1);
+      finish({ data: { success: true, data: receipt(scopeA, body.attemptId) } }); await flushPromises();
+      expect(w.emitted('applied')?.at(-1)?.[0]).toMatchObject({ reservation: { scopeId: scopeA, attemptId: body.attemptId } });
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+    } finally { w.unmount(); }
+  });
 });
