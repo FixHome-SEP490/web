@@ -175,6 +175,15 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
+  it('identifies the generated hero image as an illustration, not a FixHome employee', async () => {
+    const wrapper = mount(LandingHero, await setup());
+    const alt = wrapper.get('img').attributes('alt') ?? '';
+    expect(alt).toMatch(/^Minh họa kỹ thuật viên/);
+    expect(alt).toContain('kiểm tra máy lạnh tại nhà');
+    expect(alt).not.toContain('FixHome');
+    wrapper.unmount();
+  });
+
   it('applies category deep links and falls back for an invalid category', async () => {
     const categories = [category('one'), category('two')];
     const serviceRows = ['one', 'two'].map((id) => ({
@@ -257,15 +266,16 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders the mobile app showcase without invented ratings, download counts or a fake QR code', async () => {
+  it('presents current mobile app capabilities as a visual feature path without fake store claims', async () => {
     const context = await setup();
     const wrapper = mount(LandingMobileApp, context);
 
-    // Check headline and mockup image
-    expect(wrapper.text()).toContain('Chăm sóc ngôi nhà trong tầm tay');
-    expect(wrapper.text()).toContain('Tiện lợi hơn trên ứng dụng FixHome');
-    const img = wrapper.get('img[src="/images/fixhome-devices-mockup.png"]');
-    expect(img.exists()).toBe(true);
+    expect(wrapper.text()).toContain('Theo dõi việc sửa chữa trên điện thoại');
+    expect(wrapper.text()).toContain('Theo dõi yêu cầu trong từng đơn');
+    expect(wrapper.text()).toContain('Trao đổi với kỹ thuật viên');
+    expect(wrapper.text()).toContain('Xem lại lịch sử sửa chữa');
+    expect(wrapper.findAll('.app-flow > li')).toHaveLength(3);
+    expect(wrapper.findAll('img')).toHaveLength(0);
 
     // No store listing exists yet, so nothing may pretend to download the app.
     expect(wrapper.text()).not.toContain('4.9/5');
@@ -286,62 +296,56 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders LandingDiagnosis with the AI diagnosis infographic image and 4 stages', async () => {
+  it('explains the four AI guidance stages and keeps human assessment authoritative', async () => {
     const context = await setup();
     const wrapper = mount(LandingDiagnosis, context);
 
     expect(wrapper.text()).toContain('Chưa rõ hỏng ở đâu?');
-    expect(wrapper.text()).toContain('Để AI hỗ trợ phân tích bước đầu');
-    const img = wrapper.get('img[src="/images/fixhome-ai-diagnosis.jpg"]');
-    expect(img.exists()).toBe(true);
+    expect(wrapper.text()).toContain('Để AI gợi ý bước đầu');
+    expect(wrapper.findAll('img')).toHaveLength(0);
+    expect(wrapper.findAll('ol > li')).toHaveLength(4);
 
     // Verify 4 stages exist
-    expect(wrapper.text()).toContain('Gửi ảnh hoặc mô tả triệu chứng');
-    expect(wrapper.text()).toContain('AI nhận diện thiết bị & phân tích');
-    expect(wrapper.text()).toContain('Khoanh vùng nguyên nhân có thể gặp');
-    expect(wrapper.text()).toContain('Gợi ý dịch vụ phù hợp');
-    // No unmeasured accuracy claim on the page.
+    expect(wrapper.text()).toContain('Mô tả sự cố');
+    expect(wrapper.text()).toContain('Trao đổi với trợ lý AI');
+    expect(wrapper.text()).toContain('Nhận gợi ý ban đầu');
+    expect(wrapper.text()).toContain('Tự chọn dịch vụ và tiếp tục đặt lịch');
+    expect(wrapper.text()).toContain('AI chỉ đưa ra gợi ý ban đầu');
     expect(wrapper.text()).not.toContain('Độ chính xác cao');
+    expect(wrapper.text()).toContain('Kỹ thuật viên kiểm tra thực tế');
+    expect(wrapper.text()).toContain('bạn duyệt báo giá trước khi sửa');
 
     // Verify CTA
     expect(wrapper.text()).toContain('Phân tích sự cố bằng AI');
     wrapper.unmount();
   });
 
-  it('renders LandingHowItWorks with 5 steps and dynamic phone screen switching', async () => {
+  it('shows candidate selection and invitation before tracking a booking', async () => {
     const context = await setup();
     const wrapper = mount(LandingHowItWorks, context);
 
     expect(wrapper.text()).toContain('Sửa chữa đơn giản, từng bước rõ ràng');
-    // Initially renders step 1 image
-    let img = wrapper.get('img[src="/images/steps/step-1-select-service.png"]');
-    expect(img.exists()).toBe(true);
-
-    // Verify all 5 steps exist
-    expect(wrapper.text()).toContain('Chọn dịch vụ & loại máy');
-    expect(wrapper.text()).toContain('Mô tả sự cố & gửi ảnh');
-    expect(wrapper.text()).toContain('AI gợi ý dịch vụ phù hợp');
-    expect(wrapper.text()).toContain('Chọn lịch & kỹ thuật viên');
-    expect(wrapper.text()).toContain('Duyệt chi phí & thanh toán');
-
-    // Click step 3 card to switch screen
-    const stepCards = wrapper.findAll('.cursor-pointer');
-    expect(stepCards.length).toBeGreaterThanOrEqual(5);
-    await stepCards[2]!.trigger('click');
-    await flushPromises();
-
-    // Image switches to step 3 AI result
-    img = wrapper.get('img[src="/images/steps/step-3-ai-result.png"]');
-    expect(img.exists()).toBe(true);
+    expect(wrapper.findAll('ol > li')).toHaveLength(4);
+    expect(wrapper.findAll('img')).toHaveLength(0);
+    expect(wrapper.findAll('.step-item h3').map((heading) => heading.text())).toEqual([
+      'Gửi yêu cầu sửa chữa',
+      'Xem kỹ thuật viên phù hợp',
+      'Chọn 1 hoặc 2 kỹ thuật viên',
+      'Theo dõi đơn và báo giá',
+    ]);
+    expect(wrapper.text()).toContain('Chọn dịch vụ, mô tả tình trạng, địa chỉ và thời gian phù hợp.');
+    expect(wrapper.text()).toContain('Sau khi gửi yêu cầu, xem danh sách kỹ thuật viên phù hợp.');
+    expect(wrapper.text()).toContain('Chọn theo thứ tự ưu tiên rồi gửi lời mời.');
+    expect(wrapper.text()).toContain('Người thứ hai là dự phòng nếu người đầu từ chối hoặc hết hạn phản hồi.');
+    expect(wrapper.text()).toContain('Khi kỹ thuật viên nhận việc, theo dõi đơn.');
+    expect(wrapper.text()).toContain('Nếu cần khảo sát, duyệt báo giá trước khi sửa.');
+    expect(wrapper.text()).not.toContain('Chờ kỹ thuật viên phản hồi');
+    expect(wrapper.text()).not.toContain('tối đa 5 ảnh');
+    expect(wrapper.text()).not.toContain('3 ảnh');
+    expect(wrapper.text()).not.toMatch(/1-2km|100% Thợ/);
 
     // Verify CTA
     expect(wrapper.text()).toContain('Bắt đầu đặt lịch ngay');
-    // A booking takes up to five photos (backend: five photos, two videos), the
-    // customer picks one or two technicians, and the CTA opens the booking form.
-    expect(wrapper.text()).toContain('tối đa 5 ảnh');
-    expect(wrapper.text()).not.toContain('3 ảnh');
-    expect(wrapper.text()).toContain('sáng, chiều, tối');
-    expect(wrapper.text()).not.toMatch(/1-2km|100% Thợ/);
     wrapper.unmount();
   });
 
@@ -349,6 +353,9 @@ describe('Public landing page', () => {
     const context = await setup();
     const wrapper = mount(LandingPage, context);
     await flushPromises();
+    expect(wrapper.find('a[href="/app/bookings/ai"]').exists()).toBe(true);
+    expect(wrapper.find('a[href="/pricing-policy"]').exists()).toBe(true);
+    expect(wrapper.findAll('#questions details')).toHaveLength(4);
     const ids = wrapper.findAll('[id]').map((el) => el.attributes('id'));
     const order = ['gioi-thieu', 'services', 'ai', 'how-it-works', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
     expect(order.every((index) => index >= 0)).toBe(true);
@@ -362,16 +369,15 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders LandingTrust with text on the left and technician photo on the right', async () => {
+  it('renders concise trust details without overstating technician identity checks', async () => {
     const context = await setup();
     const wrapper = mount(LandingTrust, context);
 
-    expect(wrapper.text()).toContain('Đúng người thực hiện');
-    expect(wrapper.text()).toContain('Đúng chuẩn tay nghề');
-    expect(wrapper.text()).toContain('Kỹ thuật viên đã xác minh');
-
-    const img = wrapper.get('img[src="/images/technician-home-640.webp"]');
-    expect(img.exists()).toBe(true);
+    expect(wrapper.text()).toContain('Hồ sơ và kỹ năng được xem xét');
+    expect(wrapper.text()).toContain('Đánh giá sau đơn hoàn tất');
+    expect(wrapper.text()).toContain('Bảo hành theo thông tin đơn');
+    expect(wrapper.text()).not.toContain('video khuôn mặt');
+    expect(wrapper.findAll('img')).toHaveLength(0);
     wrapper.unmount();
   });
 });

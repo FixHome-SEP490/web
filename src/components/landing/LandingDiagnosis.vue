@@ -1,148 +1,112 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  Sparkles,
-  ArrowRight,
-} from 'lucide-vue-next';
+import { ArrowRight, Sparkles } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
 const router = useRouter();
-const activeStage = ref(0);
 
 const stages = [
   {
-    id: 0,
-    title: 'Gửi ảnh hoặc mô tả triệu chứng',
-    desc: 'Chụp thiết bị hoặc viết vài dòng về hiện tượng bạn thấy.',
+    title: 'Mô tả sự cố',
+    description: 'Mô tả dấu hiệu bạn thấy. Ảnh thiết bị không bắt buộc.',
   },
   {
-    id: 1,
-    title: 'AI nhận diện thiết bị & phân tích',
-    desc: 'Nhận ra loại thiết bị như máy lạnh, máy giặt, tủ lạnh và dấu hiệu bất thường.',
+    title: 'Trao đổi với trợ lý AI',
+    description: 'Trợ lý có thể hỏi thêm để hiểu tình trạng thiết bị.',
   },
   {
-    id: 2,
-    title: 'Khoanh vùng nguyên nhân có thể gặp',
-    desc: 'Hỏi thêm khi cần, rồi gợi ý vài nguyên nhân để bạn tham khảo trước khi gặp thợ.',
+    title: 'Nhận gợi ý ban đầu',
+    description: 'AI nêu một số khả năng để bạn tham khảo, không kết luận nguyên nhân.',
   },
   {
-    id: 3,
-    title: 'Gợi ý dịch vụ phù hợp',
-    desc: 'Bạn xem giá và vẫn đổi được dịch vụ trước khi đặt thợ.',
+    title: 'Tự chọn dịch vụ và tiếp tục đặt lịch',
+    description: 'Bạn quyết định dịch vụ và gửi yêu cầu riêng khi sẵn sàng.',
   },
 ];
 </script>
 
 <template>
-  <section
-    id="ai"
-    class="landing-section bg-white border-b border-ink-100"
-    aria-labelledby="ai-title"
-  >
-    <div class="landing-container">
-      <!-- Section Header -->
-      <div class="max-w-2xl">
-        <p class="landing-eyebrow">Thêm thông tin, bớt băn khoăn</p>
+  <section id="ai" class="landing-section bg-white" aria-labelledby="ai-title">
+    <div class="landing-container grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-16">
+      <div class="max-w-[620px]">
+        <p class="landing-eyebrow">Khi chưa rõ nguyên nhân</p>
         <h2 id="ai-title" class="ai-section-title">
           Chưa rõ hỏng ở đâu?
-          <br class="hidden sm:block" />
-          Để AI hỗ trợ phân tích bước đầu.
+          <span class="block text-brand-600">Để AI gợi ý bước đầu.</span>
         </h2>
-        <p class="landing-description">
-          Gửi ảnh hoặc vài dòng mô tả. Kết quả chỉ để tham khảo.
+        <p class="landing-description max-w-[60ch]">
+          Mô tả dấu hiệu bạn thấy và trò chuyện với trợ lý AI để có thêm hướng tham khảo.
         </p>
-      </div>
 
-      <!-- Balanced 2-Column Grid: Left Image, Right Story Steps -->
-      <div class="mt-12 grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
-        <!-- LEFT: Real AI Diagnosis Infographic Image from User -->
-        <div class="relative flex items-center justify-center">
-          <!-- Ambient glowing backdrop -->
-          <div
-            class="pointer-events-none absolute -inset-4 rounded-3xl bg-gradient-to-tr from-brand-100/40 via-sky-50/20 to-emerald-50/20 blur-2xl"
-            aria-hidden="true"
-          ></div>
-
-          <!-- Main Visual Image -->
-          <figure class="relative z-10 w-full overflow-hidden rounded-2xl lg:rounded-3xl border border-ink-200/80 bg-white shadow-(--shadow-e2) transition-all duration-300 hover:shadow-(--shadow-e3)">
-            <img
-              :src="'/images/fixhome-ai-diagnosis.jpg'"
-              alt="Quy trình phân tích sự cố bằng AI của FixHome: Gửi ảnh thiết bị, hệ thống nhận diện và gợi ý dịch vụ phù hợp"
-              width="768"
-              height="1024"
-              loading="lazy"
-              decoding="async"
-              class="w-full h-auto object-cover"
-            />
-          </figure>
+        <div class="mt-6 border-l-2 border-brand-600 pl-4 sm:mt-7 sm:pl-5">
+          <p class="text-base font-semibold leading-6 text-ink-900">AI chỉ đưa ra gợi ý ban đầu.</p>
+          <p class="mt-2 text-[15px] leading-6 text-ink-600">
+            Kỹ thuật viên kiểm tra thực tế. Nếu cần khảo sát, bạn duyệt báo giá trước khi sửa.
+          </p>
         </div>
 
-        <!-- RIGHT: Interactive Story Steps / Checkpoints -->
-        <div class="space-y-4 lg:space-y-5">
-          <div
-            v-for="(stage, idx) in stages"
-            :key="stage.id"
-            class="group cursor-pointer rounded-xl border p-4 sm:p-5 transition-all duration-300"
-            :class="[
-              activeStage === idx
-                ? 'border-brand-600 bg-brand-50/40 shadow-xs ring-1 ring-brand-200'
-                : 'border-ink-200/80 bg-white hover:border-brand-200 hover:bg-ink-25/50'
-            ]"
-            @click="activeStage = idx"
-          >
-            <span
-              class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors"
-              :class="activeStage === idx ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700'"
-            >
-              0{{ idx + 1 }}
-            </span>
-
-            <h3
-              class="mt-2.5 text-base sm:text-[17px] font-semibold transition-colors"
-              :class="activeStage === idx ? 'text-brand-600 font-bold' : 'text-ink-900 group-hover:text-brand-600'"
-            >
-              {{ stage.title }}
-            </h3>
-
-            <p class="mt-1.5 text-sm leading-6 text-ink-600">
-              {{ stage.desc }}
-            </p>
-          </div>
-
-          <!-- UNIFIED CTA PER ISSUE 04 -->
-          <div class="pt-2">
-            <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/ai')">
-              <Sparkles :size="18" aria-hidden="true" />
-              Phân tích sự cố bằng AI
-              <ArrowRight :size="18" aria-hidden="true" />
-            </FhButton>
-          </div>
+        <div class="mt-7">
+          <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/ai')">
+            <Sparkles :size="18" aria-hidden="true" />
+            Phân tích sự cố bằng AI
+            <ArrowRight :size="18" aria-hidden="true" />
+          </FhButton>
         </div>
       </div>
+
+      <ol class="ai-stages" aria-label="Các bước dùng trợ lý AI">
+        <li v-for="(stage, index) in stages" :key="stage.title" class="ai-stage">
+          <span class="ai-stage-number" aria-hidden="true">0{{ index + 1 }}</span>
+          <div>
+            <h3 class="text-base font-semibold leading-6 text-ink-900 sm:text-[17px]">{{ stage.title }}</h3>
+            <p class="mt-1 text-[15px] leading-6 text-ink-600">{{ stage.description }}</p>
+          </div>
+        </li>
+      </ol>
     </div>
   </section>
 </template>
 
 <style scoped>
 .ai-section-title {
-  font-size: 28px;
-  line-height: 1.25;
-  letter-spacing: -0.025em;
-  font-weight: 700;
-  text-wrap: balance;
+  margin: 0;
   color: var(--color-ink-900);
+  font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
-@media (min-width: 640px) {
-  .ai-section-title {
-    font-size: 32px;
-  }
+.ai-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-ink-200);
 }
 
-@media (min-width: 1024px) {
-  .ai-section-title {
-    font-size: 34px;
+.ai-stage {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--color-ink-200);
+}
+
+.ai-stage-number {
+  color: var(--color-brand-600);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+@media (min-width: 768px) {
+  .ai-stage {
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 20px;
+    padding: 24px 0;
   }
 }
 </style>
