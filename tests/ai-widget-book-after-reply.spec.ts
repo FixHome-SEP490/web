@@ -22,6 +22,7 @@ function setUp(thinking: boolean, devices: unknown[] = []) {
     pinnedService: ref({ serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 's1' }),
     pinnedDevices: ref(devices),
     sessionId: ref('abc'),
+    lastReply: ref(null),
     isThinking: ref(thinking),
     startOver: vi.fn(),
     loadHoldingLines: vi.fn(),
@@ -48,6 +49,40 @@ describe('Booking button in the assistant', () => {
     (conversation.isThinking as { value: boolean }).value = false;
     await nextTick();
     expect(wrapper.find('[data-testid="ai-book-technician"]').exists()).toBe(true);
+  });
+
+  it('offers manual booking after an unavailable first answer with no pinned service', async () => {
+    push.mockClear();
+    const wrapper = setUp(false);
+    (conversation.pinnedService as { value: unknown }).value = null;
+    (conversation.lastReply as { value: unknown }).value = { status: 'unavailable', failureReason: 'service_unavailable' };
+    await nextTick();
+
+    const manualButton = wrapper.find('[data-testid="ai-book-manual"]');
+    expect(manualButton.exists()).toBe(true);
+    await manualButton.trigger('click');
+    expect(push).toHaveBeenCalledWith({ name: 'new-booking' });
+  });
+
+  it('offers manual booking for HTTP 200 unavailable payload without failureReason', async () => {
+    const wrapper = setUp(false);
+    (conversation.pinnedService as { value: unknown }).value = null;
+    (conversation.lastReply as { value: unknown }).value = { status: 'unavailable', aiAvailable: false, recommendedServices: [] };
+    await nextTick();
+    expect(wrapper.find('[data-testid="ai-book-manual"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps validation and rate-limit feedback separate from unavailable CTA', async () => {
+    const wrapper = setUp(false);
+    (conversation.pinnedService as { value: unknown }).value = null;
+    (conversation.lastReply as { value: unknown }).value = { status: 'unavailable', failureReason: 'validation' };
+    await nextTick();
+    expect(wrapper.find('[data-testid="ai-book-manual"]').exists()).toBe(false);
+    (conversation.lastReply as { value: unknown }).value = { status: 'unavailable', failureReason: 'rate_limited' };
+    await nextTick();
+    expect(wrapper.find('[data-testid="ai-book-manual"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 });
 

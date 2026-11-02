@@ -69,7 +69,7 @@ it('offers the verified prefill CTA with the exact source booking query and keep
   expect(w.find('[data-testid="continuation-new-booking"]').exists()).toBe(true);
   expect(w.text()).not.toContain('chưa sẵn sàng');
   await cta.trigger('click');
-  expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId } });
+  expect(push).toHaveBeenCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: source.bookingId, sourceBookingIds: source.bookingId } });
   expect(push).not.toHaveBeenCalledWith(expect.stringContaining('http'));
 });
 it('shows no source CTA for report-only/noneligible and no fake zero on errors', async () => {

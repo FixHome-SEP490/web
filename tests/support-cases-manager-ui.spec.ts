@@ -125,6 +125,16 @@ describe('SupportDetailPage for a complaint', () => {
   const button = (wrapper: Awaited<ReturnType<typeof mountPage>>, label: string) =>
     wrapper.findAll('button').find((b) => b.text() === label);
 
+  it('keeps system technician_delay read-only even for a manager with resolve permission', async () => {
+    const wrapper = await mountPage(baseCase({ caseType: 'technician_delay' }));
+    expect(wrapper.text()).toContain('Kỹ thuật viên đến trễ');
+    expect(wrapper.text()).toContain('Chỉ xem');
+    expect(button(wrapper, 'Tiếp nhận')).toBeUndefined();
+    expect(wrapper.find('form').exists()).toBe(false);
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it.each(['property_damage', 'cash_mismatch', 'parts_dispute', 'technician_replacement'])(
     'lets Admin read %s without any manager operation or replacement preflight', async (caseType) => {
       const auth = useAuthStore();
@@ -536,7 +546,54 @@ describe('SupportDetailPage for a complaint', () => {
 });
 
 describe('SupportQueuePage', () => {
+  it.each(['ADMIN', 'SERVICE_MANAGER'])('%s can filter delay cases for one order and keeps that scope on reload', async role => {
+    useAuthStore().setAuth('test-token', { id: 'staff', fullName: 'Fixture', email: 'staff@example.test', status: 'ACTIVE', role: role as UserRole, permissions: ['support:read_all'] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/console/support', component: SupportQueuePage }] });
+    apiClientMock.get.mockResolvedValue(envelope([baseCase({ caseType: 'technician_delay' })], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    await router.push('/console/support?caseType=technician_delay&serviceOrderId=order-1');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases', { params: expect.objectContaining({ caseType: 'technician_delay', serviceOrderId: 'order-1' }) });
+    expect(wrapper.text()).toContain('Kỹ thuật viên đến trễ');
+    expect(wrapper.find('a[href="/console/orders/order-1"]').exists()).toBe(true);
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    [401, 'đăng nhập lại'],
+    [403, 'quyền xem tất cả'],
+    [500, 'Chưa tải được danh sách hỗ trợ'],
+  ])('shows actionable HTTP %s errors, never an empty list, and retries', async (status, message) => {
+    apiClientMock.get.mockRejectedValueOnce({ response: { status, data: { message: 'SQL secret stack' } } });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/console/support', component: SupportQueuePage }] });
+    await router.push('/console/support');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain(message);
+    expect(wrapper.get('[role="alert"]').text()).toContain(`HTTP ${status}`);
+    expect(wrapper.text()).not.toContain('SQL secret stack');
+    expect(wrapper.text()).not.toContain('Không có yêu cầu nào phù hợp');
+    apiClientMock.get.mockResolvedValueOnce(envelope([baseCase()], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    await wrapper.get('[data-testid="console-load-error"] button').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label^="Mở chi tiết"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('distinguishes invalid response contracts without exposing parser details', async () => {
+    apiClientMock.get.mockResolvedValueOnce(envelope([{ broken: 'private payload' }], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/console/support', component: SupportQueuePage }] });
+    await router.push('/console/support');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('không đúng định dạng');
+    expect(wrapper.text()).not.toContain('private payload');
+    expect(wrapper.text()).not.toContain('Không có yêu cầu nào phù hợp');
+    wrapper.unmount();
+  });
 
   it('opens a cash case in the Admin read-only detail instead of the SM cash page', async () => {
     useAuthStore().user!.role = UserRole.ADMIN;

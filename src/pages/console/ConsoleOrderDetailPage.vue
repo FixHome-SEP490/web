@@ -12,6 +12,8 @@ import {
 } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import GroupStopIncidentsPanel from '../../components/console/GroupStopIncidentsPanel.vue';
+import StoppedWorkFinancePanel from '../../components/console/StoppedWorkFinancePanel.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import { orderStatusLabel, paymentStatusLabel, roleLabel } from '../../components/console/console-labels';
@@ -105,11 +107,31 @@ const paymentTone = computed(() => {
   return status === 'PAID' ? 'COMPLETED' : status === 'REFUNDED' ? 'CANCELLED' : 'PENDING';
 });
 
+function safeTimelineNote(title: string, status: string): string | undefined {
+  const note = title.trim().replace(/\s+/gu, ' ');
+  if (!note || note.length > 160) return undefined;
+  if (note.toLocaleLowerCase('vi') === orderStatusLabel(status).toLocaleLowerCase('vi')) return undefined;
+  if (!/[À-ỹĐđ]/u.test(note)) return undefined;
+  if (/\b(?:work|completed|payment|verified|technician|internal|failed|error|system|status)\b/i.test(note)) {
+    return undefined;
+  }
+  if (
+    /@|https?:\/\/|www\.|(?:^|[^\p{L}\p{N}_])(?:sđt|điện thoại|email|cccd|căn cước|địa chỉ|số nhà|đường|phường|quận|huyện|tỉnh|thành phố|căn hộ)(?=$|[^\p{L}\p{N}_])|\d(?:[\s().-]*\d){7,}/iu.test(note)
+    || /(?:[\p{Ll}\p{M}]\s+\p{Lu}\p{Ll}{1,}|^\p{Lu}\p{Ll}+\s+\p{Lu}\p{Ll}+)/u.test(note)
+  ) {
+    return undefined;
+  }
+  return note;
+}
+
+const timelineEntries = computed(() => order.value?.timeline ?? []);
+
 const timelineSteps = computed<TimelineStep[]>(() => {
-  const entries = order.value?.timeline ?? [];
+  const entries = timelineEntries.value;
   return entries.map((entry, index) => ({
     key: `${entry.status}-${index}`,
-    label: entry.title || orderStatusLabel(entry.status),
+    label: orderStatusLabel(entry.status),
+    note: safeTimelineNote(entry.title, entry.status),
     timestamp: entry.timestamp ? vnDateTimeString(entry.timestamp) : undefined,
     actor: entry.actor ? roleLabel(entry.actor) : undefined,
     completed: index < entries.length - 1,
@@ -153,11 +175,29 @@ const timelineSteps = computed<TimelineStep[]>(() => {
         </template>
       </ConsolePageHeader>
 
+      <div class="space-y-2 text-sm">
+        <p class="text-ink-600">Trang chỉ đọc. Trạng thái lịch sử của đơn chưa xác nhận việc đã dừng hay hủy; xem yêu cầu hỗ trợ và đối soát riêng.</p>
+        <router-link :to="{ path: '/console/support', query: { serviceOrderId: order.id } }" class="inline-flex min-h-11 items-center font-medium text-brand-700 underline" data-testid="order-support-link">Yêu cầu hỗ trợ của đơn này</router-link>
+      </div>
+      <GroupStopIncidentsPanel :key="`group:${order.id}`" :order-id="order.id" :group-id="order.visitGroupId ?? null" />
+      <StoppedWorkFinancePanel :key="order.id" :order-id="order.id" />
+
       <div class="grid gap-6 lg:grid-cols-3">
         <div class="space-y-6 lg:col-span-2">
           <FhCard title="Lịch sử trạng thái">
             <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
             <p v-else class="text-sm text-ink-500">Chưa có lịch sử trạng thái.</p>
+            <div v-if="isStaffMediaViewerAllowed && timelineEntries.length" class="mt-4 space-y-2 border-t border-ink-100 pt-3">
+              <p class="text-xs text-ink-500">Lý do gốc do hệ thống ghi nhận</p>
+              <details v-for="(entry, index) in timelineEntries" :key="`reason-${entry.status}-${index}`" class="min-w-0">
+                <summary class="cursor-pointer text-sm font-medium text-brand-700">Xem lý do gốc · {{ index + 1 }}</summary>
+                <div class="mt-2 min-w-0 rounded-[var(--radius-sm)] bg-ink-50 p-3 text-sm text-ink-700">
+                  <p><span class="font-medium">Mục {{ index + 1 }} · {{ orderStatusLabel(entry.status) }}</span></p>
+                  <p v-if="entry.timestamp" class="text-xs text-ink-500">{{ vnDateTimeString(entry.timestamp) }}</p>
+                  <p class="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{{ entry.title }}</p>
+                </div>
+              </details>
+            </div>
           </FhCard>
 
           <BookingMediaViewer

@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { reactive } from 'vue';
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../src/api/client', () => ({ default: { get, post, patch: vi.fn(), delete: vi.fn() }, getHttpStatus: (e: { response?: { status?: number } }) => e?.response?.status }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'order-B' }, query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+const route = reactive({ params: { id: 'order-B' }, query: {} });
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: async (target: { path: string }) => { route.params.id = target.path.split('/').at(-1)!; }, replace: vi.fn() }) }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ openConversationForBooking: vi.fn(), toggleWidget: vi.fn(), conversations: [] }) }));
 import TechnicianJobDetailPage from '../src/pages/technician/TechnicianJobDetailPage.vue';
 enableAutoUnmount(afterEach);
@@ -25,6 +27,13 @@ const reason = 'Tôi không đủ kỹ năng xử lý thiết bị này.';
 async function render(overrides: Record<string, unknown> = {}) {
   get.mockImplementation(async (path: string) => {
     if (path === '/service-orders/order-B') return { data: { data: order(overrides) } };
+    if (overrides.visitGroupId && /^\/service-orders\/order-[CD]$/.test(path)) {
+      const id = path.split('/').at(-1)!;
+      return { data: { data: { ...order(overrides), id, bookingId: id.replace('order-', 'booking-') } } };
+    }
+    if (overrides.visitGroupId && path.endsWith('/checkout')) return { data: { data: { visitGroupId: overrides.visitGroupId, ready: false, waiting: 3, total: 0, paid: false, pendingCash: null,
+      devices: (overrides.twoDevices ? ['B', 'C'] : ['B', 'C', 'D']).map((key, i) => ({ sequence: i + 1, bookingId: `booking-${key}`, serviceOrderId: `order-${key}`, deviceLabel: null, serviceName: 'Fixture', state: 'open', invoiceId: null, amount: 0, paid: false })),
+    } } };
     if (path === '/bookings/booking-B') return { data: { data: { id: 'booking-B', status: 'matched', media: [] } } };
     if (path === '/service-orders/order-B/part-requests') return { data: { data: [] } };
     if (path.endsWith('/invoice') || path.endsWith('/cash-settlement')) return { data: { data: null } };
@@ -34,14 +43,31 @@ async function render(overrides: Record<string, unknown> = {}) {
   await flushPromises();
   return w;
 }
-beforeEach(() => { get.mockReset(); post.mockReset(); });
+beforeEach(() => { route.params.id = 'order-B'; get.mockReset(); post.mockReset(); });
+
+it('selects machine 2 in the report form and stops only that machine with its own source', async () => {
+  const w = await render({ visitGroupId: 'visit-1' });
+  await w.get('[data-testid="job-more-button"]').trigger('click');
+  await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+  expect(w.get('[data-testid="report-device"]').findAll('option').map(item => item.text())).toEqual(['Máy 1', 'Máy 2', 'Máy 3']);
+  await w.get('[data-testid="report-device"]').setValue('order-C'); await flushPromises();
+  expect(route.params.id).toBe('order-C');
+  expect(w.get('[data-testid="report-device"]').element.value).toBe('order-C');
+  await w.get('[data-testid="report-reason-code"]').setValue('manufacturer_warranty_or_workshop');
+  await w.get('[data-testid="cannot-continue-dialog"] textarea').setValue(reason);
+  await w.get('[data-testid="cannot-continue-confirm-intent"]').setValue(true);
+  post.mockRejectedValue({ response: { status: 403 } });
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenCalledWith('/service-orders/order-C/cannot-continue', expect.objectContaining({ reasonCode: 'manufacturer_warranty_or_workshop', reasonClass: 'non_technician_exception', reason }));
+});
 
 it('offers cannot-continue only after a valid check-in and posts exactly one typed command', async () => {
   post.mockResolvedValue(receipt());
   const w = await render();
   await w.get('[data-testid="job-more-button"]').trigger('click');
-  // Report-only stays a separate, non-stopping action.
-  expect(w.find('[data-testid="job-technician-report-skill"]').exists()).toBe(true);
+  expect(w.find('[data-testid="job-technician-report-skill"]').exists()).toBe(false);
+  expect(w.get('[data-testid="job-cannot-continue-menu"]').text()).toBe('Báo cáo vấn đề sửa chữa');
   await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
   const dialog = w.get('[data-testid="cannot-continue-dialog"]');
   expect(dialog.attributes('aria-busy')).toBe('false');
@@ -73,6 +99,11 @@ it('hides cannot-continue before check-in and keeps objective repair-failed acce
   expect(checkedIn.find('[data-testid="job-repair-failed-menu"]').exists()).toBe(true);
 });
 
+it('shows arrived waiting in detail after check-in while the device remains en route', async () => {
+  const w = await render({ status: 'en_route', arrivalVerified: true });
+  expect(w.text()).toContain('Đã đến, chờ sửa');
+});
+
 it('reports a refused command without claiming cancellation or success', async () => {
   post.mockRejectedValue({ response: { status: 403 } });
   const w = await render();
@@ -85,7 +116,39 @@ it('reports a refused command without claiming cancellation or success', async (
   await flushPromises();
   expect(post).toHaveBeenCalledTimes(1);
   await flushPromises();
-  expect(w.get('[data-testid="cannot-continue-dialog"]').text()).toContain('Quyền hoặc trạng thái');
+  expect(w.get('[data-testid="cannot-continue-dialog"]').text()).toContain('không có quyền');
+  expect(w.get('[data-testid="cannot-continue-submit"]').attributes('disabled')).toBeDefined();
   expect(w.text()).not.toContain('Đã ghi nhận gián đoạn');
   expect(post.mock.calls.every(([path]) => path === '/service-orders/order-B/cannot-continue')).toBe(true);
+});
+
+it('keeps machine 1 reachable after machine 2 becomes released history without exposing customer PII', async () => {
+  const w = await render({ visitGroupId: 'visit-1', twoDevices: true });
+  await w.get('[data-testid="job-more-button"]').trigger('click');
+  await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+  await w.get('[data-testid="report-device"]').setValue('order-C'); await flushPromises();
+  let stopped = false;
+  const original = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) => {
+    if (stopped && path === '/service-orders/order-C') return { data: { data: { id: 'order-C', code: 'FH-C', status: 'under_repair', historical: true, workStopped: true, operationalDisposition: 'STOPPED', createdAt: '2026-11-01T00:00:00Z' } } };
+    return original(path);
+  });
+  post.mockImplementation(async () => {
+    stopped = true;
+    const result = receipt();
+    result.data.data.customerContinuation.source = { serviceOrderId: 'order-C', bookingId: 'booking-C', incidentId: '30000000-0000-4000-8000-000000000001', visitGroupId: 'visit-1' } as never;
+    Object.assign(result.data.data, { workStopped: true, assignmentReleased: true, operationalDisposition: 'STOPPED' });
+    return result;
+  });
+  await w.get('[data-testid="cannot-continue-dialog"] textarea').setValue(reason);
+  await w.get('[data-testid="cannot-continue-confirm-intent"]').setValue(true);
+  await w.get('[data-testid="cannot-continue-submit"]').trigger('click'); await flushPromises();
+  const history = w.get('[data-testid="technician-historical-detail"]');
+  expect(history.text()).not.toContain('Fixture');
+  expect(history.find('a[href^="tel:"]').exists()).toBe(false);
+  expect(history.get('[data-testid="historical-jobs"]').text()).toContain('Danh sách công việc');
+  await history.get('[data-testid="historical-sibling-1"]').trigger('click'); await flushPromises();
+  expect(route.params.id).toBe('order-B');
+  expect(w.find('[data-testid="technician-historical-detail"]').exists()).toBe(false);
+  expect(w.get('[data-testid="job-now"]').exists()).toBe(true);
 });

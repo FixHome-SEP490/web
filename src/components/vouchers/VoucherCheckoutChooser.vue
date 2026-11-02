@@ -33,7 +33,7 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const customerId = computed(() => auth.userRole === 'CUSTOMER' ? auth.user?.id : null);
-const open = ref(false);
+const open = ref(true);
 const state = ref<ChooserState>('loading');
 const offers = ref<VoucherOffer[]>([]);
 const selectedId = ref('');
@@ -67,7 +67,7 @@ const sheetPreviewMessage = computed(() => {
   if (previewState.value === 'error') return previewError.value || 'Máy chủ chưa xác nhận được bản xem trước.';
   if (previewState.value === 'ready' && preview.value?.paymentAvailable !== true) {
     return preview.value?.reason === 'VOUCHER_FUNDING_NOT_READY'
-      ? 'Dịch vụ giữ chỗ voucher chưa sẵn sàng trên máy chủ. Chưa giữ chỗ; hóa đơn vẫn dùng tổng gốc.'
+      ? 'Dịch vụ giữ chỗ voucher chưa sẵn sàng trên máy chủ. Bạn có thể đóng bảng và thanh toán không dùng voucher, hoặc thử kiểm tra lại. Hóa đơn vẫn dùng tổng gốc.'
       : 'Máy chủ chưa cho phép giữ chỗ voucher. Chưa giữ chỗ; hóa đơn vẫn dùng tổng gốc.';
   }
   if (previewState.value === 'ready' && preview.value?.paymentAvailable === true) {
@@ -155,6 +155,7 @@ async function applyVoucher() {
     reservation.value = held;
     nowMs.value = Date.now();
     emit('applied', { reservation: held, preview: quote });
+    open.value = false;
   } catch (error) {
     if (error instanceof VoucherReservationExpiredError
       || (typeof error === 'object' && error !== null && 'code' in error && error.code === 'VOUCHER_RESERVATION_EXPIRED')) {
@@ -335,6 +336,7 @@ onMounted(() => {
   window.addEventListener('offline', handleOffline);
   window.addEventListener('online', handleOnline);
   expiryTimer = setInterval(checkExpiry, 1000);
+  void load();
 });
 
 onBeforeUnmount(() => {
@@ -407,7 +409,7 @@ onBeforeUnmount(() => {
           <div class="flex justify-between gap-3"><dt>Trợ giá FixHome dự kiến</dt><dd><FhMoney :amount="preview.fixHomeDiscountSubsidyVnd" /></dd></div>
           <div class="flex justify-between gap-3 font-semibold text-ink-900"><dt>Khách hàng dự kiến thanh toán</dt><dd><FhMoney :amount="preview.customerDueVnd" /></dd></div>
         </dl>
-        <p v-if="reservation" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Máy chủ đang xác nhận tất toán 0 ₫.' : 'Chưa ghi nhận thanh toán.' }}</p>
+        <p v-if="reservation" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Chờ bạn bấm Xác nhận tất toán 0 ₫ ở màn thanh toán.' : 'Chưa ghi nhận thanh toán.' }}</p>
         <p v-else class="mt-2 text-xs leading-5 text-ink-600">Số tiền này chỉ để xem trước. Hóa đơn và thanh toán hiện tại vẫn dùng tổng gốc.</p>
       </div>
 
@@ -426,7 +428,6 @@ onBeforeUnmount(() => {
         :loading="applying"
         @click="applyVoucher"
       >{{ applying ? 'Đang giữ chỗ…' : preview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}</FhButton>
-      <RouterLink :to="walletLocation" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline focus-visible:outline-2 focus-visible:outline-brand-600">Mở ví ưu đãi</RouterLink>
     </div>
 
     <VoucherSelectionSheet
@@ -451,6 +452,8 @@ onBeforeUnmount(() => {
       @select="selectOffer"
       @apply="applyVoucher"
       @retry-preview="loadPreview"
-    />
+    >
+      <template #secondary><RouterLink :to="walletLocation" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline focus-visible:outline-2 focus-visible:outline-brand-600">Mở ví ưu đãi</RouterLink></template>
+    </VoucherSelectionSheet>
   </section>
 </template>

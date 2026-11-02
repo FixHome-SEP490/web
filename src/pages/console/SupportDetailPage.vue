@@ -5,6 +5,7 @@ import { ordersApi } from '../../api/orders.api';
 import { getHttpStatus } from '../../api/client';
 import TechnicianReplacementPanel from '../../components/console/TechnicianReplacementPanel.vue';
 import SupportCaseContext from '../../components/console/SupportCaseContext.vue';
+import GroupStopIncidentsPanel from '../../components/console/GroupStopIncidentsPanel.vue';
 import StoppedWorkFinancePanel from '../../components/console/StoppedWorkFinancePanel.vue';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -50,7 +51,8 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 // Admin's global permission shortcut must never grant manager operations here.
-const canManage = computed(() => auth.userRole === 'SERVICE_MANAGER' && auth.hasPermission('support:resolve'));
+const canManage = computed(() => auth.userRole === 'SERVICE_MANAGER' && auth.hasPermission('support:resolve')
+  && supportCase.value?.caseType !== 'technician_delay');
 const isAdmin = computed(() => auth.userRole === 'ADMIN');
 const caseId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''));
 const supportCase = ref<SupportCaseDetail | null>(null);
@@ -92,6 +94,7 @@ const technicianReportCodeLabels: Record<TechnicianReportReasonCode, string> = {
   no_compatible_part: 'Không có linh kiện phù hợp',
   manufacturer_warranty_or_workshop: 'Cần trung tâm hoặc bảo hành hãng',
   customer_absent: 'Khách không có mặt',
+  customer_unreachable: 'Không liên lạc được khách',
   customer_cancelled: 'Khách đã hủy',
   dispute_or_other: 'Tranh chấp hoặc tình huống khác',
 };
@@ -457,6 +460,7 @@ watch(caseId, (id) => {
     </template>
 
     <template v-else-if="supportCase">
+      <p v-if="supportCase.caseType === 'technician_delay'" class="text-sm text-ink-600" role="status">Chỉ xem. Đây là thông báo hệ thống về kỹ thuật viên đến trễ; không thực hiện hủy đơn hoặc quyết định tài chính tại đây.</p>
       <ConsolePageHeader :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
         <template #badges>
           <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
@@ -540,6 +544,7 @@ watch(caseId, (id) => {
         v-if="supportCase.booking || supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement"
         :support-case="supportCase"
       />
+      <GroupStopIncidentsPanel v-if="supportCase.serviceOrderId && ['customer_absent', 'customer_unreachable'].includes(supportCase.reasonCode ?? '')" :key="supportCase.id" :order-id="supportCase.serviceOrderId" />
       <StoppedWorkFinancePanel v-if="supportCase.serviceOrderId" :order-id="supportCase.serviceOrderId" />
 
       <FhCard v-if="isTypedTechnicianReport" title="Đánh giá trách nhiệm">

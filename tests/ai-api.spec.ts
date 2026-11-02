@@ -94,6 +94,74 @@ describe('analyze', () => {
     expect(reply.priceEstimate).toBeUndefined();
     expect(reply.recommendedServices).toEqual([]);
   });
+
+  it('classifies an AI backend outage separately from an image transport failure', async () => {
+    apiClientMock.post.mockRejectedValueOnce({
+      response: { status: 503 },
+      message: 'Request failed with status code 503',
+    });
+
+    const reply = await aiApi.analyze({ description: 'Máy giặt không vắt', images: ['data:image/jpeg;base64,abc'] });
+
+    expect(reply.failureReason).toBe('service_unavailable');
+    expect(reply.messageVi).toContain('tạm thời không khả dụng');
+    expect(reply.messageVi).toContain('chọn dịch vụ thủ công');
+  });
+
+  it.each(['ECONNABORTED', 'ETIMEDOUT'])('does not mark an ambiguous image timeout (%s) as safe to retry', async (code) => {
+    apiClientMock.post.mockRejectedValueOnce({ code, message: 'timeout of 45000ms exceeded' });
+
+    const reply = await aiApi.analyze({ description: 'Máy giặt không vắt', images: ['data:image/jpeg;base64,abc'] });
+
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(reply.failureReason).toBe('service_unavailable');
+    expect(reply.messageVi).toContain('tạm thời không khả dụng');
+  });
+
+  it('does not treat HTTP 408 as a safe image retry', async () => {
+    apiClientMock.post.mockRejectedValueOnce({
+      response: { status: 408 },
+      message: 'Request failed with status code 408',
+    });
+
+    const reply = await aiApi.analyze({ description: 'Máy giặt không vắt', images: ['data:image/jpeg;base64,abc'] });
+
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(reply.failureReason).toBe('service_unavailable');
+  });
+
+  it('classifies an explicit payload rejection as safe for one smaller image retry', async () => {
+    apiClientMock.post.mockRejectedValueOnce({
+      response: { status: 413 },
+      message: 'Request failed with status code 413',
+    });
+
+    const reply = await aiApi.analyze({ description: 'Máy giặt không vắt', images: ['data:image/jpeg;base64,abc'] });
+
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(reply.failureReason).toBe('image_transport');
+  });
+
+  it('does not classify a generic network outage as an image-only failure', async () => {
+    apiClientMock.post.mockRejectedValueOnce({ code: 'ERR_NETWORK', message: 'Network Error' });
+
+    const reply = await aiApi.analyze({ description: 'Máy giặt không vắt', images: ['data:image/jpeg;base64,abc'] });
+
+    expect(reply.failureReason).toBe('service_unavailable');
+  });
+
+  it('keeps invalid descriptions as validation feedback instead of a network error', async () => {
+    apiClientMock.post.mockRejectedValueOnce({
+      response: { status: 400, data: { message: 'Mô tả chưa hợp lệ. Vui lòng nhập rõ tình trạng thiết bị.' } },
+      message: 'Request failed with status code 400',
+    });
+
+    const reply = await aiApi.analyze({ description: '', images: [] });
+
+    expect(reply.failureReason).toBe('validation');
+    expect(reply.messageVi).toBe('Mô tả chưa hợp lệ. Vui lòng nhập rõ tình trạng thiết bị.');
+    expect(reply.messageVi).not.toContain('mạng');
+  });
 });
 
 describe('acknowledgements', () => {

@@ -55,6 +55,7 @@ import { AI_MAX_IMAGES } from '../../api/ai.api';
 import { AI_VISIT_DEVICE_LIMIT, DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
+import { useFillViewport } from '../../composables/useFillViewport';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { SLOT_SHORT, isSessionUpcoming, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -66,6 +67,10 @@ const router = useRouter();
 const isFailedRepairEntry = computed(() => route.query.repairFailure !== undefined);
 const isInterruptionRebookEntry = computed(() => route.query.interruptionRebook !== undefined);
 const interruptionSourceBookingId = computed(() => typeof route.query.interruptionRebook === 'string' ? route.query.interruptionRebook : '');
+const interruptionSources = computed(() => {
+  const value = route.query.sourceBookingIds;
+  return typeof value === 'string' ? value.split(',') : value === undefined ? undefined : [];
+});
 const interruptionCustomerId = computed(() => useAuthStore().user?.id ?? '');
 const failedRepairSources = computed(() => {
   const value = route.query.repairFailure;
@@ -82,9 +87,12 @@ const setBookingLayoutWidth = inject<(wide: boolean) => void>('customer-booking-
  */
 const isAiFlow = route.meta?.bookingFlow === 'ai';
 const step = ref(1);
+const aiBookingPanel = ref<HTMLElement | null>(null);
+const aiBookingHeight = useFillViewport(aiBookingPanel, 240);
+const aiServicesOpen = ref(false);
 if (!isFailedRepairEntry.value && !isInterruptionRebookEntry.value) useStepHistory(step, router, route);
 watch(step, (currentStep, previous) => {
-  setBookingLayoutWidth(currentStep === 2 || (!isAiFlow && currentStep === 1));
+  setBookingLayoutWidth(currentStep === 2 || currentStep === 3 || (!isAiFlow && currentStep === 1));
   // A new step starts at its top, never mid-page under the header (PO 20/10/2026).
   if (previous !== undefined && typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -217,7 +225,10 @@ const canAddDevice = computed(() => visitDeviceCount.value < VISIT_DEVICE_LIMIT)
 // and advances in one action, without ever creating a fourth draft.
 const canSaveThirdAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
   && extraDevices.value.length === VISIT_DEVICE_LIMIT - 1 && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveThirdAndContinue.value)
+const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+  && extraDevices.value.length > 0 && extraDevices.value.length < VISIT_DEVICE_LIMIT
+  && !!selectedServiceId.value && !editingSavedDeviceKey.value);
+const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value)
   ? isCatalogV2PreviewReady.value && !loading.value && !uploadingPhoto.value
   : !editingSavedDeviceKey.value && (
   selectedServiceId.value
@@ -1556,14 +1567,15 @@ function toggleSymptom(symptom: string) {
 
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
-  if (singleSwitchOpen.value) return;
+  if (step.value !== 1 || singleSwitchOpen.value || loading.value || uploadingPhoto.value) return;
   if (editingSavedDeviceKey.value) {
     addAnotherDevice();
     return;
   }
-  if (canSaveThirdAndContinue.value) {
-    addAnotherDevice();
-    if (extraDevices.value.length === VISIT_DEVICE_LIMIT && !selectedServiceId.value) step.value = 2;
+  if (canSaveAndContinue.value) {
+    const savedCount = extraDevices.value.length;
+    addAnotherDevice({ continuing: true });
+    if (extraDevices.value.length === savedCount + 1 && !selectedServiceId.value) step.value = 2;
     return;
   }
   if (!selectedServiceId.value && visitGrouping.value && extraDevices.value.length >= 2) {
@@ -1681,7 +1693,7 @@ function priceTextOf(price: SummaryPrice): string {
 }
 
 /** Keep this device in the visit and start the next one with the same address and time. */
-function addAnotherDevice(options: { quiet?: boolean } = {}) {
+function addAnotherDevice(options: { quiet?: boolean; continuing?: boolean } = {}) {
   if (!visitGrouping.value && isFixedPrice.value && quantity.value > 1) {
     toast.warning('Trong lượt sửa, mỗi thiết bị cần có mô tả và ảnh riêng. Hãy giảm số lượng về 1 để thêm thiết bị.');
     step.value = 1;
@@ -1748,7 +1760,7 @@ function addAnotherDevice(options: { quiet?: boolean } = {}) {
     toast.success(`Đã thêm ${extraDevices.value.length} thiết bị. Kiểm tra tiếp ${nextAi.nameVi.toLowerCase()}.`);
     return;
   }
-  toast.success(extraDevices.value.length === VISIT_DEVICE_LIMIT
+  toast.success(options.continuing ? `Đã lưu ${extraDevices.value.length} thiết bị.` : extraDevices.value.length === VISIT_DEVICE_LIMIT
     ? `Đã lưu đủ ${VISIT_DEVICE_LIMIT} thiết bị.`
     : `Đã thêm ${extraDevices.value.length} thiết bị. Chọn thiết bị tiếp theo.`);
 }
@@ -1988,7 +2000,9 @@ async function createAndFindTech() {
 <template>
   <InterruptionRebookForm
     v-if="isInterruptionRebookEntry && !isFailedRepairEntry"
+    :key="`${interruptionSourceBookingId}:${interruptionSources?.join(',') ?? ''}`"
     :source-booking-id="interruptionSourceBookingId"
+    :source-booking-ids="interruptionSources"
     :customer-id="interruptionCustomerId"
     @created="result => router.push(result.kind === 'booking' ? '/app/bookings/' + result.id + '/candidates' : '/app/visits/' + result.id + '/candidates')"
     @later="router.push('/app')"
@@ -2006,7 +2020,7 @@ async function createAndFindTech() {
   <div
     v-else
     class="w-full space-y-5 sm:space-y-6"
-    :class="(step === 1 && !isAiFlow) || step === 2 ? (visitSummaryPrice.kind === 'partial' ? 'pb-[calc(12rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24') : 'pb-16'"
+    :class="(step === 1 && !isAiFlow) || step === 2 ? (visitSummaryPrice.kind === 'partial' ? 'pb-[calc(12rem_+_env(safe-area-inset-bottom))] lg:pb-24' : 'pb-[calc(8.5rem_+_env(safe-area-inset-bottom))] lg:pb-24') : step === 3 ? 'pb-0' : 'pb-16'"
   >
     <!-- Stepper. On a phone (PO 18/10/2026) four labels do not fit and were cut after the second:
          there it is "Bước 2/4" with the step's name and a progress bar; wider screens show every step. -->
@@ -2549,7 +2563,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveThirdAndContinue ? `Lưu máy ${VISIT_DEVICE_LIMIT} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === VISIT_DEVICE_LIMIT ? `Tiếp tục với ${VISIT_DEVICE_LIMIT} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
@@ -2678,13 +2692,12 @@ async function createAndFindTech() {
         />
       </div>
       <!-- Step 3: conversation with the assistant before booking -->
-      <div v-else-if="step === 3" key="step-3" class="mx-auto w-full max-w-3xl space-y-6">
-        <div class="space-y-5 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-[var(--shadow-e1)] sm:p-8">
+      <div v-else-if="step === 3" key="step-3" ref="aiBookingPanel" class="mx-auto flex w-full max-w-6xl min-h-0 flex-col gap-3 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-3 shadow-[var(--shadow-e1)] sm:p-5" :style="{ height: aiBookingHeight ? `${aiBookingHeight}px` : '72dvh' }" data-testid="ai-booking-panel">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Trò chuyện với trợ lý AI</h2>
-              <p class="mt-1 text-sm text-ink-500 text-pretty">
-                Trợ lý có thể hỏi thêm để chẩn đoán sát hơn. Bạn trả lời, hỏi thêm, gửi thêm ảnh hoặc nhờ đổi dịch vụ ngay tại đây, xong rồi mới đặt thợ.
+              <p class="mt-1 hidden sm:block text-sm text-ink-600 text-pretty">
+                Bạn có thể hỏi thêm, gửi ảnh hoặc đổi dịch vụ trước khi đặt lịch.
               </p>
             </div>
             <button
@@ -2699,15 +2712,23 @@ async function createAndFindTech() {
             </button>
           </div>
 
-          <div class="h-[30rem] max-h-[65dvh] overflow-hidden rounded-[var(--radius-md)] border border-ink-200">
-            <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." class="h-full">
-              <template #pinned>
+          <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-1" data-testid="ai-booking-workspace">
+            <div class="order-last min-h-0 min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-ink-200 lg:order-first" data-testid="ai-booking-chat">
+              <AiConversationThread :conversation="aiConversation" placeholder="Trả lời trợ lý hoặc hỏi thêm..." />
+            </div>
+            <aside class="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain" aria-label="Dịch vụ sẽ đặt">
+              <button type="button" class="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-brand-600 lg:hidden" :aria-expanded="aiServicesOpen" aria-controls="ai-booking-services" data-testid="ai-services-toggle" @click="aiServicesOpen = !aiServicesOpen">
+                <span>{{ aiBooksVisit ? `${aiChosenDevices.length} thiết bị` : '1 thiết bị' }} · Dịch vụ sẽ đặt</span>
+                <span class="text-brand-700">{{ aiServicesOpen ? 'Thu gọn' : 'Xem/đổi' }}</span>
+              </button>
+              <div id="ai-booking-services" class="space-y-3 lg:block" :class="{ hidden: !aiServicesOpen }">
+                <h3 class="hidden px-3 pt-3 text-base font-semibold text-ink-900 lg:block">Dịch vụ sẽ đặt</h3>
                 <div
                   v-if="aiBooksVisit"
-                  class="space-y-2 border-t border-ink-100 bg-ink-50 px-3.5 py-2.5 text-sm"
+                  class="space-y-2 bg-ink-50 p-3 text-sm"
                   data-testid="ai-visit-services"
                 >
-                  <p class="text-ink-500">Dịch vụ sẽ đặt cho {{ aiChosenDevices.length }} thiết bị:</p>
+                  <p class="text-ink-600">Dịch vụ sẽ đặt cho {{ aiChosenDevices.length }} thiết bị:</p>
                   <ul class="space-y-1.5">
                     <li
                       v-for="(device, index) in aiChosenDevices"
@@ -2716,11 +2737,11 @@ async function createAndFindTech() {
                       :data-testid="`ai-visit-service-${index}`"
                     >
                       <span class="min-w-0 flex-1">
-                        <span class="block truncate text-xs text-ink-500">Máy {{ index + 1 }} · {{ device.nameVi }}</span>
-                        <span class="block truncate font-semibold text-ink-900">{{ device.service?.nameVi }}</span>
+                        <span class="block text-sm text-ink-600">Máy {{ index + 1 }} · {{ device.nameVi }}</span>
+                        <span class="block break-words font-semibold text-ink-900">{{ device.service?.nameVi }}</span>
                       </span>
                       <select
-                        class="h-9 w-20 shrink-0 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-700 disabled:opacity-40"
+                        class="min-h-11 w-20 shrink-0 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-700 disabled:opacity-40"
                         :aria-label="`Đổi dịch vụ cho máy ${index + 1}: ${device.nameVi}`"
                         :disabled="aiConversation.isThinking.value"
                         :data-testid="`ai-visit-service-change-${index}`"
@@ -2734,7 +2755,7 @@ async function createAndFindTech() {
                   </ul>
                   <button
                     type="button"
-                    class="min-h-9 text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700"
+                    class="min-h-11 text-sm text-ink-600 underline underline-offset-2 hover:text-ink-700"
                     data-testid="ai-book-one-only"
                     @click="bookOneAiDevice"
                   >
@@ -2744,7 +2765,7 @@ async function createAndFindTech() {
                 <template v-else>
                 <div
                   v-if="aiSuggested && aiSuggestsOtherService && aiSuggestedServiceExists && selectedServiceId && !aiConversation.isThinking.value"
-                  class="flex flex-wrap items-center gap-3 border-t border-brand-100 bg-brand-50 px-3.5 py-2.5"
+                  class="flex flex-wrap items-center gap-3 border border-brand-100 rounded-xl bg-brand-50 px-3.5 py-2.5"
                   data-testid="ai-suggested-service"
                 >
                   <div class="min-w-0 flex-1">
@@ -2760,20 +2781,20 @@ async function createAndFindTech() {
                     Đổi sang dịch vụ này
                   </button>
                 </div>
-                <div class="space-y-2 border-t border-ink-100 bg-ink-50 px-3.5 py-2.5 text-sm" data-testid="ai-current-service">
+                <div class="space-y-2 bg-ink-50 p-3 text-sm" data-testid="ai-current-service">
                   <div v-if="selectedService" class="flex min-w-0 items-center gap-2">
-                    <span class="whitespace-nowrap text-ink-500">Dịch vụ sẽ đặt:</span>
-                    <span class="min-w-0 truncate font-semibold text-ink-900">{{ selectedService.name }}</span>
+                    <span class="whitespace-nowrap text-ink-600">Dịch vụ sẽ đặt:</span>
+                    <span class="min-w-0 break-words font-semibold text-ink-900">{{ selectedService.name }}</span>
                   </div>
                   <p v-else-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value" class="text-warning-800" data-testid="ai-pick-service-hint">Chọn dịch vụ ở ô bên dưới để đặt thợ.</p>
-                  <p v-else class="text-ink-500">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
+                  <p v-else class="text-ink-600">Trợ lý sẽ chọn dịch vụ phù hợp sau khi chẩn đoán.</p>
                   <label
                     v-if="aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
-                    class="flex items-center gap-2 text-ink-600"
+                    class="flex flex-col items-start gap-2 text-ink-600"
                   >
                     <span class="whitespace-nowrap">Đổi dịch vụ khác:</span>
                     <select
-                      class="h-9 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-900"
+                      class="min-h-11 w-full min-w-0 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-2 text-sm text-ink-900"
                       data-testid="ai-manual-service"
                       :value="selectedServiceId"
                       @change="chooseService(($event.target as HTMLSelectElement).value)"
@@ -2785,7 +2806,7 @@ async function createAndFindTech() {
                   <button
                     v-if="aiBookOneOnly && aiChosenDevices.length >= 2"
                     type="button"
-                    class="min-h-9 text-xs text-ink-500 underline underline-offset-2 hover:text-ink-700"
+                    class="min-h-11 text-sm text-ink-600 underline underline-offset-2 hover:text-ink-700"
                     data-testid="ai-book-all"
                     @click="aiBookOneOnly = false"
                   >
@@ -2793,11 +2814,10 @@ async function createAndFindTech() {
                   </button>
                 </div>
                 </template>
-              </template>
-            </AiConversationThread>
+              </div>
+            </aside>
           </div>
-
-          <div class="flex items-center justify-between gap-3 border-t border-ink-100 pt-5">
+          <div class="flex items-center justify-between gap-3 shrink-0 border-t border-ink-200 pt-3">
             <FhButton variant="ghost" size="md" @click="step = 1">
               <ArrowLeft :size="15" class="mr-1.5" /> Quay lại
             </FhButton>
@@ -2805,7 +2825,6 @@ async function createAndFindTech() {
               Đặt thợ ngay <ArrowRight :size="15" class="ml-1.5" />
             </FhButton>
           </div>
-        </div>
       </div>
 
       <!-- Step 4: one last look, then send. -->
@@ -3031,6 +3050,9 @@ async function createAndFindTech() {
 </template>
 
 <style scoped>
+/* This panel already reserves the bottom navigation via useFillViewport.
+   The layout's normal page padding would add a second, empty page scroller. */
+:global([data-testid="customer-layout-main"]:has([data-testid="ai-booking-panel"])) { padding-bottom: 0; }
 .wizard-step-enter-active,
 .wizard-step-leave-active { transition: all 0.22s cubic-bezier(0.25, 1, 0.5, 1); }
 .wizard-step-enter-from { opacity: 0; transform: translateY(6px); }

@@ -6,6 +6,7 @@ export const COMPLAINT_WINDOW_DAYS = 7;
 export const complaintTypeLabels: Record<SupportCaseType, string> = {
   matching_exhausted: 'Không tìm được kỹ thuật viên',
   arrival_abnormal: 'Kỹ thuật viên không đến hoặc đến trễ',
+  technician_delay: 'Kỹ thuật viên đến trễ',
   cancellation_review: 'Tranh chấp về việc hủy đơn',
   parts_dispute: 'Tranh chấp về linh kiện',
   mid_job_interruption: 'Công việc bị gián đoạn giữa chừng',

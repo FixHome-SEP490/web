@@ -79,6 +79,26 @@ describe('T1 continuation boundary', () => {
     expect(post.mock.calls[0]![0]).toBe(`/service-orders/${orderId}/cannot-continue`);
     expect(api.pending(orderId)?.commandId).toBeTruthy();
   });
+
+  it.each([
+    [401, 'đăng nhập lại'], [403, 'không có quyền'], [409, 'Trạng thái máy hoặc phân công'],
+  ])('diagnoses HTTP %s and locks replay even after dialog reopen', async (status, message) => {
+    const api = createCannotContinuePort();
+    post.mockRejectedValue({ response: { status } });
+    await expect(api.send(orderId, bookingId, null, input())).rejects.toThrow(message);
+    const command = api.pending(orderId);
+    expect(api.retryAllowed(orderId)).toBe(false);
+    await expect(api.send(orderId, bookingId, null, input())).rejects.toThrow();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(api.pending(orderId)).toEqual(command);
+  });
+
+  it('preserves a safe server conflict diagnosis and rejects technical details', async () => {
+    post.mockRejectedValueOnce({ response: { status: 409, data: { error: { message: 'Đã ghi nhận gián đoạn tại nhà khách.' } } } });
+    await expect(createCannotContinuePort().send(orderId, bookingId, null, input())).rejects.toThrow('Đã ghi nhận gián đoạn');
+    post.mockRejectedValueOnce({ response: { status: 409, data: { error: { message: 'QueryFailedError SQL private' } } } });
+    await expect(createCannotContinuePort().send(orderId, bookingId, null, input())).rejects.toThrow('Trạng thái máy hoặc phân công');
+  });
 });
 
 describe('T2 prefilled rebook metadata', () => {

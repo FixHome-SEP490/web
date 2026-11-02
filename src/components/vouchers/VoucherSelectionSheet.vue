@@ -642,9 +642,10 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
+          <div class="px-4"><slot name="secondary" /></div>
           <footer class="flex shrink-0 flex-col gap-2 border-t border-ink-100 bg-ink-25 p-4 sm:flex-row sm:items-center sm:justify-end">
             <FhButton data-testid="voucher-selection-cancel" variant="secondary" size="md" @click="requestClose">
-              Huỷ
+              {{ activeReservation ? 'Quay lại thanh toán' : selectionDisabled ? 'Đóng bảng chọn' : 'Tiếp tục không dùng voucher' }}
             </FhButton>
             <FhButton
               data-testid="voucher-selection-apply"

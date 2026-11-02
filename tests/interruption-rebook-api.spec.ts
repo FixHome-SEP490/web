@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import backendFixture from './fixtures/interruption-draft-backend.json';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(), post: vi.fn(), getBooking: vi.fn(), getOrder: vi.fn(),
   getMine: vi.fn(), getService: vi.fn(), getPreview: vi.fn(), getAddresses: vi.fn(),
 }));
-vi.mock('../src/api/client', () => ({ default: { get: mocks.get, post: mocks.post } }));
+vi.mock('../src/api/client', () => ({ default: { get: mocks.get, post: mocks.post }, getHttpStatus: (error: { response?: { status?: number } }) => error?.response?.status }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getBooking: mocks.getBooking } }));
 vi.mock('../src/api/orders.api', () => ({ ordersApi: { getOrder: mocks.getOrder } }));
 vi.mock('../src/api/support-cases.api', () => ({ supportCasesApi: { getMine: mocks.getMine } }));
@@ -71,6 +72,48 @@ describe('interruptionRebookApi', () => {
     expect(draft.items[0]?.selectedVariantCode).toBeNull();
     expect(mocks.get).toHaveBeenCalledWith('/bookings/' + ids.booking + '/interruption-draft');
     expect(mocks.getMine).toHaveBeenCalledWith(ids.case);
+  });
+
+  it.each(['00000000-0000-0000-0000-000000000123', '88888888-8888-4888-8888-888888888888'])('accepts Backend user UUID %s without relaxing source IDs', async technicianId => {
+    const data = rawDraft(); data.items[0]!.previousTechnicianId = technicianId;
+    mocks.get.mockResolvedValueOnce(ok(data));
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).resolves.toMatchObject({ items: [{ previousTechnicianId: technicianId }] });
+    data.items[0]!.sourceCaseId = '00000000-0000-0000-0000-000000000123';
+    mocks.get.mockResolvedValueOnce(ok(data));
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).rejects.toThrow();
+  });
+
+  it.each(['draft', 'subset'] as const)('accepts a Backend-produced %s with UUID v0/v4 users and exact selected sources', async key => {
+    const fixture = backendFixture[key];
+    const anchor = fixture.items[0]!.sourceBookingId;
+    const sources = fixture.items.map(item => item.sourceBookingId);
+    mocks.get.mockResolvedValueOnce(ok(fixture));
+    mocks.getBooking.mockImplementation(async (id: string) => ({ ...backendFixture.rows.Booking.find(row => row.id === id)!, status: 'CANCELLED' }));
+    mocks.getOrder.mockImplementation(async (id: string) => ({ ...backendFixture.rows.ServiceOrder.find(row => row.id === id)!, status: 'CANCELLED' }));
+    mocks.getMine.mockImplementation(async (id: string) => backendFixture.rows.SupportCase.find(row => row.id === id));
+    mocks.getAddresses.mockResolvedValue(backendFixture.rows.Address);
+    const result = await interruptionRebookApi.readDraft(anchor, backendFixture.owner, sources);
+    expect(result.items.map(item => item.previousTechnicianId)).toEqual(fixture.items.map(item => item.previousTechnicianId));
+    expect(result.items.map(item => item.sourceBookingId)).toEqual(sources);
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['draft', 'get'], ['booking', 'getBooking'], ['order', 'getOrder'], ['case', 'getMine'], ['address', 'getAddresses'], ['catalog', 'getPreview'],
+  ] as const)('identifies the %s read phase without leaking response details', async (phase, method) => {
+    mocks[method].mockRejectedValueOnce({ response: { status: 503, data: { private: 'PRIVATE_CUSTOMER_DATA' } } });
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).rejects.toMatchObject({ phase, status: 503, diagnostic: `REBOOK_${phase.toUpperCase()}_503` });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('keeps an unclassified network failure distinct from a proven contract rejection', async () => {
+    mocks.get.mockRejectedValueOnce(new Error('Synthetic connection failure'));
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).rejects.toMatchObject({ phase: 'draft', diagnostic: 'REBOOK_DRAFT_UNVERIFIED' });
+  });
+
+  it('reports link validation as a sanitized contract failure and retains strict ownership', async () => {
+    mocks.getBooking.mockResolvedValueOnce({ id: ids.booking, customerId: 'other-owner', serviceId: ids.service, status: 'CANCELLED', visitGroupId: null });
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer')).rejects.toMatchObject({ phase: 'links', diagnostic: 'REBOOK_LINKS_CONTRACT' });
   });
 
   it('rejects a draft whose case does not belong to its linked source order and booking', async () => {
@@ -158,6 +201,44 @@ describe('interruptionRebookApi', () => {
     await expect(interruptionRebookApi.confirm(ids.booking, 'customer', {
       idempotencyKey: 'stable-key-003', addressId: ids.address, date: '2090-01-02', slot: 'morning', items: [item, item],
     })).rejects.toThrow();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2])('requests and confirms exactly %s selected stopped devices from a three-device visit', async count => {
+    const data = rawDraft(count);
+    data.sourceVisitGroupId = ids.group;
+    const sources = data.items.map((item, index) => ({ ...item,
+      sourceOrderId: index ? '90000000-0000-4000-8000-000000000001' : ids.order,
+      sourceCaseId: index ? '90000000-0000-4000-8000-000000000002' : ids.case,
+    }));
+    data.items = sources;
+    mocks.get.mockResolvedValueOnce(ok(data));
+    mocks.getBooking.mockImplementation(async (id: string) => ({ id, customerId: 'customer', serviceId: ids.service, status: 'MATCHED', visitGroupId: ids.group }));
+    mocks.getOrder.mockImplementation(async (id: string) => ({ id, bookingId: sources.find(row => row.sourceOrderId === id)!.sourceBookingId, status: 'UNDER_REPAIR' }));
+    mocks.getMine.mockImplementation(async (id: string) => {
+      const row = sources.find(row => row.sourceCaseId === id)!;
+      return { id, bookingId: row.sourceBookingId, serviceOrderId: row.sourceOrderId, caseType: 'technician_replacement', status: 'open' };
+    });
+    const selected = sources.map(row => row.sourceBookingId);
+    const draft = await interruptionRebookApi.readDraft(ids.booking, 'customer', selected);
+    expect(draft.items.map(row => row.sourceBookingId)).toEqual(selected);
+    expect(mocks.get).toHaveBeenCalledWith(`/bookings/${ids.booking}/interruption-draft`, { params: { sourceBookingIds: selected.join(',') } });
+    const created = sources.map((source, index) => ({ sourceBookingId: source.sourceBookingId, sourceCaseId: source.sourceCaseId,
+      bookingId: index ? '90000000-0000-4000-8000-000000000004' : '90000000-0000-4000-8000-000000000003' }));
+    mocks.post.mockReset().mockResolvedValueOnce(ok({ targetKind: data.targetKind, bookingId: count === 1 ? created[0]!.bookingId : null,
+      visitGroupId: count === 2 ? ids.second : null, items: created }));
+    await interruptionRebookApi.confirm(ids.booking, 'customer', { idempotencyKey: 'subset-command', addressId: ids.address,
+      date: '2090-01-02', slot: 'morning', items: sources.map(row => ({ sourceBookingId: row.sourceBookingId, sourceCaseId: row.sourceCaseId, selectedVariantCode: 'AC-01-01' })) });
+    expect(mocks.post.mock.calls[0]![1].items.map((row: { sourceBookingId: string }) => row.sourceBookingId)).toEqual(selected);
+  });
+
+  it('rejects extra/unselected sources and invalid explicit subsets before confirmation', async () => {
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [])).rejects.toThrow();
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.booking, ids.booking])).rejects.toThrow();
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.second])).rejects.toThrow();
+    expect(mocks.get).not.toHaveBeenCalled();
+    mocks.get.mockResolvedValueOnce(ok(rawDraft(2)));
+    await expect(interruptionRebookApi.readDraft(ids.booking, 'customer', [ids.booking])).rejects.toThrow();
     expect(mocks.post).not.toHaveBeenCalled();
   });
 });

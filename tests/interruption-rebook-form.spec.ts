@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 
 const mocks = vi.hoisted(() => ({ readDraft: vi.fn(), confirm: vi.fn() }));
-vi.mock('../src/api/interruption-rebook.api', () => ({ interruptionRebookApi: mocks }));
+vi.mock('../src/api/interruption-rebook.api', async importOriginal => ({ ...await importOriginal<typeof import('../src/api/interruption-rebook.api')>(), interruptionRebookApi: mocks }));
 import InterruptionRebookForm from '../src/components/customer/InterruptionRebookForm.vue';
 
 enableAutoUnmount(afterEach);

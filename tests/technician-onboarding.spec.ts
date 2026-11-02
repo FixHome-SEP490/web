@@ -3,8 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import TechnicianOnboardingPage from '../src/pages/technician/TechnicianOnboardingPage.vue';
 import { technicianOnboardingApi } from '../src/api/technician-onboarding.api';
+import { technicianVerificationApi } from '../src/api/technician-verification.api';
 import { useAuthStore } from '../src/stores/auth.store';
 import { UserRole } from '../src/types';
+import { toast } from 'vue-sonner';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -252,6 +254,58 @@ describe('TechnicianOnboardingPage', () => {
     expect(wrapper.text()).toContain('Hồ sơ thợ đã được tiếp nhận!');
     expect(wrapper.text()).toContain('Đang chờ ban quản trị phê duyệt');
     expect(wrapper.text()).not.toContain('Hồ sơ chưa đạt yêu cầu');
+  });
+
+  it('reports technician KYC submission as pending admin review', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({
+      onboardingStatus: 'in_progress',
+      verificationStatus: 'pending',
+      currentStep: 2,
+      personalInfoCompleted: true,
+      kycSubmitted: false,
+      skillsSelected: false,
+      addressSet: false,
+      fullName: 'minh CU',
+      dateOfBirth: '1995-08-20',
+      gender: 'male',
+      citizenIdNumber: '001200001111',
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture');
+    vi.mocked(technicianVerificationApi.requestUploadUrl).mockResolvedValue({
+      storageObjectPath: 'technician-verification/fixture.jpg',
+      uploadUrl: 'https://upload.invalid/fixture',
+      token: 'fixture',
+    });
+    vi.mocked(technicianVerificationApi.uploadToSignedUrl).mockResolvedValue(undefined);
+    vi.mocked(technicianVerificationApi.submit).mockResolvedValue({
+      id: 'verification-1',
+      status: 'PENDING',
+      submittedAt: '2026-10-29T00:00:00.000Z',
+      rejectionReason: null,
+      fptDecision: null,
+      documents: [],
+    });
+
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    const fileInputs = wrapper.findAll('input[type="file"]');
+    for (const [index, input] of fileInputs.slice(0, 3).entries()) {
+      Object.defineProperty(input.element, 'files', {
+        configurable: true,
+        value: [new File(['fixture'], `kyc-${index}.jpg`, { type: 'image/jpeg' })],
+      });
+      await input.trigger('change');
+    }
+
+    const nextButton = wrapper.findAll('button').find((button) => button.text().includes('Lưu & Tiếp tục: Bước 3'));
+    expect(nextButton).toBeDefined();
+    await nextButton!.trigger('click');
+    await flushPromises();
+
+    expect(technicianVerificationApi.submit).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Đã gửi hồ sơ xác thực. Vui lòng chờ duyệt.');
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining('xác thực hồ sơ KYC thành công'));
+    expect(wrapper.text()).toContain('Bước 3: Chọn kỹ năng chuyên môn & Kinh nghiệm');
   });
 
   it('renders Approved screen with 0 VND initial balance notice and 200,000 VND deposit requirement', async () => {

@@ -41,6 +41,7 @@ import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intent
 import type { FundedReservation } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { pendingPaymentCashNotice } from '../../utils/pending-payment-cash-notice';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
@@ -95,6 +96,9 @@ const quotationPending = ref(false);
 // Modals
 const showCancelModal = ref(false);
 const showPaymentModal = ref(false);
+// A refusal raised inside the payment dialog is shown there, not on the page under the overlay (bug 39).
+const paymentDialogError = ref<string | null>(null);
+const cashHeldByPendingPayment = ref(false);
 const paymentDialog = ref<HTMLElement | null>(null);
 let paymentOpener: HTMLElement | null = null;
 watch(showPaymentModal, async open => {
@@ -727,6 +731,7 @@ function reservationForAction(): FundedReservation | null | undefined {
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
+  if (workStopped.value || paymentBlocked.value || actionLoading.value || walletPaying.value) return;
   if (value.reservation.scopeId !== order.value?.id || value.preview.scopeId !== order.value?.id
     || value.reservation.claimId !== value.preview.claimId || value.preview.paymentAvailable !== true) {
     actionMessage.value = { type: 'error', text: 'Máy chủ chưa xác nhận voucher cho hóa đơn này.' };
@@ -734,7 +739,11 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
   }
   fundedVoucher.value = value;
   actionMessage.value = null;
-  if (value.preview.customerDueVnd !== 0) return;
+}
+
+async function confirmZeroCheckout() {
+  if (actionLoading.value || walletPaying.value || paymentBlocked.value || workStopped.value
+    || activeFundedVoucher.value?.preview.customerDueVnd !== 0) return;
   const held = reservationForAction();
   if (!held || !invoice.value?.id || !order.value?.id) return;
   actionLoading.value = true;
@@ -764,6 +773,7 @@ let payMethodPicked = false;
 function choosePayMethod(method: PayMethod) {
   payMethod.value = method;
   payMethodPicked = true;
+  paymentDialogError.value = null;
 }
 watch(walletBalance, () => {
   if (walletCovers.value || payMethodPicked || payMethod.value !== 'wallet' || walletBalance.value === null) return;
@@ -773,6 +783,8 @@ watch(walletBalance, () => {
 const handlePay = () => {
   if (paymentBlocked.value || actionLoading.value) return;
   showPaymentModal.value = true;
+  paymentDialogError.value = null;
+  cashHeldByPendingPayment.value = false;
   walletBalance.value = null;
   payMethodPicked = false;
   payMethod.value = payMethods.value[0] ?? null;
@@ -780,6 +792,7 @@ const handlePay = () => {
 };
 
 function confirmCashIntent() {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (cashFirstEnabled.value) {
     void createCashIntent();
     return;
@@ -800,6 +813,7 @@ async function refreshCashIntent(serviceOrderId = order.value?.id ?? orderId) {
 }
 
 async function createCashIntent() {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (oldFinanceReview.value || !cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
     || currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return;
   const held = reservationForAction();
@@ -816,7 +830,12 @@ async function createCashIntent() {
     cashCreateCommandId.value = null;
   } catch (error) {
     await refreshCashIntent();
-    actionMessage.value = { type: 'error', text: userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.') };
+    const pendingNotice = pendingPaymentCashNotice(error);
+    const text = pendingNotice
+      ?? userFacingError(error, 'Chưa tạo được yêu cầu tiền mặt. Hãy kiểm tra trạng thái trước khi thử lại.');
+    actionMessage.value = { type: 'error', text };
+    if (showPaymentModal.value) paymentDialogError.value = text;
+    cashHeldByPendingPayment.value = pendingNotice !== null;
   } finally {
     actionLoading.value = false;
   }
@@ -844,6 +863,7 @@ async function cancelCashIntent() {
 }
 
 const payWithWallet = async () => {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (!invoice.value?.id || walletPaying.value || actionLoading.value || !walletCovers.value || !paymentOptions.value.includes('wallet')) return;
   const hadFundedVoucher = !!fundedVoucher.value;
   const held = reservationForAction();
@@ -865,6 +885,7 @@ const payWithWallet = async () => {
 };
 
 const confirmPayment = async () => {
+  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (actionLoading.value || walletPaying.value || !paymentOptions.value.includes('vnpay')) return;
   const hadFundedVoucher = !!fundedVoucher.value;
   const held = reservationForAction();
@@ -1959,6 +1980,8 @@ const parsedReview = computed(() => {
             @released="clearFundedVoucher"
             @expired="clearFundedVoucher"
           />
+          <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="actionLoading || walletPaying" :loading="actionLoading" data-testid="order-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+          <template v-else>
           <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
             <button
               v-for="method in payMethods"
@@ -2001,6 +2024,12 @@ const parsedReview = computed(() => {
             <template v-if="cashFirstEnabled">Gửi yêu cầu tiền mặt để máy chủ chốt số tiền hiện tại; kỹ thuật viên chỉ có thể xác nhận đã nhận sau khi yêu cầu được tạo.</template>
             <template v-else>Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.</template>
           </p>
+          <p
+            v-if="paymentDialogError && payMethod === 'cash'"
+            role="alert"
+            class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800 text-pretty"
+            data-testid="pay-dialog-error"
+          >{{ paymentDialogError }}</p>
           <FhButton
             v-if="payMethod === 'wallet'"
             class="w-full"
@@ -2023,9 +2052,12 @@ const parsedReview = computed(() => {
             v-else-if="payMethod === 'cash'"
             class="w-full"
             size="lg"
+            :disabled="actionLoading || walletPaying || cashHeldByPendingPayment"
+            :loading="actionLoading"
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"
           >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>
+          </template>
         </template>
       </div>
     </div>

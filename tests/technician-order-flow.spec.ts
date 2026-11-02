@@ -88,6 +88,7 @@ const activeOrder = {
 };
 
 const stubs = {
+  Teleport: true,
   FhButton: {
     props: ['disabled', 'loading', 'variant'],
     template: '<button :disabled="disabled" :data-variant="variant"><slot /></button>',
@@ -146,7 +147,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     orderId: id, partRequestId: `request-${id}`, partRequestItemId: `item-${id}`, partNameSnapshot: 'Linh kiện fixture',
     issuedQty: issued, usedQty: used, declaredQty: declared, managerAcceptedQty: accepted, outstandingQty: issued - used - accepted, version: 1,
   });
-  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; deviceStates?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; invalidEnvelope?: string } = {}) {
+  async function render(options: { status?: string; missing?: string; denied?: string; foreignRequest?: string; requestStatuses?: string[]; deviceStates?: string[]; returns?: Record<string, unknown[] | Promise<unknown[]>>; invalidReturns?: string; returnErrorStatus?: number; invalidEnvelope?: string } = {}) {
     mockGet.mockImplementation(async (path: string) => {
       const id = ids.find(id => path === `/service-orders/${id}`);
       if (id) return { data: { data: { ...activeOrder, id, bookingId: `booking-${id}`, visitGroupId: 'visit-p1', status: options.status ?? 'ACCEPTED' } } };
@@ -161,7 +162,7 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
       }
       const returnsId = ids.find(id => path === `/service-orders/${id}/part-returns`);
       if (returnsId) {
-        if (returnsId === options.invalidReturns) throw { response: { status: 503 } };
+        if (returnsId === options.invalidReturns) throw { response: { status: options.returnErrorStatus ?? 503 } };
         if (returnsId === options.invalidEnvelope) return { data: {} };
         return { data: { data: await options.returns?.[returnsId] ?? [] } };
       }
@@ -240,9 +241,30 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
   it('keeps a terminal child with an unknown ledger visible in mixed visits without inventing zero', async () => {
     const w = await render({ status: 'UNDER_REPAIR', deviceStates: ['cancelled', 'open', 'open'], invalidReturns: ids[0] });
     expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
-    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · Chưa xác nhận được tình trạng hoàn trả');
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Máy 1 · Chưa kiểm tra được nghĩa vụ linh kiện');
     expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
     expect(w.get('[data-testid="visit-returns-retry"]').exists()).toBe(true);
+    w.unmount();
+  });
+  it.each([403, 503])('shows released machine ledger HTTP %s as unknown rather than confirmed debt', async status => {
+    const w = await render({ status: 'COMPLETED', deviceStates: ['succeeded', 'interrupted', 'succeeded'], invalidReturns: ids[1], returnErrorStatus: status });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    const detail = w.get('[data-testid="visit-return-device-2"]');
+    expect(detail.text()).toContain('Chưa kiểm tra được nghĩa vụ linh kiện');
+    expect(detail.text()).not.toContain('cần trả kho');
+    expect(mockPost).not.toHaveBeenCalled(); w.unmount();
+  });
+
+  it('treats backend former-assignee UNKNOWN marker as SM reconciliation, not cleared return stock', async () => {
+    const w = await render({ status: 'COMPLETED', deviceStates: ['succeeded', 'interrupted', 'succeeded'], returns: {
+      [ids[1]]: [{ orderId: ids[1], receiptState: 'UNKNOWN', returnStatus: 'unknown' }],
+    } });
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    const detail = w.get('[data-testid="visit-return-device-2"]');
+    expect(detail.text()).toContain('qu?n l? d?ch v? c?n ??i so?t');
+    expect(detail.text()).not.toContain('c?n tr? kho');
+    expect(detail.text()).not.toContain('0 linh ki?n');
+    expect(mockPost).not.toHaveBeenCalled();
     w.unmount();
   });
   it('clears only quantities physically accepted by manager after an authoritative refresh', async () => {
@@ -268,7 +290,8 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
   });
   it('rejects a ledger belonging to another child rather than adding its quantities', async () => {
     const w = await render({ status: 'COMPLETED', returns: { [ids[1]]: [ledger(ids[0], 99, 0, 99, 0)] } });
-    const banner = w.get('[data-testid="visit-returns-warning"]');
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    const banner = w.get('[data-testid="visit-return-child-details"]');
     expect(banner.text()).not.toContain('99');
     expect(banner.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
     w.unmount();
@@ -276,14 +299,16 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
   it('treats a missing ledger envelope as unknown instead of an empty returned-stock list', async () => {
     const w = await render({ status: 'COMPLETED', invalidEnvelope: ids[1] });
     expect(w.get('[data-testid="visit-return-device-2"]').text()).toContain('Chưa kiểm tra được');
-    expect(w.get('[data-testid="visit-returns-warning"]').text()).not.toContain('0 linh kiện');
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).not.toContain('0 linh kiện');
     w.unmount();
   });
   it('ignores an older pending ledger response after a newer manager-confirmed read', async () => {
     let finish!: (rows: unknown[]) => void;
     const returns: Record<string, unknown[] | Promise<unknown[]>> = { [ids[0]]: new Promise(resolve => { finish = resolve; }) };
     const w = await render({ status: 'COMPLETED', returns });
-    expect(w.get('[data-testid="visit-returns-warning"]').attributes('aria-busy')).toBe('true');
+    expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
+    expect(w.get('[data-testid="visit-return-child-details"]').text()).toContain('Chưa kiểm tra được');
     returns[ids[0]] = [ledger(ids[0], 2, 0, 2, 2)];
     window.dispatchEvent(new Event('focus')); await flushPromises();
     expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
@@ -1038,8 +1063,8 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const before = mount(TechnicianJobDetailPage, { global: { stubs } });
     await flushPromises();
     await openMoreMenu(before);
-    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · kỹ năng');
-    expect(menuItems(before)).not.toContain('Báo cáo hỗ trợ · ngoại lệ');
+    expect(menuItems(before)).not.toContain('Nhờ quản lý hỗ trợ · kỹ năng (vẫn tiếp tục)');
+    expect(menuItems(before)).not.toContain('Nhờ quản lý hỗ trợ · ngoại lệ (vẫn tiếp tục)');
     expect(before.find('[data-testid="replacement-card"]').exists()).toBe(false);
     before.unmount();
 
@@ -1056,19 +1081,17 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await openMoreMenu(wrapper);
     // After check-in the order can no longer be cancelled by the technician.
     expect(menuItems(wrapper)).not.toContain('Huỷ đơn');
-    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · kỹ năng');
-    expect(menuItems(wrapper)).toContain('Báo cáo hỗ trợ · ngoại lệ');
+    expect(menuItems(wrapper)).toContain('Báo cáo vấn đề sửa chữa');
     expect(menuItems(wrapper)).not.toContain('Cần thay đổi thợ');
     expect(menuItems(wrapper)).not.toContain('Báo cáo vấn đề');
-    await wrapper.findAll('[role="menuitem"]').find((b) => b.text().includes('Báo cáo hỗ trợ · kỹ năng'))!.trigger('click');
-    const dialog = wrapper.get('[data-testid="technician-report-dialog"]');
+    await wrapper.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
+    const dialog = wrapper.findComponent({ name: 'CannotContinueDialog' });
+    await dialog.get('[data-testid="report-mode"]').setValue('support');
     expect(dialog.text()).toContain('Thiếu kỹ năng hoặc thao tác chưa đúng');
-    expect(dialog.attributes('aria-describedby')).toBe('technician-report-description');
-    expect(dialog.get('[data-testid="technician-report-reason"]').attributes('aria-describedby')).toBe('technician-report-reason-hint');
-    expect(dialog.get('#technician-report-reason-hint').text()).toContain('10–2.000 ký tự');
-    await dialog.get('[data-testid="technician-report-reason"]').setValue('Thiếu kỹ năng xử lý dòng máy này.');
-    await dialog.get('[data-testid="technician-report-evidence"]').setValue(true);
-    await dialog.get('[data-testid="technician-report-submit"]').trigger('click');
+    expect(dialog.get('textarea').attributes('aria-describedby')).toBe('cannot-continue-reason-hint');
+    await dialog.get('textarea').setValue('Thiếu kỹ năng xử lý dòng máy này.');
+    await dialog.get('[data-testid="report-support-evidence"]').setValue(true);
+    await dialog.get('[data-testid="cannot-continue-submit"]').trigger('click');
     await flushPromises();
     expect(mockPost).toHaveBeenCalledWith('/support/cases/technician-report', {
       serviceOrderId: 'job-test-101',

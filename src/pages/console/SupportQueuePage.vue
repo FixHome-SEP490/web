@@ -9,6 +9,7 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import {
   supportCasesApi,
+  SupportCaseContractError,
   type SupportCaseStatus,
   type SupportCaseSummary,
   type SupportCaseType,
@@ -23,6 +24,8 @@ import {
 } from './support-cases.utils';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
+import { getHttpStatus } from '../../api/client';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const router = useRouter();
 const route = useRoute();
@@ -39,6 +42,7 @@ const columns: ConsoleColumn[] = [
 const caseTypes: SupportCaseType[] = [
   'matching_exhausted',
   'arrival_abnormal',
+  'technician_delay',
   'cash_non_response',
   'cash_mismatch',
   'cancellation_review',
@@ -60,35 +64,44 @@ const queryValue = <T extends string>(value: unknown, allowed: readonly T[]): T 
   typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : '';
 const caseTypeFilter = ref<SupportCaseType | ''>(queryValue(route?.query?.caseType, caseTypes));
 const statusFilter = ref<SupportCaseStatus | ''>(queryValue(route?.query?.status, statuses));
+const serviceOrderIdFilter = computed(() => typeof route.query.serviceOrderId === 'string' ? route.query.serviceOrderId.trim() : '');
 const page = ref(1);
 const pageSize = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const loading = ref(true);
-const error = ref(false);
+const error = ref('');
 let latestRequest = 0;
 
 async function loadCases() {
   const requestId = ++latestRequest;
   loading.value = true;
-  error.value = false;
+  error.value = '';
   try {
     const response = await supportCasesApi.listCases({
       page: page.value,
       limit: pageSize,
       caseType: caseTypeFilter.value || undefined,
       status: statusFilter.value || undefined,
+      serviceOrderId: serviceOrderIdFilter.value || undefined,
       search: searchQuery.value.trim() || undefined,
       sort: 'priority',
     });
     if (requestId !== latestRequest) return;
     cases.value = response.data;
     total.value = response.meta.total;
-  } catch {
+  } catch (failure) {
     if (requestId !== latestRequest) return;
     cases.value = [];
     total.value = 0;
-    error.value = true;
+    const status = getHttpStatus(failure);
+    const fallback = failure instanceof SupportCaseContractError
+      ? 'Dữ liệu danh sách hỗ trợ không đúng định dạng. Thử lại; nếu vẫn lỗi, báo nhóm hỗ trợ kiểm tra phản hồi danh sách.'
+      : 'Chưa tải được danh sách hỗ trợ. Kiểm tra kết nối rồi thử lại.';
+    error.value = userFacingError(failure, fallback);
+    if (status === 403) error.value += ' Cần tài khoản quản lý dịch vụ hoặc quản trị viên có quyền xem tất cả yêu cầu hỗ trợ.';
+    // Only the numeric transport status is diagnostic; never expose response bodies or parser internals.
+    if (status !== undefined) error.value += ` (HTTP ${status})`;
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -129,6 +142,7 @@ watch([caseTypeFilter, statusFilter], () => {
     void loadCases();
   }
 });
+watch(serviceOrderIdFilter, applySearch);
 
 watch(page, (nextPage, previousPage) => {
   if (nextPage !== previousPage) void loadCases();
@@ -139,6 +153,7 @@ watch(page, (nextPage, previousPage) => {
   <div class="space-y-5">
     <ConsolePageHeader title="Yêu cầu hỗ trợ" :count="loading || error ? null : total" />
     <p v-if="isAdmin" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
+    <p v-if="serviceOrderIdFilter" class="text-sm text-ink-600" role="status">Đang xem yêu cầu hỗ trợ của một đơn. <router-link :to="`/console/orders/${encodeURIComponent(serviceOrderIdFilter)}`" class="text-brand-700 underline">Xem đơn sửa chữa</router-link> · <router-link to="/console/support" class="text-brand-700 underline">Xem tất cả yêu cầu</router-link></p>
 
     <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="applySearch">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo lý do, mã yêu cầu" label="Tìm yêu cầu hỗ trợ" />
@@ -166,7 +181,7 @@ watch(page, (nextPage, previousPage) => {
       </button>
     </form>
 
-    <ConsoleLoadError v-if="error" @retry="loadCases" />
+    <ConsoleLoadError v-if="error" :message="error" @retry="loadCases" />
     <ConsoleTable
       v-else
       :columns="columns"

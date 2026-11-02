@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, watchEffect } from 'vue';
 
 // The conversation with the assistant is many turns, not one: the assistant
 // may ask back, and the customer answers, asks, adds photos or asks for another
 // service, all in the same session.
-const { analyze, ask, acknowledgements } = vi.hoisted(() => ({
+const { analyze, ask, acknowledgements, shrinkForRetry, uploadBookingPhoto, uploadBookingVideo } = vi.hoisted(() => ({
   analyze: vi.fn(),
   ask: vi.fn(),
   acknowledgements: vi.fn(),
+  shrinkForRetry: vi.fn(),
+  uploadBookingPhoto: vi.fn(),
+  uploadBookingVideo: vi.fn(),
 }));
 vi.mock('../src/api/ai.api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/api/ai.api')>();
@@ -14,10 +18,17 @@ vi.mock('../src/api/ai.api', async (importOriginal) => {
 });
 vi.mock('../src/utils/image-for-ai', () => ({
   prepareForAi: vi.fn(async (files: File[]) => ({ images: files.map((f) => ({ dataUrl: `data:${f.name}`, bytes: 1 })) })),
-  shrinkForRetry: vi.fn(async (images: { dataUrl: string }[]) => images.map((i) => `${i.dataUrl}#small`)),
+  shrinkForRetry,
+}));
+vi.mock('../src/api/media.api', () => ({
+  mediaApi: {
+    uploadBookingPhoto,
+    uploadBookingVideo,
+  },
 }));
 
 import { useAiConversation, composeFromFields, priceLabel, priceBreakdown } from '../src/composables/useAiConversation';
+import { mediaApi } from '../src/api/media.api';
 
 const reply = (extra: Record<string, unknown> = {}) => ({
   sessionId: 'sess-1', status: 'ok', aiAvailable: true, messageVi: 'Dạ em xem rồi ạ.',
@@ -25,7 +36,14 @@ const reply = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('useAiConversation', () => {
-  beforeEach(() => { analyze.mockReset(); ask.mockReset(); acknowledgements.mockReset().mockResolvedValue({}); });
+  beforeEach(() => {
+    analyze.mockReset();
+    ask.mockReset();
+    acknowledgements.mockReset().mockResolvedValue({});
+    shrinkForRetry.mockReset().mockImplementation(async (images: { dataUrl: string }[]) => images.map((i) => `${i.dataUrl}#small`));
+    uploadBookingPhoto.mockReset().mockResolvedValue({ uploadId: 'uploaded-photo' });
+    uploadBookingVideo.mockReset().mockResolvedValue({ uploadId: 'uploaded-video' });
+  });
 
   it('lets the customer answer what the assistant asked back, in the same session', async () => {
     analyze
@@ -89,13 +107,87 @@ describe('useAiConversation', () => {
     expect(c.pinnedService.value?.serviceId).toBe('svc-fix');
   });
 
-  it('retries once with smaller photos when the first send fails, and never blocks', async () => {
+  it('retries once with smaller photos only for a recoverable image transport failure', async () => {
     analyze
-      .mockResolvedValueOnce({ status: 'unavailable', aiAvailable: false, sessionId: null, messageVi: 'Trợ lý đang bận' })
+      .mockResolvedValueOnce({ status: 'unavailable', aiAvailable: false, failureReason: 'image_transport', sessionId: null, messageVi: 'Ảnh chưa gửi được' })
       .mockResolvedValueOnce(reply());
     const c = useAiConversation({ dwellMs: 0 });
     await c.sendTurn('Máy giặt không vắt', [{ dataUrl: 'data:big', bytes: 9 } as never]);
+    expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ images: ['data:big#small'] }));
+    expect(c.messages.value.filter((message) => message.isAcknowledgement)).toHaveLength(1);
+    expect(c.messages.value.find((message) => message.isAcknowledgement)?.text).toBe('Ảnh chưa gửi được, đang thử gửi bản nhẹ hơn…');
+    expect(mediaApi.uploadBookingPhoto).toHaveBeenCalledTimes(1);
+    expect(c.isThinking.value).toBe(false);
+  });
+
+  it('reactively updates the acknowledgement while the smaller image is being prepared', async () => {
+    let finishShrink!: (images: string[]) => void;
+    shrinkForRetry.mockReturnValueOnce(new Promise<string[]>((resolve) => { finishShrink = resolve; }));
+    analyze.mockResolvedValueOnce({
+      status: 'unavailable',
+      aiAvailable: undefined,
+      failureReason: 'image_transport',
+      sessionId: null,
+      messageVi: 'Ảnh chưa gửi được',
+    }).mockResolvedValueOnce(reply());
+    const c = useAiConversation({ dwellMs: 0 });
+    const observedTexts: string[] = [];
+    const stop = watchEffect(() => {
+      const acknowledgement = c.messages.value.find((message) => message.isAcknowledgement);
+      if (acknowledgement) observedTexts.push(acknowledgement.text);
+    });
+
+    const sending = c.sendTurn('Máy giặt không vắt', [{ dataUrl: 'data:big', bytes: 9 } as never]);
+    await vi.waitFor(() => expect(shrinkForRetry).toHaveBeenCalledTimes(1));
+    await nextTick();
+
+    expect(observedTexts).toContain('Ảnh chưa gửi được, đang thử gửi bản nhẹ hơn…');
+    finishShrink(['data:big#small']);
+    await sending;
+    stop();
+  });
+
+  it('does not retry an ambiguous image timeout or duplicate its booking media upload', async () => {
+    analyze.mockResolvedValueOnce({
+      status: 'unavailable',
+      aiAvailable: false,
+      failureReason: 'service_unavailable',
+      sessionId: null,
+      messageVi: 'Trợ lý đang tạm thời không khả dụng.',
+    });
+    const c = useAiConversation({ dwellMs: 0 });
+
+    await c.sendTurn('Máy lạnh không mát', [{ dataUrl: 'data:photo', bytes: 1 } as never]);
+
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(mediaApi.uploadBookingPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry photos for an unavailable AI backend and keeps the selected service', async () => {
+    analyze.mockResolvedValueOnce({
+      status: 'unavailable',
+      aiAvailable: false,
+      failureReason: 'service_unavailable',
+      sessionId: null,
+      messageVi: 'Trợ lý đang tạm thời không khả dụng. Bạn có thể chọn dịch vụ thủ công để tiếp tục đặt lịch.',
+    });
+    const c = useAiConversation({ dwellMs: 0 });
+    c.pinnedService.value = { serviceCode: 'AC-01', nameVi: 'Sửa điều hòa', serviceId: 'svc-ac' };
+
+    await c.sendTurn('Máy lạnh không mát', [{ dataUrl: 'data:photo', bytes: 1 } as never], { keepImagesForBooking: false });
+
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(c.pinnedService.value?.serviceId).toBe('svc-ac');
+    expect(c.messages.value.at(-1)?.text).toContain('tạm thời không khả dụng');
+  });
+
+  it('clears the thinking state when an unexpected AI error escapes', async () => {
+    analyze.mockRejectedValueOnce(new Error('unexpected failure'));
+    const c = useAiConversation({ dwellMs: 0 });
+
+    await expect(c.sendTurn('Máy giặt không vắt', [])).rejects.toThrow('unexpected failure');
+
     expect(c.isThinking.value).toBe(false);
   });
 

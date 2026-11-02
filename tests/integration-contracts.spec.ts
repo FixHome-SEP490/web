@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../src/api/client';
 import { bookingsApi } from '../src/api/bookings.api';
+import { visitGroupsApi } from '../src/api/visit-groups.api';
 import { ordersApi, evidencePhaseToType, evidenceTypeToPhase, normalizeEvidenceType } from '../src/api/orders.api';
 import { profileApi } from '../src/api/profile.api';
 import { bookingSchedule } from '../src/utils/booking-schedule';
@@ -34,6 +35,47 @@ describe('booking/order HTTP contracts (AI excluded)', () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({data:{data:[{id:'address'}]}});
     expect(await profileApi.getAddresses()).toEqual([{id:'address'}]);
   });
+  it('opts into coarse empty reasons without changing the native candidates array contract', async () => {
+    // The real HTTP body: the reason rides in meta next to data (bug 41).
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
+    expect(await bookingsApi.getCandidatesWithDiagnostics('b')).toEqual({
+      candidates: [], emptyReason: 'OUTSIDE_COVERAGE',
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/bookings/b/technician-candidates?diagnostics=1', { timeout: 60000 },
+    );
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [{
+      userId: 'user-tech', technicianId: 'profile-tech', fullName: 'Thợ',
+    }], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
+    const found = await bookingsApi.getCandidatesWithDiagnostics('b');
+    expect(found.candidates[0].id).toBe('user-tech');
+    expect(found.emptyReason).toBeNull();
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'FAKE_REASON' } } });
+    expect((await bookingsApi.getCandidatesWithDiagnostics('b')).emptyReason).toBeNull();
+    // A field next to data never reaches the client through the envelope, it is not read.
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], emptyReason: 'OUTSIDE_COVERAGE' } });
+    expect((await bookingsApi.getCandidatesWithDiagnostics('b')).emptyReason).toBeNull();
+  });
+  it('reads the reason a whole visit has no technician from the same meta.emptyReason body', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
+    expect(await visitGroupsApi.candidatesWithDiagnostics('g')).toEqual({ candidates: [], emptyReason: 'OUTSIDE_COVERAGE' });
+    expect(apiClient.get).toHaveBeenCalledWith('/visit-groups/g/technician-candidates?diagnostics=1', { timeout: 60000 });
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [{ userId: 'user-tech', technicianId: 'profile-tech', fullName: 'Thợ' }], meta: { emptyReason: 'OUTSIDE_COVERAGE' } } });
+    const found = await visitGroupsApi.candidatesWithDiagnostics('g');
+    expect(found.candidates[0].id).toBe('user-tech');
+    expect(found.emptyReason).toBeNull();
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [], meta: { emptyReason: 'FAKE_REASON' } } });
+    expect((await visitGroupsApi.candidatesWithDiagnostics('g')).emptyReason).toBeNull();
+    // The plain list Mobile reads is still there without diagnostics.
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { data: [] } });
+    expect(await visitGroupsApi.candidates('g')).toEqual([]);
+    expect(apiClient.get).toHaveBeenLastCalledWith('/visit-groups/g/technician-candidates', { timeout: 60000 });
+  });
+
   it('uses quotation decisions and multipart evidence accepted by Backend', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({data:{data:{}}});
     await ordersApi.approveQuotation('q');

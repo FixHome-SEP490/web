@@ -18,7 +18,7 @@ import {
   FhMoney,
   TechnicianProfileModal,
 } from '../../components';
-import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
+import { bookingsApi, type TechnicianCandidate, type CandidateEmptyReason } from '../../api/bookings.api';
 import { visitGroupsApi } from '../../api/visit-groups.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 
@@ -41,6 +41,79 @@ const loadError = ref('');
 const sending = ref(false);
 const sendError = ref('');
 const candidates = ref<TechnicianCandidate[]>([]);
+const emptyReason = ref<CandidateEmptyReason | null>(null);
+let latestLoadId = 0;
+
+// A visit reads the same reasons as one booking (bug 41); only the words naming it differ.
+const requestWord = isVisit ? 'lượt sửa' : 'yêu cầu';
+const viewRequestLabel = isVisit ? 'Xem lượt sửa' : 'Xem yêu cầu';
+const emptyState = computed(() => {
+  switch (emptyReason.value) {
+    case 'OUTSIDE_COVERAGE':
+      return {
+        title: 'Địa chỉ nằm ngoài khu vực phục vụ',
+        description: `FixHome chưa có kỹ thuật viên phục vụ tại địa chỉ đã đặt. Bạn có thể đặt lại ${requestWord} này với một địa chỉ khác.`,
+        action: 'Đặt lại với địa chỉ khác',
+      };
+    case 'BOOKING_LOCATION_MISSING':
+      return {
+        title: 'Chưa xác định được vị trí đặt lịch',
+        description: `${isVisit ? 'Lượt sửa' : 'Yêu cầu'} chưa có vị trí chính xác đã xác nhận. Vui lòng kiểm tra lại địa chỉ và đặt lại với vị trí đầy đủ.`,
+        action: viewRequestLabel,
+      };
+    case 'TIME_UNAVAILABLE':
+      return {
+        title: 'Chưa có thợ rảnh trong giờ hẹn này',
+        description: 'Các thợ phù hợp với địa chỉ đều bận hoặc không làm việc trong giờ hẹn đã chọn. Hãy xem lại lịch hẹn.',
+        action: 'Xem lịch hẹn',
+      };
+    default:
+      return {
+        title: 'Chưa có kỹ thuật viên phù hợp',
+        description: isVisit
+          ? 'Hiện chưa tìm được thợ nhận sửa được mọi máy trong lượt này. Bạn có thể kiểm tra lại địa chỉ, các máy và thời gian.'
+          : 'Hiện chưa tìm được thợ đáp ứng đầy đủ điều kiện của yêu cầu này. Bạn có thể kiểm tra lại địa chỉ, dịch vụ và thời gian.',
+        action: viewRequestLabel,
+      };
+  }
+});
+
+
+// Only a found technician makes the "ready" badge true (bug 41: it showed over the empty list).
+const showsReadyBadge = computed(() => !loading.value && !loadError.value && candidates.value.length > 0);
+// Nothing to choose, nothing to send: the "Đã chọn 0/2, Gửi lời mời" bar shows only over a list.
+const showsActionBar = showsReadyBadge;
+
+const rebooking = ref(false);
+// Out of area: start a new request for the same service and description, the customer picks
+// another address in the form. The current request is left as it is, it can be cancelled there.
+const rebookElsewhere = async () => {
+  if (!bookingId || rebooking.value) return;
+  // A visit holds several devices the form cannot be filled with from a link: the form opens
+  // empty and the customer adds the devices again at the new address.
+  if (isVisit) {
+    await router.push({ name: 'new-booking' });
+    return;
+  }
+  rebooking.value = true;
+  const query: Record<string, string> = {};
+  try {
+    const booking = await bookingsApi.getBooking(bookingId);
+    if (booking.serviceId) query.serviceId = booking.serviceId;
+    if (booking.description?.trim()) query.desc = booking.description.trim().slice(0, 1000);
+  } catch {
+    // The form still opens, the customer chooses the service again.
+  } finally {
+    rebooking.value = false;
+  }
+  await router.push({ name: 'new-booking', query });
+};
+
+const handleEmptyAction = () => {
+  if (emptyReason.value === 'OUTSIDE_COVERAGE') void rebookElsewhere();
+  else router.push(backTarget.value);
+};
+
 const selectedIds = ref<string[]>([]);
 const inviteSent = ref(false);
 
@@ -63,6 +136,7 @@ const handleModalToggleSelect = (id: string) => {
 };
 
 const loadCandidates = async () => {
+  const loadId = ++latestLoadId;
   if (!bookingId) {
     loadError.value = 'Không xác định được đơn đặt lịch. Vui lòng tạo lại yêu cầu đặt thợ.';
     loading.value = false;
@@ -70,16 +144,23 @@ const loadCandidates = async () => {
   }
   loading.value = true;
   loadError.value = '';
+  emptyReason.value = null;
   try {
-    const list = isVisit ? await visitGroupsApi.candidates(bookingId) : await bookingsApi.getCandidates(bookingId);
-    candidates.value = list;
+    const result = isVisit
+      ? await visitGroupsApi.candidatesWithDiagnostics(bookingId)
+      : await bookingsApi.getCandidatesWithDiagnostics(bookingId);
+    if (loadId !== latestLoadId) return;
+    candidates.value = result.candidates;
+    emptyReason.value = result.candidates.length ? null : result.emptyReason;
     // The customer may choose one or two technicians; selection order is invitation priority.
     selectedIds.value = [];
   } catch {
+    if (loadId !== latestLoadId) return;
     candidates.value = [];
+    emptyReason.value = null;
     loadError.value = 'Không thể tải danh sách kỹ thuật viên phù hợp. Vui lòng thử lại.';
   } finally {
-    loading.value = false;
+    if (loadId === latestLoadId) loading.value = false;
   }
 };
 
@@ -168,7 +249,11 @@ const successMessage = computed(() => selectedCount.value === 1
             Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong buổi bạn chọn
           </p>
         </div>
-        <div class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0">
+        <div
+          v-if="showsReadyBadge"
+          data-testid="candidates-ready-badge"
+          class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+        >
           <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
           Đang có thợ sẵn sàng nhận đơn
         </div>
@@ -234,11 +319,16 @@ const successMessage = computed(() => selectedCount.value === 1
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
-      title="Chưa có kỹ thuật viên nhận được giờ hẹn này"
-      description="Kỹ thuật viên chỉ nhận đơn trong ca làm và khi còn trống lịch. Hãy đổi sang buổi khác rồi tìm lại."
-      action-text="Đổi giờ hẹn"
-      @action="router.push(backTarget)"
-    />
+      :title="emptyState.title"
+      :description="emptyState.description"
+      :action-text="emptyState.action"
+      data-testid="candidates-empty"
+      @action="handleEmptyAction"
+    >
+      <template v-if="emptyReason === 'OUTSIDE_COVERAGE'" #extra>
+        <FhButton variant="ghost" size="sm" class="mt-2" :disabled="rebooking" @click="router.push(backTarget)">{{ viewRequestLabel }}</FhButton>
+      </template>
+    </FhEmptyState>
 
     <!-- Candidates Cards -->
     <div v-else class="space-y-3.5">
@@ -407,7 +497,11 @@ const successMessage = computed(() => selectedCount.value === 1
     </div>
 
     <!-- Floating Sticky Action Bar -->
-    <div class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)">
+    <div
+      v-if="showsActionBar"
+      data-testid="candidates-action-bar"
+      class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)"
+    >
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
         <div class="flex items-center gap-2.5">
           <div class="flex items-center gap-1.5">

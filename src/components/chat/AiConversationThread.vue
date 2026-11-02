@@ -2,9 +2,9 @@
 // The thread and composer of a conversation with the assistant. Shared by the
 // floating assistant and the booking form's diagnosis step; the owner keeps
 // the conversation (useAiConversation) and puts its own action in the
-// `pinned` slot - "Đặt thợ" in the assistant, "Đổi dịch vụ" in the form.
-import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { Bot, X, Image as ImageIcon, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
+// `pinned` slot (the floating assistant's booking action).
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { ArrowDown, Bot, X, Image as ImageIcon, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
 import {
   AI_CHAT_MAX_IMAGES,
@@ -99,14 +99,41 @@ const uploadSummary = computed(() => {
   return null;
 });
 const thread = ref<HTMLElement | null>(null);
+const threadContent = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const followingLatest = ref(true);
+let resizeObserver: ResizeObserver | undefined;
 
-async function scrollToEnd() {
-  await nextTick();
-  if (thread.value) thread.value.scrollTop = thread.value.scrollHeight;
+function onThreadScroll() {
+  const el = thread.value;
+  if (el) followingLatest.value = el.scrollHeight - el.clientHeight - el.scrollTop <= 96;
 }
 
-watch(() => [c.messages.length, c.isThinking, c.messages[c.messages.length - 1]?.text], scrollToEnd, { immediate: true });
+async function scrollToEnd() {
+  followingLatest.value = true;
+  await nextTick();
+  // A scroll gesture may have happened while waiting for Vue's DOM update.
+  if (followingLatest.value && thread.value) thread.value.scrollTop = thread.value.scrollHeight;
+}
+
+function followGrowth() {
+  if (followingLatest.value) void scrollToEnd();
+}
+
+// Inspect user identity as well as the last message: sendTurn can append both
+// the customer's message and the assistant's acknowledgement in the same tick.
+watch(() => c.messages.filter((message) => message.sender === 'user').at(-1)?.id, () => { void scrollToEnd(); });
+watch(() => c.messages[0]?.id, () => { void scrollToEnd(); });
+watch(() => [c.messages, c.isThinking], followGrowth, { deep: true, immediate: true });
+
+onMounted(() => {
+  followGrowth();
+  if (typeof ResizeObserver === 'undefined') return;
+  resizeObserver = new ResizeObserver(followGrowth);
+  if (threadContent.value) resizeObserver.observe(threadContent.value);
+  if (thread.value) resizeObserver.observe(thread.value);
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 async function onFiles(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -142,9 +169,11 @@ defineExpose({ scrollToEnd });
 </script>
 
 <template>
-  <div class="flex flex-col min-h-0 h-full">
+  <div class="flex flex-col min-h-0 min-w-0 h-full [&>div:not(:first-child)]:shrink-0">
     <!-- Thread -->
-    <div ref="thread" class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 bg-ink-50/40" data-testid="ai-thread">
+    <div class="relative flex flex-1 min-h-0 min-w-0">
+    <div ref="thread" class="flex-1 min-h-0 min-w-0 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4 bg-ink-50/40 [overflow-anchor:none]" data-testid="ai-thread" role="region" aria-label="Nội dung trò chuyện với trợ lý AI" tabindex="0" @scroll.passive="onThreadScroll">
+      <div ref="threadContent" class="mx-auto max-w-[72ch] space-y-5">
       <div v-for="(message, messageIndex) in c.messages" :key="message.id">
         <div v-if="message.sender === 'user'" class="flex justify-end">
           <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-600 text-white px-3.5 py-2">
@@ -154,7 +183,7 @@ defineExpose({ scrollToEnd });
                 <button
                   v-if="photoLabels[messageIndex]?.[index]"
                   type="button"
-                  class="max-w-full line-clamp-2 break-words text-center rounded-xl px-2 py-0.5 text-[11px] leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
+                  class="max-w-full break-words text-center rounded-xl px-2 py-0.5 text-xs leading-4 bg-white/20 hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60"
                   :class="photoLabels[messageIndex][index]!.uncertain ? 'ring-1 ring-warning-300' : ''"
                   :title="`Bấm để sửa nếu ảnh ${index + 1} không phải thiết bị này`"
                   :aria-label="`Ảnh ${index + 1}: ${photoLabels[messageIndex][index]!.text}. Bấm để sửa`"
@@ -176,11 +205,11 @@ defineExpose({ scrollToEnd });
                 class="w-44 max-w-full rounded-lg bg-ink-900"
               ></video>
             </div>
-            <p v-if="message.text" class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ message.text }}</p>
+            <p v-if="message.text" class="text-base leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{{ message.text }}</p>
           </div>
         </div>
         <template v-if="message.sender === 'user'">
-          <p v-if="message.videos?.length" class="mt-1 text-right text-xs text-ink-500" data-testid="ai-video-note">
+          <p v-if="message.videos?.length" class="mt-1 text-right text-sm text-ink-600" data-testid="ai-video-note">
             {{ VIDEO_NOT_ANALYSED }}
           </p>
           <!-- PO 18/10/2026: what goes with the booking is sent now, in the background; each says how far it is. -->
@@ -232,13 +261,13 @@ defineExpose({ scrollToEnd });
               class="rounded-2xl rounded-bl-sm px-3.5 py-2 border"
               :class="message.isAcknowledgement ? 'bg-ink-100/70 border-ink-100 text-ink-500 italic' : 'bg-white border-ink-100 text-ink-900'"
             >
-              <p class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ message.text }}</p>
+              <p class="text-base leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{{ message.text }}</p>
             </div>
 
             <!-- What it found. The booking action lives in the pinned slot. -->
             <div
               v-if="message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable'"
-              class="rounded-xl border border-ink-100 bg-white p-3 space-y-2.5"
+              class="border-l-2 border-brand-200 pl-3 py-2 space-y-4 [overflow-wrap:anywhere]"
               data-testid="ai-reply-details"
             >
               <!-- Safety first: a warning read after a list of faults is a warning nobody acted on. -->
@@ -248,9 +277,9 @@ defineExpose({ scrollToEnd });
               >
                 <div class="flex items-center gap-1.5 mb-1">
                   <AlertTriangle :size="14" class="text-danger-700" />
-                  <span class="text-xs font-semibold text-danger-700">Anh/chị làm ngay giúp em</span>
+                  <span class="text-sm font-semibold text-danger-700">Anh/chị làm ngay giúp em</span>
                 </div>
-                <p v-for="(action, index) in message.reply.suggestedActionsVi" :key="index" class="text-sm text-danger-900 leading-relaxed">
+                <p v-for="(action, index) in message.reply.suggestedActionsVi" :key="index" class="text-base text-danger-900 leading-relaxed">
                   {{ index + 1 }}. {{ action }}
                 </p>
               </div>
@@ -260,24 +289,24 @@ defineExpose({ scrollToEnd });
               </div>
 
               <div v-if="message.reply.suspectedFaults?.length">
-                <p class="text-xs font-semibold text-ink-500 mb-1">Có thể là</p>
-                <p v-for="fault in message.reply.suspectedFaults" :key="fault.faultCode" class="text-sm text-ink-900 leading-relaxed">• {{ fault.nameVi }}</p>
+                <p class="text-sm font-semibold text-ink-700 mb-1">Có thể là</p>
+                <p v-for="fault in message.reply.suspectedFaults" :key="fault.faultCode" class="text-base text-ink-900 leading-relaxed">• {{ fault.nameVi }}</p>
               </div>
 
               <div v-if="message.reply.urgency !== 'HIGH' && message.reply.suggestedActionsVi?.length">
-                <p class="text-xs font-semibold text-ink-500 mb-1">Anh/chị có thể làm trước</p>
-                <p v-for="(action, index) in message.reply.suggestedActionsVi" :key="index" class="text-sm text-ink-900 leading-relaxed">• {{ action }}</p>
+                <p class="text-sm font-semibold text-ink-700 mb-1">Anh/chị có thể làm trước</p>
+                <p v-for="(action, index) in message.reply.suggestedActionsVi" :key="index" class="text-base text-ink-900 leading-relaxed">• {{ action }}</p>
               </div>
 
               <div v-if="message.reply.clarification?.questionsVi?.length" class="rounded-lg bg-warning-50 border border-warning-200 p-2.5" data-testid="ai-questions">
-                <p class="text-xs font-semibold text-warning-800 mb-1">{{ answersFor(message).length ? 'Em hỏi thêm một chút, anh/chị bấm chọn hoặc trả lời ở ô bên dưới nhé' : 'Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé' }}</p>
-                <p v-for="(question, index) in message.reply.clarification.questionsVi" :key="index" class="text-sm text-warning-900 leading-relaxed">{{ question }}</p>
+                <p class="text-sm font-semibold text-warning-800 mb-1">{{ answersFor(message).length ? 'Em hỏi thêm một chút, anh/chị bấm chọn hoặc trả lời ở ô bên dưới nhé' : 'Em hỏi thêm một chút, anh/chị trả lời ở ô bên dưới nhé' }}</p>
+                <p v-for="(question, index) in message.reply.clarification.questionsVi" :key="index" class="text-base text-warning-900 leading-relaxed">{{ question }}</p>
                 <div v-if="answersFor(message).length" class="flex flex-wrap gap-2 mt-2" data-testid="ai-quick-replies">
                   <button
                     v-for="choice in answersFor(message)"
                     :key="choice"
                     type="button"
-                    class="px-3.5 py-1.5 rounded-full border border-warning-300 bg-white text-sm font-semibold text-ink-900 hover:bg-warning-100 active:scale-95 transition-[background-color,transform] duration-150"
+                    class="min-h-11 px-3.5 py-2 rounded-full border border-warning-300 bg-white text-sm font-semibold text-ink-900 hover:bg-warning-100 active:scale-95 transition-[background-color,transform] duration-150"
                     @click="answer(choice)"
                   >
                     {{ choice }}
@@ -285,34 +314,39 @@ defineExpose({ scrollToEnd });
                 </div>
               </div>
 
-              <div v-if="priceLabel(message.reply)" class="flex items-center justify-between gap-3 pt-2 border-t border-ink-100">
-                <span class="text-xs text-ink-500">Chi phí tham khảo</span>
-                <span class="text-sm font-semibold text-ink-900 font-num whitespace-nowrap">{{ priceLabel(message.reply) }}</span>
+              <div v-if="priceLabel(message.reply)" class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-ink-100">
+                <span class="text-sm text-ink-600">Chi phí tham khảo</span>
+                <span class="text-base font-semibold text-ink-900 font-num whitespace-nowrap">{{ priceLabel(message.reply) }}</span>
               </div>
-              <p v-if="priceBreakdown(message.reply)" class="text-xs text-ink-500" data-testid="ai-price-breakdown">{{ priceBreakdown(message.reply) }}</p>
-              <p v-if="message.reply.priceEstimate?.requiresAssessment" class="text-xs text-ink-500">Thợ xem tận nơi rồi mới báo giá chính xác ạ.</p>
+              <p v-if="priceBreakdown(message.reply)" class="text-sm text-ink-600" data-testid="ai-price-breakdown">{{ priceBreakdown(message.reply) }}</p>
+              <p v-if="message.reply.priceEstimate?.requiresAssessment" class="text-sm text-ink-600">Thợ xem tận nơi rồi mới báo giá chính xác ạ.</p>
 
-              <p v-if="message.reply.disclaimerVi" class="text-xs text-ink-400 leading-snug">{{ message.reply.disclaimerVi }}</p>
+              <p v-if="message.reply.disclaimerVi" class="text-sm text-ink-700 leading-relaxed">{{ message.reply.disclaimerVi }}</p>
             </div>
           </div>
         </div>
       </div>
 
       <ChatTypingDots v-if="c.isThinking && !c.isRevealing" />
+      </div>
+    </div>
+    <button v-if="!followingLatest" type="button" class="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-[var(--shadow-e2)] hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-600" data-testid="ai-jump-latest" @click="scrollToEnd">
+      <ArrowDown :size="16" aria-hidden="true" /> Tin nhắn mới nhất
+    </button>
     </div>
 
     <slot name="pinned" />
 
     <div
       v-if="uploadSummary"
-      class="flex items-center gap-2 border-t border-ink-100 px-3.5 py-1.5 text-xs"
+      class="flex flex-wrap items-center gap-2 border-t border-ink-100 px-3.5 py-2 text-sm"
       :class="uploadSummary.failed ? 'bg-danger-50 text-danger-700' : 'bg-white text-ink-600'"
       data-testid="ai-upload-summary"
       role="status"
     >
       <AlertTriangle v-if="uploadSummary.failed" :size="13" class="shrink-0" aria-hidden="true" />
       <Film v-else :size="13" class="shrink-0" aria-hidden="true" />
-      <span class="min-w-0 flex-1 truncate">{{ uploadSummary.text }}</span>
+      <span class="min-w-0 flex-1 basis-40 break-words">{{ uploadSummary.text }}</span>
       <span class="shrink-0 text-ink-500">Ảnh {{ imagesUsed }}/{{ AI_CHAT_MAX_IMAGES }} · Video {{ videosUsed }}/{{ AI_MAX_VIDEOS }}</span>
       <button
         v-if="uploadSummary.failed"
@@ -355,21 +389,21 @@ defineExpose({ scrollToEnd });
           <X :size="11" />
         </button>
       </div>
-      <span class="text-xs text-ink-500 whitespace-nowrap" data-testid="ai-attachment-count">
+      <span class="text-sm text-ink-600 whitespace-nowrap" data-testid="ai-attachment-count">
         Ảnh {{ imagesUsed }}/{{ AI_CHAT_MAX_IMAGES }} · Video {{ videosUsed }}/{{ AI_MAX_VIDEOS }}
       </span>
-      <p v-if="pendingVideos.some((video) => video.state === 'preparing')" class="basis-full text-xs text-ink-500">
+      <p v-if="pendingVideos.some((video) => video.state === 'preparing')" class="basis-full text-sm text-ink-600">
         Đang nén video cho nhẹ trước khi gửi, anh/chị cứ nhắn tiếp ạ.
       </p>
-      <p v-if="pendingVideos.length" class="basis-full text-xs text-ink-500">{{ VIDEO_NOT_ANALYSED }}</p>
+      <p v-if="pendingVideos.length" class="basis-full text-sm text-ink-600">{{ VIDEO_NOT_ANALYSED }}</p>
     </div>
-    <p v-if="c.problem" class="px-3.5 pb-1 text-xs text-danger-600">{{ c.problem }}</p>
-    <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-xs text-warning-700" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
+    <p v-if="c.problem" class="px-3.5 pb-1 text-sm text-danger-700">{{ c.problem }}</p>
+    <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-sm text-warning-800" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
 
     <!-- Composer -->
-    <div class="flex items-end gap-2 px-3 py-2.5 border-t border-ink-100 bg-white">
+    <div class="flex shrink-0 items-end gap-2 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] border-t border-ink-200 bg-white">
       <input ref="fileInput" type="file" :accept="ACCEPT" multiple class="hidden" data-testid="ai-file-input" @change="onFiles" />
-      <button type="button" class="p-2 rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
+      <button type="button" class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
         <ImageIcon :size="19" />
       </button>
       <textarea
@@ -378,12 +412,13 @@ defineExpose({ scrollToEnd });
         rows="1"
         :placeholder="placeholder"
         data-testid="ai-input"
-        class="flex-1 resize-none rounded-xl bg-ink-100/70 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 max-h-28"
+        aria-label="Nhắn cho trợ lý AI"
+        class="min-w-0 flex-1 resize-none rounded-xl bg-ink-100/70 px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-brand-200 max-h-28"
         @keydown.enter.exact.prevent="c.canSend && c.send()"
       ></textarea>
       <button
         type="button"
-        class="w-9 h-9 rounded-full bg-brand-600 text-white flex items-center justify-center disabled:bg-ink-300 shrink-0"
+        class="w-11 h-11 rounded-full bg-brand-600 text-white flex items-center justify-center disabled:bg-ink-300 shrink-0"
         :disabled="!c.canSend"
         title="Gửi"
         aria-label="Gửi"

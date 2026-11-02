@@ -3,8 +3,8 @@
 // skill takes them all and the customer pays once for the devices repaired.
 import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
 import type { BookingDeviceAttributes } from './catalog-pricing.api';
-import type { BookingItem, TechnicianCandidate } from './bookings.api';
-import { CANDIDATES_TIMEOUT_MS, normalizeBooking } from './bookings.api';
+import type { BookingItem, CandidateEmptyReason, CandidateSearchResult, TechnicianCandidate } from './bookings.api';
+import { CANDIDATES_TIMEOUT_MS, normalizeBooking, readCandidateSearch } from './bookings.api';
 import { readPage, type PageResult } from './paging';
 import apiClient from './client';
 
@@ -69,6 +69,12 @@ export interface VisitGroupPageItem {
   items: VisitGroupPageDevice[];
 }
 
+/** A VisitGroup page row returned only by the authenticated technician assigned-page endpoint. */
+export interface VisitGroupAssignedPageItem extends VisitGroupPageItem {
+  /** Present only for the technician's active assignment; null means no authorized address was returned. */
+  assignedAddressSummary?: string | null;
+}
+
 export interface VisitGroupPageDevice {
   itemId: string;
   sequence: number;
@@ -81,6 +87,8 @@ export interface VisitGroupPageDevice {
   orderId: string | null;
   orderCode: string | null;
   orderStatus: string | null;
+  /** First valid check-in of the technician holding this order; null before arrival (bug 17). */
+  arrivedAt?: string | null;
 }
 
 export type VisitGroupReadStatus =
@@ -134,7 +142,7 @@ function assignedPageParams(page: number, pageSize: number, filter: VisitGroupsA
   return { ...pageParams(page, pageSize), ...(filter.tab ? { tab: filter.tab } : {}) };
 }
 
-export type VisitDeviceState = 'succeeded' | 'failed' | 'quote_declined' | 'cancelled' | 'open';
+export type VisitDeviceState = 'succeeded' | 'failed' | 'quote_declined' | 'cancelled' | 'interrupted' | 'open';
 
 export interface VisitCheckout {
   visitGroupId: string;
@@ -149,12 +157,14 @@ export interface VisitCheckout {
     invoiceId: string | null;
     amount: number;
     paid: boolean;
+    financialFollowupRequired?: boolean;
   }>;
   total: number;
   waiting: number;
   ready: boolean;
   paid: boolean;
   pendingCash: { id: string; amount: number; declaredAt: string } | null;
+  financialFollowupRequired?: boolean;
 }
 
 const URGENCY = { LOW: 'low', NORMAL: 'medium', HIGH: 'high', EMERGENCY: 'critical' } as const;
@@ -202,7 +212,7 @@ export const visitGroupsApi = {
   },
 
   /** Visits assigned to the signed-in technician; the response contains only authorized orders. */
-  async assignedPage(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}): Promise<PageResult<VisitGroupPageItem>> {
+  async assignedPage(page: number, pageSize: number, filter: VisitGroupsAssignedPageFilter = {}): Promise<PageResult<VisitGroupAssignedPageItem>> {
     const res = await apiClient.get<unknown>('/visit-groups/assigned-page', { params: assignedPageParams(page, pageSize, filter) });
     return readPage(res.data, { page, pageSize });
   },
@@ -213,6 +223,15 @@ export const visitGroupsApi = {
       if (!candidate.userId?.trim()) throw new Error('Candidate missing technician User ID');
       return { ...candidate, id: candidate.userId.trim() };
     });
+  },
+
+  /** The same list with the reason it is empty, read like a single booking's (bug 41). */
+  async candidatesWithDiagnostics(id: string): Promise<CandidateSearchResult> {
+    const res = await apiClient.get<{ data: TechnicianCandidate[]; meta?: { emptyReason?: CandidateEmptyReason | null } }>(
+      `/visit-groups/${id}/technician-candidates?diagnostics=1`,
+      { timeout: CANDIDATES_TIMEOUT_MS },
+    );
+    return readCandidateSearch(res.data);
   },
 
   async shortlist(id: string, technicianIds: string[]): Promise<void> {

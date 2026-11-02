@@ -1,10 +1,6 @@
 <script setup lang="ts">
-import {
-  supportCasesApi,
-  type TechnicianReportReasonClass,
-  type TechnicianReportReasonCode,
-} from '../../api/support-cases.api';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
+import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
@@ -59,6 +55,7 @@ import {
   type EvidenceType,
 } from '../../api/orders.api';
 import FailedRepairDialog from '../../components/technician/FailedRepairDialog.vue';
+import { createGroupStopPort, type GroupStopResult } from '../../api/group-stop.api';
 import CannotContinueDialog from '../../components/technician/CannotContinueDialog.vue';
 import { createCannotContinuePort, type CustomerContinuation } from '../../api/platform-continuation.api';
 import { failedRepairKey } from '../../api/failed-repair.api';
@@ -108,6 +105,7 @@ const queryClient = useQueryClient();
 const actionLoading = ref(false);
 const job = ref<ServiceOrderItem | null>(null);
 const cannotContinuePort = createCannotContinuePort();
+const groupStopPort = createGroupStopPort();
 const cannotContinueOpen = ref(false);
 const interruptionByOrder = ref<Record<string, CustomerContinuation>>({});
 const recordedInterruption = computed(() => interruptionByOrder.value[jobIdRef.value] ?? null);
@@ -127,6 +125,7 @@ const visitGroupId = computed(() => job.value?.visitGroupId ?? null);
 const fixedVisitBase = computed(() => isFixedPriceOrder.value && !!visitGroupId.value);
 const skipsQuote = computed(() => isFixedPriceOrder.value && !visitGroupId.value);
 const visitCheckout = ref<VisitCheckout | null>(null);
+const historicalSiblingLinks = ref<Array<{ id: string; sequence: number }>>([]);
 const cashIntentCapability = ref<CashIntentCapability | null>(null);
 const cashFirstEnabled = computed(() => cashIntentCapability.value?.cashFirstEnabled === true);
 const cashIntent = computed(() => cashIntentCapability.value?.intent ?? null);
@@ -142,7 +141,7 @@ const siblingOrderPrefetches = new Map<string, Promise<void>>();
 const visitChildBundles = ref<Record<string, TechnicianJobBundle>>({});
 let visitPartRequestReadVersion = 0;
 type VisitReturnSummary = { needDeclare: number; awaitingManager: number };
-const visitReturns = ref<Record<string, { state: 'loading' | 'ready' | 'error'; summary: VisitReturnSummary | null }>>({});
+const visitReturns = ref<Record<string, { state: 'loading' | 'ready' | 'unknown' | 'error'; summary: VisitReturnSummary | null }>>({});
 const visitReturnsGroupId = ref<string | null>(null);
 const visitReturnsLoading = ref(false);
 let visitReturnsReadVersion = 0;
@@ -170,7 +169,9 @@ const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((eve
     // clearQueryCache() runs on logout/account switch; invalidate in-flight
     // sibling reads too, so a late response cannot repopulate the new session.
     clearPrefetchedVisitOrders();
+    historicalSiblingLinks.value = [];
     cannotContinuePort.reset();
+    groupStopPort.reset();
     cannotContinueOpen.value = false;
     interruptionByOrder.value = {};
   }
@@ -1162,7 +1163,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
   else if (completionConfirmOpen.value && !actionLoading.value) completionConfirmOpen.value = false;
   else if (departureChoiceOpen.value && !actionLoading.value) departureChoiceOpen.value = false;
   else if (showWithdrawModal.value && !withdrawing.value) showWithdrawModal.value = false;
-  else if (technicianReportOpen.value && !technicianReportSending.value) technicianReportOpen.value = false;
 };
 
 // Everything the job page reads, in one cached answer: a return visit shows it at
@@ -1389,6 +1389,13 @@ async function refreshVisitReturns() {
     const seen = new Set<string>();
     const summary = { needDeclare: 0, awaitingManager: 0 };
     if (!Array.isArray(records)) throw new Error('Invalid return ledger');
+    // Server explicitly attests only a missing ledger for the verified former assignee.
+    // UNKNOWN is not evidence of an empty/cleared warehouse obligation.
+    if (records.length === 1 && records[0] && typeof records[0] === 'object'
+      && records[0].orderId === id && 'receiptState' in records[0] && records[0].receiptState === 'UNKNOWN'
+      && 'returnStatus' in records[0] && records[0].returnStatus === 'unknown') {
+      return { state: 'unknown' as const, summary: null };
+    }
     for (const record of records) {
       if (!record || record.orderId !== id || !record.partRequestId || !record.partRequestItemId || seen.has(record.partRequestItemId)
         || ![record.issuedQty, record.usedQty, record.declaredQty, record.managerAcceptedQty, record.outstandingQty].every(value => Number.isSafeInteger(value) && value >= 0)
@@ -1400,11 +1407,11 @@ async function refreshVisitReturns() {
       summary.needDeclare += record.outstandingQty - waiting;
       summary.awaitingManager += waiting;
     }
-    return summary;
+    return { state: 'ready' as const, summary };
   }));
   if (version !== visitReturnsReadVersion || epoch !== visitPrefetchEpoch || groupId !== visitGroupId.value || visitCheckout.value?.visitGroupId !== groupId) return;
   visitReturns.value = Object.fromEntries(results.map((result, index) => [ids[index]!, result.status === 'fulfilled'
-    ? { state: 'ready', summary: result.value }
+    ? result.value
     : { state: 'error', summary: visitReturns.value[ids[index]!]?.summary ?? null }]));
   visitReturnsLoading.value = false;
 }
@@ -1427,7 +1434,7 @@ const visitReturnNeedsAttention = (device: typeof visitReturnDevices.value[numbe
   || (device.ledger.summary?.needDeclare ?? 0) > 0 || (device.ledger.summary?.awaitingManager ?? 0) > 0;
 const visitReturnChildDetails = computed(() => visitTerminalReturnDevices.value.filter(visitReturnNeedsAttention));
 const visitReturnWarning = computed(() => visitAllDevicesTerminal.value
-  && (visitReturnUnknown.value || visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
+  && (visitTerminalReturnTotals.value.needDeclare > 0 || visitTerminalReturnTotals.value.awaitingManager > 0));
 function onReturnSummary(value: VisitReturnSummary) {
   returnsToDeclare.value = value.needDeclare;
   returnsAwaitingManager.value = value.awaitingManager;
@@ -1548,8 +1555,16 @@ const jobQuery = useCachedQuery({
 function applyJobBundle(bundle: TechnicianJobBundle) {
   if (bundle.historical) {
     if (bundle.historical.id !== jobIdRef.value) return;
+    if (visitCheckout.value) historicalSiblingLinks.value = visitCheckout.value.devices.flatMap(device => {
+      const id = device.serviceOrderId;
+      const sibling = id && visitCheckout.value ? authorizedVisitChildBundle(id, visitCheckout.value.visitGroupId)?.job : null;
+      return sibling && id !== bundle.historical?.id && !sibling.workStopped && sibling.operationalDisposition !== 'STOPPED'
+        && ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'].includes(sibling.status.toUpperCase())
+        ? [{ id: sibling.id, sequence: device.sequence }] : [];
+    });
     historicalJob.value = bundle.historical;
     job.value = null;
+    bookingForMedia.value = null;
     ++visitCheckoutReadVersion;
     visitCheckout.value = null;
     stopLocationPing();
@@ -1707,6 +1722,7 @@ watch(
     // full-page skeleton while the route's query observer catches up.
     job.value = null;
     historicalJob.value = null;
+    historicalSiblingLinks.value = [];
     evidences.value = [];
     completionPartRequests.value = null;
     quotationItems.value = [];
@@ -1763,11 +1779,7 @@ watch(
     cannotContinueOpen.value = false;
     moreOpen.value = false;
     showWithdrawModal.value = false;
-    technicianReportOpen.value = false;
     technicianReportSent.value = false;
-    technicianReportReason.value = '';
-    technicianReportEvidenceRefs.value = [];
-    technicianReportError.value = '';
     pendingPartsUsage.value = 0;
     pendingPartsReturns.value = 0;
     partsReturnsKnown.value = false;
@@ -2332,23 +2344,49 @@ const AC_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Đã huỷ',
 };
 
-const technicianReportOpen = ref(false);
-const technicianReportReasonClass = ref<TechnicianReportReasonClass>('technician_skill_gap');
-const technicianReportReasonCode = ref<TechnicianReportReasonCode>('skill_gap');
-const technicianReportReason = ref('');
-const technicianReportEvidenceRefs = ref<string[]>([]);
-const technicianReportError = ref('');
-const technicianReportSending = ref(false);
 const technicianReportSent = ref(false);
-const technicianReportReasonInput = ref<HTMLTextAreaElement | null>(null);
-const technicianReportEvidence = computed(() => [...new Map(evidences.value
-  .filter((item) => item.mediaUrl?.trim())
-  .map((item) => [item.mediaUrl, item])).values()]);
+const reportTargetOrderId = ref<string | null>(null);
+const reportDevices = computed(() => {
+  const groupId = visitGroupId.value;
+  if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return [];
+  return visitCheckout.value.devices.slice(0, 3).flatMap(device => {
+    const id = device.serviceOrderId;
+    const child = id ? authorizedVisitChildBundle(id, groupId)?.job : null;
+    return id && child && child.arrivalVerified && !child.workStopped && device.state === 'open'
+      && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(child.status).toUpperCase())
+      ? [{ id, label: `Máy ${device.sequence}${device.deviceLabel ? ` · ${device.deviceLabel}` : ''}` }] : [];
+  });
+});
+const reportGroupDevices = computed(() => {
+  const groupId = visitGroupId.value;
+  if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return [];
+  return visitCheckout.value.devices.map(device => {
+    const child = device.serviceOrderId ? authorizedVisitChildBundle(device.serviceOrderId, groupId)?.job : null;
+    const protectedDevice = device.state !== 'open' || device.paid || !!child?.completionRequestedAt
+      || ['COMPLETED', 'CANCELLED'].includes(String(child?.status).toUpperCase());
+    return { id: device.bookingId, label: `Máy ${device.sequence}${device.deviceLabel ? ` · ${device.deviceLabel}` : ''}`,
+      disposition: protectedDevice ? 'protected' as const : child && child.arrivalVerified && !child.workStopped
+        && ['EN_ROUTE', 'UNDER_REPAIR'].includes(String(child.status).toUpperCase()) ? 'active' as const : 'unknown' as const };
+  });
+});
+async function groupInterruptionRecorded(result: GroupStopResult) {
+  if (!mounted || result.groupId !== visitGroupId.value || !result.stopped.some(child => child.orderId === jobIdRef.value)) return;
+  cannotContinueOpen.value = false;
+  repairFailedOpen.value = false;
+  if (job.value?.id === jobIdRef.value) job.value = { ...job.value, workStopped: true, assignmentReleased: true, operationalDisposition: 'STOPPED' };
+  stopLocationPing();
+  cache.markChanged(affectedBy.orderChange);
+  clearPrefetchedVisitOrders();
+  notifySuccess(`Đã dừng ${result.stopped.length} máy, giữ nguyên ${result.preserved.length} máy. Tiền và linh kiện cũ cần đối soát riêng.`);
+  await loadJob(jobIdRef.value, { silent: true }).catch(() => undefined);
+}
+const reportEvidence = computed(() => evidences.value.filter(item => item.mediaUrl?.trim())
+  .map((item, index) => ({ url: item.mediaUrl, label: `Ảnh hiện trường ${index + 1}` })));
 const canCreateTypedTechnicianReport = computed(() => !recordedInterruption.value && gpsCheckedIn.value
   && ['EN_ROUTE', 'UNDER_REPAIR'].includes(statusUpper.value));
 const canStopOnsite = computed(() => canCreateTypedTechnicianReport.value && !completionRequested.value && !actionLoading.value);
 function openCannotContinue() {
-  if (!canStopOnsite.value) return;
+  if (!canCreateTypedTechnicianReport.value) return;
   moreOpen.value = false;
   cannotContinueOpen.value = true;
 }
@@ -2367,25 +2405,22 @@ async function interruptionRecorded(result: CustomerContinuation) {
   cache.markChanged(affectedBy.orderChange);
   await loadJob(source.serviceOrderId, { silent: true }).catch(() => undefined);
 }
-const technicianReportCodes: { value: TechnicianReportReasonCode; label: string }[] = [
-  { value: 'device_too_old', label: 'Thiết bị đã quá cũ' },
-  { value: 'severe_damage', label: 'Thiết bị hư hỏng nặng' },
-  { value: 'no_compatible_part', label: 'Không có linh kiện phù hợp' },
-  { value: 'manufacturer_warranty_or_workshop', label: 'Cần trung tâm hoặc bảo hành hãng' },
-  { value: 'customer_absent', label: 'Khách không có mặt' },
-  { value: 'customer_cancelled', label: 'Khách đã hủy' },
-  { value: 'dispute_or_other', label: 'Tranh chấp hoặc tình huống khác' },
-];
-function openTechnicianReport(reasonClass: TechnicianReportReasonClass) {
-  if (!canCreateTypedTechnicianReport.value || technicianReportSent.value) return;
-  moreOpen.value = false;
-  technicianReportReasonClass.value = reasonClass;
-  technicianReportReasonCode.value = reasonClass === 'technician_skill_gap' ? 'skill_gap' : 'device_too_old';
-  technicianReportReason.value = '';
-  technicianReportEvidenceRefs.value = [];
-  technicianReportError.value = '';
-  technicianReportOpen.value = true;
-  void nextTick(() => technicianReportReasonInput.value?.focus());
+async function selectReportDevice(orderId: string) {
+  if (!reportDevices.value.some(device => device.id === orderId) || orderId === jobIdRef.value) return;
+  cannotContinueOpen.value = false;
+  reportTargetOrderId.value = orderId;
+  await router.push({ path: `/tech/jobs/${orderId}`, query: route.query });
+}
+watch([() => job.value?.id, canCreateTypedTechnicianReport], () => {
+  if (reportTargetOrderId.value === job.value?.id && job.value?.id === jobIdRef.value && canCreateTypedTechnicianReport.value) {
+    reportTargetOrderId.value = null;
+    cannotContinueOpen.value = true;
+  }
+});
+function technicianSupportReported() {
+  technicianReportSent.value = true;
+  cannotContinueOpen.value = false;
+  notifySuccess('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
 }
 
 async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
@@ -2416,35 +2451,6 @@ async function loadCashIntent(data: ServiceOrderItem | null = job.value) {
   cashIntentReadInFlight = { key, version, promise };
   return promise;
 }
-async function submitTechnicianReport() {
-  if (!canCreateTypedTechnicianReport.value || technicianReportSending.value) return;
-  const sourceId = jobIdRef.value;
-  const reason = technicianReportReason.value.trim();
-  if (reason.length < 10 || reason.length > 2000) {
-    technicianReportError.value = 'Mô tả cần từ 10 đến 2000 ký tự.';
-    return;
-  }
-  technicianReportSending.value = true;
-  technicianReportError.value = '';
-  try {
-    await supportCasesApi.createTechnicianReport({
-      serviceOrderId: sourceId,
-      reasonClass: technicianReportReasonClass.value,
-      reasonCode: technicianReportReasonCode.value,
-      reason,
-      ...(technicianReportEvidenceRefs.value.length ? { evidenceRefs: [...technicianReportEvidenceRefs.value] } : {}),
-    });
-    if (!mounted || sourceId !== jobIdRef.value) return;
-    technicianReportSent.value = true;
-    technicianReportOpen.value = false;
-    notifySuccess('Đã gửi báo cáo hỗ trợ. Công việc vẫn tiếp tục; báo cáo này không dừng hoặc hủy đơn.');
-  } catch (err) {
-    if (mounted && sourceId === jobIdRef.value) technicianReportError.value = userFacingError(err, 'Chưa gửi được báo cáo. Vui lòng thử lại.');
-  } finally {
-    if (mounted && sourceId === jobIdRef.value) technicianReportSending.value = false;
-  }
-}
-
 const handleCompleteOrder = async () => {
   if (!hasAfterPhoto.value) {
     notifyError('Chụp ít nhất một ảnh sau sửa trước khi gửi hoàn thành.');
@@ -2698,6 +2704,10 @@ const toggleMore = async () => {
       <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
       <p v-if="historicalJob.workStopped" class="text-sm text-ink-600">Công việc đã dừng và phân công đã được nhả. Nghĩa vụ tiền và linh kiện cũ được đối soát riêng.</p>
       <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>
+      <nav class="flex flex-wrap gap-2" aria-label="Tiếp tục công việc">
+        <FhButton v-for="sibling in historicalSiblingLinks" :key="sibling.id" size="md" :data-testid="`historical-sibling-${sibling.sequence}`" @click="router.push({ path: `/tech/jobs/${sibling.id}` })">Tiếp tục máy {{ sibling.sequence }}</FhButton>
+        <FhButton variant="secondary" size="md" data-testid="historical-jobs" @click="router.push({ path: '/tech/jobs' })">Danh sách công việc</FhButton>
+      </nav>
     </div>
 
     <!-- Could not load at all: one friendly line and a retry -->
@@ -2713,7 +2723,7 @@ const toggleMore = async () => {
           <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
             <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
-            <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
+            <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
           </div>
         </div>
 
@@ -2740,37 +2750,15 @@ const toggleMore = async () => {
               Làm mới
             </button>
             <button
-              v-if="canStopOnsite"
+              v-if="canCreateTypedTechnicianReport"
               type="button"
               role="menuitem"
-              class="w-full min-h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left"
+              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
               data-testid="job-cannot-continue-menu"
               @click="openCannotContinue"
             >
-              <Ban :size="16" class="shrink-0" />
-              Không thể tiếp tục công việc
-            </button>
-            <button
-              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
-              type="button"
-              role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="job-technician-report-skill"
-              @click="openTechnicianReport('technician_skill_gap')"
-            >
-              <Flag :size="16" class="text-ink-500" />
-              Báo cáo hỗ trợ · kỹ năng
-            </button>
-            <button
-              v-if="canCreateTypedTechnicianReport && !technicianReportSent"
-              type="button"
-              role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="job-technician-report-exception"
-              @click="openTechnicianReport('non_technician_exception')"
-            >
-              <Flag :size="16" class="text-ink-500" />
-              Báo cáo hỗ trợ · ngoại lệ
+              <Flag :size="16" class="shrink-0 text-ink-500" />
+              Báo cáo vấn đề sửa chữa
             </button>
             <button
               v-if="canReport && !gpsCheckedIn"
@@ -2841,9 +2829,9 @@ const toggleMore = async () => {
         </ul>
         <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
       </section>
-      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-label="Linh kiện cần trả kho ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
-        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" class="flex flex-wrap items-center justify-between gap-x-3">
-          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else> · Chưa xác nhận được tình trạng hoàn trả</span></span>
+      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status" aria-label="Tình trạng linh kiện ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
+        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" :data-testid="`visit-return-device-${device.sequence}`" class="flex flex-wrap items-center justify-between gap-x-3">
+          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else-if="device.ledger?.state === 'unknown'"> ? Ch?a c? s? theo d?i linh ki?n cho m?y n?y; qu?n l? d?ch v? c?n ??i so?t</span><span v-else> · Chưa kiểm tra được nghĩa vụ linh kiện (nhờ quản lý dịch vụ hoặc thử lại)</span></span>
           <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
         </p>
         <button v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
@@ -3899,6 +3887,16 @@ const toggleMore = async () => {
       :parts="failedRepairParts"
       :parts-known="completionPartRequests !== null && !quoteStockLoading && !quoteStockError && !completionPartsReadFailed"
       :port="cannotContinuePort"
+      :group-port="groupStopPort"
+      :group-devices="reportGroupDevices"
+      :customer-phone="job?.customerPhone"
+      @group-recorded="groupInterruptionRecorded"
+      unified
+      :support-allowed="canCreateTypedTechnicianReport && !technicianReportSent"
+      :devices="reportDevices"
+      :evidence="reportEvidence"
+      @device="selectReportDevice"
+      @supported="technicianSupportReported"
       @close="cannotContinueOpen = false"
       @parts="showCannotContinueParts"
       @recorded="interruptionRecorded"
@@ -3992,47 +3990,6 @@ const toggleMore = async () => {
       </div>
     </div>
 
-    <div
-      v-if="technicianReportOpen"
-      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
-      @click.self="!technicianReportSending && (technicianReportOpen = false)"
-    >
-      <div role="dialog" aria-modal="true" aria-labelledby="technician-report-title" aria-describedby="technician-report-description" class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto" data-testid="technician-report-dialog">
-        <div>
-          <h3 id="technician-report-title" class="text-lg font-bold text-ink-900">
-            {{ technicianReportReasonClass === 'technician_skill_gap' ? 'Báo cáo lỗi kỹ năng hoặc thao tác' : 'Báo cáo ngoại lệ thiết bị hoặc khách hàng' }}
-          </h3>
-          <p id="technician-report-description" class="mt-2 text-sm leading-relaxed text-ink-600">Chỉ gửi báo cáo hỗ trợ; công việc vẫn tiếp tục. Báo cáo này không dừng hoặc hủy đơn. Nếu bạn không thể tiếp tục, đóng và chọn hành động riêng “Không thể tiếp tục công việc”.</p>
-        </div>
-        <label v-if="technicianReportReasonClass === 'non_technician_exception'" class="block space-y-1 text-sm font-medium text-ink-700">
-          Lý do
-          <select v-model="technicianReportReasonCode" data-testid="technician-report-code" class="h-11 w-full rounded-xl border border-ink-300 bg-white px-3 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-            <option v-for="option in technicianReportCodes" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-        </label>
-        <div v-else class="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">Thiếu kỹ năng hoặc thao tác chưa đúng</div>
-        <label class="block space-y-1 text-sm font-medium text-ink-700">
-          Mô tả tình huống
-          <textarea ref="technicianReportReasonInput" v-model="technicianReportReason" data-testid="technician-report-reason" rows="4" maxlength="2000" aria-required="true" :aria-describedby="technicianReportError ? 'technician-report-reason-hint technician-report-error' : 'technician-report-reason-hint'" class="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" placeholder="Nêu rõ tình huống để quản lý xem xét" />
-          <span id="technician-report-reason-hint" class="block text-xs font-normal text-ink-600">10–2.000 ký tự</span>
-        </label>
-        <fieldset v-if="technicianReportEvidence.length" class="space-y-2">
-          <legend class="text-sm font-medium text-ink-700">Ảnh có sẵn trong đơn (không bắt buộc)</legend>
-          <div v-for="(item, index) in technicianReportEvidence" :key="item.mediaUrl" class="flex items-center gap-3 border-b border-ink-100 text-sm text-ink-700">
-            <label class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3">
-              <input v-model="technicianReportEvidenceRefs" type="checkbox" :value="item.mediaUrl" data-testid="technician-report-evidence" class="h-4 w-4 shrink-0 rounded border-ink-300 text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2" />
-              Ảnh {{ index + 1 }}
-            </label>
-            <a :href="item.mediaUrl" target="_blank" rel="noopener noreferrer" :aria-label="`Mở ảnh ${index + 1} trong tab mới`" class="inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-brand-700 underline underline-offset-4 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" @click.stop>Mở ảnh</a>
-          </div>
-        </fieldset>
-        <p v-if="technicianReportError" id="technician-report-error" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{{ technicianReportError }}</p>
-        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-          <FhButton variant="secondary" :disabled="technicianReportSending" @click="technicianReportOpen = false">Đóng</FhButton>
-          <FhButton data-testid="technician-report-submit" :loading="technicianReportSending" :disabled="technicianReportSending" @click="submitTechnicianReport">Gửi báo cáo</FhButton>
-        </div>
-      </div>
-    </div>
 
     <!-- Photo preview -->
     <div

@@ -3,8 +3,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import {
-  MapPin,
-  Calendar,
   ChevronRight,
   Navigation,
   MessageSquare,
@@ -19,7 +17,7 @@ import {
   FhStatusPill,
 } from '../../components';
 import { ordersApi, historicalPill, isHistoricalOrder, isReleasedJob, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
-import { visitGroupsApi, type VisitGroupPageDevice, type VisitGroupPageItem } from '../../api/visit-groups.api';
+import { visitGroupsApi, type VisitGroupAssignedPageItem, type VisitGroupPageDevice } from '../../api/visit-groups.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
@@ -27,6 +25,7 @@ import { useQueryChoice, useQueryPage } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
+import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -61,7 +60,7 @@ const {
   pageSize: PAGE_SIZE,
   fetch: (p, size) => ordersApi.getTechnicianJobsPage(p, size, { statuses: TAB_STATES[activeTab.value], excludeVisitGroups: true }),
 });
-const visitGroupsList = usePagedList<VisitGroupPageItem>({
+const visitGroupsList = usePagedList<VisitGroupAssignedPageItem>({
   key: () => queryKeys.visitGroups.technicianList({ tab: 'all' }),
   pageSize: PAGE_SIZE,
   page: useQueryPage('visitsPage'),
@@ -135,7 +134,7 @@ const handleEnRoute = async (job: ServiceOrderItem) => {
   }
 };
 
-const handleVisitEnRoute = async (group: VisitGroupPageItem) => {
+const handleVisitEnRoute = async (group: VisitGroupAssignedPageItem) => {
   const lead = visitLead(group);
   if (!lead?.orderId || String(lead.orderStatus).toUpperCase() !== 'ACCEPTED' || actionLoading.value) return;
   actionLoading.value = lead.orderId;
@@ -150,7 +149,7 @@ const handleVisitEnRoute = async (group: VisitGroupPageItem) => {
   }
 };
 
-const visitLead = (group: VisitGroupPageItem) => [...group.items].sort((a, b) => a.sequence - b.sequence)[0];
+const visitLead = (group: VisitGroupAssignedPageItem) => [...group.items].sort((a, b) => a.sequence - b.sequence)[0];
 
 function visitItemStatus(item: VisitGroupPageDevice) {
   if (item.outcome === 'failed') return 'Không sửa được';
@@ -158,20 +157,22 @@ function visitItemStatus(item: VisitGroupPageDevice) {
   if (item.outcome === 'succeeded' || item.orderStatus?.toLowerCase() === 'completed') return 'Hoàn thành';
   if (item.orderStatus?.toLowerCase() === 'cancelled' || item.bookingStatus.toLowerCase() === 'cancelled') return 'Đã hủy';
   if (item.orderStatus?.toLowerCase() === 'under_repair') return 'Đang sửa chữa';
+  if (isArrivedWaiting(item)) return VISIT_DEVICE_ARRIVED_LABEL;
   if (item.orderStatus?.toLowerCase() === 'en_route') return 'Đang di chuyển';
   if (item.orderStatus?.toLowerCase() === 'accepted') return 'Đã nhận đơn';
   if (item.bookingStatus.toLowerCase() === 'closed') return 'Chưa tìm được thợ';
   return 'Đang tìm thợ';
 }
 
-function visitGroupStatus(status: VisitGroupPageItem['status']) {
+function visitGroupStatus(group: VisitGroupAssignedPageItem) {
+  if (isVisitArrived(group)) return VISIT_GROUP_ARRIVED_LABEL;
   const labels = {
     submitted: 'Đang chờ xử lý', matching: 'Đang tìm thợ', no_technician: 'Chưa có thợ phù hợp',
     accepted: 'Đã nhận lịch', en_route: 'Đang di chuyển', under_repair: 'Đang sửa chữa',
     completed: 'Hoàn thành', cancelled: 'Đã hủy', failed: 'Có thiết bị chưa sửa',
     quote_declined: 'Có báo giá chưa được nhận', mixed: 'Kết quả nhiều trạng thái',
-  } satisfies Record<VisitGroupPageItem['status'], string>;
-  return labels[status];
+  } satisfies Record<VisitGroupAssignedPageItem['status'], string>;
+  return labels[group.status];
 }
 
 const handleChatWithCustomer = async (job: ServiceOrderItem) => {
@@ -303,13 +304,14 @@ onUnmounted(() => {
               <div class="min-w-0">
                 <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
                 <p class="mt-1 text-sm text-ink-500">Lịch hẹn <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
+                <p v-if="group.assignedAddressSummary?.trim()" class="mt-1 break-words text-sm text-ink-600" data-testid="technician-visit-address">Địa chỉ: {{ group.assignedAddressSummary }}</p>
               </div>
-              <span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group.status)}`">{{ visitGroupStatus(group.status) }}</span>
+              <span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group)}`">{{ visitGroupStatus(group) }}</span>
             </div>
             <ul class="grid gap-2 sm:grid-cols-2" aria-label="Thiết bị trong lượt sửa">
               <li v-for="item in group.items" :key="item.itemId" :data-testid="`technician-visit-device-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl bg-ink-50 px-3 py-2 text-sm">
-                <span class="block truncate font-medium text-ink-900">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
-                <span class="mt-1 block truncate text-xs text-ink-500">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ visitItemStatus(item) }}</span>
+                <span class="block break-words font-medium text-ink-900">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+                <span class="mt-1 block break-words text-xs text-ink-500">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ visitItemStatus(item) }}</span>
               </li>
             </ul>
             <div class="flex flex-wrap items-center justify-end gap-2 border-t border-ink-100 pt-3">
@@ -317,7 +319,7 @@ onUnmounted(() => {
                 v-if="visitLead(group)?.orderId && String(visitLead(group)?.orderStatus).toUpperCase() === 'ACCEPTED'"
                 variant="primary"
                 size="sm"
-                class="h-10"
+                class="min-h-11"
                 :loading="actionLoading === visitLead(group)?.orderId"
                 @click.stop="handleVisitEnRoute(group)"
               >
@@ -327,7 +329,7 @@ onUnmounted(() => {
                 v-if="visitLead(group)?.orderId"
                 :to="`/tech/jobs/${visitLead(group)!.orderId}`"
                 :data-testid="`technician-visit-open-${group.id}`"
-                class="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                class="inline-flex h-11 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               >
                 Mở công việc <ChevronRight :size="16" aria-hidden="true" />
               </router-link>
@@ -453,7 +455,7 @@ onUnmounted(() => {
               <span class="font-num text-ink-500 whitespace-nowrap">#{{ row.job.code }}</span>
               <FhStatusPill :status="row.job.status" />
               <span class="inline-flex items-center gap-1 text-ink-600 whitespace-nowrap">
-                <Calendar :size="14" class="text-ink-400" />
+                <span class="text-ink-500">Ngày hẹn:</span>
                 {{ vnDateString(row.job.scheduledAt) }}
               </span>
             </div>
@@ -463,7 +465,7 @@ onUnmounted(() => {
               <span v-if="row.job.customerPhone" class="ml-1 font-num text-ink-500 whitespace-nowrap">{{ row.job.customerPhone }}</span>
             </p>
             <p class="text-sm text-ink-600 flex items-start gap-1.5">
-              <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+              <span class="shrink-0 text-ink-500">Địa chỉ:</span>
               <span class="text-pretty">{{ row.job.addressSummary }}</span>
             </p>
           </div>

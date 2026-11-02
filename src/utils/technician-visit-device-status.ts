@@ -14,7 +14,7 @@ export interface TechnicianVisitDeviceStatus {
   custodyLabel: string | null;
 }
 
-type JobStatusSource = Pick<ServiceOrderItem, 'status' | 'quotation'>;
+type JobStatusSource = Pick<ServiceOrderItem, 'status' | 'quotation'> & Partial<Pick<ServiceOrderItem, 'arrivalVerified'>>;
 type PartRequestStatusSource = Pick<PartRequest, 'status'>;
 
 const OUTCOME_LABELS: Record<Exclude<VisitDeviceState, 'open'>, Pick<TechnicianVisitDeviceStatus, 'label' | 'tone'>> = {
@@ -22,6 +22,7 @@ const OUTCOME_LABELS: Record<Exclude<VisitDeviceState, 'open'>, Pick<TechnicianV
   failed: { label: 'Không sửa được', tone: 'danger' },
   quote_declined: { label: 'Khách không duyệt báo giá', tone: 'attention' },
   cancelled: { label: 'Đã huỷ', tone: 'neutral' },
+  interrupted: { label: 'Đã dừng sửa', tone: 'attention' },
 };
 
 function custodyLabel(summary?: TechnicianVisitCustodySummary | null): string | null {
@@ -66,6 +67,10 @@ export function projectTechnicianVisitDeviceStatus(
       tone = 'progress';
     } else if (['UNDER_REPAIR', 'IN_PROGRESS'].includes(String(job.status).toUpperCase())) {
       label = 'Đang sửa';
+      tone = 'progress';
+    } else if (job.arrivalVerified && ['ACCEPTED', 'EN_ROUTE'].includes(String(job.status).toUpperCase())) {
+      // One check-in covers the visit, this device waits for its own repair (bug 17).
+      label = 'Đã đến, chờ sửa';
       tone = 'progress';
     }
   }
