@@ -14,13 +14,12 @@ const error = ref(false);
 const activeCategories = computed(() => categories.value.filter((category) => category.isActive));
 const visibleCategories = computed(() => activeCategories.value.slice(0, 6));
 
-// Balanced grid layout: 2x2 centered grid if 4 categories, 3x2 if 6 categories
 const gridLayoutClass = computed(() => {
   const count = visibleCategories.value.length;
   if (count <= 4) {
-    return 'max-w-4xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-5 lg:gap-6';
+    return 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5 xl:grid-cols-4';
   }
-  return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6';
+  return 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4';
 });
 
 // Do not expose catalog rollout notes in public highlights.
@@ -57,14 +56,14 @@ onMounted(loadCategories);
 </script>
 
 <template>
-  <section class="landing-section bg-white" aria-labelledby="services-title">
+  <section class="landing-section bg-ink-25/60" aria-labelledby="services-title">
     <div class="landing-container">
       <div class="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div class="max-w-xl">
           <p class="landing-eyebrow">Bắt đầu từ điều bạn cần</p>
           <h2 id="services-title" class="services-title">Dịch vụ cho ngôi nhà của bạn</h2>
-          <p class="landing-description">
-            Tiền công niêm yết theo loại máy và công suất. Việc cần kiểm tra thì thợ khảo sát và báo giá tại nhà.
+          <p class="landing-description max-w-[62ch]">
+            Tùy dịch vụ, bạn xem giá công theo loại máy hoặc nhận báo giá sau khảo sát.
           </p>
         </div>
         <router-link to="/services" class="landing-text-link shrink-0">
@@ -78,12 +77,12 @@ onMounted(loadCategories);
         v-if="loading"
         role="status"
         aria-label="Đang tải danh mục dịch vụ"
-        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         <div
           v-for="item in 4"
           :key="item"
-          class="rounded-xl border border-ink-200/80 bg-white p-6 shadow-xs"
+          class="rounded-2xl border border-ink-200/80 bg-white p-5"
           aria-hidden="true"
         >
           <FhSkeleton width="48px" height="48px" class="rounded-xl" />
@@ -112,16 +111,15 @@ onMounted(loadCategories);
       <!-- Dynamic Service Category Cards -->
       <div v-else :class="gridLayoutClass">
         <router-link
-          v-for="(category, index) in visibleCategories"
+          v-for="category in visibleCategories"
           :key="category.id"
           :to="{ name: 'services', query: { category: category.id } }"
-          class="service-card group flex min-w-0 flex-col justify-between rounded-xl border border-ink-200/80 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-brand-300 hover:shadow-(--shadow-e2)"
-          :style="{ animationDelay: `${index * 80}ms` }"
+          class="service-card group flex min-h-[224px] min-w-0 flex-col justify-between rounded-2xl border border-ink-200/80 bg-white p-5 transition-colors duration-200 hover:border-brand-300 sm:p-6"
         >
           <div>
             <div class="flex items-center justify-between">
               <span
-                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-colors duration-200 group-hover:bg-brand-600 group-hover:text-white"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"
               >
                 <component
                   :is="categoryIcon(category)"
@@ -133,19 +131,19 @@ onMounted(loadCategories);
             </div>
 
             <div class="mt-4 min-w-0">
-              <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors">
+              <h3 class="text-base font-semibold text-ink-900 transition-colors group-hover:text-brand-700 sm:text-[17px]">
                 {{ category.name }}
               </h3>
-              <p class="mt-2 text-sm leading-6 text-ink-600 line-clamp-2">
+              <p class="mt-2 line-clamp-2 text-[15px] leading-6 text-ink-600">
                 {{ categoryDescription(category) }}
               </p>
             </div>
           </div>
 
-          <div class="mt-5 pt-4 border-t border-ink-100 flex items-center justify-between">
+          <div class="mt-5 flex items-center justify-between border-t border-ink-100 pt-4">
             <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600">
               Xem dịch vụ
-              <ArrowRight :size="15" class="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
+              <ArrowRight :size="16" aria-hidden="true" />
             </span>
           </div>
         </router-link>
@@ -156,46 +154,11 @@ onMounted(loadCategories);
 
 <style scoped>
 .services-title {
-  font-size: 28px;
-  line-height: 1.25;
-  letter-spacing: -0.025em;
+  font-size: clamp(1.8rem, 3vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
   font-weight: 700;
   text-wrap: balance;
   color: var(--color-ink-900);
-}
-
-@media (min-width: 640px) {
-  .services-title {
-    font-size: 32px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .services-title {
-    font-size: 34px;
-  }
-}
-
-.service-card {
-  animation: cardFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes cardFadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .service-card {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
 }
 </style>

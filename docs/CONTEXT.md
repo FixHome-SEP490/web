@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-02 17:35 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-rebook-voucher-history-web-20261102
+> Cập nhật lần cuối: 2026-11-02 21:37 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-01-landing-20261102
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -187,7 +187,7 @@ Mọi danh sách dạng bảng dùng một bộ phân trang `components/FhPagina
 - Menu tài khoản (avatar) dùng chung `components/account/AccountMenu.vue` cho trang công khai (`PublicLayout`) và khu khách (`CustomerLayout`); mục theo vai trò lấy từ `utils/account-menu.ts`. Menu chỉ có mục tài khoản, không còn danh sách dịch vụ hay mục "Tài khoản" dẫn về trang tổng quan đầy dịch vụ.
 - Khu khách: "Lịch sử sửa chữa" rời thanh trên vào menu avatar (thanh trên còn Tổng quan, Đơn sửa chữa, Bảo hành, Tin nhắn). Mục "Sổ địa chỉ" trùng link với "Hồ sơ cá nhân" nên gộp vào đó.
 - Trang công khai: mỗi vai trò chỉ khác một nút ở header: khách "Đặt thợ ngay", kỹ thuật viên "Vào trang thợ", quản lý dịch vụ và admin "Vào trang quản lý"; trên điện thoại nút này nằm đầu menu avatar. Menu ba gạch chỉ còn điều hướng trang. Cột "Tài khoản" ở footer dẫn khách tới "Đơn của tôi".
-- Landing xếp lại theo thứ tự: hero, dịch vụ, AI, cách hoạt động, vì sao tin, ứng dụng, câu hỏi, lời kêu gọi cuối; nav header cùng thứ tự. Rút gọn chữ, bỏ dòng lặp và các nhãn nổi có số liệu chưa kiểm chứng ("Độ chính xác cao", "100% thợ xác minh", "bán kính 1-2km", "tối đa 5 ảnh"). Không đổi màu, font hay style.
+- Landing xếp theo thứ tự: hero, dịch vụ, AI, cách hoạt động, vì sao tin, ứng dụng, câu hỏi, lời kêu gọi cuối; nav header cùng thứ tự. W1.01 giữ thứ tự, route, token màu và font hiện có; dùng khung landing tối đa 1520 px, rút gọn nội dung, bỏ mockup chưa kiểm chứng và cách ghim cuộn. Quy trình nêu bước khách xem danh sách kỹ thuật viên phù hợp, chọn 1 hoặc 2 người theo thứ tự ưu tiên và gửi lời mời; AI chỉ gợi ý, việc cần khảo sát có báo giá để khách duyệt trước khi sửa.
 
 ### Kỹ thuật viên (`/tech`)
 
@@ -499,6 +499,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.
 - 2026-11-02 17:35 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Khóa thu tiền ở trang cha trước reserve và qua timeout/đóng/remount theo attempt cache, chống POST đang chạy qua remount và khóa hóa đơn cũ khi đổi phiên; thêm hồi quy parent–chooser thật.
 - 2026-11-02 14:44 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Phân loại receipt voucher terminal, bỏ hold hết hạn/đã nhả có chứng cứ, khóa thu sau redeemed/refunded và đối chiếu hóa đơn; tách A-B-A và chống gửi trùng đang chạy.
 
@@ -541,4 +542,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
 - 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
-- 2026-10-22 22:54 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Review an toàn CustomerVisit: chỉ dùng cùng gate báo giá của OrderDetail (EN_ROUTE và SENT); ẩn hành động huỷ/đổi lịch nếu chưa đọc đủ trạng thái child, không suy đoán khi API lỗi; bổ sung 2 test, focused 18 PASS, typecheck/lint PASS; xác minh full CI sau khi push.

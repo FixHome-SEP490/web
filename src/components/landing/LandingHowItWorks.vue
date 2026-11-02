@@ -1,276 +1,67 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  Smartphone,
-  Camera,
-  Sparkles,
-  CalendarDays,
-  CircleCheck,
-  ArrowRight,
-} from 'lucide-vue-next';
+import { ArrowRight, ClipboardList, Search, Send, ReceiptText } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
 const router = useRouter();
-const sectionRef = ref<HTMLElement | null>(null);
-const activeStep = ref(0);
 
 const steps = [
   {
-    stepNum: '01',
-    icon: Smartphone,
-    tag: 'Bước 1',
-    title: 'Chọn dịch vụ & loại máy',
-    description: 'Tìm theo tên thiết bị, chọn loại máy và công suất để thấy tiền công.',
-    image: '/images/steps/step-1-select-service.png',
-    badge: 'Giá theo loại máy',
+    icon: ClipboardList,
+    title: 'Gửi yêu cầu sửa chữa',
+    description: 'Chọn dịch vụ, mô tả tình trạng, địa chỉ và thời gian phù hợp.',
   },
   {
-    stepNum: '02',
-    icon: Camera,
-    tag: 'Bước 2',
-    title: 'Mô tả sự cố & gửi ảnh',
-    description: 'Viết vài dòng, gửi tối đa 5 ảnh. Chưa rõ lỗi thì nhờ AI phân tích.',
-    image: '/images/steps/step-2-ai-diagnosis.png',
-    badge: 'Tối đa 5 ảnh',
+    icon: Search,
+    title: 'Xem kỹ thuật viên phù hợp',
+    description: 'Sau khi gửi yêu cầu, xem danh sách kỹ thuật viên phù hợp.',
   },
   {
-    stepNum: '03',
-    icon: Sparkles,
-    tag: 'Bước 3',
-    title: 'AI gợi ý dịch vụ phù hợp',
-    description: 'AI gợi ý nguyên nhân và dịch vụ. Kết quả chỉ để tham khảo.',
-    image: '/images/steps/step-3-ai-result.png',
-    badge: 'Chỉ để tham khảo',
+    icon: Send,
+    title: 'Chọn 1 hoặc 2 kỹ thuật viên',
+    description: 'Chọn theo thứ tự ưu tiên rồi gửi lời mời. Người thứ hai là dự phòng nếu người đầu từ chối hoặc hết hạn phản hồi.',
   },
   {
-    stepNum: '04',
-    icon: CalendarDays,
-    tag: 'Bước 4',
-    title: 'Chọn lịch & kỹ thuật viên',
-    description: 'Hẹn buổi sáng, chiều, tối hoặc tới ngay, rồi chọn 1 đến 2 kỹ thuật viên theo thứ tự ưu tiên.',
-    image: '/images/steps/step-4-find-technician.png',
-    badge: 'Chọn 1 đến 2 thợ',
-  },
-  {
-    stepNum: '05',
-    icon: CircleCheck,
-    tag: 'Bước 5',
-    title: 'Duyệt chi phí & thanh toán',
-    description: 'Linh kiện và phát sinh đều chờ bạn duyệt. Xong việc trả bằng ví, VNPay hoặc tiền mặt, có bảo hành.',
-    image: '/images/steps/step-5-quote-complete.png',
-    badge: 'Duyệt trước, trả sau',
+    icon: ReceiptText,
+    title: 'Theo dõi đơn và báo giá',
+    description: 'Khi kỹ thuật viên nhận việc, theo dõi đơn. Nếu cần khảo sát, duyệt báo giá trước khi sửa.',
   },
 ];
-
-let isTicking = false;
-
-function updateActiveStepOnScroll() {
-  if (!sectionRef.value) return;
-  // Pinned scroll on desktop (lg and above)
-  if (window.innerWidth >= 1024) {
-    const rect = sectionRef.value.getBoundingClientRect();
-    const totalDist = sectionRef.value.offsetHeight - window.innerHeight;
-    if (totalDist > 0) {
-      const scrolled = -rect.top;
-      // Calculate progress from 0 to 1
-      const progress = Math.max(0, Math.min(0.999, scrolled / totalDist));
-      const stepIdx = Math.floor(progress * steps.length);
-      const clamped = Math.max(0, Math.min(steps.length - 1, stepIdx));
-      if (clamped !== activeStep.value) {
-        activeStep.value = clamped;
-      }
-    }
-  } else {
-    // Normal mobile scroll tracking: pick element closest to viewport focal zone
-    const stepEls = sectionRef.value.querySelectorAll<HTMLElement>('[data-step-index]');
-    if (!stepEls || stepEls.length === 0) return;
-    const triggerZone = window.innerHeight * 0.45;
-    let bestIndex = activeStep.value;
-    let minDistance = Infinity;
-
-    stepEls.forEach((el) => {
-      const idx = Number(el.getAttribute('data-step-index'));
-      const rect = el.getBoundingClientRect();
-      const cardCenter = rect.top + rect.height / 2;
-      const distance = Math.abs(cardCenter - triggerZone);
-      if (distance < minDistance) {
-        minDistance = distance;
-        bestIndex = idx;
-      }
-    });
-
-    if (bestIndex !== activeStep.value && bestIndex >= 0 && bestIndex < steps.length) {
-      activeStep.value = bestIndex;
-    }
-  }
-}
-
-function onScroll() {
-  if (!isTicking) {
-    isTicking = true;
-    requestAnimationFrame(() => {
-      updateActiveStepOnScroll();
-      isTicking = false;
-    });
-  }
-}
-
-function selectStep(idx: number) {
-  activeStep.value = idx;
-  if (!sectionRef.value) return;
-
-  if (window.innerWidth >= 1024) {
-    const rect = sectionRef.value.getBoundingClientRect();
-    const sectionTop = window.scrollY + rect.top;
-    const totalDist = sectionRef.value.offsetHeight - window.innerHeight;
-    if (totalDist > 0) {
-      const targetScroll = sectionTop + ((idx + 0.5) / steps.length) * totalDist;
-      window.scrollTo({ top: targetScroll, behavior: 'smooth' });
-    }
-  } else {
-    const targetCard = sectionRef.value?.querySelector(`[data-step-index="${idx}"]`);
-    targetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
-
-onMounted(() => {
-  // Preload all 5 step images to ensure instant zero-latency transitions
-  steps.forEach((s) => {
-    const img = new Image();
-    img.src = s.image;
-  });
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll, { passive: true });
-  updateActiveStepOnScroll();
-});
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll);
-  window.removeEventListener('resize', onScroll);
-});
 </script>
 
 <template>
-  <section
-    id="how-it-works"
-    ref="sectionRef"
-    class="relative bg-ink-25 border-y border-ink-100 lg:h-[260vh]"
-    aria-labelledby="steps-title"
-  >
-    <!-- Sticky Full-Frame Showcase on Desktop (Fits completely in one screen frame) -->
-    <div class="lg:sticky lg:top-16 lg:h-[calc(100vh-64px)] flex flex-col justify-center py-8 lg:py-2 overflow-hidden">
-      <div class="landing-container w-full">
-        <!-- Section Header -->
-        <div class="max-w-2xl mb-4 lg:mb-6">
-          <div class="inline-flex items-center gap-2 mb-1.5">
-            <span class="h-0.5 w-6 bg-brand-600 rounded-full"></span>
-            <p class="landing-eyebrow mb-0 text-brand-600 font-semibold tracking-wider">Cách hoạt động</p>
-          </div>
+  <section id="how-it-works" class="landing-section bg-ink-25/60" aria-labelledby="steps-title">
+    <div class="landing-container">
+      <div class="grid gap-5 sm:grid-cols-[1.1fr_0.9fr] sm:items-end sm:gap-10">
+        <div class="max-w-[700px]">
+          <p class="landing-eyebrow">Cách hoạt động</p>
           <h2 id="steps-title" class="steps-title">Sửa chữa đơn giản, từng bước rõ ràng</h2>
-          <p class="landing-description mt-1 text-ink-600 text-sm sm:text-base max-w-xl">
-            Từ lúc chọn dịch vụ đến khi đơn hoàn tất, mọi khoản tiền đều chờ bạn duyệt.
+        </div>
+        <p class="max-w-[58ch] text-base leading-7 text-ink-600 sm:justify-self-end">
+          Sau khi tạo yêu cầu, bạn chọn và gửi lời mời tới kỹ thuật viên phù hợp. Đơn sửa chữa được tạo khi kỹ thuật viên nhận việc.
+        </p>
+      </div>
+
+      <ol class="steps-grid mt-9 lg:mt-12" aria-label="Quy trình đặt lịch và sửa chữa">
+        <li v-for="(step, index) in steps" :key="step.title" class="step-item">
+          <div class="flex items-center gap-3">
+            <span class="step-number" aria-hidden="true">0{{ index + 1 }}</span>
+            <component :is="step.icon" :size="21" class="text-brand-600" aria-hidden="true" />
+          </div>
+          <h3 class="mt-5 text-base font-semibold leading-6 text-ink-900 sm:text-[17px]">
+            {{ step.title }}
+          </h3>
+          <p class="mt-2 text-[15px] leading-6 text-ink-600">
+            {{ step.description }}
           </p>
-        </div>
+        </li>
+      </ol>
 
-        <!-- 2-Column Split: Left Stepper (Compact & in-frame), Right Phone with Floating Badges -->
-        <div class="grid items-center gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12">
-          <!-- LEFT COLUMN: Compact Step List with Vertical Accent Indicator (Image 2 style) -->
-          <div class="relative">
-            <!-- Steps List (Fits cleanly within viewport frame) -->
-            <div class="space-y-2.5 sm:space-y-3">
-              <div
-                v-for="(step, idx) in steps"
-                :key="step.stepNum"
-                :data-step-index="idx"
-                class="group relative pl-4 sm:pl-5 py-1.5 sm:py-2 cursor-pointer select-none transition-all duration-200 rounded-xl"
-                :class="[
-                  activeStep === idx
-                    ? 'bg-white/80 shadow-xs'
-                    : 'hover:bg-white/50'
-                ]"
-                @click="selectStep(idx)"
-              >
-                <!-- Active accent vertical line indicator on the left (Image 2 style) -->
-                <div
-                  class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-all duration-300"
-                  :class="activeStep === idx ? 'bg-brand-600 opacity-100' : 'bg-transparent group-hover:bg-ink-200 opacity-40'"
-                  aria-hidden="true"
-                ></div>
-
-                <!-- Step Number + Title inline -->
-                <div class="flex items-baseline gap-2.5 sm:gap-3">
-                  <span
-                    class="font-num text-lg sm:text-xl font-black transition-colors shrink-0"
-                    :class="activeStep === idx ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'"
-                  >
-                    {{ step.stepNum }}
-                  </span>
-                  <h3
-                    class="text-sm sm:text-base transition-colors leading-snug"
-                    :class="activeStep === idx ? 'text-ink-900 font-extrabold' : 'text-ink-700 font-bold group-hover:text-brand-600'"
-                  >
-                    {{ step.title }}
-                  </h3>
-                  <span
-                    v-if="activeStep === idx"
-                    class="hidden md:inline-block ml-auto rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 border border-brand-100 shrink-0"
-                  >
-                    {{ step.badge }}
-                  </span>
-                </div>
-
-                <!-- Step Description -->
-                <p
-                  class="text-xs sm:text-[13px] leading-relaxed transition-all duration-200 mt-1 pl-[1.85rem] sm:pl-[2.1rem]"
-                  :class="[
-                    activeStep === idx
-                      ? 'text-ink-600 font-normal opacity-100 max-h-20'
-                      : 'text-ink-400 max-h-12 opacity-80 line-clamp-1 group-hover:opacity-100'
-                  ]"
-                >
-                  {{ step.description }}
-                </p>
-              </div>
-            </div>
-
-            <!-- ACTION BUTTONS -->
-            <div class="pt-4 sm:pt-5 pl-4 sm:pl-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <FhButton size="md" class="shadow-sm hover:shadow-md transition-shadow" @click="router.push('/app/bookings/new')">
-                Bắt đầu đặt lịch ngay
-                <ArrowRight :size="16" aria-hidden="true" class="ml-1" />
-              </FhButton>
-            </div>
-          </div>
-
-          <!-- RIGHT COLUMN: Centered Phone Mockup with Snug Floating Badges (Image 2 style) -->
-          <div class="relative flex flex-col items-center justify-center">
-            <!-- Phone Wrapper with badges attached tightly around the phone frame -->
-            <div class="relative w-full max-w-[225px] sm:max-w-[245px] lg:max-w-[255px] mx-auto select-none transition-transform duration-300 hover:scale-[1.01]">
-              <!-- Centered Phone Frame Showcase -->
-              <div class="relative aspect-[512/1040] w-full max-h-[440px]">
-                <img
-                  v-for="(st, sIdx) in steps"
-                  :key="st.stepNum"
-                  :src="st.image"
-                  :alt="st.title"
-                  width="512"
-                  height="1040"
-                  loading="eager"
-                  decoding="async"
-                  class="absolute inset-0 h-full w-full object-contain drop-shadow-(--shadow-e3) transition-all duration-250 ease-out will-change-transform"
-                  :class="[
-                    activeStep === sIdx
-                      ? 'opacity-100 scale-100 z-10'
-                      : 'opacity-0 scale-[0.98] pointer-events-none z-0'
-                  ]"
-                />
-              </div>
-            </div>
-
-          </div>
-        </div>
+      <div class="mt-8 lg:mt-10">
+        <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/new')">
+          Bắt đầu đặt lịch ngay
+          <ArrowRight :size="18" aria-hidden="true" />
+        </FhButton>
       </div>
     </div>
   </section>
@@ -278,23 +69,46 @@ onUnmounted(() => {
 
 <style scoped>
 .steps-title {
-  font-size: 26px;
-  line-height: 1.25;
-  letter-spacing: -0.025em;
-  font-weight: 700;
-  text-wrap: balance;
+  margin: 0;
   color: var(--color-ink-900);
+  font-size: clamp(1.85rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+
+.step-item {
+  min-width: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-ink-300);
+}
+
+.step-number {
+  color: var(--color-brand-600);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 @media (min-width: 640px) {
-  .steps-title {
-    font-size: 30px;
+  .steps-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 36px 24px;
   }
 }
 
-@media (min-width: 1024px) {
-  .steps-title {
-    font-size: 32px;
+@media (min-width: 1280px) {
+  .steps-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 32px;
   }
 }
 </style>
