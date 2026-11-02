@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-02 21:37 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-01-landing-20261102
+> Cập nhật lần cuối: 2026-11-03 06:26 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-02-services-20261103
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -326,7 +326,7 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - P1 giữ nút "Khai trả" của kỹ thuật viên và "Đã nhận" của quản lý dịch vụ. Khi API trả 403/404/501/503 thì ẩn phần hoàn trả, vẫn giữ luồng QR/dùng linh kiện. Quick wins 29/10 bổ sung cảnh báo terminal Web nhưng không đổi contract; Browser, Backend runtime và Web–Mobile parity CHƯA KIỂM CHỨNG.
 
 - Catalog V2 discovery: hàng dịch vụ đặt lịch và thẻ `/services` ưu tiên `priceSummary` từ API: khoảng/giá công theo thiết bị và phạm vi, giá tham khảo kèm yêu cầu khách duyệt, hoặc khảo sát và báo giá. Số dịch vụ đã hiển thị nằm cuối danh sách đặt lịch; bộ lọc vẫn xử lý toàn bộ catalog đã tải, không thêm phân trang. Không dùng summary cho tổng tiền, điều kiện đặt hay payload booking; AI giữ nguyên. Runtime với Backend mới và Mobile CHƯA KIỂM CHỨNG.
-- Catalog public (owner 19/10/2026): `/services` hiện toàn bộ danh mục đang hoạt động (catalog hiện có 13) thành chip xuống hàng dưới ô tìm kiếm trên desktop, cuộn ngang trên điện thoại; giữ lọc `category/q/page`, bàn phím và giảm chuyển động. Landing giữ 6 danh mục đầu đang hoạt động, ẩn mô tả chứa `Catalog V2` hoặc `chưa kích hoạt` bằng mô tả dự phòng ngắn, icon dự phòng theo `category.code`, link xem tất cả có số danh mục thực tế. Browser fixture 13 danh mục đã kiểm tra tại 360/390/768/1440; Backend thật và Mobile NOT VERIFIED.
+- Catalog public (owner 19/10/2026): `/services` hiện chip của mọi danh mục đang hoạt động, tự xuống dòng theo bề rộng; W1.02 dùng khung tối đa 1600 px và lưới dịch vụ 4 cột từ 1200 px, 3 cột từ 900–1199 px, 2 cột từ 561–899 px, 1 cột tới 560 px. Kết quả vẫn phân trang API 9 mục/trang; giữ query `category/q/page`, tìm kiếm bàn phím/IME, giảm chuyển động, đặt lịch và cách hiển thị giá theo dữ liệu API. Browser worktree đã kiểm khung, tìm kiếm bàn phím, giảm chuyển động và tràn ngang tại 360/390/768/1024/1440/1920; API local không có dữ liệu danh mục/dịch vụ nên thẻ có dữ liệu CHƯA KIỂM CHỨNG. Landing giữ 6 danh mục đầu đang hoạt động, ẩn mô tả chứa `Catalog V2` hoặc `chưa kích hoạt` bằng mô tả dự phòng ngắn, icon dự phòng theo `category.code`, link xem tất cả có số danh mục thực tế. Backend thật và Mobile CHƯA KIỂM CHỨNG.
 
 ### Báo giá, linh kiện và thanh toán P013 (20/10/2026)
 
@@ -499,6 +499,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
 - 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.
 - 2026-11-02 17:35 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Khóa thu tiền ở trang cha trước reserve và qua timeout/đóng/remount theo attempt cache, chống POST đang chạy qua remount và khóa hóa đơn cũ khi đổi phiên; thêm hồi quy parent–chooser thật.
 - 2026-11-02 14:44 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Phân loại receipt voucher terminal, bỏ hold hết hạn/đã nhả có chứng cứ, khóa thu sau redeemed/refunded và đối chiếu hóa đơn; tách A-B-A và chống gửi trùng đang chạy.
@@ -541,4 +542,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-23 21:18 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Web Multi-Service V5.3: summary giá typed, review tối đa 3 máy, điều hướng/cache child, PART_REQUEST_READY/custody và checkout states; 163 test files/1.450 tests, lint/typecheck/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
 - 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-22 23:59 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Technician VisitGroup có điều hướng Máy 1/2/3 từ checkout có phân quyền, cho xem tiến độ riêng và chuyển đúng ServiceOrder; không trộn báo giá/ảnh/linh kiện, không hiện link khi thiếu quyền; test tập trung 24 PASS, typecheck/lint PASS; runtime account kỹ thuật viên/Mobile chưa kiểm chứng.
