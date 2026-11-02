@@ -388,6 +388,26 @@ function normalizeTechnicianOrder(order: TechnicianOrderItem): TechnicianOrderIt
   }
   return normalizeOrder(order);
 }
+/** Withdrawn history must never fall back to the live-order mapper. */
+function readWithdrawnOrder(value: unknown): HistoricalOrderItem {
+  const invalid = () => new Error('Chưa xác minh được lịch sử công việc. Vui lòng thử lại.');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const row = value as Record<string, unknown>;
+  const status = typeof row.status === 'string' ? row.status.toUpperCase() : '';
+  if (row.historical !== true || typeof row.id !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id)
+    || typeof row.code !== 'string' || !row.code.trim() || row.code.length > 128
+    || !['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED', 'CANCELLED'].includes(status)
+    || typeof row.createdAt !== 'string' || !Number.isFinite(Date.parse(row.createdAt))
+    || ['completedAt', 'cancelledAt'].some(key => row[key] != null && (typeof row[key] !== 'string' || !Number.isFinite(Date.parse(row[key]))))) throw invalid();
+  return {
+    id: row.id, code: row.code, status: status as CanonicalOrderStatus, historical: true,
+    createdAt: row.createdAt, completedAt: row.completedAt as string | null ?? null,
+    cancelledAt: row.cancelledAt as string | null ?? null,
+    ...(row.workStopped === true && row.operationalDisposition === 'STOPPED'
+      ? { workStopped: true, operationalDisposition: 'STOPPED' as const } : {}),
+  };
+}
 function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecord {
   return {
     ...rec,
@@ -447,6 +467,16 @@ export const ordersApi = {
   async getTechnicianJobsPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<TechnicianOrderItem>> {
     const res = await apiClient.get<unknown>('/service-orders/my', { params: { page, pageSize, ...filterParams(filter) } });
     return readPage(res.data, { page, pageSize }, normalizeTechnicianOrder);
+  },
+
+  /** Includes former assignments in groups; no active filters or customer fields. */
+  async getTechnicianHistoryPage(page: number, pageSize: number): Promise<PageResult<HistoricalOrderItem>> {
+    const res = await apiClient.get<unknown>('/service-orders/my', { params: { page, pageSize, history: 'withdrawn' } });
+    const body = res.data;
+    if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
+      throw new Error('Chưa xác minh được lịch sử công việc. Vui lòng thử lại.');
+    }
+    return readPage(body, { page, pageSize }, readWithdrawnOrder);
   },
 
   async getTechnicianOrder(id: string): Promise<TechnicianOrderItem> {

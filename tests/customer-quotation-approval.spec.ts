@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { reactive } from 'vue';
 
 enableAutoUnmount(afterEach);
+vi.mock('../src/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'synthetic-customer' } }) }));
 const route = reactive({ params: { id: 'o1' }, query: {} });
 const { http, visits, listeners } = vi.hoisted(() => ({
   http: { get: vi.fn(), post: vi.fn() },

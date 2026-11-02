@@ -78,3 +78,23 @@ describe('historical ServiceOrder Web adapter keeps private-free summary separat
     expect(value).toEqual(historical);
   });
 });
+it('requests guarded withdrawn history including grouped children and strips all private fields', async () => {
+ const id = '11111111-1111-4111-8111-111111111111';
+ mockGet.mockResolvedValue({ data: { data: [{ ...historical, id, status: 'under_repair', workStopped: true, operationalDisposition: 'STOPPED', ...{ customerPhone: 'PRIVATE', addressSummary: 'PRIVATE', destination: { lat: 10 }, bookingId: 'PRIVATE', visitGroupId: 'PRIVATE' } }], meta: { total: 1 } } });
+ const page = await ordersApi.getTechnicianHistoryPage(1, 20);
+ expect(mockGet).toHaveBeenCalledWith('/service-orders/my', { params: { page: 1, pageSize: 20, history: 'withdrawn' } });
+ expect(page.items[0]).toMatchObject({ id, historical: true, status: 'UNDER_REPAIR', workStopped: true });
+ expect(JSON.stringify(page.items)).not.toMatch(/PRIVATE|bookingId|address|destination|Phone|visitGroupId/);
+});
+it.each([{ ...historical, id: '../private' }, { ...historical, status: 'new_state' }, { ...historical, historical: false }])('rejects an unverified withdrawn history row %o', async row => {
+ mockGet.mockResolvedValue({ data: { data: [row], meta: { total: 1 } } });
+ await expect(ordersApi.getTechnicianHistoryPage(1, 20)).rejects.toThrow();
+});
+it('opens explicit history while keeping active tabs separate and has no customer actions', async () => {
+ mockGet.mockImplementation(async (_url: string, options?: { params?: { history?: string } }) => ({ data: { data: options?.params?.history ? [{ ...historical, id: '11111111-1111-4111-8111-111111111111' }] : [], meta: { total: options?.params?.history ? 1 : 0 } } }));
+ const w = mount(TechnicianJobsPage); await flushPromises();
+ await w.get('[data-testid="jobs-list-switch-history"]').trigger('click'); await flushPromises();
+ expect(w.text()).toContain('Đã rút, hủy'); expect(w.text()).toContain('SO-OLD');
+ expect(w.find('a[href^="tel:"]').exists()).toBe(false); expect(w.text()).not.toContain('Nhắn tin');
+ w.unmount();
+});

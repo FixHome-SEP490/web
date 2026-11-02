@@ -67,10 +67,20 @@ export interface InterruptionRebookItemInput {
 export interface InterruptionRebookInput {
   idempotencyKey: string;
   addressId: string;
-  date: string;
-  slot: BookingSlot;
+  mode?: 'scheduled' | 'urgent';
+  date?: string;
+  slot?: BookingSlot;
   customerNote?: string;
   items: InterruptionRebookItemInput[];
+}
+
+function validSchedule(input: InterruptionRebookInput): boolean {
+  if (input.mode === 'urgent') return input.date === undefined && input.slot === undefined;
+  if (input.mode !== undefined && input.mode !== 'scheduled') return false;
+  if (typeof input.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)
+    || !['morning', 'afternoon', 'evening'].includes(input.slot ?? '')) return false;
+  const parsed = new Date(input.date + 'T00:00:00Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === input.date;
 }
 
 interface ReadContext {
@@ -225,8 +235,7 @@ export const interruptionRebookApi = {
     if (!context || context.owner !== owner || !asId(input.addressId)
       || !context.draft.addresses.some(address => address.id === input.addressId)
       || !/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey)
-      || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)
-      || !['morning', 'afternoon', 'evening'].includes(input.slot)
+      || !validSchedule(input)
       || !Array.isArray(input.items) || input.items.length !== context.draft.items.length
       || new Set(input.items.map(item => `${item.sourceBookingId}:${item.sourceCaseId}`)).size !== input.items.length
       || input.items.some(item => !context.draft.items.some(source => source.sourceBookingId === item.sourceBookingId && source.sourceCaseId === item.sourceCaseId))) throw invalid();
@@ -237,7 +246,9 @@ export const interruptionRebookApi = {
       if (source.pricing.status === 'INSPECTION_REQUIRED' && item.selectedVariantCode) throw invalid();
     }
     const body = {
-      idempotencyKey: input.idempotencyKey, addressId: input.addressId, date: input.date, slot: input.slot,
+      idempotencyKey: input.idempotencyKey, addressId: input.addressId,
+      ...(input.mode !== undefined ? { mode: input.mode } : {}),
+      ...(input.mode !== 'urgent' ? { date: input.date, slot: input.slot } : {}),
       ...(input.customerNote?.trim() ? { customerNote: input.customerNote.trim() } : {}),
       items: input.items.map(item => ({
         sourceBookingId: item.sourceBookingId, sourceCaseId: item.sourceCaseId,

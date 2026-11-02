@@ -13,6 +13,7 @@ export type FundedCashReservation = { voucherReservationId: string; customerDueV
 export type FundedReservation = {
   id: string; claimId: string; scopeId: string; attemptId: string;
   state: 'RESERVED'; reservedAt: string; expiresAt: string;
+  serverTimeAtResponse?: string; receivedAtMs?: number;
 };
 export type FundedCashDeclaration = {
   declaredAmount: number;
@@ -21,10 +22,21 @@ export type FundedCashDeclaration = {
 };
 export type FundedCashConfirmation = { agreed: true } | { agreed: false; disputeReason: string };
 
-export class VoucherReservationExpiredError extends Error {
-  readonly code = 'VOUCHER_RESERVATION_EXPIRED';
-  constructor() {
-    super('Thời gian giữ voucher đã hết. Hãy tải lại thông tin thanh toán để thử lại.');
+export type FundedTerminalState = 'EXPIRED' | 'RELEASED' | 'REDEEMED' | 'REFUNDED';
+export type FundedTerminalReceipt = Omit<FundedReservation, 'state'> & { state: FundedTerminalState };
+
+/** Only constructed after the response identity and reservation window are verified. */
+export class VoucherReservationTerminalError extends Error {
+  readonly code: string;
+  constructor(readonly receipt: FundedTerminalReceipt) {
+    super('Giữ chỗ voucher đã kết thúc. Cần đối chiếu trạng thái thanh toán từ máy chủ.');
+    this.name = 'VoucherReservationTerminalError';
+    this.code = 'VOUCHER_RESERVATION_' + receipt.state;
+  }
+}
+export class VoucherReservationExpiredError extends VoucherReservationTerminalError {
+  constructor(receipt: FundedTerminalReceipt & { state: 'EXPIRED' }) {
+    super(receipt);
     this.name = 'VoucherReservationExpiredError';
   }
 }
@@ -88,21 +100,30 @@ function cashSettlement(value: unknown): Record<string, unknown> {
 }
 
 export const fundedCheckoutApi = {
-  async reserve(claimId: string, scopeId: string, attemptId: string): Promise<FundedReservation> {
-    if (![claimId, scopeId, attemptId].every(key)) invalid();
-    const result = data((await apiClient.post<unknown>('/vouchers/apply', { claimId, scopeId, attemptId })).data);
-    if (!key(result.id) || result.claimId !== claimId || result.scopeId !== scopeId
+  async reserve(claimId: string, scopeId: string, attemptId: string, expectedReservationId?: string): Promise<FundedReservation> {
+    if (![claimId, scopeId, attemptId].every(key) || (expectedReservationId !== undefined && !key(expectedReservationId))) invalid();
+    const response = await apiClient.post<unknown>('/vouchers/apply', { claimId, scopeId, attemptId });
+    const receivedAtMs = Date.now();
+    const result = data(response.data);
+    // HTTP Date is the response clock, not the original reservation creation time.
+    const responseDate = response.headers?.date;
+    const serverTimeAtResponse = typeof responseDate === 'string' && Number.isFinite(Date.parse(responseDate))
+      ? new Date(Date.parse(responseDate)).toISOString() : undefined;
+    if (!key(result.id) || (expectedReservationId !== undefined && result.id !== expectedReservationId) || result.claimId !== claimId || result.scopeId !== scopeId
       || result.attemptId !== attemptId
       || typeof result.reservedAt !== 'string' || typeof result.expiresAt !== 'string'
       || !Number.isFinite(Date.parse(result.reservedAt)) || !Number.isFinite(Date.parse(result.expiresAt))
       || Date.parse(result.expiresAt) <= Date.parse(result.reservedAt)
       || Date.parse(result.expiresAt) - Date.parse(result.reservedAt) > 15 * 60 * 1000) invalid();
-    if (result.state === 'EXPIRED' || Date.parse(result.expiresAt) <= Date.now()) {
-      throw new VoucherReservationExpiredError();
+    const identity = { id: result.id, claimId, scopeId, attemptId, reservedAt: result.reservedAt, expiresAt: result.expiresAt };
+    if (result.state === 'EXPIRED') throw new VoucherReservationExpiredError({ ...identity, state: 'EXPIRED' });
+    if (result.state === 'RELEASED' || result.state === 'REDEEMED' || result.state === 'REFUNDED') {
+      throw new VoucherReservationTerminalError({ ...identity, state: result.state });
     }
     if (result.state !== 'RESERVED') invalid();
     return { id: result.id, claimId, scopeId, attemptId, state: 'RESERVED',
-      reservedAt: result.reservedAt, expiresAt: result.expiresAt };
+      reservedAt: result.reservedAt, expiresAt: result.expiresAt,
+      ...(serverTimeAtResponse ? { serverTimeAtResponse, receivedAtMs } : {}) };
   },
   async release(reservationId: string): Promise<void> {
     const body = hold(reservationId);

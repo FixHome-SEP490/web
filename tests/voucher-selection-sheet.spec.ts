@@ -1,6 +1,6 @@
 // The reusable voucher sheet is a consent surface over server preview and
 // reservation state. It must never calculate or apply a client-side discount.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
 
@@ -288,3 +288,18 @@ function wrapperText(wrapper: VueWrapper): string {
 function wrapperButton(wrapper: VueWrapper, text: string) {
   return wrapper.findAll('[data-testid="voucher-selection-sheet"] button').find((button) => button.text() === text)!;
 }
+
+it('held primary closes without reserve and reopen retains elapsed TTL', async () => {
+ vi.useFakeTimers();
+ try {
+ const w = mountSheet({ serverReservation: activeReservation });
+ const primary = w.get('[data-testid="voucher-selection-apply"]');
+ expect(primary.text()).toBe('Quay lại thanh toán');
+ expect(primary.attributes('disabled')).toBeUndefined();
+ await primary.trigger('click');
+ expect(w.emitted('close')).toHaveLength(1); expect(w.emitted('apply')).toBeUndefined();
+ await vi.advanceTimersByTimeAsync(60000);
+ await w.setProps({ open: false }); await vi.advanceTimersByTimeAsync(120000); await w.setProps({ open: true });
+ expect(w.get('[data-testid="voucher-selection-reservation"]').text()).toContain('12:00');
+ } finally { vi.useRealTimers(); }
+});
