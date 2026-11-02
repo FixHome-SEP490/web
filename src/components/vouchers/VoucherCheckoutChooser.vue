@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useQueryClient } from '@tanstack/vue-query';
 import { useRoute, useRouter } from 'vue-router';
 import { ChevronDown, TicketPercent } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
@@ -9,6 +10,7 @@ import { fundedCheckoutApi, VoucherReservationExpiredError } from '../../api/fun
 import type { FundedReservation } from '../../api/funded-checkout.api';
 import { vouchersApi } from '../../api/vouchers.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
+import { queryKeys } from '../../lib/query-keys';
 import { getHttpStatus } from '../../api/client';
 import {
   claimOffer,
@@ -32,6 +34,12 @@ const emit = defineEmits<{
 }>();
 
 const auth = useAuthStore();
+const cache = useQueryClient();
+// Uncertain attempts outlive modal remounts; the auth boundary clears this cache.
+cache.setQueryDefaults(queryKeys.voucherAttempts.all, { gcTime: Infinity });
+type SavedAttempt = { attemptId: string; offer: VoucherOffer; preview: VoucherCheckoutPreview; reservation: FundedReservation | null };
+const attemptKey = queryKeys.voucherAttempts.scope;
+let disposed = false;
 const customerId = computed(() => auth.userRole === 'CUSTOMER' ? auth.user?.id : null);
 const open = ref(true);
 const state = ref<ChooserState>('loading');
@@ -47,13 +55,17 @@ const applyError = ref('');
 const applying = ref(false);
 const attemptId = ref('');
 const reservationAttemptStarted = ref(false);
+const attemptScopeId = ref<string | null>(null);
 const reservation = ref<FundedReservation | null>(null);
 const nowMs = ref(Date.now());
-const remainingSeconds = computed(() => reservation.value
-  ? Math.max(0, Math.ceil((Date.parse(reservation.value.expiresAt) - nowMs.value) / 1000)) : 0);
+const remainingSeconds = computed(() => {
+  const held = reservation.value;
+  if (!held?.serverTimeAtResponse || held.receivedAtMs === undefined) return null;
+  return Math.max(0, Math.ceil((Date.parse(held.expiresAt) - Date.parse(held.serverTimeAtResponse) - Math.max(0, nowMs.value - held.receivedAtMs)) / 1000));
+});
 const canApply = computed(() => previewState.value === 'ready' && preview.value?.paymentAvailable === true
   && !!selectedOffer.value && !!customerId.value && !!props.scopeId && !reservation.value
-  && !applying.value && remainingSeconds.value >= 0);
+  && !applying.value && (!reservationAttemptStarted.value || attemptScopeId.value === props.scopeId));
 const walletLocation = computed(() => ({
   name: 'customer-vouchers',
   query: { returnTo: route.fullPath },
@@ -96,6 +108,8 @@ function createAttemptId(): string {
 }
 
 function resetAttempt() {
+  if (customerId.value && attemptScopeId.value) cache.removeQueries({ queryKey: attemptKey(customerId.value, attemptScopeId.value), exact: true });
+  attemptScopeId.value = null;
   attemptId.value = '';
   reservationAttemptStarted.value = false;
   applyError.value = '';
@@ -143,13 +157,19 @@ async function applyVoucher() {
     try { attemptId.value = createAttemptId(); }
     catch (error) { applyError.value = userFacingError(error, 'Chưa thể giữ chỗ an toàn.'); return; }
   }
+  attemptScopeId.value = scopeId;
   reservationAttemptStarted.value = true;
   applying.value = true;
   applyError.value = '';
+  const key = attemptKey(owner, scopeId);
+  cache.setQueryData<SavedAttempt>(key, { attemptId: attemptId.value, offer: selected, preview: quote, reservation: null });
+  const saved = cache.getQueryData<SavedAttempt>(key);
   try {
     const held = await fundedCheckoutApi.reserve(selected.id, scopeId, attemptId.value);
-    if (selected.id !== selectedId.value || scopeId !== props.scopeId || owner !== customerId.value) {
-      await fundedCheckoutApi.release(held.id);
+    if (cache.getQueryData(key) === saved && owner === customerId.value) {
+      cache.setQueryData<SavedAttempt>(key, { attemptId: held.attemptId, offer: selected, preview: quote, reservation: held });
+    }
+    if (disposed || selected.id !== selectedId.value || scopeId !== props.scopeId || owner !== customerId.value) {
       return;
     }
     reservation.value = held;
@@ -157,6 +177,7 @@ async function applyVoucher() {
     emit('applied', { reservation: held, preview: quote });
     open.value = false;
   } catch (error) {
+    if (disposed || scopeId !== props.scopeId || owner !== customerId.value) return;
     if (error instanceof VoucherReservationExpiredError
       || (typeof error === 'object' && error !== null && 'code' in error && error.code === 'VOUCHER_RESERVATION_EXPIRED')) {
       resetAttempt();
@@ -166,7 +187,6 @@ async function applyVoucher() {
     } else if (getHttpStatus(error) === 403) {
       applyError.value = 'Tài khoản này không có quyền giữ voucher cho lượt thanh toán.';
     } else if (getHttpStatus(error) === 409) {
-      resetAttempt();
       previewState.value = 'conflict';
       applyError.value = 'Voucher đã hết hạn, đã được dùng hoặc lượt thanh toán đã thay đổi. Hãy tải lại bản xem trước.';
     } else if (getHttpStatus(error) === 503) {
@@ -179,34 +199,42 @@ async function applyVoucher() {
   }
 }
 
-async function releaseReservation() {
-  if (!reservation.value || applying.value) return;
+async function reconcileReservation() {
+  const held = reservation.value;
+  const owner = customerId.value;
+  if (!held || !owner || held.scopeId !== props.scopeId || applying.value) return;
   applying.value = true;
   applyError.value = '';
   try {
-    await fundedCheckoutApi.release(reservation.value.id);
-    reservation.value = null;
-    resetAttempt();
-    emit('released');
-  } catch (error) {
-    applyError.value = userFacingError(error, 'Chưa hủy được giữ chỗ. Hãy thử lại.');
+    // Same idempotent attempt: asks the server for its receipt, never a second hold.
+    const result = await fundedCheckoutApi.reserve(held.claimId, held.scopeId, held.attemptId);
+    if (disposed || owner !== customerId.value || held.scopeId !== props.scopeId) return;
+    reservation.value = result;
+    const saved = cache.getQueryData<SavedAttempt>(attemptKey(owner, held.scopeId));
+    if (saved) cache.setQueryData<SavedAttempt>(attemptKey(owner, held.scopeId), { ...saved, reservation: result });
+  } catch (reason) {
+    if (disposed || owner !== customerId.value || held.scopeId !== props.scopeId) return;
+    if (reason instanceof VoucherReservationExpiredError) {
+      reservation.value = null;
+      resetAttempt();
+      emit('expired');
+      await loadPreview();
+    } else applyError.value = userFacingError(reason, 'Chưa xác minh được giữ chỗ. Hãy kiểm tra thanh toán trước khi thử lại.');
   } finally {
-    applying.value = false;
+    if (!disposed) applying.value = false;
   }
 }
 
-watch(() => props.scopeId, (scopeId) => {
-  if (reservation.value && reservation.value.scopeId !== scopeId) void releaseReservation();
+// A scope change is not permission to release a hold (payment may be pending).
+watch(() => props.scopeId, () => {
+  previewSequence++;
+  preview.value = null;
+  previewState.value = 'idle';
 }, { flush: 'sync' });
 
 function checkExpiry() {
   nowMs.value = Date.now();
-  if (reservation.value && remainingSeconds.value === 0) {
-    reservation.value = null;
-    resetAttempt();
-    applyError.value = 'Thời gian giữ voucher đã hết. Bạn có thể thử giữ chỗ lại nếu voucher vẫn còn hiệu lực.';
-    emit('expired');
-  }
+  // Display-only deadline: retain the receipt and attempt until the server reconciles it.
 }
 
 function isOffline(): boolean {
@@ -221,7 +249,7 @@ async function loadPreview() {
   preview.value = null;
   previewError.value = '';
   if (!claimId) { previewState.value = 'idle'; return; }
-  if (!scopeId) { previewState.value = 'no_scope'; return; }
+  if (!scopeId || (reservationAttemptStarted.value && attemptScopeId.value !== scopeId)) { previewState.value = 'no_scope'; return; }
   if (isOffline()) { previewState.value = 'offline'; return; }
   if (!owner) { previewState.value = 'forbidden'; return; }
   previewState.value = 'loading';
@@ -256,6 +284,29 @@ async function loadPreview() {
 
 async function load() {
   const request = ++sequence;
+  if (reservationAttemptStarted.value || reservation.value) {
+    state.value = 'ready';
+    if (!reservation.value) void loadPreview();
+    else if (reservation.value.scopeId === props.scopeId && customerId.value) {
+      preview.value = cache.getQueryData<SavedAttempt>(attemptKey(customerId.value, reservation.value.scopeId))?.preview ?? null;
+      previewState.value = preview.value ? 'ready' : 'idle';
+    }
+    return;
+  }
+  const saved = customerId.value && props.scopeId ? cache.getQueryData<SavedAttempt>(attemptKey(customerId.value, props.scopeId)) : undefined;
+  if (saved) {
+    reservationAttemptStarted.value = true;
+    attemptScopeId.value = props.scopeId;
+    attemptId.value = saved.attemptId;
+    offers.value = [saved.offer];
+    selectedId.value = saved.offer.id;
+    reservation.value = saved.reservation;
+    preview.value = saved.preview;
+    previewState.value = 'ready';
+    state.value = 'ready';
+    if (saved.reservation) emit('applied', { reservation: saved.reservation, preview: saved.preview });
+    return;
+  }
   offers.value = [];
   selectedId.value = '';
   returnSelectionMessage.value = '';
@@ -299,8 +350,9 @@ function handleOffline() {
   previewSequence++;
   preview.value = null;
   previewState.value = 'offline';
-  offers.value = [];
-  selectedId.value = '';
+  if (!reservationAttemptStarted.value && !reservation.value) {
+    offers.value = []; selectedId.value = '';
+  }
   returnSelectionMessage.value = '';
   error.value = '';
   state.value = 'offline';
@@ -328,7 +380,7 @@ watch(() => route.query.voucherClaimId, (claimId) => {
 }, { flush: 'sync' });
 
 watch(() => [selectedId.value, props.scopeId, customerId.value] as const, () => {
-  resetAttempt();
+  if (!reservationAttemptStarted.value && !reservation.value) resetAttempt();
   void loadPreview();
 }, { flush: 'sync' });
 
@@ -340,6 +392,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   sequence++;
   previewSequence++;
   window.removeEventListener('offline', handleOffline);
@@ -409,16 +462,16 @@ onBeforeUnmount(() => {
           <div class="flex justify-between gap-3"><dt>Trợ giá FixHome dự kiến</dt><dd><FhMoney :amount="preview.fixHomeDiscountSubsidyVnd" /></dd></div>
           <div class="flex justify-between gap-3 font-semibold text-ink-900"><dt>Khách hàng dự kiến thanh toán</dt><dd><FhMoney :amount="preview.customerDueVnd" /></dd></div>
         </dl>
-        <p v-if="reservation" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Chờ bạn bấm Xác nhận tất toán 0 ₫ ở màn thanh toán.' : 'Chưa ghi nhận thanh toán.' }}</p>
+        <p v-if="reservation && remainingSeconds !== null" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Chờ bạn bấm Xác nhận tất toán 0 ₫ ở màn thanh toán.' : 'Chưa ghi nhận thanh toán.' }}</p>
         <p v-else class="mt-2 text-xs leading-5 text-ink-600">Số tiền này chỉ để xem trước. Hóa đơn và thanh toán hiện tại vẫn dùng tổng gốc.</p>
       </div>
 
       <p v-if="applyError" class="text-sm text-danger-700" role="alert" data-testid="checkout-voucher-apply-error">{{ applyError }}</p>
-      <div v-if="reservation && remainingSeconds > 0" class="flex flex-wrap items-center gap-2">
+      <div v-if="reservation" class="flex flex-wrap items-center gap-2">
         <span class="text-xs text-success-700" role="status">Voucher đã giữ chỗ, chưa xác nhận thanh toán.</span>
-        <button type="button" class="min-h-11 px-2 text-sm text-danger-700 underline" :disabled="applying" @click="releaseReservation">Hủy giữ chỗ</button>
+        <span class="text-xs text-ink-600">Chưa thể đổi voucher khi chưa xác nhận hủy giữ chỗ an toàn.</span>
+        <button type="button" data-testid="checkout-voucher-reconcile" class="min-h-11 text-sm font-medium text-brand-700 underline" :disabled="applying || reservation.scopeId !== scopeId" @click="reconcileReservation">Kiểm tra giữ chỗ</button>
       </div>
-      <p v-else-if="reservation && remainingSeconds === 0" class="text-sm text-warning-800" role="alert">Thời gian giữ voucher đã hết.</p>
       <FhButton
         v-else
         data-testid="checkout-voucher-apply"
@@ -446,7 +499,7 @@ onBeforeUnmount(() => {
       :applying="applying"
       :selection-disabled="reservationAttemptStarted || !!reservation"
       :apply-error="applyError"
-      :server-reservation="reservation ? { voucherId: reservation.claimId, expiresAt: reservation.expiresAt, serverTimeAtResponse: reservation.reservedAt } : null"
+      :server-reservation="reservation ? { voucherId: reservation.claimId, expiresAt: reservation.expiresAt, serverTimeAtResponse: reservation.serverTimeAtResponse ?? '', receivedAtMs: reservation.receivedAtMs } : null"
       @close="open = false"
       @retry="load"
       @select="selectOffer"

@@ -80,13 +80,9 @@ const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?
   .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
 const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
-const voucherClock = ref(Date.now());
 const activeFundedVoucher = computed(() => fundedVoucher.value
   && fundedVoucher.value.reservation.scopeId === order.value?.id
-  && (Date.parse(fundedVoucher.value.reservation.expiresAt) > voucherClock.value
-    || cashSettlement.value?.status === 'pending_confirmation')
   ? fundedVoucher.value : null);
-let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const quotationFeedback = ref<typeof actionMessage.value>(null);
 const quotationFeedbackElement = ref<HTMLElement | null>(null);
@@ -528,17 +524,6 @@ onMounted(async () => {
     showReviewModal.value = true;
   }
 });
-onMounted(() => {
-  voucherExpiryTimer = setInterval(() => {
-    voucherClock.value = Date.now();
-    if (fundedVoucher.value && Date.parse(fundedVoucher.value.reservation.expiresAt) <= voucherClock.value
-      && cashSettlement.value?.status !== 'pending_confirmation') {
-      clearFundedVoucher();
-      actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết. Hóa đơn vẫn thanh toán theo tổng gốc từ máy chủ.' };
-    }
-  }, 1000);
-});
-onUnmounted(() => { if (voucherExpiryTimer) clearInterval(voucherExpiryTimer); });
 
 async function confirmQuotationApproval(quotationId: string, allowRetry = false, failure?: unknown) {
   let latest: ServiceOrderItem | undefined;
@@ -722,9 +707,9 @@ function clearFundedVoucher() { fundedVoucher.value = null; }
 function reservationForAction(): FundedReservation | null | undefined {
   const held = fundedVoucher.value;
   if (!held) return null;
-  if (held.reservation.scopeId !== order.value?.id || Date.parse(held.reservation.expiresAt) <= Date.now()) {
+  if (held.reservation.scopeId !== order.value?.id) {
     clearFundedVoucher();
-    actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết hoặc lượt thanh toán đã đổi. Hãy xem lại tổng tiền trước khi tiếp tục.' };
+    actionMessage.value = { type: 'error', text: 'Lượt thanh toán đã đổi. Hãy xem lại tổng tiền trước khi tiếp tục.' };
     return undefined;
   }
   return held.reservation;

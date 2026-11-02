@@ -8,6 +8,7 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/auth';
 import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
@@ -34,6 +35,8 @@ import { chatSocketService } from '../../services/chat-socket.service';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
+const rebookVerificationVersion = ref(0);
 const visitId = computed(() => String(route.params.id));
 
 const visit = ref<Visit | null>(null);
@@ -226,7 +229,7 @@ async function readVisit() {
       && Number.isSafeInteger(nextCheckout.waiting) && nextCheckout.waiting >= 0
       && typeof nextCheckout.ready === 'boolean' && typeof nextCheckout.paid === 'boolean'
       && (!nextCheckout.pendingCash || billingAmount(nextCheckout.pendingCash.amount) !== null);
-    if (validCheckout) checkout.value = nextCheckout;
+    if (validCheckout) { checkout.value = nextCheckout; rebookVerificationVersion.value++; }
     void refreshCashIntent(groupId);
     if (!validCheckout) checkoutError.value = 'Chưa tải được thông tin thanh toán. Vui lòng thử lại.';
     if (disposed || lookupVersion !== childOrderLookupVersion || groupId !== visitId.value) return;
@@ -263,10 +266,8 @@ function load(): Promise<void> {
 }
 onMounted(load);
 watch(visitId, () => {
-  if (fundedVoucher.value && !checkout.value?.pendingCash) {
-    void fundedCheckoutApi.release(fundedVoucher.value.reservation.id).catch(() => undefined);
-    clearFundedVoucher();
-  }
+  // Route changes are not permission to release a hold with an uncertain payment.
+  clearFundedVoucher();
   seenCashNotifications.clear();
   cashIntentCapability.value = null;
   cashCreateCommandId.value = null;
@@ -320,14 +321,6 @@ onMounted(() => {
   window.addEventListener('focus', resyncOnReturn);
   window.addEventListener('online', resyncOnReturn);
   document.addEventListener('visibilitychange', resyncOnReturn);
-  voucherExpiryTimer = setInterval(() => {
-    voucherClock.value = Date.now();
-    if (fundedVoucher.value && Date.parse(fundedVoucher.value.reservation.expiresAt) <= voucherClock.value
-      && !checkout.value?.pendingCash) {
-      clearFundedVoucher();
-      message.value = { type: 'error', text: 'Thời gian giữ voucher đã hết. Lượt sửa vẫn thanh toán theo trạng thái từ máy chủ.' };
-    }
-  }, 1000);
 });
 watch(checkoutOrderIds, (orderIds) => {
   const groupId = visitId.value;
@@ -364,7 +357,6 @@ watch(visitBookingIds, (bookingIds) => {
 }, { immediate: true });
 onUnmounted(() => {
   disposed = true;
-  if (voucherExpiryTimer) clearInterval(voucherExpiryTimer);
   if (refreshTimer !== null) clearTimeout(refreshTimer);
   refreshTimer = null;
   childOrderLookupVersion = child.invalidate();
@@ -619,12 +611,9 @@ type CheckoutState = 'waiting' | 'paid' | 'pending_cash' | 'zero_due' | 'wallet_
 const payMethod = ref<PayMethod>('wallet');
 const cashInstructionsOpen = ref(false);
 const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
-const voucherClock = ref(Date.now());
 const activeFundedVoucher = computed(() => fundedVoucher.value
   && fundedVoucher.value.reservation.scopeId === visitId.value
-  && (Date.parse(fundedVoucher.value.reservation.expiresAt) > voucherClock.value || !!checkout.value?.pendingCash)
   ? fundedVoucher.value : null);
-let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
 const walletBalance = ref<number | null>(null);
 const walletError = ref(false);
 const voucherDue = computed(() => activeFundedVoucher.value?.preview.customerDueVnd ?? checkout.value?.total ?? 0);
@@ -685,9 +674,9 @@ function clearFundedVoucher() { fundedVoucher.value = null; }
 function reservationForAction(): FundedReservation | null | undefined {
   const held = fundedVoucher.value;
   if (!held) return null;
-  if (held.reservation.scopeId !== visitId.value || Date.parse(held.reservation.expiresAt) <= Date.now()) {
+  if (held.reservation.scopeId !== visitId.value) {
     clearFundedVoucher();
-    message.value = { type: 'error', text: 'Thời gian giữ voucher đã hết hoặc lượt thanh toán đã đổi. Hãy kiểm tra lại số tiền trước khi tiếp tục.' };
+    message.value = { type: 'error', text: 'Lượt thanh toán đã đổi. Hãy kiểm tra lại số tiền trước khi tiếp tục.' };
     return undefined;
   }
   return held.reservation;
@@ -926,9 +915,8 @@ async function answerCash(agreed: boolean) {
 
       <section class="space-y-3" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
-        <div v-if="interruptedDevices.length" role="status" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700" data-testid="visit-interrupted">
-          <StoppedDevicesRebookPicker :group-id="visitId" :devices="interruptedDevices" :disabled="!!checkoutError || !!loadError" />
-          <p>Máy đã dừng được đặt lịch mới riêng. Các máy còn lại tiếp tục theo tiến độ bên dưới. Tiền và linh kiện cũ được đối soát riêng.</p>
+        <div v-if="interruptedDevices.length" class="border-b border-ink-200 pb-2 text-sm text-ink-700" data-testid="visit-interrupted">
+          <StoppedDevicesRebookPicker :group-id="visitId" :customer-id="auth.user?.id" :revalidation="rebookVerificationVersion" :devices="interruptedDevices" :disabled="checkoutLoading || !!checkoutError || !!loadError" />
         </div>
         <FhButton
           v-if="failedBookingIds.length > 1"

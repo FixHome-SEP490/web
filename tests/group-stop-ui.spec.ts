@@ -143,3 +143,22 @@ it('keeps the selected stopped subset through same-visit refresh and parent load
   await w.get('[data-testid="stopped-rebook-continue"]').trigger('click');
   expect(mocks.push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: second, sourceBookingIds: second } });
 });
+
+it('restores same-customer subset on remount without spinner and locks CTA until authorized revalidation', async () => {
+ const devices = [{ bookingId, sequence: 1, deviceLabel: null }, { bookingId: second, sequence: 2, deviceLabel: null }];
+ const p = { customerId: 'synthetic-customer', groupId, disabled: false, devices };
+ const w = mount(StoppedDevicesRebookPicker, { props: p }); await flushPromises();
+ await w.findAll('input')[1]!.setValue(true); w.unmount();
+ let resolve!: (ids: string[]) => void;
+ mocks.sources.mockReturnValueOnce(new Promise<string[]>(r => { resolve = r; }));
+ const again = mount(StoppedDevicesRebookPicker, { props: p });
+ expect(again.text()).not.toContain('Đang xác minh');
+ expect(again.findAll('input')).toHaveLength(2);
+ expect((again.findAll('input')[1]!.element as HTMLInputElement).checked).toBe(true);
+ expect(again.get('[data-testid="stopped-rebook-continue"]').attributes('disabled')).toBeDefined();
+ resolve([bookingId]); await flushPromises();
+ expect(again.findAll('input')).toHaveLength(1);
+ expect(again.text()).toContain('Máy 2');
+ await again.setProps({ customerId: 'another-customer' });
+ expect(again.findAll('input')).toHaveLength(0);
+});

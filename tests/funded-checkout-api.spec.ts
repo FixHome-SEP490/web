@@ -124,3 +124,12 @@ describe('funded checkout server-only transaction APIs', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 });
+
+it('uses response Date rather than reservedAt for replayed holds, and leaves missing response clock unknown', async () => {
+ const dto = { id, claimId: claim, scopeId, attemptId: attempt, state: 'RESERVED', reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' };
+ vi.mocked(apiClient.post).mockResolvedValue({ headers: { date: 'Tue, 01 Jan 2030 00:10:00 GMT' }, data: { success: true, data: dto } });
+ const held = await fundedCheckoutApi.reserve(claim, scopeId, attempt);
+ expect(held.serverTimeAtResponse).toBe('2030-01-01T00:10:00.000Z');
+ expect(held.receivedAtMs).toEqual(expect.any(Number));
+ reply(dto); expect((await fundedCheckoutApi.reserve(claim, scopeId, attempt)).serverTimeAtResponse).toBeUndefined();
+});

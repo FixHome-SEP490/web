@@ -234,7 +234,7 @@ describe('checkout voucher boundary', () => {
     wrapper.unmount();
   });
 
-  it('releases a stale hold when the SOLO or VisitGroup checkout scope changes', async () => {
+  it('retains the hold without automatic release when checkout scope changes', async () => {
     const pinia = createPinia(); setActivePinia(pinia); signIn();
     const claimId = '22222222-2222-4222-8222-222222222222';
     const oldScope = '33333333-3333-4333-8333-333333333333';
@@ -250,8 +250,7 @@ describe('checkout voucher boundary', () => {
       .mockResolvedValueOnce({ data: { success: true, data: {
         id: reservationId, claimId, scopeId: oldScope, attemptId, state: 'RESERVED',
         reservedAt: '2030-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:15:00.000Z',
-      } } })
-      .mockResolvedValueOnce({ data: { success: true, data: { id: reservationId, state: 'RELEASED' } } });
+      } } });
     const wrapper = mountChooser(pinia, oldScope);
     await flushPromises();
     await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
@@ -262,10 +261,9 @@ describe('checkout voucher boundary', () => {
 
     await wrapper.setProps({ scopeId: nextScope });
     await flushPromises();
-    expect(apiClient.post).toHaveBeenNthCalledWith(2, `/vouchers/reservations/${reservationId}/release`);
-    expect(wrapper.emitted('released')).toHaveLength(1);
-    expect(wrapper.get('[data-testid="checkout-voucher-preview"]').attributes('data-scope-id')).toBe(nextScope);
-    expect(wrapper.get('[data-testid="checkout-voucher-apply"]').attributes('disabled')).toBeUndefined();
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('released')).toBeUndefined();
+    expect(wrapper.find('[data-testid="checkout-voucher-preview"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -407,4 +405,59 @@ describe('checkout voucher boundary', () => {
       online.mockRestore();
     }
   });
+});
+
+it('reopen after an uncertain reserve keeps claim and attempt, never releases or settles', async () => {
+ vi.clearAllMocks();
+ const pinia = createPinia(); setActivePinia(pinia); signIn();
+ const claimId = '22222222-2222-4222-8222-222222222222'; const scope = '33333333-3333-4333-8333-333333333333';
+ vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({ data: { success: true, data: path === '/vouchers/wallet' ? [{ ...walletClaim, id: claimId }] : preview(claimId, scope, 250000, 50000, true) } }) as never);
+ vi.mocked(apiClient.post).mockRejectedValue(new Error('uncertain'));
+ const w = mountChooser(pinia, scope); await flushPromises();
+ await w.get('[data-testid="voucher-selection-option"]').trigger('click'); await flushPromises();
+ await w.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+ await w.get('[data-testid="voucher-selection-close"]').trigger('click');
+ await w.get('[data-testid="open-voucher-chooser"]').trigger('click'); await flushPromises();
+ expect(w.get('[data-testid="voucher-selection-option"]').attributes('aria-pressed')).toBe('true');
+ await w.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+ expect(apiClient.post).toHaveBeenCalledTimes(2); expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+ w.unmount();
+});
+
+it('remount after an uncertain reserve reconciles with the same attempt id', async () => {
+ vi.clearAllMocks();
+ const pinia = createPinia(); setActivePinia(pinia); signIn();
+ const claimId = '22222222-2222-4222-8222-222222222222'; const scope = '33333333-3333-4333-8333-333333333333';
+ vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({ data: { success: true, data: path === '/vouchers/wallet' ? [{ ...walletClaim, id: claimId }] : preview(claimId, scope, 250000, 50000, true) } }) as never);
+ vi.mocked(apiClient.post).mockRejectedValue(new Error('uncertain'));
+ const w = mountChooser(pinia, scope); await flushPromises();
+ await w.get('[data-testid="voucher-selection-option"]').trigger('click'); await flushPromises();
+ await w.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises(); w.unmount();
+ const again = mountChooser(pinia, scope); await flushPromises();
+ expect(again.get('[data-testid="voucher-selection-option"]').attributes('aria-pressed')).toBe('true');
+ await again.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+ expect(apiClient.post).toHaveBeenCalledTimes(2); expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+ again.unmount();
+});
+
+it('checks the same held attempt and only forgets it after server EXPIRED, never releases or pays', async () => {
+ vi.clearAllMocks();
+ const pinia = createPinia(); setActivePinia(pinia); signIn();
+ const claimId = '22222222-2222-4222-8222-222222222222'; const scope = '33333333-3333-4333-8333-333333333333';
+ vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({ data: { success: true, data: path === '/vouchers/wallet' ? [{ ...walletClaim, id: claimId }] : preview(claimId, scope, 250000, 50000, true) } }) as never);
+ let state = 'RESERVED';
+ vi.mocked(apiClient.post).mockImplementation(async (_path, body) => ({ headers: { date: 'Tue, 01 Jan 2030 00:20:00 GMT' }, data: { success: true, data: { ...body, id: '55555555-5555-4555-8555-555555555555', state, reservedAt: '2030-01-01T00:00:00Z', expiresAt: '2030-01-01T00:15:00Z' } } }));
+ const w = mountChooser(pinia, scope); await flushPromises();
+ await w.get('[data-testid="voucher-selection-option"]').trigger('click'); await flushPromises();
+ await w.get('[data-testid="voucher-selection-apply"]').trigger('click'); await flushPromises();
+ expect(w.emitted('applied')).toHaveLength(1);
+ await w.get('[data-testid="checkout-voucher-reconcile"]').trigger('click'); await flushPromises();
+ expect(w.emitted('expired')).toBeUndefined();
+ expect(vi.mocked(apiClient.post).mock.calls[1]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+ state = 'EXPIRED';
+ await w.get('[data-testid="checkout-voucher-reconcile"]').trigger('click'); await flushPromises();
+ expect(w.emitted('expired')).toHaveLength(1);
+ expect(vi.mocked(apiClient.post).mock.calls[2]).toEqual(vi.mocked(apiClient.post).mock.calls[0]);
+ expect(vi.mocked(apiClient.post).mock.calls.every(([path]) => path === '/vouchers/apply')).toBe(true);
+ w.unmount();
 });

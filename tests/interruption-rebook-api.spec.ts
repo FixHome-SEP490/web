@@ -65,6 +65,24 @@ describe('interruptionRebookApi', () => {
     mocks.getAddresses.mockResolvedValue([{ id: ids.address, userId: 'customer', line1: 'Test', district: 'D', province: 'P', isDefault: true }]);
   });
 
+  it.each([{ mode: 'urgent' }, { mode: 'scheduled', date: '2090-01-02', slot: 'morning' }])('confirms mode-specific schedule through receipt: %o', async schedule => {
+    await interruptionRebookApi.readDraft(ids.booking, 'customer');
+    mocks.post.mockResolvedValue(ok({ targetKind: 'booking', bookingId: ids.second, visitGroupId: null,
+      items: [{ sourceBookingId: ids.booking, sourceCaseId: ids.case, bookingId: ids.second }] }));
+    await interruptionRebookApi.confirm(ids.booking, 'customer', {
+      ...schedule, idempotencyKey: 'test-key-001', addressId: ids.address,
+      items: [{ sourceBookingId: ids.booking, sourceCaseId: ids.case, selectedVariantCode: 'AC-01-01' }],
+    } as Parameters<typeof interruptionRebookApi.confirm>[2]);
+    expect(mocks.post).toHaveBeenCalledWith('/bookings/' + ids.booking + '/interruption-rebook', expect.objectContaining(schedule));
+  });
+  it.each([{ mode: 'urgent', date: '2090-01-02', slot: 'morning' }, { mode: 'unknown' }, { mode: 'scheduled' }, { date: '2090-02-31', slot: 'morning' }])('rejects invalid scheduling: %o', async schedule => {
+    await interruptionRebookApi.readDraft(ids.booking, 'customer');
+    await expect(interruptionRebookApi.confirm(ids.booking, 'customer', {
+      ...schedule, idempotencyKey: 'test-key-001', addressId: ids.address,
+      items: [{ sourceBookingId: ids.booking, sourceCaseId: ids.case, selectedVariantCode: 'AC-01-01' }],
+    } as Parameters<typeof interruptionRebookApi.confirm>[2])).rejects.toThrow();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
   it('loads linked cancelled sources with verified interruption cases and a fresh server price preview', async () => {
     const draft = await interruptionRebookApi.readDraft(ids.booking, 'customer');
     expect(draft.items).toHaveLength(1);
@@ -204,12 +222,13 @@ describe('interruptionRebookApi', () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it.each([1, 2])('requests and confirms exactly %s selected stopped devices from a three-device visit', async count => {
+  it.each([1, 2, 3].flatMap(count => (['scheduled', 'urgent'] as const).map(mode => ({ count, mode }))))('requests and confirms exactly $count selected stopped devices in $mode', async ({ count, mode }) => {
     const data = rawDraft(count);
     data.sourceVisitGroupId = ids.group;
     const sources = data.items.map((item, index) => ({ ...item,
-      sourceOrderId: index ? '90000000-0000-4000-8000-000000000001' : ids.order,
-      sourceCaseId: index ? '90000000-0000-4000-8000-000000000002' : ids.case,
+      sourceBookingId: index === 0 ? ids.booking : index === 1 ? ids.second : '90000000-0000-4000-8000-000000000010',
+      sourceOrderId: index ? `90000000-0000-4000-8000-00000000001${index}` : ids.order,
+      sourceCaseId: index ? `90000000-0000-4000-8000-00000000002${index}` : ids.case,
     }));
     data.items = sources;
     mocks.get.mockResolvedValueOnce(ok(data));
@@ -224,11 +243,11 @@ describe('interruptionRebookApi', () => {
     expect(draft.items.map(row => row.sourceBookingId)).toEqual(selected);
     expect(mocks.get).toHaveBeenCalledWith(`/bookings/${ids.booking}/interruption-draft`, { params: { sourceBookingIds: selected.join(',') } });
     const created = sources.map((source, index) => ({ sourceBookingId: source.sourceBookingId, sourceCaseId: source.sourceCaseId,
-      bookingId: index ? '90000000-0000-4000-8000-000000000004' : '90000000-0000-4000-8000-000000000003' }));
+      bookingId: `90000000-0000-4000-8000-00000000003${index}` }));
     mocks.post.mockReset().mockResolvedValueOnce(ok({ targetKind: data.targetKind, bookingId: count === 1 ? created[0]!.bookingId : null,
-      visitGroupId: count === 2 ? ids.second : null, items: created }));
+      visitGroupId: count > 1 ? ids.second : null, items: created }));
     await interruptionRebookApi.confirm(ids.booking, 'customer', { idempotencyKey: 'subset-command', addressId: ids.address,
-      date: '2090-01-02', slot: 'morning', items: sources.map(row => ({ sourceBookingId: row.sourceBookingId, sourceCaseId: row.sourceCaseId, selectedVariantCode: 'AC-01-01' })) });
+      mode, ...(mode === 'scheduled' ? { date: '2090-01-02', slot: 'morning' as const } : {}), items: sources.map(row => ({ sourceBookingId: row.sourceBookingId, sourceCaseId: row.sourceCaseId, selectedVariantCode: 'AC-01-01' })) });
     expect(mocks.post.mock.calls[0]![1].items.map((row: { sourceBookingId: string }) => row.sourceBookingId)).toEqual(selected);
   });
 

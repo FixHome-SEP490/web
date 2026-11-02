@@ -4,6 +4,7 @@ import { reactive } from 'vue';
 import type { VisitCheckout } from '../src/api/visit-groups.api';
 
 enableAutoUnmount(afterEach);
+vi.mock('../src/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'synthetic-customer' } }) }));
 const route = reactive({ params: { id: 'v1' } });
 const { visits, orders, cashIntents, live } = vi.hoisted(() => ({
   visits: { get: vi.fn(), checkout: vi.fn(), payWithWallet: vi.fn(), confirmCash: vi.fn(), vnpayUrl: vi.fn() },

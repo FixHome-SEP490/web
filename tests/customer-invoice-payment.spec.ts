@@ -279,4 +279,19 @@ describe('customer invoice payment UI', () => {
     expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(true);
     w.unmount();
   });
+
+ it('retains the funded receipt past local TTL without falling back or settling automatically', async () => {
+   vi.useFakeTimers(); vi.setSystemTime(new Date('2030-01-01T00:10:00Z'));
+   const w = await openPayment(300000);
+   try {
+     await w.get('[data-testid="apply-zero-test-voucher"]').trigger('click'); await flushPromises();
+     await vi.advanceTimersByTimeAsync(6 * 60 * 1000); await flushPromises();
+     expect(w.find('[data-testid="order-confirm-zero"]').exists()).toBe(true);
+     expect(funded.zero).not.toHaveBeenCalled(); expect(funded.wallet).not.toHaveBeenCalled();
+     funded.zero.mockRejectedValueOnce(new Error('server still reconciles'));
+     await w.get('[data-testid="order-confirm-zero"]').trigger('click'); await flushPromises();
+     expect(funded.zero).toHaveBeenCalledTimes(1);
+     expect(w.find('[data-testid="order-confirm-zero"]').exists()).toBe(true);
+   } finally { w.unmount(); vi.useRealTimers(); }
+ });
 });

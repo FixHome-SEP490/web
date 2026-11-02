@@ -20,9 +20,15 @@ export const queryKeys = {
     customerList: (filter: Filter) => ['orders', 'customer-list', filter] as const,
     customerRecent: ['orders', 'customer-recent'] as const,
     customerDetail: (id: string) => ['orders', 'customer-detail', id] as const,
+    stoppedRebook: (owner: string | undefined, group: string, sources: string) => ['orders', 'stopped-rebook', owner, group, sources] as const,
     history: (filter: Filter) => ['orders', 'history', filter] as const,
     console: (filter: Filter) => ['orders', 'console', filter] as const,
     cancellations: ['orders', 'cancellations'] as const,
+  },
+  /** Mutation identities are retained until reconciled; auth clearing removes them. */
+  voucherAttempts: {
+    all: ['voucher-attempts'] as const,
+    scope: (owner: string, scope: string) => ['voucher-attempts', owner, scope] as const,
   },
   /** Booking requests before a technician takes them. */
   bookings: {
