@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-03 08:00 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103
+> Cập nhật lần cuối: 2026-11-03 10:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,14 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Trang Cách hoạt động W1.04 (03/11/2026)
+
+- `/how-it-works` là trang công khai độc lập: hero có ảnh minh họa hiện có, hành trình 4 bước dọc và CTA cuối. Không thêm API, route, dependency hay thay đổi component dùng chung.
+- Bản copy rút gọn lần hai: bỏ section nguyên tắc lặp AI/báo giá/bảo hành; mỗi bước chỉ còn một câu ngắn. Ghi chú phụ về giá cố định và phạm vi bảo hành nằm trong `<details>` native, không mở sẵn; các ý bắt buộc vẫn hiện rõ: AI chỉ gợi ý, chọn 1–2 thợ theo thứ tự ưu tiên, duyệt báo giá trước khi sửa và đồng ý chi phí phát sinh.
+- CTA đặt lịch dùng `/app/bookings/new` thống nhất với landing, `/services`, chi tiết dịch vụ và header; khách chưa đăng nhập đi qua `/login?redirect=/app/bookings/new`. Trang liên kết `/services` và `/track`.
+- `tests/public-how-it-works.spec.ts` kiểm tra 4 bước, một `h1`, câu chữ an toàn, độ dài copy, `<details>` đóng mặc định, ảnh minh họa và chuyển hướng đăng nhập. Browser QA Playwright ở 390/1440/1920 px: không tràn ngang, không lỗi trang; bodyChars 1393/1499/1499, thấp hơn bản live 1809/1915/1915. Luồng đăng nhập thật và Lighthouse CHƯA KIỂM CHỨNG.
+
 
 ### Đặt lại, voucher và lịch sử thợ (02/11/2026)
 
@@ -500,7 +508,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
 - 2026-11-03 08:00 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Giữ `priceSummary.fixed_range` là tiền công theo phạm vi cả khi hai đầu bằng nhau; hiện một số, bỏ đơn vị kế thừa và ghi rõ khảo sát/xác nhận trước sửa.
+- 2026-11-03 07:55 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Rút gọn copy W1.04 `/how-it-works`: bỏ section nguyên tắc lặp, mỗi bước còn một câu, ghi chú phụ trong `<details>` đóng mặc định; giữ rõ chọn 1–2 thợ và duyệt chi phí phát sinh. BodyChars 1393–1499 so với live 1809–1915; CTA `/app/bookings/new`.
 - 2026-11-03 07:44 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Làm mới chi tiết dịch vụ công khai với giá theo `priceSummary`, disclosure phạm vi/điều kiện và CTA giữ `serviceId`; Browser kiểm fixture ở viewport di động và desktop, Backend thật/Mobile CHƯA KIỂM CHỨNG.
 - 2026-11-03 07:04 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-hybrid-20261103 | Điều chỉnh W1.02 /services theo phản hồi owner: hero, tiêu đề và tìm kiếm căn giữa như bản cũ; gom danh mục chính, phần còn lại Xem thêm/Thu gọn, giữ lưới 1–4 cột, giá API, tìm kiếm, lọc, phân trang 9 và quyền đặt lịch.
 - 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
@@ -538,5 +548,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
 - 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-23 22:23 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Polish booking summary/review theo máy, chip và disclosure khách/thợ, trạng thái lỗi thanh toán và truy cập thông báo bằng bàn phím; giữ nguyên hợp đồng và quyền, browser/E2E/Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-23 22:00 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Bổ sung trạng thái hành động từng child, cảnh báo PartRequest `ready` từ API có quyền, chuyển child không làm remount shell, badge báo giá khách và sửa `aria-labelledby`; lint/typecheck/1.465 tests/build PASS, browser/E2E/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
