@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-03 06:26 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-02-services-20261103
+> Cập nhật lần cuối: 2026-11-03 07:04 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-02-hybrid-20261103
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -499,15 +499,13 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-03 07:04 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-hybrid-20261103 | Điều chỉnh W1.02 /services theo phản hồi owner: hero, tiêu đề và tìm kiếm căn giữa như bản cũ; gom danh mục chính, phần còn lại Xem thêm/Thu gọn, giữ lưới 1–4 cột, giá API, tìm kiếm, lọc, phân trang 9 và quyền đặt lịch.
 - 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
 - 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.
 - 2026-11-02 17:35 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Khóa thu tiền ở trang cha trước reserve và qua timeout/đóng/remount theo attempt cache, chống POST đang chạy qua remount và khóa hóa đơn cũ khi đổi phiên; thêm hồi quy parent–chooser thật.
 - 2026-11-02 14:44 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Phân loại receipt voucher terminal, bỏ hold hết hạn/đã nhả có chứng cứ, khóa thu sau redeemed/refunded và đối chiếu hóa đơn; tách A-B-A và chống gửi trùng đang chạy.
-
 - 2026-11-02 14:25 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Sửa recovery voucher chưa rõ kết quả: replay đúng attempt không phụ thuộc preview quota mới, giữ snapshot tham khảo và ranh giới khách/scope.
-
 - 2026-11-02 10:34 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Ghi UX rebook urgent/địa chỉ, máy dừng gọn, voucher giữ attempt/giờ phản hồi và lịch sử cựu phân công riêng tư; Backend trước Web và giới hạn runtime.
-
 - 2026-11-02 01:10 (UTC+7) | foxonworld | foxonworld/fixhome-qa-seven-issues-web-20261102 | Sửa bảy lỗi demo Web: xác nhận ZERO tường minh, ảnh lỗi, điều hướng máy lịch sử, trạng thái dừng/đặt lại UUID legacy, voucher readiness và nghĩa vụ linh kiện; ghi giới hạn QA.
 - 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
 - 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.
@@ -541,4 +539,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-23 22:00 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Bổ sung trạng thái hành động từng child, cảnh báo PartRequest `ready` từ API có quyền, chuyển child không làm remount shell, badge báo giá khách và sửa `aria-labelledby`; lint/typecheck/1.465 tests/build PASS, browser/E2E/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 21:18 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Web Multi-Service V5.3: summary giá typed, review tối đa 3 máy, điều hướng/cache child, PART_REQUEST_READY/custody và checkout states; 163 test files/1.450 tests, lint/typecheck/build PASS; browser/Backend DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-23 19:08 (UTC+7) | ToanAltF4 | fix/tech-parts-bugs | Sửa lỗi BUG DETECTOR 10-14 phía thợ và quản lý: trang /console/part-returns Hoàn trả linh kiện (chỉ dòng đã khai trả có ô nhận, gom theo phiếu, phần thợ còn giữ chỉ để xem; trang Yêu cầu linh kiện chỉ còn dòng nhắc), camera không cao quá màn hình, xem chi tiết báo giá và từng chi phí phát sinh, chặn hoàn thành dùng số đã dùng thật trong sổ giữ linh kiện, bỏ linh kiện mua ngoài, chi phí phát sinh chọn nhanh linh kiện FixHome đang giữ (không hỏi giao hàng khi đủ hàng)
-- 2026-10-23 02:24 (UTC+7) | foxonworld | foxonworld/feature-visit-group-ux-owner-v1-20261022 | Parent VisitGroup list cho khách/thợ và lịch sử terminal theo server paging, loại child khỏi list cũ bằng cờ opt-in; focused 67 PASS; shared DEV, browser 360/390/430 và Mobile CHƯA KIỂM CHỨNG.

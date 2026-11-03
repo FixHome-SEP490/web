@@ -102,12 +102,17 @@ const {
 
 const categoryNames = computed(() => new Map(categories.value.map((category) => [category.id, category.name])));
 const spotlightCategories = computed(() => categories.value);
+const showAllCategories = ref(false);
+const additionalCategoryCount = computed(() => Math.max(0, categories.value.length - 7));
 const categoryRows = computed(() => {
   const chips = [{ id: '', name: 'Tất cả', icon: LayoutGrid }, ...categories.value.map(category => ({
     id: category.id, name: category.name, icon: categoryIcon(category),
   }))];
-  return [chips.slice(0, 8), chips.slice(8)].filter(row => row.length);
+  return [chips.slice(0, 8), ...(showAllCategories.value ? [chips.slice(8)] : [])].filter(row => row.length);
 });
+watch([categories, selectedCategoryId], ([available, selected]) => {
+  if (selected && available.findIndex(category => category.id === selected) >= 7) showAllCategories.value = true;
+}, { immediate: true });
 const hasFilters = computed(() => Boolean(selectedCategoryId.value || search.value));
 const busy = computed(() => categoriesLoading.value || loading.value || refreshing.value || changingPage.value);
 const searchSuggestions = computed<SearchSuggestion[]>(() => {
@@ -330,9 +335,9 @@ onBeforeUnmount(() => {
     <section class="services-hero" aria-labelledby="services-title">
       <div class="services-hero__copy">
         <p class="services-eyebrow">DỊCH VỤ FIXHOME</p>
-        <h1 id="services-title">Chọn dịch vụ phù hợp</h1>
+        <h1 id="services-title">Tìm đúng dịch vụ sửa chữa.</h1>
         <p class="services-hero__lead">
-          Tìm dịch vụ, xem cách tính giá trước khi đặt lịch.
+          Tra cứu dịch vụ và mức giá trước khi đặt lịch.
         </p>
       </div>
 
@@ -422,7 +427,7 @@ onBeforeUnmount(() => {
         aria-label="Danh mục dịch vụ"
         data-testid="spotlight-categories"
       >
-        <div v-for="(row, rowIndex) in categoryRows" :key="rowIndex" class="category-row">
+        <div v-for="(row, rowIndex) in categoryRows" :id="rowIndex === 1 ? 'additional-service-categories' : undefined" :key="rowIndex" class="category-row">
           <button v-for="category in row" :key="category.id" type="button" class="category-suggestion" :title="category.name"
             :class="{ 'category-suggestion--selected': selectedCategoryId === category.id }"
             :aria-pressed="selectedCategoryId === category.id"
@@ -433,6 +438,18 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+
+      <button
+        v-if="additionalCategoryCount > 0"
+        type="button"
+        class="category-more-toggle"
+        :aria-expanded="showAllCategories"
+        aria-controls="additional-service-categories"
+        data-testid="category-more-toggle"
+        @click="showAllCategories = !showAllCategories"
+      >
+        {{ showAllCategories ? 'Thu gọn danh mục' : `Xem thêm ${additionalCategoryCount} danh mục` }}
+      </button>
 
       <div v-if="categoriesError" class="category-error" role="status">
         <p>Danh mục chưa tải được. Bạn vẫn có thể tìm trong toàn bộ dịch vụ.</p>
@@ -965,21 +982,26 @@ onBeforeUnmount(() => {
 }
 
 .services-hero {
-  display: grid;
-  grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.22fr);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  column-gap: clamp(28px, 5vw, 76px);
-  row-gap: 24px;
-  padding: 8px 0 34px;
-  text-align: left;
+  gap: 18px;
+  padding: 24px 0 38px;
+  text-align: center;
 }
-.services-hero__copy { width: 100%; }
-.services-eyebrow { justify-content: flex-start; margin-bottom: 10px; font-size: 11px; letter-spacing: 0.09em; }
-.services-hero h1 { max-width: 11ch; margin: 0; font-size: clamp(30px, 3.1vw, 42px); line-height: 1.12; letter-spacing: -0.035em; }
-.services-hero__lead { max-width: 38ch; margin: 12px 0 0; font-size: 15px; }
-
-.services-search-stage { width: 100%; margin: 0; align-items: stretch; row-gap: 0; }
-.services-search-panel { width: 100%; }
+.services-hero__copy { width: min(100%, 930px); }
+.services-eyebrow { justify-content: center; margin-bottom: 12px; font-size: 12px; letter-spacing: 0.06em; }
+.services-hero h1 {
+  max-width: 100%;
+  margin: 0 auto;
+  font-size: clamp(36px, 3.8vw, 56px);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+.services-hero__lead { max-width: 60ch; margin: 12px auto 0; font-size: 15px; }
+.services-search-stage { width: min(100%, 700px); margin: 3px auto 0; align-items: stretch; row-gap: 0; }
+.services-search-panel { width: 100%; text-align: center; }
 .services-search-panel label { margin-bottom: 8px; }
 .services-search-panel > p { margin-top: 8px; }
 .services-search-field { min-height: 60px; gap: 12px; padding-inline: 18px; border-radius: 14px; box-shadow: var(--shadow-e1); }
@@ -988,9 +1010,31 @@ onBeforeUnmount(() => {
 .services-search-field input[type="search"]::-webkit-search-cancel-button { appearance: none; -webkit-appearance: none; }
 .services-search-field input[type="search"]::-ms-clear { display: none; width: 0; height: 0; }
 
-.category-cloud { grid-column: 1 / -1; width: 100%; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 2px; }
-.category-row { display: flex; width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
-.category-row .category-suggestion { width: auto; min-width: 44px; justify-content: flex-start; padding-inline: 13px; }
+.category-cloud {
+  width: min(100%, 1320px);
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+.category-row { display: flex; width: 100%; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.category-row .category-suggestion { width: auto; min-width: 44px; justify-content: center; padding-inline: 13px; }
+.category-more-toggle {
+  min-height: 44px;
+  margin-top: -3px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-brand-700);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.category-more-toggle:hover { background: var(--color-brand-50); }
+.category-more-toggle:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+.category-suggestion { width: auto; min-width: 44px; justify-content: flex-start; padding-inline: 13px; }
 .category-suggestion { min-height: 44px; border-radius: 12px; background: var(--color-ink-25); box-shadow: none; font-size: 13px; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease; }
 .category-suggestion:hover,
 .category-suggestion--selected { box-shadow: inset 0 0 0 1px var(--color-brand-600); }
@@ -1037,21 +1081,22 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 899px) {
   .public-services { width: min(calc(100% - 40px), 760px); padding-top: 24px; }
-  .services-hero { grid-template-columns: minmax(0, 1fr); gap: 18px; padding-bottom: 28px; }
-  .services-hero__copy { max-width: 620px; }
-  .services-hero h1 { max-width: 18ch; }
-  .services-search-stage { max-width: none; }
+  .services-hero { gap: 18px; padding-bottom: 28px; }
+  .services-hero__copy { max-width: 760px; }
+  .services-hero h1 { max-width: 100%; font-size: clamp(34px, 5.1vw, 48px); }
+  .services-search-stage { width: min(100%, 700px); }
   .category-cloud { padding-top: 0; }
   .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 }
 @media (max-width: 560px) {
   .public-services { width: calc(100% - 32px); padding: 20px 0 48px; }
-  .services-hero { gap: 16px; padding-bottom: 22px; }
-  .services-hero h1 { font-size: 30px; }
+  .services-hero { gap: 16px; padding-top: 7px; padding-bottom: 24px; }
+  .services-hero h1 { font-size: clamp(29px, 8vw, 36px); }
   .services-hero__lead { margin-top: 8px; font-size: 14px; }
   .services-search-field { min-height: 54px; padding-inline: 14px; border-radius: 12px; }
   .services-search-field input { font-size: 15px; }
   .services-search-panel > p { font-size: 12px; }
+  .category-cloud { gap: 8px; }
   .category-row { gap: 7px; }
   .category-row .category-suggestion { min-height: 44px; padding-inline: 10px; }
   .category-suggestion { gap: 6px; font-size: 12px; }
@@ -1073,4 +1118,5 @@ onBeforeUnmount(() => {
   .public-services *::before,
   .public-services *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
 </style>
