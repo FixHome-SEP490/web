@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAuthStore } from '../../stores/auth';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -38,7 +39,7 @@ import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
 import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intents.api';
-import type { FundedReservation } from '../../api/funded-checkout.api';
+import type { FundedReservation, FundedTerminalReceipt } from '../../api/funded-checkout.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { pendingPaymentCashNotice } from '../../utils/pending-payment-cash-notice';
@@ -68,6 +69,7 @@ const chatStore = useChatStore();
 const orderId = route.params.id as string;
 const cache = useCacheUpdates();
 const queryClient = useQueryClient();
+const auth = useAuthStore();
 
 const actionLoading = ref(false);
 const financialReadReady = ref(false);
@@ -80,13 +82,53 @@ const newTechnicianInvited = computed(() => (bookingDetails.value?.invitations ?
   .some(invitation => ['PENDING', 'STANDBY'].includes(String(invitation.status).toUpperCase())));
 const invoice = ref<{ id?: string; [key: string]: unknown } | null>(null);
 const fundedVoucher = ref<{ reservation: FundedReservation; preview: VoucherCheckoutPreview } | null>(null);
-const voucherClock = ref(Date.now());
-const activeFundedVoucher = computed(() => fundedVoucher.value
+const voucherTerminal = ref<FundedTerminalReceipt | null>(null);
+const voucherReconciliationLoading = ref(false);
+// The chooser caches evidence BEFORE POST. Keep collection blocked across modal remounts.
+type ParentVoucherAttempt = {
+  attemptId: string; offer: { id: string; ownerCustomerId: string };
+  preview: VoucherCheckoutPreview; reservation: FundedReservation | null; terminal?: FundedTerminalReceipt; requestPending?: boolean;
+};
+const voucherCacheVersion = ref(0);
+const stopVoucherCache = queryClient.getQueryCache().subscribe(event => {
+  if (event.query.queryKey[0] === queryKeys.voucherAttempts.all[0]) voucherCacheVersion.value++;
+});
+onUnmounted(stopVoucherCache);
+const savedVoucherAttempt = computed(() => {
+  void voucherCacheVersion.value;
+  const owner = auth.user?.id;
+  return owner ? queryClient.getQueryData<ParentVoucherAttempt>(queryKeys.voucherAttempts.scope(owner, orderId)) : undefined;
+});
+const savedFundedVoucher = computed(() => {
+  const saved = savedVoucherAttempt.value;
+  const held = saved?.reservation;
+  return saved && !saved.terminal && held?.state === 'RESERVED'
+    && saved.offer.ownerCustomerId === auth.user?.id && held.scopeId === orderId
+    && held.claimId === saved.offer.id && held.attemptId === saved.attemptId
+    && saved.preview.scopeId === held.scopeId && saved.preview.claimId === held.claimId
+    && saved.preview.paymentAvailable === true ? { reservation: held, preview: saved.preview } : null;
+});
+const voucherAttemptPending = computed(() => !!savedVoucherAttempt.value
+  && !savedVoucherAttempt.value.terminal
+  && (savedVoucherAttempt.value.requestPending === true || !savedFundedVoucher.value));
+const voucherContextChanged = ref(false);
+const voucherCollectionBlocked = computed(() => voucherAttemptPending.value || voucherContextChanged.value);
+watch(() => auth.user?.id, () => {
+  fundedVoucher.value = null;
+  voucherTerminal.value = null;
+  // A mounted invoice belongs to its original session. Re-enter the page to
+  // obtain a backend-authoritative checkout for the new account.
+  voucherContextChanged.value = true;
+}, { flush: 'sync' });
+watch(savedVoucherAttempt, (saved, previous) => {
+  // Infinite retention: removal comes from an authoritative unused terminal or logout.
+  if (!saved && previous) fundedVoucher.value = null;
+}, { flush: 'sync' });
+const voucherReconciliationRequired = computed(() => (voucherTerminal.value ?? savedVoucherAttempt.value?.terminal)?.scopeId === order.value?.id
+  && ['REDEEMED', 'REFUNDED'].includes((voucherTerminal.value ?? savedVoucherAttempt.value?.terminal)?.state ?? ''));
+const activeFundedVoucher = computed(() => savedFundedVoucher.value ?? (!savedVoucherAttempt.value && fundedVoucher.value
   && fundedVoucher.value.reservation.scopeId === order.value?.id
-  && (Date.parse(fundedVoucher.value.reservation.expiresAt) > voucherClock.value
-    || cashSettlement.value?.status === 'pending_confirmation')
-  ? fundedVoucher.value : null);
-let voucherExpiryTimer: ReturnType<typeof setInterval> | null = null;
+  ? fundedVoucher.value : null));
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const quotationFeedback = ref<typeof actionMessage.value>(null);
 const quotationFeedbackElement = ref<HTMLElement | null>(null);
@@ -236,8 +278,8 @@ const partsItems = computed(() => billing.value.items.filter(item => item.type.t
 const shownLaborTotal = computed(() => billing.value.labor);
 const shownPartsTotal = computed(() => billing.value.parts);
 const oldFinanceReview = computed(() => workStopped.value || !!order.value?.failedWorkFinance);
-const paymentOptions = computed(() => paymentChannels(billing.value.total, oldFinanceReview.value || billing.value.mismatch || !financialReadReady.value || !invoice.value?.id || isPaid.value));
-const paymentBlocked = computed(() => paymentOptions.value.length === 0);
+const paymentOptions = computed(() => paymentChannels(billing.value.total, voucherReconciliationRequired.value || oldFinanceReview.value || billing.value.mismatch || !financialReadReady.value || !invoice.value?.id || isPaid.value));
+const paymentBlocked = computed(() => voucherCollectionBlocked.value || paymentOptions.value.length === 0);
 
 const openLightbox = (ev: OrderEvidence) => {
   lightboxEvidence.value = ev;
@@ -528,17 +570,6 @@ onMounted(async () => {
     showReviewModal.value = true;
   }
 });
-onMounted(() => {
-  voucherExpiryTimer = setInterval(() => {
-    voucherClock.value = Date.now();
-    if (fundedVoucher.value && Date.parse(fundedVoucher.value.reservation.expiresAt) <= voucherClock.value
-      && cashSettlement.value?.status !== 'pending_confirmation') {
-      clearFundedVoucher();
-      actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết. Hóa đơn vẫn thanh toán theo tổng gốc từ máy chủ.' };
-    }
-  }, 1000);
-});
-onUnmounted(() => { if (voucherExpiryTimer) clearInterval(voucherExpiryTimer); });
 
 async function confirmQuotationApproval(quotationId: string, allowRetry = false, failure?: unknown) {
   let latest: ServiceOrderItem | undefined;
@@ -647,13 +678,14 @@ const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'A
 };
 
 const handleConfirmCashPayment = async () => {
+  if (voucherCollectionBlocked.value) return;
   if (!cashSettlement.value || confirmCashAmount.value === '' || paymentBlocked.value || actionLoading.value) return;
   const amount = Number(confirmCashAmount.value);
   const matches = amount === cashSettlement.value.declaredAmount;
   try {
     actionLoading.value = true;
     actionMessage.value = null;
-    const held = fundedVoucher.value?.reservation ?? null;
+    const held = activeFundedVoucher.value?.reservation ?? null;
     if (held && held.scopeId !== order.value?.id) {
       actionMessage.value = { type: 'error', text: 'Mã giữ voucher không khớp với đơn này. Chưa gửi xác nhận tiền mặt.' };
       return;
@@ -720,14 +752,32 @@ const walletCovers = computed(() => walletBalance.value !== null && !!order.valu
 
 function clearFundedVoucher() { fundedVoucher.value = null; }
 function reservationForAction(): FundedReservation | null | undefined {
-  const held = fundedVoucher.value;
+  const held = activeFundedVoucher.value;
   if (!held) return null;
-  if (held.reservation.scopeId !== order.value?.id || Date.parse(held.reservation.expiresAt) <= Date.now()) {
+  if (held.reservation.scopeId !== order.value?.id) {
     clearFundedVoucher();
-    actionMessage.value = { type: 'error', text: 'Thời gian giữ voucher đã hết hoặc lượt thanh toán đã đổi. Hãy xem lại tổng tiền trước khi tiếp tục.' };
+    actionMessage.value = { type: 'error', text: 'Lượt thanh toán đã đổi. Hãy xem lại tổng tiền trước khi tiếp tục.' };
     return undefined;
   }
   return held.reservation;
+}
+
+async function handleVoucherTerminal(receipt: FundedTerminalReceipt) {
+  if (!['EXPIRED', 'RELEASED', 'REDEEMED', 'REFUNDED'].includes(receipt.state)) return;
+  if (receipt.scopeId !== orderId) return;
+  const held = fundedVoucher.value?.reservation;
+  if (held && (held.id !== receipt.id || held.claimId !== receipt.claimId || held.attemptId !== receipt.attemptId)) return;
+  if (receipt.state === 'EXPIRED' || receipt.state === 'RELEASED') { clearFundedVoucher(); return; }
+  voucherTerminal.value = receipt;
+  clearFundedVoucher();
+  if (voucherReconciliationLoading.value) return;
+  voucherReconciliationLoading.value = true;
+  try {
+    await loadOrder(true);
+    await nextTick();
+    if (mounted && isPaid.value) showPaymentModal.value = false;
+  } finally { voucherReconciliationLoading.value = false; }
+  // An unpaid/failed read is not evidence that a consumed voucher can be charged again.
 }
 
 async function handleVoucherApplied(value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }) {
@@ -742,6 +792,7 @@ async function handleVoucherApplied(value: { reservation: FundedReservation; pre
 }
 
 async function confirmZeroCheckout() {
+  if (voucherCollectionBlocked.value) return;
   if (actionLoading.value || walletPaying.value || paymentBlocked.value || workStopped.value
     || activeFundedVoucher.value?.preview.customerDueVnd !== 0) return;
   const held = reservationForAction();
@@ -781,7 +832,7 @@ watch(walletBalance, () => {
 });
 
 const handlePay = () => {
-  if (paymentBlocked.value || actionLoading.value) return;
+  if (voucherContextChanged.value || (!voucherAttemptPending.value && paymentBlocked.value) || actionLoading.value) return;
   showPaymentModal.value = true;
   paymentDialogError.value = null;
   cashHeldByPendingPayment.value = false;
@@ -792,6 +843,7 @@ const handlePay = () => {
 };
 
 function confirmCashIntent() {
+  if (voucherCollectionBlocked.value) return;
   if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (cashFirstEnabled.value) {
     void createCashIntent();
@@ -813,11 +865,12 @@ async function refreshCashIntent(serviceOrderId = order.value?.id ?? orderId) {
 }
 
 async function createCashIntent() {
-  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
+  if (voucherCollectionBlocked.value) return;
+  if (voucherReconciliationRequired.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (oldFinanceReview.value || !cashFirstEnabled.value || !order.value || actionLoading.value || walletPaying.value
     || currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return;
   const held = reservationForAction();
-  if (fundedVoucher.value && !held) return;
+  if (activeFundedVoucher.value && !held) return;
   cashCreateCommandId.value ??= newCashCommandId();
   actionLoading.value = true;
   actionMessage.value = null;
@@ -842,6 +895,7 @@ async function createCashIntent() {
 }
 
 async function cancelCashIntent() {
+  if (voucherCollectionBlocked.value) return;
   const intent = currentCashIntent.value;
   if (!cashFirstEnabled.value || intent?.status !== 'pending' || actionLoading.value) return;
   cashCancelCommandId.value ??= newCashCommandId();
@@ -863,9 +917,10 @@ async function cancelCashIntent() {
 }
 
 const payWithWallet = async () => {
+  if (voucherCollectionBlocked.value) return;
   if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (!invoice.value?.id || walletPaying.value || actionLoading.value || !walletCovers.value || !paymentOptions.value.includes('wallet')) return;
-  const hadFundedVoucher = !!fundedVoucher.value;
+  const hadFundedVoucher = !!activeFundedVoucher.value;
   const held = reservationForAction();
   if (hadFundedVoucher && !held) return;
   walletPaying.value = true;
@@ -885,9 +940,10 @@ const payWithWallet = async () => {
 };
 
 const confirmPayment = async () => {
+  if (voucherCollectionBlocked.value) return;
   if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
   if (actionLoading.value || walletPaying.value || !paymentOptions.value.includes('vnpay')) return;
-  const hadFundedVoucher = !!fundedVoucher.value;
+  const hadFundedVoucher = !!activeFundedVoucher.value;
   const held = reservationForAction();
   if (hadFundedVoucher && !held) return;
   try {
@@ -904,6 +960,7 @@ const confirmPayment = async () => {
 };
 
 const completeNoCharge = async () => {
+  if (voucherCollectionBlocked.value) return;
   if (!invoice.value?.id || actionLoading.value || walletPaying.value || !paymentOptions.value.includes('no-charge')) return;
   actionLoading.value = true;
   actionMessage.value = null;
@@ -1066,6 +1123,12 @@ const parsedReview = computed(() => {
 
 <template>
   <div class="max-w-4xl mx-auto space-y-6 pb-12">
+    <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>
+    <p v-if="voucherAttemptPending" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-reservation-pending">Kết quả giữ voucher chưa rõ. Hãy mở voucher và kiểm tra lại yêu cầu cũ trước khi thanh toán; chưa thể trả bằng ví, VNPay hoặc tiền mặt.</p>
+    <section v-if="voucherReconciliationRequired && !isPaid && !showPaymentModal" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
+      Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu hóa đơn từ máy chủ; chưa thể thanh toán lại.
+      <FhButton variant="secondary" size="sm" :disabled="voucherReconciliationLoading" @click="(voucherTerminal ?? savedVoucherAttempt?.terminal) && handleVoucherTerminal((voucherTerminal ?? savedVoucherAttempt?.terminal)!)">Kiểm tra thanh toán</FhButton>
+    </section>
     <router-link
       v-if="visitGroupId"
       :to="`/app/visits/${visitGroupId}`"
@@ -1309,7 +1372,7 @@ const parsedReview = computed(() => {
           <FhButton v-if="visitGroupId" variant="primary" size="md" data-testid="pay-with-visit" @click="router.push(`/app/visits/${visitGroupId}`)">
             Thanh toán cả lượt
           </FhButton>
-          <FhButton v-else-if="invoice?.id" variant="primary" size="md" :disabled="actionLoading || paymentBlocked" @click="handlePay">
+          <FhButton v-else-if="invoice?.id" variant="primary" size="md" :disabled="voucherContextChanged || actionLoading || (!voucherAttemptPending && paymentBlocked)" @click="handlePay">
             Thanh toán ngay
           </FhButton>
         </div>
@@ -1953,8 +2016,13 @@ const parsedReview = computed(() => {
           </button>
         </div>
 
-        <p v-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
-        <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
+        <section v-if="voucherReconciliationRequired && !isPaid" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
+          Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu hóa đơn từ máy chủ; chưa thể thanh toán lại.
+          <FhButton variant="secondary" size="sm" :disabled="voucherReconciliationLoading" @click="(voucherTerminal ?? savedVoucherAttempt?.terminal) && handleVoucherTerminal((voucherTerminal ?? savedVoucherAttempt?.terminal)!)">Kiểm tra thanh toán</FhButton>
+        </section>
+        <p v-else-if="voucherAttemptPending" role="alert" class="text-sm text-warning-900">Kết quả giữ voucher chưa rõ. Kiểm tra lại đúng yêu cầu cũ trong bảng chọn voucher trước khi thanh toán.</p>
+        <p v-else-if="paymentBlocked" role="alert" class="text-sm text-danger-700">Thông tin hóa đơn chưa sẵn sàng hoặc chưa khớp. Vui lòng kiểm tra lại trước khi thanh toán.</p>
+        <FhButton v-if="paymentOptions.includes('no-charge')" data-testid="complete-no-charge" class="w-full" :disabled="voucherCollectionBlocked || actionLoading" :loading="actionLoading" @click="completeNoCharge">Hoàn tất miễn phí</FhButton>
 
         <section v-if="!isPaid && cashFirstEnabled && currentCashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" aria-labelledby="cash-intent-pending-title" data-testid="cash-intent-pending">
           <h4 id="cash-intent-pending-title" class="font-semibold text-balance">Chờ kỹ thuật viên xác nhận tiền mặt</h4>
@@ -1977,10 +2045,11 @@ const parsedReview = computed(() => {
             :key="invoice?.id"
             :scope-id="order?.id ?? null"
             @applied="handleVoucherApplied"
+            @terminal="handleVoucherTerminal"
             @released="clearFundedVoucher"
             @expired="clearFundedVoucher"
           />
-          <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="actionLoading || walletPaying" :loading="actionLoading" data-testid="order-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+          <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="voucherCollectionBlocked || actionLoading || walletPaying" :loading="actionLoading" data-testid="order-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
           <template v-else>
           <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="pay-methods">
             <button
@@ -1992,7 +2061,7 @@ const parsedReview = computed(() => {
               class="flex min-h-14 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors"
               :class="payMethod === method ? 'bg-brand-50' : 'bg-white hover:bg-ink-50'"
               :data-testid="`pay-method-${method}`"
-              :disabled="actionLoading || walletPaying"
+              :disabled="voucherCollectionBlocked || actionLoading || walletPaying"
               @click="choosePayMethod(method)"
             >
               <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
@@ -2034,7 +2103,7 @@ const parsedReview = computed(() => {
             v-if="payMethod === 'wallet'"
             class="w-full"
             size="lg"
-            :disabled="!walletCovers || walletPaying || actionLoading"
+            :disabled="voucherCollectionBlocked || !walletCovers || walletPaying || actionLoading"
             :loading="walletPaying"
             data-testid="pay-with-wallet"
             @click="payWithWallet"
@@ -2043,7 +2112,7 @@ const parsedReview = computed(() => {
             v-else-if="payMethod === 'vnpay'"
             class="w-full"
             size="lg"
-            :disabled="actionLoading || walletPaying"
+            :disabled="voucherCollectionBlocked || actionLoading || walletPaying"
             :loading="actionLoading"
             data-testid="pay-with-vnpay"
             @click="confirmPayment"
@@ -2052,7 +2121,7 @@ const parsedReview = computed(() => {
             v-else-if="payMethod === 'cash'"
             class="w-full"
             size="lg"
-            :disabled="actionLoading || walletPaying || cashHeldByPendingPayment"
+            :disabled="voucherCollectionBlocked || actionLoading || walletPaying || cashHeldByPendingPayment"
             :loading="actionLoading"
             data-testid="pay-cash-ok"
             @click="confirmCashIntent"

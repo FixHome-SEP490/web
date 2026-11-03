@@ -1,126 +1,136 @@
 <script setup lang="ts">
-import {
-  Bell,
-  MapPin,
-  MessageSquare,
-  ShieldCheck,
-  Smartphone,
-} from 'lucide-vue-next';
+import { Bell, History, MessageSquare, Smartphone } from 'lucide-vue-next';
 
 const appFeatures = [
   {
     icon: Bell,
-    title: 'Thông báo theo tiến độ đơn',
-    desc: 'Biết khi thợ nhận đơn, lên đường, gửi báo giá hay không kịp tới.',
-  },
-  {
-    icon: MapPin,
-    title: 'Theo dõi lộ trình theo thời gian thực',
-    desc: 'Xem thợ đang ở đâu để chủ động đón.',
+    title: 'Theo dõi yêu cầu trong từng đơn',
+    description: 'Xem trạng thái và thông tin liên quan đến yêu cầu.',
   },
   {
     icon: MessageSquare,
-    title: 'Nhắn tin & gửi ảnh trực tiếp',
-    desc: 'Trao đổi và gửi ảnh cho kỹ thuật viên.',
+    title: 'Trao đổi với kỹ thuật viên',
+    description: 'Nhắn tin và gửi ảnh trong cuộc trò chuyện.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Hóa đơn & bảo hành',
-    desc: 'Lưu lịch sử sửa chữa, hóa đơn và bảo hành của từng đơn.',
+    icon: History,
+    title: 'Xem lại lịch sử sửa chữa',
+    description: 'Tìm lại thông tin của những đơn đã hoàn tất.',
   },
 ];
 </script>
 
 <template>
-  <section
-    id="mobile-app"
-    class="landing-section bg-gradient-to-b from-white via-ink-25/50 to-white border-b border-ink-100 overflow-hidden"
-    aria-labelledby="app-section-title"
-  >
-    <div class="landing-container">
-      <div class="grid items-center gap-12 lg:grid-cols-[1.05fr_1.15fr] lg:gap-16">
-        <!-- LEFT COLUMN: Content & Features -->
-        <div class="max-w-xl">
-          <div class="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3.5 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-4">
-            <Smartphone :size="15" class="text-brand-600" aria-hidden="true" />
-            <span>Trải nghiệm di động mọi lúc, mọi nơi</span>
-          </div>
-
-          <h2 id="app-section-title" class="app-title">
-            Chăm sóc ngôi nhà trong tầm tay.
-            <br />
-            <span class="text-brand-600">Tiện lợi hơn trên ứng dụng FixHome.</span>
-          </h2>
-
-          <p class="landing-description mt-3">
-            Theo dõi đơn, nhắn tin với thợ và xem bảo hành ngay trên điện thoại.
-          </p>
-
-          <!-- 4 Features List -->
-          <div class="mt-8 grid gap-5 sm:grid-cols-2">
-            <div
-              v-for="item in appFeatures"
-              :key="item.title"
-              class="flex items-start gap-3 rounded-xl border border-ink-200/70 bg-white p-3.5 shadow-2xs transition-shadow hover:shadow-xs"
-            >
-              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                <component :is="item.icon" :size="18" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 class="text-sm font-semibold text-ink-900 leading-snug">{{ item.title }}</h3>
-                <p class="mt-1 text-xs text-ink-600 leading-relaxed">{{ item.desc }}</p>
-              </div>
-            </div>
-          </div>
+  <section id="mobile-app" class="landing-section bg-ink-25/60" aria-labelledby="app-section-title">
+    <div class="landing-container grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-16">
+      <div class="mobile-intro max-w-[650px]">
+        <div class="mobile-icon" aria-hidden="true">
+          <Smartphone :size="58" :stroke-width="1.5" />
         </div>
-
-        <!-- RIGHT COLUMN: High-resolution Devices Mockup (Web Laptop + Mobile Phone) -->
-        <div class="relative flex items-center justify-center">
-          <!-- Ambient glowing backdrop -->
-          <div
-            class="pointer-events-none absolute -inset-4 rounded-3xl bg-gradient-to-tr from-brand-100/40 via-brand-50/20 to-emerald-50/30 blur-2xl"
-            aria-hidden="true"
-          ></div>
-
-          <!-- Main Devices Image -->
-          <figure class="relative z-10 w-full transition-transform duration-500 hover:scale-[1.01]">
-            <img
-              :src="'/images/fixhome-devices-mockup.png'"
-              alt="Giao diện FixHome hiển thị đồng bộ trên màn hình Laptop và điện thoại iPhone"
-              width="1024"
-              height="768"
-              loading="lazy"
-              decoding="async"
-              class="w-full h-auto object-contain drop-shadow-(--shadow-e3)"
-            />
-          </figure>
-
-        </div>
+        <p class="landing-eyebrow mt-6">Trong ứng dụng FixHome</p>
+        <h2 id="app-section-title" class="app-title">Theo dõi việc sửa chữa trên điện thoại.</h2>
+        <p class="landing-description max-w-[58ch]">
+          Xem trạng thái yêu cầu, trao đổi với kỹ thuật viên và tìm lại thông tin trong từng đơn.
+        </p>
       </div>
-    </div>
 
+      <ol class="app-flow" aria-label="Việc bạn có thể làm trong ứng dụng FixHome">
+        <li v-for="item in appFeatures" :key="item.title" class="app-flow-step">
+          <div class="app-flow-icon" aria-hidden="true">
+            <component :is="item.icon" :size="21" :stroke-width="1.8" />
+          </div>
+          <h3 class="text-base font-semibold leading-6 text-ink-900 sm:text-[17px]">{{ item.title }}</h3>
+          <p class="text-[15px] leading-6 text-ink-600">{{ item.description }}</p>
+        </li>
+      </ol>
+    </div>
   </section>
 </template>
 
 <style scoped>
+.mobile-icon {
+  display: flex;
+  width: 104px;
+  height: 104px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-brand-50);
+  color: var(--color-brand-600);
+}
+
 .app-title {
-  font-size: 28px;
-  line-height: 1.25;
-  letter-spacing: -0.025em;
-  font-weight: 700;
-  text-wrap: balance;
+  margin: 0;
   color: var(--color-ink-900);
+  font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
-@media (min-width: 640px) {
-  .app-title {
-    font-size: 32px;
+.app-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-flow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 4px 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.app-flow-step:not(:last-child)::after {
+  position: absolute;
+  top: 44px;
+  bottom: -20px;
+  left: 21px;
+  width: 2px;
+  background: var(--color-brand-200);
+  content: '';
+}
+
+.app-flow-icon {
+  position: relative;
+  z-index: 1;
+  grid-row: span 2;
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-brand-100);
+  border-radius: 9999px;
+  background: var(--color-brand-50);
+  color: var(--color-brand-600);
+}
+
+@media (min-width: 1280px) {
+  .app-flow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
   }
-}
 
-@media (min-width: 1024px) {
-  .app-title {
-    font-size: 34px;
+  .app-flow-step {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .app-flow-step:not(:last-child)::after {
+    top: 21px;
+    right: -24px;
+    bottom: auto;
+    left: 52px;
+    width: auto;
+    height: 2px;
   }
 }
 </style>

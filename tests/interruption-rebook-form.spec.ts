@@ -31,6 +31,7 @@ const mountForm = () => mount(InterruptionRebookForm, {
     stubs: {
       FhButton: { props: ['disabled', 'loading', 'variant', 'size'], emits: ['click'], template: '<button v-bind="$attrs" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' },
       FhSkeleton: true,
+      RouterLink: true,
       BookingSessionPicker: {
         props: ['modelValue', 'sessions'], emits: ['update:modelValue'],
         template: '<button data-testid="choose-new-session" @click="$emit(\'update:modelValue\', { date: \'2090-01-02\', slot: \'morning\' })">Chọn lịch mới</button>',
@@ -89,4 +90,41 @@ describe('InterruptionRebookForm', () => {
     expect(mocks.confirm.mock.calls[0]?.[2]).not.toHaveProperty('voucher');
     expect(wrapper.emitted('created')?.[0]?.[0]).toEqual({ kind: 'booking', id: 'new-booking' });
   });
+});
+
+it.each([1, 2, 3].flatMap(count => (['urgent', 'scheduled'] as const).map(mode => ({ count, mode }))))('uses full address cards and receipt confirmation for $count machines in $mode', async ({ count, mode }) => {
+ vi.resetAllMocks();
+ const items = Array.from({ length: count }, (_, i) => ({ ...draft.items[0], sourceBookingId: `source-${i}`, sourceCaseId: `case-${i}` }));
+ mocks.readDraft.mockResolvedValue({ ...draft, items, addresses: [{ ...draft.addresses[0], label: 'Nhà riêng', line1: '123 Đường rất dài' }] });
+ mocks.confirm.mockResolvedValue({ kind: count === 1 ? 'booking' : 'visit', id: 'new' });
+ vi.stubGlobal('crypto', { randomUUID: () => 'urgent-key-001' });
+ const w = mountForm(); await flushPromises();
+ expect(w.get('[data-testid="interruption-address"]').text()).toContain('123 Đường rất dài, D, P');
+ expect(w.findAll('input[type="radio"]')).toHaveLength(1);
+ await w.get(`[data-testid="mode-${mode}"]`).trigger('click');
+ if (mode === 'scheduled') await w.get('[data-testid="choose-new-session"]').trigger('click');
+ for (let i = 0; i < count; i++) await w.get(`[data-testid="interruption-variant-${i}"]`).setValue('AC-01-01');
+ await w.get('[data-testid="interruption-reprice-consent"]').setValue(true);
+ await w.get('[data-testid="interruption-rebook-confirm"]').trigger('click'); await flushPromises();
+ const input = mocks.confirm.mock.calls[0]?.[2];
+ expect(input).toMatchObject({ mode, addressId: ids.address, idempotencyKey: 'urgent-key-001' });
+ if (mode === 'urgent') { expect(input).not.toHaveProperty('date'); expect(input).not.toHaveProperty('slot'); }
+ else expect(input).toMatchObject({ date: '2090-01-02', slot: 'morning' });
+ expect(input.items.map((item: { sourceBookingId: string }) => item.sourceBookingId)).toEqual(items.map(item => item.sourceBookingId));
+});
+
+it('drops a failed confirmation from a previous source after switching the form', async () => {
+ vi.resetAllMocks(); vi.stubGlobal('crypto', { randomUUID: () => 'source-key-001' });
+ mocks.readDraft.mockResolvedValue(draft);
+ let reject!: (reason: Error) => void;
+ mocks.confirm.mockReturnValue(new Promise((_resolve, r) => { reject = r; }));
+ const w = mountForm(); await flushPromises();
+ await w.get('[data-testid="mode-urgent"]').trigger('click');
+ await w.get('[data-testid="interruption-variant-0"]').setValue('AC-01-01');
+ await w.get('[data-testid="interruption-reprice-consent"]').setValue(true);
+ await w.get('[data-testid="interruption-rebook-confirm"]').trigger('click');
+ await w.setProps({ sourceBookingId: 'another-source' }); await flushPromises();
+ reject(new Error('Late previous-source failure')); await flushPromises();
+ expect(w.find('[data-testid="interruption-rebook-retry-confirm"]').exists()).toBe(false);
+ expect(w.emitted('created')).toBeUndefined();
 });

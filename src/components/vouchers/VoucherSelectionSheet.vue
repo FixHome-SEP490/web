@@ -40,6 +40,7 @@ interface VoucherSelectionReservation {
   expiresAt: string;
   /** Server clock at response time, used for a clock-skew-safe countdown. */
   serverTimeAtResponse: string;
+  receivedAtMs?: number;
 }
 
 const props = withDefaults(defineProps<{
@@ -114,6 +115,7 @@ let lastFocused: HTMLElement | null = null;
 let bodyOverflow: string | null = null;
 let timer: ReturnType<typeof setInterval> | undefined;
 let startedAt = 0;
+let countdownKey = '';
 
 const customerOffers = computed(() => filterCustomerVoucherOffers(props.offers, props.customerId ?? null));
 const personalOffers = computed(() => customerOffers.value.filter((offer) => offer.kind === 'PERSONAL'));
@@ -200,14 +202,18 @@ function stopCountdown() {
 
 function syncCountdown() {
   stopCountdown();
-  elapsedMs.value = 0;
   const reservation = activeReservation.value;
-  if (!props.open || !reservation) return;
-  const initial = remainingReservationSeconds(reservation, 0);
-  if (initial === null || initial === 0) return;
-  startedAt = performance.now();
+  if (!reservation) { countdownKey = ''; elapsedMs.value = 0; return; }
+  const key = `${reservation.voucherId}:${reservation.expiresAt}:${reservation.serverTimeAtResponse}`;
+  if (key !== countdownKey) {
+    countdownKey = key;
+    startedAt = reservation.receivedAtMs ?? Date.now();
+  }
+  const tick = () => { elapsedMs.value = Math.max(0, Date.now() - startedAt); };
+  tick();
+  if (!props.open || remainingReservationSeconds(reservation, elapsedMs.value) === null) return;
   timer = setInterval(() => {
-    elapsedMs.value = performance.now() - startedAt;
+    tick();
     if (remainingReservationSeconds(reservation, elapsedMs.value) === 0) stopCountdown();
   }, 1000);
 }
@@ -642,20 +648,21 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
+          <p v-if="activeReservation" class="px-4 pb-3 text-sm text-ink-600" data-testid="voucher-switch-rationale">Voucher đã giữ chỗ, chưa thanh toán. Chưa thể đổi voucher khi máy chủ chưa xác nhận có thể hủy giữ chỗ an toàn. Quay lại để chọn cách thanh toán hoặc kiểm tra trạng thái.</p>
           <div class="px-4"><slot name="secondary" /></div>
           <footer class="flex shrink-0 flex-col gap-2 border-t border-ink-100 bg-ink-25 p-4 sm:flex-row sm:items-center sm:justify-end">
-            <FhButton data-testid="voucher-selection-cancel" variant="secondary" size="md" @click="requestClose">
+            <FhButton v-if="!activeReservation" data-testid="voucher-selection-cancel" variant="secondary" size="md" @click="requestClose">
               {{ activeReservation ? 'Quay lại thanh toán' : selectionDisabled ? 'Đóng bảng chọn' : 'Tiếp tục không dùng voucher' }}
             </FhButton>
             <FhButton
               data-testid="voucher-selection-apply"
               variant="primary"
               size="md"
-              :disabled="!canApply || applying || !!activeReservation"
+              :disabled="applying || (!activeReservation && !canApply)"
               :loading="applying"
-              @click="emit('apply')"
+              @click="activeReservation ? requestClose() : emit('apply')"
             >
-              {{ applying ? 'Đang giữ chỗ…' : activeReservation ? 'Voucher đã được giữ chỗ' : serverPreview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}
+              {{ applying ? 'Đang giữ chỗ…' : activeReservation ? 'Quay lại thanh toán' : serverPreview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}
             </FhButton>
           </footer>
         </div>

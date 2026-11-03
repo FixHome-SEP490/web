@@ -133,16 +133,22 @@ describe('Public service discovery', () => {
     mockPublicCatalog();
   });
 
-  it('shows all 14 category chips in two rows and keeps search when selecting the last', async () => {
+  it('keeps a centered primary category row and reveals the remaining categories on demand', async () => {
     const categories = Array.from({ length: 13 }, (_, i) => category(`cat-${i}`, `Danh m?c ${i + 1}`));
     mockPublicCatalog({ categories });
     const context = await setup('/services?q=may');
     const wrapper = mount(ServicesPage, context);
     await flushPromises();
     const chips = wrapper.get('[data-testid="spotlight-categories"]');
-    expect(chips.findAll('button')).toHaveLength(14);
+    expect(chips.findAll('.category-suggestion')).toHaveLength(8);
+    expect(chips.findAll('.category-row').map(row => row.findAll('button').length)).toEqual([8]);
+    const more = wrapper.get('[data-testid="category-more-toggle"]');
+    expect(more.attributes('aria-expanded')).toBe('false');
+    expect(more.text()).toContain('Xem thêm 6 danh mục');
+    await more.trigger('click');
+    expect(more.attributes('aria-expanded')).toBe('true');
+    expect(chips.findAll('.category-suggestion')).toHaveLength(14);
     expect(chips.findAll('.category-row').map(row => row.findAll('button').length)).toEqual([8, 6]);
-    expect(chips.find('[data-testid="category-more-toggle"]').exists()).toBe(false);
     await chips.get('[data-testid="category-cat-12"]').trigger('click');
     await flushPromises();
     expect(chips.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
@@ -151,6 +157,38 @@ describe('Public service discovery', () => {
     await chips.get('[data-testid="category-all"]').trigger('click');
     await flushPromises();
     expect(context.router.currentRoute.value.query).toEqual({ q: 'may' });
+    wrapper.unmount();
+  });
+
+  it('keeps a secondary category visible when opened by a direct link', async () => {
+    const categories = Array.from({ length: 13 }, (_, index) => category('cat-' + index, 'Danh mục ' + (index + 1)));
+    mockPublicCatalog({ categories });
+    const wrapper = mount(ServicesPage, await setup('/services?category=cat-12'));
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="category-more-toggle"]').attributes('aria-expanded')).toBe('true');
+    expect(wrapper.get('[data-testid="category-cat-12"]').attributes('aria-pressed')).toBe('true');
+    wrapper.unmount();
+  });
+
+  it('keeps search and filters above an accessible service grid with a visible result count', async () => {
+    const services = Array.from({ length: 4 }, (_, index) => service({
+      id: `service-${index + 1}`,
+      name: `Dịch vụ ${index + 1}`,
+    }));
+    mockPublicCatalog({ services, total: 4 });
+    const wrapper = mount(ServicesPage, await setup());
+    await flushPromises();
+
+    const hero = wrapper.get('.services-hero');
+    expect(hero.get('h1').text()).toBe('Tìm đúng dịch vụ sửa chữa.');
+    expect(hero.get('input[type="search"]').exists()).toBe(true);
+    expect(hero.get('[data-testid="spotlight-categories"]').attributes('aria-label')).toBe('Danh mục dịch vụ');
+    expect(wrapper.get('.results-count').text()).toContain('4');
+    expect(wrapper.get('.service-grid').attributes('role')).toBe('list');
+    expect(wrapper.get('.service-grid').attributes('aria-label')).toBe('Danh sách dịch vụ');
+    expect(wrapper.get('.service-grid').findAll('[role="listitem"]')).toHaveLength(4);
+
     wrapper.unmount();
   });
 

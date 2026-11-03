@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useQueryClient } from '@tanstack/vue-query';
 import { useRoute, useRouter } from 'vue-router';
 import { ChevronDown, TicketPercent } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import FhMoney from '../FhMoney.vue';
 import VoucherSelectionSheet from './VoucherSelectionSheet.vue';
-import { fundedCheckoutApi, VoucherReservationExpiredError } from '../../api/funded-checkout.api';
-import type { FundedReservation } from '../../api/funded-checkout.api';
+import { fundedCheckoutApi, VoucherReservationTerminalError } from '../../api/funded-checkout.api';
+import type { FundedReservation, FundedTerminalReceipt } from '../../api/funded-checkout.api';
 import { vouchersApi } from '../../api/vouchers.api';
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
+import { queryKeys } from '../../lib/query-keys';
 import { getHttpStatus } from '../../api/client';
 import {
   claimOffer,
@@ -29,9 +31,17 @@ const emit = defineEmits<{
   applied: [value: { reservation: FundedReservation; preview: VoucherCheckoutPreview }];
   released: [];
   expired: [];
+  terminal: [receipt: FundedTerminalReceipt];
 }>();
 
 const auth = useAuthStore();
+const cache = useQueryClient();
+// Uncertain attempts outlive modal remounts; the auth boundary clears this cache.
+cache.setQueryDefaults(queryKeys.voucherAttempts.all, { gcTime: Infinity });
+type SavedAttempt = { attemptId: string; offer: VoucherOffer; preview: VoucherCheckoutPreview; reservation: FundedReservation | null; terminal?: FundedTerminalReceipt; requestPending?: boolean };
+const attemptKey = queryKeys.voucherAttempts.scope;
+let disposed = false;
+let switchingContext = false;
 const customerId = computed(() => auth.userRole === 'CUSTOMER' ? auth.user?.id : null);
 const open = ref(true);
 const state = ref<ChooserState>('loading');
@@ -45,20 +55,57 @@ const preview = ref<VoucherCheckoutPreview | null>(null);
 const previewError = ref('');
 const applyError = ref('');
 const applying = ref(false);
+const requests = ref(new Set<string>());
+const cacheVersion = ref(0);
+const stopAttemptUpdates = cache.getQueryCache().subscribe(event => {
+  if (event.query.queryKey[0] === queryKeys.voucherAttempts.all[0]) cacheVersion.value++;
+});
+onBeforeUnmount(stopAttemptUpdates);
+const requestKey = (owner: string, scopeId: string, attempt: string) => JSON.stringify([owner, scopeId, attempt]);
+const requestPending = computed(() => {
+  void cacheVersion.value;
+  const owner = customerId.value;
+  const scopeId = props.scopeId;
+  return !!owner && !!scopeId && (requests.value.has(requestKey(owner, scopeId, attemptId.value))
+    || cache.getQueryData<SavedAttempt>(attemptKey(owner, scopeId))?.requestPending === true);
+});
+function currentAttempt(owner: string, scopeId: string, attempt: string) {
+  return !disposed && owner === customerId.value && scopeId === props.scopeId
+    && attemptScopeId.value === scopeId && attemptId.value === attempt;
+}
 const attemptId = ref('');
 const reservationAttemptStarted = ref(false);
+const attemptScopeId = ref<string | null>(null);
 const reservation = ref<FundedReservation | null>(null);
+const terminal = ref<FundedTerminalReceipt | null>(null);
 const nowMs = ref(Date.now());
-const remainingSeconds = computed(() => reservation.value
-  ? Math.max(0, Math.ceil((Date.parse(reservation.value.expiresAt) - nowMs.value) / 1000)) : 0);
-const canApply = computed(() => previewState.value === 'ready' && preview.value?.paymentAvailable === true
-  && !!selectedOffer.value && !!customerId.value && !!props.scopeId && !reservation.value
-  && !applying.value && remainingSeconds.value >= 0);
+const remainingSeconds = computed(() => {
+  const held = reservation.value;
+  if (!held?.serverTimeAtResponse || held.receivedAtMs === undefined) return null;
+  return Math.max(0, Math.ceil((Date.parse(held.expiresAt) - Date.parse(held.serverTimeAtResponse) - Math.max(0, nowMs.value - held.receivedAtMs)) / 1000));
+});
+function pendingAttempt(): SavedAttempt | null {
+  const owner = customerId.value;
+  const scopeId = props.scopeId;
+  if (!owner || !scopeId || !reservationAttemptStarted.value || reservation.value || terminal.value
+    || attemptScopeId.value !== scopeId || !attemptId.value) return null;
+  const saved = cache.getQueryData<SavedAttempt>(attemptKey(owner, scopeId));
+  return saved && !saved.reservation && !saved.terminal && saved.attemptId === attemptId.value
+    && saved.offer.id === selectedId.value && saved.offer.ownerCustomerId === owner
+    && saved.preview.claimId === saved.offer.id && saved.preview.scopeId === scopeId ? saved : null;
+}
+const canApply = computed(() => !reservation.value && !terminal.value && !applying.value && !requestPending.value
+  && (reservationAttemptStarted.value ? !!pendingAttempt()
+    : previewState.value === 'ready' && preview.value?.paymentAvailable === true
+      && !!selectedOffer.value && !!customerId.value && !!props.scopeId));
 const walletLocation = computed(() => ({
   name: 'customer-vouchers',
   query: { returnTo: route.fullPath },
 }));
+const terminalMessage = 'Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu hóa đơn/thanh toán từ máy chủ; chưa thể tạo yêu cầu mới hoặc thanh toán lại.';
 const sheetPreviewMessage = computed(() => {
+  if (terminal.value) return terminalMessage;
+  if (pendingAttempt()) return 'Kết quả giữ chỗ chưa rõ. Áp dụng lại để kiểm tra đúng yêu cầu cũ; bản xem trước đã lưu chỉ để tham khảo, chưa xác nhận giữ chỗ hoặc thanh toán.';
   if (previewState.value === 'loading') return 'Đang tải bản xem trước từ máy chủ…';
   if (previewState.value === 'no_scope') return 'Chưa có lượt thanh toán để kiểm tra điều kiện voucher.';
   if (previewState.value === 'offline') return 'Đang ngoại tuyến. Chưa thể kiểm tra voucher hoặc giữ chỗ.';
@@ -96,6 +143,8 @@ function createAttemptId(): string {
 }
 
 function resetAttempt() {
+  if (customerId.value && attemptScopeId.value) cache.removeQueries({ queryKey: attemptKey(customerId.value, attemptScopeId.value), exact: true });
+  attemptScopeId.value = null;
   attemptId.value = '';
   reservationAttemptStarted.value = false;
   applyError.value = '';
@@ -132,24 +181,58 @@ function consumeReturnedClaimQuery() {
   void router.replace({ path: route.path, query, hash: route.hash });
 }
 
+function acceptTerminal(receipt: FundedTerminalReceipt, saved: SavedAttempt | undefined, owner: string, scopeId: string) {
+  const key = attemptKey(owner, scopeId);
+  if (!saved || saved.attemptId !== receipt.attemptId || saved.offer.id !== receipt.claimId
+    || receipt.scopeId !== scopeId || (saved.reservation && saved.reservation.id !== receipt.id)
+    || owner !== customerId.value || cache.getQueryData(key) !== saved) return;
+  const unused = receipt.state === 'EXPIRED' || receipt.state === 'RELEASED';
+  if (unused) cache.removeQueries({ queryKey: key, exact: true });
+  else cache.setQueryData<SavedAttempt>(key, { ...saved, reservation: null, terminal: receipt });
+  if (!currentAttempt(owner, scopeId, receipt.attemptId)) return;
+  reservation.value = null;
+  preview.value = null;
+  previewState.value = 'idle';
+  if (unused) {
+    resetAttempt();
+    if (receipt.state === 'EXPIRED') emit('expired'); else emit('released');
+    applyError.value = 'Giữ chỗ đã kết thúc theo xác nhận từ máy chủ. Hãy kiểm tra lại trước khi chọn voucher mới.';
+    void loadPreview();
+  } else {
+    terminal.value = receipt;
+    applyError.value = terminalMessage;
+  }
+  emit('terminal', receipt);
+}
+
 async function applyVoucher() {
-  const selected = selectedOffer.value;
-  const quote = preview.value;
+  const replay = pendingAttempt();
+  const selected = replay?.offer ?? selectedOffer.value;
+  const quote = replay?.preview ?? preview.value;
   const scopeId = props.scopeId;
   const owner = customerId.value;
-  if (!canApply.value || !selected || !quote || !scopeId || !owner) return;
+  if (!canApply.value || !selected || !quote || !scopeId || !owner
+    || (reservationAttemptStarted.value && !replay)) return;
   if (isOffline()) { applyError.value = 'Đang ngoại tuyến. Chưa thể giữ chỗ voucher.'; return; }
   if (!attemptId.value) {
     try { attemptId.value = createAttemptId(); }
     catch (error) { applyError.value = userFacingError(error, 'Chưa thể giữ chỗ an toàn.'); return; }
   }
+  attemptScopeId.value = scopeId;
   reservationAttemptStarted.value = true;
   applying.value = true;
   applyError.value = '';
+  const key = attemptKey(owner, scopeId);
+  const requestAttemptId = attemptId.value;
+  cache.setQueryData<SavedAttempt>(key, { attemptId: requestAttemptId, offer: selected, preview: quote, reservation: null, requestPending: true });
+  const saved = cache.getQueryData<SavedAttempt>(key);
+  const requestId = requestKey(owner, scopeId, requestAttemptId);
+  requests.value.add(requestId);
   try {
-    const held = await fundedCheckoutApi.reserve(selected.id, scopeId, attemptId.value);
-    if (selected.id !== selectedId.value || scopeId !== props.scopeId || owner !== customerId.value) {
-      await fundedCheckoutApi.release(held.id);
+    const held = await fundedCheckoutApi.reserve(selected.id, scopeId, requestAttemptId);
+    if (cache.getQueryData(key) !== saved || owner !== customerId.value) return;
+    cache.setQueryData<SavedAttempt>(key, { attemptId: held.attemptId, offer: selected, preview: quote, reservation: held });
+    if (!currentAttempt(owner, scopeId, held.attemptId) || selected.id !== selectedId.value) {
       return;
     }
     reservation.value = held;
@@ -157,16 +240,16 @@ async function applyVoucher() {
     emit('applied', { reservation: held, preview: quote });
     open.value = false;
   } catch (error) {
-    if (error instanceof VoucherReservationExpiredError
-      || (typeof error === 'object' && error !== null && 'code' in error && error.code === 'VOUCHER_RESERVATION_EXPIRED')) {
-      resetAttempt();
-      applyError.value = 'Lượt giữ voucher đã hết hạn. Bạn có thể thử giữ chỗ lại.';
-    } else if (getHttpStatus(error) === 401) {
+    if (error instanceof VoucherReservationTerminalError) {
+      acceptTerminal(error.receipt, saved, owner, scopeId);
+      return;
+    }
+    if (!currentAttempt(owner, scopeId, requestAttemptId)) return;
+    if (getHttpStatus(error) === 401) {
       applyError.value = 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại trước khi giữ chỗ voucher.';
     } else if (getHttpStatus(error) === 403) {
       applyError.value = 'Tài khoản này không có quyền giữ voucher cho lượt thanh toán.';
     } else if (getHttpStatus(error) === 409) {
-      resetAttempt();
       previewState.value = 'conflict';
       applyError.value = 'Voucher đã hết hạn, đã được dùng hoặc lượt thanh toán đã thay đổi. Hãy tải lại bản xem trước.';
     } else if (getHttpStatus(error) === 503) {
@@ -175,38 +258,80 @@ async function applyVoucher() {
       applyError.value = userFacingError(error, 'Chưa giữ được voucher. Hãy thử lại; lần thử lại sẽ dùng cùng mã giao dịch.');
     }
   } finally {
-    applying.value = false;
+    // A remounted chooser observes completion of this exact HTTP request. Never
+    // clear another identity, a terminal receipt or a cache cleared by logout.
+    if (saved && owner === customerId.value && cache.getQueryData(key) === saved) {
+      cache.setQueryData<SavedAttempt>(key, { ...saved, requestPending: false });
+    }
+    requests.value.delete(requestId);
+    if (!disposed && owner === customerId.value && scopeId === props.scopeId
+      && (!attemptId.value || attemptId.value === requestAttemptId)) applying.value = false;
   }
 }
 
-async function releaseReservation() {
-  if (!reservation.value || applying.value) return;
+async function reconcileReservation() {
+  const held = reservation.value;
+  const owner = customerId.value;
+  if (!held || !owner || held.scopeId !== props.scopeId || applying.value || requestPending.value || terminal.value) return;
+  const key = attemptKey(owner, held.scopeId);
+  const previous = cache.getQueryData<SavedAttempt>(key);
+  if (!previous) return;
+  cache.setQueryData<SavedAttempt>(key, { ...previous, requestPending: true });
+  const saved = cache.getQueryData<SavedAttempt>(key);
+  const requestId = requestKey(owner, held.scopeId, held.attemptId);
+  requests.value.add(requestId);
   applying.value = true;
   applyError.value = '';
   try {
-    await fundedCheckoutApi.release(reservation.value.id);
-    reservation.value = null;
-    resetAttempt();
-    emit('released');
-  } catch (error) {
-    applyError.value = userFacingError(error, 'Chưa hủy được giữ chỗ. Hãy thử lại.');
+    const result = await fundedCheckoutApi.reserve(held.claimId, held.scopeId, held.attemptId, held.id);
+    if (cache.getQueryData(key) !== saved || owner !== customerId.value) return;
+    cache.setQueryData<SavedAttempt>(key, { ...saved!, reservation: result, requestPending: false });
+    if (!currentAttempt(owner, held.scopeId, held.attemptId)) return;
+    reservation.value = result;
+  } catch (reason) {
+    if (reason instanceof VoucherReservationTerminalError) {
+      acceptTerminal(reason.receipt, saved, owner, held.scopeId);
+    } else if (currentAttempt(owner, held.scopeId, held.attemptId)) {
+      applyError.value = userFacingError(reason, 'Chưa xác minh được giữ chỗ. Hãy kiểm tra thanh toán trước khi thử lại.');
+    }
   } finally {
-    applying.value = false;
+    if (saved && owner === customerId.value && cache.getQueryData(key) === saved) {
+      cache.setQueryData<SavedAttempt>(key, { ...saved, requestPending: false });
+    }
+    requests.value.delete(requestId);
+    if (!disposed && owner === customerId.value && held.scopeId === props.scopeId
+      && (!attemptId.value || attemptId.value === held.attemptId)) applying.value = false;
   }
 }
 
-watch(() => props.scopeId, (scopeId) => {
-  if (reservation.value && reservation.value.scopeId !== scopeId) void releaseReservation();
+// UI belongs to the selected scope; cached mutation identities belong to their original scope.
+function clearLocalContext() {
+  switchingContext = true;
+  sequence++;
+  previewSequence++;
+  applying.value = false;
+  reservation.value = null;
+  terminal.value = null;
+  reservationAttemptStarted.value = false;
+  attemptScopeId.value = null;
+  attemptId.value = '';
+  selectedId.value = '';
+  offers.value = [];
+  preview.value = null;
+  previewState.value = 'idle';
+  applyError.value = '';
+  returnSelectionMessage.value = '';
+  switchingContext = false;
+}
+watch(() => props.scopeId, () => {
+  clearLocalContext();
+  open.value = true;
+  void load();
 }, { flush: 'sync' });
 
 function checkExpiry() {
   nowMs.value = Date.now();
-  if (reservation.value && remainingSeconds.value === 0) {
-    reservation.value = null;
-    resetAttempt();
-    applyError.value = 'Thời gian giữ voucher đã hết. Bạn có thể thử giữ chỗ lại nếu voucher vẫn còn hiệu lực.';
-    emit('expired');
-  }
+  // Display-only deadline: retain the receipt and attempt until the server reconciles it.
 }
 
 function isOffline(): boolean {
@@ -220,8 +345,12 @@ async function loadPreview() {
   const owner = customerId.value;
   preview.value = null;
   previewError.value = '';
-  if (!claimId) { previewState.value = 'idle'; return; }
-  if (!scopeId) { previewState.value = 'no_scope'; return; }
+  if (!claimId || terminal.value) { previewState.value = 'idle'; return; }
+  if (!scopeId || (reservationAttemptStarted.value && attemptScopeId.value !== scopeId)) { previewState.value = 'no_scope'; return; }
+  // A fresh eligibility preview can reject quota consumed by this very reservation.
+  // Replay only its saved identity; the server resolves the outcome idempotently.
+  const replay = pendingAttempt();
+  if (replay) { preview.value = replay.preview; previewState.value = 'ready'; return; }
   if (isOffline()) { previewState.value = 'offline'; return; }
   if (!owner) { previewState.value = 'forbidden'; return; }
   previewState.value = 'loading';
@@ -256,6 +385,31 @@ async function loadPreview() {
 
 async function load() {
   const request = ++sequence;
+  if (reservationAttemptStarted.value || reservation.value) {
+    state.value = 'ready';
+    if (!reservation.value) void loadPreview();
+    else if (reservation.value.scopeId === props.scopeId && customerId.value) {
+      preview.value = cache.getQueryData<SavedAttempt>(attemptKey(customerId.value, reservation.value.scopeId))?.preview ?? null;
+      previewState.value = preview.value ? 'ready' : 'idle';
+    }
+    return;
+  }
+  const saved = customerId.value && props.scopeId ? cache.getQueryData<SavedAttempt>(attemptKey(customerId.value, props.scopeId)) : undefined;
+  if (saved) {
+    reservationAttemptStarted.value = true;
+    attemptScopeId.value = props.scopeId;
+    attemptId.value = saved.attemptId;
+    offers.value = [saved.offer];
+    terminal.value = saved.terminal ?? null;
+    selectedId.value = saved.offer.id;
+    reservation.value = saved.terminal ? null : saved.reservation;
+    preview.value = saved.terminal ? null : saved.preview;
+    previewState.value = 'ready';
+    state.value = 'ready';
+    if (saved.terminal) emit('terminal', saved.terminal);
+    else if (saved.reservation) emit('applied', { reservation: saved.reservation, preview: saved.preview });
+    return;
+  }
   offers.value = [];
   selectedId.value = '';
   returnSelectionMessage.value = '';
@@ -299,8 +453,9 @@ function handleOffline() {
   previewSequence++;
   preview.value = null;
   previewState.value = 'offline';
-  offers.value = [];
-  selectedId.value = '';
+  if (!reservationAttemptStarted.value && !reservation.value) {
+    offers.value = []; selectedId.value = '';
+  }
   returnSelectionMessage.value = '';
   error.value = '';
   state.value = 'offline';
@@ -311,24 +466,17 @@ function handleOnline() {
 }
 
 watch(customerId, () => {
-  sequence++;
-  previewSequence++;
-  preview.value = null;
-  previewState.value = 'idle';
-  offers.value = [];
-  selectedId.value = '';
-  returnSelectionMessage.value = '';
+  clearLocalContext();
   open.value = false;
-  reservation.value = null;
-  resetAttempt();
 }, { flush: 'sync' });
 
 watch(() => route.query.voucherClaimId, (claimId) => {
   if (offers.value.length > 0) selectReturnedClaim(claimId);
 }, { flush: 'sync' });
 
-watch(() => [selectedId.value, props.scopeId, customerId.value] as const, () => {
-  resetAttempt();
+watch(selectedId, () => {
+  if (switchingContext) return;
+  if (!reservationAttemptStarted.value && !reservation.value) resetAttempt();
   void loadPreview();
 }, { flush: 'sync' });
 
@@ -340,6 +488,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   sequence++;
   previewSequence++;
   window.removeEventListener('offline', handleOffline);
@@ -376,6 +525,9 @@ onBeforeUnmount(() => {
     <p v-else-if="preview?.paymentAvailable === true" class="text-xs leading-5 text-ink-600">Máy chủ cho phép giữ voucher trong thời hạn ghi nhận. Hóa đơn chỉ thay đổi khi máy chủ xác nhận thanh toán.</p>
     <p v-if="returnSelectionMessage" class="mt-2 text-sm text-warning-800" role="status" data-testid="checkout-voucher-return-state">{{ returnSelectionMessage }}</p>
 
+    <p v-if="terminal" role="alert" class="mt-3 text-sm text-warning-800" data-testid="checkout-voucher-terminal">{{ terminalMessage }}
+      <button type="button" class="min-h-11 text-brand-700 underline" @click="emit('terminal', terminal)">Kiểm tra thanh toán</button>
+    </p>
     <div class="mt-3 space-y-3">
       <div v-if="selectedOffer" class="rounded-lg border border-brand-200 bg-brand-50 p-3" data-testid="checkout-voucher-selected">
         <p class="text-[11px] font-semibold uppercase tracking-wider text-brand-700">Đang chọn để xem</p>
@@ -409,16 +561,16 @@ onBeforeUnmount(() => {
           <div class="flex justify-between gap-3"><dt>Trợ giá FixHome dự kiến</dt><dd><FhMoney :amount="preview.fixHomeDiscountSubsidyVnd" /></dd></div>
           <div class="flex justify-between gap-3 font-semibold text-ink-900"><dt>Khách hàng dự kiến thanh toán</dt><dd><FhMoney :amount="preview.customerDueVnd" /></dd></div>
         </dl>
-        <p v-if="reservation" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Chờ bạn bấm Xác nhận tất toán 0 ₫ ở màn thanh toán.' : 'Chưa ghi nhận thanh toán.' }}</p>
+        <p v-if="reservation && remainingSeconds !== null" class="mt-2 text-xs leading-5 text-warning-800" role="status">Còn {{ Math.floor(remainingSeconds / 60) }} phút {{ String(remainingSeconds % 60).padStart(2, '0') }} giây để hoàn tất thanh toán. {{ preview.customerDueVnd === 0 ? 'Chờ bạn bấm Xác nhận tất toán 0 ₫ ở màn thanh toán.' : 'Chưa ghi nhận thanh toán.' }}</p>
         <p v-else class="mt-2 text-xs leading-5 text-ink-600">Số tiền này chỉ để xem trước. Hóa đơn và thanh toán hiện tại vẫn dùng tổng gốc.</p>
       </div>
 
       <p v-if="applyError" class="text-sm text-danger-700" role="alert" data-testid="checkout-voucher-apply-error">{{ applyError }}</p>
-      <div v-if="reservation && remainingSeconds > 0" class="flex flex-wrap items-center gap-2">
+      <div v-if="reservation" class="flex flex-wrap items-center gap-2">
         <span class="text-xs text-success-700" role="status">Voucher đã giữ chỗ, chưa xác nhận thanh toán.</span>
-        <button type="button" class="min-h-11 px-2 text-sm text-danger-700 underline" :disabled="applying" @click="releaseReservation">Hủy giữ chỗ</button>
+        <span class="text-xs text-ink-600">Chưa thể đổi voucher khi chưa xác nhận hủy giữ chỗ an toàn.</span>
+        <button type="button" data-testid="checkout-voucher-reconcile" class="min-h-11 text-sm font-medium text-brand-700 underline" :disabled="applying || requestPending || reservation.scopeId !== scopeId" @click="reconcileReservation">Kiểm tra giữ chỗ</button>
       </div>
-      <p v-else-if="reservation && remainingSeconds === 0" class="text-sm text-warning-800" role="alert">Thời gian giữ voucher đã hết.</p>
       <FhButton
         v-else
         data-testid="checkout-voucher-apply"
@@ -443,10 +595,10 @@ onBeforeUnmount(() => {
       :preview-message-is-error="sheetPreviewMessageIsError"
       :preview-retryable="sheetPreviewRetryable"
       :can-apply="canApply"
-      :applying="applying"
-      :selection-disabled="reservationAttemptStarted || !!reservation"
+      :applying="applying || requestPending"
+      :selection-disabled="reservationAttemptStarted || !!reservation || !!terminal"
       :apply-error="applyError"
-      :server-reservation="reservation ? { voucherId: reservation.claimId, expiresAt: reservation.expiresAt, serverTimeAtResponse: reservation.reservedAt } : null"
+      :server-reservation="reservation ? { voucherId: reservation.claimId, expiresAt: reservation.expiresAt, serverTimeAtResponse: reservation.serverTimeAtResponse ?? '', receivedAtMs: reservation.receivedAtMs } : null"
       @close="open = false"
       @retry="load"
       @select="selectOffer"

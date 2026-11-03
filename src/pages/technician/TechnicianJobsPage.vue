@@ -16,7 +16,7 @@ import {
   FhSkeleton,
   FhStatusPill,
 } from '../../components';
-import { ordersApi, historicalPill, isHistoricalOrder, isReleasedJob, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
+import { ordersApi, historicalPill, isHistoricalOrder, isReleasedJob, type HistoricalOrderItem, type ServiceOrderItem, type TechnicianOrderItem } from '../../api/orders.api';
 import { visitGroupsApi, type VisitGroupAssignedPageItem, type VisitGroupPageDevice } from '../../api/visit-groups.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
@@ -42,7 +42,7 @@ const TAB_STATES: Record<JobTab, string[]> = {
 const PAGE_SIZE = 20;
 
 const activeTab = useQueryChoice<JobTab>('tab', TAB_KEYS, 'all');
-const listView = useQueryChoice<'jobs' | 'visits'>('list', ['jobs', 'visits'], 'jobs');
+const listView = useQueryChoice<'jobs' | 'visits' | 'history'>('list', ['jobs', 'visits', 'history'], 'jobs');
 const actionLoading = ref<string | null>(null);
 const cache = useCacheUpdates();
 
@@ -76,6 +76,16 @@ const {
   changingPage: changingVisitGroupsPage,
   prefetch: prefetchVisitGroups,
 } = visitGroupsList;
+
+const historyList = usePagedList<HistoricalOrderItem>({
+  key: () => queryKeys.orders.technicianJobs({ history: 'withdrawn' }),
+  pageSize: PAGE_SIZE,
+  page: useQueryPage('historyPage'),
+  enabled: () => listView.value === 'history',
+  fetch: (p, size) => ordersApi.getTechnicianHistoryPage(p, size),
+});
+const { page: historyPage, items: history, total: historyTotal, loading: historyLoading,
+  error: historyError, load: retryHistory, prefetch: prefetchHistory } = historyList;
 
 // How many jobs each tab holds: one row per tab is enough to read its total.
 async function fetchCounts(): Promise<Partial<Record<JobTab, number>>> {
@@ -267,7 +277,7 @@ onUnmounted(() => {
 
     <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại danh sách công việc">
       <button
-        v-for="choice in [{ key: 'jobs' as const, label: 'Công việc đơn', shortLabel: 'Công việc' }, { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị' }]"
+        v-for="choice in [{ key: 'jobs' as const, label: 'Công việc đơn', shortLabel: 'Công việc' }, { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị' }, { key: 'history' as const, label: 'Lịch sử · Đã rút, hủy', shortLabel: 'Lịch sử' }]"
         :key="choice.key"
         type="button"
         :aria-pressed="listView === choice.key"
@@ -282,7 +292,25 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <template v-if="listView === 'visits'">
+    <section v-if="listView === 'history'" class="space-y-3" aria-label="Lịch sử đã rời công việc" data-testid="technician-withdrawn-history">
+      <h2 class="text-base font-semibold text-ink-900">Đã rút, hủy</h2>
+      <p class="text-sm text-ink-600">Các đơn bạn không còn phụ trách, gồm từng máy trong lượt nhiều thiết bị. Chỉ hiển thị tóm tắt lịch sử.</p>
+      <FhSkeleton v-if="historyLoading" height="100px" />
+      <div v-else-if="historyError" role="alert" class="text-sm text-danger-700">
+        {{ userFacingError(historyError, 'Chưa tải được lịch sử công việc.') }}
+        <FhButton variant="secondary" size="sm" @click="retryHistory">Thử lại</FhButton>
+      </div>
+      <p v-else-if="!history.length" class="rounded-xl border border-ink-200 bg-white p-5 text-sm text-ink-600">Chưa có công việc đã rời.</p>
+      <ul v-else class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white">
+        <li v-for="entry in history" :key="entry.id" class="flex flex-wrap items-center gap-3 p-4" data-testid="technician-withdrawn-order">
+          <span class="font-num text-sm text-ink-700">#{{ entry.code }}</span>
+          <FhStatusPill :status="historicalPill(entry).status" :label="historicalPill(entry).label" />
+          <span class="text-sm text-ink-600">{{ vnDateString(entry.createdAt) }}</span>
+        </li>
+      </ul>
+      <FhPagination v-model:page="historyPage" :page-size="PAGE_SIZE" :total="historyTotal" :disabled="historyLoading" @prefetch="prefetchHistory" />
+    </section>
+    <template v-else-if="listView === 'visits'">
       <div v-if="loadingVisitGroups" class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lượt sửa nhiều thiết bị">
         <FhSkeleton width="45%" height="18px" />
         <FhSkeleton width="70%" height="14px" />
