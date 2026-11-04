@@ -1,4 +1,4 @@
-import type { VisitCheckout } from '../api/visit-groups.api';
+import { VISIT_DEVICE_LIMIT, type VisitCheckout } from '../api/visit-groups.api';
 
 export interface VisitInvoiceSummaryRow {
   sequence: number;
@@ -24,7 +24,7 @@ export function summarizeTechnicianVisitInvoices(
   checkout: VisitCheckout | null,
   invoiceFor: (serviceOrderId: string) => InvoiceRecord | null,
 ): TechnicianVisitInvoiceSummary | null {
-  if (!checkout || !checkout.visitGroupId || !checkout.devices.length || checkout.devices.length > 3) return null;
+  if (!checkout || !checkout.visitGroupId || !checkout.devices.length || checkout.devices.length > VISIT_DEVICE_LIMIT) return null;
   const ids = new Set<string>();
   const invoices = new Set<string>();
   const rows = [...checkout.devices].sort((a, b) => a.sequence - b.sequence).map((d) => {

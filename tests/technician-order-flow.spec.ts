@@ -646,12 +646,14 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     const current = { ...activeOrder, visitGroupId: 'visit-1' };
     const sibling = { ...activeOrder, id: 'job-test-202', bookingId: 'booking-202', visitGroupId: 'visit-1' };
     const third = { ...activeOrder, id: 'job-test-303', bookingId: 'booking-303', visitGroupId: 'visit-1' };
+    const fourth = { ...activeOrder, id: 'job-test-404', bookingId: 'booking-404', visitGroupId: 'visit-1' };
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: current } };
       if (path === '/service-orders/job-test-202') return { data: { data: sibling } };
       if (path === '/service-orders/job-test-303') return { data: { data: third } };
+      if (path === '/service-orders/job-test-404') return { data: { data: fourth } };
       if (path === '/visit-groups/visit-1/checkout') return { data: { data: {
-        visitGroupId: 'visit-1', total: 0, waiting: 3, ready: false, paid: false, pendingCash: null,
+        visitGroupId: 'visit-1', total: 0, waiting: 4, ready: false, paid: false, pendingCash: null,
         devices: [
           { sequence: 1, bookingId: 'booking-101', serviceName: 'Máy lạnh', serviceOrderId: 'job-test-101', state: 'open', amount: 0, paid: false },
           { sequence: 2, bookingId: 'booking-202', serviceName: 'Máy giặt', serviceOrderId: 'job-test-202', state: 'open', amount: 0, paid: false },
@@ -671,10 +673,11 @@ describe('Technician Order Receiving & Execution Workspace', () => {
 
     expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-202');
     expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-303');
-    expect(mockGet).not.toHaveBeenCalledWith('/service-orders/job-test-404');
+    expect(mockGet).toHaveBeenCalledWith('/service-orders/job-test-404');
     await vi.waitFor(() => {
       expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-202'))).toMatchObject({ job: { id: 'job-test-202' } });
       expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-303'))).toMatchObject({ job: { id: 'job-test-303' } });
+      expect(queryClient.getQueryData(queryKeys.orders.technicianDetail('job-test-404'))).toMatchObject({ job: { id: 'job-test-404' } });
     });
     expect(wrapper.find('[data-testid="tech-visit-navigator"]').exists()).toBe(true);
     wrapper.unmount();
