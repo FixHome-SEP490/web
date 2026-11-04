@@ -12,7 +12,7 @@ const { visits, orders, cashIntents, live } = vi.hoisted(() => ({
   cashIntents: { get: vi.fn(), create: vi.fn(), cancel: vi.fn() },
   live: { orderChanges: [] as Array<(event?: unknown) => void> },
 }));
-vi.mock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visits }));
+vi.mock('../src/api/visit-groups.api', () => ({ VISIT_DEVICE_LIMIT: 5, visitGroupsApi: visits }));
 vi.mock('../src/api/orders.api', () => ({ ordersApi: orders }));
 vi.mock('../src/api/cash-intents.api', () => ({ cashIntentsApi: cashIntents }));
 vi.mock('../src/api/customer-wallet.api', () => ({ customerWalletApi: { summary: async () => ({ balance: 1000000 }) } }));

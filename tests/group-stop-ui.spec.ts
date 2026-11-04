@@ -7,6 +7,21 @@ vi.mock('../src/api/interruption-rebook.api', () => ({ interruptionRebookApi: { 
 import CannotContinueDialog from '../src/components/technician/CannotContinueDialog.vue';
 import GroupContactReadiness from '../src/components/technician/GroupContactReadiness.vue';
 import StoppedDevicesRebookPicker from '../src/components/customer/StoppedDevicesRebookPicker.vue';
+
+it('selects all five stopped devices, then preserves only a chosen subset in navigation', async () => {
+  const devices = Array.from({ length: 5 }, (_, index) => ({ bookingId: `booking-${index + 1}`, sequence: index + 1, deviceLabel: null }));
+  mocks.sources.mockResolvedValue(devices.map(device => device.bookingId));
+  const w = mount(StoppedDevicesRebookPicker, { props: { groupId: 'group-five', disabled: false, devices } });
+  await flushPromises();
+  for (const checkbox of w.findAll('input')) await checkbox.setValue(true);
+  expect(w.get('[data-testid="stopped-rebook-continue"]').attributes('disabled')).toBeUndefined();
+  await w.get('[data-testid="stopped-rebook-continue"]').trigger('click');
+  expect(mocks.push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: 'booking-1', sourceBookingIds: devices.map(device => device.bookingId).join(',') } });
+  for (const checkbox of w.findAll('input').slice(0, 3)) await checkbox.setValue(false);
+  await w.get('[data-testid="stopped-rebook-continue"]').trigger('click');
+  expect(mocks.push).toHaveBeenLastCalledWith({ path: '/app/bookings/new', query: { interruptionRebook: 'booking-4', sourceBookingIds: 'booking-4,booking-5' } });
+  w.unmount();
+});
 import { createGroupStopPort } from '../src/api/group-stop.api';
 import { createCannotContinuePort } from '../src/api/platform-continuation.api';
 enableAutoUnmount(afterEach);

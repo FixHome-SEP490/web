@@ -33,6 +33,13 @@ function render(devices: VisitCheckout['devices'], activeOrderId: string) {
 }
 
 describe('Technician VisitGroup machine navigation', () => {
+  it.each([2, 3, 4, 5])('keeps all %i distinct child links and advances to the last machine', count => {
+    const wrapper = render(Array.from({ length: count }, (_, index) => device(index + 1, `o${index + 1}`, index < count - 1 ? 'succeeded' : 'open')), `o${count - 1}`);
+    expect(wrapper.findAll('[data-testid^="tech-visit-device-"]')).toHaveLength(count);
+    expect(wrapper.get(`[data-testid="tech-visit-device-${count}"]`).attributes('href')).toBe(`/tech/jobs/o${count}`);
+    expect(wrapper.get('[data-testid="tech-visit-next"]').attributes('href')).toBe(`/tech/jobs/o${count}`);
+    wrapper.unmount();
+  });
   it('labels one shared visit and separates each child price and parts from the current machine', () => {
     const wrapper = mount(TechnicianVisitDeviceNavigator, {
       props: { devices: [device(1, 'o1'), device(2, 'o2'), device(3, 'o3')], activeOrderId: 'o1', overviewByOrderId: {

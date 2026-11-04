@@ -22,6 +22,15 @@ const invoices = (values: Record<string, number>) => (orderId: string) => ({
 });
 
 describe('technician visit invoices (display-only)', () => {
+  it.each([4, 5])('preserves all %i independently verified invoice amounts', count => {
+    const visit = checkout();
+    visit.devices = Array.from({ length: count }, (_, index) => ({ ...visit.devices[0]!, sequence: index + 1,
+      bookingId: `booking-${index + 1}`, serviceOrderId: `order-${index + 1}`, invoiceId: `invoice-${index + 1}`, amount: (index + 1) * 10000 }));
+    visit.total = visit.devices.reduce((sum, device) => sum + device.amount, 0);
+    const summary = summarizeTechnicianVisitInvoices(visit, invoices(Object.fromEntries(visit.devices.map(device => [device.serviceOrderId!, device.amount]))));
+    expect(summary).toMatchObject({ pending: 0, confirmedGross: visit.total, unpaidGross: visit.total });
+    expect(summary?.rows.map(row => row.amount)).toEqual(visit.devices.map(device => device.amount));
+  });
   it('sums all three verified child invoices and keeps payment source of truth distinct', () => {
     const visit = checkout();
     const summary = summarizeTechnicianVisitInvoices(visit, invoices({

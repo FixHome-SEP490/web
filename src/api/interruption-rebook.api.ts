@@ -1,3 +1,4 @@
+import { VISIT_DEVICE_LIMIT } from './visit-groups.api';
 import apiClient, { getHttpStatus } from './client';
 import { bookingsApi } from './bookings.api';
 import { ordersApi } from './orders.api';
@@ -106,7 +107,7 @@ function normalizeRawDraft(value: unknown, anchor: string): Omit<InterruptionDra
     || (value.address.id !== null && !asId(value.address.id))
     || (value.address.text !== null && typeof value.address.text !== 'string')
     || (value.customerNote !== null && typeof value.customerNote !== 'string')
-    || !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 3) throw invalid();
+    || !Array.isArray(value.items) || value.items.length < 1 || value.items.length > VISIT_DEVICE_LIMIT) throw invalid();
   const seenBookings = new Set<string>();
   const seenOrders = new Set<string>();
   const seenCases = new Set<string>();
@@ -142,7 +143,7 @@ export const interruptionRebookApi = {
    * Network or malformed responses are never treated as valid/empty source lists.
    */
   async listAvailableStoppedSources(groupId: string, candidateIds: string[]): Promise<string[]> {
-    if (!asId(groupId) || !candidateIds.length || candidateIds.length > 3 ||
+    if (!asId(groupId) || !candidateIds.length || candidateIds.length > VISIT_DEVICE_LIMIT ||
       candidateIds.some(id => !asId(id)) || new Set(candidateIds).size !== candidateIds.length) throw invalid();
     for (const anchor of candidateIds) {
       try {
@@ -167,7 +168,7 @@ export const interruptionRebookApi = {
     const generation = (reads.get(anchor) ?? 0) + 1;
     reads.set(anchor, generation);
     contexts.delete(anchor);
-    if (!asId(anchor) || !owner || (sourceBookingIds && (sourceBookingIds.length < 1 || sourceBookingIds.length > 3
+    if (!asId(anchor) || !owner || (sourceBookingIds && (sourceBookingIds.length < 1 || sourceBookingIds.length > VISIT_DEVICE_LIMIT
       || sourceBookingIds.some(id => !asId(id)) || new Set(sourceBookingIds).size !== sourceBookingIds.length || !sourceBookingIds.includes(anchor)))) throw invalid();
     const raw = await readPhase('draft', async () => {
       const response = await apiClient.get<unknown>('/bookings/' + encodeURIComponent(anchor) + '/interruption-draft', ...(sourceBookingIds ? [{ params: { sourceBookingIds: sourceBookingIds.join(',') } }] : []));

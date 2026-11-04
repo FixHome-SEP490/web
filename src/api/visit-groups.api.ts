@@ -1,5 +1,5 @@
 // src/api/visit-groups.api.ts
-// Up to three devices in one visit (PO 21/10/2026): one technician with every
+// Up to five devices in one visit (PO 21/10/2026): one technician with every
 // skill takes them all and the customer pays once for the devices repaired.
 import type { BookingMode, BookingSlot, SessionOption } from '../utils/booking-session';
 import type { BookingDeviceAttributes } from './catalog-pricing.api';
@@ -9,7 +9,7 @@ import { readPage, type PageResult } from './paging';
 import apiClient from './client';
 
 /** The most devices one visit takes; the form locks "Thêm thiết bị" at this count. */
-export const VISIT_DEVICE_LIMIT = 3;
+export const VISIT_DEVICE_LIMIT = 5;
 
 export interface VisitDeviceInput {
   serviceId: string;
@@ -186,7 +186,8 @@ export const visitGroupsApi = {
     const hotline = typeof res.data.data?.hotline === 'string' ? res.data.data.hotline.trim() : '';
     return {
       enabled: res.data.data?.enabled === true,
-      deviceLimit: Number(res.data.data?.deviceLimit) || VISIT_DEVICE_LIMIT,
+      deviceLimit: Number.isInteger(res.data.data?.deviceLimit) && Number(res.data.data?.deviceLimit) >= 1
+        && Number(res.data.data?.deviceLimit) <= VISIT_DEVICE_LIMIT ? Number(res.data.data?.deviceLimit) : 3,
       hotline: hotline || null,
     };
   },

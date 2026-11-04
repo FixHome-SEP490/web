@@ -14,6 +14,22 @@ const receipt = (commandId: string) => ({ version: 1, groupId: group, commandId,
   preserved: [], oldObligationsPreserved: true, financialFollowupRequired: true, automaticLiabilityApplied: false });
 describe('atomic group stop', () => {
   beforeEach(() => vi.resetAllMocks());
+  it.each([4, 5])('retains every child in a %i-device receipt including protected financial records', async count => {
+    const port = createGroupStopPort();
+    mocks.post.mockImplementation(async (_path, body) => {
+      const result = receipt(body.commandId);
+      return { data: { data: { ...result,
+        stopped: Array.from({ length: count - 1 }, (_, index) => ({ ...result.stopped[0],
+          bookingId: `${index + 5}3333333-3333-4333-8333-333333333333`,
+          orderId: `${index + 5}2222222-2222-4222-8222-222222222222`,
+          incidentId: `${index + 5}4444444-4444-4444-8444-444444444444` })),
+        preserved: [{ bookingId: booking, orderId: order, orderStatus: 'completed', outcome: 'succeeded', disposition: 'PRESERVED', financialFollowupRequired: false }],
+      } } };
+    });
+    const result = await port.send(group, { ...input, selectedOrderId: '52222222-2222-4222-8222-222222222222' });
+    expect(result.stopped).toHaveLength(count - 1);
+    expect(result.preserved).toEqual([{ bookingId: booking, orderId: order, orderStatus: 'completed', outcome: 'succeeded', disposition: 'PRESERVED', financialFollowupRequired: false }]);
+  });
   it('keeps one command across uncertain ack, dialog reopen and reconciliation; never posts children', async () => {
     const port = createGroupStopPort();
     mocks.post.mockRejectedValueOnce(new Error('network'));
