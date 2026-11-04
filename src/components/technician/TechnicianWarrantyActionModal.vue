@@ -33,6 +33,8 @@ const error = ref('');
 
 const open = computed(() => !!props.claim && !!props.mode);
 const notCovered = computed(() => result.value === 'not_covered');
+// FixHome pays the part on a part fault, and "not covered" ends the claim: both need proof.
+const evidenceRequired = computed(() => notCovered.value || result.value === 'covered_part');
 const title = computed(
   () =>
     ({
@@ -100,8 +102,10 @@ function validate(mode: WarrantyActionMode): string {
   }
   if (mode === 'propose') {
     if (findings.value.trim().length < MIN_TEXT) return `Vui lòng mô tả kết quả kiểm tra ít nhất ${MIN_TEXT} ký tự.`;
-    if (notCovered.value && !evidence.photos.value.length) {
-      return 'Cần ít nhất một ảnh làm bằng chứng khi kết luận không bảo hành.';
+    if (evidenceRequired.value && !evidence.photos.value.length) {
+      return notCovered.value
+        ? 'Cần ít nhất một ảnh làm bằng chứng khi kết luận không bảo hành.'
+        : 'Cần ít nhất một ảnh linh kiện hỏng khi kết luận lỗi linh kiện.';
     }
   }
   if (mode === 'complete' && note.value.trim().length < MIN_TEXT) {
@@ -192,7 +196,7 @@ async function submit() {
             class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
           ></textarea>
         </div>
-        <p class="text-xs text-ink-500">Quản lý dịch vụ sẽ phân công kỹ thuật viên khác. Lý do của bạn được ghi lại.</p>
+        <p class="text-xs text-ink-500">Nghỉ phép và ngoài khu vực được hệ thống kiểm tra. Lý do khác chờ quản lý xét; không chính đáng sẽ bị trừ điểm uy tín.</p>
       </template>
 
       <template v-else-if="mode === 'propose'">
@@ -248,7 +252,7 @@ async function submit() {
 
       <div v-if="showPhotos" class="space-y-2">
         <span class="text-xs font-medium text-ink-700">
-          Ảnh đính kèm ({{ mode === 'propose' && notCovered ? 'bắt buộc' : 'không bắt buộc' }}, tối đa {{ evidence.maxPhotos }} ảnh)
+          Ảnh đính kèm ({{ mode === 'propose' && evidenceRequired ? 'bắt buộc' : 'không bắt buộc' }}, tối đa {{ evidence.maxPhotos }} ảnh)
         </span>
         <div v-if="evidence.photos.value.length" class="flex flex-wrap gap-2">
           <div v-for="(photo, index) in evidence.photos.value" :key="photo.url" class="relative">

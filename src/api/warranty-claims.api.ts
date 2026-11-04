@@ -2,7 +2,14 @@ import apiClient from './client';
 import { readPage, type PageResult } from './paging';
 import type { PaginationMeta } from '../types';
 import type { WarrantyClaimView } from './orders.api';
-import type { DeclineReason, InspectionResult, NotCoveredReason, WarrantyClaimStatus } from '../utils/warranty-claim';
+import type {
+  ClaimOutcome,
+  DeclineReason,
+  DeclineReview,
+  InspectionResult,
+  NotCoveredReason,
+  WarrantyClaimStatus,
+} from '../utils/warranty-claim';
 
 export interface WarrantyVisitView {
   id: string;
@@ -30,6 +37,18 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
   };
   coverage: { id: string; itemDescription: string; expiresAt: string } | null;
   visit: WarrantyVisitView | null;
+  /** A decline or missed response waiting for a manager, or the verdict. */
+  declineReview?: DeclineReview | null;
+  declineReasonCode?: string | null;
+  outcomeCode?: ClaimOutcome | null;
+  /** Whole VND returned to the customer wallet when the item could not be fixed. */
+  refundAmount?: number | null;
+  noShowFlaggedAt?: string | null;
+}
+
+export interface ReplacementPart {
+  partCatalogId: string;
+  quantity: number;
 }
 
 export interface ProposeInspectionPayload {
@@ -79,6 +98,8 @@ export interface WarrantyQueueQuery {
   status?: WarrantyClaimStatus;
   unassigned?: boolean;
   technicianId?: string;
+  /** Only claims whose decline or missed response a manager still has to judge. */
+  declineReview?: 'pending';
 }
 
 export interface TechnicianWarrantyStat {
@@ -135,12 +156,21 @@ export const warrantyManagerApi = {
 
   approve: (
     claimId: string,
-    payload: { result?: InspectionResult; reasonCode?: NotCoveredReason; customerNote?: string },
+    payload: {
+      result?: InspectionResult;
+      reasonCode?: NotCoveredReason;
+      customerNote?: string;
+      overrideReason?: string;
+      replacementParts?: ReplacementPart[];
+    },
   ) => managerPost(claimId, 'approve', payload),
 
   reject: (claimId: string, payload: { reasonCode: NotCoveredReason; customerNote: string }) =>
     managerPost(claimId, 'reject', payload),
 
-  close: (claimId: string, payload: { outcome: 'resolved' | 'rejected'; note?: string }) =>
+  close: (claimId: string, payload: { outcome: 'resolved' | 'rejected' | 'unfixed'; note?: string; refundAmount?: number }) =>
     managerPost(claimId, 'close', payload),
+
+  reviewDecline: (claimId: string, payload: { valid: boolean; note: string }) =>
+    managerPost(claimId, 'review-decline', payload),
 };

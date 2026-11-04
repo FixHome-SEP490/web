@@ -76,12 +76,22 @@ describe('warrantyManagerApi', () => {
     await warrantyManagerApi.approve('claim-1', { customerNote: 'Đã kiểm tra kỹ' });
     await warrantyManagerApi.reject('claim-1', { reasonCode: 'expired', customerNote: 'Đã hết hạn bảo hành.' });
     await warrantyManagerApi.close('claim-1', { outcome: 'resolved' });
+    await warrantyManagerApi.reviewDecline('claim-1', { valid: false, note: 'Lịch của thợ còn trống.' });
     expect(apiClientMock.post.mock.calls.map((call) => call[0])).toEqual([
       '/service-manager/warranty-claims/claim-1/assign',
       '/service-manager/warranty-claims/claim-1/approve',
       '/service-manager/warranty-claims/claim-1/reject',
       '/service-manager/warranty-claims/claim-1/close',
+      '/service-manager/warranty-claims/claim-1/review-decline',
     ]);
+  });
+
+  it('asks only for the claims waiting for a decline review when told to', async () => {
+    apiClientMock.get.mockResolvedValueOnce(listResponse([]));
+    await warrantyManagerApi.listQueue({ page: 1, limit: 10, declineReview: 'pending' });
+    expect(apiClientMock.get).toHaveBeenCalledWith('/service-manager/warranty-claims', {
+      params: { page: 1, limit: 10, declineReview: 'pending' },
+    });
   });
 
   it('reads eligible technicians and the rates for a window', async () => {
@@ -98,7 +108,7 @@ describe('warrantyManagerApi', () => {
 describe('WarrantyDecisionModal', () => {
   beforeEach(() => vi.clearAllMocks());
   const submit = (wrapper: ReturnType<typeof mountModal>) => wrapper.findAll('button').at(-1)!;
-  const mountModal = (mode: 'assign' | 'approve' | 'reject' | 'close', c = claim()) =>
+  const mountModal = (mode: 'assign' | 'approve' | 'reject' | 'close' | 'review', c = claim()) =>
     mount(WarrantyDecisionModal, {
       props: { claim: c, mode, technicians: [{ id: 'tech-1', fullName: 'Kỹ thuật viên A' }, { id: 'tech-2', fullName: 'Kỹ thuật viên B' }] },
       attachTo: document.body,
@@ -132,23 +142,127 @@ describe('WarrantyDecisionModal', () => {
     wrapper.unmount();
   });
 
-  it('warns on an override and demands a customer note for not covered', async () => {
+  it('demands a customer note for not covered and a written reason for changing the technician proposal', async () => {
     const wrapper = mountModal('approve');
     await wrapper.findAll('input[type="radio"]')[2].setValue();
-    expect(wrapper.text()).toContain('đổi kết luận so với đề xuất');
+    expect(wrapper.find('#warranty-override-reason').exists()).toBe(true);
     await submit(wrapper).trigger('click');
     expect(apiClientMock.post).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('giải thích cho khách hàng');
 
-    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'awaiting_customer' }) } });
     await wrapper.get('#warranty-final-reason').setValue('normal_wear');
     await wrapper.get('#warranty-customer-note').setValue('Linh kiện đã hao mòn tự nhiên theo thời gian.');
+    await submit(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('lý do đổi kết luận');
+
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'awaiting_customer' }) } });
+    await wrapper.get('#warranty-override-reason').setValue('Ảnh cho thấy linh kiện mòn đều theo thời gian.');
     await submit(wrapper).trigger('click');
     await flushPromises();
     expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/approve', {
       result: 'not_covered',
       reasonCode: 'normal_wear',
       customerNote: 'Linh kiện đã hao mòn tự nhiên theo thời gian.',
+      overrideReason: 'Ảnh cho thấy linh kiện mòn đều theo thời gian.',
+    });
+    wrapper.unmount();
+  });
+
+  it('offers a FixHome part for a workmanship fault and sends it with the approval', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountModal('approve');
+      await wrapper.findAll('input[type="radio"]')[0].setValue();
+      await wrapper.get('#warranty-override-reason').setValue('Mối nối lỏng là do lắp, không phải linh kiện.');
+
+      apiClientMock.get.mockResolvedValueOnce({ data: { data: [{ id: 'part-9', name: 'Bo mạch điều hoà', sellingPrice: 400000 }], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } } });
+      await wrapper.get('input[type="search"]').setValue('bo mạch');
+      await vi.advanceTimersByTimeAsync(350);
+      await flushPromises();
+      expect(apiClientMock.get).toHaveBeenCalledWith('/parts/catalog', { params: { search: 'bo mạch', limit: 10 } });
+
+      await wrapper.get('select[aria-label="Linh kiện"]').setValue('part-9');
+      apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'in_progress' }) } });
+      await submit(wrapper).trigger('click');
+      await flushPromises();
+      expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/approve', {
+        result: 'covered_workmanship',
+        overrideReason: 'Mối nối lỏng là do lắp, không phải linh kiện.',
+        replacementParts: [{ partCatalogId: 'part-9', quantity: 1 }],
+      });
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not offer the part picker for a part fault, where FixHome supplies it', () => {
+    const wrapper = mountModal('approve');
+    expect(wrapper.find('input[type="search"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('judges a decline: a note is required and "not justified" is sent as valid false', async () => {
+    const wrapper = mountModal('review', claim({ status: 'submitted', technician: null, declineReview: 'pending', declineReasonCode: 'busy' }));
+    expect(wrapper.text()).toContain('Xét việc từ chối bảo hành');
+    await submit(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('nhận xét');
+
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'submitted', declineReview: 'invalid' }) } });
+    await wrapper.findAll('input[type="radio"]')[1].setValue();
+    await wrapper.get('#warranty-review-note').setValue('Lịch của kỹ thuật viên còn trống hôm đó.');
+    await submit(wrapper).trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/review-decline', {
+      valid: false,
+      note: 'Lịch của kỹ thuật viên còn trống hôm đó.',
+    });
+    wrapper.unmount();
+  });
+
+  it('titles a no-show review differently from a decline review', () => {
+    const wrapper = mountModal('review', claim({ status: 'accepted', declineReview: 'pending', noShowFlaggedAt: '2026-11-03T00:00:00.000Z' }));
+    expect(wrapper.text()).toContain('Xét việc không đến kiểm tra');
+    wrapper.unmount();
+  });
+
+  it('closes an unfixed claim with a refund: needs a note even when the customer agreed, and a whole-VND amount', async () => {
+    const wrapper = mountModal('close', claim({ status: 'awaiting_customer', customerResponse: 'agreed' }));
+    await wrapper.get('input[value="unfixed"]').setValue();
+    await submit(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('ghi chú đóng yêu cầu');
+
+    await wrapper.get('#warranty-close-note').setValue('Đã thử hai lần nhưng không khắc phục được.');
+    await wrapper.get('#warranty-refund').setValue('12,5');
+    await submit(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('số nguyên');
+
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'resolved', outcomeCode: 'unfixed', refundAmount: 250000 }) } });
+    await wrapper.get('#warranty-refund').setValue('250000');
+    await submit(wrapper).trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/close', {
+      outcome: 'unfixed',
+      note: 'Đã thử hai lần nhưng không khắc phục được.',
+      refundAmount: 250000,
+    });
+    wrapper.unmount();
+  });
+
+  it('leaves the refund blank to refund the whole covered line', async () => {
+    const wrapper = mountModal('close', claim({ status: 'in_progress' }));
+    await wrapper.get('input[value="unfixed"]').setValue();
+    await wrapper.get('#warranty-close-note').setValue('Linh kiện không còn bán, không sửa được.');
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'resolved' }) } });
+    await submit(wrapper).trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/close', {
+      outcome: 'unfixed',
+      note: 'Linh kiện không còn bán, không sửa được.',
     });
     wrapper.unmount();
   });
@@ -233,6 +347,38 @@ describe('ConsoleWarrantyPage', () => {
     // a closed claim offers no decision
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Duyệt kết luận')).toHaveLength(1);
     expect(wrapper.find('[data-testid="warranty-read-only"]').exists()).toBe(false);
+  });
+
+  it('flags a claim waiting for a decline review and opens the review instead of the usual action', async () => {
+    asRole('service_manager');
+    apiClientMock.get.mockResolvedValueOnce(
+      listResponse([
+        claim({ id: 'a', status: 'submitted', technician: null, visit: null, declineReview: 'pending', declineReasonCode: 'busy' }),
+        claim({ id: 'b', status: 'accepted', declineReview: 'pending', noShowFlaggedAt: '2026-11-03T00:00:00.000Z' }),
+        claim({ id: 'c', status: 'resolved', outcomeCode: 'unfixed', refundAmount: 250000 }),
+      ]),
+    );
+    const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Chờ quản lý xét');
+    expect(wrapper.text()).toContain('Không khắc phục được, đã hoàn tiền');
+    const buttons = wrapper.findAll('button').map((b) => b.text());
+    expect(buttons).toContain('Xét từ chối');
+    expect(buttons).toContain('Xét không đến');
+  });
+
+  it('filters the queue to the claims waiting for a decline review', async () => {
+    asRole('service_manager');
+    apiClientMock.get.mockResolvedValue(listResponse([]));
+    const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
+    await flushPromises();
+
+    await wrapper.findAll('input[type="checkbox"]')[1].setValue(true);
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenLastCalledWith('/service-manager/warranty-claims', {
+      params: { page: 1, limit: 10, declineReview: 'pending' },
+    });
   });
 
   it('hides every decision button for an administrator (read only)', async () => {

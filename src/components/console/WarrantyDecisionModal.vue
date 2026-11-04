@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import { warrantyManagerApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
+import { partsCatalogApi } from '../../api/parts-catalog.api';
+import type { FixHomePart } from '../../api/admin-parts.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import {
   inspectionResultLabels,
@@ -11,7 +13,7 @@ import {
   type NotCoveredReason,
 } from '../../utils/warranty-claim';
 
-export type WarrantyDecisionMode = 'assign' | 'approve' | 'reject' | 'close';
+export type WarrantyDecisionMode = 'assign' | 'approve' | 'reject' | 'close' | 'review';
 
 const props = defineProps<{
   claim: StaffWarrantyClaim | null;
@@ -26,14 +28,27 @@ const technicianId = ref('');
 const result = ref<InspectionResult>('covered_part');
 const reasonCode = ref<NotCoveredReason>('other_component');
 const customerNote = ref('');
-const outcome = ref<'resolved' | 'rejected'>('resolved');
+const outcome = ref<'resolved' | 'rejected' | 'unfixed'>('resolved');
 const closeNote = ref('');
+const refundAmount = ref('');
+const overrideReason = ref('');
+const reviewValid = ref(true);
+const reviewNote = ref('');
+const partSearch = ref('');
+const partOptions = ref<FixHomePart[]>([]);
+const partId = ref('');
+const partQty = ref(1);
+let partTimer: ReturnType<typeof setTimeout> | undefined;
 const submitting = ref(false);
 const error = ref('');
 
 const open = computed(() => !!props.claim && !!props.mode);
 const proposal = computed(() => props.claim?.visit?.proposedResult ?? null);
 const notCovered = computed(() => result.value === 'not_covered');
+const overriding = computed(() => !!proposal.value && result.value !== proposal.value);
+// A workmanship fault can still need a FixHome part; the technician then pays for it.
+const workmanship = computed(() => result.value === 'covered_workmanship');
+const unfixed = computed(() => outcome.value === 'unfixed');
 const customerAgreed = computed(
   () => props.claim?.status === 'awaiting_customer' && props.claim.customerResponse === 'agreed',
 );
@@ -44,6 +59,7 @@ const title = computed(
       approve: 'Duyệt kết luận kiểm tra',
       reject: 'Từ chối yêu cầu bảo hành',
       close: 'Đóng yêu cầu bảo hành',
+      review: props.claim?.noShowFlaggedAt ? 'Xét việc không đến kiểm tra' : 'Xét việc từ chối bảo hành',
     })[props.mode ?? 'assign'],
 );
 const assignable = computed(() => props.technicians.filter((t) => t.id !== props.claim?.technician?.id));
@@ -54,10 +70,33 @@ watch(open, (isOpen) => {
   technicianId.value = '';
   customerNote.value = '';
   closeNote.value = '';
+  refundAmount.value = '';
+  overrideReason.value = '';
+  reviewValid.value = true;
+  reviewNote.value = '';
+  partSearch.value = '';
+  partOptions.value = [];
+  partId.value = '';
+  partQty.value = 1;
   outcome.value = props.claim.awaitingPrompt === 'completion' || props.claim.status === 'in_progress' ? 'resolved' : 'rejected';
   result.value = proposal.value ?? 'covered_part';
   reasonCode.value = (props.claim.visit?.notCoveredReasonCode as NotCoveredReason) || 'other_component';
 }, { immediate: true });
+
+watch(partSearch, (term) => {
+  clearTimeout(partTimer);
+  partTimer = setTimeout(async () => {
+    if (term.trim().length < 2) {
+      partOptions.value = [];
+      return;
+    }
+    try {
+      partOptions.value = (await partsCatalogApi.getCatalog({ search: term.trim(), limit: 10 })).data;
+    } catch {
+      partOptions.value = [];
+    }
+  }, 300);
+});
 
 function close() {
   if (!submitting.value) emit('close');
@@ -71,8 +110,17 @@ function validate(mode: WarrantyDecisionMode): string {
   if (mode === 'reject' && customerNote.value.trim().length < MIN_NOTE) {
     return `Vui lòng nhập nội dung giải thích cho khách hàng (ít nhất ${MIN_NOTE} ký tự).`;
   }
-  if (mode === 'close' && !customerAgreed.value && closeNote.value.trim().length < MIN_NOTE) {
+  if (mode === 'approve' && overriding.value && overrideReason.value.trim().length < MIN_NOTE) {
+    return `Vui lòng ghi lý do đổi kết luận của kỹ thuật viên (ít nhất ${MIN_NOTE} ký tự).`;
+  }
+  if (mode === 'close' && (unfixed.value || !customerAgreed.value) && closeNote.value.trim().length < MIN_NOTE) {
     return `Vui lòng nhập ghi chú đóng yêu cầu (ít nhất ${MIN_NOTE} ký tự).`;
+  }
+  if (mode === 'close' && unfixed.value && refundAmount.value.trim() && !/^[1-9]\d*$/.test(refundAmount.value.trim())) {
+    return 'Số tiền hoàn phải là số nguyên VND lớn hơn 0.';
+  }
+  if (mode === 'review' && reviewNote.value.trim().length < MIN_NOTE) {
+    return `Vui lòng ghi nhận xét của bạn (ít nhất ${MIN_NOTE} ký tự).`;
   }
   return '';
 }
@@ -84,7 +132,12 @@ async function run(claim: StaffWarrantyClaim, mode: WarrantyDecisionMode): Promi
       ...(result.value !== proposal.value ? { result: result.value } : {}),
       ...(notCovered.value ? { reasonCode: reasonCode.value } : {}),
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
+      ...(overriding.value ? { overrideReason: overrideReason.value.trim() } : {}),
+      ...(workmanship.value && partId.value ? { replacementParts: [{ partCatalogId: partId.value, quantity: partQty.value }] } : {}),
     });
+  }
+  if (mode === 'review') {
+    return warrantyManagerApi.reviewDecline(claim.id, { valid: reviewValid.value, note: reviewNote.value.trim() });
   }
   if (mode === 'reject') {
     return warrantyManagerApi.reject(claim.id, { reasonCode: reasonCode.value, customerNote: customerNote.value.trim() });
@@ -92,6 +145,7 @@ async function run(claim: StaffWarrantyClaim, mode: WarrantyDecisionMode): Promi
   return warrantyManagerApi.close(claim.id, {
     outcome: outcome.value,
     ...(closeNote.value.trim() ? { note: closeNote.value.trim() } : {}),
+    ...(unfixed.value && refundAmount.value.trim() ? { refundAmount: Number(refundAmount.value.trim()) } : {}),
   });
 }
 
@@ -187,9 +241,40 @@ async function submit() {
             <span v-if="value === proposal" class="ml-auto text-ink-500">Đề xuất</span>
           </label>
         </fieldset>
-        <p v-if="proposal && result !== proposal" class="text-xs text-warning-700">
-          Bạn đang đổi kết luận so với đề xuất của kỹ thuật viên; thay đổi này được ghi vào thống kê.
-        </p>
+        <div v-if="overriding" class="space-y-1">
+          <label for="warranty-override-reason" class="text-xs font-medium text-warning-700">Lý do đổi kết luận của kỹ thuật viên</label>
+          <textarea
+            id="warranty-override-reason"
+            v-model="overrideReason"
+            rows="2"
+            maxlength="2000"
+            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+          ></textarea>
+        </div>
+        <div v-if="workmanship" class="space-y-1.5 p-3 rounded-[var(--radius-sm)] border border-ink-200">
+          <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
+          <input
+            v-model="partSearch"
+            type="search"
+            placeholder="Tìm linh kiện theo tên hoặc mã"
+            aria-label="Tìm linh kiện FixHome"
+            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+          />
+          <div v-if="partOptions.length" class="flex gap-2">
+            <select v-model="partId" aria-label="Linh kiện" class="flex-1 h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm">
+              <option value="" disabled>Chọn linh kiện</option>
+              <option v-for="part in partOptions" :key="part.id" :value="part.id">{{ part.name }}</option>
+            </select>
+            <input
+              v-model.number="partQty"
+              type="number"
+              min="1"
+              max="100"
+              aria-label="Số lượng"
+              class="w-20 h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+            />
+          </div>
+        </div>
         <div v-if="notCovered" class="space-y-1">
           <label for="warranty-final-reason" class="text-xs font-medium text-ink-700">Lý do không bảo hành</label>
           <select
@@ -237,6 +322,30 @@ async function submit() {
         </div>
       </template>
 
+      <template v-else-if="mode === 'review'">
+        <p class="text-xs text-ink-700">
+          {{ claim.noShowFlaggedAt ? 'Kỹ thuật viên đã nhận nhưng chưa check-in đúng hạn.' : 'Lý do từ chối: ' + (claim.declineReasonCode || '—') }}
+        </p>
+        <fieldset class="space-y-1.5">
+          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="reviewValid ? 'border-brand-600 bg-brand-50' : ''">
+            <input v-model="reviewValid" type="radio" name="warranty-review" :value="true" /> Hợp lệ, không trừ điểm
+          </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="!reviewValid ? 'border-brand-600 bg-brand-50' : ''">
+            <input v-model="reviewValid" type="radio" name="warranty-review" :value="false" /> Không chính đáng, trừ điểm uy tín
+          </label>
+        </fieldset>
+        <div class="space-y-1">
+          <label for="warranty-review-note" class="text-xs font-medium text-ink-700">Nhận xét</label>
+          <textarea
+            id="warranty-review-note"
+            v-model="reviewNote"
+            rows="3"
+            maxlength="2000"
+            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+          ></textarea>
+        </div>
+      </template>
+
       <template v-else>
         <fieldset class="space-y-1.5">
           <legend class="text-xs font-medium text-ink-700 mb-1">Kết quả đóng</legend>
@@ -246,13 +355,26 @@ async function submit() {
           <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="outcome === 'rejected' ? 'border-brand-600 bg-brand-50' : ''">
             <input v-model="outcome" type="radio" name="warranty-outcome" value="rejected" /> Không được bảo hành
           </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="outcome === 'unfixed' ? 'border-brand-600 bg-brand-50' : ''">
+            <input v-model="outcome" type="radio" name="warranty-outcome" value="unfixed" /> Không khắc phục được: hoàn tiền cho khách
+          </label>
         </fieldset>
+        <div v-if="unfixed" class="space-y-1">
+          <label for="warranty-refund" class="text-xs font-medium text-ink-700">Số tiền hoàn vào ví khách (₫, để trống = cả hạng mục)</label>
+          <input
+            id="warranty-refund"
+            v-model="refundAmount"
+            inputmode="numeric"
+            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
+          />
+          <p class="text-xs text-ink-500">Số tiền này bị trừ từ ví kỹ thuật viên đã làm đơn gốc và thợ nhận bảo hành bị trừ điểm uy tín.</p>
+        </div>
         <p v-if="claim.status === 'disputed'" class="text-xs text-warning-700">
           Yêu cầu bị khách phản đối: quản lý đã duyệt lần đầu không thể tự đóng, cần một quản lý khác xem xét.
         </p>
         <div class="space-y-1">
           <label for="warranty-close-note" class="text-xs font-medium text-ink-700">
-            Ghi chú {{ customerAgreed ? '(không bắt buộc vì khách hàng đã đồng ý)' : '' }}
+            Ghi chú {{ customerAgreed && !unfixed ? '(không bắt buộc vì khách hàng đã đồng ý)' : '' }}
           </label>
           <textarea
             id="warranty-close-note"
