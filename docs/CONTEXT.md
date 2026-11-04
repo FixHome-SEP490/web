@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 13:04 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p2-booking-draft-web-20261104
+> Cập nhật lần cuối: 2026-11-04 14:28 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,14 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Kho W1 và nhận linh kiện W2 trên Web (04/11/2026)
+
+- `/console/warehouses` mở cho Admin và quản lý dịch vụ; Backend chỉ trả kho được giao cho quản lý đang đăng nhập. Admin tạo/sửa/xóa kho và chọn quản lý dịch vụ đang hoạt động từ danh sách tài khoản hiện có. Kho mới chưa có tồn.
+- Web đọc danh mục SKU đang hoạt động, không nhập mã linh kiện tự do. Tồn và lịch sử đọc từ `/warehouses/:id/stock` và `/warehouses/:id/movements`; điều chỉnh dùng `STOCK_IN`/`CORRECTION` theo enum Backend (`stock_in`/`correction`) và `idempotencyKey`. Không tạo kho hoặc tồn giả.
+- Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Khi chưa có dữ liệu khoảng cách, Web ghi rõ chưa xác minh và không hiện km/ETA.
+- Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
+- Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Focused suite 75/75 và full suite 2372/2372 PASS; typecheck/lint/build PASS. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
 
 ### VisitGroup P1 tối đa 5 thiết bị trên Web (04/11/2026)
 
@@ -469,6 +477,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- W1/W2 Web source sẵn sàng lead review, chưa commit/push/merge/deploy. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc migration Backend, kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
+
 - P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
 
 - P1 max5: chỉ release Web cùng Backend P1 sau forward migration do lead xác minh; trước đó contact API giữ mức 3. Focused tests/typecheck/lint/build không chứng minh giao dịch DB, tiền/linh kiện/bảo hành thực tế hoặc E2E đăng nhập. Browser, shared DEV và Mobile parity: CHƯA KIỂM CHỨNG. Hard-refresh sau coordinated rollout; không chạy Docker/deploy hoặc ghi DB trong task writer.
@@ -525,6 +535,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
 - 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
 - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
@@ -564,4 +575,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
 - 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
