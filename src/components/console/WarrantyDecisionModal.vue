@@ -252,7 +252,7 @@ async function submit() {
           ></textarea>
         </div>
         <div v-if="workmanship" class="space-y-1.5 p-3 rounded-[var(--radius-sm)] border border-ink-200">
-          <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Thợ trả tiền theo giá bán (không bắt buộc)</p>
+          <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
           <input
             v-model="partSearch"
             type="search"

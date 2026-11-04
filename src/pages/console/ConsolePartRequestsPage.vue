@@ -6,6 +6,7 @@ import { Copy, Check, X } from 'lucide-vue-next';
 import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
@@ -45,6 +46,7 @@ const fulfillmentFilter = ref('ALL');
 const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 
 const qrModalRequest = ref<PartRequest | null>(null);
+const inspectionRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
 const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
@@ -279,7 +281,17 @@ const requestCode = (req: PartRequest) => `PR-${req.id.substring(0, 8).toUpperCa
 const isOpen = (req: PartRequest) => ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
 const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.toLowerCase()) && !!req.qrToken;
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
-const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh');
+const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
+// A warranty part is issued only after the faulty one was inspected; the result decides who pays.
+const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !req.faultyInspectionResult;
+const canReinspect = (req: PartRequest) => req.requestType === 'warranty' && ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
+const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
+const onInspected = (updated: PartRequest) => {
+  replaceRow(updated);
+  if (detailModalRequest.value?.id === updated.id) detailModalRequest.value = updated;
+  inspectionRequest.value = null;
+  showToast('success', 'Đã lưu kết quả kiểm tra linh kiện hỏng.');
+};
 const methodLabel = (method: string) => (method === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho');
 
 const getStatusLabel = (status: PartRequestStatus | string) => {
@@ -369,6 +381,7 @@ const getUsageBadgeClass = (status: string) => {
         <option value="ALL">Tất cả loại</option>
         <option value="PRE_REPAIR">Trước sửa chữa</option>
         <option value="ADDITIONAL">Phát sinh</option>
+        <option value="WARRANTY">Bảo hành</option>
       </select>
       <select v-model="fulfillmentFilter" :class="consoleField" aria-label="Hình thức nhận">
         <option value="ALL">Mọi hình thức</option>
@@ -482,7 +495,14 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-actions="{ row }">
         <div class="flex items-center justify-end gap-2">
           <FhButton
-            v-if="canOperate && row.status.toLowerCase() === 'requested'"
+            v-if="canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="inspectionRequest = row"
+          >Kiểm tra linh kiện hỏng</FhButton>
+          <FhButton
+            v-else-if="canOperate && row.status.toLowerCase() === 'requested'"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -605,6 +625,13 @@ const getUsageBadgeClass = (status: string) => {
 
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Loại</dt><dd class="text-ink-900">{{ typeLabel(detailModalRequest.requestType) }}</dd></div>
+          <div v-if="detailModalRequest.requestType === 'warranty'" class="flex justify-between gap-3">
+            <dt class="text-ink-500">Linh kiện hỏng</dt>
+            <dd class="text-right text-ink-900">
+              {{ inspectionLabel(detailModalRequest.faultyInspectionResult) }}
+              <button v-if="canOperate && canReinspect(detailModalRequest)" type="button" class="ml-2 text-brand-700 hover:underline" @click="inspectionRequest = detailModalRequest">{{ detailModalRequest.faultyInspectionResult ? 'Sửa' : 'Kiểm tra' }}</button>
+            </dd>
+          </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(detailModalRequest.status) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Phí giao hàng</dt><dd><FhMoney :amount="detailModalRequest.shippingFee || 0" /></dd></div>
@@ -651,6 +678,8 @@ const getUsageBadgeClass = (status: string) => {
         </div>
       </div>
     </div>
+
+    <FaultyPartInspectionModal :request="inspectionRequest" @close="inspectionRequest = null" @done="onInspected" />
   </div>
 </template>
 

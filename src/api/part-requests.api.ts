@@ -9,7 +9,8 @@ export type PartRequestStatus =
   | 'completed'
   | 'cancelled';
 
-export type PartRequestType = 'pre_repair' | 'additional' | 'quotation';
+export type PartRequestType = 'pre_repair' | 'additional' | 'quotation' | 'warranty';
+export type FaultyInspectionResult = 'manufacturer' | 'installation' | 'undetermined';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type PartUsageStatus = 'pending' | 'used' | 'returned';
 export type PartSource = 'fixhome' | 'technician' | 'external';
@@ -45,6 +46,10 @@ export interface PartRequest {
   completedAt?: string | null;
   cancelledAt?: string | null;
   preparedByUserId?: string | null;
+  /** Warranty only: what the manager found on the faulty part; it decides who pays the new one. */
+  faultyInspectionResult?: FaultyInspectionResult | null;
+  faultyInspectionNote?: string | null;
+  chargeTechnician?: boolean;
   createdAt: string;
   updatedAt: string;
   items: PartRequestItem[];
@@ -483,6 +488,15 @@ export const partRequestsApi = {
     const res = await apiClient.get<{ data: PartRequest }>(
       `/part-requests/${requestId}`,
     );
+    return res.data.data;
+  },
+
+  /** SM records what the faulty part of a warranty request shows; required before READY. */
+  async recordFaultyInspection(
+    requestId: string,
+    payload: { result: FaultyInspectionResult; note?: string; evidenceRefs?: string[] },
+  ): Promise<PartRequest> {
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-inspection`, payload);
     return res.data.data;
   },
 
