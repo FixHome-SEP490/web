@@ -49,6 +49,26 @@ const rawDraft = (count = 1) => ({
 const ok = (data: unknown) => ({ data: { success: true, statusCode: 200, message: 'OK', data } });
 
 describe('interruptionRebookApi', () => {
+  it.each([4, 5])('verifies and rebooks all %i selected sources without dropping receipts', async count => {
+    const data = rawDraft(count);
+    data.items = data.items.map((item, index) => ({ ...item,
+      sourceBookingId: index === 0 ? ids.booking : `${index + 2}1111111-1111-4111-8111-111111111111`,
+      sourceOrderId: `${index}3333333-3333-4333-8333-333333333333`,
+      sourceCaseId: `${index}4444444-4444-4444-8444-444444444444`,
+    }));
+    mocks.get.mockResolvedValue(ok(data));
+    mocks.getBooking.mockImplementation(async id => ({ id, customerId: 'customer', serviceId: ids.service, status: 'CANCELLED', visitGroupId: ids.group }));
+    mocks.getOrder.mockImplementation(async id => ({ id, bookingId: data.items.find(item => item.sourceOrderId === id)!.sourceBookingId, status: 'CANCELLED' }));
+    mocks.getMine.mockImplementation(async id => { const item = data.items.find(item => item.sourceCaseId === id)!; return { id, bookingId: item.sourceBookingId, serviceOrderId: item.sourceOrderId, caseType: 'mid_job_interruption', status: 'resolved', resolutionCode: 'interrupted_for_rebook' }; });
+    mocks.post.mockResolvedValue(ok({ targetKind: 'visit_group', bookingId: null, visitGroupId: ids.group,
+      items: data.items.map((item, index) => ({ ...item, bookingId: `${index}9999999-9999-4999-8999-999999999999` })) }));
+    const sources = data.items.map(item => item.sourceBookingId);
+    const draft = await interruptionRebookApi.readDraft(ids.booking, 'customer', sources);
+    expect(draft.items.map(item => item.sourceBookingId)).toEqual(sources);
+    await expect(interruptionRebookApi.confirm(ids.booking, 'customer', { idempotencyKey: 'max-five-test', addressId: ids.address, date: '2090-01-02', slot: 'morning',
+      items: data.items.map(item => ({ sourceBookingId: item.sourceBookingId, sourceCaseId: item.sourceCaseId, selectedVariantCode: 'AC-01-01' })) })).resolves.toEqual({ kind: 'visit', id: ids.group });
+    expect(mocks.post.mock.calls[0]![1].items).toHaveLength(count);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockResolvedValue(ok(rawDraft()));

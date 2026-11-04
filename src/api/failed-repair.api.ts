@@ -1,3 +1,4 @@
+import { VISIT_DEVICE_LIMIT } from './visit-groups.api';
 import type { InjectionKey } from 'vue';
 import { catalogPricingApi, type BookingDeviceAttributes, type CatalogPricingPreview } from './catalog-pricing.api';
 import type { BookingMedia } from './bookings.api';
@@ -102,7 +103,7 @@ export function validateFailedRepairDraft(draft: FailedRepairDraft, sources: str
   if (!customerId || !draft?.id || draft.customerId !== customerId
     || (draft.expiresAt !== undefined && (!Number.isFinite(Date.parse(draft.expiresAt)) || Date.parse(draft.expiresAt) <= Date.now()))
     || !draft.address?.id || draft.address.userId !== customerId
-    || !Array.isArray(draft.items) || draft.items.length < 1 || draft.items.length > 3
+    || !Array.isArray(draft.items) || draft.items.length < 1 || draft.items.length > VISIT_DEVICE_LIMIT
     || sources.length < 1 || sources.length !== new Set(sources).size
     || sources.some(id => !draft.items.some(item => item.sourceBookingId === id))
     || new Set(draft.items.map(item => item.sourceBookingId)).size !== draft.items.length
@@ -150,7 +151,7 @@ function assertServerDraft(data: unknown, anchor: string, sources: string[]): as
     || data.confirmation.path !== `/api/v1/bookings/${anchor}/repair-failure-rebook`
     || data.requiresNewSchedule !== true || data.requiresPricingRevalidation !== true
     || !isRecord(data.address) || !safeId(data.address.id)
-    || !Array.isArray(data.items) || data.items.length < 1 || data.items.length > 3
+    || !Array.isArray(data.items) || data.items.length < 1 || data.items.length > VISIT_DEVICE_LIMIT
     || data.targetKind !== (data.items.length === 1 ? 'booking' : 'visit_group')
     || (data.customerNote !== null && typeof data.customerNote !== 'string')) throw invalidDraft();
   const seen = new Set<string>();
@@ -224,7 +225,7 @@ export function createFailedRepairPort(customerId: () => string): FailedRepairPo
       const version = ++revision;
       const owner = customerId();
       context = null; submittedInput = null; prepared = null; photoClaims.clear();
-      if (!owner || !sources.length || sources.length > 3 || !sources.every(safeId) || new Set(sources).size !== sources.length) throw invalidDraft();
+      if (!owner || !sources.length || sources.length > VISIT_DEVICE_LIMIT || !sources.every(safeId) || new Set(sources).size !== sources.length) throw invalidDraft();
       const anchor = sources[0]!;
       const raw = await readRaw(anchor, sources);
       const addresses = await profileApi.getAddresses();

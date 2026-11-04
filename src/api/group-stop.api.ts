@@ -1,3 +1,4 @@
+import { VISIT_DEVICE_LIMIT } from './visit-groups.api';
 import apiClient, { getHttpStatus } from './client';
 import { CannotContinueError } from './platform-continuation.api';
 
@@ -41,7 +42,7 @@ function readResult(v: unknown, groupId: string, commandId: string): GroupStopRe
   if (!record(v) || v.version !== 1 || v.groupId !== groupId || v.commandId !== commandId
     || v.oldObligationsPreserved !== true || v.financialFollowupRequired !== true || v.automaticLiabilityApplied !== false
     || !Array.isArray(v.stopped) || v.stopped.length < 1 || !Array.isArray(v.preserved)
-    || v.stopped.length + v.preserved.length > 3) throw invalid();
+    || v.stopped.length + v.preserved.length > VISIT_DEVICE_LIMIT) throw invalid();
   const seen = new Set<string>();
   for (const child of [...v.stopped, ...v.preserved]) {
     if (!record(child) || !uuid(child.orderId) || !uuid(child.bookingId) || seen.has(child.orderId)) throw invalid();

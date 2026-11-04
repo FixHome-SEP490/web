@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { useRouter } from 'vue-router';
 import { queryKeys } from '../../lib/query-keys';
 import FhButton from '../FhButton.vue';
+import { VISIT_DEVICE_LIMIT } from '../../api/visit-groups.api';
 import { interruptionRebookApi } from '../../api/interruption-rebook.api';
 
 const props = defineProps<{ groupId: string; devices: Array<{ bookingId: string; sequence: number; deviceLabel: string | null }>; disabled: boolean; customerId?: string; revalidation?: number }>();
@@ -24,7 +25,7 @@ let generation = 0;
 const availableDevices = computed(() => props.devices.filter(device => availableIds.value.includes(device.bookingId)));
 const unavailableDevices = computed(() => props.devices.filter(device => !availableIds.value.includes(device.bookingId)));
 const valid = computed(() => !props.disabled && !checking.value && !error.value &&
-  selected.value.length > 0 && selected.value.length <= 3 && new Set(selected.value).size === selected.value.length &&
+  selected.value.length > 0 && selected.value.length <= VISIT_DEVICE_LIMIT && new Set(selected.value).size === selected.value.length &&
   selected.value.every(id => availableIds.value.includes(id)));
 
 async function refresh() {

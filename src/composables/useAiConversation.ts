@@ -55,7 +55,7 @@ const ACKNOWLEDGEMENT_DWELL_MS = 900;
 const FALLBACK_SERVICE_CODES = new Set(['DICH_VU_KHAC']);
 
 /** The most appliances one visit takes, and so the most the assistant suggests at once. */
-export const AI_VISIT_DEVICE_LIMIT = 3;
+export const AI_VISIT_DEVICE_LIMIT = 5;
 
 /** The appliances of a reply that can be booked now, in the order the assistant gave them. */
 export function bookableDevices(reply: AiReply | null | undefined): AiDeviceSuggestion[] {

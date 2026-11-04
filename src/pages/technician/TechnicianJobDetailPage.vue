@@ -61,7 +61,7 @@ import { createCannotContinuePort, type CustomerContinuation } from '../../api/p
 import { failedRepairKey } from '../../api/failed-repair.api';
 import { createTechnicianFailedRepairPort } from '../../api/technician-failed-repair.api';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
-import { visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
+import { VISIT_DEVICE_LIMIT, visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
 import { cashIntentsApi, type CashIntentCapability, type CashIntentScopeKind } from '../../api/cash-intents.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
@@ -180,7 +180,7 @@ const stopVisitCacheSessionListener = queryClient.getQueryCache().subscribe((eve
 function prefetchVisitSiblingOrders(checkout: VisitCheckout, activeOrderId: string, groupId: string) {
   const deviceOrderIds = [...checkout.devices]
     .sort((a, b) => a.sequence - b.sequence)
-    .slice(0, 3)
+    .slice(0, VISIT_DEVICE_LIMIT)
     .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []);
   for (const orderId of deviceOrderIds) {
     if (orderId !== activeOrderId) prefetchedVisitOrderIds.add(orderId);
@@ -487,7 +487,7 @@ const openDepartureChoice = async () => {
       if (id !== jobIdRef.value) return;
       const checkout = visitCheckout.value;
       if (checkout?.visitGroupId !== groupId) throw new Error('Visit unavailable');
-      const devices = [...checkout.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3);
+      const devices = [...checkout.devices].sort((a, b) => a.sequence - b.sequence).slice(0, VISIT_DEVICE_LIMIT);
       // Await only this bounded list of authorized child reads, including siblings still prefetching.
       await Promise.all(devices.map(async device => {
         const orderId = device.serviceOrderId;
@@ -1199,7 +1199,7 @@ function cacheVisitChildBundle(orderId: string, bundle: TechnicianJobBundle, gro
 
 function authorizedVisitChildBundle(orderId: string, groupId: string): TechnicianJobBundle | null {
   const deviceExists = visitCheckout.value?.visitGroupId === groupId
-    && visitCheckout.value.devices.slice(0, 3).some((device) => device.serviceOrderId === orderId);
+    && visitCheckout.value.devices.slice(0, VISIT_DEVICE_LIMIT).some((device) => device.serviceOrderId === orderId);
   if (!deviceExists) return null;
   const bundle = visitChildBundles.value[orderId]
     ?? queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(orderId));
@@ -1240,7 +1240,7 @@ const visitDeviceStatusByOrderId = computed<Record<string, TechnicianVisitDevice
   const groupId = visitGroupId.value;
   if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return {};
   const statuses: Record<string, TechnicianVisitDeviceStatus> = {};
-  for (const device of visitCheckout.value.devices.slice(0, 3)) {
+  for (const device of visitCheckout.value.devices.slice(0, VISIT_DEVICE_LIMIT)) {
     const orderId = device.serviceOrderId?.trim();
     if (!orderId) continue;
     const bundle = authorizedVisitChildBundle(orderId, groupId);
@@ -1261,7 +1261,7 @@ const visitDeviceOverview = computed(() => {
   const groupId = visitGroupId.value;
   const overview: Record<string, { price: number | null; priceLabel: string; partsLabel: string; extraLabel: string }> = {};
   if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return overview;
-  for (const device of visitCheckout.value.devices.slice(0, 3)) {
+  for (const device of visitCheckout.value.devices.slice(0, VISIT_DEVICE_LIMIT)) {
     const id = device.serviceOrderId;
     if (!id) continue;
     const bundle = authorizedVisitChildBundle(id, groupId);
@@ -1297,7 +1297,7 @@ const pendingReadyVisitPartRequest = computed(() => {
   const groupId = visitGroupId.value;
   const checkout = visitCheckout.value;
   if (!groupId || checkout?.visitGroupId !== groupId) return null;
-  for (const device of [...checkout.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3)) {
+  for (const device of [...checkout.devices].sort((a, b) => a.sequence - b.sequence).slice(0, VISIT_DEVICE_LIMIT)) {
     const orderId = device.serviceOrderId?.trim();
     if (!orderId) continue;
     const bundle = authorizedVisitChildBundle(orderId, groupId);
@@ -1313,7 +1313,7 @@ async function readVisitPartRequestsOnce() {
   const groupId = visitGroupId.value;
   const checkout = visitCheckout.value;
   if (!groupId || checkout?.visitGroupId !== groupId || document.visibilityState === 'hidden') return;
-  const orderIds = [...new Set(checkout.devices.slice(0, 3)
+  const orderIds = [...new Set(checkout.devices.slice(0, VISIT_DEVICE_LIMIT)
     .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []))]
     .filter((orderId) => !!authorizedVisitChildBundle(orderId, groupId));
   if (!orderIds.length) return;
@@ -1373,8 +1373,8 @@ async function refreshVisitReturns() {
   const groupId = visitGroupId.value;
   const checkout = visitCheckout.value;
   if (!groupId || checkout?.visitGroupId !== groupId || document.visibilityState === 'hidden') return;
-  const ids = checkout.devices.slice(0, 3).flatMap(device => device.serviceOrderId ? [device.serviceOrderId] : []);
-  if (!ids.length || new Set(ids).size !== ids.length || checkout.devices.length > 3) return;
+  const ids = checkout.devices.slice(0, VISIT_DEVICE_LIMIT).flatMap(device => device.serviceOrderId ? [device.serviceOrderId] : []);
+  if (!ids.length || new Set(ids).size !== ids.length || checkout.devices.length > VISIT_DEVICE_LIMIT) return;
   const version = ++visitReturnsReadVersion;
   const epoch = visitPrefetchEpoch;
   if (visitReturnsGroupId.value !== groupId) visitReturns.value = {};
@@ -1417,7 +1417,7 @@ async function refreshVisitReturns() {
 }
 const visitReturnDevices = computed(() => {
   if (!visitGroupId.value || visitReturnsGroupId.value !== visitGroupId.value || visitCheckout.value?.visitGroupId !== visitGroupId.value) return [];
-  return [...visitCheckout.value.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3).map(device => ({
+  return [...visitCheckout.value.devices].sort((a, b) => a.sequence - b.sequence).slice(0, VISIT_DEVICE_LIMIT).map(device => ({
     ...device, ledger: device.serviceOrderId ? visitReturns.value[device.serviceOrderId] : undefined,
   }));
 });
@@ -1710,7 +1710,7 @@ watch(
     const currentGroupId = visitGroupId.value;
     const isKnownSibling = !!currentGroupId
       && visitCheckout.value?.visitGroupId === currentGroupId
-      && visitCheckout.value.devices.slice(0, 3).some((device) => device.serviceOrderId === nextId);
+      && visitCheckout.value.devices.slice(0, VISIT_DEVICE_LIMIT).some((device) => device.serviceOrderId === nextId);
     const cachedBundle = queryClient.getQueryData<TechnicianJobBundle>(queryKeys.orders.technicianDetail(nextId))
       ?? (isKnownSibling ? authorizedVisitChildBundle(nextId, currentGroupId!) : null);
     const cachedSiblingReady = isKnownSibling
@@ -2349,7 +2349,7 @@ const reportTargetOrderId = ref<string | null>(null);
 const reportDevices = computed(() => {
   const groupId = visitGroupId.value;
   if (!groupId || visitCheckout.value?.visitGroupId !== groupId) return [];
-  return visitCheckout.value.devices.slice(0, 3).flatMap(device => {
+  return visitCheckout.value.devices.slice(0, VISIT_DEVICE_LIMIT).flatMap(device => {
     const id = device.serviceOrderId;
     const child = id ? authorizedVisitChildBundle(id, groupId)?.job : null;
     return id && child && child.arrivalVerified && !child.workStopped && device.state === 'open'

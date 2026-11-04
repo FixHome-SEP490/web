@@ -2,7 +2,7 @@
 //
 // The appliances the assistant suggested booking together, handed from the
 // chat (floating assistant or the AI booking form) to the booking form that
-// builds a visit of up to three devices. Kept in memory for one hand-over and
+// builds a visit of up to five devices. Kept in memory for one hand-over and
 // tied to the conversation it came from, so a stale draft never fills a form
 // for another conversation. Nothing is persisted.
 

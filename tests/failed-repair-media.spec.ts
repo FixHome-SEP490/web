@@ -71,7 +71,7 @@ describe('live failed-repair rebook contract at the authenticated HTTP boundary'
     getService.mockReset().mockImplementation(async id => ({ id, name: id, code: 'WM', isActive: true }));
     getPreview.mockReset().mockImplementation(async id => ({ serviceId: id, serviceCode: 'WM', status: 'FIXED_PRICE', bindingReady: true, selectedVariant: { variantCode: 'WM-01-02', variantId: 'variant', scopeVi: 'Fixture', laborPriceVnd: 150000 }, possibleVariants: [], missingAttributes: [], priceRange: null, messageVi: '' }));
   });
-  it.each([['B'], ['B', 'C'], ['A', 'B', 'C']])('GET is read-only; final POST uses the exact server failed set %j', async (...ids) => {
+  it.each([['B'], ['B', 'C'], ['A', 'B', 'C'], ['A', 'B', 'C', 'D'], ['A', 'B', 'C', 'D', 'E']])('GET is read-only; final POST uses the exact server failed set %j', async (...ids) => {
     const data = raw(ids);
     get.mockResolvedValue({ data: { data } });
     post.mockResolvedValue({ data: { data: { targetKind: data.targetKind, bookingId: ids.length === 1 ? 'new-B' : null, visitGroupId: ids.length > 1 ? 'new-visit' : null, items: ids.map(id => ({ sourceBookingId: id, sourceIncidentId: `incident-${id}`, bookingId: `new-${id}` })) } } });
