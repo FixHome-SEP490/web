@@ -285,6 +285,14 @@ describe('useAiConversation several appliances', () => {
     expect(c.pinnedDevices.value.map((d) => d.deviceType)).toEqual(['washing_machine', 'refrigerator']);
   });
 
+  it('retains five selected physical devices and caps a sixth suggestion', async () => {
+    const selected = Array.from({ length: 6 }, (_, index) => ({ ...devices[0]!, nameVi: `Máy ${index + 1}` }));
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [devices[0]!.service], devices: selected }));
+    const c = useAiConversation({ dwellMs: 0 });
+    await c.sendTurn('Có nhiều máy giặt không vắt', []);
+    expect(c.pinnedDevices.value.map(device => device.nameVi)).toEqual(['Máy 1', 'Máy 2', 'Máy 3', 'Máy 4', 'Máy 5']);
+  });
+
   it('keeps the list over a plain question, drops it when the conversation is about one appliance again', async () => {
     analyze
       .mockResolvedValueOnce(reply({ recommendedServices: [devices[0].service], devices }))

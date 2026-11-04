@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One visit of up to three devices (PO 21/10/2026): one technician with every
+ * One visit of up to five devices (PO 21/10/2026): one technician with every
  * skill takes them all, each device is quoted and repaired on its own, and the
  * customer pays once, after every device has its result, for the devices
  * repaired only. Matching, the one reschedule and cancelling act on the whole
@@ -25,7 +25,7 @@ import type { FundedReservation, FundedTerminalReceipt } from '../../api/funded-
 import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { useVisitOrderDetails, type VisitOrderDetails as OrderDetails } from '../../composables/useVisitOrderDetails';
-import { visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
+import { VISIT_DEVICE_LIMIT, visitGroupsApi, type Visit, type VisitCheckout, type VisitDeviceState } from '../../api/visit-groups.api';
 import { cashIntentsApi, type CashIntentCapability } from '../../api/cash-intents.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { sessionLabel, upcomingSessions, type BookingSlot, type SessionOption } from '../../utils/booking-session';
@@ -165,7 +165,7 @@ async function loadChildOrderDetails(devices: VisitCheckout['devices'], lookupVe
     const item = visit.value?.items.find((candidate) => candidate.booking?.id === device.bookingId);
     if (!item) continue;
     childOrders.push({ serviceOrderId, sequence: item.sequence, bookingId: device.bookingId });
-    if (childOrders.length === 3) break;
+    if (childOrders.length === VISIT_DEVICE_LIMIT) break;
   }
 
   if (childOrders.length === 0) {
@@ -292,9 +292,9 @@ watch(visitId, () => {
 });
 
 const checkoutOrderIds = computed(() => [...new Set((checkout.value?.devices ?? [])
-  .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []))].slice(0, 3));
+  .flatMap((device) => device.serviceOrderId?.trim() ? [device.serviceOrderId.trim()] : []))].slice(0, VISIT_DEVICE_LIMIT));
 const visitBookingIds = computed(() => [...new Set((visit.value?.items ?? [])
-  .flatMap(item => item.booking?.id?.trim() ? [item.booking.id.trim()] : []))].slice(0, 3));
+  .flatMap(item => item.booking?.id?.trim() ? [item.booking.id.trim()] : []))].slice(0, VISIT_DEVICE_LIMIT));
 const stopOrderSubscriptions = new Map<string, () => void>();
 const stopBookingSubscriptions = new Map<string, () => void>();
 const stopVisitResync = onResync(scheduleVisitRefresh);

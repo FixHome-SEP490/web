@@ -43,7 +43,7 @@ vi.mock('../src/api/catalog-pricing.api', () => ({
 }));
 vi.mock('../src/api/profile.api', () => ({ profileApi: { getAddresses } }));
 vi.mock('../src/api/visit-groups.api', () => ({
-  VISIT_DEVICE_LIMIT: 3,
+  VISIT_DEVICE_LIMIT: 5,
   visitGroupsApi: { contact: visitContact, create: createVisit, consultation: createConsultation },
 }));
 vi.mock('../src/utils/image-for-ai', async (importOriginal) => {
@@ -451,6 +451,40 @@ describe('NewBookingWizardPage A+ service finder', () => {
       description: 'Máy phòng khách bẩn',
       photoUploadIds: ['photo-single'],
     }));
+    wrapper.unmount();
+  });
+
+  it.each([2, 3, 4, 5])('saves and submits %i physical machines without requiring five', async count => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 5, hotline: null });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="visit-opt-in-action"]').trigger('click');
+    for (let index = 0; index < count; index++) {
+      await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+      await wrapper.get('[data-testid="booking-description"]').setValue(`Physical machine ${index + 1}`);
+      await wrapper.get(index === count - 1 ? '[data-testid="step1-next"]' : '[data-testid="visit-add-device-step1"]').trigger('click');
+    }
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid^="visit-review-device-"]')).toHaveLength(count);
+    if (count === 5) {
+      expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);
+      await wrapper.get('[data-testid="visit-review-consultation"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Mỗi lượt tối đa 5 máy');
+      expect(createConsultation).not.toHaveBeenCalled();
+      await wrapper.get('[data-testid="visit-consultation-submit"]').trigger('click');
+      await flushPromises();
+      expect(createConsultation).toHaveBeenCalledWith(expect.objectContaining({ message: 'Tôi muốn sửa nhiều hơn 5 máy. Nhờ Quản lý dịch vụ liên hệ tư vấn.' }));
+      await wrapper.get('[data-testid="step1-next"]').trigger('click');
+      await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+      await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    }
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(createVisit).toHaveBeenCalledTimes(1);
+    expect(createVisit.mock.calls[0]![0].items.map((item: { description: string }) => item.description)).toEqual(Array.from({ length: count }, (_, index) => `Physical machine ${index + 1}`));
+    expect(createBooking).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

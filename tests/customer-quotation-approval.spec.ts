@@ -12,7 +12,7 @@ const { http, visits, listeners } = vi.hoisted(() => ({
   listeners: new Map<string, () => void>(),
 }));
 vi.mock('../src/api/client', () => ({ default: http }));
-vi.mock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visits }));
+vi.mock('../src/api/visit-groups.api', () => ({ VISIT_DEVICE_LIMIT: 5, visitGroupsApi: visits }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({}) }));
 vi.mock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: () => () => undefined } }));
 vi.mock('../src/services/live-updates', () => ({

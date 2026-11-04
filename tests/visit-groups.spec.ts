@@ -73,6 +73,13 @@ describe('visit-groups api', () => {
     expect(await visitGroupsApi.contact()).toEqual({ enabled: false, deviceLimit: 3, hotline: null });
   });
 
+  it.each([[3, 3], [5, 5], [6, 3], [0, 3], [4.5, 3], ['5', 3], [null, 3]])('bounds advertised deviceLimit %s to %s', async (advertised, expected) => {
+    const { visitGroupsApi, VISIT_DEVICE_LIMIT } = await import('../src/api/visit-groups.api');
+    expect(VISIT_DEVICE_LIMIT).toBe(5);
+    client.get.mockResolvedValue({ data: { data: { enabled: true, deviceLimit: advertised } } });
+    expect((await visitGroupsApi.contact()).deviceLimit).toBe(expected);
+  });
+
   it('keeps an unconfigured hotline empty and sends consultation only when requested', async () => {
     const { visitGroupsApi } = await import('../src/api/visit-groups.api');
     client.get.mockResolvedValue({ data: { data: { enabled: true, deviceLimit: 3, hotline: null } } });
@@ -113,7 +120,7 @@ describe('customer visit page', () => {
   async function mountPage(realChooser = false) {
     vi.resetModules();
     vi.doMock('../src/api/platform-continuation.api', () => ({ customerContinuationApi: { get: continuationGet } }));
-    vi.doMock('../src/api/visit-groups.api', () => ({ visitGroupsApi: visitApi }));
+    vi.doMock('../src/api/visit-groups.api', () => ({ VISIT_DEVICE_LIMIT: 5, visitGroupsApi: visitApi }));
     vi.doMock('../src/api/orders.api', () => ({ ordersApi: orders }));
     vi.doMock('../src/api/customer-wallet.api', () => ({ customerWalletApi: wallet }));
     vi.doMock('../src/api/funded-checkout.api', async importOriginal => ({ ...await importOriginal<typeof import('../src/api/funded-checkout.api')>(), fundedCheckoutApi: funded }));
@@ -168,6 +175,18 @@ describe('customer visit page', () => {
     push.mockClear();
     wallet.summary.mockResolvedValue({ balance: 1000000 });
     visitApi.get.mockResolvedValue(visit);
+  });
+
+  it.each([4, 5])('loads all %i child details and live subscriptions for a single checkout', async count => {
+    const items = Array.from({ length: count }, (_, index) => ({ ...visit.items[0]!, id: `i${index + 1}`, sequence: index + 1, booking: { ...visit.items[0]!.booking, id: `b${index + 1}` } }));
+    visitApi.get.mockResolvedValue({ ...visit, items });
+    visitApi.checkout.mockResolvedValue(checkout({ devices: items.map(item => device(item.booking.id, { sequence: item.sequence, state: 'open' })) }));
+    const wrapper = await mountPage();
+    expect(orders.getOrder.mock.calls.map(([id]) => id)).toEqual(items.map(item => `o-${item.booking.id}`));
+    expect([...bookingListeners.keys()]).toEqual(items.map(item => item.booking.id));
+    expect([...orderListeners.keys()]).toEqual(items.map(item => `o-${item.booking.id}`));
+    expect(visitApi.checkout).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
   });
 
 

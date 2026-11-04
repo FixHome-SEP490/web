@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * One VisitGroup may contain up to three physical devices, each with its own
+ * One VisitGroup may contain up to five physical devices, each with its own
  * ServiceOrder. This is navigation only: parts, quotations and evidence still
  * belong to the selected ServiceOrder.
  */
 import { computed } from 'vue';
 import FhMoney from '../FhMoney.vue';
 import { PackageCheck } from 'lucide-vue-next';
-import type { VisitCheckout } from '../../api/visit-groups.api';
+import { VISIT_DEVICE_LIMIT, type VisitCheckout } from '../../api/visit-groups.api';
 import type { TechnicianVisitDeviceStatus } from '../../utils/technician-visit-device-status';
 import { projectTechnicianVisitDeviceStatus } from '../../utils/technician-visit-device-status';
 
@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<{
 });
 const emit = defineEmits<{ openParts: [orderId: string] }>();
 
-const devices = computed(() => [...props.devices].sort((a, b) => a.sequence - b.sequence).slice(0, 3));
+const devices = computed(() => [...props.devices].sort((a, b) => a.sequence - b.sequence).slice(0, VISIT_DEVICE_LIMIT));
 const resolved = computed(() => devices.value.filter((device) => device.state !== 'open').length);
 const nextOpen = computed(() => {
   const current = devices.value.find((device) => device.serviceOrderId === props.activeOrderId);
