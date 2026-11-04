@@ -11,6 +11,10 @@ const {
   visitContact,
   createVisit,
   createConsultation,
+  currentDraft,
+  saveDraft,
+  discardDraft,
+  submitDraft,
   push,
   route,
 } = vi.hoisted(() => ({
@@ -22,6 +26,10 @@ const {
   visitContact: vi.fn(),
   createVisit: vi.fn(),
   createConsultation: vi.fn(),
+  currentDraft: vi.fn(),
+  saveDraft: vi.fn(),
+  discardDraft: vi.fn(),
+  submitDraft: vi.fn(),
   push: vi.fn(),
   route: { query: {} as Record<string, string> },
 }));
@@ -46,6 +54,10 @@ vi.mock('../src/api/visit-groups.api', () => ({
   VISIT_DEVICE_LIMIT: 5,
   visitGroupsApi: { contact: visitContact, create: createVisit, consultation: createConsultation },
 }));
+vi.mock('../src/api/booking-drafts.api', () => ({
+  bookingDraftsApi: { current: currentDraft, save: saveDraft, discard: discardDraft, submit: submitDraft },
+}));
+vi.mock('../src/stores/auth.store', () => ({ useAuthStore: () => ({ user: { id: 'customer-1' } }) }));
 vi.mock('../src/utils/image-for-ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/utils/image-for-ai')>();
   return { ...actual, normalizeForUpload: vi.fn(async (file: File) => file) };
@@ -223,12 +235,115 @@ describe('NewBookingWizardPage A+ service finder', () => {
     visitContact.mockReset().mockResolvedValue({ enabled: false, deviceLimit: 3, hotline: null });
     createVisit.mockReset().mockResolvedValue({ id: 'visit-id' });
     createConsultation.mockReset().mockResolvedValue(undefined);
+    currentDraft.mockReset().mockResolvedValue(null);
+    saveDraft.mockReset().mockImplementation(async (snapshot: unknown, version: number | null) => ({
+      id: 'draft-1', version: version === null ? 1 : version + 1,
+      expiresAt: '2026-12-05T00:00:00.000Z', snapshot,
+    }));
+    discardDraft.mockReset().mockResolvedValue({ deleted: true });
+    submitDraft.mockReset().mockResolvedValue({ kind: 'booking', bookingId: 'booking-draft-id', visitGroupId: null });
     getService.mockReset();
     getCategories.mockReset().mockResolvedValue(sampleCategories);
     getAddresses.mockReset().mockResolvedValue([{
       id: 'addr-1', label: 'Nhà riêng', line1: '123 Test', district: 'Q1', province: 'TP.HCM', isDefault: true,
     }]);
     route.query = {};
+  });
+
+  it('writes no draft until the customer clicks the explicit save action', async () => {
+    const wrapper = await renderWizard();
+    expect(saveDraft).not.toHaveBeenCalled();
+    await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
+    await wrapper.get('[data-testid="booking-description"]').setValue('Máy lạnh chảy nước');
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    await wrapper.get('[data-testid="booking-draft-save"]').trigger('click');
+    await flushPromises();
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    const [snapshot, expectedVersion] = saveDraft.mock.calls[0]!;
+    expect(expectedVersion).toBeNull();
+    expect(snapshot).toMatchObject({ kind: 'booking', savedDeviceCount: 0, addressId: 'addr-1', items: [{
+      serviceId: 'svc-ac-clean', description: 'Máy lạnh chảy nước',
+    }] });
+    expect(snapshot).not.toHaveProperty('activeDevice');
+    expect(snapshot).not.toHaveProperty('extraDevices');
+    expect(JSON.stringify(snapshot)).not.toMatch(/previewUrl|blob:|price|quote|transcript/i);
+    wrapper.unmount();
+  });
+
+  it('restores one active device from the flat draft and shows its expiry', async () => {
+    currentDraft.mockResolvedValue({
+      id: 'draft-one', version: 2, expiresAt: '2026-12-05T00:00:00.000Z',
+      snapshot: { kind: 'booking', addressId: 'addr-1', mode: 'urgent', quantity: 1, step: 1,
+        items: [{ serviceId: 'svc-ac-clean', description: 'Máy lạnh chảy nước' }] },
+    });
+    getService.mockImplementation(async (id: string) => ({ ...sampleCategories[0].services[0], id, isActive: true }));
+    const wrapper = await renderWizard();
+    expect(wrapper.get('[data-testid="booking-draft-prompt"]').text()).toContain('05/12/2026');
+    await wrapper.get('[data-testid="booking-draft-resume"]').trigger('click');
+    await flushPromises();
+    expect((wrapper.get('[data-testid="booking-description"]').element as HTMLTextAreaElement).value).toBe('Máy lạnh chảy nước');
+    expect(wrapper.find('[data-testid="visit-devices-banner"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="booking-draft-expiry"]').text()).toContain('05/12/2026');
+    wrapper.unmount();
+  });
+
+  it('restores five visit devices, warns photos need re-upload, and submits once through the draft receipt', async () => {
+    visitContact.mockResolvedValue({ enabled: true, deviceLimit: 5, hotline: null });
+    currentDraft.mockResolvedValue({
+      id: 'draft-five', version: 4, expiresAt: '2026-12-05T00:00:00.000Z',
+      snapshot: { kind: 'visit_group', addressId: 'addr-1', mode: 'urgent', savedDeviceCount: 4, step: 1,
+        items: Array.from({ length: 5 }, (_, index) => ({
+          serviceId: 'svc-ac-clean', description: `Máy ${index + 1}`,
+          ...(index === 0 ? { photoUploadIds: ['expired-photo-upload'] } : {}),
+        })) },
+    });
+    getService.mockImplementation(async (id: string) => ({ ...sampleCategories[0].services[0], id, isActive: true }));
+    submitDraft.mockResolvedValue({ kind: 'visit_group', bookingId: null, visitGroupId: 'visit-draft-id' });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="booking-draft-resume"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid^="visit-device-"]').filter((item) => item.attributes('data-testid')?.match(/^visit-device-\d+$/))).toHaveLength(4);
+    expect(wrapper.get('[data-testid="booking-draft-photo-note"]').text()).toContain('Ảnh không được khôi phục từ bản nháp');
+    expect(wrapper.find('img[src="blob:expired-photo-upload"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="booking-summary-service"]').text()).toContain('5 thiết bị');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="mode-urgent"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(submitDraft).toHaveBeenCalledTimes(1);
+    expect(submitDraft.mock.calls[0]![0]).toBe('draft-five');
+    expect(submitDraft.mock.calls[0]![1].request.data.items).toHaveLength(5);
+    expect(submitDraft.mock.calls[0]![1].request.data.idempotencyKey).toBe(submitDraft.mock.calls[0]![1].operationKey);
+    expect(createVisit).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith('/app/visits/visit-draft-id');
+    wrapper.unmount();
+  });
+
+  it('keeps the same draft generation and operation key when retrying an uncertain submit', async () => {
+    currentDraft.mockResolvedValue({
+      id: 'draft-submit', version: 7, expiresAt: '2026-12-05T00:00:00.000Z',
+      snapshot: { kind: 'booking', addressId: 'addr-1', mode: 'urgent', quantity: 1, step: 4,
+        items: [{ serviceId: 'svc-ac-clean', description: 'Máy lạnh chảy nước' }] },
+    });
+    getService.mockImplementation(async (id: string) => ({ ...sampleCategories[0].services[0], id, isActive: true }));
+    submitDraft.mockRejectedValueOnce(new Error('network timeout')).mockResolvedValueOnce({
+      kind: 'booking', bookingId: 'booking-draft-id', visitGroupId: null,
+    });
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="booking-draft-resume"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(createBooking).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="booking-draft-submit-retry"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="booking-draft-submit-retry"]').trigger('click');
+    await flushPromises();
+    expect(submitDraft).toHaveBeenCalledTimes(2);
+    expect(submitDraft.mock.calls[1]).toEqual(submitDraft.mock.calls[0]);
+    expect(push).toHaveBeenCalledWith('/app/bookings/booking-draft-id/candidates');
+    wrapper.unmount();
   });
 
   it('shows compact categories and selects nothing by default', async () => {

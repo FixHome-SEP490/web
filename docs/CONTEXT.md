@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 12:12 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p1-group5-web-20261104
+> Cập nhật lần cuối: 2026-11-04 13:04 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p2-booking-draft-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -98,6 +98,12 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Wizard chỉ mở mức 5 khi contact API trả giới hạn hợp lệ tối đa 5; Backend cũ hoặc thiếu giới hạn giữ mức 3. Máy thứ sáu bị chặn và dùng luồng tư vấn Quản lý dịch vụ hiện có, chỉ gửi sau thao tác tường minh. Không đổi giao diện, lịch theo buổi hoặc giờ Backend; giờ mong muốn chỉ là `customerNote`.
 - Navigator, đọc child, subscription, tổng hóa đơn, group-stop receipt và parser đặt lại giữ đủ 4/5 máy. Gián đoạn cho phép subset nguồn server xác minh; sửa thất bại vẫn xác nhận toàn bộ tập failed do server trả. Giới hạn ảnh bằng chứng vẫn 3; Web AI consumer giữ tối đa 5 máy, không sửa AI service.
 - Mobile giữ mức 3 theo owner, không sửa hoặc kiểm thử Mobile. Lead phụ trách Backend P1 và migration/CI/PR/merge/deploy; Web writer chỉ sửa source/tests/docs. Runtime Backend/DB thật và trình duyệt CHƯA KIỂM CHỨNG trong task này.
+
+### Bản nháp đặt lịch P2 trên Web (04/11/2026)
+
+- Khách đăng nhập có thể lưu bản nháp thủ công bằng “Lưu bản nháp”; không có tự lưu hay giỏ hàng. Có thể tiếp tục bản nháp từ máy chủ hoặc chủ động xóa. Backend quyết định giới hạn một bản nháp đang hoạt động mỗi tài khoản và hạn 30 ngày.
+- Web gửi snapshot phẳng theo allowlist Backend: địa chỉ ID, lịch, ghi chú khách không ràng buộc, urgency và tối đa 5 thiết bị với dịch vụ/mô tả/thuộc tính/biến thể/photo upload ID; metadata an toàn gồm loại luồng, số thiết bị đã lưu, số lượng và bước. Không gửi file, URL ảnh, nội dung chat hoặc giá. Khi khôi phục, Web tải lại và xác minh địa chỉ/dịch vụ/giá; ảnh không được khôi phục và khách được nhắc tải lại ảnh cần thiết.
+- Bản nháp đã lưu được gửi qua endpoint submit kèm version và operation key; lỗi kết quả chưa rõ cho phép thử lại cùng yêu cầu. Khi chưa có bản nháp, Web giữ nguyên API tạo Booking/VisitGroup hiện có. Test API/UI tập trung 56/56 PASS; typecheck, lint, build PASS. Full suite chờ CI của PR; Backend DEV, DB thật và browser đăng nhập CHƯA KIỂM CHỨNG.
 
 ### Trang Cách hoạt động W1.04 (03/11/2026)
 
@@ -463,6 +469,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
+
 - P1 max5: chỉ release Web cùng Backend P1 sau forward migration do lead xác minh; trước đó contact API giữ mức 3. Focused tests/typecheck/lint/build không chứng minh giao dịch DB, tiền/linh kiện/bảo hành thực tế hoặc E2E đăng nhập. Browser, shared DEV và Mobile parity: CHƯA KIỂM CHỨNG. Hard-refresh sau coordinated rollout; không chạy Docker/deploy hoặc ghi DB trong task writer.
 
 - Đợt rebook/voucher/history 02/11: Backend urgent/history phải được tích hợp, kiểm thử và rollout trước Web. Recovery terminal voucher/A→B→A mới qua adapter/component tests; runtime Backend đăng nhập, PSP/refund thật và Mobile NOT VERIFIED. REFUNDED hoặc hóa đơn chưa xác minh PAID giữ trạng thái chặn thu, không suy ra có thể trả lại tổng gốc. Trình duyệt cục bộ dùng fixture giả, chặn API thật ở 360/768/1440 px: địa chỉ đầy đủ, chọn địa chỉ, urgent, disclosure máy dừng, voucher held/đóng/mở lại/keyboard không reset countdown, không tràn ngang hoặc lỗi console. Không chứng minh E2E có đăng nhập, nguyên tử/idempotency DB, payment pending/PSP thật hoặc Mobile parity: NOT VERIFIED. Source Mobile đã đối chiếu booking/technician jobs, chưa có các thay đổi Web này. Backend hiện chưa cung cấp lý do rời phân công chi tiết nên không phân biệt chắc rút với bị thay thế; Web giữ nhãn trung tính. Thiếu HTTP Date thì đồng hồ chỉ báo chưa xác định. Cần hard-refresh Web sau rollout và restart Backend mới trước QA.
@@ -517,6 +525,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
 - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
 - 2026-11-03 08:00 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Giữ `priceSummary.fixed_range` là tiền công theo phạm vi cả khi hai đầu bằng nhau; hiện một số, bỏ đơn vị kế thừa và ghi rõ khảo sát/xác nhận trước sửa.
@@ -556,4 +565,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
 - 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
-- 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
