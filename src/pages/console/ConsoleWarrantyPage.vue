@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { X } from 'lucide-vue-next';
 import { FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -16,19 +15,12 @@ import {
   type StaffWarrantyClaim,
   type TechnicianWarrantyStat,
 } from '../../api/warranty-claims.api';
-import { ordersApi, type OrderEvidenceRecord } from '../../api/orders.api';
 import { useAuthStore } from '../../stores/auth';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
-  claimDisplayMeta,
-  claimOutcomeLabels,
-  declineReviewLabels,
-  inspectionResultLabels,
-  notCoveredReasonLabels,
+  managerClaimDisplayMeta,
   warrantyClaimStatusMeta,
   warrantyClaimToneClasses,
-  type InspectionResult,
-  type NotCoveredReason,
   type WarrantyClaimStatus,
 } from '../../utils/warranty-claim';
 import { getSupportErrorMessage } from './support-cases.utils';
@@ -42,9 +34,6 @@ const loading = ref(true);
 const error = ref('');
 const actionError = ref('');
 const notice = ref('');
-const detailClaim = ref<StaffWarrantyClaim | null>(null);
-// Photos of the original job, so a manager can judge the fault without leaving the panel.
-const originalEvidence = ref<OrderEvidenceRecord[]>([]);
 const page = ref(1);
 const limit = 10;
 const total = ref(0);
@@ -126,7 +115,7 @@ function onDone(updated: StaffWarrantyClaim) {
 }
 
 const pct = (value: number | null) => (value === null ? '—' : `${Math.round(value * 100)}%`);
-const meta = (claim: StaffWarrantyClaim) => claimDisplayMeta(claim);
+const meta = (claim: StaffWarrantyClaim) => managerClaimDisplayMeta(claim);
 const closed = (claim: StaffWarrantyClaim) => ['resolved', 'rejected'].includes(claim.status);
 const tabs = [
   { key: 'queue' as const, label: 'Hàng đợi' },
@@ -157,16 +146,6 @@ watch([statusFilter, unassignedOnly, reviewOnly], () => {
   else void loadQueue();
 });
 watch(page, () => void loadQueue());
-watch(detailClaim, async (claim) => {
-  originalEvidence.value = [];
-  if (!claim) return;
-  try {
-    const rows = await ordersApi.getEvidence(claim.order.id);
-    if (detailClaim.value?.id === claim.id) originalEvidence.value = rows.filter((row) => row.type === 'before' || row.type === 'after');
-  } catch {
-    // The panel is complete without the photos.
-  }
-});
 watch(tab, (next) => {
   if (next === 'rates' && !stats.value.length && !statsLoading.value) void loadStats();
 });
@@ -224,23 +203,19 @@ onMounted(() => void loadQueue());
         empty-text="Không có yêu cầu bảo hành."
       >
         <template #cell-item="{ row }">
-          <button
-            type="button"
+          <router-link
+            :to="`/console/warranty/${row.id}`"
             class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            @click="detailClaim = row"
-          >{{ row.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</button>
-          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ row.order.code }}</div>
+          >{{ row.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</router-link>
+          <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
         </template>
         <template #cell-status="{ row }">
-          <div class="flex flex-wrap gap-1">
+          <div class="flex flex-wrap items-center gap-1.5">
             <span
               class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
               :class="warrantyClaimToneClasses[meta(row).tone]"
             >{{ meta(row).label }}</span>
-            <span v-if="!row.technician && !closed(row)" class="whitespace-nowrap rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Chưa có kỹ thuật viên</span>
-            <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">Gửi sau khi hết hạn</span>
-            <span v-if="row.declineReview === 'pending'" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">{{ declineReviewLabels.pending }}</span>
-            <span v-if="row.outcomeCode === 'unfixed'" class="whitespace-nowrap rounded bg-ink-100 px-1.5 py-0.5 text-xs font-medium text-ink-700">{{ claimOutcomeLabels.unfixed }}</span>
+            <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap text-xs font-medium text-warning-700">Gửi sau hạn</span>
           </div>
         </template>
         <template #cell-technician="{ row }">
@@ -278,10 +253,6 @@ onMounted(() => void loadQueue());
               size="sm"
               @click="openModal(row, 'close')"
             >Đóng yêu cầu</FhButton>
-            <ConsoleMoreMenu v-if="['submitted', 'accepted', 'inspected'].includes(row.status)" label="Thao tác khác với yêu cầu">
-              <ConsoleMenuItem v-if="row.status === 'inspected'" @click="openModal(row, 'assign')">Phân công lại</ConsoleMenuItem>
-              <ConsoleMenuItem danger @click="openModal(row, 'reject')">Từ chối</ConsoleMenuItem>
-            </ConsoleMoreMenu>
           </div>
         </template>
       </ConsoleTable>
@@ -320,73 +291,6 @@ onMounted(() => void loadQueue());
         <template #cell-declineRate="{ row }"><span class="whitespace-nowrap font-num">{{ pct(row.declineRate) }} ({{ row.declines }})</span></template>
       </ConsoleTable>
     </template>
-
-    <!-- Side panel with the full claim -->
-    <div v-if="detailClaim" class="fixed inset-0 z-50 flex justify-end bg-ink-950/40" @click.self="detailClaim = null" @keydown.esc="detailClaim = null">
-      <aside
-        class="flex h-full w-full max-w-md flex-col bg-white shadow-[var(--shadow-e3)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="warranty-detail-title"
-      >
-        <div class="flex items-start justify-between gap-3 border-b border-ink-100 px-5 py-4">
-          <div class="min-w-0">
-            <h2 id="warranty-detail-title" class="text-lg font-semibold text-ink-900">{{ detailClaim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</h2>
-            <router-link :to="`/console/orders/${detailClaim.order.id}`" class="font-num text-sm text-brand-700 hover:underline">{{ detailClaim.order.code }}</router-link>
-          </div>
-          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailClaim = null">
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </div>
-        <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
-          <span
-            class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
-            :class="warrantyClaimToneClasses[meta(detailClaim).tone]"
-          >{{ meta(detailClaim).label }}</span>
-          <dl class="space-y-2.5">
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Dịch vụ</dt><dd class="text-right text-ink-900">{{ detailClaim.order.serviceName }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Khách hàng</dt><dd class="text-right text-ink-900">{{ detailClaim.order.customerName }} <span class="whitespace-nowrap font-num text-ink-600">{{ detailClaim.order.customerPhone }}</span></dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Kỹ thuật viên</dt><dd class="text-right text-ink-900">{{ detailClaim.technician?.fullName || '—' }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Gửi lúc</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ formatDateTimeVN(detailClaim.submittedAt) }}</dd></div>
-          </dl>
-          <div>
-            <div class="mb-1 text-ink-500">Khách mô tả</div>
-            <p class="whitespace-pre-line text-ink-900">{{ detailClaim.description }}</p>
-          </div>
-          <div v-if="detailClaim.evidenceRefs?.length" class="flex flex-wrap gap-2">
-            <a v-for="url in detailClaim.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
-              <img :src="url" alt="Ảnh khách hàng gửi kèm" class="h-16 w-16 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
-            </a>
-          </div>
-          <div v-if="originalEvidence.length" class="space-y-1 border-t border-ink-100 pt-4">
-            <div class="text-ink-500">Ảnh trước và sau khi sửa (đơn gốc)</div>
-            <div class="flex flex-wrap gap-2">
-              <a v-for="item in originalEvidence" :key="item.id" :href="item.mediaUrl" target="_blank" rel="noopener noreferrer">
-                <img :src="item.mediaUrl" :alt="item.type === 'before' ? 'Ảnh trước khi sửa' : 'Ảnh sau khi sửa'" class="h-16 w-16 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
-              </a>
-            </div>
-          </div>
-          <div v-if="detailClaim.visit?.proposedResult" class="space-y-1 border-t border-ink-100 pt-4">
-            <div class="text-ink-500">Đề xuất của kỹ thuật viên</div>
-            <p class="font-medium text-ink-900">{{ inspectionResultLabels[detailClaim.visit.proposedResult as InspectionResult] }}</p>
-            <p v-if="detailClaim.visit.notCoveredReasonCode" class="text-ink-700">
-              Lý do: {{ notCoveredReasonLabels[detailClaim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
-            </p>
-            <p class="whitespace-pre-line text-ink-700">{{ detailClaim.visit.findings }}</p>
-          </div>
-          <div v-if="detailClaim.outcomeCode" class="border-t border-ink-100 pt-4">
-            <div class="mb-1 text-ink-500">Kết cục</div>
-            <p class="text-ink-900">
-              {{ claimOutcomeLabels[detailClaim.outcomeCode] }}<template v-if="detailClaim.refundAmount"> · {{ detailClaim.refundAmount.toLocaleString('vi-VN') }} ₫</template>
-            </p>
-          </div>
-          <div v-if="detailClaim.resolutionNotes" class="border-t border-ink-100 pt-4">
-            <div class="mb-1 text-ink-500">Đã gửi khách hàng</div>
-            <p class="text-ink-900">{{ detailClaim.resolutionNotes }}</p>
-          </div>
-        </div>
-      </aside>
-    </div>
 
     <WarrantyDecisionModal
       :claim="modalClaim"

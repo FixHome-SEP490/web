@@ -58,6 +58,51 @@ export function claimDisplayMeta(claim: {
   return claimStatusMeta(claim.status);
 }
 
+/**
+ * The same states told from the technician's side: what the customer sees as "sent" is, for the
+ * technician, a claim waiting for them to take it.
+ */
+const technicianLabels: Partial<Record<WarrantyClaimStatus, { label: string; tone: ClaimTone }>> = {
+  submitted: { label: 'Chờ bạn nhận', tone: 'warning' },
+  accepted: { label: 'Bạn đã nhận', tone: 'info' },
+  inspected: { label: 'Chờ quản lý duyệt', tone: 'warning' },
+  awaiting_customer: { label: 'Chờ khách phản hồi', tone: 'warning' },
+};
+
+export function technicianClaimDisplayMeta(claim: {
+  status: string;
+  customerResponse?: 'agreed' | 'disputed' | null;
+}): { label: string; tone: ClaimTone } {
+  // An agreed claim keeps its own label: it waits for the manager, not for the customer.
+  if (claim.status === 'awaiting_customer' && claim.customerResponse === 'agreed') return claimDisplayMeta(claim);
+  return (isKnownClaimStatus(claim.status) && technicianLabels[claim.status]) || claimDisplayMeta(claim);
+}
+
+/**
+ * One label for the service manager: what the claim is waiting for, which is also what they can do
+ * about it. "Sent" is the customer's word; for a manager it is waiting for a technician.
+ */
+export function managerClaimDisplayMeta(claim: {
+  status: string;
+  customerResponse?: 'agreed' | 'disputed' | null;
+  technician?: unknown;
+  declineReview?: 'pending' | 'valid' | 'invalid' | null;
+  noShowFlaggedAt?: string | null;
+  outcomeCode?: 'fixed' | 'unfixed' | 'rejected' | null;
+}): { label: string; tone: ClaimTone } {
+  if (claim.declineReview === 'pending') return { label: claim.noShowFlaggedAt ? 'Chờ xét không đến' : 'Chờ xét từ chối', tone: 'warning' };
+  if (claim.outcomeCode === 'unfixed') return { label: 'Không khắc phục được, đã hoàn tiền', tone: 'neutral' };
+  switch (claim.status) {
+    case 'submitted': return claim.technician ? { label: 'Chờ thợ nhận', tone: 'info' } : { label: 'Chờ phân công', tone: 'warning' };
+    case 'accepted': return { label: 'Thợ đã nhận', tone: 'info' };
+    case 'inspected': return { label: 'Chờ duyệt kết luận', tone: 'warning' };
+    case 'awaiting_customer':
+      return claim.customerResponse === 'agreed' ? { label: 'Khách đồng ý, chờ đóng', tone: 'info' } : { label: 'Chờ khách phản hồi', tone: 'warning' };
+    case 'disputed': return { label: 'Khách phản đối, chờ xem xét', tone: 'warning' };
+    default: return claimDisplayMeta(claim);
+  }
+}
+
 export type InspectionResult = 'covered_workmanship' | 'covered_part' | 'not_covered';
 
 export const inspectionResultLabels: Record<InspectionResult, string> = {
@@ -100,6 +145,19 @@ export const declineReasonLabels: Record<DeclineReason, string> = {
   on_leave: 'Đang nghỉ (hệ thống kiểm tra)',
   out_of_area: 'Ngoài khu vực nhận việc (hệ thống kiểm tra)',
   other: 'Lý do khác (quản lý xác nhận)',
+};
+
+export const faultyInspectionLabels = {
+  manufacturer: 'Lỗi nhà sản xuất, FixHome chịu',
+  installation: 'Do lắp đặt, thợ trả tiền',
+  undetermined: 'Không xác định, FixHome chịu',
+} as const;
+
+export const invoiceLineTypeLabels: Record<string, string> = { labor: 'Tiền công', parts_equipment: 'Linh kiện, vật tư' };
+export const paymentStatusLabels: Record<string, string> = { paid: 'Đã thanh toán', unpaid: 'Chưa thanh toán', refunded: 'Đã hoàn tiền' };
+export const coverageStatusLabels: Record<string, string> = { active: 'Còn hạn', expired: 'Hết hạn', voided: 'Đã huỷ', pending: 'Chưa bắt đầu' };
+export const visitStatusLabels: Record<string, string> = {
+  scheduled: 'Đã hẹn', checked_in: 'Đã có mặt', inspected: 'Đã gửi kết luận', completed: 'Đã sửa xong', cancelled: 'Đã huỷ',
 };
 
 /** A decline or missed response a manager judges before it costs the technician reputation. */

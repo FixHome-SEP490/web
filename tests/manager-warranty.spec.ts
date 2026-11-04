@@ -336,11 +336,10 @@ describe('ConsoleWarrantyPage', () => {
     await flushPromises();
 
     const text = wrapper.text();
-    expect(text).toContain('Chờ quản lý dịch vụ duyệt');
-    expect(text).toContain('Chưa có kỹ thuật viên');
-    expect(text).toContain('Gửi sau khi hết hạn');
-    expect(text).toContain('Đã đồng ý, chờ quản lý dịch vụ đóng');
-    expect(text).not.toContain('Khách đã đồng ý');
+    expect(text).toContain('Chờ duyệt kết luận');
+    expect(text).toContain('Chờ phân công');
+    expect(text).toContain('Gửi sau hạn');
+    expect(text).toContain('Khách đồng ý, chờ đóng');
     expect(text).toContain('Duyệt kết luận');
     expect(text).toContain('Phân công kỹ thuật viên');
     expect(text).toContain('Đóng yêu cầu');
@@ -361,7 +360,8 @@ describe('ConsoleWarrantyPage', () => {
     const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Chờ quản lý xét');
+    expect(wrapper.text()).toContain('Chờ xét từ chối');
+    expect(wrapper.text()).toContain('Chờ xét không đến');
     expect(wrapper.text()).toContain('Không khắc phục được, đã hoàn tiền');
     const buttons = wrapper.findAll('button').map((b) => b.text());
     expect(buttons).toContain('Xét từ chối');

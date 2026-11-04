@@ -4,6 +4,14 @@ import { flushPromises, mount } from '@vue/test-utils';
 const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../src/api/client', () => ({ default: apiClientMock }));
 
+const routerMock = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+vi.mock('vue-router', async (original) => ({ ...(await original<typeof import('vue-router')>()), useRouter: () => routerMock }));
+
+const chatMock = vi.hoisted(() => ({ openConversationForBooking: vi.fn(), toggleWidget: vi.fn() }));
+const ordersMock = vi.hoisted(() => ({ getOrder: vi.fn() }));
+vi.mock('../src/api/orders.api', async (original) => ({ ...(await original<typeof import('../src/api/orders.api')>()), ordersApi: ordersMock }));
+vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => chatMock }));
+
 const mediaMock = vi.hoisted(() => ({ upload: vi.fn() }));
 vi.mock('../src/api/media.api', () => ({
   mediaApi: mediaMock,
@@ -35,6 +43,7 @@ const claim = (overrides: Partial<StaffWarrantyClaim> = {}): StaffWarrantyClaim 
   order: {
     id: 'order-1',
     code: 'SO-1',
+    bookingId: 'booking-1',
     serviceName: 'Sửa đường nước',
     addressSummary: '12 Lê Lợi, Quận 1',
     customerName: 'Khách A',
@@ -214,16 +223,121 @@ describe('TechnicianWarrantyPage', () => {
     ]);
 
     const text = wrapper.text();
-    expect(text).toContain('Cần xử lý (4)');
-    expect(text).toContain('Đang chờ phản hồi (1)');
-    expect(text).toContain('Đã đóng (1)');
+    const count = (key: string) => wrapper.get(`[data-testid="warranty-tab-${key}"]`).text();
+    expect(count('all')).toContain('6');
+    expect(count('todo')).toContain('Cần xử lý');
+    expect(count('todo')).toContain('4');
+    expect(count('waiting')).toContain('1');
+    expect(count('closed')).toContain('1');
     for (const label of ['Nhận yêu cầu', 'Không nhận được', 'Đã đến nơi', 'Gửi kết luận kiểm tra', 'Báo đã bảo hành xong']) {
       expect(text).toContain(label);
     }
-    expect(text).toContain('Kết luận bạn đã đề xuất');
-    expect(text).toContain('Khách sử dụng sai cách');
-    expect(text).toContain('Đã giải thích cho khách.');
-    expect(wrapper.find('a[href="tel:0911222333"]').exists()).toBe(true);
+    // The list stays short: the long parts only show in the detail panel.
+    expect(wrapper.find('button[aria-label^="Xem chi tiết"]').exists()).toBe(true);
+    expect(text).not.toContain('Kết luận bạn đã đề xuất');
+    expect(text).not.toContain('Đã giải thích cho khách.');
+    expect(wrapper.find('[data-testid="warranty-claim-detail"]').exists()).toBe(false);
+  });
+
+  it('filters the list by group with the pills, like the jobs page', async () => {
+    const wrapper = await mountPage([
+      claim({ id: 'a', status: 'submitted' }),
+      claim({ id: 'e', status: 'inspected', visit: visit({ status: 'inspected', proposedResult: 'covered_part', findings: 'Nứt mối ghép' }) }),
+      claim({ id: 'f', status: 'rejected' }),
+    ]);
+    const shown = () => wrapper.findAll('li[data-testid^="warranty-claim-"]').map((li) => li.attributes('data-testid'));
+    expect(shown()).toEqual(['warranty-claim-a', 'warranty-claim-e', 'warranty-claim-f']);
+
+    await wrapper.get('[data-testid="warranty-tab-waiting"]').trigger('click');
+    expect(shown()).toEqual(['warranty-claim-e']);
+    expect(wrapper.get('[data-testid="warranty-tab-waiting"]').attributes('aria-selected')).toBe('true');
+
+    await wrapper.get('[data-testid="warranty-tab-closed"]').trigger('click');
+    expect(shown()).toEqual(['warranty-claim-f']);
+  });
+
+  it('opens the claim page when the row or the arrow is clicked, not the buttons on it', async () => {
+    routerMock.push.mockClear();
+    const wrapper = await mountPage([claim({ id: 'a', status: 'submitted' })]);
+
+    await wrapper.get('[data-testid="warranty-claim-a"]').trigger('click');
+    expect(routerMock.push).toHaveBeenLastCalledWith({ name: 'tech-warranty-detail', params: { id: 'a' } });
+
+    routerMock.push.mockClear();
+    await wrapper.get('button[aria-label^="Xem chi tiết"]').trigger('click');
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+
+    routerMock.push.mockClear();
+    await wrapper.findAll('button').find((b) => b.text() === 'Nhận yêu cầu')!.trigger('click');
+    expect(routerMock.push).not.toHaveBeenCalled();
+  });
+
+  it('names each state from the technician side, not the customer side', async () => {
+    const wrapper = await mountPage([
+      claim({ id: 'a', status: 'submitted' }),
+      claim({ id: 'b', status: 'accepted', visit: visit() }),
+      claim({ id: 'e', status: 'inspected', visit: visit({ status: 'inspected', proposedResult: 'covered_part', findings: 'Nứt mối ghép' }) }),
+      claim({ id: 'w', status: 'awaiting_customer' }),
+      claim({ id: 'g', status: 'awaiting_customer', customerResponse: 'agreed' }),
+    ]);
+    const label = (id: string) => wrapper.get(`[data-testid="warranty-claim-${id}"]`).text();
+    expect(label('a')).toContain('Chờ bạn nhận');
+    expect(label('a')).not.toContain('Đã gửi yêu cầu');
+    expect(label('b')).toContain('Bạn đã nhận');
+    expect(label('e')).toContain('Chờ quản lý duyệt');
+    expect(label('w')).toContain('Chờ khách phản hồi');
+    expect(label('g')).toContain('Đã đồng ý, chờ quản lý dịch vụ đóng');
+  });
+
+  it('keeps the row short like the jobs page: customer with phone, address, contact buttons; no photos or conclusion', async () => {
+    const wrapper = await mountPage([
+      claim({ id: 'e', status: 'inspected', evidenceRefs: ['https://cdn.test/a.jpg'], visit: visit({ status: 'inspected', proposedResult: 'not_covered', notCoveredReasonCode: 'customer_misuse', findings: 'Khách tự tháo van' }) }),
+    ]);
+    const row = wrapper.get('[data-testid="warranty-claim-e"]');
+    expect(row.text()).toContain('Khách A');
+    expect(row.text()).toContain('0911222333');
+    expect(row.text()).toContain('Lê Lợi, Quận 1');
+    expect(row.text()).not.toContain('Chỉ đường');
+    expect(row.text()).toContain('Nhắn tin');
+    expect(row.get('a[href="tel:0911222333"]').text()).toContain('Gọi điện');
+    expect(row.find('img').exists()).toBe(false);
+    expect(row.text()).not.toContain('Kết luận bạn đã đề xuất');
+    expect(row.text()).not.toContain('Khách tự tháo van');
+  });
+
+  it('lets the technician call or message the customer only after taking the claim', async () => {
+    const wrapper = await mountPage([
+      claim({ id: 'new', status: 'submitted' }),
+      claim({ id: 'mine', status: 'accepted', visit: visit() }),
+      claim({ id: 'closed', status: 'rejected' }),
+    ]);
+    const reach = (id: string) => {
+      const row = wrapper.get(`[data-testid="warranty-claim-${id}"]`);
+      return { call: row.find('a[href^="tel:"]').exists(), message: row.findAll('button').some((b) => b.text() === 'Nhắn tin') };
+    };
+    expect(reach('new')).toEqual({ call: false, message: false });
+    expect(reach('mine')).toEqual({ call: true, message: true });
+    expect(reach('closed')).toEqual({ call: true, message: true });
+  });
+
+  it('reads the booking from the order when the server does not send it with the claim', async () => {
+    ordersMock.getOrder.mockResolvedValueOnce({ id: 'order-1', bookingId: 'booking-from-order' });
+    chatMock.openConversationForBooking.mockClear();
+    const wrapper = await mountPage([claim({ id: 'a', status: 'accepted', visit: visit(), order: { ...claim().order, bookingId: undefined } })]);
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Nhắn tin')!.trigger('click');
+    await flushPromises();
+
+    expect(ordersMock.getOrder).toHaveBeenCalledWith('order-1');
+    expect(chatMock.openConversationForBooking).toHaveBeenCalledWith('booking-from-order');
+  });
+
+  it('opens the conversation of the booking from the message button', async () => {
+    const wrapper = await mountPage([claim({ id: 'a', status: 'accepted', visit: visit(), order: { ...claim().order, bookingId: 'booking-9' } })]);
+    await wrapper.findAll('button').find((b) => b.text() === 'Nhắn tin')!.trigger('click');
+    await flushPromises();
+    expect(chatMock.openConversationForBooking).toHaveBeenCalledWith('booking-9');
+    expect(chatMock.toggleWidget).toHaveBeenCalledWith(true);
   });
 
   it('shows an empty state and a load error', async () => {
@@ -260,7 +374,7 @@ describe('TechnicianWarrantyPage', () => {
     apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ id: 'a', technician: null }) } });
     await wrapper.findAll('button').find((b) => b.text() === 'Gửi lý do')!.trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('Cần xử lý (1)');
+    expect(wrapper.get('[data-testid="warranty-tab-todo"]').text()).toContain('1');
     expect(wrapper.text()).toContain('Đã trả yêu cầu về cho quản lý dịch vụ');
   });
   it('asks the server for 20 claims a page and moves to the next page', async () => {
@@ -278,7 +392,7 @@ describe('TechnicianWarrantyPage', () => {
     await flushPromises();
     expect(apiClientMock.get).toHaveBeenLastCalledWith('/warranty-claims/mine', { params: { page: 2, pageSize: 20 } });
     expect(wrapper.find('[data-testid="warranty-claim-p1-0"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Đã đóng (1)');
+    expect(wrapper.get('[data-testid="warranty-tab-closed"]').text()).toContain('1');
     expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('21–23 / 23');
   });
 });
