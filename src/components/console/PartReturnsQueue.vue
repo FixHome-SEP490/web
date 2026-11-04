@@ -24,6 +24,7 @@ import {
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
+import { warehouseReturnAccepted } from '../../utils/warehouse-fulfillment';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
 
 const emit = defineEmits<{ (e: 'count', value: number | null): void }>();
@@ -32,6 +33,7 @@ const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
 
 const returnQueue = ref<PartCustodyReturnRecord[]>([]);
+const warehouseAcceptedRequests = ref<Record<string, boolean>>({});
 const returnsLoading = ref(true);
 const returnsUnavailable = ref(false);
 const returnsLoadError = ref(false);
@@ -142,6 +144,14 @@ const loadReturns = async () => {
   try {
     const rows = await partRequestsApi.getPendingReturns();
     if (version !== returnsLoadVersion) return;
+    const requestIds = [...new Set(rows.map((row) => row.partRequestId))];
+    warehouseAcceptedRequests.value = {};
+    await Promise.all(requestIds.map(async (requestId) => {
+      try {
+        const allocation = await partRequestsApi.getWarehouseAllocation(requestId);
+        if (version === returnsLoadVersion && allocation.mode === 'warehouse') warehouseAcceptedRequests.value[requestId] = true;
+      } catch { /* Legacy or unavailable allocation never implies a warehouse stock return. */ }
+    }));
     const drafts: Record<string, number> = {};
     for (const row of rows) {
       const key = returnKey(row);
@@ -184,9 +194,13 @@ const handleAcceptReturn = async (row: PartCustodyReturnRecord) => {
     });
     showToast(
       'success',
-      quantity < pendingDeclaredQty(row)
-        ? 'Đã ghi nhận số lượng nhận thực tế. Phần còn lại vẫn chờ nhận.'
-        : 'Đã ghi nhận số linh kiện đã nhận.',
+      warehouseAcceptedRequests.value[row.partRequestId]
+        ? quantity < pendingDeclaredQty(row)
+          ? 'Đã nhận một phần tại kho và cập nhật tồn thực tế. Phần còn lại vẫn chờ nhận.'
+          : 'Đã nhận linh kiện tại kho và cập nhật tồn thực tế.'
+        : quantity < pendingDeclaredQty(row)
+          ? 'Đã ghi nhận số lượng nhận thực tế. Phần còn lại vẫn chờ nhận.'
+          : 'Đã ghi nhận số linh kiện đã nhận.',
     );
     await loadReturns();
   } catch (err: unknown) {
@@ -273,6 +287,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
               <div class="inline-flex items-baseline gap-1"><dt>Khai trả{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.declaredQty }}<span aria-hidden="true" class="ml-3 font-sans font-normal text-ink-600">{{ ' · ' }}</span></dd></div>
               <div class="inline-flex items-baseline gap-1"><dt>Đã nhận{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.managerAcceptedQty }}</dd></div>
             </dl>
+            <p v-if="warehouseAcceptedRequests[row.partRequestId] && warehouseReturnAccepted('warehouse', row.managerAcceptedQty)" class="text-sm font-medium text-success-700" :data-testid="`warehouse-returned-${row.partRequestItemId}`">Đã nhận lại tại kho theo xác nhận thực tế.</p>
             <div v-if="canOperate" class="flex flex-wrap items-end gap-2">
               <div>
                 <label :for="`accept-qty-${returnKey(row)}`" class="mb-1 block text-xs font-medium text-ink-700">Số lượng nhận thực tế</label>

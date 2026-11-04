@@ -31,6 +31,7 @@ import {
   type PartCustodyReturnRecord,
   type DeclareReturnPayload,
   type FulfillmentMethod,
+  type WarehouseAllocation,
 } from '../api/part-requests.api';
 import { usePartsCatalogPicker } from '../composables/usePartsCatalogPicker';
 import { onOrderChange, whileOffline } from '../services/live-updates';
@@ -38,6 +39,7 @@ import type { FixHomePart } from '../api/admin-parts.api';
 import { vnDateTimeString } from '../utils/vn-time';
 import { technicianUsageLimit } from '../utils/technician-workflow';
 import { partCustodyQuantities } from '../utils/part-custody-quantities';
+import { canTechnicianAcknowledgeWarehousePickup } from '../utils/warehouse-fulfillment';
 
 const props = defineProps<{
   orderId: string;
@@ -70,6 +72,9 @@ const backgroundSyncError = ref(false);
 const actionSuccess = ref<string | null>(null);
 
 const partRequests = ref<PartRequest[]>([]);
+const warehouseAllocations = ref<Record<string, WarehouseAllocation | null>>({});
+const warehouseAllocationErrors = ref<Record<string, boolean>>({});
+const warehouseAllocationLoading = ref<Record<string, boolean>>({});
 const partRequestsLoaded = ref(false);
 const requestDetailOverrides = ref<Record<string, boolean>>({});
 const isRequestExpanded = (id: string, group: string) => requestDetailOverrides.value[id] ?? group === 'action';
@@ -334,7 +339,7 @@ const requestGroups = computed(() => {
     { key: 'resolved', label: 'Đã xử lý', requests: [] as PartRequest[] },
   ];
   for (const request of partRequests.value) {
-    const handoverReady = (request.fulfillmentMethod === 'pickup' && request.status === 'ready') ||
+    const handoverReady = canReceivePickup(request) ||
       (request.fulfillmentMethod === 'delivery' && request.status === 'delivering');
     const usagePending = request.items.some(item => item.partSource === 'fixhome' && (!item.usageStatus || item.usageStatus === 'pending'));
     const returnNeedsDeclaration = request.items.some(item => {
@@ -448,6 +453,7 @@ const loadPartRequests = async (quiet = false) => {
     const records = await partRequestsApi.getByOrderId(props.orderId);
     if (version !== requestsLoadVersion) return;
     partRequests.value = records;
+    await loadWarehouseAllocations(records, version);
     partRequestsLoaded.value = true;
     backgroundSyncError.value = false;
     emit('requests', records);
@@ -464,6 +470,28 @@ const loadPartRequests = async (quiet = false) => {
     if (version === requestsLoadVersion) loading.value = false;
   }
 };
+
+async function loadWarehouseAllocations(records: PartRequest[], version: number) {
+  const pickups = records.filter((request) => request.fulfillmentMethod === 'pickup');
+  warehouseAllocations.value = {};
+  warehouseAllocationErrors.value = {};
+  await Promise.all(pickups.map(async (request) => {
+    warehouseAllocationLoading.value[request.id] = true;
+    try {
+      const allocation = await partRequestsApi.getWarehouseAllocation(request.id);
+      if (version === requestsLoadVersion) warehouseAllocations.value[request.id] = allocation;
+    } catch {
+      if (version === requestsLoadVersion) warehouseAllocationErrors.value[request.id] = true;
+    } finally {
+      if (version === requestsLoadVersion) warehouseAllocationLoading.value[request.id] = false;
+    }
+  }));
+}
+const warehouseAllocationFor = (request: PartRequest) => warehouseAllocations.value[request.id] ?? null;
+const needsWarehouseReceipt = (request: PartRequest) => request.fulfillmentMethod === 'pickup' && warehouseAllocationFor(request)?.mode === 'warehouse';
+const canReceivePickup = (request: PartRequest) => needsWarehouseReceipt(request)
+  ? canTechnicianAcknowledgeWarehousePickup(warehouseAllocationFor(request))
+  : request.fulfillmentMethod === 'pickup' && warehouseAllocationFor(request)?.mode === 'legacy' && request.status === 'ready';
 
 const loadReturns = async () => {
   const version = ++returnsLoadVersion;
@@ -1325,6 +1353,20 @@ const getStatusBadgeClass = (status: string) => {
             <strong>Lý do:</strong> {{ pr.reason }}
           </p>
 
+          <section v-if="pr.fulfillmentMethod === 'pickup' && (warehouseAllocationFor(pr)?.mode === 'warehouse' || warehouseAllocationLoading[pr.id] || warehouseAllocationErrors[pr.id])" class="space-y-1 rounded-lg border border-ink-200 bg-ink-25 p-3 text-xs" :data-testid="`tech-warehouse-allocation-${pr.id}`">
+            <p v-if="warehouseAllocationLoading[pr.id]" class="text-ink-600">Đang kiểm tra kho được phân bổ…</p>
+            <p v-else-if="warehouseAllocationErrors[pr.id]" class="text-warning-800">Chưa kiểm tra được trạng thái kho. Không xác nhận nhận hàng cho tới khi được đối chiếu.</p>
+            <template v-else-if="warehouseAllocationFor(pr)?.mode === 'warehouse'">
+              <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'manual_assistance' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
+              <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
+              <p v-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+              <p v-if="warehouseAllocationFor(pr)?.status === 'manual_assistance'" class="text-warning-800">Chưa có một kho đủ linh kiện cho toàn bộ yêu cầu. Cần quản lý hỗ trợ thủ công; chưa thể nhận hàng.</p>
+              <p v-else-if="warehouseAllocationFor(pr)?.status === 'reserved' || warehouseAllocationFor(pr)?.status === 'ready'" class="text-ink-700">Đang chờ quản lý bàn giao trực tiếp. Chưa có xác nhận đã cấp linh kiện.</p>
+              <p v-else-if="warehouseAllocationFor(pr)?.status === 'handed_over'" class="font-medium text-brand-800">Quản lý đã bàn giao thực tế. Nhập mã QR nhận hàng riêng do quản lý đưa cho bạn.</p>
+              <p v-else-if="warehouseAllocationFor(pr)?.status === 'received'" class="font-medium text-success-700">Đã xác nhận nhận linh kiện.</p>
+            </template>
+          </section>
+
           <!-- Delivery Shipping Fee if any -->
           <div v-if="pr.shippingFee > 0" class="text-xs text-brand-700 font-medium">
             Phí giao hàng: <FhMoney :amount="pr.shippingFee" />
@@ -1344,7 +1386,7 @@ const getStatusBadgeClass = (status: string) => {
           <!-- QR Handover Action (When READY or DELIVERING) -->
           <div
             v-if="
-              (pr.fulfillmentMethod === 'pickup' && pr.status === 'ready') ||
+              canReceivePickup(pr) ||
               (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering')
             "
             class="p-3 rounded-lg bg-brand-50 border border-brand-200 space-y-2"
@@ -1352,7 +1394,7 @@ const getStatusBadgeClass = (status: string) => {
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 text-brand-900 font-bold">
                 <QrCode :size="16" class="text-brand-600 shrink-0" />
-                <span>Linh kiện đã sẵn sàng bàn giao!</span>
+                <span>{{ needsWarehouseReceipt(pr) ? 'Nhập mã nhận riêng sau khi quản lý bàn giao' : 'Linh kiện đã sẵn sàng bàn giao!' }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <FhButton
@@ -1372,7 +1414,7 @@ const getStatusBadgeClass = (status: string) => {
               <input
                 v-model="qrTokenInput"
                 type="text"
-                placeholder="Nhập mã trên phiếu (VD: FH-PR-...)"
+                :placeholder="needsWarehouseReceipt(pr) ? 'Nhập mã nhận hàng riêng do quản lý cung cấp' : 'Nhập mã bàn giao'"
                 class="flex-1 min-w-[200px] text-xs rounded border border-brand-300 p-2 bg-white"
               />
               <FhButton

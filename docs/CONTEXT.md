@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 13:53 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: warranty-cost-sla-20261104
+> Cập nhật lần cuối: 2026-11-04 18:36 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,14 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Kho W1 và nhận linh kiện W2 trên Web (04/11/2026)
+
+- `/console/warehouses` mở cho Admin và quản lý dịch vụ; Backend chỉ trả kho được giao cho quản lý đang đăng nhập. Admin tạo/sửa/xóa kho và chọn quản lý dịch vụ đang hoạt động từ danh sách tài khoản hiện có. Kho mới chưa có tồn.
+- Web đọc danh mục SKU đang hoạt động, không nhập mã linh kiện tự do. Tồn và lịch sử đọc từ `/warehouses/:id/stock` và `/warehouses/:id/movements`; điều chỉnh dùng `STOCK_IN`/`CORRECTION` theo enum Backend (`stock_in`/`correction`) và `idempotencyKey`. Không tạo kho hoặc tồn giả.
+- Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Khi chưa có dữ liệu khoảng cách, Web ghi rõ chưa xác minh và không hiện km/ETA.
+- Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
+- Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
 
 ### VisitGroup P1 tối đa 5 thiết bị trên Web (04/11/2026)
 
@@ -470,6 +478,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- W1/W2 Web đã gộp `origin/dev` `1110b4a` và đẩy lên PR #209; chưa merge/deploy. Chờ CI Web và Backend W2 PR #195 cùng migration/reconciliation trước DEV rollout. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
 - Bảo hành 04/11: Mobile chưa cập nhật nên chưa có luồng tự chọn linh kiện, đóng `unfixed` hay xét từ chối; thợ dùng Mobile vẫn gửi lý do `busy` (vào hàng chờ xét) và gửi kết luận lỗi linh kiện không kèm ảnh sẽ bị Backend từ chối. Màn Console chưa có bộ chọn nhiều linh kiện; Backend nhận nhiều.
 - P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
 
@@ -527,9 +536,11 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
+- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
 - 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
 - 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
-- 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
+ - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
 - 2026-11-04 12:10 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Trang yêu cầu linh kiện của SM thêm loại Bảo hành và bước kiểm tra linh kiện hỏng trước khi chuẩn bị xong.
 - 2026-11-04 11:25 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Console bảo hành: xét từ chối hoặc không đến, đóng không khắc phục được kèm hoàn tiền, lý do đổi kết luận, chọn linh kiện khi lỗi do công, ảnh đơn gốc; thợ thấy lý do từ chối nào được kiểm tra.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
@@ -566,4 +577,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
-- 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa

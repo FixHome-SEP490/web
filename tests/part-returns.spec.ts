@@ -4,6 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 const { partRequestsApi, partsCatalogApi, apiClientMock, auth } = vi.hoisted(() => ({
   partRequestsApi: {
     getByOrderId: vi.fn(),
+    getWarehouseAllocation: vi.fn(),
     createPreRepair: vi.fn(),
     receiveByQr: vi.fn(),
     updateItemUsage: vi.fn(),
@@ -118,6 +119,7 @@ beforeEach(() => {
   partRequestsApi.getByOrderId.mockResolvedValue([]);
   partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
   partRequestsApi.getPendingReturns.mockResolvedValue([]);
+  partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'legacy', status: null });
   partRequestsApi.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
   partRequestsApi.getAll.mockResolvedValue({ data: [], total: 0 });
 });
@@ -381,6 +383,26 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
     wrapper.unmount();
   });
 
+  it('confirms warehouse stock was updated only after the SM acceptance succeeds', async () => {
+    partRequestsApi.getPendingReturns
+      .mockResolvedValueOnce([returnRecord({ declaredQty: 2 })])
+      .mockResolvedValueOnce([]);
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'warehouse', status: 'received' });
+    partRequestsApi.acceptReturn.mockResolvedValue(null);
+
+    const wrapper = mount(ConsolePartReturnsPage, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="accept-return"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[role="status"]').text()).toContain('Đã nhận linh kiện tại kho và cập nhật tồn thực tế.');
+    expect(partRequestsApi.acceptReturn).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
   it('prevents a double submit while the acceptance is in flight', async () => {
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
     const pending = deferred<null>();
@@ -479,6 +501,7 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
 describe('part-requests.api P1 return contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'legacy', status: null });
   });
 
   it('treats 503 pending activation as unavailable without hiding actual network errors', async () => {

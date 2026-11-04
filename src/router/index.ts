@@ -339,6 +339,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Yêu cầu linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'warehouses',
+        name: 'console-warehouses',
+        component: () => import('../pages/console/ConsoleWarehousesPage.vue'),
+        meta: { title: 'Kho linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'wallets',
         name: 'console-wallets',
         component: () => import('../pages/console/ConsoleWalletsPage.vue'),

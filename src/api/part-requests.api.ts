@@ -55,6 +55,27 @@ export interface PartRequest {
   items: PartRequestItem[];
 }
 
+export type WarehouseAllocationMode = 'warehouse' | 'legacy';
+export type WarehouseAllocationStatus = 'manual_assistance' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
+export interface WarehouseAllocation {
+  partRequestId: string;
+  mode: WarehouseAllocationMode;
+  status: WarehouseAllocationStatus;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  warehouseAddress?: string | null;
+  responsibleUserId?: string | null;
+  distanceNotVerified?: boolean;
+  reviewRequired?: boolean;
+  manualAssistanceReason?: string | null;
+  tokenExpiresAt?: string | null;
+  tokenVersion?: number;
+  handedOverAt?: string | null;
+  receivedAt?: string | null;
+}
+export interface WarehouseAllocationCommandPayload { idempotencyKey: string }
+export interface WarehouseQrResponse { allocation: WarehouseAllocation; qrToken: string | null }
+
 export interface CreatePartRequestPayload {
   items: Array<{
     partCatalogId: string;
@@ -489,6 +510,26 @@ export const partRequestsApi = {
       `/part-requests/${requestId}`,
     );
     return res.data.data;
+  },
+
+  async getWarehouseAllocation(requestId: string): Promise<WarehouseAllocation> {
+    const response = await apiClient.get<{ data: WarehouseAllocation }>(`/part-requests/${requestId}/warehouse-allocation`);
+    return response.data.data;
+  },
+
+  async reserveWarehouse(requestId: string, payload: WarehouseAllocationCommandPayload): Promise<WarehouseAllocation> {
+    const response = await apiClient.post<{ data: WarehouseAllocation }>(`/part-requests/${requestId}/warehouse-reserve`, payload);
+    return response.data.data;
+  },
+
+  async prepareWarehouseQr(requestId: string, payload: WarehouseAllocationCommandPayload): Promise<WarehouseQrResponse> {
+    const response = await apiClient.post<{ data: WarehouseQrResponse }>(`/part-requests/${requestId}/warehouse-qr`, payload);
+    return response.data.data;
+  },
+
+  async confirmWarehouseHandover(requestId: string, payload: { qrToken: string; idempotencyKey: string }): Promise<WarehouseQrResponse> {
+    const response = await apiClient.post<{ data: WarehouseQrResponse }>(`/part-requests/${requestId}/warehouse-handover`, payload);
+    return response.data.data;
   },
 
   /** SM records what the faulty part of a warranty request shows; required before READY. */

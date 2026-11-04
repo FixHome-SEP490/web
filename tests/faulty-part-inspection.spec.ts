@@ -4,7 +4,7 @@ enableAutoUnmount(afterEach);
 
 const { api, auth } = vi.hoisted(() => ({
   api: {
-    getAll: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getReturnsByOrderId: vi.fn(),
+    getAll: vi.fn(), getWarehouseAllocation: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getReturnsByOrderId: vi.fn(),
     markReady: vi.fn(), recordFaultyInspection: vi.fn(),
   },
   auth: { hasRole: vi.fn(() => true) },
@@ -36,6 +36,7 @@ const text = (w: { text: () => string }) => w.text().replace(/\s+/g, ' ');
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   auth.hasRole.mockReturnValue(true);
+  api.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-w', mode: 'legacy', status: null });
   api.getPendingReturns.mockResolvedValue([]);
   api.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
   api.getReturnsByOrderId.mockResolvedValue([]);
