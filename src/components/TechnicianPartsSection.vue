@@ -22,6 +22,7 @@ import {
   Info,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
+import ShippingShareBreakdown from './ShippingShareBreakdown.vue';
 import { userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
@@ -1368,8 +1369,8 @@ const getStatusBadgeClass = (status: string) => {
           </section>
 
           <!-- Delivery Shipping Fee if any -->
-          <div v-if="pr.shippingFee > 0" class="text-xs text-brand-700 font-medium">
-            Phí giao hàng: <FhMoney :amount="pr.shippingFee" />
+          <div v-if="pr.fulfillmentMethod !== 'pickup' && (pr.shippingFee > 0 || pr.shippingPolicyVersion)" class="text-xs text-brand-700 font-medium">
+            <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
           </div>
 
           <!-- Pending Preparation State -->

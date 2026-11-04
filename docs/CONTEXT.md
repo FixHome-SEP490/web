@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 18:36 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104
+> Cập nhật lần cuối: 2026-11-04 19:41 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w3-delivery-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -99,6 +99,12 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Khi chưa có dữ liệu khoảng cách, Web ghi rõ chưa xác minh và không hiện km/ETA.
 - Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
 - Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
+
+### W3 delivery Web — read-only scaffold (04/11/2026)
+
+- Web thêm kiểu đọc optional cho `shippingPolicyVersion`, `customerShippingShare`, `technicianShippingShare` và `technicianNetLabor`; không thêm URL hoặc mutation. Thiếu policy/shares giữ `LEGACY_100_0` và phí khách bằng toàn bộ `shippingFee`. W3 chỉ hiển thị khi version là `W3_70_30_V1`, các số VND nguyên không âm/safe, tổng shares bằng courier cost và customer share đúng `floor((7*S+5)/10)` bằng BigInt; policy vắng nhưng có shares split, shares LEGACY lệch hoặc snapshot W3 thiếu/sai đều fail closed.
+- Customer/visit hiện hai shares, technician hiện hai shares và chỉ hiện net labor server gửi, SM xem full courier cost; pickup không có phí. Không hiện consent/approval/payment/dispatch mới. Existing API responses chỉ được đọc nếu tự mang các fields; draft delivery endpoint chưa được gọi nên W3 chưa được bật. Handoff: `docs/WAREHOUSE_W3_WEB_HANDOFF.md`.
+- `tests/shipping-policy.spec.ts` 14/14 PASS; typecheck/lint/build PASS bằng Node 24.15.0. `npm test`: 2402/2403 PASS, một test VisitGroup timeout khi môi trường báo ECONNREFUSED tới localhost:3000; browser/backend runtime, Finance signoff và financial activation CHƯA KIỂM CHỨNG.
 
 ### VisitGroup P1 tối đa 5 thiết bị trên Web (04/11/2026)
 
@@ -536,6 +542,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
 - 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
 - 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
 - 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
@@ -576,4 +583,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 21:40 (UTC+7) | ToanAltF4 | fix/ai-price-and-description | Chat AI ghi rõ khoảng giá gồm tiền công và linh kiện; mô tả sang form bỏ câu sai rồi
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
-- 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại

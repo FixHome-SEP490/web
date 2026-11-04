@@ -34,6 +34,7 @@ import {
 import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, type AdditionalCostRecord, type WarrantyClaimView, type EvidenceType, type WarrantyCoverageRecord } from '../../api/orders.api';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
+import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
 import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -292,6 +293,10 @@ const canDecideQuotation = computed(() => !oldFinanceReview.value && canDecideOf
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
+const shippingPolicyRequests = computed(() => partRequests.value.filter(request =>
+  request.fulfillmentMethod === 'delivery' && !!request.shippingPolicyVersion
+  && !additionalCosts.value.some(cost => cost.id === request.additionalCostId && !!cost.shippingPolicyVersion),
+));
 const acDecidingId = ref('');
 const externalDisclaimerAccepted = ref<Record<string, boolean>>({});
 const hasExternalParts = (cost: AdditionalCostRecord) => {
@@ -1460,9 +1465,8 @@ const parsedReview = computed(() => {
               </span>
               <span class="font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
             </li>
-            <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between gap-3 py-2">
-              <span class="text-ink-700">Phí giao linh kiện</span>
-              <span class="font-num text-ink-900 whitespace-nowrap"><FhMoney :amount="cost.shippingFee" /></span>
+            <li v-if="cost.fulfillmentMethod !== 'pickup' && (Number(cost.shippingFee) > 0 || cost.shippingPolicyVersion)" class="list-none py-2">
+              <ShippingShareBreakdown :snapshot="cost" role="customer" :fulfillment-method="cost.fulfillmentMethod" />
             </li>
           </ul>
 
@@ -1769,6 +1773,16 @@ const parsedReview = computed(() => {
                   <p v-else class="py-2.5 text-ink-500">Không thay linh kiện.</p>
                 </div>
 
+                <div v-if="shippingPolicyRequests.length" class="space-y-2 border-t border-ink-100 pt-3" data-testid="customer-shipping-policy-breakdowns">
+                  <ShippingShareBreakdown
+                    v-for="request in shippingPolicyRequests"
+                    :key="request.id"
+                    :snapshot="request"
+                    role="customer"
+                    :fulfillment-method="request.fulfillmentMethod"
+                  />
+                </div>
+
                 <div v-if="!billing.final && decidedAdditionalCosts.length > 0" class="space-y-1">
                   <h3 class="font-medium text-ink-500">Phát sinh</h3>
                   <ul class="divide-y divide-ink-100">
@@ -1789,9 +1803,8 @@ const parsedReview = computed(() => {
                           </span>
                           <span class="font-num whitespace-nowrap"><FhMoney :amount="item.lineTotal" /></span>
                         </li>
-                        <li v-if="Number(cost.shippingFee) > 0" class="flex items-center justify-between gap-3">
-                          <span>Phí giao linh kiện</span>
-                          <span class="font-num whitespace-nowrap"><FhMoney :amount="cost.shippingFee" /></span>
+                        <li v-if="cost.fulfillmentMethod !== 'pickup' && (Number(cost.shippingFee) > 0 || cost.shippingPolicyVersion)" class="list-none">
+                          <ShippingShareBreakdown :snapshot="cost" role="customer" :fulfillment-method="cost.fulfillmentMethod" />
                         </li>
                       </ul>
                       <img
