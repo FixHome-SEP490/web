@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 
 const {
   uploadBookingPhoto,
@@ -230,6 +231,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     } finally { wrapper?.unmount(); vi.useRealTimers(); }
   });
   beforeEach(() => {
+    setActivePinia(createPinia());
     createBooking.mockReset().mockResolvedValue({ id: 'booking-id' });
     uploadBookingPhoto.mockReset();
     visitContact.mockReset().mockResolvedValue({ enabled: false, deviceLimit: 3, hotline: null });

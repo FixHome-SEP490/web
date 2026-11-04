@@ -3,6 +3,7 @@ import { tidyAddressText } from '../../utils/address-text';
 import { toast } from 'vue-sonner';
 // src/pages/customer/NewBookingWizardPage.vue
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { getActivePinia } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import {
   AlertTriangle,
@@ -1598,7 +1599,7 @@ onMounted(() => {
   applyIncomingDescription();
   void loadCategories();
   void loadAddresses();
-  if (!isAiFlow && useAuthStore().user?.id) void loadCurrentBookingDraft();
+  if (!isAiFlow && getActivePinia() && useAuthStore().user?.id) void loadCurrentBookingDraft();
   armStepFooterObserver();
   // The AI form needs it too: several appliances the assistant advised on are booked as one visit.
   visitGroupsApi.contact().then((contact) => {
