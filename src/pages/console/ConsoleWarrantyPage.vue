@@ -16,10 +16,13 @@ import {
   type StaffWarrantyClaim,
   type TechnicianWarrantyStat,
 } from '../../api/warranty-claims.api';
+import { ordersApi, type OrderEvidenceRecord } from '../../api/orders.api';
 import { useAuthStore } from '../../stores/auth';
 import { formatDateTimeVN } from '../../utils/formatters';
 import {
   claimDisplayMeta,
+  claimOutcomeLabels,
+  declineReviewLabels,
   inspectionResultLabels,
   notCoveredReasonLabels,
   warrantyClaimStatusMeta,
@@ -40,12 +43,15 @@ const error = ref('');
 const actionError = ref('');
 const notice = ref('');
 const detailClaim = ref<StaffWarrantyClaim | null>(null);
+// Photos of the original job, so a manager can judge the fault without leaving the panel.
+const originalEvidence = ref<OrderEvidenceRecord[]>([]);
 const page = ref(1);
 const limit = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 const statusFilter = ref<WarrantyClaimStatus | ''>('');
 const unassignedOnly = ref(false);
+const reviewOnly = ref(false);
 const technicians = ref<{ id: string; fullName: string }[]>([]);
 
 const modalClaim = ref<StaffWarrantyClaim | null>(null);
@@ -68,6 +74,7 @@ async function loadQueue() {
       limit,
       status: statusFilter.value || undefined,
       unassigned: unassignedOnly.value || undefined,
+      declineReview: reviewOnly.value ? 'pending' : undefined,
     });
     if (requestId !== latestRequest) return;
     claims.value = result.data;
@@ -145,11 +152,21 @@ const rateColumns: ConsoleColumn[] = [
 ];
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
-watch([statusFilter, unassignedOnly], () => {
+watch([statusFilter, unassignedOnly, reviewOnly], () => {
   if (page.value !== 1) page.value = 1;
   else void loadQueue();
 });
 watch(page, () => void loadQueue());
+watch(detailClaim, async (claim) => {
+  originalEvidence.value = [];
+  if (!claim) return;
+  try {
+    const rows = await ordersApi.getEvidence(claim.order.id);
+    if (detailClaim.value?.id === claim.id) originalEvidence.value = rows.filter((row) => row.type === 'before' || row.type === 'after');
+  } catch {
+    // The panel is complete without the photos.
+  }
+});
 watch(tab, (next) => {
   if (next === 'rates' && !stats.value.length && !statsLoading.value) void loadStats();
 });
@@ -193,6 +210,9 @@ onMounted(() => void loadQueue());
         <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
           <input v-model="unassignedOnly" type="checkbox" class="h-4 w-4" /> Chưa có kỹ thuật viên
         </label>
+        <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+          <input v-model="reviewOnly" type="checkbox" class="h-4 w-4" /> Chờ xét từ chối hoặc không đến
+        </label>
       </div>
 
       <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue" />
@@ -219,6 +239,8 @@ onMounted(() => void loadQueue());
             >{{ meta(row).label }}</span>
             <span v-if="!row.technician && !closed(row)" class="whitespace-nowrap rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Chưa có kỹ thuật viên</span>
             <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">Gửi sau khi hết hạn</span>
+            <span v-if="row.declineReview === 'pending'" class="whitespace-nowrap rounded bg-warning-50 px-1.5 py-0.5 text-xs font-medium text-warning-700">{{ declineReviewLabels.pending }}</span>
+            <span v-if="row.outcomeCode === 'unfixed'" class="whitespace-nowrap rounded bg-ink-100 px-1.5 py-0.5 text-xs font-medium text-ink-700">{{ claimOutcomeLabels.unfixed }}</span>
           </div>
         </template>
         <template #cell-technician="{ row }">
@@ -233,7 +255,13 @@ onMounted(() => void loadQueue());
         <template #cell-actions="{ row }">
           <div v-if="canDecide && !closed(row)" class="flex items-center justify-end gap-2">
             <FhButton
-              v-if="row.status === 'inspected'"
+              v-if="row.declineReview === 'pending'"
+              variant="primary"
+              size="sm"
+              @click="openModal(row, 'review')"
+            >Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}</FhButton>
+            <FhButton
+              v-else-if="row.status === 'inspected'"
               variant="primary"
               size="sm"
               @click="openModal(row, 'approve')"
@@ -330,6 +358,14 @@ onMounted(() => void loadQueue());
               <img :src="url" alt="Ảnh khách hàng gửi kèm" class="h-16 w-16 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
             </a>
           </div>
+          <div v-if="originalEvidence.length" class="space-y-1 border-t border-ink-100 pt-4">
+            <div class="text-ink-500">Ảnh trước và sau khi sửa (đơn gốc)</div>
+            <div class="flex flex-wrap gap-2">
+              <a v-for="item in originalEvidence" :key="item.id" :href="item.mediaUrl" target="_blank" rel="noopener noreferrer">
+                <img :src="item.mediaUrl" :alt="item.type === 'before' ? 'Ảnh trước khi sửa' : 'Ảnh sau khi sửa'" class="h-16 w-16 rounded-[var(--radius-sm)] border border-ink-200 object-cover" />
+              </a>
+            </div>
+          </div>
           <div v-if="detailClaim.visit?.proposedResult" class="space-y-1 border-t border-ink-100 pt-4">
             <div class="text-ink-500">Đề xuất của kỹ thuật viên</div>
             <p class="font-medium text-ink-900">{{ inspectionResultLabels[detailClaim.visit.proposedResult as InspectionResult] }}</p>
@@ -337,6 +373,12 @@ onMounted(() => void loadQueue());
               Lý do: {{ notCoveredReasonLabels[detailClaim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
             </p>
             <p class="whitespace-pre-line text-ink-700">{{ detailClaim.visit.findings }}</p>
+          </div>
+          <div v-if="detailClaim.outcomeCode" class="border-t border-ink-100 pt-4">
+            <div class="mb-1 text-ink-500">Kết cục</div>
+            <p class="text-ink-900">
+              {{ claimOutcomeLabels[detailClaim.outcomeCode] }}<template v-if="detailClaim.refundAmount"> · {{ detailClaim.refundAmount.toLocaleString('vi-VN') }} ₫</template>
+            </p>
           </div>
           <div v-if="detailClaim.resolutionNotes" class="border-t border-ink-100 pt-4">
             <div class="mb-1 text-ink-500">Đã gửi khách hàng</div>

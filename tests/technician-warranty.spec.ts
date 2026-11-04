@@ -140,16 +140,37 @@ describe('TechnicianWarrantyActionModal', () => {
     wrapper.unmount();
   });
 
-  it('sends a covered proposal without a reason code', async () => {
+  it('sends a workmanship proposal without a reason code or a photo', async () => {
     apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'inspected' }) } });
     const wrapper = mountModal('propose');
-    await wrapper.get('#warranty-findings').setValue('Linh kiện bị nứt ở mối ghép');
+    await wrapper.findAll('input[type="radio"]')[0].setValue();
+    await wrapper.get('#warranty-findings').setValue('Mối nối bị lỏng do lắp chưa chặt');
     await submitButton(wrapper).trigger('click');
     await flushPromises();
     expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/propose', {
-      result: 'covered_part',
-      findings: 'Linh kiện bị nứt ở mối ghép',
+      result: 'covered_workmanship',
+      findings: 'Mối nối bị lỏng do lắp chưa chặt',
     });
+    wrapper.unmount();
+  });
+
+  it('demands a photo of the faulty part when FixHome would pay for it', async () => {
+    const wrapper = mountModal('propose');
+    expect((wrapper.findAll('input[type="radio"]')[1].element as HTMLInputElement).checked).toBe(true);
+    await wrapper.get('#warranty-findings').setValue('Linh kiện bị nứt ở mối ghép');
+    expect(wrapper.text()).toContain('bắt buộc');
+    await submitButton(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('ảnh linh kiện hỏng');
+    wrapper.unmount();
+  });
+
+  it('tells the technician which decline reasons are checked and which wait for a manager', async () => {
+    const wrapper = mountModal('decline');
+    const options = wrapper.findAll('#warranty-decline-reason option').map((o) => o.text());
+    expect(options).toContain('Đang nghỉ (hệ thống kiểm tra)');
+    expect(options).toContain('Đang bận (quản lý xác nhận)');
+    expect(wrapper.text()).toContain('trừ điểm uy tín');
     wrapper.unmount();
   });
 

@@ -74,6 +74,9 @@ export type NotCoveredReason =
   | 'expired'
   | 'cannot_reproduce'
   | 'customer_unavailable'
+  | 'third_party_repair'
+  | 'force_majeure'
+  | 'transport_damage'
   | 'other';
 
 export const notCoveredReasonLabels: Record<NotCoveredReason, string> = {
@@ -84,14 +87,34 @@ export const notCoveredReasonLabels: Record<NotCoveredReason, string> = {
   expired: 'Đã hết hạn bảo hành',
   cannot_reproduce: 'Không tái hiện được lỗi',
   customer_unavailable: 'Khách vắng mặt hoặc không cho kiểm tra',
+  third_party_repair: 'Người khác đã sửa hoặc vệ sinh sau đó',
+  force_majeure: 'Thiên tai, cháy nổ, sét đánh',
+  transport_damage: 'Hỏng khi vận chuyển',
   other: 'Lý do khác',
 };
 
 export type DeclineReason = 'busy' | 'on_leave' | 'out_of_area' | 'other';
 
 export const declineReasonLabels: Record<DeclineReason, string> = {
-  busy: 'Đang bận',
-  on_leave: 'Đang nghỉ',
-  out_of_area: 'Ngoài khu vực nhận việc',
-  other: 'Lý do khác',
+  busy: 'Đang bận (quản lý xác nhận)',
+  on_leave: 'Đang nghỉ (hệ thống kiểm tra)',
+  out_of_area: 'Ngoài khu vực nhận việc (hệ thống kiểm tra)',
+  other: 'Lý do khác (quản lý xác nhận)',
+};
+
+/** A decline or missed response a manager judges before it costs the technician reputation. */
+export type DeclineReview = 'pending' | 'valid' | 'invalid';
+
+export const declineReviewLabels: Record<DeclineReview, string> = {
+  pending: 'Chờ quản lý xét',
+  valid: 'Đã xét: hợp lệ',
+  invalid: 'Đã xét: không hợp lệ',
+};
+
+export type ClaimOutcome = 'fixed' | 'unfixed' | 'rejected';
+
+export const claimOutcomeLabels: Record<ClaimOutcome, string> = {
+  fixed: 'Đã khắc phục',
+  unfixed: 'Không khắc phục được, đã hoàn tiền',
+  rejected: 'Không được bảo hành',
 };

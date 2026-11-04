@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-03 10:16 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103
+> Cập nhật lần cuối: 2026-11-04 11:25 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: warranty-cost-sla-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -212,7 +212,7 @@ V5.3 bổ sung linh kiện: detail kỹ thuật viên dùng ledger theo PartRequ
 ### Console (`/console`)
 
 - Cả quản lý dịch vụ và admin: tổng quan, đơn, booking (gán thợ thủ công), yêu cầu linh kiện, ví và rút tiền, khu vực phục vụ.
-- Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành. Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
+- Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành (duyệt, từ chối, đóng, xét việc thợ từ chối hoặc không đến). Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
 - Chỉ admin: kỹ thuật viên, duyệt xác minh danh tính (kỹ thuật viên và khách hàng), danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
 ### Giao diện console làm lại (10/10/2026, nhánh `feat/console-ui-redesign`)
@@ -369,6 +369,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Nhánh tích hợp local gom #16/#17 (nhãn và địa chỉ chỉ từ danh sách lượt được giao), #41 (lý do trống theo diagnostics tùy chọn), #39 (copy an toàn khi Backend trả 409 chờ thanh toán), #38 (chỉ xác nhận VNPay khi API đơn trả `PAID`), #33 (nhãn timeline tiếng Việt), #35 (phân loại lỗi AI và fallback đặt dịch vụ thủ công), #40 (copy KYC chờ duyệt) và banner nạp ví chưa xác minh. Không đổi backend, migration, nghiệp vụ thanh toán hay provider.
 - Các thay đổi và test đã tích hợp ở source Web; chưa có kết quả gate trong context này. Backend #17 address contract, signed-in E2E, runtime trình duyệt và Backend DEV CHƯA KIỂM CHỨNG. PR/CI/dev deploy đang chờ.
 
+Bảo hành, chi phí và uy tín (PO 04/11/2026, Backend `warranty-cost-sla-20261104`): Console bảo hành (`ConsoleWarrantyPage.vue`, `WarrantyDecisionModal.vue`) thêm bộ lọc "Chờ xét từ chối hoặc không đến" (`declineReview=pending`), thao tác Xét từ chối hoặc không đến (`POST /service-manager/warranty-claims/:id/review-decline {valid, note}`, chỉ `valid: false` mới trừ điểm uy tín thợ), đóng yêu cầu với kết cục "Không khắc phục được: hoàn tiền cho khách" (`outcome: 'unfixed'`, `refundAmount` tuỳ chọn, để trống là hoàn cả hạng mục; ghi chú luôn bắt buộc), ô lý do khi đổi kết luận của thợ (`overrideReason`) và chọn một linh kiện FixHome khi lỗi do công thợ (`replacementParts`, thợ trả tiền). Panel chi tiết hiện ảnh trước và sau sửa của đơn gốc (`GET /service-orders/:id/evidence`) và kết cục. Thợ: lý do từ chối ghi rõ nghỉ phép và ngoài khu vực do hệ thống kiểm tra, lý do khác chờ quản lý xét; kết luận lỗi linh kiện bắt buộc ảnh linh kiện hỏng. Nhãn lý do không bảo hành thêm `third_party_repair`, `force_majeure`, `transport_damage`. Kiểm chứng: unit test web (`warranty-claim`, `technician-warranty`, `manager-warranty`), lint, typecheck; chạy với Backend thật CHƯA KIỂM CHỨNG.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -456,6 +458,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Bảo hành 04/11: Mobile chưa cập nhật nên chưa có luồng tự chọn linh kiện, đóng `unfixed` hay xét từ chối; thợ dùng Mobile vẫn gửi lý do `busy` (vào hàng chờ xét) và gửi kết luận lỗi linh kiện không kèm ảnh sẽ bị Backend từ chối. Màn Console chưa có bộ chọn nhiều linh kiện; Backend nhận nhiều.
 - Đợt rebook/voucher/history 02/11: Backend urgent/history phải được tích hợp, kiểm thử và rollout trước Web. Recovery terminal voucher/A→B→A mới qua adapter/component tests; runtime Backend đăng nhập, PSP/refund thật và Mobile NOT VERIFIED. REFUNDED hoặc hóa đơn chưa xác minh PAID giữ trạng thái chặn thu, không suy ra có thể trả lại tổng gốc. Trình duyệt cục bộ dùng fixture giả, chặn API thật ở 360/768/1440 px: địa chỉ đầy đủ, chọn địa chỉ, urgent, disclosure máy dừng, voucher held/đóng/mở lại/keyboard không reset countdown, không tràn ngang hoặc lỗi console. Không chứng minh E2E có đăng nhập, nguyên tử/idempotency DB, payment pending/PSP thật hoặc Mobile parity: NOT VERIFIED. Source Mobile đã đối chiếu booking/technician jobs, chưa có các thay đổi Web này. Backend hiện chưa cung cấp lý do rời phân công chi tiết nên không phân biệt chắc rút với bị thay thế; Web giữ nhãn trung tính. Thiếu HTTP Date thì đồng hồ chỉ báo chưa xác định. Cần hard-refresh Web sau rollout và restart Backend mới trước QA.
 
 - Group stop/rebook: Web nối source controller/DTO/service Backend đang viết, chưa chứng minh contract đã tích hợp hoặc triển khai DEV. Readiness chưa trả tập máy đủ điều kiện/bảo vệ, Web chỉ hiển thị dự kiến theo child có quyền; Backend preflight cuối cùng vẫn quyết định. Thợ chưa có GET biên nhận nhóm theo command, nên đối chiếu phản hồi chưa rõ dùng chính POST idempotent với lệnh cũ, Backend đọc receipt trước kiểm tra assignment hiện tại. Bộ nhớ lệnh không sống qua hard-refresh. API hàng đợi hỗ trợ chưa có parent row nhóm; không tự gộp child sau phân trang. Signed-in E2E, gọi điện thật, thông báo/socket, nguyên tử/concurrency/rollback trên DB, Backend DEV và Mobile parity NOT VERIFIED. Thư mục Mobile được cấp hiện trống nên không đối chiếu source được. Browser mới xem snapshot fixture cục bộ, thao tác/viewport/evaluate bị chính sách công cụ chặn; không phải runtime feature PASS. Hard-refresh sau khi coordinator tích hợp, dùng tài khoản được cấp để QA sau Backend deploy.
@@ -508,6 +511,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 11:25 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Console bảo hành: xét từ chối hoặc không đến, đóng không khắc phục được kèm hoàn tiền, lý do đổi kết luận, chọn linh kiện khi lỗi do công, ảnh đơn gốc; thợ thấy lý do từ chối nào được kiểm tra.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
 - 2026-11-03 08:00 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Giữ `priceSummary.fixed_range` là tiền công theo phạm vi cả khi hai đầu bằng nhau; hiện một số, bỏ đơn vị kế thừa và ghi rõ khảo sát/xác nhận trước sửa.
 - 2026-11-03 07:55 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Rút gọn copy W1.04 `/how-it-works`: bỏ section nguyên tắc lặp, mỗi bước còn một câu, ghi chú phụ trong `<details>` đóng mặc định; giữ rõ chọn 1–2 thợ và duyệt chi phí phát sinh. BodyChars 1393–1499 so với live 1809–1915; CTA `/app/bookings/new`.
@@ -547,4 +551,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES
 - 2026-10-23 23:45 (UTC+7) | foxonworld | foxonworld/fixhome-v54-sol-polish-20261023 | Polish bố cục Booking/Visit/chip thợ/linh kiện/hoàn trả, cỡ nút và aria; render fixture 360–1440px, giữ nguyên API/quyền/giá/ledger; runtime đăng nhập và Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-23 22:51 (UTC+7) | foxonworld | foxonworld/fixhome-v53-multiservice-ux-20261023 | Tách số thực dùng/khai trả/nhận kho theo ledger, cân nút linh kiện, thêm refresh và trạng thái lỗi manager, định tuyến PART_RETURN_DECLARED; focused 16 files/206 tests PASS, runtime/E2E/Backend/Mobile CHƯA KIỂM CHỨNG.
