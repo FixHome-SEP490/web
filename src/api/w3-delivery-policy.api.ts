@@ -41,6 +41,7 @@ interface Inert {
   blockers: typeof W3_BLOCKERS;
 }
 export interface W3PolicyCurrent extends Inert { draft: W3PolicyDraft | null }
+export interface W3PolicyHistory extends Inert { drafts: W3PolicyDraft[] }
 export interface W3PolicyPreview extends Inert {
   hypotheticalOnly: true;
   draftId: string;
@@ -124,10 +125,10 @@ export const w3DeliveryPolicyApi = {
   async current(): Promise<W3PolicyCurrent> {
     return readCurrent((await apiClient.get<unknown>(`${base}/current`)).data);
   },
-  async history(beforeRevision?: number): Promise<W3PolicyDraft[]> {
+  async history(beforeRevision?: number): Promise<W3PolicyHistory> {
     const query = beforeRevision === undefined ? {} : { beforeRevision: integer(beforeRevision, 1, maxRevision) };
     const data = shape(body((await apiClient.get<unknown>(`${base}/history`, { params: { ...query, limit: 20 } })).data), [...inertKeys, 'drafts']);
-    inert(data);
+    const state = inert(data);
     if (!Array.isArray(data.drafts) || data.drafts.length > 20) return invalid();
     const drafts = await Promise.all(data.drafts.map(draft));
     let previous = beforeRevision ?? maxRevision + 1;
@@ -136,7 +137,7 @@ export const w3DeliveryPolicyApi = {
       if (row.state.revision >= previous || ids.has(row.id)) return invalid();
       previous = row.state.revision; ids.add(row.id);
     }
-    return drafts;
+    return { ...state, drafts };
   },
   async create(input: W3PolicyParameters): Promise<W3PolicyDraft> {
     const expected = parameters(input);
