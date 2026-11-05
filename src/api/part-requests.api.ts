@@ -38,6 +38,12 @@ export interface PartRequest {
   status: PartRequestStatus;
   reason?: string | null;
   shippingFee: number;
+  /** Optional read-only delivery snapshot; absent fields remain LEGACY. */
+  shippingPolicyVersion?: string | null;
+  customerShippingShare?: number | null;
+  technicianShippingShare?: number | null;
+  /** Display only when supplied by an authoritative server read. */
+  technicianNetLabor?: number | null;
   additionalCostId?: string | null;
   quotationId?: string | null;
   qrToken?: string | null;
