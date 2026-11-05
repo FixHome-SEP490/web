@@ -1,23 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { RefreshCw } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
+import { Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
 import { FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
 } from '../../components/technician/TechnicianWarrantyActionModal.vue';
+import WarrantyContactActions from '../../components/technician/WarrantyContactActions.vue';
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { getSupportErrorMessage } from '../console/support-cases.utils';
+import { checkInClaim } from '../../composables/useWarrantyCheckIn';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
-import { formatDateTimeVN } from '../../utils/formatters';
+import { vnDateString } from '../../utils/vn-time';
 import {
-  claimDisplayMeta,
-  inspectionResultLabels,
-  notCoveredReasonLabels,
+  technicianClaimDisplayMeta,
   warrantyClaimToneClasses,
-  type InspectionResult,
-  type NotCoveredReason,
 } from '../../utils/warranty-claim';
 
 const PAGE_SIZE = 20;
@@ -47,23 +46,35 @@ const modalMode = ref<WarrantyActionMode | null>(null);
 
 const groups = computed(() => [
   {
-    key: 'todo',
+    key: 'todo' as const,
     title: 'Cần xử lý',
     items: claims.value.filter((c) => ['submitted', 'accepted', 'in_progress'].includes(c.status)),
   },
   {
-    key: 'waiting',
+    key: 'waiting' as const,
     title: 'Đang chờ phản hồi',
     items: claims.value.filter((c) => ['inspected', 'awaiting_customer', 'disputed'].includes(c.status)),
   },
   {
-    key: 'closed',
+    key: 'closed' as const,
     title: 'Đã đóng',
     items: claims.value.filter((c) => ['resolved', 'rejected'].includes(c.status)),
   },
 ]);
 
+// Same pills as the jobs page: everything, or one group. Groups keep their order inside "all".
+const activeTab = ref<'all' | 'todo' | 'waiting' | 'closed'>('all');
+const tabs = computed(() => [
+  { key: 'all' as const, label: 'Tất cả', count: claims.value.length },
+  ...groups.value.map((group) => ({ key: group.key, label: group.title, count: group.items.length })),
+]);
+const rows = computed(() =>
+  groups.value.filter((group) => activeTab.value === 'all' || group.key === activeTab.value).flatMap((group) => group.items),
+);
+
 const cache = useCacheUpdates();
+const router = useRouter();
+const openDetail = (claim: StaffWarrantyClaim) => router.push({ name: 'tech-warranty-detail', params: { id: claim.id } });
 
 function replace(updated: StaffWarrantyClaim) {
   cache.markChanged(affectedBy.warrantyChange);
@@ -99,23 +110,12 @@ function onDone(updated: StaffWarrantyClaim) {
   };
 }
 
-function currentPosition(): Promise<{ lat?: number; lng?: number }> {
-  return new Promise((resolve) => {
-    if (!('geolocation' in navigator)) return resolve({});
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
-      () => resolve({}),
-      { timeout: 5000 },
-    );
-  });
-}
-
 async function checkIn(claim: StaffWarrantyClaim) {
   if (busyId.value) return;
   busyId.value = claim.id;
   notice.value = null;
   try {
-    replace(await warrantyClaimsApi.checkIn(claim.id, await currentPosition()));
+    replace(await checkInClaim(claim));
     notice.value = { type: 'success', text: 'Đã xác nhận bạn có mặt tại nơi kiểm tra.' };
   } catch (reason) {
     notice.value = {
@@ -127,10 +127,8 @@ async function checkIn(claim: StaffWarrantyClaim) {
   }
 }
 
-const meta = (claim: StaffWarrantyClaim) => claimDisplayMeta(claim);
+const meta = (claim: StaffWarrantyClaim) => technicianClaimDisplayMeta(claim);
 const checkedIn = (claim: StaffWarrantyClaim) => claim.visit?.status === 'checked_in';
-const hasNextStep = (claim: StaffWarrantyClaim) =>
-  ['submitted', 'accepted', 'in_progress', 'inspected', 'awaiting_customer'].includes(claim.status);
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 
 </script>
@@ -179,112 +177,112 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     />
 
     <template v-else>
-      <template v-for="group in groups" :key="group.key">
-        <section v-if="group.items.length" class="space-y-2">
-          <h2 class="text-base font-semibold text-ink-900">{{ group.title }} ({{ group.items.length }})</h2>
+      <!-- Filter pills, same look as the jobs page -->
+      <div class="bg-ink-100 rounded-full p-1.5 flex items-center gap-1 overflow-x-auto select-none text-sm font-semibold" role="tablist" aria-label="Lọc yêu cầu bảo hành">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === tab.key"
+          :data-testid="`warranty-tab-${tab.key}`"
+          class="h-10 px-4 rounded-full transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer"
+          :class="[focusRing, activeTab === tab.key ? 'bg-white shadow-xs font-bold text-ink-900' : 'font-medium text-ink-600 hover:text-ink-900']"
+          @click="activeTab = tab.key"
+        >
+          <span>{{ tab.label }}</span>
+          <span
+            v-if="tab.key === 'all' || tab.count > 0"
+            class="min-w-5 h-5 px-1.5 rounded-full text-xs font-num inline-flex items-center justify-center"
+            :class="activeTab === tab.key ? 'bg-ink-100 text-ink-900' : 'bg-white/80 text-ink-600'"
+          >{{ tab.count }}</span>
+        </button>
+      </div>
 
-          <ul class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100">
-            <li v-for="claim in group.items" :key="claim.id" class="p-5 sm:p-6 space-y-3 text-sm" :data-testid="`warranty-claim-${claim.id}`">
-              <div class="space-y-1">
+      <p v-if="!rows.length" class="text-center py-10 px-6 bg-white rounded-2xl border border-ink-200 text-sm text-ink-500">
+        Không có yêu cầu bảo hành ở mục này.
+      </p>
+
+      <!-- One surface, one row per claim -->
+      <ul v-else class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+        <li
+          v-for="claim in rows"
+          :key="claim.id"
+          class="p-5 sm:p-6 hover:bg-ink-25 transition-colors cursor-pointer text-sm"
+          :data-testid="`warranty-claim-${claim.id}`"
+          @click="openDetail(claim)"
+        >
+          <div class="flex gap-3">
+            <div class="flex-1 min-w-0 space-y-3">
+              <div class="space-y-1.5">
                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <router-link
-                    :to="`/tech/jobs/${claim.order.id}`"
-                    class="font-num text-brand-700 hover:text-brand-800 whitespace-nowrap rounded"
-                    :class="focusRing"
-                  >
-                    #{{ claim.order.code }}
-                  </router-link>
+                  <span class="font-num text-ink-500 whitespace-nowrap">#{{ claim.order.code }}</span>
                   <span
                     class="inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] text-xs font-medium whitespace-nowrap"
                     :class="warrantyClaimToneClasses[meta(claim).tone]"
-                  >
-                    {{ meta(claim).label }}
-                  </span>
+                  >{{ meta(claim).label }}</span>
+                  <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] bg-warning-50 text-xs font-medium text-warning-800 whitespace-nowrap">Gửi sau hạn</span>
+                  <span class="text-ink-500 whitespace-nowrap">{{ vnDateString(claim.submittedAt) }}</span>
                 </div>
-                <p class="text-base font-semibold text-ink-900 text-balance">{{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</p>
-                <p class="text-ink-600">{{ claim.order.serviceName }}</p>
-                <p class="text-ink-900">
-                  {{ claim.order.customerName }}
-                  <a
-                    v-if="claim.order.customerPhone"
-                    :href="`tel:${claim.order.customerPhone}`"
-                    class="ml-1 font-num font-medium text-brand-700 hover:underline whitespace-nowrap"
-                  >{{ claim.order.customerPhone }}</a>
+                <h3 class="font-semibold text-base sm:text-lg text-ink-900 text-balance">{{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</h3>
+                <p class="flex items-start gap-1.5 text-ink-900">
+                  <User :size="14" class="h-5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                  <span>
+                    {{ claim.order.customerName }}
+                    <span v-if="claim.order.customerPhone" class="ml-1 font-num text-ink-500 whitespace-nowrap">{{ claim.order.customerPhone }}</span>
+                  </span>
                 </p>
-                <p class="text-ink-600 text-pretty">{{ claim.order.addressSummary }}</p>
-              </div>
-
-              <p class="text-ink-800 whitespace-pre-line text-pretty">{{ claim.description }}</p>
-              <p v-if="claim.submittedAfterExpiry" class="p-3 rounded-xl bg-warning-50 border border-warning-200 text-warning-800">
-                Gửi sau khi hết hạn bảo hành. Quản lý dịch vụ sẽ quyết định.
-              </p>
-              <div v-if="claim.evidenceRefs?.length" class="flex flex-wrap gap-2">
-                <a
-                  v-for="url in claim.evidenceRefs"
-                  :key="url"
-                  :href="url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="rounded-[var(--radius-sm)]"
-                  :class="focusRing"
-                >
-                  <img :src="url" alt="Ảnh khách hàng gửi kèm" class="w-14 h-14 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
-                </a>
-              </div>
-
-              <p v-if="claim.visit?.scheduledAt || claim.visit?.checkedInAt" class="flex flex-wrap gap-x-4 gap-y-1 text-ink-600">
-                <span v-if="claim.visit?.scheduledAt" class="whitespace-nowrap">Lịch kiểm tra <strong class="font-semibold text-ink-900 font-num">{{ formatDateTimeVN(claim.visit.scheduledAt) }}</strong></span>
-                <span v-if="claim.visit?.checkedInAt" class="whitespace-nowrap">Đã có mặt lúc <strong class="font-semibold text-ink-900 font-num">{{ formatDateTimeVN(claim.visit.checkedInAt) }}</strong></span>
-              </p>
-
-              <div
-                v-if="claim.status === 'inspected' && claim.visit?.proposedResult"
-                class="p-3 rounded-xl bg-ink-50 space-y-1"
-              >
-                <p class="font-semibold text-ink-900">Kết luận bạn đã đề xuất</p>
-                <p class="text-ink-800">{{ inspectionResultLabels[claim.visit.proposedResult as InspectionResult] }}</p>
-                <p v-if="claim.visit.notCoveredReasonCode" class="text-ink-800">
-                  Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || claim.visit.notCoveredReasonCode }}
+                <p class="flex items-start gap-1.5 text-ink-600">
+                  <MapPin :size="14" class="h-5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                  <span class="text-pretty">{{ claim.order.addressSummary }}</span>
                 </p>
-                <p class="text-ink-700 whitespace-pre-line">{{ claim.visit.findings }}</p>
               </div>
-
-              <p v-if="claim.resolutionNotes" class="p-3 rounded-xl bg-ink-50 text-ink-800">
-                <span class="font-semibold">Phản hồi của quản lý dịch vụ:</span> {{ claim.resolutionNotes }}
-              </p>
-
-              <!-- Next step: always bottom right, the main action last -->
-              <div
-                v-if="hasNextStep(claim)"
-                class="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-ink-100"
-              >
-                <template v-if="claim.status === 'submitted'">
-                  <FhButton variant="secondary" size="md" @click="openModal(claim, 'decline')">Không nhận được</FhButton>
-                  <FhButton variant="primary" size="md" @click="openModal(claim, 'accept')">Nhận yêu cầu</FhButton>
-                </template>
-                <template v-else-if="claim.status === 'accepted'">
-                  <FhButton
-                    v-if="!checkedIn(claim)"
-                    variant="primary"
-                    size="md"
-                    :loading="busyId === claim.id"
-                    :disabled="!!busyId"
-                    @click="checkIn(claim)"
-                  >
-                    Đã đến nơi
-                  </FhButton>
-                  <FhButton v-else variant="primary" size="md" @click="openModal(claim, 'propose')">Gửi kết luận kiểm tra</FhButton>
-                </template>
-                <FhButton v-else-if="claim.status === 'in_progress'" variant="primary" size="md" @click="openModal(claim, 'complete')">
-                  Báo đã bảo hành xong
-                </FhButton>
-                <p v-else-if="claim.status === 'inspected'" class="mr-auto text-ink-500">Đang chờ quản lý dịch vụ duyệt kết luận.</p>
-                <p v-else-if="claim.status === 'awaiting_customer'" class="mr-auto text-ink-500">Đang chờ khách hàng phản hồi.</p>
+              <!-- What the customer reported, set apart from the address above -->
+              <div class="border-l-2 border-ink-200 pl-3">
+                <p class="text-xs font-medium text-ink-500">Khách mô tả</p>
+                <p class="mt-0.5 line-clamp-2 text-ink-800 text-pretty">{{ claim.description }}</p>
               </div>
-            </li>
-          </ul>
-        </section>
-      </template>
+            </div>
+            <button
+              type="button"
+              class="w-10 h-10 -mr-2 rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center shrink-0 self-center"
+              :class="focusRing"
+              :aria-label="`Xem chi tiết bảo hành đơn ${claim.order.code}`"
+              @click.stop="openDetail(claim)"
+            >
+              <ChevronRight :size="20" aria-hidden="true" />
+            </button>
+          </div>
+
+          <!-- One action row: the next step on the left, ways to reach the customer on the right -->
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-ink-100 pt-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <template v-if="claim.status === 'submitted'">
+                <FhButton variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'accept')"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>
+                <FhButton variant="secondary" size="sm" class="h-10" @click.stop="openModal(claim, 'decline')"><X :size="16" aria-hidden="true" /> Không nhận được</FhButton>
+              </template>
+              <template v-else-if="claim.status === 'accepted'">
+                <FhButton
+                  v-if="!checkedIn(claim)"
+                  variant="primary"
+                  size="sm"
+                  class="h-10"
+                  :loading="busyId === claim.id"
+                  :disabled="!!busyId"
+                  @click.stop="checkIn(claim)"
+                ><MapPinCheck :size="16" aria-hidden="true" /> Đã đến nơi</FhButton>
+                <FhButton v-else variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'propose')"><ClipboardCheck :size="16" aria-hidden="true" /> Gửi kết luận kiểm tra</FhButton>
+              </template>
+              <FhButton v-else-if="claim.status === 'in_progress'" variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'complete')">
+                <CircleCheck :size="16" aria-hidden="true" /> Báo đã bảo hành xong
+              </FhButton>
+              <p v-else-if="claim.status === 'inspected'" class="text-ink-500">Chờ quản lý duyệt kết luận</p>
+              <p v-else-if="claim.status === 'awaiting_customer'" class="text-ink-500">Chờ khách phản hồi</p>
+            </div>
+            <WarrantyContactActions :claim="claim" class="ml-auto" />
+          </div>
+        </li>
+      </ul>
       <FhPagination v-model:page="page" :page-size="PAGE_SIZE" :total="total" :disabled="loading" @prefetch="prefetch" />
     </template>
 

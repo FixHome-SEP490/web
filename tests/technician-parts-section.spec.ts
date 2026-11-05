@@ -13,6 +13,7 @@ vi.mock('../src/services/live-updates', () => ({
 const { partRequestsApi, partsCatalogApi } = vi.hoisted(() => ({
   partRequestsApi: {
     getByOrderId: vi.fn(),
+    getWarehouseAllocation: vi.fn(),
     createPreRepair: vi.fn(),
     receiveByQr: vi.fn(),
     updateItemUsage: vi.fn(),
@@ -55,6 +56,7 @@ describe('TechnicianPartsSection inside the job page', () => {
     partsCatalogApi.getCatalog.mockResolvedValue({ data: [] });
     // P1 return feature idle by default in these tests.
     partRequestsApi.getReturnsByOrderId.mockResolvedValue([]);
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'legacy', status: null });
   });
 
   it('restricts unapproved usage to zero and declares all unused units with confirmed quantities', async () => {

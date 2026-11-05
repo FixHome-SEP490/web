@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 13:04 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p2-booking-draft-web-20261104
+> Cập nhật lần cuối: 2026-11-04 18:36 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,6 +92,14 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ## 3. Trạng thái hiện tại
 
+### Kho W1 và nhận linh kiện W2 trên Web (04/11/2026)
+
+- `/console/warehouses` mở cho Admin và quản lý dịch vụ; Backend chỉ trả kho được giao cho quản lý đang đăng nhập. Admin tạo/sửa/xóa kho và chọn quản lý dịch vụ đang hoạt động từ danh sách tài khoản hiện có. Kho mới chưa có tồn.
+- Web đọc danh mục SKU đang hoạt động, không nhập mã linh kiện tự do. Tồn và lịch sử đọc từ `/warehouses/:id/stock` và `/warehouses/:id/movements`; điều chỉnh dùng `STOCK_IN`/`CORRECTION` theo enum Backend (`stock_in`/`correction`) và `idempotencyKey`. Không tạo kho hoặc tồn giả.
+- Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Khi chưa có dữ liệu khoảng cách, Web ghi rõ chưa xác minh và không hiện km/ETA.
+- Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
+- Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
+
 ### VisitGroup P1 tối đa 5 thiết bị trên Web (04/11/2026)
 
 - Theo owner, Web nhận 2–5 thiết bị vật lý cùng hộ gia đình/địa chỉ/buổi đến, một kỹ thuật viên đủ mọi kỹ năng và một thanh toán chung. Một thiết bị vẫn dùng Booking thường. Mỗi child giữ Booking/ServiceOrder, báo giá, linh kiện và bảo hành riêng.
@@ -111,7 +119,6 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Bản copy rút gọn lần hai: bỏ section nguyên tắc lặp AI/báo giá/bảo hành; mỗi bước chỉ còn một câu ngắn. Ghi chú phụ về giá cố định và phạm vi bảo hành nằm trong `<details>` native, không mở sẵn; các ý bắt buộc vẫn hiện rõ: AI chỉ gợi ý, chọn 1–2 thợ theo thứ tự ưu tiên, duyệt báo giá trước khi sửa và đồng ý chi phí phát sinh.
 - CTA đặt lịch dùng `/app/bookings/new` thống nhất với landing, `/services`, chi tiết dịch vụ và header; khách chưa đăng nhập đi qua `/login?redirect=/app/bookings/new`. Trang liên kết `/services` và `/track`.
 - `tests/public-how-it-works.spec.ts` kiểm tra 4 bước, một `h1`, câu chữ an toàn, độ dài copy, `<details>` đóng mặc định, ảnh minh họa và chuyển hướng đăng nhập. Browser QA Playwright ở 390/1440/1920 px: không tràn ngang, không lỗi trang; bodyChars 1393/1499/1499, thấp hơn bản live 1809/1915/1915. Luồng đăng nhập thật và Lighthouse CHƯA KIỂM CHỨNG.
-
 
 ### Đặt lại, voucher và lịch sử thợ (02/11/2026)
 
@@ -225,7 +232,7 @@ V5.3 bổ sung linh kiện: detail kỹ thuật viên dùng ledger theo PartRequ
 ### Console (`/console`)
 
 - Cả quản lý dịch vụ và admin: tổng quan, đơn, booking (gán thợ thủ công), yêu cầu linh kiện, ví và rút tiền, khu vực phục vụ.
-- Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành. Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
+- Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành (duyệt, từ chối, đóng, xét việc thợ từ chối hoặc không đến). Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
 - Chỉ admin: kỹ thuật viên, duyệt xác minh danh tính (kỹ thuật viên và khách hàng), danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
 ### Giao diện console làm lại (10/10/2026, nhánh `feat/console-ui-redesign`)
@@ -382,6 +389,8 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Nhánh tích hợp local gom #16/#17 (nhãn và địa chỉ chỉ từ danh sách lượt được giao), #41 (lý do trống theo diagnostics tùy chọn), #39 (copy an toàn khi Backend trả 409 chờ thanh toán), #38 (chỉ xác nhận VNPay khi API đơn trả `PAID`), #33 (nhãn timeline tiếng Việt), #35 (phân loại lỗi AI và fallback đặt dịch vụ thủ công), #40 (copy KYC chờ duyệt) và banner nạp ví chưa xác minh. Không đổi backend, migration, nghiệp vụ thanh toán hay provider.
 - Các thay đổi và test đã tích hợp ở source Web; chưa có kết quả gate trong context này. Backend #17 address contract, signed-in E2E, runtime trình duyệt và Backend DEV CHƯA KIỂM CHỨNG. PR/CI/dev deploy đang chờ.
 
+Bảo hành, chi phí và uy tín (PO 04/11/2026, Backend `warranty-cost-sla-20261104`): Console bảo hành (`ConsoleWarrantyPage.vue`, `WarrantyDecisionModal.vue`) thêm bộ lọc "Chờ xét từ chối hoặc không đến" (`declineReview=pending`), thao tác Xét từ chối hoặc không đến (`POST /service-manager/warranty-claims/:id/review-decline {valid, note}`, chỉ `valid: false` mới trừ điểm uy tín thợ), đóng yêu cầu với kết cục "Không khắc phục được: hoàn tiền cho khách" (`outcome: 'unfixed'`, `refundAmount` tuỳ chọn, để trống là hoàn cả hạng mục; ghi chú luôn bắt buộc), ô lý do khi đổi kết luận của thợ (`overrideReason`) và chọn một linh kiện FixHome khi lỗi do công thợ (`replacementParts`, thợ trả tiền). Panel chi tiết hiện ảnh trước và sau sửa của đơn gốc (`GET /service-orders/:id/evidence`) và kết cục. Thợ: lý do từ chối ghi rõ nghỉ phép và ngoài khu vực do hệ thống kiểm tra, lý do khác chờ quản lý xét; kết luận lỗi linh kiện bắt buộc ảnh linh kiện hỏng. Nhãn lý do không bảo hành thêm `third_party_repair`, `force_majeure`, `transport_damage`. Trang Yêu cầu linh kiện của SM (`ConsolePartRequestsPage.vue`) có loại Bảo hành: với yêu cầu loại này nút "Chuẩn bị xong" chỉ hiện sau khi SM kiểm tra linh kiện hỏng qua `FaultyPartInspectionModal.vue` (`POST /part-requests/:id/faulty-inspection`, ba kết quả, "do lắp đặt" bắt buộc ghi chú và ảnh, sửa được đến khi thợ nhận). Kiểm chứng: unit test web (`warranty-claim`, `technician-warranty`, `manager-warranty`, `faulty-part-inspection`), lint, typecheck; chạy với Backend thật CHƯA KIỂM CHỨNG.
+
 ## 4. Kiến trúc và thư mục chính
 
 - `src/api/`: 30 module gọi API và `client.ts` (axios dùng chung, tự refresh token khi gặp 401, mọi lỗi đổi sang câu tiếng Việt qua `utils/user-facing-error.ts`).
@@ -469,6 +478,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- W1/W2 Web đã gộp `origin/dev` `1110b4a` và đẩy lên PR #209; chưa merge/deploy. Chờ CI Web và Backend W2 PR #195 cùng migration/reconciliation trước DEV rollout. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
+- Bảo hành 04/11: Mobile chưa cập nhật nên chưa có luồng tự chọn linh kiện, đóng `unfixed` hay xét từ chối; thợ dùng Mobile vẫn gửi lý do `busy` (vào hàng chờ xét) và gửi kết luận lỗi linh kiện không kèm ảnh sẽ bị Backend từ chối. Màn Console chưa có bộ chọn nhiều linh kiện; Backend nhận nhiều.
 - P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
 
 - P1 max5: chỉ release Web cùng Backend P1 sau forward migration do lead xác minh; trước đó contact API giữ mức 3. Focused tests/typecheck/lint/build không chứng minh giao dịch DB, tiền/linh kiện/bảo hành thực tế hoặc E2E đăng nhập. Browser, shared DEV và Mobile parity: CHƯA KIỂM CHỨNG. Hard-refresh sau coordinated rollout; không chạy Docker/deploy hoặc ghi DB trong task writer.
@@ -525,8 +536,13 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
+- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
+- 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
 - 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
-- 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
+ - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
+- 2026-11-04 12:10 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Trang yêu cầu linh kiện của SM thêm loại Bảo hành và bước kiểm tra linh kiện hỏng trước khi chuẩn bị xong.
+- 2026-11-04 11:25 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Console bảo hành: xét từ chối hoặc không đến, đóng không khắc phục được kèm hoàn tiền, lý do đổi kết luận, chọn linh kiện khi lỗi do công, ảnh đơn gốc; thợ thấy lý do từ chối nào được kiểm tra.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
 - 2026-11-03 08:00 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Giữ `priceSummary.fixed_range` là tiền công theo phạm vi cả khi hai đầu bằng nhau; hiện một số, bỏ đơn vị kế thừa và ghi rõ khảo sát/xác nhận trước sửa.
 - 2026-11-03 07:55 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Rút gọn copy W1.04 `/how-it-works`: bỏ section nguyên tắc lặp, mỗi bước còn một câu, ghi chú phụ trong `<details>` đóng mặc định; giữ rõ chọn 1–2 thợ và duyệt chi phí phát sinh. BodyChars 1393–1499 so với live 1809–1915; CTA `/app/bookings/new`.
@@ -561,7 +577,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
 - 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.
 - 2026-10-26 13:41 (UTC+7) | ToanAltF4 | fix/ai-photo-label-wrap | Nhãn ảnh trong chat AI xuống tối đa 2 dòng thay vì cắt chữ, để dấu ? của ảnh đoán không bị mất trên điện thoại
-- 2026-10-26 12:47 (UTC+7) | ToanAltF4 | feat/ai-photo-device-label | Chat AI: nhãn thiết bị dưới mỗi ảnh khách gửi (từ reply.photos), đoán có dấu ?, bấm để điền sẵn Ảnh N là để sửa
-- 2026-10-26 01:57 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E3: đăng ký booking trước assignment, gom sự kiện và bỏ replay cash, map VISIT_GROUP về trang lượt; dọn fixture/Vite E2, socket thật CHƯA KIỂM CHỨNG.
-- 2026-10-26 01:45 (UTC+7) | foxonworld | foxonworld/fixhome-e2e-e2-customer-parent-20261026 | E2: lưu máy 3 và tiếp tục, giá partial rõ nghĩa, duyệt giá/phát sinh tại VisitGroup, đồng bộ tiền mặt và chống phản hồi cũ; fixture 360–1440px, Backend thật/Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-25 00:01 (UTC+7) | ToanAltF4 | feat/ai-multi-device | Trợ lý AI gợi ý tối đa 3 thiết bị: khung chat hiện nút Đặt N thiết bị, form đặt lịch nạp lần lượt từng thiết bị (dịch vụ + mô tả) vào lượt sửa, gửi aiSessionId; bỏ mã KIEM_TRA cũ khỏi FALLBACK_SERVICE_CODES

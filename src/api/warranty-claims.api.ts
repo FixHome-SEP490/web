@@ -1,8 +1,15 @@
-import apiClient from './client';
+import apiClient, { getHttpStatus } from './client';
 import { readPage, type PageResult } from './paging';
 import type { PaginationMeta } from '../types';
 import type { WarrantyClaimView } from './orders.api';
-import type { DeclineReason, InspectionResult, NotCoveredReason, WarrantyClaimStatus } from '../utils/warranty-claim';
+import type {
+  ClaimOutcome,
+  DeclineReason,
+  DeclineReview,
+  InspectionResult,
+  NotCoveredReason,
+  WarrantyClaimStatus,
+} from '../utils/warranty-claim';
 
 export interface WarrantyVisitView {
   id: string;
@@ -23,6 +30,7 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
   order: {
     id: string;
     code: string;
+    bookingId?: string;
     serviceName: string;
     addressSummary: string;
     customerName: string;
@@ -30,6 +38,85 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
   };
   coverage: { id: string; itemDescription: string; expiresAt: string } | null;
   visit: WarrantyVisitView | null;
+  /** A decline or missed response waiting for a manager, or the verdict. */
+  declineReview?: DeclineReview | null;
+  declineReasonCode?: string | null;
+  outcomeCode?: ClaimOutcome | null;
+  /** Whole VND returned to the customer wallet when the item could not be fixed. */
+  refundAmount?: number | null;
+  noShowFlaggedAt?: string | null;
+}
+
+type Person = { id: string; fullName: string } | null;
+
+/** One claim with everything a service manager needs to judge it. */
+export interface WarrantyClaimDetail extends StaffWarrantyClaim {
+  /** False when the server answered with the claim only (a backend without the detail block yet). */
+  detailLoaded?: boolean;
+  detail: {
+    decision: {
+      finalResult: InspectionResult | null;
+      finalReasonCode: string | null;
+      smOverrodeProposal: boolean;
+      reviewedBy: Person;
+      reviewedAt: string | null;
+      customerRespondedAt: string | null;
+      awaitingSince: string | null;
+      escalatedSupportCaseId: string | null;
+    };
+    declined: { by: Person; at: string | null; reasonCode: string | null; note: string | null } | null;
+    originalJob: {
+      completedAt: string | null;
+      paymentStatus: string;
+      laborTotal: number;
+      partsTotal: number;
+      grandTotal: number;
+      laborWarrantyDays: number | null;
+      technicians: { id: string; fullName: string; assignedAt: string; isActive: boolean }[];
+      lines: {
+        id: string;
+        type: string;
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        lineTotal: number;
+        warrantyDays: number;
+        partSource: string | null;
+        partWarrantyOption: string | null;
+        covered: boolean;
+      }[];
+    };
+    coverage: { id: string; startsAt: string; expiresAt: string; warrantyDays: number; status: string } | null;
+    visits: (WarrantyVisitView & { technician: Person })[];
+    partRequest: {
+      id: string;
+      status: string;
+      chargeTechnician: boolean;
+      faultyInspectionResult: 'manufacturer' | 'installation' | 'undetermined' | null;
+      faultyInspectionNote: string | null;
+      faultyInspectionEvidence: string[] | null;
+      faultyInspectedAt: string | null;
+      items: { id: string; name: string; quantity: number; unitPrice: number; usageStatus: string }[];
+    } | null;
+    otherClaims: { id: string; status: string; submittedAt: string; itemDescription: string }[];
+  };
+}
+
+export function emptyClaimDetail(): WarrantyClaimDetail['detail'] {
+  return {
+    decision: { finalResult: null, finalReasonCode: null, smOverrodeProposal: false, reviewedBy: null, reviewedAt: null, customerRespondedAt: null, awaitingSince: null, escalatedSupportCaseId: null },
+    declined: null,
+    originalJob: { completedAt: null, paymentStatus: 'unpaid', laborTotal: 0, partsTotal: 0, grandTotal: 0, laborWarrantyDays: null, technicians: [], lines: [] },
+    coverage: null,
+    visits: [],
+    partRequest: null,
+    otherClaims: [],
+  };
+}
+
+export interface ReplacementPart {
+  partCatalogId: string;
+  quantity: number;
 }
 
 export interface ProposeInspectionPayload {
@@ -60,6 +147,27 @@ export const warrantyClaimsApi = {
     return readPage(res.data, { page, pageSize });
   },
 
+  /**
+   * One of my claims. A claim handed back or taken by someone else answers 404, and so does a
+   * backend without the single-claim route, so a 404 is double-checked against my own list.
+   */
+  async get(claimId: string): Promise<StaffWarrantyClaim> {
+    try {
+      const res = await apiClient.get<{ data: StaffWarrantyClaim }>(`/warranty-claims/${encodeURIComponent(claimId)}`);
+      return res.data.data;
+    } catch (reason) {
+      if (getHttpStatus(reason) !== 404) throw reason;
+      const pageSize = 100;
+      for (let page = 1; page <= 5; page++) {
+        const result = await warrantyClaimsApi.listMine({ page, pageSize });
+        const found = result.items.find((claim) => claim.id === claimId);
+        if (found) return found;
+        if (page * pageSize >= result.total) break;
+      }
+      throw reason;
+    }
+  },
+
   accept: (claimId: string, payload: { scheduledAt?: string }) => post(claimId, 'accept', payload),
 
   decline: (claimId: string, payload: { reasonCode: DeclineReason; note?: string }) =>
@@ -79,6 +187,8 @@ export interface WarrantyQueueQuery {
   status?: WarrantyClaimStatus;
   unassigned?: boolean;
   technicianId?: string;
+  /** Only claims whose decline or missed response a manager still has to judge. */
+  declineReview?: 'pending';
 }
 
 export interface TechnicianWarrantyStat {
@@ -131,16 +241,32 @@ export const warrantyManagerApi = {
     return res.data.data;
   },
 
+  async getDetail(claimId: string): Promise<WarrantyClaimDetail> {
+    const res = await apiClient.get<{ data: StaffWarrantyClaim & Partial<WarrantyClaimDetail> }>(`${MANAGER_BASE}/${encodeURIComponent(claimId)}`);
+    const data = res.data.data;
+    // A backend without the detail block still answers with the claim itself: show that, not a blank page.
+    return { ...data, detail: data.detail ?? emptyClaimDetail(), detailLoaded: !!data.detail };
+  },
+
   assign: (claimId: string, technicianId: string) => managerPost(claimId, 'assign', { technicianId }),
 
   approve: (
     claimId: string,
-    payload: { result?: InspectionResult; reasonCode?: NotCoveredReason; customerNote?: string },
+    payload: {
+      result?: InspectionResult;
+      reasonCode?: NotCoveredReason;
+      customerNote?: string;
+      overrideReason?: string;
+      replacementParts?: ReplacementPart[];
+    },
   ) => managerPost(claimId, 'approve', payload),
 
   reject: (claimId: string, payload: { reasonCode: NotCoveredReason; customerNote: string }) =>
     managerPost(claimId, 'reject', payload),
 
-  close: (claimId: string, payload: { outcome: 'resolved' | 'rejected'; note?: string }) =>
+  close: (claimId: string, payload: { outcome: 'resolved' | 'rejected' | 'unfixed'; note?: string; refundAmount?: number }) =>
     managerPost(claimId, 'close', payload),
+
+  reviewDecline: (claimId: string, payload: { valid: boolean; note: string }) =>
+    managerPost(claimId, 'review-decline', payload),
 };

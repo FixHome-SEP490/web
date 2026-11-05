@@ -264,6 +264,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Bảo hành' },
       },
       {
+        path: 'warranty/:id',
+        name: 'tech-warranty-detail',
+        component: () => import('../pages/technician/TechnicianWarrantyDetailPage.vue'),
+        meta: { title: 'Chi tiết bảo hành' },
+      },
+      {
         path: 'earnings',
         name: 'tech-earnings',
         component: () => import('../pages/technician/TechnicianEarningsPage.vue'),
@@ -333,6 +339,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Yêu cầu linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'warehouses',
+        name: 'console-warehouses',
+        component: () => import('../pages/console/ConsoleWarehousesPage.vue'),
+        meta: { title: 'Kho linh kiện', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'wallets',
         name: 'console-wallets',
         component: () => import('../pages/console/ConsoleWalletsPage.vue'),
@@ -375,6 +387,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/console/ConsoleWarrantyPage.vue'),
         // The admin reads the queue and the rates; only a service manager decides (PO 09/10/2026).
         meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
+        path: 'warranty/:id',
+        name: 'console-warranty-detail',
+        component: () => import('../pages/console/ConsoleWarrantyDetailPage.vue'),
+        meta: { title: 'Chi tiết bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'support/cash/:id',

@@ -25,6 +25,7 @@ import {
   Wallet,
   WalletCards,
   TicketPercent,
+  Warehouse,
 } from 'lucide-vue-next';
 
 export interface ConsoleNavItem {
@@ -51,6 +52,7 @@ const support = item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
 const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
 const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', MapPinned);
+const warehouses = item('Kho linh kiện', '/console/warehouses', Warehouse);
 
 /**
  * Sidebar of the console, one list per role (PO 10/10/2026): grouped by job,
@@ -59,7 +61,7 @@ const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', Map
 export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, partRequests, partReturns, payouts, serviceAreas] },
+      { group: 'Vận hành', items: [overview, orders, bookings, warehouses, partRequests, partReturns, payouts, serviceAreas] },
       {
         group: 'Hỗ trợ',
         items: [
@@ -75,7 +77,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
     return [
       {
         group: 'Vận hành',
-        items: [overview, orders, bookings, partRequests, support, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+        items: [overview, orders, bookings, warehouses, partRequests, support, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
       },
       {
         group: 'Kỹ thuật viên',

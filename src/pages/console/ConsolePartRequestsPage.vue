@@ -6,6 +6,7 @@ import { Copy, Check, X } from 'lucide-vue-next';
 import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
@@ -14,6 +15,7 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField } from '../../components/console/console-ui';
 import {
   partRequestsApi,
+  type WarehouseAllocation,
   type PartRequest,
   type PartRequestStatus,
   type PartRequestType,
@@ -25,9 +27,11 @@ import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeSt
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
+import { canConfirmWarehouseHandover, warehouseQrAction } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
+const isAdmin = computed(() => auth.hasRole('ADMIN'));
 const page = ref(1);
 const pageSize = 20;
 const loadError = ref(false);
@@ -45,9 +49,16 @@ const fulfillmentFilter = ref('ALL');
 const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 
 const qrModalRequest = ref<PartRequest | null>(null);
+const inspectionRequest = ref<PartRequest | null>(null);
 const detailModalRequest = ref<PartRequest | null>(null);
 const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
+const allocations = ref<Record<string, WarehouseAllocation | null>>({});
+const allocationLoading = ref<Record<string, boolean>>({});
+const allocationErrors = ref<Record<string, string>>({});
+const warehouseTokens = ref<Record<string, { pickup: string | null; receipt: string | null }>>({});
+const warehouseQrImages = ref<Record<string, { pickup: string; receipt: string }>>({});
+const handoverTarget = ref<PartRequest | null>(null);
 
 // Thợ đã khai trả, quản lý nhận ở trang Hoàn trả linh kiện (BUG DETECTOR 10); ở đây chỉ nhắc số dòng đang chờ.
 const returnsWaiting = ref<number | null>(null);
@@ -159,6 +170,7 @@ const loadData = async () => {
     if (version !== loadVersion) return;
     requests.value = res.data;
     totalCount.value = res.total;
+    await loadWarehouseAllocations(res.data, version);
     void loadVisibleCustody(res.data, version);
   } catch {
     if (version !== loadVersion) return;
@@ -168,6 +180,71 @@ const loadData = async () => {
     if (version === loadVersion) loading.value = false;
   }
 };
+
+async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
+  const pickups = rows.filter((row) => row.fulfillmentMethod === 'pickup');
+  allocations.value = {};
+  allocationErrors.value = {};
+  for (const row of pickups) allocationLoading.value[row.id] = true;
+  await Promise.all(pickups.map(async (row) => {
+    try {
+      const allocation = await partRequestsApi.getWarehouseAllocation(row.id);
+      if (version === loadVersion) allocations.value[row.id] = allocation;
+    } catch (error) {
+      if (version === loadVersion) allocationErrors.value[row.id] = userFacingError(error, 'Chưa đọc được tình trạng cấp phát kho.');
+    } finally {
+      if (version === loadVersion) allocationLoading.value[row.id] = false;
+    }
+  }));
+}
+
+const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
+const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
+const canReserve = (request: PartRequest) => (canOperate.value || isAdmin.value) && ['manual_assistance', 'reserved'].includes(allocationFor(request)?.status ?? '') && !allocationLoading.value[request.id];
+const canPreparePickupQr = (allocation: WarehouseAllocation | null) => canOperate.value && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
+
+async function reserveWarehouse(request: PartRequest) {
+  if (!canReserve(request) || actionLoading.value) return;
+  actionLoading.value = true;
+  try {
+    const allocation = await partRequestsApi.reserveWarehouse(request.id, { idempotencyKey: crypto.randomUUID() });
+    allocations.value[request.id] = allocation;
+    allocationErrors.value[request.id] = '';
+    showToast('success', allocation.status === 'manual_assistance' ? 'Chưa có kho đủ tồn; đã giữ hướng hỗ trợ thủ công.' : 'Đã giữ tồn tại một kho cho toàn bộ yêu cầu.');
+  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa phân bổ được kho.'); }
+  finally { actionLoading.value = false; }
+}
+
+async function prepareWarehouseQr(request: PartRequest) {
+  const allocation = allocationFor(request);
+  if (!canPreparePickupQr(allocation) || actionLoading.value) return;
+  actionLoading.value = true;
+  try {
+    const result = await partRequestsApi.prepareWarehouseQr(request.id, { idempotencyKey: crypto.randomUUID() });
+    allocations.value[request.id] = result.allocation;
+    warehouseTokens.value[request.id] = { pickup: result.qrToken, receipt: null };
+    if (result.qrToken) warehouseQrImages.value[request.id] = { pickup: await QRCode.toDataURL(result.qrToken, { width: 220 }), receipt: '' };
+    if (!result.qrToken) showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
+  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa tạo được mã QR lấy hàng.'); }
+  finally { actionLoading.value = false; }
+}
+
+async function confirmPhysicalHandover(request: PartRequest) {
+  const pickup = warehouseTokens.value[request.id]?.pickup;
+  const allocation = allocationFor(request);
+  if (!canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocation) || !pickup || actionLoading.value) return;
+  actionLoading.value = true;
+  try {
+    const result = await partRequestsApi.confirmWarehouseHandover(request.id, { qrToken: pickup, idempotencyKey: crypto.randomUUID() });
+    allocations.value[request.id] = result.allocation;
+    warehouseTokens.value[request.id] = { pickup: null, receipt: result.qrToken };
+    if (result.qrToken) warehouseQrImages.value[request.id] = { pickup: '', receipt: await QRCode.toDataURL(result.qrToken, { width: 220 }) };
+    handoverTarget.value = null;
+    if (!result.qrToken) showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên.');
+    else showToast('success', 'Đã xác nhận bàn giao thực tế; tồn kho đã được xuất. Đưa mã nhận hàng riêng cho kỹ thuật viên.');
+  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.'); }
+  finally { actionLoading.value = false; }
+}
 
 onMounted(() => {
   void loadData();
@@ -277,9 +354,20 @@ const regenerateQr = async () => {
 /** Short reference shown to staff and technicians ("PR-1A2B3C4D"). */
 const requestCode = (req: PartRequest) => `PR-${req.id.substring(0, 8).toUpperCase()}`;
 const isOpen = (req: PartRequest) => ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
-const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.toLowerCase()) && !!req.qrToken;
+const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.toLowerCase()) && !!req.qrToken && (req.fulfillmentMethod === 'delivery' || allocationFor(req)?.mode === 'legacy');
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
-const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : 'Phát sinh');
+const canMarkLegacyPickupReady = (req: PartRequest) => req.fulfillmentMethod === 'pickup' && allocationFor(req)?.mode === 'legacy';
+const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
+// A warranty part is issued only after the faulty one was inspected; the result decides who pays.
+const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !req.faultyInspectionResult;
+const canReinspect = (req: PartRequest) => req.requestType === 'warranty' && ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
+const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
+const onInspected = (updated: PartRequest) => {
+  replaceRow(updated);
+  if (detailModalRequest.value?.id === updated.id) detailModalRequest.value = updated;
+  inspectionRequest.value = null;
+  showToast('success', 'Đã lưu kết quả kiểm tra linh kiện hỏng.');
+};
 const methodLabel = (method: string) => (method === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho');
 
 const getStatusLabel = (status: PartRequestStatus | string) => {
@@ -369,6 +457,7 @@ const getUsageBadgeClass = (status: string) => {
         <option value="ALL">Tất cả loại</option>
         <option value="PRE_REPAIR">Trước sửa chữa</option>
         <option value="ADDITIONAL">Phát sinh</option>
+        <option value="WARRANTY">Bảo hành</option>
       </select>
       <select v-model="fulfillmentFilter" :class="consoleField" aria-label="Hình thức nhận">
         <option value="ALL">Mọi hình thức</option>
@@ -482,7 +571,14 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-actions="{ row }">
         <div class="flex items-center justify-end gap-2">
           <FhButton
-            v-if="canOperate && row.status.toLowerCase() === 'requested'"
+            v-if="canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="inspectionRequest = row"
+          >Kiểm tra linh kiện hỏng</FhButton>
+          <FhButton
+            v-else-if="canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -516,6 +612,41 @@ const getUsageBadgeClass = (status: string) => {
         </div>
       </template>
     </ConsoleTable>
+
+    <section v-for="row in requests.filter((request) => request.fulfillmentMethod === 'pickup')" :key="`warehouse-${row.id}`" class="space-y-2 rounded-lg border border-ink-200 bg-white p-4" :data-testid="`warehouse-allocation-${row.id}`">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold text-ink-900">Lấy hàng tại kho · {{ requestCode(row) }}</h2>
+        <span v-if="allocationLoading[row.id]" class="text-sm text-ink-500">Đang kiểm tra phân bổ…</span>
+        <span v-else-if="allocationFor(row)?.mode === 'legacy'" class="text-sm text-ink-600">Yêu cầu lịch sử, chưa tham gia phân bổ kho W2.</span>
+        <span v-else-if="allocationFor(row)?.status === 'received'" class="text-sm font-medium text-success-700">Kỹ thuật viên đã xác nhận nhận hàng.</span>
+        <span v-else-if="allocationFor(row)?.status === 'handed_over'" class="text-sm font-medium text-brand-700">Quản lý đã bàn giao thực tế; tồn đã xuất.</span>
+        <span v-else-if="allocationFor(row)?.status === 'ready'" class="text-sm font-medium text-brand-700">Đã có mã lấy hàng; đang chờ bàn giao thực tế.</span>
+        <span v-else-if="allocationFor(row)?.status === 'reserved'" class="text-sm font-medium text-brand-700">Đã giữ toàn bộ linh kiện tại một kho.</span>
+        <span v-else-if="allocationFor(row)?.status === 'manual_assistance'" class="text-sm font-medium text-warning-800">Cần quản lý hỗ trợ thủ công; chưa sẵn sàng nhận.</span>
+        <span v-else-if="allocationErrors[row.id]" class="text-sm text-danger-700">{{ allocationErrors[row.id] }}</span>
+      </div>
+      <template v-if="allocationFor(row)?.mode === 'warehouse'">
+        <p v-if="allocationFor(row)?.warehouseName" class="text-sm text-ink-700">Kho: {{ allocationFor(row)?.warehouseName }}<template v-if="allocationFor(row)?.warehouseAddress"> · {{ allocationFor(row)?.warehouseAddress }}</template></p>
+        <p v-if="allocationFor(row)?.reviewRequired" class="text-sm text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+        <p v-if="allocationFor(row)?.manualAssistanceReason" class="text-sm text-warning-800">Chưa có một kho đủ tồn cho toàn bộ yêu cầu. Có thể nhờ quản lý hỗ trợ thủ công; không tự chia qua nhiều kho.</p>
+        <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
+        <div v-if="allocationFor(row)?.status === 'manual_assistance'" class="flex flex-wrap gap-2">
+          <FhButton v-if="canReserve(row)" variant="secondary" size="sm" :disabled="actionLoading" @click="reserveWarehouse(row)">Thử phân bổ lại</FhButton>
+          <router-link to="/console/warehouses" class="inline-flex min-h-10 items-center text-sm font-medium text-brand-700 underline">Mở kho và tồn thực tế</router-link>
+        </div>
+        <FhButton v-if="canPreparePickupQr(allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+        <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-brand-200 bg-brand-50 p-3">
+          <img :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 bg-white p-1" />
+          <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
+        </div>
+        <div v-if="warehouseTokens[row.id]?.receipt && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-success-200 bg-success-50 p-3">
+          <img :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 bg-white p-1" />
+          <div class="min-w-0 flex-1 space-y-1"><p class="text-sm font-semibold text-success-800">Đưa mã nhận hàng riêng này cho kỹ thuật viên (hiệu lực 48 giờ).</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.receipt }}</p></div>
+        </div>
+      </template>
+    </section>
+
+    <FhConfirmDialog :open="Boolean(handoverTarget)" title="Xác nhận đã giao linh kiện trực tiếp?" consequence="Chỉ xác nhận sau khi đã giao đủ toàn bộ linh kiện tại kho. Backend sẽ xuất tồn một lần và tạo mã nhận riêng cho kỹ thuật viên." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && confirmPhysicalHandover(handoverTarget)" @cancel="handoverTarget = null" />
 
     <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="setPage" />
 
@@ -605,6 +736,13 @@ const getUsageBadgeClass = (status: string) => {
 
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Loại</dt><dd class="text-ink-900">{{ typeLabel(detailModalRequest.requestType) }}</dd></div>
+          <div v-if="detailModalRequest.requestType === 'warranty'" class="flex justify-between gap-3">
+            <dt class="text-ink-500">Linh kiện hỏng</dt>
+            <dd class="text-right text-ink-900">
+              {{ inspectionLabel(detailModalRequest.faultyInspectionResult) }}
+              <button v-if="canOperate && canReinspect(detailModalRequest)" type="button" class="ml-2 text-brand-700 hover:underline" @click="inspectionRequest = detailModalRequest">{{ detailModalRequest.faultyInspectionResult ? 'Sửa' : 'Kiểm tra' }}</button>
+            </dd>
+          </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(detailModalRequest.status) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Phí giao hàng</dt><dd><FhMoney :amount="detailModalRequest.shippingFee || 0" /></dd></div>
@@ -651,6 +789,8 @@ const getUsageBadgeClass = (status: string) => {
         </div>
       </div>
     </div>
+
+    <FaultyPartInspectionModal :request="inspectionRequest" @close="inspectionRequest = null" @done="onInspected" />
   </div>
 </template>
 

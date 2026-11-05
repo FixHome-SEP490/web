@@ -9,7 +9,8 @@ export type PartRequestStatus =
   | 'completed'
   | 'cancelled';
 
-export type PartRequestType = 'pre_repair' | 'additional' | 'quotation';
+export type PartRequestType = 'pre_repair' | 'additional' | 'quotation' | 'warranty';
+export type FaultyInspectionResult = 'manufacturer' | 'installation' | 'undetermined';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type PartUsageStatus = 'pending' | 'used' | 'returned';
 export type PartSource = 'fixhome' | 'technician' | 'external';
@@ -45,10 +46,35 @@ export interface PartRequest {
   completedAt?: string | null;
   cancelledAt?: string | null;
   preparedByUserId?: string | null;
+  /** Warranty only: what the manager found on the faulty part; it decides who pays the new one. */
+  faultyInspectionResult?: FaultyInspectionResult | null;
+  faultyInspectionNote?: string | null;
+  chargeTechnician?: boolean;
   createdAt: string;
   updatedAt: string;
   items: PartRequestItem[];
 }
+
+export type WarehouseAllocationMode = 'warehouse' | 'legacy';
+export type WarehouseAllocationStatus = 'manual_assistance' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
+export interface WarehouseAllocation {
+  partRequestId: string;
+  mode: WarehouseAllocationMode;
+  status: WarehouseAllocationStatus;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  warehouseAddress?: string | null;
+  responsibleUserId?: string | null;
+  distanceNotVerified?: boolean;
+  reviewRequired?: boolean;
+  manualAssistanceReason?: string | null;
+  tokenExpiresAt?: string | null;
+  tokenVersion?: number;
+  handedOverAt?: string | null;
+  receivedAt?: string | null;
+}
+export interface WarehouseAllocationCommandPayload { idempotencyKey: string }
+export interface WarehouseQrResponse { allocation: WarehouseAllocation; qrToken: string | null }
 
 export interface CreatePartRequestPayload {
   items: Array<{
@@ -483,6 +509,35 @@ export const partRequestsApi = {
     const res = await apiClient.get<{ data: PartRequest }>(
       `/part-requests/${requestId}`,
     );
+    return res.data.data;
+  },
+
+  async getWarehouseAllocation(requestId: string): Promise<WarehouseAllocation> {
+    const response = await apiClient.get<{ data: WarehouseAllocation }>(`/part-requests/${requestId}/warehouse-allocation`);
+    return response.data.data;
+  },
+
+  async reserveWarehouse(requestId: string, payload: WarehouseAllocationCommandPayload): Promise<WarehouseAllocation> {
+    const response = await apiClient.post<{ data: WarehouseAllocation }>(`/part-requests/${requestId}/warehouse-reserve`, payload);
+    return response.data.data;
+  },
+
+  async prepareWarehouseQr(requestId: string, payload: WarehouseAllocationCommandPayload): Promise<WarehouseQrResponse> {
+    const response = await apiClient.post<{ data: WarehouseQrResponse }>(`/part-requests/${requestId}/warehouse-qr`, payload);
+    return response.data.data;
+  },
+
+  async confirmWarehouseHandover(requestId: string, payload: { qrToken: string; idempotencyKey: string }): Promise<WarehouseQrResponse> {
+    const response = await apiClient.post<{ data: WarehouseQrResponse }>(`/part-requests/${requestId}/warehouse-handover`, payload);
+    return response.data.data;
+  },
+
+  /** SM records what the faulty part of a warranty request shows; required before READY. */
+  async recordFaultyInspection(
+    requestId: string,
+    payload: { result: FaultyInspectionResult; note?: string; evidenceRefs?: string[] },
+  ): Promise<PartRequest> {
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-inspection`, payload);
     return res.data.data;
   },
 
