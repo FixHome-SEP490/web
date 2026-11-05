@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-04 19:41 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w3-delivery-web-20261104
+> Cập nhật lần cuối: 2026-11-05 19:51 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w3-delivery-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -100,7 +100,11 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
 - Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
 
-### W3 delivery Web — read-only scaffold (04/11/2026)
+### W3 delivery Web — shipping chỉ đọc và Admin DRAFT/preview (05/11/2026)
+
+- Admin có trang riêng `/console/admin/w3-delivery-policy`, menu “Cấu hình giao hàng” (trang ghi rõ bản nháp), chỉ Admin với route `config:read`; Backend giữ quyền ghi `config:update`. Chỉ đọc current/history, tạo/sửa DRAFT theo revision và preview giả định thủ công; không có chính sách hiệu lực hoặc thao tác tài chính. Generic AdminConfig không đổi.
+- Adapter fail closed theo envelope thành công, sáu blockers, `NON_EXECUTABLE_PREVIEW/BLOCKED`, effective policy null, DRAFT/revision/version và SHA-256 canonical fingerprint. Số nguyên không âm/safe; không tự điền phí. Ngưỡng phí chỉ để xem xét, không phải phí giao thực tế được duyệt; shares chỉ do server trả. 404/503 ẩn form với NOT_AVAILABLE; 409 giữ nội dung và yêu cầu tải lại; lỗi chưa rõ không tự retry hay báo lưu thành công.
+- Focused W3 + console shell + routes + context 65/65 PASS; lint/typecheck/build PASS. Full suite đã chạy lại 2446/2446 PASS sau khi rút nhãn menu tuân thủ design system. Reviewer READ_ONLY kiểm tra lại hai finding đã sửa, không còn blocker source. Chromium với API giả lập tại 360/768/1440 px kiểm lưu, preview, conflict, unsupported, focus và giảm chuyển động; không tràn ngang. Backend/JWT/DB thật, owner before/after review và Mobile NOT VERIFIED; không sửa Mobile/AI. Xem mục 8 và `docs/WAREHOUSE_W3_WEB_HANDOFF.md`.
 
 - Web thêm kiểu đọc optional cho `shippingPolicyVersion`, `customerShippingShare`, `technicianShippingShare` và `technicianNetLabor`; không thêm URL hoặc mutation. Thiếu policy/shares giữ `LEGACY_100_0` và phí khách bằng toàn bộ `shippingFee`. W3 chỉ hiển thị khi version là `W3_70_30_V1`, các số VND nguyên không âm/safe, tổng shares bằng courier cost và customer share đúng `floor((7*S+5)/10)` bằng BigInt; policy vắng nhưng có shares split, shares LEGACY lệch hoặc snapshot W3 thiếu/sai đều fail closed.
 - Customer/visit hiện hai shares, technician hiện hai shares và chỉ hiện net labor server gửi, SM xem full courier cost; pickup không có phí. Không hiện consent/approval/payment/dispatch mới. Existing API responses chỉ được đọc nếu tự mang các fields; draft delivery endpoint chưa được gọi nên W3 chưa được bật. Handoff: `docs/WAREHOUSE_W3_WEB_HANDOFF.md`.
@@ -414,6 +418,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 5. Hợp đồng với repo khác
 
+- W3 Admin B3a source-only, đối chiếu controller/DTO/service/store Backend và mục 14 `WAREHOUSE_W3_FINANCE_CONTRACT.md`: `/admin/w3-delivery-policy/{current,history,drafts,preview}`; PATCH `/drafts/:id` tạo snapshot UUID mới. Create dùng `expectedRevision:0`, revise/preview dùng revision đã đọc. Preview gửi draftId và mẫu nhập thủ công với tuổi bằng chứng nullable; không đọc hóa đơn/đề xuất thật. Không có ACTIVE/RETIRED/effective API. Mọi phản hồi giữ mode preview, finance BLOCKED, effectivePolicy null và đủ sáu blockers. Backend chưa triển khai, migration 0006 chưa áp dụng, HTTP/DB và financial activation NOT VERIFIED.
+
 - Lịch sử cựu phân công: `GET /service-orders/my?page&pageSize&history=withdrawn` chỉ kỹ thuật viên, không kết hợp status/stage hoặc `excludeVisitGroups`. Backend trả từng HistoricalOrderSummary kể cả child trong VisitGroup, không chạy sweep trễ ở nhánh này. Web chỉ giữ `id, code, status, createdAt, completedAt, cancelledAt, historical` và cặp `workStopped=true/operationalDisposition=STOPPED` có chứng cứ; từ chối ID/status/shape lạ, không fallback sang live order. Không có group/customer/booking metadata trong DTO mới. Đối chiếu source Backend writer; rollout Backend trước Web, runtime chưa kiểm chứng.
 
 - Group stop (nguồn worktree Backend đang viết ngày 01/11/2026): `GET /visit-groups/:id/contact-readiness?selectedOrderId=...` trả `contactCount`, `notificationSent`, `callsSpaced`, `nextCallAt`, `nextEligibleAt`, `serverNow`, `ready`. `POST /visit-groups/:id/contact-attempt` nhận `selectedOrderId, commandId, kind` (`CALL_ATTEMPT|IN_APP_NOTIFICATION`), trả thêm `evidenceId, recordedAt, callConnectionVerified=false`. `POST /visit-groups/:id/cannot-continue` nhận `selectedOrderId, commandId, reasonClass, reasonCode, reason, photoEvidenceIds`; Web chỉ gửi hai lý do nhóm với `non_technician_exception`, mô tả trim 10–2.000 ký tự, tối đa 3 UUID ảnh. Kết quả xác minh `groupId/commandId`, `stopped`, `preserved`, giữ nghĩa vụ cũ và không tự áp trách nhiệm. GET `/:id/stop-incidents` chỉ cho SM/Admin; Web không dùng endpoint này cho thợ.
@@ -484,6 +490,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- W3 Admin Web: chưa commit/push/merge/deploy. Full suite có test `console-ui-shell.spec.ts` bắt nhãn menu ≤20 ký tự/không ngoặc, xung đột nhãn chính xác owner yêu cầu (36 ký tự/có ngoặc); test ngoài allowlist nên không sửa, gate chưa xanh. Lead/owner cần xử lý xung đột trước release, duyệt trước/sau và xác minh source/migration/PG/RLS/grants. Không dùng draft hoặc preview làm shipping approval, consent hoặc mở tài chính. Backend thật, shared DEV và legal/Finance signoff NOT VERIFIED; restart Backend và hard-refresh Web chỉ sau rollout được duyệt riêng.
+
 - W1/W2 Web đã gộp `origin/dev` `1110b4a` và đẩy lên PR #209; chưa merge/deploy. Chờ CI Web và Backend W2 PR #195 cùng migration/reconciliation trước DEV rollout. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
 - Bảo hành 04/11: Mobile chưa cập nhật nên chưa có luồng tự chọn linh kiện, đóng `unfixed` hay xét từ chối; thợ dùng Mobile vẫn gửi lý do `busy` (vào hàng chờ xét) và gửi kết luận lỗi linh kiện không kèm ảnh sẽ bị Backend từ chối. Màn Console chưa có bộ chọn nhiều linh kiện; Backend nhận nhiều.
 - P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
@@ -542,6 +550,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-05 19:51 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Admin W3 DRAFT/preview fail-closed, source review và mock QA 360/768/1440; rút nhãn menu theo design system không nới test, full Web 2446/2446 PASS, focused 65/65 và lint/typecheck/build PASS; không kích hoạt tài chính.
 - 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
 - 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
 - 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
@@ -581,5 +590,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-27 18:12 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối kỹ thuật viên với lookup cash funded SOLO/VisitGroup và khai theo due server; giữ fail-closed cho tới khi Backend chốt GET và phản hồi không có reservation.
 - 2026-10-27 17:52 (UTC+7) | foxonworld | foxonworld/fixhome-t21-web-integration-post178-20261027 | Nối chooser với reservation và funded Wallet/VNPay/Cash-confirm/ZERO; giữ APPLY fail-closed theo preview Backend, khóa cash khi luồng thợ chưa gửi reservation; rails thật CHƯA KIỂM CHỨNG.
 - 2026-10-26 21:40 (UTC+7) | ToanAltF4 | fix/ai-price-and-description | Chat AI ghi rõ khoảng giá gồm tiền công và linh kiện; mô tả sang form bỏ câu sai rồi
-- 2026-10-26 18:49 (UTC+7) | ToanAltF4 | feat/ai-pushback-no-buttons | Bỏ nút Đúng ý/Chưa đúng, trang Trợ lý AI hiện lần khách nói sai do AI tự nhận ra; sửa thanh trên cùng bị nút Đặt thợ ngay đè
-- 2026-10-26 14:32 (UTC+7) | foxonworld | foxonworld/fixhome-t2-integration-20261026 | Tích hợp trang voucher có routes/menu, REST chiến dịch/grant và ví/general/claim; checkout chỉ xem voucher, giữ khóa tài chính.

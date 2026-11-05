@@ -461,6 +461,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Cấu hình hệ thống', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/w3-delivery-policy',
+        name: 'admin-w3-delivery-policy',
+        component: () => import('../pages/console/admin/AdminW3DeliveryPolicyPage.vue'),
+        meta: { title: 'Cấu hình giao hàng', roles: ['ADMIN'], permission: 'config:read' },
+      },
+      {
         path: 'admin/parts',
         name: 'admin-parts',
         component: () => import('../pages/console/admin/AdminPartsPage.vue'),
