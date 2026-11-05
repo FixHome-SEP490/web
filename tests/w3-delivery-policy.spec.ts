@@ -28,7 +28,13 @@ function preview() {
     totals: { shippingFeeVnd: 20000, customerShippingShare: 14000, technicianShippingShare: 6000 },
     counts: { proposals: 1, aboveFeeCeiling: 0, proposalReviewDue: 0, courierEvidenceReviewDue: 0 } };
 }
-beforeEach(() => { setActivePinia(createPinia()); vi.stubGlobal('crypto', webcrypto); vi.spyOn(useAuthStore(), 'hasPermission').mockReturnValue(true); });
+beforeEach(() => {
+  setActivePinia(createPinia()); vi.stubGlobal('crypto', webcrypto);
+  const auth = useAuthStore();
+  auth.user = { id: 'admin-a', email: 'admin@example.test', fullName: 'Admin', role: 'ADMIN', status: 'active' };
+  auth.token = 'admin-token';
+  vi.spyOn(auth, 'hasPermission').mockReturnValue(true);
+});
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function mountPage() {
   const wrapper = mount(Page, { global: { stubs: { RouterLink: true } } });
@@ -93,11 +99,13 @@ describe('W3 Admin policy boundary', () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...inert, drafts: [draft()] }));
     await w3DeliveryPolicyApi.create(parameters);
     await w3DeliveryPolicyApi.revise(id, 1, parameters);
-    await w3DeliveryPolicyApi.history();
+    const history = await w3DeliveryPolicyApi.history();
     const result = await w3DeliveryPolicyApi.preview(draft(), [sample]);
     expect(post.mock.calls[0]).toEqual(['/admin/w3-delivery-policy/drafts', { expectedRevision: 0, parameters }]);
     expect(patch.mock.calls[0]).toEqual([`/admin/w3-delivery-policy/drafts/${id}`, { expectedRevision: 1, parameters }]);
     expect(get.mock.calls[0]?.[0]).toBe('/admin/w3-delivery-policy/history');
+    expect(history.drafts[0]?.state.revision).toBe(1);
+    expect(history.blockers).toEqual(inert.blockers);
     expect(post.mock.calls[1]).toEqual(['/admin/w3-delivery-policy/preview', { draftId: id, expectedRevision: 1, samples: [sample] }]);
     expect(result.proposals[0]?.customerShippingShare).toBe(14000);
   });
@@ -105,6 +113,15 @@ describe('W3 Admin policy boundary', () => {
     const post = vi.spyOn(apiClient, 'post');
     await expect(w3DeliveryPolicyApi.create({ ...parameters, feeCeilingVnd: fee } as never)).rejects.toThrow();
     expect(post).not.toHaveBeenCalled();
+  });
+  it.each([
+    { blockers: [] },
+    { drafts: [draft(1), draft(2)] },
+    { drafts: [draft(), draft()] },
+    { drafts: Array.from({ length: 21 }, (_, index) => draft(21 - index)) },
+  ])('rejects unsafe history response %j', async (change) => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...inert, drafts: [draft()], ...change }));
+    await expect(w3DeliveryPolicyApi.history()).rejects.toThrow();
   });
   it.each(['hypothetical', 'binding', 'snapshot', 'sample', 'share'])('rejects unsafe preview %s', async (field) => {
     const result = preview();
@@ -139,6 +156,49 @@ describe('W3 Admin UI and actor boundary', () => {
     expect(wrapper.text()).toContain('NOT_AVAILABLE');
     expect(wrapper.find('form').exists()).toBe(false); wrapper.unmount();
   });
+  it('shows read-only versioned history and selects the matching snapshot detail', async () => {
+    const get = vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce(envelope(current()))
+      .mockResolvedValueOnce(envelope({ ...inert, drafts: [draft(2), draft()] }));
+    const wrapper = await mountPage();
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      '/admin/w3-delivery-policy/current',
+      '/admin/w3-delivery-policy/history',
+    ]);
+    expect(wrapper.get('[data-testid="history-detail"]').text()).toContain('Lần sửa 2');
+    expect(wrapper.get('[data-testid="history-detail"]').text()).toContain('Tài chính bị khóa');
+    expect(wrapper.get('[data-testid="history-detail"]').text()).toContain('Pháp lý chưa xác minh');
+    expect(wrapper.find('[data-testid="history-detail"] button').exists()).toBe(false);
+    await wrapper.get('select[aria-label="Chọn phiên bản bản nháp"]').setValue(id);
+    expect(wrapper.get('[data-testid="history-detail"]').text()).toContain('Lần sửa 1');
+    wrapper.unmount();
+  });
+  it.each([404, 503])('reports history HTTP %s safely and keeps current draft controls', async (status) => {
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce(envelope(current()))
+      .mockRejectedValueOnce({ response: { status } });
+    const wrapper = await mountPage();
+    expect(wrapper.get('[role="alert"]').text()).toContain('NOT_AVAILABLE');
+    expect(wrapper.find('form[data-testid="draft-form"]').exists()).toBe(true);
+    expect(wrapper.find('form[data-testid="preview-form"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+  it('clears history and ignores a late response after the signed-in role changes', async () => {
+    let resolveHistory!: (value: unknown) => void;
+    const get = vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce(envelope(current()))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveHistory = resolve; }));
+    const wrapper = mount(Page, { global: { stubs: { RouterLink: true } } });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    const auth = useAuthStore();
+    auth.user = { ...auth.user!, role: 'TECHNICIAN' };
+    await flushPromises();
+    expect(wrapper.find('[data-testid="history-section"]').exists()).toBe(false);
+    resolveHistory(envelope({ ...inert, drafts: [draft()] }));
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Lần sửa 1');
+    wrapper.unmount();
+  });
   it('starts blank, validates and prevents double save or premature success', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...inert, draft: null }));
     let resolve!: (value: unknown) => void;
@@ -165,7 +225,8 @@ describe('W3 Admin UI and actor boundary', () => {
     await wrapper.get('form[data-testid="draft-form"]').trigger('submit');
     expect(patch).toHaveBeenCalledTimes(1);
     await wrapper.get('[data-testid="reload"]').trigger('click'); await flushPromises();
-    expect(get).toHaveBeenCalledTimes(2); wrapper.unmount();
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(4));
+    wrapper.unmount();
   });
   it('requires manual samples and displays only confirmed hypothetical server results', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(current()));
