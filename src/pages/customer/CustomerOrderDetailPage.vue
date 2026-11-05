@@ -35,6 +35,8 @@ import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, 
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
+import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vue';
+import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -273,6 +275,8 @@ const filteredEvidences = computed(() => {
 });
 
 const partRequests = ref<PartRequest[]>([]);
+const deliveryPhysicalRequests = computed(() => partRequests.value.filter(request =>
+  request.fulfillmentMethod === 'delivery' && request.serviceOrderId === order.value?.id && isDeliveryPhysicalRequestId(request.id)));
 const billing = computed(() => orderBilling(order.value, invoice.value, additionalCosts.value, partRequests.value));
 const laborItems = computed(() => billing.value.items.filter(item => item.type.toUpperCase() === 'LABOR'));
 const partsItems = computed(() => billing.value.items.filter(item => item.type.toUpperCase() !== 'LABOR'));
@@ -1673,6 +1677,16 @@ const parsedReview = computed(() => {
           </div>
         </div>
       </section>
+
+      <div v-if="deliveryPhysicalRequests.length" class="order-3 space-y-3" data-testid="customer-delivery-requests">
+        <DeliveryPhysicalPreview
+          v-for="request in deliveryPhysicalRequests"
+          :key="request.id"
+          :request-id="request.id"
+          :fulfillment-method="request.fulfillmentMethod"
+          audience="customer"
+        />
+      </div>
 
       <!-- 6. Costs: one list, lines grouped, one total -->
       <section

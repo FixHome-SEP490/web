@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-05 19:51 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w3-delivery-web-20261104
+> Cập nhật lần cuối: 2026-11-06 00:24 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-review2-p3-w3-delivery-web-20261104
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -101,6 +101,10 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
 
 ### W3 delivery Web — shipping chỉ đọc và Admin DRAFT/preview (05/11/2026)
+
+- Bổ sung preview giao nhận chỉ đọc (06/11): `DeliveryPhysicalPreview` dùng `GET /part-requests/:id/delivery-physical/preview`, chỉ Customer/Technician đúng vai trò màn đang xem. Hai màn lấy UUID từ danh sách PartRequest thật, chỉ `delivery` và đúng ServiceOrder; không dùng additionalCostId/orderId thay requestId. Backend giữ quyền sở hữu và phân công hiện tại. Mỗi khối có mã yêu cầu thực để phân biệt khi có nhiều yêu cầu.
+- Adapter kiểm envelope thành công, schema đầy đủ, requestId khớp, eligibility/reason, enum evidence, đánh giá trước, đủ blockers và toàn bộ actions/execution bị chặn; phí thực tế luôn null, chưa ghi nhận thanh toán courier. Không diễn giải đánh giá lịch sử thành đã giao/nhận; không tính tiền hoặc tạo phê duyệt. Phản hồi cũ bị loại khi đổi request/tài khoản/role/token hoặc unmount. 404/503 hiện chưa khả dụng và ẩn chi tiết; 401/403 không hiện dữ liệu; lỗi khác chỉ cho thử lại GET. Không có lệnh vật lý, consent hoặc settlement mới; pickup/legacy shipping/Admin DRAFT giữ nguyên.
+- Test mới `tests/w3-delivery-physical.spec.ts` 56/56 PASS; focused W3 + context 114/114, full suite 2502/2502 (220 files), lint/typecheck/build PASS. Full suite có log kết nối localhost:3000 được xử lý; build còn cảnh báo chunk lớn hiện có. Review độc lập chỉ đọc phát hiện thiếu tham chiếu giữa nhiều yêu cầu, đã được bổ sung test/sửa và kiểm tra lại không còn finding source. Backend source đã đối chiếu tại worktree W3; signed-in DEV, migration 0007, PostgreSQL và Mobile NOT VERIFIED. Xem handoff cho giới hạn release.
 
 - Admin có trang riêng `/console/admin/w3-delivery-policy`, menu “Cấu hình giao hàng” (trang ghi rõ bản nháp), chỉ Admin với route `config:read`; Backend giữ quyền ghi `config:update`. Chỉ đọc current/history, tạo/sửa DRAFT theo revision và preview giả định thủ công; không có chính sách hiệu lực hoặc thao tác tài chính. Generic AdminConfig không đổi.
 - Adapter fail closed theo envelope thành công, sáu blockers, `NON_EXECUTABLE_PREVIEW/BLOCKED`, effective policy null, DRAFT/revision/version và SHA-256 canonical fingerprint. Số nguyên không âm/safe; không tự điền phí. Ngưỡng phí chỉ để xem xét, không phải phí giao thực tế được duyệt; shares chỉ do server trả. 404/503 ẩn form với NOT_AVAILABLE; 409 giữ nội dung và yêu cầu tải lại; lỗi chưa rõ không tự retry hay báo lưu thành công.
@@ -418,6 +422,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 5. Hợp đồng với repo khác
 
+- W3 physical preview theo Backend commit `585914bd154ccd579a7fc33d40910b6c30c4ea64` (lead cung cấp; source controller/service đã đọc): GET `/part-requests/:id/delivery-physical/preview` qua envelope chuẩn. Chỉ owning Customer/active Technician; không SM/Admin. Body `NON_EXECUTABLE_PREVIEW/NON_ATOMIC`, eligibility `PENDING_ASSISTANCE|INELIGIBLE`, reason `LEGACY_OR_NOT_ENROLLED|SCOPE_OR_PARTS_SOURCE_UNVERIFIED|SHIPPING_APPROVAL_SOURCE_UNVERIFIED`, `lastAssessment` nullable có version/status/reason; evidence `NOT_RECORDED|RECORDED_NOT_EXTERNALLY_VERIFIED`. `physicalExecution`, `financialExecution` và actions reserve/issueToCourier/dispatch/technicianReceipt đều `BLOCKED`; `actualCourierCost=null`, `courierPayment=NOT_RECORDED`, blockers bắt buộc vẫn đóng vật lý/tài chính. Không có HTTP POST/PATCH physical contract cho Web; không gọi proposed operational routes. Runtime shared DEV và migration `1793466000007` NOT VERIFIED; không tạo Backend/DB mới.
+
 - W3 Admin B3a source-only, đối chiếu controller/DTO/service/store Backend và mục 14 `WAREHOUSE_W3_FINANCE_CONTRACT.md`: `/admin/w3-delivery-policy/{current,history,drafts,preview}`; PATCH `/drafts/:id` tạo snapshot UUID mới. Create dùng `expectedRevision:0`, revise/preview dùng revision đã đọc. Preview gửi draftId và mẫu nhập thủ công với tuổi bằng chứng nullable; không đọc hóa đơn/đề xuất thật. Không có ACTIVE/RETIRED/effective API. Mọi phản hồi giữ mode preview, finance BLOCKED, effectivePolicy null và đủ sáu blockers. Backend chưa triển khai, migration 0006 chưa áp dụng, HTTP/DB và financial activation NOT VERIFIED.
 
 - Lịch sử cựu phân công: `GET /service-orders/my?page&pageSize&history=withdrawn` chỉ kỹ thuật viên, không kết hợp status/stage hoặc `excludeVisitGroups`. Backend trả từng HistoricalOrderSummary kể cả child trong VisitGroup, không chạy sweep trễ ở nhánh này. Web chỉ giữ `id, code, status, createdAt, completedAt, cancelledAt, historical` và cặp `workStopped=true/operationalDisposition=STOPPED` có chứng cứ; từ chối ID/status/shape lạ, không fallback sang live order. Không có group/customer/booking metadata trong DTO mới. Đối chiếu source Backend writer; rollout Backend trước Web, runtime chưa kiểm chứng.
@@ -490,6 +496,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Physical preview Web chỉ hoàn tất source chỉ đọc; chưa chứng minh trên authenticated DEV hoặc Mobile. BE cũ 404 hoặc thiếu migration 0007 trả 503 thì Web đóng chi tiết, không fake chứng từ, phí hay phê duyệt. Release vẫn bị chặn đến khi lead xác minh shared DEV Supabase, migration/RLS/grants, Finance/legal và bằng chứng giao nhận thật. Không seed, bật cờ, stage/commit/push/merge/deploy trong task này; sau rollout riêng được duyệt cần hard-refresh Web trước UAT. Browser/DEV/migration/Finance/legal/physical proof: NOT VERIFIED.
+
 - W3 Admin Web: chưa commit/push/merge/deploy. Full suite có test `console-ui-shell.spec.ts` bắt nhãn menu ≤20 ký tự/không ngoặc, xung đột nhãn chính xác owner yêu cầu (36 ký tự/có ngoặc); test ngoài allowlist nên không sửa, gate chưa xanh. Lead/owner cần xử lý xung đột trước release, duyệt trước/sau và xác minh source/migration/PG/RLS/grants. Không dùng draft hoặc preview làm shipping approval, consent hoặc mở tài chính. Backend thật, shared DEV và legal/Finance signoff NOT VERIFIED; restart Backend và hard-refresh Web chỉ sau rollout được duyệt riêng.
 
 - W1/W2 Web đã gộp `origin/dev` `1110b4a` và đẩy lên PR #209; chưa merge/deploy. Chờ CI Web và Backend W2 PR #195 cùng migration/reconciliation trước DEV rollout. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
@@ -550,6 +558,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-06 00:24 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm physical preview GET chỉ đọc cho Customer/Technician trên DELIVERY request thật, schema fail-closed và chống phản hồi cũ; 56 test mới, full 2502/2502 và lint/typecheck/build PASS, review độc lập không còn finding; DEV/release chưa xác minh.
 - 2026-11-05 19:51 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Admin W3 DRAFT/preview fail-closed, source review và mock QA 360/768/1440; rút nhãn menu theo design system không nới test, full Web 2446/2446 PASS, focused 65/65 và lint/typecheck/build PASS; không kích hoạt tài chính.
 - 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
 - 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.

@@ -23,6 +23,8 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
 import ShippingShareBreakdown from './ShippingShareBreakdown.vue';
+import DeliveryPhysicalPreview from './DeliveryPhysicalPreview.vue';
+import { isDeliveryPhysicalRequestId } from '../api/w3-delivery-physical.api';
 import { userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
@@ -1369,6 +1371,12 @@ const getStatusBadgeClass = (status: string) => {
           </section>
 
           <!-- Delivery Shipping Fee if any -->
+          <DeliveryPhysicalPreview
+            v-if="pr.fulfillmentMethod === 'delivery' && pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
+            :request-id="pr.id"
+            :fulfillment-method="pr.fulfillmentMethod"
+            audience="technician"
+          />
           <div v-if="pr.fulfillmentMethod !== 'pickup' && (pr.shippingFee > 0 || pr.shippingPolicyVersion)" class="text-xs text-brand-700 font-medium">
             <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
           </div>
