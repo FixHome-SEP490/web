@@ -5,6 +5,8 @@ import { useAuthStore } from '../../stores/auth';
 import { Copy, Check, X } from 'lucide-vue-next';
 import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
+import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
+import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
@@ -750,6 +752,15 @@ const getUsageBadgeClass = (status: string) => {
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hoàn tất</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</dd></div>
         </dl>
+
+        <DeliveryOperationsPanel
+          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee === 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
+          :request-id="detailModalRequest.id"
+          :fulfillment-method="detailModalRequest.fulfillmentMethod"
+          :request-type="detailModalRequest.requestType"
+          :shipping-fee="detailModalRequest.shippingFee"
+          audience="manager"
+        />
 
         <div>
           <h4 class="mb-2 text-sm font-semibold text-ink-900">Linh kiện</h4>
