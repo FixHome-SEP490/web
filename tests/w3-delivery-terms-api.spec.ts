@@ -11,7 +11,7 @@ const state = { version: 1, scope: 'CONDITIONAL_TERMS_ONLY', quote, customerCons
   technicianConsented: false, actual: null, financialExecution: 'BLOCKED', laborBudget: null,
   aggregateBudgetVerified: false, paymentVerified: false };
 const read = { state, invalidated: false, financialExecution: 'BLOCKED', laborBudget: null,
-  aggregateBudgetVerified: false, recordedConditionalCeilings: { count: 1, shipping: '101', technician: '30' },
+  aggregateBudgetVerified: false, recordedConditionalCeilings: { count: 1, shipping: '101', customer: '71', technician: '30' },
   blockers: ['COMMISSION_NOT_FROZEN', 'DEDUCTIONS_LEDGER_SOURCE_REQUIRED', 'SELLER_TAX_PAYMENT_POLICY_REQUIRED'] };
 const envelope = (data: unknown, statusCode = 200) => ({ data: { success: true, statusCode, message: 'Success', data } });
 afterEach(() => vi.restoreAllMocks());
@@ -23,9 +23,32 @@ describe('W3 conditional delivery terms API boundary', () => {
     expect(get).toHaveBeenCalledWith(`/part-requests/${requestId}/delivery/terms`);
   });
 
+  it('accepts the Backend four-field ceilings and preserves every authoritative total', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(read));
+    await expect(w3DeliveryTermsApi.read(requestId)).resolves.toMatchObject({
+      recordedConditionalCeilings: { count: 1, shipping: '101', customer: '71', technician: '30' },
+    });
+    expect(BigInt(read.recordedConditionalCeilings.customer) + BigInt(read.recordedConditionalCeilings.technician))
+      .toBe(BigInt(read.recordedConditionalCeilings.shipping));
+  });
+
+  it.each([
+    { ...read, recordedConditionalCeilings: { count: 1, shipping: '101', technician: '30' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, extra: '0' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, customer: '70' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, customer: '-1' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, customer: '071' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, technician: '3.0' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, count: -1 } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, count: Number.MAX_SAFE_INTEGER + 1 } },
+  ])('rejects malformed four-field Backend ceilings %#', async body => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(body));
+    await expect(w3DeliveryTermsApi.read(requestId)).rejects.toThrow();
+  });
+
   it.each([
     { ...read, financialExecution: 'ENABLED' },
-    { ...read, recordedConditionalCeilings: { count: 1, shipping: '101', technician: '30', payable: '30' } },
+    { ...read, recordedConditionalCeilings: { ...read.recordedConditionalCeilings, payable: '30' } },
     { ...read, state: { ...state, scope: 'FINANCE_APPROVED' } },
     { ...read, state: { ...state, quote: { ...quote, technicianShippingShare: 29 } } },
     { ...read, state: { ...state, paymentVerified: true } },

@@ -19,7 +19,7 @@ export interface DeliveryTermsState {
 export interface DeliveryTermsRead {
   state: DeliveryTermsState | null; invalidated: boolean; financialExecution: 'BLOCKED'; laborBudget: null;
   aggregateBudgetVerified: false;
-  recordedConditionalCeilings: { count: number; shipping: string; technician: string } | null;
+  recordedConditionalCeilings: { count: number; shipping: string; customer: string; technician: string } | null;
   blockers: typeof BLOCKERS[number][];
 }
 export interface DeliveryTermsIdentity { commandId: string; expectedVersion: number }
@@ -87,10 +87,11 @@ function parseRead(value: unknown): DeliveryTermsRead {
   if (blockers.length !== BLOCKERS.length || !BLOCKERS.every(blocker => blockers.includes(blocker))) return invalid();
   let totals: DeliveryTermsRead['recordedConditionalCeilings'] = null;
   if (d.recordedConditionalCeilings !== null) {
-    const t = exact(d.recordedConditionalCeilings, ['count', 'shipping', 'technician']);
-    const money = (v: unknown) => typeof v === 'string' && /^(0|[1-9]\d*)$/.test(v);
-    if (!integer(t.count) || !money(t.shipping) || !money(t.technician)) return invalid();
-    totals = { count: t.count, shipping: t.shipping as string, technician: t.technician as string };
+    const t = exact(d.recordedConditionalCeilings, ['count', 'shipping', 'customer', 'technician']);
+    const money = (v: unknown): v is string => typeof v === 'string' && /^(0|[1-9]\d*)$/.test(v);
+    if (!integer(t.count) || !money(t.shipping) || !money(t.customer) || !money(t.technician)
+      || BigInt(t.customer) + BigInt(t.technician) !== BigInt(t.shipping)) return invalid();
+    totals = { count: t.count, shipping: t.shipping, customer: t.customer, technician: t.technician };
   }
   return { state: parseState(d.state), invalidated: d.invalidated, financialExecution: 'BLOCKED', laborBudget: null,
     aggregateBudgetVerified: false, recordedConditionalCeilings: totals, blockers: [...BLOCKERS] };
