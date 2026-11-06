@@ -14,7 +14,7 @@ const terms = { version: 1, scope: 'CONDITIONAL_TERMS_ONLY' as const, quote, cus
   technicianConsented: false, actual: null, financialExecution: 'BLOCKED' as const, laborBudget: null,
   aggregateBudgetVerified: false as const, paymentVerified: false as const };
 const projection: DeliveryTermsRead = { state: terms, invalidated: false, financialExecution: 'BLOCKED',
-  laborBudget: null, aggregateBudgetVerified: false, recordedConditionalCeilings: { count: 1, shipping: '101', technician: '30' },
+  laborBudget: null, aggregateBudgetVerified: false, recordedConditionalCeilings: { count: 1, shipping: '101', customer: '71', technician: '30' },
   blockers: ['COMMISSION_NOT_FROZEN', 'DEDUCTIONS_LEDGER_SOURCE_REQUIRED', 'SELLER_TAX_PAYMENT_POLICY_REQUIRED'] };
 const props = { requestId, requestType: 'additional', fulfillmentMethod: 'delivery', shippingFee: 101,
   audience: 'customer' as const, sourceOwnerId: 'customer-1', technicianId: 'tech-1' };
@@ -29,7 +29,7 @@ describe('W3 conditional delivery terms panel', () => {
     signIn(UserRole.CUSTOMER, 'customer-1');
     const read = vi.spyOn(w3DeliveryTermsApi, 'read').mockResolvedValueOnce(projection).mockResolvedValue({
       ...projection, state: { ...terms, version: 2, customerConsented: true },
-      recordedConditionalCeilings: { count: 2, shipping: '202', technician: '60' },
+      recordedConditionalCeilings: { count: 2, shipping: '202', customer: '142', technician: '60' },
     });
     const consent = vi.spyOn(w3DeliveryTermsApi, 'consent').mockResolvedValue({ state: { ...terms, version: 2, customerConsented: true }, replayed: false });
     const wrapper = mount(DeliveryTermsPanel, { props });
