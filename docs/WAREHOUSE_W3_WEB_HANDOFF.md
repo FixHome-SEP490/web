@@ -1,14 +1,14 @@
-# W3 Web handoff — read-only shipping, physical preview and Admin DRAFT/preview
+# W3 Web handoff — delivery operations, physical preview and Admin DRAFT/preview
 
-Date: 06/11/2026. Status: **READ-ONLY SOURCE IMPLEMENTED; DEV UAT / RELEASE NOT VERIFIED; NOT PHYSICALLY OR FINANCIALLY ACTIVATED**.
+Date: 06/11/2026. Status: **BACKEND PR #197 MERGED AND DEPLOYED TO DEV; ZERO-FEE WEB OPERATIONS SOURCE READY FOR REVIEW/PR, NOT YET WEB-DEPLOYED; SIGNED-IN DEV UAT NOT VERIFIED; POSITIVE-FEE FINANCE REMAINS BLOCKED**.
 
 The original shipping scaffold prepares typed optional read fields and read-only rendering; that slice is unchanged. The new Admin slice below calls only B3a DRAFT/preview APIs. When policy fields are absent, Web keeps the legacy full-shipping display. W3 appears only when an existing server read supplies `shippingPolicyVersion: W3_70_30_V1`, a valid integer `shippingFee` S, and both authoritative shares: `customerShippingShare = floor((7*S + 5)/10)` and `technicianShippingShare = S - customerShippingShare`. Invalid or incomplete W3 snapshots show an error and no split. The browser never calculates the split, payment, approval, or dispatch authority.
 
-Pickup remains free. A technician net-labor line is shown only when the server read supplies a valid `technicianNetLabor`; Web does not derive it. No consent, payment, approval, courier-booking, or dispatch status is represented by this scaffold.
+Pickup remains free. A technician net-labor line is shown only when the server read supplies a valid `technicianNetLabor`; Web does not derive it. The operational panel described below is a separate zero-fee slice and never represents payment or external courier verification.
 
 ## Existing API behavior and future contract gates
 
-The backend reference is `docs/WAREHOUSE_W3_FINANCE_CONTRACT.md` in the W3 backend worktree. Section 14 implements the Admin source-only contract; operational delivery routes below remain proposals. Web does not call these proposed operational routes. Existing monetary screens retain legacy copy unless their existing server read carries a valid policy snapshot. The separate physical GET preview below does not supply shipping money or change those screens.
+The backend reference is `docs/WAREHOUSE_W3_FINANCE_CONTRACT.md` in the W3 backend worktree. Backend PR #197 merged to `dev` as `e507653`; GitHub Actions #42096980235 completed successfully and the VPS release log confirmed W3 DEV migrations `0004–0008` applied and verified. These deployment results do not establish authenticated end-to-end UAT. Existing monetary screens retain legacy copy unless their existing server read carries a valid policy snapshot. The separate physical GET preview below does not supply shipping money or change those screens.
 
 ## Physical preview — Customer / Technician (06/11/2026)
 
@@ -22,19 +22,35 @@ The backend reference is `docs/WAREHOUSE_W3_FINANCE_CONTRACT.md` in the W3 backe
 - Final checks after request-reference refinement: `npm run lint`, `npm run typecheck`, `npm run build` **PASS** (existing large-chunk warning). `npx vitest run tests/context-doc.spec.ts tests/w3-delivery-physical.spec.ts tests/w3-delivery-policy.spec.ts tests/shipping-policy.spec.ts`: **114/114 PASS**. `npm test -- --maxWorkers=4`: **2502/2502 PASS, 220 files, exit 0**. Existing tests emit handled `ECONNREFUSED localhost:3000` logs. `git diff --check`, exact seven-file allowlist and empty staged diff **PASS**; HEAD remains `2f96302e0ed8d3d9eb38658cb5cd1d6d398a3671`. No operational or authenticated-runtime success is inferred from these checks.
 - Browser/viewport screenshots and authenticated DEV HTTP/JWT/DB UAT: **NOT VERIFIED**. Project-local Playwright/Puppeteer packages were unavailable; no tooling/dependencies were installed and no screenshot was fabricated. Mobile parity: **NOT VERIFIED**. Shared DEV Supabase/migration 0007/RLS/grants, legal/Finance signoff, courier payment and real physical proof: **NOT VERIFIED**; release remains blocked. No new Backend/DB, mutation, stage/commit/push/merge/deploy/seed was performed. Lead owns final diff/PR and coordinated rollout; hard-refresh Web after that rollout before UAT.
 
-The draft proposes these routes under `/api/v1/part-requests/:id/delivery`:
+## Operations UI — zero-fee delivery
+
+- `src/api/w3-delivery-operations.api.ts` follows the W3 Backend controller and DTO at PR #197 HEAD `9e456f8`: GET and POST routes under `/api/v1/part-requests/:id/delivery`. GET requires the exact success envelope with status 200; POST and multipart evidence require status 201, matching Nest defaults. Unknown statuses, extra fields, positive amounts, inconsistent quote fingerprints or non-BLOCKED financial output fail closed.
+- `DeliveryOperationsPanel.vue` is mounted from the existing Customer order, Technician part request and Service Manager part request detail. It requires a real DELIVERY PartRequest UUID, `additional` source type with explicit `shippingFee === 0`, matching Customer/Technician owner or Service Manager role, and the matching role before GET or actions. It does not use W2 allocation for DELIVERY. Service Manager explicitly selects an active warehouse from `warehousesApi.list()` whose `responsibleUserId` matches the signed-in manager; other managers' and inactive warehouses are excluded. Pickup and Admin DRAFT/preview paths are unchanged.
+- Customer and Technician consent bind to the exact immutable quote fingerprint/version and send explicit zero totals/shares. The Service Manager can propose zero-fee delivery, record actual zero with an image, issue to courier, dispatch or release; Technician can reserve and record receipt. Every command carries UUIDv4 `commandId` and its independent consent or physical `expectedVersion`; uncertain command retries reuse the same key and payload. A changed actor/request invalidates pending reads.
+- Evidence upload accepts JPEG/PNG/WebP up to 10 MiB and only displays backend-issued evidence IDs. Uploaded bytes are labeled unverified; physical journal statuses are described as recorded state, never verified courier delivery. Signed URLs, payments, invoices and positive fees are not implemented.
+- Initial Service Manager proposal is a deliberate bootstrap: after selecting their own active warehouse and uploading QUOTE evidence, Web sends only `POST /proposal` with `expectedVersion=0` and zero fee without requiring a successful GET. Copy states that Backend checks request ownership and approved source. After proposal ACK, Web reads GET to enter operations. For an explicit existing-state read, 404/403/503 or malformed data shows safe unavailable/error copy and enables no mutation. Financial execution remains `BLOCKED`; any positive amount is rejected locally and by Backend. Backend/database/DEV behavior and source eligibility are still authoritative.
+
+The routes under `/api/v1/part-requests/:id/delivery` in Backend PR #197 are:
 
 | Route | Draft actor | Draft purpose | Web gate |
 | --- | --- | --- | --- |
-| `GET /` | Owning customer, active technician, assigned warehouse SM | Read policy, quote version, S/c/t, consent status | Before any W3 UI depends on a delivery-specific read, backend must publish and implement the stable response and access rules. |
-| `POST /proposal` | Active SM for the warehouse | Submit courier quote/evidence and S | No Web call until backend, Finance, and owner approve the command contract. |
-| `POST /consent` | Owning customer or active technician, separate receipts | Explicit acceptance bound to proposal/version | No Web consent UI until each actor's receipt, version binding, expiry/revocation, and retry behavior are implemented and reviewed. |
-| `POST /actual` | Active SM for the warehouse | Record actual S/evidence | No Web call until the actual-cost and consent invalidation rules are live and reviewed. |
-| `POST /dispatch` | Active SM for the warehouse | Record manual booking reference/evidence | No Web call until server dispatch gates, custody evidence, and race handling are live and reviewed. |
+| `GET /` | Owning customer, active technician, assigned warehouse SM | Read policy, quote version, S/c/t, consent status | Web requires exact zero-fee quote and blocked financial execution. |
+| `POST /proposal` | Active SM for the warehouse | `commandId`, `expectedVersion`, `warehouseId`, `evidenceId`, `courierReference`, `totalShippingFee=0` | UI sends only explicit zero. |
+| `POST /consent` | Owning customer or active technician, separate receipts | Exact `quoteVersion`/`quoteFingerprint`, explicit `accepted=true`, zero total/share | UI shows one actor's consent at a time and binds to the immutable quote. |
+| `POST /actual` | Active SM for the warehouse | `commandId`, `expectedVersion`, quote version, zero total, evidence ID | UI requires customer + technician consent and evidence. |
+| `POST /reserve`, `/release` | Technician / current SM respectively | `commandId`, physical `expectedVersion` | UI follows the physical journal version, not consent version. |
+| `POST /issue-to-courier`, `/dispatch`, `/receipt` | SM, SM, Technician respectively | `commandId`, physical `expectedVersion`, stage evidence ID | Uploaded evidence remains unverified external proof. |
+| `POST /evidence`, `GET /evidence/:evidenceId` | SM/Technician upload; scoped actors read | Multipart metadata / Backend signed URL | Web uploads bounded images; does not construct storage URLs. |
 
-Before implementation of any operational delivery mutation, the backend/Finance/owner gate must confirm: authenticated actor and ownership/RBAC; immutable integer VND snapshot; exact W3 ratio and source cost; dual explicit consent bound to the same proposal/version; technician net labor after all approved deductions and aggregate W3 shares; invoice/payment/cancel race checks; idempotent command receipts; refund/cancel rules; and W2 custody evidence. The draft specifically requires command ID, expected version, payload fingerprint, order/allocation locking, retry-safe receipt, and server-side rejection of mismatched retries. These checks remain backend authority.
+The Backend source validates authenticated actor and ownership/RBAC; immutable zero-fee quote; dual explicit consent bound to the same proposal/version; invoice/order/source races; idempotent command receipts; and W2 custody evidence. These checks remain backend authority. Web does not claim they have passed on DEV or that Finance has approved activation.
 
-Finance signoff is **not complete**. W3 must not be financially activated, deployed, or inferred from a positive shipping fee. No migration, environment switch, shared database write, or Mobile/AI change is part of this Web scaffold.
+Finance signoff is **not complete**. W3 must not be financially activated, deployed, or inferred from a positive shipping fee. No migration, environment switch, shared database write, or Mobile/AI change is part of this Web implementation.
+
+### Web operational UI verification (06/11/2026)
+
+- Focused W3 operations, physical preview, integrated Customer/Technician/SM views and context: **127/127 PASS**. Regression coverage confirms SM bootstrap skips GET, filters to the signed-in manager's active warehouse, requires QUOTE evidence, does not POST without ownership/evidence, and retries an uncertain proposal with identical command ID and payload.
+- `npm run lint`, `npm run typecheck`, `npm run build`: **PASS**. `npm test -- --maxWorkers=4`: **2567/2567 PASS, 224 files, exit 0**. Lead added RED→GREEN technician receipt evidence regression: the technician must use the server-bound `physical.warehouseId` rather than the SM warehouse picker; 32/32 W3 operations/API focused tests and typecheck PASS after correction. The full suite logs handled `ECONNREFUSED localhost:3000` errors; build retains the existing large-chunk warning.
+- Backend PR #197 is deployed to DEV with migrations `0004–0008` confirmed by VPS release log. Authenticated Web operations/DEV/JWT/DB end-to-end behavior, Finance and courier external verification, Mobile parity and browser runtime for this operational panel remain **NOT VERIFIED**. Lead owns commit/PR/release; no commit, push or deploy was made from this worktree.
 
 ## Owner preview: copy comparison
 

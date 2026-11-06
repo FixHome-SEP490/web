@@ -36,6 +36,7 @@ import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
 import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vue';
+import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
@@ -1685,6 +1686,16 @@ const parsedReview = computed(() => {
           :request-id="request.id"
           :fulfillment-method="request.fulfillmentMethod"
           audience="customer"
+        />
+        <DeliveryOperationsPanel
+          v-for="request in deliveryPhysicalRequests"
+          :key="`operations-${request.id}`"
+          :request-id="request.id"
+          :fulfillment-method="request.fulfillmentMethod"
+          :request-type="request.requestType"
+          :shipping-fee="request.shippingFee"
+          audience="customer"
+          :source-owner-id="bookingDetails?.customerId"
         />
       </div>
 
