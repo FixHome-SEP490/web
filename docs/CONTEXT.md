@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-06 16:58 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w3-terms-fourfield-web-20261106
+> Cập nhật lần cuối: 2026-11-06 19:05 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-quick-replies
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -576,6 +576,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-06 19:05 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Chat AI: nút trả lời nhanh lấy clarification.answerOptionsVi do ai-service (chat2) gửi, không có thì đoán Có/Không theo câu hỏi như cũ
 - 2026-11-06 16:58 (UTC+7) | foxonworld | foxonworld/fixhome-w3-terms-fourfield-web-20261106 | Sửa Web W3 terms GET parser nhận strict bốn ceiling fields và xác minh tổng bằng BigInt; runtime authenticated vẫn CHƯA KIỂM CHỨNG.
 - 2026-11-06 13:42 (UTC+7) | foxonworld | foxonworld/fixhome-w3-finance-web-uat-20261106 | Thêm W3 terms consent riêng, cho phép share Technician 0 ₫ và quote thấp hơn ceiling được duyệt; Finance BLOCKED, Backend migration/runtime và signed-in DEV UAT chưa kiểm chứng.
 - 2026-11-06 13:17 (UTC+7) | foxonworld | foxonworld/fixhome-w3-finance-web-uat-20261106 | Khóa retry consent W3 sau 409 đến khi GET mới thành công, hiện cảnh báo snapshot chia phí thiếu policy, dịch copy lifecycle sang tiếng Việt; 2593 test, lint/typecheck/build PASS, signed-in DEV UAT chưa xác minh.
@@ -617,4 +618,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
 - 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
 - 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
-- 2026-10-27 21:08 (UTC+7) | foxonworld | foxonworld/fixhome-t21-f3-wallet-only-20261027 | Update Service Manager refunded-voucher explanation: customer receives only FixHome-wallet credit regardless of original VNPay/Cash/Wallet payment method, after original settlement and approval.

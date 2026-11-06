@@ -154,7 +154,10 @@ const latestReplyId = computed(() => {
 
 function answersFor(message: AiChatMessage): string[] {
   if (c.isThinking || message.id !== latestReplyId.value) return [];
-  return quickReplies(message.reply?.clarification?.questionsVi?.[0]);
+  const offered = (message.reply?.clarification?.answerOptionsVi || []).map((o) => o.trim()).filter(Boolean);
+  // The assistant's own answers for its question first; the yes/no guess from
+  // the question's last word only when it sent none.
+  return offered.length ? offered.slice(0, 4) : quickReplies(message.reply?.clarification?.questionsVi?.[0]);
 }
 
 function answer(text: string) {
