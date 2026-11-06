@@ -310,6 +310,8 @@ describe('W3 Admin UI and actor boundary', () => {
       return { data: envelope(versionCurrent(head)).data, status: 200 } as never;
     });
     const wrapper = await mountPage();
+    // Lifecycle data can render after the legacy page resolves under CI concurrency.
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="retire-lifecycle"]').exists()).toBe(true));
     await wrapper.get('[data-testid="retire-lifecycle"]').trigger('click'); await flushPromises();
     expect(post).toHaveBeenCalledWith('/admin/w3-delivery-policy/versions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/retire', { expectedRevision: 2 });
     await vi.waitFor(() => {
