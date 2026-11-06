@@ -74,4 +74,67 @@ describe('W3 conditional delivery terms API boundary', () => {
     await expect(w3DeliveryTermsApi.consent(requestId, consent, 71)).rejects.toThrow();
     expect(post).not.toHaveBeenCalled();
   });
+
+  it('uploads positive-fee quote evidence only through the terms evidence route', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(envelope({
+      evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', purpose: 'QUOTE', quoteVersion: 1,
+      verification: 'UPLOADED_BYTES_NOT_COURIER_VERIFIED',
+    }, 201));
+    const file = new File(['quote'], 'quote.png', { type: 'image/png' });
+    await expect(w3DeliveryTermsApi.uploadEvidence(requestId, {
+      warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', purpose: 'QUOTE', quoteVersion: 1, file,
+    })).resolves.toEqual({ evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', purpose: 'QUOTE', quoteVersion: 1 });
+    expect(post.mock.calls[0]?.[0]).toBe(`/part-requests/${requestId}/delivery/terms/evidence`);
+  });
+
+  it('records a positive quote through the terms proposal contract', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(envelope({ state, replayed: false }, 201));
+    const body = { commandId, expectedVersion: 0, warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', courierReference: 'SHIP-101', totalShippingFee: 101 };
+    await expect(w3DeliveryTermsApi.propose(requestId, body)).resolves.toMatchObject({ state, replayed: false });
+    expect(post).toHaveBeenCalledWith(`/part-requests/${requestId}/delivery/terms/proposal`, body);
+  });
+
+  it('records the actual fee after both consents and verifies the returned final shares', async () => {
+    const actual = { quoteVersion: 1, totalShippingFee: 4, customerShippingShare: 3,
+      technicianShippingShare: 1, verification: 'RECORDED_NOT_EXTERNALLY_VERIFIED' as const };
+    const actualState = { ...state, version: 2, customerConsented: true, technicianConsented: true, actual };
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(envelope({ state: actualState, replayed: false }, 201));
+    const body = { commandId, expectedVersion: 1, quoteVersion: 1, totalShippingFee: 4,
+      evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' };
+    await expect(w3DeliveryTermsApi.actual(requestId, body)).resolves.toMatchObject({ state: actualState });
+    expect(post).toHaveBeenCalledWith(`/part-requests/${requestId}/delivery/terms/actual`, body);
+  });
+
+  it.each([
+    { totalShippingFee: 0, label: 'zero is not a positive terms quote' },
+    { totalShippingFee: 102, label: 'a different server quote' },
+  ])('rejects a terms proposal that does not match the requested positive fee: $label', async ({ totalShippingFee }) => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue(envelope({ state, replayed: false }, 201));
+    await expect(w3DeliveryTermsApi.propose(requestId, {
+      commandId, expectedVersion: 0, warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', courierReference: 'SHIP-101', totalShippingFee,
+    })).rejects.toThrow();
+  });
+
+  it('rejects an actual acknowledgement whose final fee differs from the command', async () => {
+    const actual = { quoteVersion: 1, totalShippingFee: 4, customerShippingShare: 3,
+      technicianShippingShare: 1, verification: 'RECORDED_NOT_EXTERNALLY_VERIFIED' as const };
+    vi.spyOn(apiClient, 'post').mockResolvedValue(envelope({
+      state: { ...state, version: 2, customerConsented: true, technicianConsented: true, actual }, replayed: false,
+    }, 201));
+    await expect(w3DeliveryTermsApi.actual(requestId, {
+      commandId, expectedVersion: 1, quoteVersion: 1, totalShippingFee: 5,
+      evidenceId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    })).rejects.toThrow();
+  });
+
+  it('rejects non-image terms evidence before any multipart upload', async () => {
+    const post = vi.spyOn(apiClient, 'post');
+    await expect(w3DeliveryTermsApi.uploadEvidence(requestId, {
+      warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', purpose: 'ACTUAL', quoteVersion: 1,
+      file: new File(['bad'], 'proof.txt', { type: 'text/plain' }),
+    })).rejects.toThrow();
+    expect(post).not.toHaveBeenCalled();
+  });
 });

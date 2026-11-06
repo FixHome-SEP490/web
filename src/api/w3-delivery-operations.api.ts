@@ -10,10 +10,10 @@ export type DeliveryPhysicalStatus = 'INELIGIBLE' | 'PENDING_ASSISTANCE' | 'RESE
 export interface DeliveryOperationsQuote {
   quoteVersion: number;
   fingerprint: string;
-  policyVersion: string;
-  totalShippingFee: 0;
-  customerShippingShare: 0;
-  technicianShippingShare: 0;
+  policyVersion: 'W3_70_30_V1';
+  totalShippingFee: number;
+  customerShippingShare: number;
+  technicianShippingShare: number;
   laborBudget: 'UNVERIFIED';
 }
 export interface DeliveryPhysicalState {
@@ -31,7 +31,7 @@ export interface DeliveryOperationsRead {
   invalidated: boolean;
   customerConsented: boolean;
   technicianConsented: boolean;
-  actual: { totalShippingFee: 0; quoteVersion: number } | null;
+  actual: { totalShippingFee: number; quoteVersion: number } | null;
   physical: DeliveryPhysicalState | null;
   financialExecution: 'BLOCKED';
   financialBlocker: 'FINANCE_LEDGER_SOURCE_REQUIRED';
@@ -71,10 +71,14 @@ function envelope(value: unknown, expectedStatusCode: 200 | 201): unknown {
 function parseQuote(value: unknown): DeliveryOperationsQuote {
   const q = exact(value, ['quoteVersion', 'fingerprint', 'policyVersion', 'totalShippingFee', 'customerShippingShare', 'technicianShippingShare', 'laborBudget']);
   if (!int(q.quoteVersion, 1, 2147483647) || typeof q.fingerprint !== 'string' || !SHA256.test(q.fingerprint)
-    || q.policyVersion !== 'W3_70_30_V1' || q.totalShippingFee !== 0
-    || q.customerShippingShare !== 0 || q.technicianShippingShare !== 0 || q.laborBudget !== 'UNVERIFIED') return invalid();
-  return { quoteVersion: q.quoteVersion, fingerprint: q.fingerprint, policyVersion: q.policyVersion,
-    totalShippingFee: 0, customerShippingShare: 0, technicianShippingShare: 0, laborBudget: 'UNVERIFIED' };
+    || q.policyVersion !== 'W3_70_30_V1' || !int(q.totalShippingFee)
+    || !int(q.customerShippingShare) || !int(q.technicianShippingShare)
+    || q.customerShippingShare + q.technicianShippingShare !== q.totalShippingFee
+    || BigInt(q.customerShippingShare) !== (7n * BigInt(q.totalShippingFee) + 5n) / 10n
+    || q.laborBudget !== 'UNVERIFIED') return invalid();
+  return { quoteVersion: q.quoteVersion, fingerprint: q.fingerprint, policyVersion: 'W3_70_30_V1',
+    totalShippingFee: q.totalShippingFee, customerShippingShare: q.customerShippingShare,
+    technicianShippingShare: q.technicianShippingShare, laborBudget: 'UNVERIFIED' };
 }
 function parsePhysical(value: unknown): DeliveryPhysicalState {
   const p = exact(value, ['status', 'reason', 'warehouseId', 'responsibleUserId', 'quantities', 'version', 'courierReference', 'evidence']);
@@ -110,8 +114,9 @@ function parseRead(value: unknown, requestId: string): DeliveryOperationsRead {
   let actual: DeliveryOperationsRead['actual'] = null;
   if (d.actual !== null) {
     const a = exact(d.actual, ['totalShippingFee', 'quoteVersion']);
-    if (a.totalShippingFee !== 0 || !int(a.quoteVersion, 1, 2147483647) || !quote || a.quoteVersion !== quote.quoteVersion) return invalid();
-    actual = { totalShippingFee: 0, quoteVersion: a.quoteVersion };
+    if (!int(a.totalShippingFee) || !int(a.quoteVersion, 1, 2147483647) || !quote
+      || a.quoteVersion !== quote.quoteVersion || a.totalShippingFee > quote.totalShippingFee) return invalid();
+    actual = { totalShippingFee: a.totalShippingFee, quoteVersion: a.quoteVersion };
   }
   const physical = d.physical === null ? null : parsePhysical(d.physical);
   if (!UUID_V4.test(requestId) || ((d.customerConsented || d.technicianConsented || actual) && !quote)) return invalid();

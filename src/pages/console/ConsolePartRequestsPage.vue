@@ -755,7 +755,7 @@ const getUsageBadgeClass = (status: string) => {
         </dl>
 
         <DeliveryOperationsPanel
-          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee === 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
+          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee >= 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
           :request-id="detailModalRequest.id"
           :fulfillment-method="detailModalRequest.fulfillmentMethod"
           :request-type="detailModalRequest.requestType"

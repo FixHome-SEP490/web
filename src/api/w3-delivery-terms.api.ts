@@ -2,6 +2,9 @@ import apiClient from './client';
 
 const UUID_V4 = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const SHA256 = /^[a-f0-9]{64}$/;
+const COURIER_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const BLOCKERS = ['COMMISSION_NOT_FROZEN', 'DEDUCTIONS_LEDGER_SOURCE_REQUIRED', 'SELLER_TAX_PAYMENT_POLICY_REQUIRED'] as const;
 const invalid = (): never => { throw new Error('Chưa thể đối chiếu điều khoản giao linh kiện.'); };
 
@@ -25,6 +28,16 @@ export interface DeliveryTermsRead {
 export interface DeliveryTermsIdentity { commandId: string; expectedVersion: number }
 export interface DeliveryTermsConsentInput extends DeliveryTermsIdentity {
   quoteVersion: number; quoteFingerprint: string; totalShippingFee: number; shippingShare: number; accepted: true;
+}
+export interface DeliveryTermsProposalInput extends DeliveryTermsIdentity {
+  warehouseId: string; evidenceId: string; courierReference: string; totalShippingFee: number;
+}
+export interface DeliveryTermsActualInput extends DeliveryTermsIdentity {
+  quoteVersion: number; totalShippingFee: number; evidenceId: string;
+}
+export type DeliveryTermsEvidencePurpose = 'QUOTE' | 'ACTUAL';
+export interface DeliveryTermsUploadedEvidence {
+  evidenceId: string; purpose: DeliveryTermsEvidencePurpose; quoteVersion: number;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -103,6 +116,9 @@ function basePath(requestId: string): string {
 function validateIdentity(input: DeliveryTermsIdentity) {
   if (!UUID_V4.test(input.commandId) || !integer(input.expectedVersion, 0, 2147483646)) return invalid();
 }
+function validateFile(file: File) {
+  if (!ALLOWED_MIME.includes(file.type as (typeof ALLOWED_MIME)[number]) || file.size < 1 || file.size > MAX_FILE_SIZE) return invalid();
+}
 function parseCommand(value: unknown) {
   const d = exact(envelope(value, 201), ['state', 'replayed']);
   const state = parseState(d.state);
@@ -115,6 +131,34 @@ export const w3DeliveryTermsApi = {
     const response = await apiClient.get<unknown>(basePath(requestId));
     return parseRead(envelope(response.data, 200));
   },
+  async uploadEvidence(requestId: string, input: {
+    warehouseId: string; purpose: DeliveryTermsEvidencePurpose; quoteVersion: number; file: File;
+  }): Promise<DeliveryTermsUploadedEvidence> {
+    const base = basePath(requestId);
+    if (!UUID_V4.test(input.warehouseId) || !['QUOTE', 'ACTUAL'].includes(input.purpose)
+      || !integer(input.quoteVersion, 1, 2147483647)) return invalid();
+    validateFile(input.file);
+    const form = new FormData();
+    form.append('file', input.file);
+    form.append('warehouseId', input.warehouseId);
+    form.append('purpose', input.purpose);
+    form.append('quoteVersion', String(input.quoteVersion));
+    const response = await apiClient.post<unknown>(`${base}/evidence`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    const d = exact(envelope(response.data, 201), ['evidenceId', 'purpose', 'quoteVersion', 'verification']);
+    if (typeof d.evidenceId !== 'string' || !UUID_V4.test(d.evidenceId) || d.purpose !== input.purpose
+      || d.quoteVersion !== input.quoteVersion || d.verification !== 'UPLOADED_BYTES_NOT_COURIER_VERIFIED') return invalid();
+    return { evidenceId: d.evidenceId, purpose: input.purpose, quoteVersion: input.quoteVersion };
+  },
+  async propose(requestId: string, input: DeliveryTermsProposalInput) {
+    validateIdentity(input);
+    if (!UUID_V4.test(input.warehouseId) || !UUID_V4.test(input.evidenceId)
+      || !integer(input.totalShippingFee, 1) || !COURIER_REFERENCE.test(input.courierReference)) return invalid();
+    const response = await apiClient.post<unknown>(`${basePath(requestId)}/proposal`, input);
+    const result = parseCommand(response.data);
+    if (result.state.version <= input.expectedVersion
+      || result.state.quote.totalShippingFee !== input.totalShippingFee) return invalid();
+    return result;
+  },
   async consent(requestId: string, input: DeliveryTermsConsentInput, authoritativePartyShare: number) {
     validateIdentity(input);
     if (!integer(input.quoteVersion, 1, 2147483647) || !SHA256.test(input.quoteFingerprint)
@@ -126,6 +170,17 @@ export const w3DeliveryTermsApi = {
     if (quote.quoteVersion !== input.quoteVersion || quote.fingerprint !== input.quoteFingerprint
       || quote.totalShippingFee !== input.totalShippingFee
       || ![quote.customerShippingShare, quote.technicianShippingShare].includes(input.shippingShare)) return invalid();
+    return result;
+  },
+  async actual(requestId: string, input: DeliveryTermsActualInput) {
+    validateIdentity(input);
+    if (!integer(input.quoteVersion, 1, 2147483647) || !integer(input.totalShippingFee)
+      || !UUID_V4.test(input.evidenceId)) return invalid();
+    const response = await apiClient.post<unknown>(`${basePath(requestId)}/actual`, input);
+    const result = parseCommand(response.data);
+    const actual = result.state.actual;
+    if (result.state.version <= input.expectedVersion || !actual
+      || actual.quoteVersion !== input.quoteVersion || actual.totalShippingFee !== input.totalShippingFee) return invalid();
     return result;
   },
 };
