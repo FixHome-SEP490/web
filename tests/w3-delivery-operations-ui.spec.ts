@@ -71,6 +71,29 @@ describe('W3 delivery operations panel', () => {
     wrapper.unmount();
   });
 
+  it('requires a fresh read after a consent version conflict instead of replaying the stale command', async () => {
+    signIn(UserRole.CUSTOMER, 'owner-a');
+    const read = vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection());
+    vi.spyOn(w3DeliveryOperationsApi, 'consent').mockRejectedValue({ response: { status: 409 } });
+    const wrapper = mount(DeliveryOperationsPanel, { props });
+    await flushPromises();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get('[data-testid="delivery-consent"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Trạng thái đã thay đổi. Hãy tải lại trước khi tiếp tục.');
+    expect(wrapper.text()).not.toContain('Thử lại cùng thao tác');
+    expect(wrapper.find('[data-testid="delivery-consent"]').exists()).toBe(false);
+
+    const reloadButton = wrapper.findAll('button').find(button => button.text().includes('Tải lại trạng thái'));
+    expect(reloadButton).toBeDefined();
+    await reloadButton!.trigger('click');
+    await flushPromises();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[data-testid="delivery-consent"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it.each([404, 503])('shows only safe unavailable copy and no mutation for HTTP %s', async status => {
     signIn(UserRole.CUSTOMER, 'owner-a');
     vi.spyOn(w3DeliveryOperationsApi, 'read').mockRejectedValue({ response: { status } });

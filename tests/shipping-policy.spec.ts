@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { readShippingPolicy } from '../src/utils/shipping-policy';
+import { hasShippingPolicyData, readShippingPolicy } from '../src/utils/shipping-policy';
 import ShippingShareBreakdown from '../src/components/ShippingShareBreakdown.vue';
 
 describe('readShippingPolicy', () => {
+  it('keeps incomplete share metadata visible for fail-closed rendering', () => {
+    expect(hasShippingPolicyData({ shippingFee: 20_000, customerShippingShare: 14_000, technicianShippingShare: 6_000 })).toBe(true);
+    expect(hasShippingPolicyData({ shippingFee: 20_000 })).toBe(false);
+  });
+
   it('keeps snapshots with no policy or share fields on the legacy full-shipping path', () => {
     expect(readShippingPolicy({ shippingFee: 20_000 })).toMatchObject({
       state: 'valid', policyVersion: 'LEGACY_100_0', courierCost: 20_000,

@@ -20,6 +20,12 @@ const nonNegativeVnd = (value: unknown): number | null => {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
 
+export function hasShippingPolicyData(snapshot: ShippingPolicySnapshot): boolean {
+  return (snapshot.shippingPolicyVersion != null && snapshot.shippingPolicyVersion !== '')
+    || snapshot.customerShippingShare != null
+    || snapshot.technicianShippingShare != null;
+}
+
 /**
  * Read the server snapshot without deriving W3 values on the client.
  * An absent policy version is historical LEGACY; only an explicit W3 version
