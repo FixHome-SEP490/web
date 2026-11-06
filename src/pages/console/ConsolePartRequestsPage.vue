@@ -6,6 +6,7 @@ import { Copy, Check, X } from 'lucide-vue-next';
 import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
+import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -760,6 +761,16 @@ const getUsageBadgeClass = (status: string) => {
           :request-type="detailModalRequest.requestType"
           :shipping-fee="detailModalRequest.shippingFee"
           audience="manager"
+        />
+        <DeliveryTermsPanel
+          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee > 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
+          :key="`terms-${detailModalRequest.id}`"
+          :request-id="detailModalRequest.id"
+          :request-type="detailModalRequest.requestType"
+          :fulfillment-method="detailModalRequest.fulfillmentMethod"
+          :shipping-fee="detailModalRequest.shippingFee"
+          audience="manager"
+          :technician-id="detailModalRequest.technicianId"
         />
 
         <div>

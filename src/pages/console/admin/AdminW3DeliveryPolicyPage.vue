@@ -190,7 +190,7 @@ async function activateLifecycle() {
     const active = await w3DeliveryPolicyApi.activate(version.id, version.state.revision, receipt.id);
     if (actor !== actorEpoch || !canReadPage.value) return;
     lifecycleCurrent.value = { ...lifecycleCurrent.value!, version: active }; lifecycleResult.value = null; lifecycleConfirmation.value = false;
-    lifecycleSuccess.value = 'Đã kích hoạt cấu hình vận hành. Finance 70/30 remains blocked.';
+    lifecycleSuccess.value = 'Đã kích hoạt cấu hình vận hành. Tài chính 70/30 vẫn bị khóa.';
     await refreshLifecycle();
   } catch (reason) { if (actor === actorEpoch) lifecycleFailed(reason); }
   finally { if (actor === actorEpoch) lifecycleTransitioning.value = false; }
@@ -362,7 +362,7 @@ onMounted(() => { load(); loadLifecycle(); });
       <div class="max-w-4xl space-y-2">
         <h2 id="lifecycle-title" class="text-xl font-semibold text-ink-900">Vòng đời cấu hình vận hành giao linh kiện</h2>
         <div class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
-          <p class="font-semibold">ACTIVE chỉ là cấu hình vận hành · Finance 70/30 remains blocked.</p>
+          <p class="font-semibold">ACTIVE chỉ là cấu hình vận hành · Tài chính 70/30 vẫn bị khóa.</p>
           <p>Không có legal hoặc ledger approval trong luồng này. Cấu hình không tạo payout, không thay đổi phí giao thực tế và không đặt giao hàng.</p>
         </div>
       </div>

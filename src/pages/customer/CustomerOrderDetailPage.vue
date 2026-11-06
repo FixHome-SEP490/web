@@ -35,8 +35,10 @@ import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, 
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
+import { hasShippingPolicyData } from '../../utils/shipping-policy';
 import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vue';
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
+import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import { orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
@@ -299,8 +301,8 @@ const canDecideQuotation = computed(() => !oldFinanceReview.value && canDecideOf
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
 const shippingPolicyRequests = computed(() => partRequests.value.filter(request =>
-  request.fulfillmentMethod === 'delivery' && !!request.shippingPolicyVersion
-  && !additionalCosts.value.some(cost => cost.id === request.additionalCostId && !!cost.shippingPolicyVersion),
+  request.fulfillmentMethod === 'delivery' && hasShippingPolicyData(request)
+  && !additionalCosts.value.some(cost => cost.id === request.additionalCostId && hasShippingPolicyData(cost)),
 ));
 const acDecidingId = ref('');
 const externalDisclaimerAccepted = ref<Record<string, boolean>>({});
@@ -1696,6 +1698,17 @@ const parsedReview = computed(() => {
           :shipping-fee="request.shippingFee"
           audience="customer"
           :source-owner-id="bookingDetails?.customerId"
+        />
+        <DeliveryTermsPanel
+          v-for="request in deliveryPhysicalRequests.filter(row => row.shippingFee > 0)"
+          :key="`terms-${request.id}`"
+          :request-id="request.id"
+          :request-type="request.requestType"
+          :fulfillment-method="request.fulfillmentMethod"
+          :shipping-fee="request.shippingFee"
+          audience="customer"
+          :source-owner-id="bookingDetails?.customerId"
+          :technician-id="request.technicianId"
         />
       </div>
 

@@ -24,6 +24,7 @@ const auth = useAuthStore();
 const readState = ref<DeliveryOperationsRead | null>(null);
 const readStatus = ref<'idle' | 'loading' | 'ready' | 'unavailable' | 'error' | 'forbidden'>('idle');
 const message = ref('');
+const requiresReload = ref(false);
 const busy = ref(false);
 const accepted = ref(false);
 const courierReference = ref('');
@@ -82,6 +83,7 @@ async function load() {
     const result = await w3DeliveryOperationsApi.read(props.requestId);
     if (!isCurrent(token, key)) return;
     readState.value = result;
+    requiresReload.value = false;
     readStatus.value = 'ready';
   } catch (error) {
     if (!isCurrent(token, key)) return;
@@ -114,6 +116,7 @@ function initialize() {
   retryAction.value = null;
   message.value = '';
   accepted.value = false;
+  requiresReload.value = false;
   busy.value = false;
   quotePhoto.value = null;
   actualPhoto.value = null;
@@ -170,8 +173,18 @@ async function runCommand(action: string, expectedVersion: number, fields: Recor
     await load();
     if (readStatus.value === 'ready') message.value = 'Đã ghi nhận từ phản hồi của hệ thống.';
     else message.value = 'Thao tác đã được ghi nhận; chưa tải lại được trạng thái.';
-  } catch {
-    if (isCurrent(token, key)) message.value = 'Chưa xác định được kết quả. Có thể thử lại cùng thao tác hoặc tải lại trạng thái.';
+  } catch (error) {
+    if (isCurrent(token, key)) {
+      const status = typeof error === 'object' && error !== null && 'response' in error
+        ? (error as { response?: { status?: number } }).response?.status : undefined;
+      if (status === 409) {
+        requiresReload.value = true;
+        retryAction.value = null;
+        message.value = 'Trạng thái đã thay đổi. Hãy tải lại trước khi tiếp tục.';
+      } else {
+        message.value = 'Chưa xác định được kết quả. Có thể thử lại cùng thao tác hoặc tải lại trạng thái.';
+      }
+    }
   } finally {
     if (alive && key === scopeKey()) busy.value = false;
   }
@@ -302,6 +315,10 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
     </div>
     <template v-else-if="readStatus === 'ready' && readState">
       <p v-if="readState.invalidated" class="text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
+      <template v-else-if="requiresReload">
+        <p class="text-sm text-warning-800" role="alert">{{ message }}</p>
+        <FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      </template>
       <template v-else>
         <dl v-if="quote" class="grid gap-1 text-sm sm:grid-cols-2">
           <div><dt class="inline text-ink-600">Phí giao thực tế: </dt><dd class="inline font-medium text-ink-900">{{ quote.totalShippingFee }} ₫</dd></div>
