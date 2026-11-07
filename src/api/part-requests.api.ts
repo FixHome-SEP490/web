@@ -62,7 +62,7 @@ export interface PartRequest {
 }
 
 export type WarehouseAllocationMode = 'warehouse' | 'legacy';
-export type WarehouseAllocationStatus = 'manual_assistance' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
+export type WarehouseAllocationStatus = 'manual_assistance' | 'stock_unavailable' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
 export interface WarehouseAllocation {
   partRequestId: string;
   mode: WarehouseAllocationMode;
@@ -74,6 +74,7 @@ export interface WarehouseAllocation {
   distanceNotVerified?: boolean;
   reviewRequired?: boolean;
   manualAssistanceReason?: string | null;
+  stockUnavailable?: boolean;
   tokenExpiresAt?: string | null;
   tokenVersion?: number;
   handedOverAt?: string | null;
