@@ -1389,7 +1389,7 @@ const getStatusBadgeClass = (status: string) => {
               <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
               <p v-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
               <p v-if="warehouseAllocationFor(pr)?.status === 'stock_unavailable'" class="text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Thợ tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua. Yêu cầu này không phát QR.</p>
-              <FhButton v-if="pr.requestType === 'pre_repair' && pr.status === 'requested'"
+              <FhButton v-if="pr.requestType === 'pre_repair' && pr.status === 'requested' && warehouseAllocationFor(pr)?.status === 'stock_unavailable'"
                 variant="secondary" size="sm" :disabled="actionLoading"
                 @click="cancelUnavailablePreRepair(pr.id)">Dừng yêu cầu kho, tự chuẩn bị</FhButton>
               <p v-else-if="warehouseAllocationFor(pr)?.status === 'reserved' || warehouseAllocationFor(pr)?.status === 'ready'" class="text-ink-700">Đang chờ quản lý bàn giao trực tiếp. Chưa có xác nhận đã cấp linh kiện.</p>
