@@ -110,6 +110,8 @@ export interface AiDisagreement {
 export interface Clarification {
   questionsVi: string[];
   serviceGroupCodes?: string[] | null;
+  /** Short answers the assistant offers for the first question, shown as buttons. */
+  answerOptionsVi?: string[] | null;
 }
 
 /**
