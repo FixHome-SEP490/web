@@ -11,7 +11,6 @@ import {
   Banknote,
   CheckCircle2,
   ChevronDown,
-  Landmark,
   Map as MapIcon,
   MessageSquare,
   MoreHorizontal,
@@ -51,7 +50,6 @@ import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { pendingPaymentCashNotice } from '../../utils/pending-payment-cash-notice';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
-import { manualBankApi, manualBankPending, type ManualBankPendingAttempt } from '../../api/manual-bank.api';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
@@ -316,11 +314,6 @@ const hasExternalParts = (cost: AdditionalCostRecord) => {
 // Review
 const showReviewModal = ref(false);
 const existingReview = ref<Review | null>(null);
-
-// Manual bank: the local reminder is scoped to this invoice and never implies payment.
-const manualBankPendingAttempt = ref<ManualBankPendingAttempt | null>(null);
-const manualBankPendingNotice = computed(() => manualBankPendingAttempt.value !== null);
-let manualBankRequestSeq = 0;
 
 // Cash Settlement State
 const cashSettlement = ref<{
@@ -831,66 +824,12 @@ async function confirmZeroCheckout() {
   }
 }
 
-const manualBankOrderEligible = computed(() => {
-  const status = String(order.value?.status ?? '').toUpperCase();
-  return !!order.value?.completionRequestedAt && status !== 'CANCELLED';
-});
-
-const canManualBank = computed(() => {
-  if (!manualBankOrderEligible.value || visitGroupId.value) return false;
-  if (voucherCollectionBlocked.value || activeFundedVoucher.value || fundedVoucher.value
-    || voucherAttemptPending.value || voucherReconciliationRequired.value) return false;
-  if (currentCashIntent.value?.status === 'pending' || currentCashIntent.value?.status === 'received') return false;
-  if (isPaid.value || paymentBlocked.value || billing.value.mismatch) return false;
-  if (!financialReadReady.value || !invoice.value?.id) return false;
-  const total = billing.value.total;
-  return total !== null && total > 0;
-});
-
-function clearManualBankPending(invoiceId?: string | null) {
-  const currentId = typeof invoice.value?.id === 'string' ? invoice.value.id : '';
-  const id = invoiceId ?? currentId;
-  if (id) manualBankPending.forget(id, auth.user?.id ?? null);
-  manualBankPendingAttempt.value = null;
-}
-
-/**
- * `InvoiceResponseDto` has no payment list. Restore only a reminder that is
- * scoped to this customer, this invoice and the server's exact amount; the
- * order's PAID status always wins and removes it.
- */
-function reconcileManualBankPending() {
-  if (isPaid.value) {
-    clearManualBankPending();
-    return;
-  }
-  const invoiceId = typeof invoice.value?.id === 'string' ? invoice.value.id : '';
-  if (!manualBankOrderEligible.value || visitGroupId.value || !invoiceId) {
-    if (invoiceId) clearManualBankPending(invoiceId);
-    else manualBankPendingAttempt.value = null;
-    return;
-  }
-  const total = billing.value.total;
-  if (total === null || total <= 0) {
-    clearManualBankPending(invoiceId);
-    return;
-  }
-  const stored = manualBankPending.read(invoiceId, auth.user?.id ?? null);
-  if (!stored || stored.amount !== total) {
-    if (stored) manualBankPending.forget(invoiceId, auth.user?.id ?? null);
-    manualBankPendingAttempt.value = null;
-    return;
-  }
-  manualBankPendingAttempt.value = stored;
-}
-
 // The ways to pay, as one list with one action (PO 21/10/2026). The wallet comes
 // first; when its balance turns out short and the customer has not picked yet,
 // the next way is chosen for them.
-type PayMethod = 'wallet' | 'vnpay' | 'manual_bank' | 'cash';
-const PAY_ORDER: PayMethod[] = ['wallet', 'vnpay', 'manual_bank', 'cash'];
-const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) =>
-  (method === 'manual_bank' ? canManualBank.value : paymentOptions.value.includes(method))
+type PayMethod = 'wallet' | 'vnpay' | 'cash';
+const PAY_ORDER: PayMethod[] = ['wallet', 'vnpay', 'cash'];
+const payMethods = computed<PayMethod[]>(() => PAY_ORDER.filter((method) => paymentOptions.value.includes(method)
   && (method !== 'cash' || cashCapabilityKnown.value)
   && (method !== 'vnpay' || (activeFundedVoucher.value?.preview.customerDueVnd ?? billing.value.total ?? 0) >= 5000)));
 const payMethod = ref<PayMethod | null>(null);
@@ -912,10 +851,7 @@ const handlePay = () => {
   cashHeldByPendingPayment.value = false;
   walletBalance.value = null;
   payMethodPicked = false;
-  // An open bank request opens on its own warning, not on another payment action.
-  payMethod.value = manualBankPendingAttempt.value && payMethods.value.includes('manual_bank')
-    ? 'manual_bank'
-    : payMethods.value[0] ?? null;
+  payMethod.value = payMethods.value[0] ?? null;
   if (paymentOptions.value.includes('wallet')) customerWalletApi.summary(1, 1).then((w) => { walletBalance.value = w.balance; }).catch(() => { walletBalance.value = null; });
 };
 
@@ -1036,58 +972,6 @@ const confirmPayment = async () => {
   }
 };
 
-const payWithManualBank = async () => {
-  if (voucherCollectionBlocked.value) return;
-  if (activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
-  const invoiceId = typeof invoice.value?.id === 'string' ? invoice.value.id : '';
-  const expectedAmount = billing.value.total;
-  if (!invoiceId || expectedAmount === null || actionLoading.value || walletPaying.value || !canManualBank.value) return;
-  const request = ++manualBankRequestSeq;
-  actionLoading.value = true;
-  paymentDialogError.value = null;
-  try {
-    const result = await manualBankApi.createPayment(invoiceId);
-    if (!mounted || request !== manualBankRequestSeq) return;
-    const currentInvoiceId = typeof invoice.value?.id === 'string' ? invoice.value.id : '';
-    const currentAmount = billing.value.total;
-    if (currentInvoiceId !== invoiceId || currentAmount !== expectedAmount || result.amount !== expectedAmount) {
-      // Do not pin an old response to a changed invoice.
-      paymentDialogError.value = 'Hóa đơn đã thay đổi. Vui lòng kiểm tra lại trước khi tạo yêu cầu mới.';
-      try { await loadOrder(true); } catch { /* Keep the server state we already show. */ }
-      return;
-    }
-    if (result.status === 'verified') {
-      // The server says an earlier request is already verified; PAID still comes
-      // only from the refreshed order, never from this response.
-      clearManualBankPending(invoiceId);
-      actionMessage.value = {
-        type: 'success',
-        text: 'Máy chủ cho biết giao dịch chuyển khoản đã được xác nhận. Đang cập nhật trạng thái đơn.',
-      };
-      try { await loadOrder(true); } catch { /* The next read will show the authoritative status. */ }
-      return;
-    }
-    const attempt = manualBankPending.remember(result, auth.user?.id ?? null);
-    if (!attempt) throw new Error('Máy chủ chưa ghi nhận yêu cầu chuyển khoản.');
-    manualBankPendingAttempt.value = attempt;
-    actionMessage.value = {
-      type: 'success',
-      text: 'Yêu cầu chuyển khoản đã được ghi nhận. Chờ Admin đối chiếu — chưa thanh toán.',
-    };
-    try {
-      await loadOrder(true);
-    } catch {
-      // The local reminder stays; the order is still the source of truth.
-    }
-  } catch (err) {
-    if (mounted && request === manualBankRequestSeq) {
-      paymentDialogError.value = userFacingError(err, 'Chưa tạo được yêu cầu chuyển khoản. Vui lòng thử lại.');
-    }
-  } finally {
-    if (request === manualBankRequestSeq) actionLoading.value = false;
-  }
-};
-
 const completeNoCharge = async () => {
   if (voucherCollectionBlocked.value) return;
   if (!invoice.value?.id || actionLoading.value || walletPaying.value || !paymentOptions.value.includes('no-charge')) return;
@@ -1179,17 +1063,6 @@ const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCa
 // A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
 const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
 const canCancel = computed(() => !oldFinanceReview.value && !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
-watch(() => auth.user?.id, () => {
-  // An in-flight response belongs to the previous session.
-  manualBankRequestSeq++;
-  manualBankPendingAttempt.value = null;
-}, { flush: 'sync' });
-watch(
-  [() => invoice.value?.id ?? '', () => billing.value.total, isPaid, visitGroupId,
-    manualBankOrderEligible, () => auth.user?.id ?? ''],
-  () => reconcileManualBankPending(),
-  { flush: 'sync' },
-);
 const canRebook = computed(() => isCompleted.value);
 /** The warranty block shows its own button; the menu only offers the claim when that block is not there. */
 const claimInWarrantyBlock = computed(() => isCompleted.value && orderWarranties.value.length > 0 && hasClaimableCoverage.value);
@@ -1525,26 +1398,6 @@ const parsedReview = computed(() => {
       <p v-if="invoice && !financialReadReady" role="alert" class="order-1 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
         Chưa tải đủ thông tin đối chiếu thanh toán. <button type="button" class="font-semibold underline" @click="loadOrder(true)">Thử lại</button>
       </p>
-
-      <section
-        v-if="manualBankPendingNotice && !isPaid"
-        role="status"
-        aria-live="polite"
-        class="order-1 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900 space-y-1"
-        data-testid="order-manual-bank-pending-alert"
-      >
-        <h4 class="font-semibold text-warning-900">Chờ Admin đối chiếu — chưa thanh toán</h4>
-        <p v-if="manualBankPendingAttempt" class="text-xs text-warning-800">
-          Số tiền yêu cầu:
-          <strong class="font-num" data-testid="order-manual-bank-pending-amount"><FhMoney :amount="manualBankPendingAttempt.amount" /></strong>
-        </p>
-        <p class="text-xs text-warning-800 leading-relaxed">
-          Yêu cầu chuyển khoản đã được ghi nhận. Vui lòng liên hệ đội ngũ FixHome để nhận thông tin tài khoản ngân hàng chính thức ngoài ứng dụng. Sau khi bạn chuyển khoản, Admin sẽ đối chiếu độc lập và cập nhật trạng thái đơn; đơn chưa hiển thị đã thanh toán cho tới khi Admin xác nhận.
-        </p>
-        <p class="text-xs font-medium text-warning-900">
-          Nếu bạn đã chuyển khoản, vui lòng không thanh toán lại bằng ví, VNPay hoặc tiền mặt.
-        </p>
-      </section>
       <!-- Cash: the customer confirms what they paid -->
       <section
         v-if="cashSettlement && cashSettlement.status === 'pending_confirmation'"
@@ -2242,18 +2095,6 @@ const parsedReview = computed(() => {
           <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="currentCashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái hóa đơn được cập nhật; chưa hiển thị là đã thanh toán.</p>
         </section>
         <p v-else-if="cashFirstEnabled && currentCashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700" data-testid="cash-intent-cancelled">Yêu cầu tiền mặt đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
-        <section v-if="!isPaid && manualBankPendingNotice" class="space-y-2 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="manual-bank-pending">
-          <h4 class="font-semibold text-balance">Chờ Admin đối chiếu — chưa thanh toán</h4>
-          <p v-if="manualBankPendingAttempt" class="text-xs text-warning-800">
-            Số tiền yêu cầu: <strong class="font-num"><FhMoney :amount="manualBankPendingAttempt.amount" /></strong>
-          </p>
-          <p class="text-xs text-warning-800 leading-relaxed">
-            Yêu cầu chuyển khoản đã được ghi nhận. Vui lòng liên hệ đội ngũ FixHome để nhận thông tin tài khoản ngân hàng chính thức ngoài ứng dụng. Sau khi bạn chuyển khoản, Admin sẽ đối chiếu độc lập và xác nhận thanh toán.
-          </p>
-          <p class="text-xs font-medium text-warning-900">
-            Nếu bạn đã chuyển khoản, vui lòng không thanh toán lại bằng ví, VNPay hoặc tiền mặt.
-          </p>
-        </section>
 
         <!-- One list of the ways to pay, one action under it (PO 21/10/2026). -->
         <template v-if="payMethods.length && !(cashFirstEnabled && ['pending', 'received'].includes(currentCashIntent?.status ?? ''))">
@@ -2283,17 +2124,15 @@ const parsedReview = computed(() => {
               <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
                 <Wallet v-if="method === 'wallet'" :size="18" />
                 <span v-else-if="method === 'vnpay'" class="text-[10px] font-extrabold leading-none tracking-tight"><span class="text-[#005BAA]">VN</span><span class="text-[#ED1C24]">PAY</span></span>
-                <Landmark v-else-if="method === 'manual_bank'" :size="18" />
                 <Banknote v-else :size="18" />
               </span>
               <span class="min-w-0 flex-1">
-                <span class="block text-sm font-semibold text-ink-900">{{ method === 'wallet' ? 'Ví FixHome' : method === 'vnpay' ? 'VNPay' : method === 'manual_bank' ? 'Chuyển khoản' : 'Tiền mặt' }}</span>
+                <span class="block text-sm font-semibold text-ink-900">{{ method === 'wallet' ? 'Ví FixHome' : method === 'vnpay' ? 'VNPay' : 'Tiền mặt' }}</span>
                 <span v-if="method === 'wallet'" class="block text-xs" :class="walletBalance !== null && !walletCovers ? 'text-warning-800' : 'text-ink-500'" data-testid="wallet-balance">
                   <template v-if="walletBalance === null">Đang xem số dư…</template>
                   <template v-else>Số dư <span class="font-num"><FhMoney :amount="walletBalance" /></span><template v-if="!walletCovers"> · không đủ</template></template>
                 </span>
                 <span v-else-if="method === 'vnpay'" class="block text-xs text-ink-500">ATM, thẻ quốc tế, QR</span>
-                <span v-else-if="method === 'manual_bank'" class="block text-xs text-ink-500">Chuyển khoản ngân hàng</span>
                 <span v-else class="block text-xs text-ink-500">Trả trực tiếp cho kỹ thuật viên</span>
               </span>
               <span
@@ -2307,18 +2146,12 @@ const parsedReview = computed(() => {
           <p v-if="payMethod === 'wallet' && walletBalance !== null && !walletCovers" class="text-sm text-ink-600">
             Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
           </p>
-          <div v-else-if="payMethod === 'manual_bank'" class="space-y-2 rounded-xl border border-warning-200 bg-warning-50 p-3.5 text-sm text-warning-900" data-testid="pay-manual-bank-info">
-            <div class="font-semibold text-warning-900">Chờ Admin đối chiếu — chưa thanh toán</div>
-            <p class="text-xs text-warning-800 leading-relaxed">
-              Vui lòng liên hệ đội ngũ FixHome để nhận thông tin tài khoản chuyển khoản ngoài ứng dụng. Sau khi bạn chuyển tiền, Admin sẽ độc lập kiểm tra sao kê ngân hàng và xác nhận hóa đơn. Hệ thống không tự động trừ tiền hay cung cấp số tài khoản tự tạo.
-            </p>
-          </div>
           <p v-else-if="payMethod === 'cash'" class="text-sm text-ink-600" data-testid="pay-cash-note">
             <template v-if="cashFirstEnabled">Gửi yêu cầu tiền mặt để máy chủ chốt số tiền hiện tại; kỹ thuật viên chỉ có thể xác nhận đã nhận sau khi yêu cầu được tạo.</template>
             <template v-else>Đưa tiền cho kỹ thuật viên. Thợ khai báo số tiền, bạn xác nhận lại ngay tại đơn này.</template>
           </p>
           <p
-            v-if="paymentDialogError && (payMethod === 'cash' || payMethod === 'manual_bank')"
+            v-if="paymentDialogError && payMethod === 'cash'"
             role="alert"
             class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800 text-pretty"
             data-testid="pay-dialog-error"
@@ -2341,15 +2174,6 @@ const parsedReview = computed(() => {
             data-testid="pay-with-vnpay"
             @click="confirmPayment"
           >Thanh toán qua VNPay</FhButton>
-          <FhButton
-            v-else-if="payMethod === 'manual_bank'"
-            class="w-full"
-            size="lg"
-            :disabled="voucherCollectionBlocked || actionLoading || walletPaying || !canManualBank"
-            :loading="actionLoading"
-            data-testid="pay-with-manual-bank"
-            @click="payWithManualBank"
-          >Tạo yêu cầu chuyển khoản</FhButton>
           <FhButton
             v-else-if="payMethod === 'cash'"
             class="w-full"
