@@ -174,6 +174,7 @@ describe('customer invoice payment UI', () => {
     expect(dialog.find('[data-testid="pay-method-wallet"]').exists()).toBe(total > 0);
     expect(dialog.find('[data-testid="pay-method-cash"]').exists()).toBe(total > 0);
     expect(dialog.find('[data-testid="pay-method-vnpay"]').exists()).toBe(total >= 5000);
+    expect(dialog.find('[data-testid="pay-method-manual_bank"]').exists()).toBe(total > 0);
     if (total > 0) expect(dialog.get('[data-testid="solo-voucher-picker"]').attributes('data-scope-id')).toBe('o1');
     w.unmount();
   });
@@ -191,7 +192,7 @@ describe('customer invoice payment UI', () => {
     const w = await openPayment(300000);
     expect(w.get('[data-testid="pay-method-wallet"]').attributes('aria-checked')).toBe('true');
     expect(w.get('[data-testid="wallet-balance"]').find('[data-money]').exists() || w.get('[data-testid="wallet-balance"]').text().includes('999.999')).toBe(true);
-    expect(w.findAll('[role="radio"]')).toHaveLength(3);
+    expect(w.findAll('[role="radio"]')).toHaveLength(4);
     expect(w.findAll('[data-testid^="pay-with-"], [data-testid="pay-cash-ok"]')).toHaveLength(1);
     await w.get('[data-testid="pay-with-wallet"]').trigger('click');
     await flushPromises();

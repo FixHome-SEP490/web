@@ -10,6 +10,9 @@ import ConsoleTable, { type ConsoleColumn } from '../../../components/console/Co
 import { CONSOLE_LOAD_ERROR, consoleField, consoleSearchField } from '../../../components/console/console-ui';
 import {
   adminPaymentsApi,
+  isValidBankReference,
+  isValidManualBankAmount,
+  normalizeBankReference,
   type AdminPaymentRow,
   type AdminPaymentSummary,
   type PaymentPurpose,
@@ -30,7 +33,12 @@ const PURPOSE: Record<PaymentPurpose, string> = {
   commission_due: 'Thợ trả công nợ',
   wallet_top_up: 'Nạp ví',
 };
-const PROVIDER: Record<string, string> = { vnpay: 'VNPay', wallet: 'Ví khách', none: 'Không qua cổng' };
+const PROVIDER: Record<string, string> = {
+  vnpay: 'VNPay',
+  wallet: 'Ví khách',
+  manual_bank: 'Chuyển khoản',
+  none: 'Không qua cổng',
+};
 const ROLE: Record<string, string> = { customer: 'Khách', technician: 'Thợ', service_manager: 'Quản lý', admin: 'Quản trị viên' };
 // Gateway failure codes in words; any other code stays off the screen (PO 10/10/2026).
 const FAILURE: Record<string, string> = {
@@ -49,9 +57,62 @@ const columns: ConsoleColumn[] = [
   { key: 'time', label: 'Thời gian', hideBelow: 'xl' },
   { key: 'amount', label: 'Số tiền', align: 'right' },
   { key: 'status', label: 'Trạng thái' },
+  { key: 'actions', label: 'Thao tác' },
 ];
 const statusClass = (s: PaymentStatus) =>
   s === 'failed' ? 'text-danger-700' : s === 'pending' ? 'text-warning-800' : 'text-ink-700';
+
+const confirmRef = ref<Record<string, string>>({});
+const confirmAck = ref<Record<string, boolean>>({});
+const confirming = ref<Record<string, boolean>>({});
+const confirmError = ref<Record<string, string>>({});
+
+function bankReferenceInvalid(r: AdminPaymentRow): boolean {
+  const raw = confirmRef.value[r.id] ?? '';
+  return raw.trim().length > 0 && !isValidBankReference(raw);
+}
+
+function canConfirmManualBank(r: AdminPaymentRow): boolean {
+  return !!r.invoiceId
+    && isValidManualBankAmount(r.amount)
+    && isValidBankReference(confirmRef.value[r.id] ?? '')
+    && (confirmAck.value[r.id] ?? false)
+    && !confirming.value[r.id]
+    && !loading.value;
+}
+
+function clearConfirmError(id: string) {
+  if (confirmError.value[id]) confirmError.value[id] = '';
+}
+
+function normalizeRefField(id: string) {
+  confirmRef.value[id] = normalizeBankReference(confirmRef.value[id]);
+  clearConfirmError(id);
+}
+
+async function handleConfirmManualBank(r: AdminPaymentRow) {
+  // A second click while the first request is in flight must not create another confirmation.
+  if (confirming.value[r.id] || !canConfirmManualBank(r)) return;
+  const amount = Number(r.amount);
+  const bankReference = normalizeBankReference(confirmRef.value[r.id]);
+  if (!r.invoiceId || !isValidManualBankAmount(amount) || !isValidBankReference(bankReference)) {
+    confirmError.value[r.id] = 'Số tiền hoặc mã tham chiếu ngân hàng không hợp lệ.';
+    return;
+  }
+  confirming.value[r.id] = true;
+  confirmError.value[r.id] = '';
+  try {
+    await adminPaymentsApi.confirmManualBank(r.invoiceId, { amount, bankReference });
+    delete confirmRef.value[r.id];
+    delete confirmAck.value[r.id];
+    delete confirmError.value[r.id];
+    await load(page.value);
+  } catch (err) {
+    confirmError.value[r.id] = userFacingError(err, 'Không thể xác nhận thanh toán do xung đột hoặc trạng thái không hợp lệ.');
+  } finally {
+    confirming.value[r.id] = false;
+  }
+}
 
 const search = ref('');
 const status = ref<PaymentStatus | ''>('');
@@ -67,9 +128,14 @@ const totalPages = ref(0);
 const loading = ref(true);
 const error = ref('');
 
+let loadGeneration = 0;
+
 async function load(next = 1) {
+  // A slower filter request must never overwrite the newest rows on screen.
+  const generation = ++loadGeneration;
   if (from.value && to.value && from.value > to.value) {
     error.value = 'Ngày bắt đầu phải trước ngày kết thúc.';
+    loading.value = false;
     return;
   }
   loading.value = true;
@@ -85,15 +151,17 @@ async function load(next = 1) {
       page: next,
       pageSize: 20,
     });
+    if (generation !== loadGeneration) return;
     rows.value = result.data;
     summary.value = result.meta.summary;
     total.value = result.meta.total;
     page.value = result.meta.page;
     totalPages.value = result.meta.totalPages;
   } catch (err) {
+    if (generation !== loadGeneration) return;
     error.value = userFacingError(err, CONSOLE_LOAD_ERROR);
   } finally {
-    loading.value = false;
+    if (generation === loadGeneration) loading.value = false;
   }
 }
 
@@ -186,6 +254,74 @@ onMounted(() => load(1));
       <template #cell-status="{ row: r }">
         <div class="whitespace-nowrap font-medium" :class="statusClass(r.status)">{{ STATUS[r.status] ?? 'Chưa rõ' }}</div>
         <div v-if="r.failureCode" class="max-w-48 text-xs text-danger-700">{{ failureLabel(r.failureCode) }}</div>
+      </template>
+      <template #cell-actions="{ row: r }">
+        <div
+          v-if="r.provider === 'manual_bank' && r.status === 'pending' && r.invoiceId"
+          class="min-w-64 space-y-2 py-1 text-left"
+          data-testid="manual-bank-confirm-form"
+        >
+          <div class="text-xs text-ink-600" data-testid="manual-bank-amount">
+            Khớp số tiền: <span class="font-num font-semibold text-ink-900"><FhMoney :amount="r.amount" /></span>
+          </div>
+          <div class="space-y-1">
+            <label :for="`mb-ref-${r.id}`" class="block text-xs font-medium text-ink-700">Mã tham chiếu ngân hàng</label>
+            <input
+              :id="`mb-ref-${r.id}`"
+              v-model="confirmRef[r.id]"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Mã giao dịch ngân hàng"
+              class="h-8 w-full rounded border px-2 text-xs focus:border-brand-500 focus:outline-hidden"
+              :class="bankReferenceInvalid(r) ? 'border-danger-400' : 'border-ink-200'"
+              data-testid="manual-bank-ref"
+              :aria-invalid="bankReferenceInvalid(r) || undefined"
+              :aria-describedby="bankReferenceInvalid(r) ? `mb-ref-help-${r.id} mb-ref-invalid-${r.id}` : `mb-ref-help-${r.id}`"
+              :disabled="confirming[r.id]"
+              @input="clearConfirmError(r.id)"
+              @blur="normalizeRefField(r.id)"
+            />
+            <p :id="`mb-ref-help-${r.id}`" class="text-[11px] text-ink-500">
+              6–128 ký tự, bắt đầu bằng chữ hoặc số; cho phép . _ : / -
+            </p>
+            <p v-if="bankReferenceInvalid(r)" :id="`mb-ref-invalid-${r.id}`" class="text-xs text-danger-700" data-testid="manual-bank-ref-invalid">
+              Mã tham chiếu chưa đúng định dạng.
+            </p>
+          </div>
+          <label class="flex items-start gap-2 text-xs text-ink-700 cursor-pointer">
+            <input
+              v-model="confirmAck[r.id]"
+              type="checkbox"
+              class="mt-0.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+              data-testid="manual-bank-ack"
+              :disabled="confirming[r.id]"
+              @change="clearConfirmError(r.id)"
+            />
+            <span>Đã kiểm tra tiền nổi độc lập trong tài khoản ngân hàng</span>
+          </label>
+          <p
+            v-if="confirmError[r.id]"
+            class="text-xs text-danger-700"
+            role="alert"
+            data-testid="manual-bank-error"
+          >
+            {{ confirmError[r.id] }}
+          </p>
+          <FhButton
+            size="sm"
+            variant="primary"
+            class="w-full text-xs"
+            :disabled="!canConfirmManualBank(r)"
+            :loading="confirming[r.id]"
+            data-testid="manual-bank-confirm-btn"
+            @click="handleConfirmManualBank(r)"
+          >
+            Xác nhận thanh toán
+          </FhButton>
+        </div>
+        <span v-else class="text-ink-400">—</span>
       </template>
     </ConsoleTable>
 
