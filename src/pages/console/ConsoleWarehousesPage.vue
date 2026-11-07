@@ -49,6 +49,8 @@ const movementColumns: ConsoleColumn[] = [
 const createForm = ref({ name: '', address: '', responsibleUserId: '' });
 const managers = ref<AdminUserRecord[]>([]);
 const managerLoadError = ref('');
+const selectedManager = computed(() =>
+  managers.value.find((manager) => manager.id === selectedWarehouse.value?.responsibleUserId) ?? null);
 const editing = ref<Warehouse | null>(null);
 const editForm = ref({ name: '', address: '', responsibleUserId: '', status: 'active' as 'active' | 'inactive' });
 const warehouseToDelete = ref<Warehouse | null>(null);
@@ -250,6 +252,10 @@ function movementKind(kind: string) { return kind === 'stock_in' ? 'Nhập kho' 
         <label class="min-w-64 flex-1 space-y-1 text-sm font-medium text-ink-700">Kho<select v-model="selectedId" class="w-full rounded-md border border-ink-300 px-3 py-2"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}<template v-if="warehouse.status !== 'active'"> · Ngừng hoạt động</template></option></select></label>
         <FhStatusPill :status="selectedWarehouse?.status === 'active' ? 'success' : 'warning'">{{ selectedWarehouse?.status === 'active' ? 'Đang hoạt động' : 'Ngừng hoạt động' }}</FhStatusPill>
         <span class="text-sm text-ink-600">{{ selectedWarehouse?.address || 'Chưa có địa chỉ' }}</span>
+        <span v-if="isAdmin && selectedWarehouse" class="text-sm text-ink-700">
+          Quản lý phụ trách: <strong>{{ selectedManager?.fullName || 'Chưa xác định' }}</strong>
+          <span v-if="selectedManager?.email"> ({{ selectedManager.email }})</span>
+        </span>
         <template v-if="isAdmin && selectedWarehouse">
           <FhButton variant="secondary" size="sm" @click="startEdit(selectedWarehouse)">Sửa kho</FhButton>
           <FhButton variant="danger" size="sm" @click="warehouseToDelete = selectedWarehouse">Xóa kho</FhButton>
