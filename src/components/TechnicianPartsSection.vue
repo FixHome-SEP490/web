@@ -22,6 +22,10 @@ import {
   Info,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton } from './index';
+import ShippingShareBreakdown from './ShippingShareBreakdown.vue';
+import DeliveryPhysicalPreview from './DeliveryPhysicalPreview.vue';
+import DeliveryOperationsPanel from './DeliveryOperationsPanel.vue';
+import { isDeliveryPhysicalRequestId } from '../api/w3-delivery-physical.api';
 import { userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
@@ -352,7 +356,8 @@ const requestGroups = computed(() => {
     });
     const resolved = request.status === 'cancelled' || request.status === 'completed' ||
       (request.status === 'received' && !usagePending);
-    const group = returnNeedsDeclaration ? groups[0] : waitingForManager ? groups[1]
+    const outOfWarehouseStock = request.fulfillmentMethod === 'pickup' && warehouseAllocationFor(request)?.status === 'stock_unavailable';
+    const group = outOfWarehouseStock ? groups[0] : returnNeedsDeclaration ? groups[0] : waitingForManager ? groups[1]
       : resolved ? groups[2] : handoverReady || (isUnderRepair.value && request.status === 'received' && usagePending)
       ? groups[0] : groups[1];
     group.requests.push(request);
@@ -674,7 +679,7 @@ const submitPreRepairRequest = async () => {
     actionError.value = null;
     actionSuccess.value = null;
 
-    await partRequestsApi.createPreRepair(props.orderId, {
+    const createdRequest = await partRequestsApi.createPreRepair(props.orderId, {
       items: selectedItems.value.map((i) => ({
         partCatalogId: i.partCatalogId,
         quantity: i.quantity,
@@ -684,16 +689,39 @@ const submitPreRepairRequest = async () => {
       reason: requestReason.value || 'Linh kiện dự kiến trước khi đi kiểm tra',
     });
 
-    actionSuccess.value = 'Đã gửi yêu cầu linh kiện dự kiến tới Quản lý dịch vụ!';
+    actionSuccess.value = 'Đã tạo yêu cầu linh kiện. Đang kiểm tra kho FixHome phù hợp.';
     showCreateForm.value = false;
     selectedItems.value = [];
     requestReason.value = '';
     clearSelectedPart();
     await loadPartRequests(partRequestsLoaded.value);
+    if (warehouseAllocationFor(createdRequest)?.status === 'stock_unavailable') {
+      actionSuccess.value = 'Không có kho FixHome nào đủ linh kiện. Bạn cần tự chuẩn bị. Hệ thống không tự động tính phí linh kiện tự mua.';
+    } else if (fulfillmentMethod.value === 'pickup') {
+      actionSuccess.value = 'Đã yêu cầu kho FixHome; theo dõi kho được phân bổ trước khi đến nhận.';
+    }
     emit('parts-updated');
   } catch (err: unknown) {
     actionError.value =
       userFacingError(err, 'Không thể tạo yêu cầu linh kiện.');
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
+const cancelUnavailablePreRepair = async (requestId: string) => {
+  const request = partRequests.value.find((row) => row.id === requestId);
+  if (!request || request.requestType !== 'pre_repair' || request.status !== 'requested'
+      || warehouseAllocationFor(request)?.status !== 'stock_unavailable' || actionLoading.value) return;
+  actionLoading.value = true;
+  actionError.value = null;
+  try {
+    await partRequestsApi.cancel(requestId, 'Kho FixHome không đủ linh kiện; kỹ thuật viên tự chuẩn bị.');
+    await loadPartRequests(partRequestsLoaded.value);
+    actionSuccess.value = 'Đã dừng yêu cầu lấy từ kho. Hãy tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua.';
+    emit('parts-updated');
+  } catch (error) {
+    actionError.value = userFacingError(error, 'Chưa hủy được yêu cầu kho; vui lòng thử lại.');
   } finally {
     actionLoading.value = false;
   }
@@ -1357,10 +1385,13 @@ const getStatusBadgeClass = (status: string) => {
             <p v-if="warehouseAllocationLoading[pr.id]" class="text-ink-600">Đang kiểm tra kho được phân bổ…</p>
             <p v-else-if="warehouseAllocationErrors[pr.id]" class="text-warning-800">Chưa kiểm tra được trạng thái kho. Không xác nhận nhận hàng cho tới khi được đối chiếu.</p>
             <template v-else-if="warehouseAllocationFor(pr)?.mode === 'warehouse'">
-              <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'manual_assistance' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
+              <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'stock_unavailable' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
               <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
               <p v-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
-              <p v-if="warehouseAllocationFor(pr)?.status === 'manual_assistance'" class="text-warning-800">Chưa có một kho đủ linh kiện cho toàn bộ yêu cầu. Cần quản lý hỗ trợ thủ công; chưa thể nhận hàng.</p>
+              <p v-if="warehouseAllocationFor(pr)?.status === 'stock_unavailable'" class="text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Thợ tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua. Yêu cầu này không phát QR.</p>
+              <FhButton v-if="pr.requestType === 'pre_repair' && pr.status === 'requested' && warehouseAllocationFor(pr)?.status === 'stock_unavailable'"
+                variant="secondary" size="sm" :disabled="actionLoading"
+                @click="cancelUnavailablePreRepair(pr.id)">Dừng yêu cầu kho, tự chuẩn bị</FhButton>
               <p v-else-if="warehouseAllocationFor(pr)?.status === 'reserved' || warehouseAllocationFor(pr)?.status === 'ready'" class="text-ink-700">Đang chờ quản lý bàn giao trực tiếp. Chưa có xác nhận đã cấp linh kiện.</p>
               <p v-else-if="warehouseAllocationFor(pr)?.status === 'handed_over'" class="font-medium text-brand-800">Quản lý đã bàn giao thực tế. Nhập mã QR nhận hàng riêng do quản lý đưa cho bạn.</p>
               <p v-else-if="warehouseAllocationFor(pr)?.status === 'received'" class="font-medium text-success-700">Đã xác nhận nhận linh kiện.</p>
@@ -1368,13 +1399,28 @@ const getStatusBadgeClass = (status: string) => {
           </section>
 
           <!-- Delivery Shipping Fee if any -->
-          <div v-if="pr.shippingFee > 0" class="text-xs text-brand-700 font-medium">
-            Phí giao hàng: <FhMoney :amount="pr.shippingFee" />
+          <DeliveryPhysicalPreview
+            v-if="pr.fulfillmentMethod === 'delivery' && pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
+            :request-id="pr.id"
+            :fulfillment-method="pr.fulfillmentMethod"
+            audience="technician"
+          />
+          <DeliveryOperationsPanel
+            v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
+            :request-id="pr.id"
+            :fulfillment-method="pr.fulfillmentMethod"
+            :request-type="pr.requestType"
+            :shipping-fee="pr.shippingFee"
+            audience="technician"
+            :source-owner-id="pr.technicianId"
+          />
+          <div v-if="pr.fulfillmentMethod !== 'pickup' && (pr.shippingFee > 0 || pr.shippingPolicyVersion)" class="text-xs text-brand-700 font-medium">
+            <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
           </div>
 
           <!-- Pending Preparation State -->
           <div
-            v-if="pr.status === 'requested'"
+            v-if="pr.status === 'requested' && warehouseAllocationFor(pr)?.status !== 'stock_unavailable'"
             class="p-2.5 rounded-lg bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
           >
             <div class="flex items-center gap-2 text-xs text-warning-800">

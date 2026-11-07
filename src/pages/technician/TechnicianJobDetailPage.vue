@@ -87,6 +87,8 @@ import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts'
 import { partsCompletionBlockers } from '../../utils/parts-completion';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import { partRequestsApi, type PartRequest, type PartCustodyReturnRecord } from '../../api/part-requests.api';
+import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
+import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { allowedComplaintTypes } from '../../utils/order-complaint';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
@@ -343,6 +345,9 @@ const uncertainFundedCashScopes = new Set<string>();
 // Quotation items form
 const quotationItems = ref<QuotationItemPayload[]>([]);
 const receivedRequests = ref<PartRequest[]>([]);
+const deliveryTermsRequests = computed(() => receivedRequests.value.filter(request => request.serviceOrderId === jobIdRef.value
+  && request.requestType === 'additional' && request.fulfillmentMethod === 'delivery' && request.shippingFee > 0
+  && isDeliveryPhysicalRequestId(request.id)));
 const completionPartRequests = ref<PartRequest[] | null>(null);
 const completionPartsReadFailed = ref(false);
 const jobInvoice = ref<Record<string, unknown> | null>(null);
@@ -3509,6 +3514,16 @@ const toggleMore = async () => {
               </span>
             </button>
             <div v-show="sections.parts" id="job-parts" class="px-5 sm:px-6 pb-5">
+              <DeliveryTermsPanel
+                v-for="request in deliveryTermsRequests"
+                :key="`terms-${request.id}`"
+                :request-id="request.id"
+                :request-type="request.requestType"
+                :fulfillment-method="request.fulfillmentMethod"
+                :shipping-fee="request.shippingFee"
+                audience="technician"
+                :technician-id="request.technicianId"
+              />
               <TechnicianPartsSection
                 ref="partsSection"
                 :key="job.id"

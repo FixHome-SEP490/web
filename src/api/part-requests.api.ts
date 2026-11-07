@@ -38,6 +38,12 @@ export interface PartRequest {
   status: PartRequestStatus;
   reason?: string | null;
   shippingFee: number;
+  /** Optional read-only delivery snapshot; absent fields remain LEGACY. */
+  shippingPolicyVersion?: string | null;
+  customerShippingShare?: number | null;
+  technicianShippingShare?: number | null;
+  /** Display only when supplied by an authoritative server read. */
+  technicianNetLabor?: number | null;
   additionalCostId?: string | null;
   quotationId?: string | null;
   qrToken?: string | null;
@@ -56,7 +62,7 @@ export interface PartRequest {
 }
 
 export type WarehouseAllocationMode = 'warehouse' | 'legacy';
-export type WarehouseAllocationStatus = 'manual_assistance' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
+export type WarehouseAllocationStatus = 'manual_assistance' | 'stock_unavailable' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
 export interface WarehouseAllocation {
   partRequestId: string;
   mode: WarehouseAllocationMode;
@@ -68,6 +74,7 @@ export interface WarehouseAllocation {
   distanceNotVerified?: boolean;
   reviewRequired?: boolean;
   manualAssistanceReason?: string | null;
+  stockUnavailable?: boolean;
   tokenExpiresAt?: string | null;
   tokenVersion?: number;
   handedOverAt?: string | null;

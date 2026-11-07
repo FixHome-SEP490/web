@@ -117,6 +117,12 @@ export interface ServiceOrderItem {
     averageRating: number | null;
   };
   laborTotal: number;
+  /** Optional read-only delivery policy snapshot; absent fields remain LEGACY. */
+  shippingPolicyVersion?: string | null;
+  customerShippingShare?: number | null;
+  technicianShippingShare?: number | null;
+  /** Display only when supplied by an authoritative server read. */
+  technicianNetLabor?: number | null;
   partsTotal: number;
   grandTotal: number;
   /** Labor warranty fixed when the technician took the order; null on older orders. */
@@ -176,6 +182,12 @@ export interface AdditionalCostRecord {
   totalPartsDelta: number;
   fulfillmentMethod?: 'pickup' | 'delivery' | null;
   shippingFee?: number;
+  /** Optional read-only delivery policy snapshot; absent fields remain LEGACY. */
+  shippingPolicyVersion?: string | null;
+  customerShippingShare?: number | null;
+  technicianShippingShare?: number | null;
+  /** Display only when supplied by an authoritative server read. */
+  technicianNetLabor?: number | null;
   expiresAt: string;
   decidedAt?: string | null;
   supersedesId?: string | null;

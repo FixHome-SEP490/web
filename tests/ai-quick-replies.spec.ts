@@ -64,6 +64,24 @@ describe('Quick replies in the thread', () => {
     expect(wrapper.find('[data-testid="ai-quick-replies"]').exists()).toBe(false);
   });
 
+  it('uses the answers the assistant sent for its question, before guessing yes/no', async () => {
+    const { conversation, sendTurn } = conversationWith(false);
+    conversation.messages.value[1] = {
+      id: 'b1',
+      sender: 'bot',
+      text: 'Dạ em cần hỏi thêm một chút để chẩn cho đúng ạ.',
+      reply: {
+        status: 'needs_clarification',
+        clarification: { questionsVi: ['Máy rơi xuống đất thì dàn lạnh còn nguyên vẹn không?'], answerOptionsVi: ['Còn nguyên vẹn', 'Bị bung ra', ' ', 'Bị vỡ, móp'] },
+      },
+    } as never;
+    const wrapper = mount(AiConversationThread, { props: { conversation: conversation as never } });
+    const buttons = wrapper.find('[data-testid="ai-quick-replies"]').findAll('button');
+    expect(buttons.map((b) => b.text())).toEqual(['Còn nguyên vẹn', 'Bị bung ra', 'Bị vỡ, móp']);
+    await buttons[1].trigger('click');
+    expect(sendTurn).toHaveBeenCalledWith('Bị bung ra', []);
+  });
+
   it('hides them once the customer has replied', () => {
     const { conversation } = conversationWith(false, [{ id: 'u2', sender: 'user', text: 'không' }]);
     const wrapper = mount(AiConversationThread, { props: { conversation: conversation as never } });
