@@ -37,6 +37,8 @@ const ownConsentRecorded = computed(() => props.audience === 'customer' ? state.
 const sourceMatches = computed(() => !!state.value && typeof props.shippingFee === 'number'
   && Number.isSafeInteger(props.shippingFee) && props.shippingFee > 0
   && state.value.quote.totalShippingFee <= props.shippingFee);
+const termsReadyForPhysical = computed(() => !!state.value && !data.value?.invalidated && sourceMatches.value
+  && state.value.customerConsented && state.value.technicianConsented && state.value.actual !== null);
 const canConsent = computed(() => props.audience !== 'manager' && contextValid.value && status.value === 'ready'
   && !requiresReload.value && !data.value?.invalidated && !!state.value && currentShare.value !== undefined
   && sourceMatches.value && !ownConsentRecorded.value);
@@ -133,7 +135,7 @@ async function submitConsent() {
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div><h3 class="text-sm font-semibold text-ink-900">Điều khoản phí giao hàng</h3>
         <p class="mt-1 break-all text-xs text-ink-600">Mã yêu cầu: {{ requestId }}</p></div>
-      <span class="rounded-md bg-warning-50 px-2 py-1 text-xs font-medium text-warning-800">Tài chính đang bị khóa</span>
+      <span class="rounded-md bg-ink-100 px-2 py-1 text-xs font-medium text-ink-700">Điều khoản trước hóa đơn</span>
     </div>
     <p v-if="status === 'loading'" class="text-sm text-ink-600" role="status">Đang tải điều khoản…</p>
     <div v-else-if="status === 'unavailable'" class="space-y-2 text-sm text-ink-700" role="status">
@@ -152,25 +154,29 @@ async function submitConsent() {
         <p class="text-xs text-ink-600">Chính sách {{ state.quote.policyVersion }} · Điều khoản phiên bản {{ state.quote.quoteVersion }}</p>
         <dl class="grid gap-2 text-sm sm:grid-cols-2">
           <div class="flex justify-between gap-2"><dt class="text-ink-600">Tổng phí giao</dt><dd class="font-num text-ink-900">{{ amount(state.quote.totalShippingFee) }}</dd></div>
-          <div class="flex justify-between gap-2"><dt class="text-ink-600">Khách hàng chịu</dt><dd class="font-num text-ink-900">{{ amount(state.quote.customerShippingShare) }}</dd></div>
-          <div class="flex justify-between gap-2"><dt class="text-ink-600">Kỹ thuật viên chịu</dt><dd class="font-num text-ink-900">{{ amount(state.quote.technicianShippingShare) }}</dd></div>
+          <div class="flex justify-between gap-2"><dt class="text-ink-600">Khách hàng chịu (70%)</dt><dd class="font-num text-ink-900">{{ amount(state.quote.customerShippingShare) }}</dd></div>
+          <div class="flex justify-between gap-2"><dt class="text-ink-600">Kỹ thuật viên chịu (30%)</dt><dd class="font-num text-ink-900">{{ amount(state.quote.technicianShippingShare) }}</dd></div>
           <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Phí thực tế đã ghi nhận</dt><dd class="font-num text-ink-900">{{ amount(state.actual.totalShippingFee) }}</dd></div>
+          <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Khách hàng chịu thực tế (70%)</dt><dd class="font-num text-ink-900">{{ amount(state.actual.customerShippingShare) }}</dd></div>
+          <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Kỹ thuật viên chịu thực tế (30%)</dt><dd class="font-num text-ink-900">{{ amount(state.actual.technicianShippingShare) }}</dd></div>
           <div v-if="data.recordedConditionalCeilings" class="flex justify-between gap-2 sm:col-span-2"><dt class="text-ink-600">Tổng điều khoản đã ghi nhận</dt><dd class="font-num text-ink-900">{{ amount(data.recordedConditionalCeilings.shipping) }}</dd></div>
         </dl>
         <p v-if="state.actual" class="text-xs text-warning-800">Phí thực tế mới được ghi nhận, chưa xác minh độc lập.</p>
         <p v-if="data.invalidated" class="text-sm text-warning-800" role="status">Điều khoản đã mất hiệu lực; consent đã khóa.</p>
         <p v-else-if="!sourceMatches" class="text-sm text-warning-800" role="status">Phí trong yêu cầu không khớp snapshot terms; consent đã khóa.</p>
+        <p v-if="termsReadyForPhysical" class="text-xs text-success-700">Đã đủ điều kiện ghi nhận giao nhận vật lý.</p>
+        <p v-else class="text-xs text-ink-600">Giao nhận vật lý chỉ khả dụng sau khi cả hai bên đồng thuận và phí thực tế được ghi nhận.</p>
         <div v-if="ownConsentRecorded" class="text-sm text-success-700">Bạn đã đồng ý điều khoản giao hàng.</div>
         <div v-else-if="canConsent" data-testid="delivery-terms-actions" class="space-y-2 border-t border-ink-100 pt-3">
           <label class="flex items-start gap-2 text-sm text-ink-800"><input v-model="accepted" type="checkbox" class="mt-1" />
             <span>Tôi đồng ý với phần phí giao hàng {{ audience === 'customer' ? 'khách hàng' : 'kỹ thuật viên' }} chịu: {{ amount(currentShare!) }}.</span></label>
           <FhButton data-testid="delivery-terms-consent" :disabled="busy || !accepted" @click="submitConsent">{{ busy ? 'Đang ghi nhận…' : 'Ghi nhận đồng ý' }}</FhButton>
         </div>
-        <div v-else-if="audience === 'manager'" class="text-sm text-ink-700">Điều khoản chỉ đọc. Tài chính, thanh toán và chi trả đang bị khóa.</div>
+        <div v-else-if="audience === 'manager'" class="text-sm text-ink-700">Quản lý dịch vụ ghi đề xuất và phí thực tế tại mục Giao linh kiện.</div>
       </template>
       <p v-if="errorMessage" class="text-sm text-ink-700" role="status">{{ errorMessage }}</p>
       <FhButton v-if="retry" variant="secondary" size="sm" :disabled="busy" @click="retry?.()">Thử lại cùng consent</FhButton>
-      <p class="text-xs text-warning-800">Đây là điều khoản có điều kiện; không xác nhận ngân sách lao động, thanh toán, chi trả hoặc giao nhận vật lý.</p>
+      <p class="text-xs text-warning-800">Khoản phí này chưa được thanh toán. Chỉ hóa đơn W3 đã khóa và đủ điều kiện mới có thể được thanh toán hoặc chi trả.</p>
     </template>
   </section>
 </template>

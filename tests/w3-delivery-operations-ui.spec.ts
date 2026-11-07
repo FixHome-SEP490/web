@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import DeliveryOperationsPanel from '../src/components/DeliveryOperationsPanel.vue';
 import { w3DeliveryOperationsApi } from '../src/api/w3-delivery-operations.api';
+import { w3DeliveryTermsApi } from '../src/api/w3-delivery-terms.api';
 import { warehousesApi } from '../src/api/warehouses.api';
 import { useAuthStore } from '../src/stores/auth';
 import { UserRole } from '../src/types';
@@ -41,7 +42,7 @@ describe('W3 delivery operations panel', () => {
     });
     const wrapper = mount(DeliveryOperationsPanel, { props });
     await flushPromises();
-    expect(wrapper.text()).toContain('Phí giao thực tế: 0 ₫');
+    expect(wrapper.text()).toContain('Phí giao thực tế: 0₫');
     expect(wrapper.text()).toContain('Tôi đồng ý với mức phí giao 0 ₫');
     expect(wrapper.text()).not.toMatch(/đã thanh toán|đã xác minh đơn vị giao/i);
     await wrapper.get('input[type="checkbox"]').setValue(true);
@@ -134,7 +135,7 @@ describe('W3 delivery operations panel', () => {
     wrapper.unmount();
   });
 
-  it('requires an actual delivery UUID, additional source and explicit zero before any read', async () => {
+  it('requires an actual delivery UUID, additional source and a non-negative fee before any read', async () => {
     signIn(UserRole.CUSTOMER, 'owner-a');
     const read = vi.spyOn(w3DeliveryOperationsApi, 'read');
     for (const change of [
@@ -142,7 +143,7 @@ describe('W3 delivery operations panel', () => {
       { fulfillmentMethod: 'pickup' },
       { requestType: 'quotation' },
       { shippingFee: undefined },
-      { shippingFee: 1 },
+      { shippingFee: -1 },
     ]) {
       const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, ...change } });
       await flushPromises();
@@ -150,6 +151,39 @@ describe('W3 delivery operations panel', () => {
       wrapper.unmount();
     }
     expect(read).not.toHaveBeenCalled();
+  });
+
+  it('renders positive 70/30 terms read-only for the customer and never offers the zero-fee consent route', async () => {
+    signIn(UserRole.CUSTOMER, 'owner-a');
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection({ quote: positiveQuote }));
+    const consent = vi.spyOn(w3DeliveryOperationsApi, 'consent');
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, shippingFee: 101 } });
+    await flushPromises();
+    const text = wrapper.text();
+    expect(text).toContain('Giao linh kiện · phí 70/30');
+    expect(text).toContain('Khách hàng chịu (70%): 71₫');
+    expect(text).toContain('Kỹ thuật viên chịu (30%): 30₫');
+    expect(text).toContain('Chưa đủ điều kiện giao nhận vật lý');
+    expect(text).toContain('Đồng thuận phí dương được ghi tại mục Điều khoản phí giao hàng.');
+    expect(wrapper.find('[data-testid="delivery-consent"]').exists()).toBe(false);
+    expect(consent).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('offers the technician warehouse reservation only after both positive-fee consents and an actual fee', async () => {
+    signIn(UserRole.TECHNICIAN, 'tech-a');
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection({
+      quote: positiveQuote, customerConsented: true, technicianConsented: true,
+      actual: { totalShippingFee: 100, quoteVersion: 1 },
+    }));
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, shippingFee: 101, audience: 'technician', sourceOwnerId: 'tech-a' } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Đã đủ điều kiện ghi nhận giao nhận vật lý.');
+    expect(wrapper.find('[data-testid="delivery-consent"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Yêu cầu phân bổ kho');
+    wrapper.unmount();
   });
 
   it('allows only the matching technician to consent and reserve after both consents and actual zero', async () => {
@@ -321,6 +355,89 @@ describe('W3 delivery operations panel', () => {
     expect(propose).toHaveBeenCalledTimes(2);
     expect(propose.mock.calls[0]?.[1]).toEqual(propose.mock.calls[1]?.[1]);
     expect(propose.mock.calls[0]?.[1]).toMatchObject({ expectedVersion: 0 });
+    wrapper.unmount();
+  });
+
+  it('records a positive proposal through the terms contract after the manager inspects the authoritative version', async () => {
+    signIn(UserRole.SERVICE_MANAGER, 'sm-a');
+    vi.spyOn(warehousesApi, 'list').mockResolvedValue([
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Kho của tôi', address: null, status: 'active', responsibleUserId: 'sm-a', createdAt: '', updatedAt: '' },
+    ]);
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    const read = vi.spyOn(w3DeliveryOperationsApi, 'read')
+      .mockResolvedValueOnce(projection({ version: 0, quote: null }))
+      .mockResolvedValue(projection({ quote: positiveQuote }));
+    const upload = vi.spyOn(w3DeliveryTermsApi, 'uploadEvidence').mockResolvedValue({
+      evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', purpose: 'QUOTE', quoteVersion: 1,
+    });
+    const propose = vi.spyOn(w3DeliveryTermsApi, 'propose').mockResolvedValue({ state: {
+      version: 1, scope: 'CONDITIONAL_TERMS_ONLY', quote: { quoteVersion: 1, policyVersion: 'W3_70_30_V1',
+        totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30, fingerprint },
+      customerConsented: false, technicianConsented: false, actual: null, financialExecution: 'BLOCKED',
+      laborBudget: null, aggregateBudgetVerified: false, paymentVerified: false,
+    }, replayed: false });
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, shippingFee: 101, audience: 'manager' } });
+    await flushPromises();
+    await wrapper.get('select').setValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    await wrapper.findAll('button').find(button => button.text() === 'Đối chiếu trạng thái đã có')?.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="positive-shipping-fee"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="positive-shipping-fee"]').setValue('101');
+    await wrapper.get('input[autocomplete="off"]').setValue('SHIP-101');
+    const input = wrapper.get('[data-testid="quote-evidence"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['photo'], 'quote.png', { type: 'image/png' })] });
+    await input.trigger('change');
+    await wrapper.findAll('button').find(button => button.text() === 'Ghi đề xuất phí giao')?.trigger('click');
+    await flushPromises();
+    expect(upload).toHaveBeenCalledWith(requestId, expect.objectContaining({
+      warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', purpose: 'QUOTE', quoteVersion: 1,
+    }));
+    expect(propose).toHaveBeenCalledWith(requestId, expect.objectContaining({
+      expectedVersion: 0, totalShippingFee: 101, warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', courierReference: 'SHIP-101',
+    }));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('Khách hàng chịu (70%): 71₫');
+    wrapper.unmount();
+  });
+
+  it('records a positive actual fee through the terms contract and enables physical operations only afterwards', async () => {
+    signIn(UserRole.SERVICE_MANAGER, 'sm-a');
+    vi.spyOn(warehousesApi, 'list').mockResolvedValue([
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Kho của tôi', address: null, status: 'active', responsibleUserId: 'sm-a', createdAt: '', updatedAt: '' },
+    ]);
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    const actual = { quoteVersion: 1, totalShippingFee: 100, customerShippingShare: 70, technicianShippingShare: 30,
+      verification: 'RECORDED_NOT_EXTERNALLY_VERIFIED' as const };
+    vi.spyOn(w3DeliveryOperationsApi, 'read')
+      .mockResolvedValueOnce(projection({ quote: positiveQuote, customerConsented: true, technicianConsented: true }))
+      .mockResolvedValue(projection({ quote: positiveQuote, customerConsented: true, technicianConsented: true,
+        actual: { totalShippingFee: 100, quoteVersion: 1 } }));
+    const upload = vi.spyOn(w3DeliveryTermsApi, 'uploadEvidence').mockResolvedValue({
+      evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', purpose: 'ACTUAL', quoteVersion: 1,
+    });
+    const actualCall = vi.spyOn(w3DeliveryTermsApi, 'actual').mockResolvedValue({ state: {
+      version: 2, scope: 'CONDITIONAL_TERMS_ONLY', quote: { quoteVersion: 1, policyVersion: 'W3_70_30_V1',
+        totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30, fingerprint },
+      customerConsented: true, technicianConsented: true, actual, financialExecution: 'BLOCKED',
+      laborBudget: null, aggregateBudgetVerified: false, paymentVerified: false,
+    }, replayed: false });
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, shippingFee: 101, audience: 'manager' } });
+    await flushPromises();
+    await wrapper.get('select').setValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    await wrapper.findAll('button').find(button => button.text() === 'Đối chiếu trạng thái đã có')?.trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="positive-actual-fee"]').setValue('100');
+    const input = wrapper.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['actual'], 'actual.png', { type: 'image/png' })] });
+    await input.trigger('change');
+    await wrapper.findAll('button').find(button => button.text() === 'Ghi nhận phí thực tế')?.trigger('click');
+    await flushPromises();
+    expect(upload).toHaveBeenCalledWith(requestId, expect.objectContaining({ purpose: 'ACTUAL', quoteVersion: 1 }));
+    expect(actualCall).toHaveBeenCalledWith(requestId, expect.objectContaining({
+      expectedVersion: 1, quoteVersion: 1, totalShippingFee: 100, evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    }));
+    expect(wrapper.text()).toContain('Đã đủ điều kiện ghi nhận giao nhận vật lý.');
     wrapper.unmount();
   });
 });

@@ -35,10 +35,11 @@ describe('W3 conditional delivery terms panel', () => {
     const wrapper = mount(DeliveryTermsPanel, { props });
     await flushPromises();
     const text = wrapper.text().replace(/\s+/g, ' ');
-    expect(text).toContain('Khách hàng chịu71 ₫');
-    expect(text).toContain('Kỹ thuật viên chịu30 ₫');
+    expect(text).toContain('Khách hàng chịu (70%)71 ₫');
+    expect(text).toContain('Kỹ thuật viên chịu (30%)30 ₫');
     expect(text).toContain('Tổng điều khoản đã ghi nhận101 ₫');
-    expect(wrapper.text()).toContain('Tài chính đang bị khóa');
+    expect(wrapper.text()).toContain('Điều khoản trước hóa đơn');
+    expect(wrapper.text()).toContain('Khoản phí này chưa được thanh toán');
     expect(wrapper.text()).not.toMatch(/đã thanh toán|đã chi trả|đã xuất kho/i);
     await wrapper.get('input[type="checkbox"]').setValue(true);
     await wrapper.get('[data-testid="delivery-terms-consent"]').trigger('click');
@@ -112,13 +113,31 @@ describe('W3 conditional delivery terms panel', () => {
     wrapper.unmount();
   });
 
-  it('keeps the Service Manager view read-only and displays only backend totals', async () => {
+  it('shows the actual final 70/30 shares and physical readiness without claiming payment', async () => {
+    signIn(UserRole.TECHNICIAN, 'tech-1');
+    vi.spyOn(w3DeliveryTermsApi, 'read').mockResolvedValue({ ...projection,
+      state: { ...terms, customerConsented: true, technicianConsented: true,
+        actual: { quoteVersion: 1, totalShippingFee: 100, customerShippingShare: 70,
+          technicianShippingShare: 30, verification: 'RECORDED_NOT_EXTERNALLY_VERIFIED' } } });
+    const wrapper = mount(DeliveryTermsPanel, { props: { ...props, audience: 'technician' } });
+    await flushPromises();
+    const text = wrapper.text();
+    expect(text).toContain('Phí thực tế đã ghi nhận100 ₫');
+    expect(text).toContain('Khách hàng chịu thực tế (70%)70 ₫');
+    expect(text).toContain('Kỹ thuật viên chịu thực tế (30%)30 ₫');
+    expect(text).toContain('Đã đủ điều kiện ghi nhận giao nhận vật lý.');
+    expect(text).toContain('Phí thực tế mới được ghi nhận, chưa xác minh độc lập.');
+    expect(text).not.toMatch(/đã thanh toán|đã chi trả|đã xuất kho/i);
+    wrapper.unmount();
+  });
+
+  it('keeps the Service Manager view read-only and redirects positive-fee actions to physical operations', async () => {
     signIn(UserRole.SERVICE_MANAGER, 'manager-1');
     vi.spyOn(w3DeliveryTermsApi, 'read').mockResolvedValue(projection);
     const consent = vi.spyOn(w3DeliveryTermsApi, 'consent');
     const wrapper = mount(DeliveryTermsPanel, { props: { ...props, audience: 'manager' } });
     await flushPromises();
-    expect(wrapper.text()).toContain('Điều khoản chỉ đọc.');
+    expect(wrapper.text()).toContain('Quản lý dịch vụ ghi đề xuất và phí thực tế tại mục Giao linh kiện.');
     expect(wrapper.find('[data-testid="delivery-terms-actions"]').exists()).toBe(false);
     expect(consent).not.toHaveBeenCalled();
     wrapper.unmount();
