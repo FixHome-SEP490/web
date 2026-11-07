@@ -5,6 +5,8 @@ export interface ShippingPolicySnapshot {
   shippingFee?: unknown;
   customerShippingShare?: unknown;
   technicianShippingShare?: unknown;
+  /** Authoritative per-shipment amounts for W3 invoices; rounding is never aggregate. */
+  shippingShipments?: unknown;
   /** Display only when an authoritative server read supplies this value. */
   technicianNetLabor?: unknown;
 }
@@ -19,6 +21,34 @@ const nonNegativeVnd = (value: unknown): number | null => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
+
+/** Verify each immutable W3 shipment before accepting the server-summed invoice snapshot. */
+function validW3Shipments(raw: unknown, amount: number, customer: number, technician: number): boolean {
+  if (!Array.isArray(raw) || raw.length === 0) return false;
+  let feeTotal = 0n;
+  let customerTotal = 0n;
+  let technicianTotal = 0n;
+  const seen = new Set<string>();
+  for (const value of raw) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const row = value as Record<string, unknown>;
+    const id = row.partRequestId;
+    const fee = nonNegativeVnd(row.shippingFee);
+    const c = nonNegativeVnd(row.customerShippingShare);
+    const t = nonNegativeVnd(row.technicianShippingShare);
+    if (typeof id !== 'string' || !id.trim() || seen.has(id)
+      || row.shippingPolicyVersion !== 'W3_70_30_V1'
+      || fee === null || c === null || t === null
+      || BigInt(c) + BigInt(t) !== BigInt(fee)
+      || BigInt(c) !== (7n * BigInt(fee) + 5n) / 10n) return false;
+    seen.add(id);
+    feeTotal += BigInt(fee);
+    customerTotal += BigInt(c);
+    technicianTotal += BigInt(t);
+  }
+  return feeTotal === BigInt(amount) && customerTotal === BigInt(customer)
+    && technicianTotal === BigInt(technician);
+}
 
 export function hasShippingPolicyData(snapshot: ShippingPolicySnapshot): boolean {
   return (snapshot.shippingPolicyVersion != null && snapshot.shippingPolicyVersion !== '')
@@ -36,6 +66,7 @@ export function readInvoiceShippingSnapshot(value: unknown): ShippingPolicySnaps
     shippingFee: invoice.shippingFee,
     customerShippingShare: invoice.customerShippingShare,
     technicianShippingShare: invoice.technicianShippingShare,
+    ...(Object.hasOwn(invoice, 'shippingShipments') ? { shippingShipments: invoice.shippingShipments } : {}),
     technicianNetLabor: invoice.technicianNetLabor,
   };
 }
@@ -78,7 +109,9 @@ export function readShippingPolicy(snapshot: ShippingPolicySnapshot): ShippingPo
   const technicianShare = nonNegativeVnd(snapshot.technicianShippingShare);
   if (courierCost === null || customerShare === null || technicianShare === null
     || BigInt(customerShare) + BigInt(technicianShare) !== BigInt(courierCost)
-    || BigInt(customerShare) !== (7n * BigInt(courierCost) + 5n) / 10n) {
+    || (Object.hasOwn(snapshot, 'shippingShipments')
+      ? !validW3Shipments(snapshot.shippingShipments, courierCost, customerShare, technicianShare)
+      : BigInt(customerShare) !== (7n * BigInt(courierCost) + 5n) / 10n)) {
     return { state: 'error', message: 'Chưa thể đối chiếu phần phí giao hàng theo chính sách W3.' };
   }
 

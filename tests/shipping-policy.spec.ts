@@ -27,6 +27,23 @@ describe('readShippingPolicy', () => {
     expect(readInvoiceShippingSnapshot({ id: 'invoice-2', shippingFee: 20_000 })).toBeNull();
   });
 
+  it('accepts per-shipment rounded W3 shares on a frozen multi-delivery invoice', () => {
+    const shippingShipments = [
+      { partRequestId: 'part-a', shippingPolicyVersion: 'W3_70_30_V1', shippingFee: 1, customerShippingShare: 1, technicianShippingShare: 0 },
+      { partRequestId: 'part-b', shippingPolicyVersion: 'W3_70_30_V1', shippingFee: 1, customerShippingShare: 1, technicianShippingShare: 0 },
+    ];
+    const snapshot = readInvoiceShippingSnapshot({
+      shippingPolicyVersion: 'W3_70_30_V1', shippingFee: 2, customerShippingShare: 2,
+      technicianShippingShare: 0, shippingShipments,
+    });
+    expect(snapshot?.shippingShipments).toEqual(shippingShipments);
+    expect(readShippingPolicy(snapshot!)).toMatchObject({ state: 'valid', courierCost: 2, customerShare: 2, technicianShare: 0 });
+    expect(readShippingPolicy({ ...snapshot!, customerShippingShare: 1 }).state).toBe('error');
+    expect(readShippingPolicy({ ...snapshot!, shippingShipments: [{ ...shippingShipments[0], customerShippingShare: 0 }, shippingShipments[1]] }).state).toBe('error');
+    expect(readShippingPolicy({ ...snapshot!, shippingShipments: [shippingShipments[0], shippingShipments[0]] }).state).toBe('error');
+    expect(readShippingPolicy({ ...snapshot!, shippingShipments: null }).state).toBe('error');
+  });
+
   it('accepts the authoritative W3 70/30 shares for 20,000 VND', () => {
     expect(readShippingPolicy({
       shippingFee: 20_000, shippingPolicyVersion: 'W3_70_30_V1',

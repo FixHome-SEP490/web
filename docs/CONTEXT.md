@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-07 11:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-quick-replies
+> Cập nhật lần cuối: 2026-11-07 12:23 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w123-auditfix-web-20261107
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -520,7 +520,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
-- W3 phí dương Web mới ở mức source trong worktree: adapter từ chối contract lệch và UI đóng thao tác khi thiếu consent/actual; Backend Task4 thanh toán ngân hàng thủ công đã commit `35a1424`, nhưng Web chưa dựng UI ngân hàng thủ công. `InvoiceResponseDto` hiện không trả policy/shares nên breakdown 70/30 cấp hóa đơn CHƯA KIỂM CHỨNG; Web chỉ hiển thị khi server trả snapshot, không tự tính. Signed-in DEV UAT chưa có profile/session đủ điều kiện (`SIGNED_IN_NOT_VERIFIED`); local route shell chuyển khách ẩn danh sang `/login`, không gọi API.
+- W3 DELIVERY phí dương và 0 ₫, bằng chứng/đồng thuận, physical handoff và frozen invoice snapshot đã merge/deploy DEV trong ngày 07/11. Đợt sửa W1–W3 auditfix xử lý đổi đơn A→B (remount và hủy subscription cũ) và hiển thị tổng chia 70/30 từ từng shipment làm tròn riêng, không tính lại trên tổng. Focused Web RED→GREEN 22/22, typecheck/lint PASS; PR/DEV deploy của đợt sửa đang chờ. UAT đăng nhập do owner tự kiểm tra, CHƯA KIỂM CHỨNG.
 - W3 Admin lifecycle Web source nối API mới trong Backend worktree đang phát triển. Chỉ cấu hình vận hành; `ACTIVE` không mở Finance 70/30, không payout, không legal/ledger approval. Cần Lead review source/schema và phối hợp release Backend trước runtime QA; migration/DB/JWT/DEV/browser: NOT VERIFIED. Khi Backend chỉ là bản cũ (lifecycle GET 404), Web giữ legacy DRAFT; 503 hoặc schema sai đóng action lifecycle.
 
 - Physical preview Web chỉ hoàn tất source chỉ đọc; chưa chứng minh trên authenticated DEV hoặc Mobile. BE cũ 404 hoặc thiếu migration 0007 trả 503 thì Web đóng chi tiết, không fake chứng từ, phí hay phê duyệt. Release vẫn bị chặn đến khi lead xác minh shared DEV Supabase, migration/RLS/grants, Finance/legal và bằng chứng giao nhận thật. Không seed, bật cờ, stage/commit/push/merge/deploy trong task này; sau rollout riêng được duyệt cần hard-refresh Web trước UAT. Browser/DEV/migration/Finance/legal/physical proof: NOT VERIFIED.
@@ -584,6 +584,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
 - 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
 - 2026-11-07 11:20 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Gộp dev (W3 thanh toán) vào nhánh nút trả lời nhanh, chỉ xung đột nhật ký CONTEXT, giữ cả hai bên
 - 2026-11-07 10:55 (UTC+7) | foxonworld | foxonworld/fixhome-w3-capstone-payments-web-20261107 | Owner loại bỏ Manual Bank: revert commit 3eb7563, chỉ giữ giao diện W3 terms/proposal/actual/physical và hóa đơn snapshot; VNPay/Ví FixHome/Tiền mặt không đổi. Focused W3 95/95 PASS, lint/typecheck PASS; PR/CI/DEV đang xử lý.
@@ -625,4 +626,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ
 - 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
 - 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt
-- 2026-11-01 18:30 (UTC+7) | ToanAltF4 | fix/audit-filter-and-cash-dialog-notice | Nhật ký thao tác: ô Mã người thực hiện chờ ngừng gõ 400 ms rồi mới gọi API, không gửi mã chưa đủ 36 ký tự (lỗi 31). Hộp thoại thanh toán: lỗi 409 khi chọn tiền mặt lúc còn giao dịch VNPay chờ xử lý giờ hiện ngay trong hộp thoại và khoá nút Yêu cầu trả tiền mặt; pendingPaymentCashNotice đọc đúng error.message của API (lỗi 39, phần web).
