@@ -35,7 +35,7 @@ import { coverageKindLabel, describeCoverage, ordersApi, type ServiceOrderItem, 
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
-import { hasShippingPolicyData } from '../../utils/shipping-policy';
+import { hasShippingPolicyData, readInvoiceShippingSnapshot } from '../../utils/shipping-policy';
 import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vue';
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
@@ -300,7 +300,8 @@ const canDecideQuotation = computed(() => !oldFinanceReview.value && canDecideOf
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
-const shippingPolicyRequests = computed(() => partRequests.value.filter(request =>
+const invoiceShippingSnapshot = computed(() => readInvoiceShippingSnapshot(invoice.value));
+const shippingPolicyRequests = computed(() => invoiceShippingSnapshot.value ? [] : partRequests.value.filter(request =>
   request.fulfillmentMethod === 'delivery' && hasShippingPolicyData(request)
   && !additionalCosts.value.some(cost => cost.id === request.additionalCostId && hasShippingPolicyData(cost)),
 ));
@@ -1809,6 +1810,11 @@ const parsedReview = computed(() => {
                     </li>
                   </ul>
                   <p v-else class="py-2.5 text-ink-500">Không thay linh kiện.</p>
+                </div>
+
+                <div v-if="invoiceShippingSnapshot" class="space-y-1 border-t border-ink-100 pt-3" data-testid="customer-invoice-shipping-snapshot">
+                  <h3 class="font-medium text-ink-500">Phí giao trong hóa đơn</h3>
+                  <ShippingShareBreakdown :snapshot="invoiceShippingSnapshot" role="customer" fulfillment-method="delivery" />
                 </div>
 
                 <div v-if="shippingPolicyRequests.length" class="space-y-2 border-t border-ink-100 pt-3" data-testid="customer-shipping-policy-breakdowns">

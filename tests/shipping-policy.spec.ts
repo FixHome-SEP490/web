@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { hasShippingPolicyData, readShippingPolicy } from '../src/utils/shipping-policy';
+import { hasShippingPolicyData, readInvoiceShippingSnapshot, readShippingPolicy } from '../src/utils/shipping-policy';
 import ShippingShareBreakdown from '../src/components/ShippingShareBreakdown.vue';
 
 describe('readShippingPolicy', () => {
@@ -14,6 +14,17 @@ describe('readShippingPolicy', () => {
       state: 'valid', policyVersion: 'LEGACY_100_0', courierCost: 20_000,
       customerShare: 20_000, technicianShare: 0,
     });
+  });
+
+  it('reads the frozen invoice snapshot instead of deriving 70/30 on the client', () => {
+    const snapshot = readInvoiceShippingSnapshot({
+      id: 'invoice-1', shippingFee: 20_000, shippingPolicyVersion: 'W3_70_30_V1',
+      customerShippingShare: 14_000, technicianShippingShare: 6_000,
+    });
+    expect(snapshot).toEqual({ shippingFee: 20_000, shippingPolicyVersion: 'W3_70_30_V1',
+      customerShippingShare: 14_000, technicianShippingShare: 6_000, technicianNetLabor: undefined });
+    expect(readShippingPolicy(snapshot!)).toMatchObject({ state: 'valid', customerShare: 14_000, technicianShare: 6_000 });
+    expect(readInvoiceShippingSnapshot({ id: 'invoice-2', shippingFee: 20_000 })).toBeNull();
   });
 
   it('accepts the authoritative W3 70/30 shares for 20,000 VND', () => {

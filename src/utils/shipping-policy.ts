@@ -26,6 +26,20 @@ export function hasShippingPolicyData(snapshot: ShippingPolicySnapshot): boolean
     || snapshot.technicianShippingShare != null;
 }
 
+/** Read only the server-frozen invoice snapshot. Never derives W3 shares from a fee. */
+export function readInvoiceShippingSnapshot(value: unknown): ShippingPolicySnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const invoice = value as Record<string, unknown>;
+  if (!hasShippingPolicyData(invoice as ShippingPolicySnapshot)) return null;
+  return {
+    shippingPolicyVersion: typeof invoice.shippingPolicyVersion === 'string' ? invoice.shippingPolicyVersion : null,
+    shippingFee: invoice.shippingFee,
+    customerShippingShare: invoice.customerShippingShare,
+    technicianShippingShare: invoice.technicianShippingShare,
+    technicianNetLabor: invoice.technicianNetLabor,
+  };
+}
+
 /**
  * Read the server snapshot without deriving W3 values on the client.
  * An absent policy version is historical LEGACY; only an explicit W3 version

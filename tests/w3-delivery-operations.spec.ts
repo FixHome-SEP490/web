@@ -34,6 +34,33 @@ describe('W3 delivery operations API boundary', () => {
     expect(get.mock.calls).toEqual([[`/part-requests/${requestId}/delivery`]]);
   });
 
+  it('accepts a positive 70/30 quote and an actual fee that does not exceed it', async () => {
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    const positiveRead = { ...read, quote: positiveQuote, customerConsented: true, technicianConsented: true,
+      actual: { totalShippingFee: 101, quoteVersion: 1 } };
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(positiveRead));
+    await expect(w3DeliveryOperationsApi.read(requestId)).resolves.toEqual(positiveRead);
+  });
+
+  it('accepts a zero actual fee on a positive quote without deriving shares on the client', async () => {
+    const positiveQuote = { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 };
+    const positiveRead = { ...read, quote: positiveQuote, customerConsented: true, technicianConsented: true,
+      actual: { totalShippingFee: 0, quoteVersion: 1 } };
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(positiveRead));
+    await expect(w3DeliveryOperationsApi.read(requestId)).resolves.toMatchObject({ actual: { totalShippingFee: 0 } });
+  });
+
+  it.each([
+    { quote: { ...quote, totalShippingFee: 101, customerShippingShare: 70, technicianShippingShare: 31 } },
+    { quote: { ...quote, totalShippingFee: 101, customerShippingShare: 72, technicianShippingShare: 29 } },
+    { quote: { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 31 } },
+    { quote: { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 }, actual: { totalShippingFee: 102, quoteVersion: 1 } },
+    { quote: { ...quote, totalShippingFee: 101, customerShippingShare: 71, technicianShippingShare: 30 }, actual: { totalShippingFee: 101, quoteVersion: 2 } },
+  ])('rejects a positive operations projection that violates 70/30 or actual bounds %#', async change => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...read, ...change }));
+    await expect(w3DeliveryOperationsApi.read(requestId)).rejects.toThrow();
+  });
+
   it.each([404, 503])('preserves HTTP %s so the UI can fail closed', async status => {
     const failure = { response: { status } };
     vi.spyOn(apiClient, 'get').mockRejectedValue(failure);
