@@ -54,6 +54,8 @@ async function mountPage() {
   const wrapper = mount(Page, { global: { stubs: { RouterLink: true } } });
   await flushPromises();
   await vi.waitFor(() => expect(wrapper.text()).not.toContain('Đang tải…'));
+  // The lifecycle section verifies hashes with webcrypto, which settles outside flushPromises.
+  await vi.waitFor(() => expect(wrapper.text()).not.toContain('Đang tải vòng đời cấu hình…'));
   await flushPromises();
   return wrapper;
 }

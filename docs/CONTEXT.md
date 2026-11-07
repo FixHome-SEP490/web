@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-07 11:20 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-quick-replies
+> Cập nhật lần cuối: 2026-11-07 11:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/ai-quick-replies
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -584,6 +584,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
 - 2026-11-07 11:20 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Gộp dev (W3 thanh toán) vào nhánh nút trả lời nhanh, chỉ xung đột nhật ký CONTEXT, giữ cả hai bên
 - 2026-11-07 10:55 (UTC+7) | foxonworld | foxonworld/fixhome-w3-capstone-payments-web-20261107 | Owner loại bỏ Manual Bank: revert commit 3eb7563, chỉ giữ giao diện W3 terms/proposal/actual/physical và hóa đơn snapshot; VNPay/Ví FixHome/Tiền mặt không đổi. Focused W3 95/95 PASS, lint/typecheck PASS; PR/CI/DEV đang xử lý.
 - 2026-11-07 03:30 (UTC+7) | foxonworld | foxonworld/fixhome-w3-capstone-payments-web-20261107 | Nối Web W3 phí giao dương 70/30: terms evidence/proposal/actual, physical gate đủ consent+actual, hóa đơn chỉ đọc snapshot server; Backend Task4 đã commit `35a1424`, InvoiceResponseDto vẫn thiếu snapshot nên live invoice NOT VERIFIED; focused 95/95, full 2639/2639, lint/typecheck/build PASS; chưa có UI ngân hàng thủ công.
@@ -625,4 +626,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
 - 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt
 - 2026-11-01 18:30 (UTC+7) | ToanAltF4 | fix/audit-filter-and-cash-dialog-notice | Nhật ký thao tác: ô Mã người thực hiện chờ ngừng gõ 400 ms rồi mới gọi API, không gửi mã chưa đủ 36 ký tự (lỗi 31). Hộp thoại thanh toán: lỗi 409 khi chọn tiền mặt lúc còn giao dịch VNPay chờ xử lý giờ hiện ngay trong hộp thoại và khoá nút Yêu cầu trả tiền mặt; pendingPaymentCashNotice đọc đúng error.message của API (lỗi 39, phần web).
-- 2026-10-30 11:17 (UTC+7) | foxonworld | foxonworld/bug-detector-web-release-integration-20261030 | Tích hợp các patch Web #16/#17/#33/#35/#38/#39/#40/#41 và wallet; kiểm tra liên repository, PR/CI/deploy còn chờ.
