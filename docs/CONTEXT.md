@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-07 03:30 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w3-capstone-payments-web-20261107
+> Cập nhật lần cuối: 2026-11-07 10:55 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w3-capstone-payments-web-20261107
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -113,8 +113,8 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - `w3-delivery-operations.api.ts` nhận báo giá dương `W3_70_30_V1` và phí thực tế trong `0..quote.totalShippingFee`, vẫn kiểm envelope 200/201, fingerprint, UUID, version và phí/chia phí bằng `BigInt`; phí 0 và các luồng W1/W2/PICKUP giữ nguyên. Response lệch schema, tổng chia sai hoặc actual vượt báo giá bị từ chối.
 - `w3-delivery-terms.api.ts` thêm upload bằng chứng `QUOTE`/`ACTUAL`, proposal và actual với envelope 201, UUIDv4, fingerprint, version tăng đúng và giới hạn phí/chia phí. `DeliveryTermsPanel.vue` vẫn là nơi Customer/Technician đồng thuận theo fingerprint; panel chỉ đọc với SM.
 - `DeliveryOperationsPanel.vue` cho SM lập báo giá/ghi phí thực tế dương qua Terms endpoint, hiện chia 70% khách/30% thợ và phí thực tế cuối; reserve/issue/dispatch/receipt/release chỉ mở khi có báo giá, cả hai consent và actual hợp lệ. Console mount panel cho `shippingFee >= 0`; luồng zero-fee cũ không đổi. `financialExecution=BLOCKED` vẫn là chủ đích: Web không coi báo giá là đã trả và không tuyên bố payout trước khi có hóa đơn W3 đủ điều kiện.
-- Trang đơn khách đọc snapshot giao hàng đã đóng băng từ invoice khi server trả `shippingPolicyVersion`/shares qua `readInvoiceShippingSnapshot`; không tự suy ra 70/30 từ phí. `InvoiceResponseDto` hiện tại của Backend chưa trả các trường này nên breakdown 70/30 cấp hóa đơn trên runtime thật CHƯA KIỂM CHỨNG; Web fail closed thay vì bịa số.
-- Focused 5 file 95/95 PASS; full `npm test` 2639/2639 trên 226 file, lint/typecheck/build PASS. Backend Task4 thanh toán ngân hàng thủ công đã commit local `35a1424`; UI ngân hàng thủ công là slice Web sau và chưa có trong thay đổi này. Signed-in DEV, migration/DB, Finance/legal, courier thật và Mobile parity CHƯA KIỂM CHỨNG.
+- Trang đơn khách đọc snapshot giao hàng đã đóng băng từ invoice khi server trả `shippingPolicyVersion`/shares qua `readInvoiceShippingSnapshot`; không tự suy ra 70/30 từ phí. Backend source hiện có snapshot W3 trong `InvoiceResponseDto`; Web chỉ dùng snapshot server. Hiển thị runtime DEV/signed-in vẫn CHƯA KIỂM CHỨNG, không tự bịa số.
+- Focused 5 file 95/95 PASS; full `npm test` 2639/2639 trên 226 file, lint/typecheck/build PASS. Owner đã hủy Manual Bank ngày 07/11/2026; Web revert toàn bộ UI/adapter/tests Manual Bank và chỉ giữ W3 phí giao dương, snapshot invoice, VNPay/Ví FixHome/Tiền mặt. Signed-in DEV, migration/DB, Finance/legal, courier thật và Mobile parity CHƯA KIỂM CHỨNG.
 
 ### W3 delivery Web — shipping chỉ đọc và Admin DRAFT/preview (06/11/2026)
 
@@ -584,6 +584,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-07 10:55 (UTC+7) | foxonworld | foxonworld/fixhome-w3-capstone-payments-web-20261107 | Owner loại bỏ Manual Bank: revert commit 3eb7563, chỉ giữ giao diện W3 terms/proposal/actual/physical và hóa đơn snapshot; VNPay/Ví FixHome/Tiền mặt không đổi. Focused W3 95/95 PASS, lint/typecheck PASS; PR/CI/DEV đang xử lý.
 - 2026-11-07 03:30 (UTC+7) | foxonworld | foxonworld/fixhome-w3-capstone-payments-web-20261107 | Nối Web W3 phí giao dương 70/30: terms evidence/proposal/actual, physical gate đủ consent+actual, hóa đơn chỉ đọc snapshot server; Backend Task4 đã commit `35a1424`, InvoiceResponseDto vẫn thiếu snapshot nên live invoice NOT VERIFIED; focused 95/95, full 2639/2639, lint/typecheck/build PASS; chưa có UI ngân hàng thủ công.
 - 2026-11-06 16:58 (UTC+7) | foxonworld | foxonworld/fixhome-w3-terms-fourfield-web-20261106 | Sửa Web W3 terms GET parser nhận strict bốn ceiling fields và xác minh tổng bằng BigInt; runtime authenticated vẫn CHƯA KIỂM CHỨNG.
 - 2026-11-06 13:42 (UTC+7) | foxonworld | foxonworld/fixhome-w3-finance-web-uat-20261106 | Thêm W3 terms consent riêng, cho phép share Technician 0 ₫ và quote thấp hơn ceiling được duyệt; Finance BLOCKED, Backend migration/runtime và signed-in DEV UAT chưa kiểm chứng.
@@ -624,5 +625,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-01 18:30 (UTC+7) | ToanAltF4 | fix/audit-filter-and-cash-dialog-notice | Nhật ký thao tác: ô Mã người thực hiện chờ ngừng gõ 400 ms rồi mới gọi API, không gửi mã chưa đủ 36 ký tự (lỗi 31). Hộp thoại thanh toán: lỗi 409 khi chọn tiền mặt lúc còn giao dịch VNPay chờ xử lý giờ hiện ngay trong hộp thoại và khoá nút Yêu cầu trả tiền mặt; pendingPaymentCashNotice đọc đúng error.message của API (lỗi 39, phần web).
 - 2026-10-30 11:17 (UTC+7) | foxonworld | foxonworld/bug-detector-web-release-integration-20261030 | Tích hợp các patch Web #16/#17/#33/#35/#38/#39/#40/#41 và wallet; kiểm tra liên repository, PR/CI/deploy còn chờ.
 - 2026-10-29 14:05 (UTC+7) | ToanAltF4 | fix/ai-chat-multi-service | Trợ lý AI tư vấn nhiều máy: khung chat liệt kê và cho đổi dịch vụ từng máy, Đặt thợ ngay mang cả lượt sang trang đặt nhóm, máy được lưu sẵn kèm ảnh
-- 2026-10-29 01:58 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Tích hợp cash intent fail-closed theo capability mà không chặn dữ liệu đơn/lượt; báo cáo thợ có kết luận trách nhiệm riêng với xử lý vận hành; thêm giữ nội dung terminal và gộp GET đang chạy. Browser/DEV/Mobile CHƯA KIỂM CHỨNG.
-- 2026-10-29 00:46 (UTC+7) | foxonworld | foxonworld/fixhome-ux-quickwins-cash-sm-20261029 | Ghi nhận quick wins địa chỉ chung, lý do phát sinh bắt buộc, cảnh báo hoàn trả terminal và nhãn checkout; không đổi API, Backend/Mobile/browser CHƯA KIỂM CHỨNG.
