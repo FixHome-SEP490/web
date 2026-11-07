@@ -696,7 +696,7 @@ const submitPreRepairRequest = async () => {
     clearSelectedPart();
     await loadPartRequests(partRequestsLoaded.value);
     if (warehouseAllocationFor(createdRequest)?.status === 'stock_unavailable') {
-      actionSuccess.value = 'Không có kho FixHome nào đủ linh kiện. Bạn cần tự chuẩn bị và khai báo đúng nguồn khi báo giá.';
+      actionSuccess.value = 'Không có kho FixHome nào đủ linh kiện. Bạn cần tự chuẩn bị. Hệ thống không tự động tính phí linh kiện tự mua.';
     } else if (fulfillmentMethod.value === 'pickup') {
       actionSuccess.value = 'Đã yêu cầu kho FixHome; theo dõi kho được phân bổ trước khi đến nhận.';
     }
@@ -718,7 +718,7 @@ const cancelUnavailablePreRepair = async (requestId: string) => {
   try {
     await partRequestsApi.cancel(requestId, 'Kho FixHome không đủ linh kiện; kỹ thuật viên tự chuẩn bị.');
     await loadPartRequests(partRequestsLoaded.value);
-    actionSuccess.value = 'Đã dừng yêu cầu lấy từ kho. Hãy tự chuẩn bị và khai báo nguồn linh kiện của thợ khi báo giá.';
+    actionSuccess.value = 'Đã dừng yêu cầu lấy từ kho. Hãy tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua.';
     emit('parts-updated');
   } catch (error) {
     actionError.value = userFacingError(error, 'Chưa hủy được yêu cầu kho; vui lòng thử lại.');
@@ -1388,7 +1388,7 @@ const getStatusBadgeClass = (status: string) => {
               <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'stock_unavailable' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
               <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
               <p v-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
-              <p v-if="warehouseAllocationFor(pr)?.status === 'stock_unavailable'" class="text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Vui lòng tự chuẩn bị và ghi đúng nguồn linh kiện khi báo giá/đề xuất chi phí. Yêu cầu này không phát QR.</p>
+              <p v-if="warehouseAllocationFor(pr)?.status === 'stock_unavailable'" class="text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Thợ tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua. Yêu cầu này không phát QR.</p>
               <FhButton v-if="pr.requestType === 'pre_repair' && pr.status === 'requested'"
                 variant="secondary" size="sm" :disabled="actionLoading"
                 @click="cancelUnavailablePreRepair(pr.id)">Dừng yêu cầu kho, tự chuẩn bị</FhButton>
