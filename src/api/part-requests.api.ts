@@ -71,6 +71,8 @@ export interface WarehouseAllocation {
   warehouseName?: string | null;
   warehouseAddress?: string | null;
   responsibleUserId?: string | null;
+  estimatedStraightLineKm?: number | null;
+  distanceReference?: 'booking_snapshot' | null;
   distanceNotVerified?: boolean;
   reviewRequired?: boolean;
   manualAssistanceReason?: string | null;
@@ -506,6 +508,21 @@ export const partRequestsApi = {
     return {
       data: res.data.data || [],
       total: res.data.meta?.total || 0,
+    };
+  },
+
+  /** SM: list requests assigned to the manager's warehouses by Backend ownership scope. */
+  async getWarehouseTasks(
+    params?: QueryPartRequestsParams,
+  ): Promise<{ data: PartRequest[]; total: number }> {
+    const res = await apiClient.get<{
+      success: true;
+      data: PartRequest[];
+      meta: { total: number };
+    }>('/part-requests/warehouse-tasks', { params });
+    return {
+      data: res.data.data,
+      total: res.data.meta.total,
     };
   },
 

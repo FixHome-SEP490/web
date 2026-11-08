@@ -59,6 +59,33 @@ describe('TechnicianPartsSection inside the job page', () => {
     partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'legacy', status: null });
   });
 
+  it('labels Backend warehouse distance as estimated straight-line distance from booking location', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('requested')]);
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({
+      partRequestId: 'pr-1', mode: 'warehouse', status: 'reserved', warehouseName: 'Kho 20',
+      estimatedStraightLineKm: 1.4, distanceReference: 'booking_snapshot', reviewRequired: true,
+    });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="tech-warehouse-allocation-pr-1"]').text()).toContain(
+      'Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~1.4 km; chưa xác minh đường đi/ETA',
+    );
+    expect(wrapper.text()).not.toContain('Không có km hoặc thời gian ước tính.');
+    wrapper.unmount();
+  });
+
+  it('keeps the existing warning when Backend does not provide a distance estimate', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('requested')]);
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({
+      partRequestId: 'pr-1', mode: 'warehouse', status: 'reserved', reviewRequired: true,
+      estimatedStraightLineKm: null, distanceReference: null,
+    });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="tech-warehouse-allocation-pr-1"]').text()).toContain('Không có km hoặc thời gian ước tính.');
+    wrapper.unmount();
+  });
+
   it('restricts unapproved usage to zero and declares all unused units with confirmed quantities', async () => {
     const pr = request('received');
     pr.items[0] = { ...pr.items[0]!, quantity: 2, partCatalogId: 'sku' } as typeof pr.items[number];

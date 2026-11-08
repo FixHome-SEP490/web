@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-07 12:23 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w123-auditfix-web-20261107
+> Cập nhật lần cuối: 2026-11-08 13:57 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w2-e2e-web-hotfix-20261108
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,13 +92,14 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 
 ## 3. Trạng thái hiện tại
 
-### Kho W1 và nhận linh kiện W2 trên Web (04/11/2026)
+### Kho W1 và nhận linh kiện W2 trên Web (08/11/2026)
 
-- `/console/warehouses` mở cho Admin và quản lý dịch vụ; Backend chỉ trả kho được giao cho quản lý đang đăng nhập. Admin tạo/sửa/xóa kho và chọn quản lý dịch vụ đang hoạt động từ danh sách tài khoản hiện có. Kho mới chưa có tồn.
+- `/console/warehouses` mở cho Admin và quản lý dịch vụ; Backend chỉ trả kho được giao cho quản lý đang đăng nhập. Web đọc success envelope (`success/statusCode/message/data`) cho danh sách và thao tác tạo/sửa/điều chỉnh; phân trang stock/movements tiếp tục đọc `data` cùng `meta`. Admin tạo/sửa/xóa kho và chọn quản lý dịch vụ đang hoạt động từ danh sách tài khoản hiện có. Kho mới chưa có tồn.
 - Web đọc danh mục SKU đang hoạt động, không nhập mã linh kiện tự do. Tồn và lịch sử đọc từ `/warehouses/:id/stock` và `/warehouses/:id/movements`; điều chỉnh dùng `STOCK_IN`/`CORRECTION` theo enum Backend (`stock_in`/`correction`) và `idempotencyKey`. Không tạo kho hoặc tồn giả.
-- Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Khi chưa có dữ liệu khoảng cách, Web ghi rõ chưa xác minh và không hiện km/ETA.
+- Pickup dùng đúng allocation/reserve/QR/handover W2. Một yêu cầu chỉ dùng một kho; thiếu kho đủ toàn bộ SKU thì hiện hỗ trợ thủ công. Nếu Backend gửi `estimatedStraightLineKm` cùng `distanceReference=booking_snapshot`, Web chỉ ghi rõ km đường thẳng ước tính từ vị trí đặt lịch và chưa xác minh đường đi/ETA; khi thiếu dữ liệu, giữ cảnh báo cũ và không hiện km/ETA. Backend field thuộc PR #212 theo yêu cầu owner; HTTP/runtime CHƯA KIỂM CHỨNG.
 - Quản lý phụ trách tạo QR lấy hàng một lần 15 phút; chỉ xác nhận sau khi bàn giao đủ hàng trực tiếp, Backend xuất tồn và trả QR nhận riêng 48 giờ. Kỹ thuật viên chỉ nhập mã nhận sau `handed_over`; endpoint `/receive` xác nhận receipt, không trừ tồn lần nữa. Sau bàn giao, có thể cấp lại QR nhận bằng `/warehouse-qr`; không lặp handover. Trạng thái đã nhận chỉ theo Backend ACK.
-- Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Sau khi gộp warranty changes từ `origin/dev`, focused W2+Warranty 146/146, typecheck, lint, build PASS; full suite chạy không ổn định ở test Voucher/VisitGroup ngoài phạm vi sửa. Shared DEV, DB, migration, custody activation và browser QA CHƯA KIỂM CHỨNG.
+- Service Manager mặc định tải danh sách công việc qua `GET /part-requests/warehouse-tasks` với bộ lọc và phân trang hiện có; Web kỳ vọng PartRequest rows cùng `meta.total`, scoped bởi Backend theo kho được giao. Backend writer đang triển khai endpoint này riêng; hợp đồng runtime CHƯA KIỂM CHỨNG. Admin và vai trò khác tiếp tục dùng luồng global hiện có. CTA chuẩn bị mã và xác nhận bàn giao nằm trên hàng của yêu cầu W2 thuộc quản lý; token pickup/receipt chỉ giữ trong phiên UI. `markReady` không dùng cho allocation pickup W2.
+- Hoàn trả chỉ ghi “Đã nhận lại tại kho” cho allocation kho sau xác nhận vật lý của quản lý và `managerAcceptedQty` > 0; thông báo cập nhật tồn chỉ hiện sau API accept thành công. DELIVERY giữ luồng cũ; không đổi phí, tài chính, custody flag hoặc policy 70/30. Web worktree ngày 08/11: focused warehouse/queue/distance 47/47 và full suite 2649/2649; lint/typecheck/build PASS. Suite có log kết nối localhost:3000 bị từ chối nhưng exit 0. Shared DEV, DB, migration, custody activation, Backend warehouse-task route và browser QA CHƯA KIỂM CHỨNG.
 
 ### W3 thao tác giao hàng 0 ₫ trên Web (06/11/2026)
 
@@ -528,6 +529,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - W3 Web PR #211 đã merge vào DEV tại `fb06c6f`; CI/deploy thành công theo xác nhận của lead. Backend PR #197 HEAD `9e456f8` chứa source delivery operations, nhưng chưa xác nhận deploy hoặc migration 0007 trên DEV. Web operations UI source trong worktree này hỗ trợ explicit zero-fee và W3 phí dương 70/30 qua Terms endpoint; luôn giữ financial execution `BLOCKED`, không dùng Admin DRAFT/preview làm shipping approval hoặc mở tài chính. DEV runtime cho nhánh Web hiện tại, migration/PG/RLS/grants, legal/Finance signoff và giao nhận thật: NOT VERIFIED. Lead sở hữu PR/release; task writer không deploy.
 
 - W1/W2 Web đã gộp `origin/dev` `1110b4a` và đẩy lên PR #209; chưa merge/deploy. Chờ CI Web và Backend W2 PR #195 cùng migration/reconciliation trước DEV rollout. Shared DEV và browser runtime CHƯA KIỂM CHỨNG. Rollout phụ thuộc kho Admin tạo thật, quản lý đang hoạt động, stock-in có chứng từ và custody tracking-only activation đúng cohort; không có dữ liệu kho/stock seed. Nếu không đủ kho cho mọi SKU, hỗ trợ thủ công; không chia nhiều kho. DELIVERY và 70/30 ngoài scope.
+- W2 Web hotfix trên nhánh `foxonworld/fixhome-w2-e2e-web-hotfix-20261108` nối warehouse success envelope và client `GET /part-requests/warehouse-tasks`; Backend endpoint đang được writer khác triển khai. Source/API tests không chứng minh route đã tích hợp, SM scope đúng trên DB, Kho20 hoặc PR-B3980BAA xuất hiện trên runtime. Không push/PR/merge/deploy hoặc ghi DB trong task này. Signed-in E2E, stock/custody exactly-once, cross-SM denial và browser UAT CHƯA KIỂM CHỨNG.
 - Bảo hành 04/11: Mobile chưa cập nhật nên chưa có luồng tự chọn linh kiện, đóng `unfixed` hay xét từ chối; thợ dùng Mobile vẫn gửi lý do `busy` (vào hàng chờ xét) và gửi kết luận lỗi linh kiện không kèm ảnh sẽ bị Backend từ chối. Màn Console chưa có bộ chọn nhiều linh kiện; Backend nhận nhiều.
 - P2 booking draft Web đã sẵn sàng lead review, chưa commit/push/deploy. Cần xác minh Backend/API transactional receipt và quota trên DEV, sau đó QA bằng tài khoản đăng nhập; ảnh upload hết hạn sau 2 giờ nên khi khôi phục luôn yêu cầu khách tải lại nếu cần. 56 test API/UI tập trung, typecheck, lint và build PASS; full suite chờ CI. Mobile parity CHƯA KIỂM CHỨNG.
 
@@ -584,6 +586,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.
 - 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
 - 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
 - 2026-11-07 11:20 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Gộp dev (W3 thanh toán) vào nhánh nút trả lời nhanh, chỉ xung đột nhật ký CONTEXT, giữ cả hai bên
@@ -625,4 +628,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
 - 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ
 - 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
-- 2026-11-01 18:39 (UTC+7) | ToanAltF4 | fix/out-of-area-candidates-visit-arrival | Danh sách thợ đọc meta.emptyReason, ngoài vùng phục vụ có nút đặt lại với địa chỉ khác và ẩn huy hiệu thợ sẵn sàng, lượt nhiều thiết bị hiện Đã đến, chờ sửa theo arrivedAt

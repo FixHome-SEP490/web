@@ -1387,7 +1387,11 @@ const getStatusBadgeClass = (status: string) => {
             <template v-else-if="warehouseAllocationFor(pr)?.mode === 'warehouse'">
               <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'stock_unavailable' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
               <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
-              <p v-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+              <p
+                v-if="warehouseAllocationFor(pr)?.distanceReference === 'booking_snapshot' && typeof warehouseAllocationFor(pr)?.estimatedStraightLineKm === 'number'"
+                class="text-warning-800"
+              >Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~{{ warehouseAllocationFor(pr)?.estimatedStraightLineKm?.toFixed(1) }} km; chưa xác minh đường đi/ETA</p>
+              <p v-else-if="warehouseAllocationFor(pr)?.reviewRequired" class="text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
               <p v-if="warehouseAllocationFor(pr)?.status === 'stock_unavailable'" class="text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Thợ tự chuẩn bị; hệ thống không tự động tính phí linh kiện tự mua. Yêu cầu này không phát QR.</p>
               <FhButton v-if="pr.requestType === 'pre_repair' && pr.status === 'requested' && warehouseAllocationFor(pr)?.status === 'stock_unavailable'"
                 variant="secondary" size="sm" :disabled="actionLoading"

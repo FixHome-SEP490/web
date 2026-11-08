@@ -9,6 +9,7 @@ const { partRequestsApi, partsCatalogApi, apiClientMock, auth } = vi.hoisted(() 
     receiveByQr: vi.fn(),
     updateItemUsage: vi.fn(),
     getAll: vi.fn(),
+    getWarehouseTasks: vi.fn(),
     getReturnsByOrderId: vi.fn(),
     getPendingReturns: vi.fn(),
     getLegacyManualReview: vi.fn(),
@@ -122,6 +123,7 @@ beforeEach(() => {
   partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'legacy', status: null });
   partRequestsApi.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
   partRequestsApi.getAll.mockResolvedValue({ data: [], total: 0 });
+  partRequestsApi.getWarehouseTasks.mockImplementation((params) => partRequestsApi.getAll(params));
 });
 
 describe('Technician khai trả linh kiện (P1 custody)', () => {
