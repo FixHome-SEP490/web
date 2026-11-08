@@ -133,6 +133,42 @@ describe('AI booking form', () => {
     expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeUndefined();
   }, 10000);
 
+  it('starts a new session on an empty step 1 without sending the old description again (PO 08/11)', async () => {
+    analyze.mockResolvedValue(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    expect(analyze).toHaveBeenCalledTimes(1);
+
+    await wrapper.get('[data-testid="ai-restart"]').trigger('click');
+    await flushPromises();
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('');
+    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+
+    await wrapper.find('textarea').setValue('Tủ lạnh ngăn đá không đông');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await pause();
+    await flushPromises();
+    expect(analyze).toHaveBeenCalledTimes(2);
+    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Tủ lạnh ngăn đá không đông', sessionId: null }));
+    expect(wrapper.get('[data-testid="ai-thread"]').text()).not.toContain('Máy lạnh kêu lạch cạch');
+  }, 10000);
+
+  it('analyses afresh when step 1 was changed after the analysis', async () => {
+    analyze.mockResolvedValue(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    // Back to step 1 through the page's own back action, then a different description.
+    const back = wrapper.findAll('button').find((b) => /Quay lại/.test(b.text()));
+    await back!.trigger('click');
+    await flushPromises();
+    await wrapper.find('textarea').setValue('Máy giặt không vắt');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await pause();
+    await flushPromises();
+    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Máy giặt không vắt', sessionId: null }));
+  }, 10000);
+
   it('lets the customer answer what the assistant asks, and takes the service the assistant chooses', async () => {
     analyze
       .mockResolvedValueOnce(reply({ status: 'needs_clarification', clarification: { questionsVi: ['Tiếng kêu ở cục trong hay cục ngoài ạ?'] } }))

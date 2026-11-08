@@ -115,8 +115,10 @@ describe('useAiConversation', () => {
     await c.sendTurn('Máy giặt không vắt', [{ dataUrl: 'data:big', bytes: 9 } as never]);
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ images: ['data:big#small'] }));
-    expect(c.messages.value.filter((message) => message.isAcknowledgement)).toHaveLength(1);
-    expect(c.messages.value.find((message) => message.isAcknowledgement)?.text).toBe('Ảnh chưa gửi được, đang thử gửi bản nhẹ hơn…');
+    // The answer takes the holding line's place (the retry wording is checked while waiting, below).
+    expect(c.messages.value.filter((message) => message.isAcknowledgement)).toHaveLength(0);
+    expect(c.messages.value.map((message) => message.sender)).toEqual(['user', 'bot']);
+    expect(c.messages.value.at(-1)?.reply).toBeTruthy();
     expect(mediaApi.uploadBookingPhoto).toHaveBeenCalledTimes(1);
     expect(c.isThinking.value).toBe(false);
   });
