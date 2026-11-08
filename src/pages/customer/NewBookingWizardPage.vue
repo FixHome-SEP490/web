@@ -724,6 +724,8 @@ function forgetAiConversation() {
 function restartAiConversation() {
   forgetAiConversation();
   clearServiceSelection();
+  // Clearing marks a customer choice; the new session must again take the service the assistant picks.
+  explicitServiceIntent = false;
   for (const photo of [...uploadedPhotos.value]) removePhotoByLocalId(photo.localId);
   description.value = '';
   userModifiedDescription.value = false;

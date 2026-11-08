@@ -152,6 +152,9 @@ describe('AI booking form', () => {
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Tủ lạnh ngăn đá không đông', sessionId: null }));
     expect(wrapper.get('[data-testid="ai-thread"]').text()).not.toContain('Máy lạnh kêu lạch cạch');
+    // The new session's own suggestion is taken, so the customer can book (seen on fixhome.sbs 08/11).
+    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa máy lạnh không mát');
+    expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
   }, 10000);
 
   it('analyses afresh when step 1 was changed after the analysis', async () => {
