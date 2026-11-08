@@ -596,6 +596,7 @@ async function startAiConversation() {
   if (aiConversation.turnCount.value > 0 || aiConversation.isThinking.value) return;
   // The assistant diagnoses from words; photos only go along with them (BRX-064).
   if (!description.value.trim()) return;
+  aiOpenedWith = aiStepOneKey();
   void aiConversation.loadHoldingLines();
   const files = uploadedPhotos.value.flatMap((photo) => photo.file ? [photo.file] : []).slice(0, AI_MAX_IMAGES);
   const prepared = files.length ? await prepareForAi(files, 0) : { images: [] };
@@ -705,12 +706,28 @@ onMounted(() => {
   if (isAiFlow) aiConversation.retryFailed();
 });
 
-/** Start again from the current description and photos, e.g. after editing step 1. */
-async function restartAiConversation() {
+/** What step 1 held when the conversation was opened from it. */
+let aiOpenedWith: string | null = null;
+const aiStepOneKey = () => JSON.stringify([description.value.trim(), uploadedPhotos.value.map((photo) => photo.localId)]);
+
+function forgetAiConversation() {
   aiConversation.startOver();
   aiVisitServiceOverrides.value = {};
   aiBookOneOnly.value = false;
-  await startAiConversation();
+  aiOpenedWith = null;
+}
+
+/**
+ * A new session is new: nothing from the old one is sent again (PO 08/11).
+ * The customer goes back to an empty step 1 and describes the new problem.
+ */
+function restartAiConversation() {
+  forgetAiConversation();
+  clearServiceSelection();
+  for (const photo of [...uploadedPhotos.value]) removePhotoByLocalId(photo.localId);
+  description.value = '';
+  userModifiedDescription.value = false;
+  step.value = 1;
 }
 
 /**
@@ -737,6 +754,8 @@ function startAiStep() {
     toast.warning('Vui lòng mô tả sơ bộ tình trạng thiết bị để trợ lý phân tích.');
     return;
   }
+  // Step 1 was changed after the analysis: the old answer no longer fits, analyse the new words afresh.
+  if (aiOpenedWith !== null && aiOpenedWith !== aiStepOneKey() && !aiConversation.isThinking.value) forgetAiConversation();
   step.value = 3;
   void startAiConversation();
 }
@@ -3064,12 +3083,13 @@ async function createAndFindTech() {
             <button
               type="button"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-ink-600 hover:bg-ink-50 disabled:opacity-40"
-              :disabled="aiConversation.isThinking.value || aiConversation.turnCount.value === 0"
+              :disabled="aiConversation.turnCount.value === 0 && !aiConversation.isThinking.value"
+              aria-label="Bắt đầu phiên mới"
               data-testid="ai-restart"
               @click="restartAiConversation"
             >
               <RotateCcw :size="15" />
-              <span class="hidden whitespace-nowrap sm:inline">Hỏi lại từ đầu</span>
+              <span class="hidden whitespace-nowrap sm:inline">Phiên mới</span>
             </button>
           </div>
 

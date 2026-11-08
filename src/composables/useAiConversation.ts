@@ -155,9 +155,13 @@ export interface AiConversationOptions {
   revealMs?: number;
 }
 
-/** A reply is written out in at most this many steps, so a long one still takes about a second. */
-export const REVEAL_STEPS = 40;
-const REVEAL_DEFAULT_MS = 28;
+/**
+ * A reply is written out in at most this many steps, so a long one still takes
+ * about a second and a half. Many small steps (a word or two each, one per
+ * frame or so) read as smooth typing; few large ones made lines jump (PO 08/11).
+ */
+export const REVEAL_STEPS = 100;
+const REVEAL_DEFAULT_MS = 14;
 
 function defaultRevealMs(): number {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 0;
@@ -289,6 +293,8 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   /** Server-issued, never invented here: the field accepts any string, so two
    *  clients that both made one up would share a conversation. */
   const sessionId = ref<string | null>(options.sessionId ?? null);
+  /** Bumped by startOver; a turn sent before it must not write into the new conversation. */
+  let generation = 0;
 
   /**
    * The service the customer is currently about to order. Replaced - never
@@ -333,6 +339,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
   }
 
   function startOver() {
+    // A reply still on its way belongs to the conversation being dropped.
+    generation += 1;
+    isThinking.value = false;
+    isRevealing.value = false;
     sessionId.value = null;
     pinnedService.value = null;
     pinnedDevices.value = [];
@@ -585,6 +595,17 @@ export function useAiConversation(options: AiConversationOptions = {}) {
     const acknowledgement = messages.value[messages.value.length - 1]!;
     isThinking.value = true;
     updated();
+    const mine = generation;
+    /** The reply takes the holding line's place, so the thread does not grow a second bubble. */
+    const placeReply = (message: AiChatMessage): AiChatMessage => {
+      const at = messages.value.indexOf(acknowledgement);
+      if (at < 0) {
+        messages.value.push(message);
+        return messages.value[messages.value.length - 1]!;
+      }
+      messages.value.splice(at, 1, message);
+      return messages.value[at]!;
+    };
 
     try {
       const ask = (payload: string[]) =>
@@ -604,6 +625,8 @@ export function useAiConversation(options: AiConversationOptions = {}) {
         const smaller = await shrinkForRetry(images);
         if (smaller.length > 0) reply = await ask(smaller);
       }
+      // Started over while this turn was out: its answer belongs to a conversation that is gone.
+      if (mine !== generation) return;
 
       if (reply.sessionId) sessionId.value = reply.sessionId;
       turnCount.value += 1;
@@ -623,16 +646,15 @@ export function useAiConversation(options: AiConversationOptions = {}) {
       const pace = options.revealMs ?? defaultRevealMs();
       const steps = pace > 0 ? revealSteps(shown) : [shown];
       if (steps.length === 1) {
-        messages.value.push({ id: nextId(), sender: 'bot', text: shown, reply });
+        placeReply({ id: nextId(), sender: 'bot', text: shown, reply });
       } else {
         // Written out piece by piece; the details under it (price, services,
         // questions) and every button come only once the whole text is there.
         isRevealing.value = true;
-        messages.value.push({ id: nextId(), sender: 'bot', text: '' });
-        const live = messages.value[messages.value.length - 1];
+        const live = placeReply({ id: nextId(), sender: 'bot', text: steps[0]! });
         for (const step of steps) {
           // Started over meanwhile: this reply belongs to a conversation that is gone.
-          if (!messages.value.includes(live)) break;
+          if (mine !== generation || !messages.value.includes(live)) break;
           live.text = step;
           updated();
           if (step !== shown) await new Promise((resolve) => setTimeout(resolve, pace));
@@ -642,8 +664,10 @@ export function useAiConversation(options: AiConversationOptions = {}) {
         isRevealing.value = false;
       }
     } finally {
-      isRevealing.value = false;
-      isThinking.value = false;
+      if (mine === generation) {
+        isRevealing.value = false;
+        isThinking.value = false;
+      }
       updated();
     }
   }
