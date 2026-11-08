@@ -97,6 +97,24 @@ describe('faulty part inspection on the manager page', () => {
     expect(wrapper.text()).toContain('Mã lấy hàng một lần · hết hạn trong 15 phút');
   });
 
+  it('shows a reissued code after handover as the technician receipt, without a dead handover button', async () => {
+    const request = warranty({ id: 'pr-done', requestType: 'quotation' });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'handed_over', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
+    api.getWarehouseAllocation.mockResolvedValue(allocation);
+    api.prepareWarehouseQr.mockResolvedValue({ allocation, qrToken: 'receipt-again' });
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === 'Cấp lại mã nhận')!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Đưa mã nhận hàng riêng này cho kỹ thuật viên');
+    expect(wrapper.text()).not.toContain('Mã lấy hàng một lần');
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Xác nhận đã giao trực tiếp')).toBe(false);
+    expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
+  });
+
   it('keeps Admin on the existing global part request list', async () => {
     auth.hasRole.mockReturnValue(false);
     api.getAll.mockResolvedValue({ data: [], total: 0 });
