@@ -33,3 +33,8 @@ export function warehouseQrAction(status: WarehouseAllocation['status']): 'prepa
 export function warehouseReturnAccepted(mode: string | null | undefined, managerAcceptedQty: number): boolean {
   return mode === 'warehouse' && Number.isInteger(managerAcceptedQty) && managerAcceptedQty > 0;
 }
+
+/** Which on-screen slot a token from the warehouse-qr endpoint belongs to: after handover it is the technician's receipt code, never a pickup code. */
+export function warehouseIssuedTokenSlot(status: WarehouseAllocation['status'] | null | undefined): 'pickup' | 'receipt' {
+  return status === 'handed_over' ? 'receipt' : 'pickup';
+}

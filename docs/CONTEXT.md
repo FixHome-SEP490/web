@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-08 13:57 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w2-e2e-web-hotfix-20261108
+> Cập nhật lần cuối: 2026-11-08 18:03 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/warehouse-handover-reissue
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -586,6 +586,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-08 18:03 (UTC+7) | ToanAltF4 | fix/warehouse-handover-reissue | Sửa nút Đã giao thực tế ở mục Lấy hàng tại kho: mã cấp lại sau bàn giao đặt đúng ô mã nhận, nút giao chỉ hiện khi phiếu ready, không thoát im lặng, lỗi báo bằng toast
 - 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.
 - 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
 - 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
@@ -625,6 +626,5 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-02 01:10 (UTC+7) | foxonworld | foxonworld/fixhome-qa-seven-issues-web-20261102 | Sửa bảy lỗi demo Web: xác nhận ZERO tường minh, ảnh lỗi, điều hướng máy lịch sử, trạng thái dừng/đặt lại UUID legacy, voucher readiness và nghĩa vụ linh kiện; ghi giới hạn QA.
 - 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
 - 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.
-- 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
 - 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ
 - 2026-11-01 20:15 (UTC+7) | foxonworld | foxonworld/fixhome-demo-recovery-hotfix-20261101 | Sửa lưu máy 2 rồi tiếp tục, continuation từng child, lỗi hỗ trợ có hướng xử lý và chẩn đoán/retry cannot-continue; giữ ranh giới tiền/linh kiện, runtime đăng nhập CHƯA KIỂM CHỨNG.
