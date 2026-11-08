@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-08 21:27 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-new-session-service
+> Cập nhật lần cuối: 2026-11-08 21:44 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-new-session-stay-in-chat
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -586,6 +586,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
 - 2026-11-08 21:27 (UTC+7) | ToanAltF4 | fix/ai-new-session-service | Phiên mới trên trang Phân tích cùng AI nhận lại dịch vụ AI gợi ý (đặt lại cờ chọn tay sau khi xoá dịch vụ)
 - 2026-11-08 21:09 (UTC+7) | ToanAltF4 | fix/ai-chat-new-session-smooth | Khung chat AI: phiên mới là mới hoàn toàn (bỏ trả lời về muộn của phiên cũ, trang Phân tích cùng AI về bước 1 trống, sửa mô tả thì phân tích lại), trả lời thay chỗ dòng chờ, chữ hiện mịn, chi tiết mờ dần
 - 2026-11-08 18:03 (UTC+7) | ToanAltF4 | fix/warehouse-handover-reissue | Sửa nút Đã giao thực tế ở mục Lấy hàng tại kho: mã cấp lại sau bàn giao đặt đúng ô mã nhận, nút giao chỉ hiện khi phiếu ready, không thoát im lặng, lỗi báo bằng toast
@@ -627,4 +628,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-02 10:34 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Ghi UX rebook urgent/địa chỉ, máy dừng gọn, voucher giữ attempt/giờ phản hồi và lịch sử cựu phân công riêng tư; Backend trước Web và giới hạn runtime.
 - 2026-11-02 01:10 (UTC+7) | foxonworld | foxonworld/fixhome-qa-seven-issues-web-20261102 | Sửa bảy lỗi demo Web: xác nhận ZERO tường minh, ảnh lỗi, điều hướng máy lịch sử, trạng thái dừng/đặt lại UUID legacy, voucher readiness và nghĩa vụ linh kiện; ghi giới hạn QA.
 - 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
-- 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.

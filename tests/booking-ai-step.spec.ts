@@ -133,25 +133,28 @@ describe('AI booking form', () => {
     expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeUndefined();
   }, 10000);
 
-  it('starts a new session on an empty step 1 without sending the old description again (PO 08/11)', async () => {
+  it('starts a new session in the chat itself: empty, nothing sent, waiting for the customer (PO 08/11)', async () => {
     analyze.mockResolvedValue(reply({ recommendedServices: [fix] }));
     const wrapper = await openAiForm();
     await describeAndAnalyze(wrapper);
     expect(analyze).toHaveBeenCalledTimes(1);
 
     await wrapper.get('[data-testid="ai-restart"]').trigger('click');
+    await pause();
     await flushPromises();
     expect(analyze).toHaveBeenCalledTimes(1);
-    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('');
-    expect(wrapper.get('[data-testid="step1-next"]').attributes('disabled')).toBeDefined();
+    const thread = wrapper.get('[data-testid="ai-thread"]').text();
+    expect(thread).not.toContain('Máy lạnh kêu lạch cạch');
+    expect(thread).not.toContain('Dạ em xem rồi ạ.');
+    expect(wrapper.find('[data-testid="ai-current-service"]').text()).not.toContain('Sửa máy lạnh không mát');
+    expect((wrapper.get('[data-testid="ai-input"]').element as HTMLTextAreaElement).value).toBe('');
 
-    await wrapper.find('textarea').setValue('Tủ lạnh ngăn đá không đông');
-    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await wrapper.get('[data-testid="ai-input"]').setValue('Tủ lạnh ngăn đá không đông');
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
     await pause();
     await flushPromises();
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Tủ lạnh ngăn đá không đông', sessionId: null }));
-    expect(wrapper.get('[data-testid="ai-thread"]').text()).not.toContain('Máy lạnh kêu lạch cạch');
     // The new session's own suggestion is taken, so the customer can book (seen on fixhome.sbs 08/11).
     expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa máy lạnh không mát');
     expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();

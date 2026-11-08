@@ -55,7 +55,7 @@ import { bookingDraftsApi, type BookingDraft, type BookingDraftSubmitRequest, ty
 import { catalogPricingApi } from '../../api/catalog-pricing.api';
 import { photosByAppliance, setAiVisitDraft, takeAiVisitDraft, type AiVisitDevice } from '../../composables/aiVisitDraft';
 import { AI_MAX_IMAGES } from '../../api/ai.api';
-import { AI_VISIT_DEVICE_LIMIT, DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
+import { AI_VISIT_DEVICE_LIMIT, ASSISTANT_GREETING, DESCRIBE_BEFORE_SEND, bookingRecap, useAiConversation, useSharedAiConversation } from '../../composables/useAiConversation';
 import { looksLikeImage, normalizeForUpload, prepareForAi } from '../../utils/image-for-ai';
 import AiConversationThread from '../../components/chat/AiConversationThread.vue';
 import { useFillViewport } from '../../composables/useFillViewport';
@@ -729,7 +729,10 @@ function restartAiConversation() {
   for (const photo of [...uploadedPhotos.value]) removePhotoByLocalId(photo.localId);
   description.value = '';
   userModifiedDescription.value = false;
-  step.value = 1;
+  // PO 08/11: stay in the chat, empty, and wait for the customer to type; nothing is sent.
+  aiConversation.messages.value = [{ id: `greeting-${Date.now()}`, sender: 'bot', text: ASSISTANT_GREETING }];
+  // Typed in the chat from now on; step 1 has nothing to re-open the conversation with.
+  aiOpenedWith = aiStepOneKey();
 }
 
 /**
