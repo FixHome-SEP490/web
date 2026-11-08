@@ -162,7 +162,8 @@ const loadData = async () => {
   loading.value = true;
   loadError.value = false;
   try {
-    const res = await partRequestsApi.getAll({
+    const getRequests = canOperate.value ? partRequestsApi.getWarehouseTasks : partRequestsApi.getAll;
+    const res = await getRequests({
       status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() as PartRequestStatus : undefined,
       requestType: typeFilter.value !== 'ALL' ? typeFilter.value.toLowerCase() as PartRequestType : undefined,
       fulfillmentMethod: fulfillmentFilter.value !== 'ALL' ? fulfillmentFilter.value.toLowerCase() as FulfillmentMethod : undefined,
@@ -562,21 +563,35 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-actions="{ row }">
         <div class="flex items-center justify-end gap-2">
           <FhButton
-            v-if="canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
+            v-if="warehouseTokens[row.id]?.pickup && canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="handoverTarget = row"
+          >Xác nhận đã giao trực tiếp</FhButton>
+          <FhButton
+            v-else-if="canPreparePickupQr(allocationFor(row))"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="prepareWarehouseQr(row)"
+          >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+          <FhButton
+            v-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="inspectionRequest = row"
           >Kiểm tra linh kiện hỏng</FhButton>
           <FhButton
-            v-else-if="canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="handleMarkReady(row)"
           >Chuẩn bị xong</FhButton>
           <FhButton
-            v-else-if="canOperate && canDeliver(row)"
+            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && canDeliver(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -618,7 +633,11 @@ const getUsageBadgeClass = (status: string) => {
       </div>
       <template v-if="allocationFor(row)?.mode === 'warehouse'">
         <p v-if="allocationFor(row)?.warehouseName" class="text-sm text-ink-700">Kho: {{ allocationFor(row)?.warehouseName }}<template v-if="allocationFor(row)?.warehouseAddress"> · {{ allocationFor(row)?.warehouseAddress }}</template></p>
-        <p v-if="allocationFor(row)?.reviewRequired" class="text-sm text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+        <p
+          v-if="allocationFor(row)?.distanceReference === 'booking_snapshot' && typeof allocationFor(row)?.estimatedStraightLineKm === 'number'"
+          class="text-sm text-warning-800"
+        >Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~{{ allocationFor(row)?.estimatedStraightLineKm?.toFixed(1) }} km; chưa xác minh đường đi/ETA</p>
+        <p v-else-if="allocationFor(row)?.reviewRequired" class="text-sm text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
         <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
         <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
 
