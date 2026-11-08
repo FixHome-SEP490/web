@@ -40,7 +40,7 @@ const columns: ConsoleColumn[] = [
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Đang chờ duyệt',
-  VERIFIED: 'Đã duyệt',
+  VERIFIED: 'Đã xác nhận danh tính',
   REJECTED: 'Đã từ chối',
 };
 const statusLabel = (status: unknown) => STATUS_LABELS[String(status ?? '').toUpperCase()] ?? 'Trạng thái chưa xác định';
@@ -155,10 +155,10 @@ const approveVerification = async (verification: TechnicianVerification) => {
   successMessage.value = '';
   try {
     await adminVerificationsApi.approveVerification(verification.id);
-    successMessage.value = `Đã duyệt hồ sơ của ${verification.technician?.fullName ?? 'kỹ thuật viên'}.`;
+    successMessage.value = `Đã xác nhận danh tính của ${verification.technician?.fullName ?? 'kỹ thuật viên'}. Thợ sẽ nhận thông báo đặt lịch lên trụ sở; hồ sơ được duyệt ở mục "Duyệt hồ sơ" sau buổi gặp.`;
     await loadVerifications();
   } catch (reason) {
-    error.value = getErrorMessage(reason, 'Chưa duyệt được hồ sơ, vui lòng thử lại.');
+    error.value = getErrorMessage(reason, 'Chưa xác nhận được danh tính, vui lòng thử lại.');
   } finally {
     actionLoadingId.value = null;
   }
@@ -245,7 +245,7 @@ const formatDate = (value: string) => {
       <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái hồ sơ">
         <option value="ALL">Tất cả trạng thái</option>
         <option value="PENDING">Đang chờ duyệt</option>
-        <option value="VERIFIED">Đã duyệt</option>
+        <option value="VERIFIED">Đã xác nhận danh tính</option>
         <option value="REJECTED">Đã từ chối</option>
       </select>
     </div>
@@ -289,7 +289,7 @@ const formatDate = (value: string) => {
               :loading="actionLoadingId === row.id"
               :disabled="Boolean(actionLoadingId)"
               @click="approveVerification(row)"
-            >Duyệt</FhButton>
+            >Xác nhận</FhButton>
             <ConsoleMoreMenu label="Thao tác khác với hồ sơ">
               <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
             </ConsoleMoreMenu>

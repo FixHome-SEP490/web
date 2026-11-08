@@ -5,6 +5,9 @@ import FhButton from '../FhButton.vue';
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { useEvidencePhotos } from '../../composables/useEvidencePhotos';
+import BookingSessionPicker from '../customer/BookingSessionPicker.vue';
+import { upcomingSessions, type BookingSlot } from '../../utils/booking-session';
+import { vnKeyAndClockToDate } from '../../utils/vn-time';
 import {
   declineReasonLabels,
   inspectionResultLabels,
@@ -14,7 +17,7 @@ import {
   type NotCoveredReason,
 } from '../../utils/warranty-claim';
 
-export type WarrantyActionMode = 'accept' | 'decline' | 'propose' | 'complete';
+export type WarrantyActionMode = 'accept' | 'reschedule' | 'decline' | 'propose' | 'complete';
 
 const props = defineProps<{ claim: StaffWarrantyClaim | null; mode: WarrantyActionMode | null }>();
 const emit = defineEmits<{ (e: 'close'): void; (e: 'done', claim: StaffWarrantyClaim): void }>();
@@ -22,23 +25,38 @@ const emit = defineEmits<{ (e: 'close'): void; (e: 'done', claim: StaffWarrantyC
 const MIN_TEXT = 10;
 const evidence = useEvidencePhotos();
 
+// The inspection time is a booking-style session (day + morning/afternoon/evening); the server stores its start,
+// or "in a few minutes" when the session is already under way, so the time it sees is always in the future.
+const SESSION_START_HOUR: Record<BookingSlot, number> = { morning: 8, afternoon: 13, evening: 18 };
+const sessions = upcomingSessions(14);
+const session = ref<{ date: string; slot: BookingSlot } | null>(null);
 const scheduledAt = ref('');
+watch(session, (picked) => {
+  if (!picked) { scheduledAt.value = ''; return; }
+  const start = vnKeyAndClockToDate(picked.date, SESSION_START_HOUR[picked.slot], 0).getTime();
+  scheduledAt.value = new Date(Math.max(start, Date.now() + 10 * 60_000)).toISOString();
+});
 const declineReason = ref<DeclineReason>('busy');
 const note = ref('');
 const result = ref<InspectionResult>('covered_part');
 const notCoveredReason = ref<NotCoveredReason>('other_component');
 const findings = ref('');
+const faultyIds = ref<string[]>([]);
+const faultyCounts = ref<Record<string, number>>({});
+const countOf = (line: { id: string; quantity: number }) => faultyCounts.value[line.id] ?? line.quantity;
 const submitting = ref(false);
 const error = ref('');
 
 const open = computed(() => !!props.claim && !!props.mode);
 const notCovered = computed(() => result.value === 'not_covered');
+const partLines = computed(() => props.claim?.order.partLines ?? []);
 // FixHome pays the part on a part fault, and "not covered" ends the claim: both need proof.
 const evidenceRequired = computed(() => notCovered.value || result.value === 'covered_part');
 const title = computed(
   () =>
     ({
       accept: 'Nhận yêu cầu bảo hành',
+      reschedule: 'Đổi lịch kiểm tra',
       decline: 'Không nhận được yêu cầu bảo hành',
       propose: 'Gửi kết luận kiểm tra',
       complete: 'Báo đã bảo hành xong',
@@ -48,6 +66,7 @@ const submitLabel = computed(
   () =>
     ({
       accept: 'Nhận yêu cầu',
+      reschedule: 'Đổi lịch và báo khách',
       decline: 'Gửi lý do',
       propose: 'Gửi kết luận',
       complete: 'Báo hoàn tất',
@@ -57,12 +76,15 @@ const showPhotos = computed(() => props.mode === 'propose' || props.mode === 'co
 
 watch(open, (isOpen) => {
   if (!isOpen) return;
+  session.value = null;
   scheduledAt.value = '';
   declineReason.value = 'busy';
   note.value = '';
   result.value = 'covered_part';
   notCoveredReason.value = 'other_component';
   findings.value = '';
+  faultyIds.value = [];
+  faultyCounts.value = {};
   error.value = '';
   evidence.reset();
 }, { immediate: true });
@@ -74,10 +96,9 @@ function close() {
 
 async function run(claim: StaffWarrantyClaim, mode: WarrantyActionMode): Promise<StaffWarrantyClaim> {
   const refs = evidence.photos.value.length ? { evidenceRefs: evidence.urls() } : {};
-  if (mode === 'accept') {
-    return warrantyClaimsApi.accept(claim.id, {
-      ...(scheduledAt.value ? { scheduledAt: new Date(scheduledAt.value).toISOString() } : {}),
-    });
+  if (mode === 'accept' || mode === 'reschedule') {
+    const payload = { scheduledAt: new Date(scheduledAt.value).toISOString() };
+    return mode === 'accept' ? warrantyClaimsApi.accept(claim.id, payload) : warrantyClaimsApi.reschedule(claim.id, payload);
   }
   if (mode === 'decline') {
     return warrantyClaimsApi.decline(claim.id, {
@@ -89,6 +110,7 @@ async function run(claim: StaffWarrantyClaim, mode: WarrantyActionMode): Promise
     return warrantyClaimsApi.propose(claim.id, {
       result: result.value,
       ...(notCovered.value ? { notCoveredReasonCode: notCoveredReason.value } : {}),
+      ...(result.value === 'covered_part' ? { faultyInvoiceItemIds: faultyIds.value, faultyQuantities: Object.fromEntries(partLines.value.filter((l) => faultyIds.value.includes(l.id)).map((l) => [l.id, countOf(l)])) } : {}),
       findings: findings.value.trim(),
       ...refs,
     });
@@ -97,11 +119,18 @@ async function run(claim: StaffWarrantyClaim, mode: WarrantyActionMode): Promise
 }
 
 function validate(mode: WarrantyActionMode): string {
+  if (mode === 'accept' || mode === 'reschedule') {
+    const at = Date.parse(scheduledAt.value);
+    if (!Number.isFinite(at) || at <= Date.now()) return 'Vui lòng chọn lịch kiểm tra ở thời điểm sau hiện tại.';
+  }
   if (mode === 'decline' && declineReason.value === 'other' && note.value.trim().length < MIN_TEXT) {
     return `Vui lòng ghi rõ lý do ít nhất ${MIN_TEXT} ký tự.`;
   }
   if (mode === 'propose') {
     if (findings.value.trim().length < MIN_TEXT) return `Vui lòng mô tả kết quả kiểm tra ít nhất ${MIN_TEXT} ký tự.`;
+    if (result.value === 'covered_part' && !faultyIds.value.length) return 'Chọn ít nhất một linh kiện bị hỏng.';
+    const badCount = partLines.value.some((l) => faultyIds.value.includes(l.id) && (!Number.isInteger(countOf(l)) || countOf(l) < 1 || countOf(l) > l.quantity));
+    if (result.value === 'covered_part' && badCount) return 'Số cái bị hỏng phải từ 1 đến số lượng đã dùng.';
     if (evidenceRequired.value && !evidence.photos.value.length) {
       return notCovered.value
         ? 'Cần ít nhất một ảnh làm bằng chứng khi kết luận không bảo hành.'
@@ -157,18 +186,13 @@ async function submit() {
 
       <p class="text-xs text-ink-600">
         Đơn <span class="font-mono font-bold text-brand-700">{{ claim.order.code }}</span> ·
-        {{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}
+        {{ claim.order.serviceName || 'Bảo hành dịch vụ' }}
       </p>
 
-      <template v-if="mode === 'accept'">
-        <div class="space-y-1">
-          <label for="warranty-schedule" class="text-xs font-medium text-ink-700">Thời gian dự kiến tới kiểm tra (không bắt buộc)</label>
-          <input
-            id="warranty-schedule"
-            v-model="scheduledAt"
-            type="datetime-local"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          />
+      <template v-if="mode === 'accept' || mode === 'reschedule'">
+        <div id="warranty-schedule" class="space-y-1.5">
+          <p class="text-xs font-medium text-ink-700">Buổi tới kiểm tra đã hẹn với khách (bắt buộc)</p>
+          <BookingSessionPicker v-model="session" :sessions="sessions" compact />
         </div>
         <p class="text-xs text-ink-500">Bạn hãy liên hệ khách hàng để thống nhất lịch. Bảo hành không thu phí công.</p>
       </template>
@@ -210,6 +234,25 @@ async function submit() {
           >
             <input v-model="result" type="radio" name="warranty-result" :value="value" />
             {{ label }}
+          </label>
+        </fieldset>
+        <fieldset v-if="result === 'covered_part'" class="space-y-1.5" data-testid="faulty-lines">
+          <legend class="text-xs font-medium text-ink-700 mb-1">Linh kiện nào bị hỏng?</legend>
+          <p v-if="!partLines.length" class="text-xs text-ink-500">Đơn gốc không có linh kiện. Hãy chọn kết luận khác.</p>
+          <label
+            v-for="line in partLines"
+            :key="line.id"
+            class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer"
+            :class="faultyIds.includes(line.id) ? 'border-brand-600 bg-brand-50' : ''"
+          >
+            <input v-model="faultyIds" type="checkbox" :value="line.id" />
+            <span class="min-w-0 flex-1">{{ line.name }}</span>
+            <span v-if="!(faultyIds.includes(line.id) && line.quantity > 1)" class="font-num text-ink-500">× {{ line.quantity }}</span>
+            <span v-else class="flex items-center gap-1 font-num text-ink-700" data-testid="faulty-quantity">
+              <span class="text-ink-500">Hỏng</span>
+              <input v-model.number="faultyCounts[line.id]" type="number" min="1" :max="line.quantity" :placeholder="String(line.quantity)" class="w-14 h-7 px-1 text-center rounded-[var(--radius-sm)] border border-ink-300" :aria-label="`Số cái hỏng của ${line.name}`" />
+              <span class="text-ink-500">/ {{ line.quantity }}</span>
+            </span>
           </label>
         </fieldset>
         <div v-if="notCovered" class="space-y-1">

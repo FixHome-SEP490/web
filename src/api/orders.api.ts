@@ -263,6 +263,8 @@ export interface OrderWarrantyItem {
   startsAt: string;
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED';
+  /** Cancelled by the server: no claim can be filed on it. */
+  voided?: boolean;
 }
 
 export interface OrderWarrantyGroup {
@@ -294,6 +296,7 @@ export interface WarrantyClaimView {
   submittedAt: string;
   resolvedAt: string | null;
   technician: { id: string; fullName: string } | null;
+  inspectionScheduledAt?: string | null;
 }
 
 export interface CreateWarrantyClaimPayload {
@@ -842,6 +845,7 @@ export const ordersApi = {
               ...describeCoverage(c),
               startsAt: c.startsAt,
               expiresAt: c.expiresAt,
+              voided: c.status?.toUpperCase() === 'VOIDED',
               status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
             })),
             minStartsAt: minStarts,

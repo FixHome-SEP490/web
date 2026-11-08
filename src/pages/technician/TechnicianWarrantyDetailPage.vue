@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Check, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, User, X } from 'lucide-vue-next';
+import { ArrowLeft, CalendarClock, Check, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User, X } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
 } from '../../components/technician/TechnicianWarrantyActionModal.vue';
 import WarrantyContactActions from '../../components/technician/WarrantyContactActions.vue';
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
+import { partRequestsApi } from '../../api/part-requests.api';
 import { getHttpStatus } from '../../api/client';
 import { getSupportErrorMessage } from '../console/support-cases.utils';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
@@ -17,6 +18,7 @@ import { formatDateTimeVN } from '../../utils/formatters';
 import { vnDateString } from '../../utils/vn-time';
 import {
   technicianClaimDisplayMeta,
+  faultyInspectionLabels,
   inspectionResultLabels,
   notCoveredReasonLabels,
   warrantyClaimToneClasses,
@@ -39,6 +41,27 @@ const modalMode = ref<WarrantyActionMode | null>(null);
 const claimId = computed(() => String(route.params.id));
 const meta = computed(() => (claim.value ? technicianClaimDisplayMeta(claim.value) : null));
 const checkedIn = computed(() => claim.value?.visit?.status === 'checked_in');
+// The replacement is in hand; the faulty part is due back at the warehouse.
+const part = computed(() => {
+  const request = claim.value?.partRequest;
+  return request && ['received', 'completed'].includes(String(request.status).toLowerCase()) ? request : null;
+});
+const partOverdue = computed(() => !!part.value && !part.value.faultyReturnedAt && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
+
+async function returnFaultyPart() {
+  if (!part.value || busy.value) return;
+  busy.value = true;
+  notice.value = null;
+  try {
+    await partRequestsApi.returnFaultyPart(part.value.id);
+    notice.value = { type: 'success', text: 'Đã ghi nhận bạn nộp linh kiện hỏng về kho.' };
+    claim.value = await warrantyClaimsApi.get(claimId.value);
+  } catch (reason) {
+    notice.value = { type: 'error', text: getSupportErrorMessage(reason, 'Không ghi nhận được. Vui lòng thử lại.') };
+  } finally {
+    busy.value = false;
+  }
+}
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
 
 async function load() {
@@ -140,7 +163,7 @@ onMounted(load);
             <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] bg-warning-50 text-xs font-medium text-warning-800 whitespace-nowrap">Gửi sau hạn</span>
             <span class="text-ink-500 whitespace-nowrap">{{ vnDateString(claim.submittedAt) }}</span>
           </div>
-          <h1 class="font-semibold text-xl text-ink-900 text-balance">{{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</h1>
+          <h1 class="font-semibold text-xl text-ink-900 text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h1>
           <p class="flex items-start gap-1.5 text-ink-900">
             <User :size="14" class="h-5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
             <span>
@@ -182,10 +205,30 @@ onMounted(load);
       <section v-if="claim.visit?.proposedResult" class="p-5 sm:p-6 space-y-1">
         <h2 class="font-semibold text-ink-900">Kết luận bạn đã đề xuất</h2>
         <p class="text-ink-800">{{ inspectionResultLabels[claim.visit.proposedResult as InspectionResult] }}</p>
+        <p v-if="claim.autoApproved" class="text-xs text-ink-500">Hệ thống đã duyệt tự động: bạn sửa lại miễn phí cho khách.</p>
         <p v-if="claim.visit.notCoveredReasonCode" class="text-ink-800">
           Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || claim.visit.notCoveredReasonCode }}
         </p>
         <p class="text-ink-700 whitespace-pre-line">{{ claim.visit.findings }}</p>
+      </section>
+
+      <section v-if="part" class="p-5 sm:p-6 space-y-2" data-testid="faulty-part-return">
+        <h2 class="font-semibold text-ink-900">Nộp linh kiện hỏng về kho</h2>
+        <p v-if="part.faultyReturnedAt" class="text-ink-800">
+          Đã nộp lúc <span class="font-num">{{ formatDateTimeVN(part.faultyReturnedAt) }}</span>.
+          <template v-if="part.faultyInspectionResult">Quản lý dịch vụ đã kiểm tra: {{ faultyInspectionLabels[part.faultyInspectionResult] }}.</template>
+          <template v-else>Chờ quản lý dịch vụ kiểm tra.</template>
+        </p>
+        <template v-else>
+          <p :class="partOverdue ? 'text-danger-700' : 'text-ink-800'">
+            <template v-if="part.faultyReturnChargedAt">Quá hạn nộp nên giá linh kiện thay thế đã bị trừ vào ví. Nộp về kho và được kiểm tra không do lắp đặt sẽ được hoàn lại.</template>
+            <template v-else-if="partOverdue">Đã quá hạn nộp. Giá linh kiện thay thế sẽ bị trừ vào ví.</template>
+            <template v-else>Hạn nộp: <span class="font-num">{{ part.faultyReturnDueAt ? formatDateTimeVN(part.faultyReturnDueAt) : '' }}</span>. Quá hạn, giá linh kiện thay thế sẽ bị trừ vào ví.</template>
+          </p>
+          <div class="flex justify-end">
+            <FhButton variant="primary" size="md" :loading="busy" :disabled="busy" @click="returnFaultyPart"><PackageCheck :size="16" aria-hidden="true" /> Đã nộp linh kiện hỏng</FhButton>
+          </div>
+        </template>
       </section>
 
       <section v-if="claim.resolutionNotes" class="p-5 sm:p-6 space-y-1">
@@ -203,6 +246,7 @@ onMounted(load);
           <FhButton variant="primary" size="md" @click="modalMode = 'accept'"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>
         </template>
         <template v-else-if="claim.status === 'accepted'">
+          <FhButton v-if="!checkedIn" variant="secondary" size="md" :disabled="busy" @click="modalMode = 'reschedule'"><CalendarClock :size="16" aria-hidden="true" /> Đổi lịch kiểm tra</FhButton>
           <FhButton v-if="!checkedIn" variant="primary" size="md" :loading="busy" :disabled="busy" @click="checkIn"><MapPinCheck :size="16" aria-hidden="true" /> Đã đến nơi</FhButton>
           <FhButton v-else variant="primary" size="md" @click="modalMode = 'propose'"><ClipboardCheck :size="16" aria-hidden="true" /> Gửi kết luận kiểm tra</FhButton>
         </template>

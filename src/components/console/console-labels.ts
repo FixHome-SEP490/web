@@ -15,6 +15,32 @@ export const roleLabel = lookup(
   'Không rõ',
 );
 
+/** Cấp độ kỹ năng; giữ nhãn đang dùng ở Hồ sơ kỹ thuật viên (PO 09/11/2026). */
+export const skillLevelLabel = lookup(
+  {
+    beginner: 'Thợ mới',
+    intermediate: 'Thợ lành nghề',
+    advanced: 'Thợ kỹ thuật cao',
+    expert: 'Chuyên gia',
+  },
+  'Chưa rõ cấp độ',
+);
+
+/** Giai đoạn xét duyệt hồ sơ kỹ thuật viên (`reviewStage` của backend). */
+export const reviewStageLabel = lookup(
+  {
+    identity_review: 'Chờ duyệt danh tính',
+    visit_required: 'Chờ thợ đặt lịch',
+    visit_scheduled: 'Đã đặt lịch lên trụ sở',
+    visit_blocked: 'Bị khóa đặt lịch (vắng nhiều lần)',
+    profile_review: 'Đã gặp, chờ duyệt hồ sơ',
+    approved: 'Đã duyệt',
+    identity_rejected: 'Danh tính bị từ chối',
+    profile_rejected: 'Hồ sơ bị từ chối',
+  },
+  'Chưa rõ giai đoạn',
+);
+
 export const paymentStatusLabel = lookup(
   {
     unpaid: 'Chưa thanh toán',

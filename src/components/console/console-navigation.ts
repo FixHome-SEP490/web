@@ -26,6 +26,8 @@ import {
   WalletCards,
   TicketPercent,
   Warehouse,
+  Building2,
+  ClipboardCheck,
 } from 'lucide-vue-next';
 
 export interface ConsoleNavItem {
@@ -83,6 +85,8 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
         group: 'Kỹ thuật viên',
         items: [
           item('Duyệt danh tính', '/console/technicians', UserCheck),
+          item('Duyệt hồ sơ', '/console/admin/profile-reviews', ClipboardCheck),
+          item('Trụ sở nhận hồ sơ', '/console/admin/visit-offices', Building2),
           item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award),
           item('Tra cứu', '/console/admin/technician-directory', UserSearch),
         ],

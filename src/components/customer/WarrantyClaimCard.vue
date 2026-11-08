@@ -108,8 +108,12 @@ async function respond(decision: 'agree' | 'dispute') {
     <p v-if="claim.resolutionNotes" class="p-2 bg-ink-50 rounded-[var(--radius-sm)] text-ink-800">
       <span class="font-semibold">Phản hồi:</span> {{ claim.resolutionNotes }}
     </p>
+    <p v-if="claim.inspectionScheduledAt" class="text-ink-800">
+      <span class="font-semibold">Lịch kiểm tra:</span> {{ formatDateTimeVN(claim.inspectionScheduledAt) }}
+    </p>
     <p class="text-xs text-ink-500">
       Gửi lúc {{ formatDateTimeVN(claim.submittedAt) }}
+      <template v-if="claim.resolvedAt"> · Hoàn tất lúc {{ formatDateTimeVN(claim.resolvedAt) }}</template>
       <template v-if="claim.technician"> · Kỹ thuật viên: {{ claim.technician.fullName }}</template>
     </p>
 

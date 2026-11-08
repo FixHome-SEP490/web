@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
@@ -25,6 +26,16 @@ import TechnicianWarrantyActionModal from '../src/components/technician/Technici
 import TechnicianWarrantyPage from '../src/pages/technician/TechnicianWarrantyPage.vue';
 import { allowedComplaintTypes, complaintTypeLabel } from '../src/utils/order-complaint';
 import { createTestQueryClient, installQueryClient } from './support/query-client';
+import BookingSessionPicker from '../src/components/customer/BookingSessionPicker.vue';
+import { addDaysToKey, vnDayKey, vnKeyAndClockToDate } from '../src/utils/vn-time';
+/** Picks tomorrow afternoon in the session picker and returns the start time the modal should send. */
+async function pickSession(wrapper: ReturnType<typeof mount>): Promise<Date> {
+  const date = addDaysToKey(vnDayKey(), 1);
+  wrapper.findComponent(BookingSessionPicker).vm.$emit('update:modelValue', { date, slot: 'afternoon' });
+  await nextTick();
+  return vnKeyAndClockToDate(date, 13, 0);
+}
+
 
 const claim = (overrides: Partial<StaffWarrantyClaim> = {}): StaffWarrantyClaim => ({
   id: 'claim-1',
@@ -110,13 +121,27 @@ describe('TechnicianWarrantyActionModal', () => {
     mount(TechnicianWarrantyActionModal, { props: { claim: claim(), mode }, attachTo: document.body });
   const submitButton = (wrapper: ReturnType<typeof mountModal>) => wrapper.findAll('button').at(-1)!;
 
-  it('accepts without a time or with an ISO time', async () => {
+  it('refuses to accept without an inspection time, then sends it as an ISO time', async () => {
     apiClientMock.post.mockResolvedValue({ data: { data: claim({ status: 'accepted' }) } });
     const wrapper = mountModal('accept');
     await submitButton(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('lịch kiểm tra');
+    const at = await pickSession(wrapper);
+    await submitButton(wrapper).trigger('click');
     await flushPromises();
-    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/accept', {});
+    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/accept', { scheduledAt: at.toISOString() });
     expect(wrapper.emitted('done')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('moves the inspection time through the reschedule route', async () => {
+    apiClientMock.post.mockResolvedValue({ data: { data: claim({ status: 'accepted' }) } });
+    const wrapper = mountModal('reschedule');
+    const at = await pickSession(wrapper);
+    await submitButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/reschedule', { scheduledAt: at.toISOString() });
     wrapper.unmount();
   });
 
@@ -163,14 +188,42 @@ describe('TechnicianWarrantyActionModal', () => {
     wrapper.unmount();
   });
 
-  it('demands a photo of the faulty part when FixHome would pay for it', async () => {
-    const wrapper = mountModal('propose');
+  it('asks which part is faulty and demands a photo of it when FixHome would pay for it', async () => {
+    const withParts = claim({ order: { ...claim().order, partLines: [{ id: 'line-1', name: 'Tụ khởi động', quantity: 2, partSource: 'fixhome' }] } });
+    const wrapper = mount(TechnicianWarrantyActionModal, { props: { claim: withParts, mode: 'propose' }, attachTo: document.body });
     expect((wrapper.findAll('input[type="radio"]')[1].element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.get('[data-testid="faulty-lines"]').text()).toContain('Tụ khởi động');
     await wrapper.get('#warranty-findings').setValue('Linh kiện bị nứt ở mối ghép');
     expect(wrapper.text()).toContain('bắt buộc');
+
+    await submitButton(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Chọn ít nhất một linh kiện bị hỏng');
+
+    await wrapper.get('input[type="checkbox"]').setValue(true);
     await submitButton(wrapper).trigger('click');
     expect(apiClientMock.post).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('ảnh linh kiện hỏng');
+    wrapper.unmount();
+  });
+
+  it('lets the technician say how many of a x3 line are faulty and refuses more than were used', async () => {
+    const withParts = claim({ order: { ...claim().order, partLines: [{ id: 'line-1', name: 'Tụ khởi động', quantity: 3, partSource: 'fixhome' }] } });
+    const wrapper = mount(TechnicianWarrantyActionModal, { props: { claim: withParts, mode: 'propose' }, attachTo: document.body });
+    expect(wrapper.find('[data-testid="faulty-quantity"]').exists()).toBe(false);
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    const count = wrapper.get('[data-testid="faulty-quantity"] input');
+    await count.setValue(4);
+    await wrapper.get('#warranty-findings').setValue('Linh kiện bị nứt ở mối ghép');
+    await submitButton(wrapper).trigger('click');
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Số cái bị hỏng phải từ 1');
+    wrapper.unmount();
+  });
+
+  it('cannot propose a part fault when the original job had no part', async () => {
+    const wrapper = mountModal('propose');
+    expect(wrapper.get('[data-testid="faulty-lines"]').text()).toContain('Đơn gốc không có linh kiện');
     wrapper.unmount();
   });
 
@@ -194,6 +247,7 @@ describe('TechnicianWarrantyActionModal', () => {
   it('shows the Backend rejection and stays open', async () => {
     apiClientMock.post.mockRejectedValueOnce({ response: { data: { message: 'Yêu cầu bảo hành đã được xử lý.' } } });
     const wrapper = mountModal('accept');
+    await pickSession(wrapper);
     await submitButton(wrapper).trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('đã được xử lý');

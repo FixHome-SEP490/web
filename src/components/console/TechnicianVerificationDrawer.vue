@@ -5,8 +5,6 @@ import {
   CheckCircle2,
   XCircle,
   User,
-  MapPin,
-  Briefcase,
   FileBadge,
   Loader2,
   Image as ImageIcon,
@@ -14,7 +12,6 @@ import {
 } from 'lucide-vue-next';
 import type { TechnicianVerification } from '../../api/admin-verifications.api';
 import { adminVerificationsApi } from '../../api/admin-verifications.api';
-import { vietnamProvincesApi, type Province } from '../../api/vietnam-provinces.api';
 
 const props = defineProps<{
   open: boolean;
@@ -32,17 +29,6 @@ const emit = defineEmits<{
 const close = () => {
   emit('update:open', false);
 };
-
-const provinces = ref<Province[]>([]);
-watch(() => props.open, async (isOpen) => {
-  if (isOpen && provinces.value.length === 0) {
-    try {
-      provinces.value = await vietnamProvincesApi.getProvincesWithDistricts();
-    } catch (e) {
-      console.error('Failed to fetch provinces', e);
-    }
-  }
-}, { immediate: true });
 
 // Map document types to human readable formats and categorize them
 const documents = computed(() => {
@@ -73,28 +59,6 @@ const profileInfo = computed(() => {
     serviceRadiusKm: v.serviceRadiusKm || null,
     serviceAreas: v.serviceAreas || [],
   };
-});
-
-const formattedServiceAreas = computed(() => {
-  if (!profileInfo.value?.serviceAreas?.length) return [];
-  if (!provinces.value.length) return profileInfo.value.serviceAreas;
-
-  return profileInfo.value.serviceAreas.map(areaStr => {
-    // Expected format: `${districtCode}, ${provinceCode}`
-    const parts = areaStr.split(',').map(s => s.trim());
-    if (parts.length === 2) {
-      const districtCode = Number(parts[0]);
-      const provinceCode = Number(parts[1]);
-      const province = provinces.value.find(p => p.code === provinceCode);
-      if (province && province.districts) {
-        const district = province.districts.find(d => d.code === districtCode);
-        if (district) {
-          return `${district.name}, ${province.name}`;
-        }
-      }
-    }
-    return areaStr;
-  });
 });
 
 const documentUrls = ref<Record<string, string>>({});
@@ -166,7 +130,7 @@ const statusText = computed(() => STATUS_TEXT[String(props.verification?.status 
       <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white shrink-0">
         <div class="flex flex-col">
           <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-            Hồ sơ kỹ thuật viên
+            Xác minh danh tính
           </h2>
           <p class="flex flex-wrap items-center gap-2 text-sm text-gray-500 font-medium">
             {{ technician?.fullName || 'Kỹ thuật viên' }}
@@ -315,70 +279,19 @@ const statusText = computed(() => STATUS_TEXT[String(props.verification?.status 
           </div>
         </section>
 
-        <!-- 3. Chuyên môn & Kinh nghiệm -->
+        <!-- Khớp khuôn mặt: ảnh CCCD với ảnh chân dung, backend so khi thợ nộp hồ sơ -->
         <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-            <Briefcase class="text-brand-600" :size="20" />
-            Chuyên môn
-          </h3>
-          
-          <div class="space-y-5">
-            <div class="flex flex-wrap items-center gap-3">
-              <span class="text-sm font-medium text-gray-500">Kinh nghiệm</span>
-              <span class="inline-flex items-center justify-center px-3 py-1 bg-brand-50 text-brand-700 font-bold text-sm rounded-lg border border-brand-100">
-                {{ profileInfo?.yearsExperience != null ? `${profileInfo.yearsExperience} năm` : '—' }}
-              </span>
-            </div>
-            
-            <div>
-              <p class="text-sm font-medium text-gray-500 mb-2">Dịch vụ đăng ký</p>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="(skill, index) in profileInfo?.skills" :key="index" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-800 text-sm font-semibold rounded-lg border border-gray-200">
-                  {{ skill.name }}
-                  <span class="text-xs font-normal text-gray-500 bg-white px-1.5 rounded border border-gray-200">{{ skill.level }}</span>
-                </span>
-                <span v-if="!profileInfo?.skills?.length" class="text-sm text-gray-400 font-medium italic">Chưa cập nhật</span>
-              </div>
-            </div>
-            
-            <div>
-              <p class="text-sm font-medium text-gray-500 mb-2">Giới thiệu</p>
-              <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm text-gray-700 leading-relaxed italic">
-                {{ profileInfo?.bio ? `"${profileInfo.bio}"` : 'Chưa cập nhật giới thiệu' }}
-              </div>
-            </div>
-          </div>
+          <h3 class="text-base font-bold text-gray-900 mb-2 border-b border-gray-50 pb-3">Khớp khuôn mặt</h3>
+          <p v-if="verification?.faceMatchScore != null" class="text-sm text-gray-700">
+            Độ tương thích giữa ảnh CCCD và ảnh chân dung: <strong class="font-num">{{ verification.faceMatchScore }}%</strong>.
+            Điểm chỉ để tham khảo, bạn vẫn đối chiếu bằng mắt.
+          </p>
+          <p v-else class="text-sm text-gray-500">Chưa có điểm khớp khuôn mặt (hệ thống tắt tính năng hoặc không so sánh được). Hãy đối chiếu bằng mắt.</p>
+          <p class="mt-3 text-xs text-gray-500">
+            Xác nhận danh tính chỉ để mời thợ lên trụ sở gặp trực tiếp. Kỹ năng, cấp độ và bằng cấp được duyệt riêng ở mục "Duyệt hồ sơ".
+          </p>
         </section>
 
-        <!-- 4. Địa chỉ & Khu vực hoạt động -->
-        <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-            <MapPin class="text-brand-600" :size="20" />
-            Địa chỉ và khu vực
-          </h3>
-          
-          <div class="space-y-4">
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Địa chỉ</p>
-              <p class="text-sm font-semibold text-gray-900">{{ profileInfo?.address || '—' }}</p>
-            </div>
-            
-            <div>
-              <p class="text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
- Bán kính nhận việc
-                <span class="font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-100">{{ profileInfo?.serviceRadiusKm != null ? `${profileInfo.serviceRadiusKm} km` : '—' }}</span>
-              </p>
-              <p class="text-sm font-medium text-gray-500 mb-2 mt-4">Khu vực nhận việc</p>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="area in formattedServiceAreas" :key="area" class="inline-flex items-center px-2.5 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-md border border-green-200">
-                  {{ area }}
-                </span>
-                <span v-if="!formattedServiceAreas.length" class="text-sm text-gray-400 font-medium italic">Chưa cập nhật</span>
-              </div>
-            </div>
-          </div>
-        </section>
-        
       </div>
 
       <!-- Footer Actions -->
@@ -405,7 +318,7 @@ const statusText = computed(() => STATUS_TEXT[String(props.verification?.status 
           >
             <Loader2 v-if="loadingApprove" class="animate-spin" :size="18" />
             <CheckCircle2 v-else :size="18" />
-            Duyệt hồ sơ
+            Xác nhận danh tính
           </button>
         </div>
       </div>

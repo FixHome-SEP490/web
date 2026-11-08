@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Camera, X, ShieldAlert, AlertTriangle, AlertCircle, Wrench } from 'lucide-vue-next';
+import { Camera, X, ShieldAlert, AlertTriangle, AlertCircle } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
-import { coverageKindLabel, ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/orders.api';
+import { ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { useEvidencePhotos } from '../../composables/useEvidencePhotos';
 import { formatDateVN } from '../../utils/formatters';
@@ -16,6 +16,7 @@ export interface ClaimableCoverage {
   startsAt?: string;
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED';
+  voided?: boolean;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -52,14 +53,28 @@ const description = ref('');
 const submitting = ref(false);
 const error = ref('');
 
-const selectable = computed(() => props.coverages.filter((c) => !props.busyCoverageIds.includes(c.id)));
+const selectable = computed(() => props.coverages.filter((c) => !c.voided && !props.busyCoverageIds.includes(c.id)));
 const selected = computed(() => props.coverages.find((c) => c.id === selectedId.value) ?? null);
+
+// The customer cannot tell a workmanship fault from a faulty part (the technician decides at inspection):
+// one claim for the whole order, filed on the free item that is covered longest.
+function bestCoverageId(): string {
+  const rank = (c: ClaimableCoverage) => (c.status === 'ACTIVE' ? 1e15 : 0) + (Date.parse(c.expiresAt) || 0);
+  return [...selectable.value].sort((a, b) => rank(b) - rank(a))[0]?.id ?? '';
+}
+
+/** "Tụ khởi động và 8 hạng mục khác": a long order never turns into a long line. */
+const scopeSummary = computed(() => {
+  const names = props.coverages.map((c) => c.itemDescription).filter(Boolean);
+  if (names.length <= 2) return names.join(' · ');
+  return `${names[0]}, ${names[1]} và ${names.length - 2} hạng mục khác`;
+});
 
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    selectedId.value = selectable.value.find((c) => c.status === 'ACTIVE')?.id ?? selectable.value[0]?.id ?? '';
+    selectedId.value = bestCoverageId();
     description.value = '';
     evidence.reset();
     error.value = '';
@@ -76,7 +91,7 @@ async function submit() {
   if (submitting.value || evidence.uploading.value) return;
   const text = description.value.trim();
   if (!selected.value) {
-    error.value = 'Vui lòng chọn hạng mục cần bảo hành.';
+    error.value = 'Đơn này đang có yêu cầu bảo hành chưa xử lý xong.';
     return;
   }
   if (text.length < MIN_LENGTH) {
@@ -156,62 +171,14 @@ async function submit() {
         </div>
       </div>
 
-      <!-- Fieldset: Select coverage item -->
-      <fieldset class="min-w-0 space-y-2">
-        <legend class="text-xs font-semibold text-ink-800 mb-1 flex items-center gap-1.5">
-          <Wrench :size="13" class="text-ink-500" />
-          <span>Chọn hạng mục cần bảo hành</span>
-        </legend>
-
-        <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-          <label
-            v-for="coverage in coverages"
-            :key="coverage.id"
-            class="relative flex items-start gap-3 p-3 rounded-xl border text-xs transition-all select-none"
-            :class="[
-              busyCoverageIds.includes(coverage.id)
-                ? 'opacity-60 border-ink-200 bg-ink-50 cursor-not-allowed'
-                : selectedId === coverage.id
-                ? 'border-brand-600 bg-brand-50/40 ring-1 ring-brand-500/20 cursor-pointer'
-                : 'border-ink-200 bg-white hover:border-ink-300 cursor-pointer',
-            ]"
-          >
-            <input
-              v-model="selectedId"
-              type="radio"
-              name="warranty-coverage"
-              class="mt-0.5 h-4 w-4 text-brand-600 focus:ring-brand-500 cursor-pointer"
-              :value="coverage.id"
-              :disabled="busyCoverageIds.includes(coverage.id)"
-            />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between gap-2">
-                <span class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <span
-                    v-if="coverageKindLabel(coverage.kind)"
-                    class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
-                    :class="coverage.kind === 'part' ? 'bg-ink-100 text-ink-700' : 'bg-brand-50 text-brand-700'"
-                    data-testid="coverage-kind"
-                  >{{ coverageKindLabel(coverage.kind) }}</span>
-                  <span class="min-w-0 font-semibold text-ink-900 truncate" :title="coverage.itemDescription">{{ coverage.itemDescription }}</span>
-                </span>
-                <span
-                  class="px-2 py-0.5 rounded-md text-[11px] font-semibold shrink-0"
-                  :class="coverage.status === 'ACTIVE' ? 'bg-success-100 text-success-800' : 'bg-ink-200 text-ink-600'"
-                >
-                  {{ coverage.status === 'ACTIVE' ? 'Còn hạn' : 'Đã hết hạn' }}
-                </span>
-              </div>
-              <div class="text-[11px] text-ink-500 mt-1 flex items-center gap-2">
-                <span class="font-num text-ink-700" data-testid="coverage-term">{{ coverageTerm(coverage) }}</span>
-                <span v-if="busyCoverageIds.includes(coverage.id)" class="text-warning-700 font-medium">
-                  · Đang có yêu cầu chưa xử lý xong
-                </span>
-              </div>
-            </div>
-          </label>
+      <!-- One claim for the whole order: the technician decides what failed -->
+      <div class="rounded-2xl border border-ink-100 p-3.5 space-y-1 text-xs" data-testid="coverage-scope">
+        <div class="flex items-start justify-between gap-3">
+          <span class="text-ink-500 shrink-0">Phạm vi:</span>
+          <span class="font-semibold text-ink-900 text-right text-pretty">{{ scopeSummary }}</span>
         </div>
-      </fieldset>
+        <p v-if="selected" class="text-right text-ink-500 font-num" data-testid="coverage-term">{{ coverageTerm(selected) }}</p>
+      </div>
 
       <!-- Expired coverage note -->
       <div

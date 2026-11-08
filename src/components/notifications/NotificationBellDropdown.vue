@@ -135,6 +135,11 @@ const handleItemClick = async (item: NotificationItem) => {
 
   // 1. TECHNICIAN navigation
   if (role === 'TECHNICIAN') {
+    // Warranty notices carry the order, not the claim: the warranty list is where the claim to act on is.
+    if (itemType.startsWith('WARRANTY_')) {
+      router.push('/tech/warranty');
+      return;
+    }
     if (itemType === 'PART_REQUEST_READY') {
       const orderId = await resolvePartRequestServiceOrderId(item);
       if (orderId) router.push(`/tech/jobs/${encodeURIComponent(orderId)}`);
@@ -163,6 +168,10 @@ const handleItemClick = async (item: NotificationItem) => {
 
   // 2. SERVICE_MANAGER or ADMIN navigation
   if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
+    if (itemType.startsWith('WARRANTY_')) {
+      router.push('/console/warranty');
+      return;
+    }
     if (role === 'SERVICE_MANAGER' && itemType === 'PART_RETURN_DECLARED') {
       router.push('/console/part-returns');
       return;

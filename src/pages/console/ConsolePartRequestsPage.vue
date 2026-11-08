@@ -358,9 +358,13 @@ const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
 const canMarkLegacyPickupReady = (req: PartRequest) => req.fulfillmentMethod === 'pickup' && allocationFor(req)?.mode === 'legacy';
 const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
-// A warranty part is issued only after the faulty one was inspected; the result decides who pays.
-const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !req.faultyInspectionResult;
-const canReinspect = (req: PartRequest) => req.requestType === 'warranty' && ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
+// The technician takes the new part first and brings the faulty one back later; the manager inspects it once it is back, once.
+const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !!req.faultyReturnedAt && !req.faultyInspectionResult;
+const faultyReturnLabel = (req: PartRequest) => {
+  if (req.faultyReturnedAt) return 'Thợ đã nộp';
+  if (!req.faultyReturnDueAt) return 'Chờ thợ nhận linh kiện thay thế';
+  return `${new Date(req.faultyReturnDueAt).getTime() < Date.now() ? 'Quá hạn nộp' : 'Hạn nộp'} ${vnDateTimeString(req.faultyReturnDueAt)}${req.faultyReturnChargedAt ? ', đã trừ ví thợ' : ''}`;
+};
 const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
 const onInspected = (updated: PartRequest) => {
   replaceRow(updated);
@@ -571,14 +575,7 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-actions="{ row }">
         <div class="flex items-center justify-end gap-2">
           <FhButton
-            v-if="canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
-            variant="primary"
-            size="sm"
-            :disabled="actionLoading"
-            @click="inspectionRequest = row"
-          >Kiểm tra linh kiện hỏng</FhButton>
-          <FhButton
-            v-else-if="canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-if="canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -739,8 +736,8 @@ const getUsageBadgeClass = (status: string) => {
           <div v-if="detailModalRequest.requestType === 'warranty'" class="flex justify-between gap-3">
             <dt class="text-ink-500">Linh kiện hỏng</dt>
             <dd class="text-right text-ink-900">
-              {{ inspectionLabel(detailModalRequest.faultyInspectionResult) }}
-              <button v-if="canOperate && canReinspect(detailModalRequest)" type="button" class="ml-2 text-brand-700 hover:underline" @click="inspectionRequest = detailModalRequest">{{ detailModalRequest.faultyInspectionResult ? 'Sửa' : 'Kiểm tra' }}</button>
+              {{ detailModalRequest.faultyInspectionResult ? inspectionLabel(detailModalRequest.faultyInspectionResult) : faultyReturnLabel(detailModalRequest) }}
+              <router-link v-if="canOperate && needsInspection(detailModalRequest)" to="/console/part-returns" class="ml-2 text-brand-700 hover:underline">Kiểm tra ở Hoàn trả linh kiện</router-link>
             </dd>
           </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>

@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
@@ -23,6 +24,16 @@ vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => chatMock }));
 import type { StaffWarrantyClaim } from '../src/api/warranty-claims.api';
 import TechnicianWarrantyDetailPage from '../src/pages/technician/TechnicianWarrantyDetailPage.vue';
 import { createTestQueryClient, installQueryClient } from './support/query-client';
+import BookingSessionPicker from '../src/components/customer/BookingSessionPicker.vue';
+import { addDaysToKey, vnDayKey, vnKeyAndClockToDate } from '../src/utils/vn-time';
+/** Picks tomorrow afternoon in the session picker and returns the start time the modal should send. */
+async function pickSession(wrapper: ReturnType<typeof mount>): Promise<Date> {
+  const date = addDaysToKey(vnDayKey(), 1);
+  wrapper.findComponent(BookingSessionPicker).vm.$emit('update:modelValue', { date, slot: 'afternoon' });
+  await nextTick();
+  return vnKeyAndClockToDate(date, 13, 0);
+}
+
 
 const claim = (overrides: Partial<StaffWarrantyClaim> = {}): StaffWarrantyClaim => ({
   id: 'claim-1',
@@ -75,7 +86,7 @@ describe('technician warranty claim page', () => {
 
     expect(apiClientMock.get).toHaveBeenCalledWith('/warranty-claims/claim-1');
     const text = wrapper.get('[data-testid="warranty-claim-detail"]').text();
-    for (const expected of ['#SO-1', 'Vòi sen', 'Khách A', '0911222333', '12 Lê Lợi, Quận 1', 'Nhắn tin', 'Gọi điện',
+    for (const expected of ['#SO-1', 'Sửa đường nước', 'Khách A', '0911222333', '12 Lê Lợi, Quận 1', 'Nhắn tin', 'Gọi điện',
       'Sửa đường nước', 'Vòi nước lại rò rỉ sau ba ngày', 'Kết luận bạn đã đề xuất', 'Khách sử dụng sai cách', 'Khách tự tháo van', 'Đã ghi nhận kết luận.']) {
       expect(text).toContain(expected);
     }
@@ -116,15 +127,40 @@ describe('technician warranty claim page', () => {
     expect(wrapper.find('[data-testid="warranty-claim-detail"]').exists()).toBe(true);
   });
 
+  it('shows the deadline for the faulty part and reports it back, then waits for the manager to inspect it', async () => {
+    const received = { id: 'pr-1', status: 'received', faultyReturnDueAt: '2099-01-01T00:00:00.000Z', faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false };
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: received }));
+    expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('Hạn nộp');
+
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: { id: 'pr-1' } } });
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'in_progress', partRequest: { ...received, faultyReturnedAt: '2026-11-05T08:00:00.000Z' } }) } });
+    await button(wrapper, 'Đã nộp linh kiện hỏng')!.trigger('click');
+    await flushPromises();
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/part-requests/pr-1/faulty-return', {});
+    expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('Chờ quản lý dịch vụ kiểm tra');
+    expect(button(wrapper, 'Đã nộp linh kiện hỏng')).toBeUndefined();
+  });
+
+  it('warns that the new part was charged when the faulty part is overdue, and shows nothing before the part is received', async () => {
+    const overdue = { id: 'pr-1', status: 'received', faultyReturnDueAt: '2026-11-01T00:00:00.000Z', faultyReturnedAt: null, faultyReturnChargedAt: '2026-11-02T00:00:00.000Z', faultyInspectionResult: null, chargeTechnician: false };
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: overdue }));
+    expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('đã bị trừ vào ví');
+
+    const waiting = await mountPage(claim({ status: 'in_progress', partRequest: { ...overdue, status: 'ready', faultyReturnDueAt: null } }));
+    expect(waiting.find('[data-testid="faulty-part-return"]').exists()).toBe(false);
+  });
+
   it('accepts the claim from the page and stays on it with the new state', async () => {
     const wrapper = await mountPage(claim());
     apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'accepted' }) } });
 
     await button(wrapper, 'Nhận yêu cầu')!.trigger('click');
+    const at = await pickSession(wrapper);
     await wrapper.findAll('button').at(-1)!.trigger('click');
     await flushPromises();
 
-    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/accept', {});
+    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/accept', { scheduledAt: at.toISOString() });
     expect(wrapper.text()).toContain('Bạn đã nhận');
     expect(button(wrapper, 'Đã đến nơi')).toBeTruthy();
     expect(routerMock.replace).not.toHaveBeenCalled();

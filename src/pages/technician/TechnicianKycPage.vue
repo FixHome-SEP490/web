@@ -424,7 +424,7 @@ const confirmWithdraw = async () => {
           <ShieldCheck :size="22" class="text-success-600 shrink-0 mt-0.5" />
           <div class="min-w-0 flex-1 space-y-1">
             <h2 class="text-lg font-semibold text-ink-900">Đã xác minh danh tính</h2>
-            <p class="text-sm text-ink-600">Bạn có thể nhận việc bình thường.</p>
+            <p class="text-sm text-ink-600">Danh tính của bạn đã được xác nhận. Vui lòng đặt lịch lên trụ sở và mang bản công chứng bằng cấp để FixHome duyệt hồ sơ, sau đó bạn mới nhận việc được.</p>
           </div>
         </div>
       </FhCard>
