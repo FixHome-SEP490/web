@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import FhButton from '../FhButton.vue';
 import FhMoney from '../FhMoney.vue';
 import FhCostBreakdown from '../FhCostBreakdown.vue';
+import ShippingShareBreakdown from '../ShippingShareBreakdown.vue';
 import type { AdditionalCostRecord, EvidenceType } from '../../api/orders.api';
 import type { VisitOrderDetails } from '../../composables/useVisitOrderDetails';
 import { orderBilling, billingAmount } from '../../utils/order-billing';
@@ -83,7 +84,9 @@ const costTotal = (cost: AdditionalCostRecord) => {
           <li v-for="item in cost.items" :key="item.id" class="flex flex-wrap justify-between gap-2">
             <span class="min-w-0 flex-1 basis-40 break-words">{{ item.description }}<span class="block text-xs text-ink-600">{{ item.quantity }} × <FhMoney :amount="item.unitPrice" /><template v-if="item.partSource === 'fixhome'"> · FixHome</template></span></span><FhMoney :amount="item.lineTotal" />
           </li>
-          <li v-if="Number(cost.shippingFee) > 0" class="flex justify-between gap-2"><span>Phí giao linh kiện</span><FhMoney :amount="cost.shippingFee" /></li>
+          <li v-if="cost.fulfillmentMethod !== 'pickup' && (Number(cost.shippingFee) > 0 || cost.shippingPolicyVersion)" class="list-none">
+            <ShippingShareBreakdown :snapshot="cost" role="customer" :fulfillment-method="cost.fulfillmentMethod" />
+          </li>
         </ul>
         <div v-if="cost.evidenceUrls?.length" class="flex flex-wrap gap-2"><img v-for="url in cost.evidenceUrls" :key="url" :src="url" alt="Ảnh chi phí phát sinh của máy này" loading="lazy" class="h-20 w-20 rounded-lg object-cover" /></div>
         <label v-if="hasExternal(cost) && canDecide(cost)" class="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl bg-warning-50 p-3 text-sm text-warning-800">

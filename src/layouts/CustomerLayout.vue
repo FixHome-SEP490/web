@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { whileOffline } from '../services/live-updates';
-import { bookingFormKey } from '../utils/booking-form-key';
+import { customerPageKey } from '../utils/booking-form-key';
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -442,7 +442,7 @@ const handleLogout = async () => {
       data-testid="customer-layout-main"
     >
       <router-view v-slot="{ Component, route: current }">
-        <component :is="Component" :key="bookingFormKey(current)" />
+        <component :is="Component" :key="customerPageKey(current)" />
       </router-view>
     </main>
 

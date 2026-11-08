@@ -4,17 +4,26 @@ const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi
 vi.mock('../src/api/client', () => ({ default: apiClientMock }));
 
 import { warehousesApi } from '../src/api/warehouses.api';
+import { partRequestsApi } from '../src/api/part-requests.api';
 import { consoleNavigation } from '../src/components/console/console-navigation';
-import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseQrAction, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
+import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseIssuedTokenSlot, warehouseQrAction, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
 import router from '../src/router';
 
 describe('Warehouse console API', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => vi.resetAllMocks());
+
+  const backendEnvelope = (data: unknown, meta?: unknown) => ({
+    success: true,
+    statusCode: 200,
+    message: 'OK',
+    data,
+    ...(meta ? { meta } : {}),
+  });
 
   it('loads warehouse rows and paginated stock using the documented endpoints', async () => {
     apiClientMock.get
-      .mockResolvedValueOnce({ data: [{ id: 'warehouse-1', name: 'Kho A', address: null, status: 'active', responsibleUserId: 'sm-1', createdAt: '', updatedAt: '' }] })
-      .mockResolvedValueOnce({ data: { data: [{ warehouseId: 'warehouse-1', partId: 'part-1', partName: 'Lọc gió', sku: 'FH-1', onHand: 0, reserved: 0, available: 0, version: 0 }], meta: { total: 1, limit: 25, offset: 0 } } });
+      .mockResolvedValueOnce({ data: backendEnvelope([{ id: 'warehouse-1', name: 'Kho A', address: null, status: 'active', responsibleUserId: 'sm-1', createdAt: '', updatedAt: '' }]) })
+      .mockResolvedValueOnce({ data: backendEnvelope([{ warehouseId: 'warehouse-1', partId: 'part-1', partName: 'Lọc gió', sku: 'FH-1', onHand: 0, reserved: 0, available: 0, version: 0 }], { total: 1, limit: 25, offset: 0 }) });
 
     const warehouses = await warehousesApi.list();
     const stock = await warehousesApi.getStock('warehouse-1', { limit: 25, offset: 0 });
@@ -27,12 +36,30 @@ describe('Warehouse console API', () => {
 
   it('sends one stock adjustment with the selected catalog id and stable idempotency key', async () => {
     const payload = { partId: 'real-catalog-part', delta: 8, kind: 'stock_in' as const, reason: 'Nhập lô kiểm kê', idempotencyKey: '00000000-0000-4000-8000-000000000001' };
-    apiClientMock.post.mockResolvedValueOnce({ data: { id: 'movement-1', warehouseId: 'warehouse-1', ...payload, actorUserId: 'sm-1', onHandAfter: 8, reservedAfter: 0, createdAt: '2026-11-04T00:00:00.000Z' } });
+    apiClientMock.post.mockResolvedValueOnce({ data: backendEnvelope({ id: 'movement-1', warehouseId: 'warehouse-1', ...payload, actorUserId: 'sm-1', onHandAfter: 8, reservedAfter: 0, createdAt: '2026-11-04T00:00:00.000Z' }) });
 
     const result = await warehousesApi.adjustStock('warehouse-1', payload);
 
     expect(apiClientMock.post).toHaveBeenCalledWith('/warehouses/warehouse-1/stock-adjustments', payload);
     expect(result.onHandAfter).toBe(8);
+  });
+
+  it('normalizes successful warehouse create and update envelopes', async () => {
+    const created = { id: 'warehouse-2', name: 'Kho B', address: null, status: 'active', responsibleUserId: 'sm-1', createdAt: '', updatedAt: '' };
+    const updated = { ...created, name: 'Kho B mới' };
+    apiClientMock.post.mockResolvedValueOnce({ data: backendEnvelope(created) });
+    apiClientMock.patch.mockResolvedValueOnce({ data: backendEnvelope(updated) });
+
+    await expect(warehousesApi.create({ name: 'Kho B', responsibleUserId: 'sm-1' })).resolves.toMatchObject({ id: 'warehouse-2' });
+    await expect(warehousesApi.update('warehouse-2', { name: 'Kho B mới' })).resolves.toMatchObject({ name: 'Kho B mới' });
+  });
+
+  it('loads the server-scoped Service Manager warehouse task queue', async () => {
+    const row = { id: 'pr-1', fulfillmentMethod: 'pickup' };
+    apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([row], { total: 2 }) });
+
+    await expect(partRequestsApi.getWarehouseTasks({ page: 1, pageSize: 20, status: 'requested' })).resolves.toEqual({ data: [row], total: 2 });
+    expect(apiClientMock.get).toHaveBeenCalledWith('/part-requests/warehouse-tasks', { params: { page: 1, pageSize: 20, status: 'requested' } });
   });
 
   it('uses only the documented W2 allocation, reserve, QR, handover and technician receive routes', async () => {
@@ -83,6 +110,10 @@ describe('Warehouse console API', () => {
     expect(warehouseQrAction('ready')).toBe('prepare');
     expect(warehouseQrAction('handed_over')).toBe('reissue');
     expect(warehouseQrAction('received')).toBe(null);
+    // Reissue after handover returns the technician receipt code, not a pickup code.
+    expect(warehouseIssuedTokenSlot('handed_over')).toBe('receipt');
+    expect(warehouseIssuedTokenSlot('ready')).toBe('pickup');
+    expect(warehouseIssuedTokenSlot('reserved')).toBe('pickup');
   });
 
   it('labels stock as returned only after a warehouse manager acceptance is recorded', () => {

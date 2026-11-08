@@ -4,6 +4,10 @@ import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
 import { Copy, Check, X } from 'lucide-vue-next';
 import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
+import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
+import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
+import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
+import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
@@ -27,11 +31,11 @@ import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeSt
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
-import { canConfirmWarehouseHandover, warehouseQrAction } from '../../utils/warehouse-fulfillment';
+import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
-const isAdmin = computed(() => auth.hasRole('ADMIN'));
+
 const page = ref(1);
 const pageSize = 20;
 const loadError = ref(false);
@@ -158,7 +162,8 @@ const loadData = async () => {
   loading.value = true;
   loadError.value = false;
   try {
-    const res = await partRequestsApi.getAll({
+    const getRequests = canOperate.value ? partRequestsApi.getWarehouseTasks : partRequestsApi.getAll;
+    const res = await getRequests({
       status: statusFilter.value !== 'ALL' ? statusFilter.value.toLowerCase() as PartRequestStatus : undefined,
       requestType: typeFilter.value !== 'ALL' ? typeFilter.value.toLowerCase() as PartRequestType : undefined,
       fulfillmentMethod: fulfillmentFilter.value !== 'ALL' ? fulfillmentFilter.value.toLowerCase() as FulfillmentMethod : undefined,
@@ -200,20 +205,7 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
 
 const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
 const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
-const canReserve = (request: PartRequest) => (canOperate.value || isAdmin.value) && ['manual_assistance', 'reserved'].includes(allocationFor(request)?.status ?? '') && !allocationLoading.value[request.id];
 const canPreparePickupQr = (allocation: WarehouseAllocation | null) => canOperate.value && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
-
-async function reserveWarehouse(request: PartRequest) {
-  if (!canReserve(request) || actionLoading.value) return;
-  actionLoading.value = true;
-  try {
-    const allocation = await partRequestsApi.reserveWarehouse(request.id, { idempotencyKey: crypto.randomUUID() });
-    allocations.value[request.id] = allocation;
-    allocationErrors.value[request.id] = '';
-    showToast('success', allocation.status === 'manual_assistance' ? 'Chưa có kho đủ tồn; đã giữ hướng hỗ trợ thủ công.' : 'Đã giữ tồn tại một kho cho toàn bộ yêu cầu.');
-  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa phân bổ được kho.'); }
-  finally { actionLoading.value = false; }
-}
 
 async function prepareWarehouseQr(request: PartRequest) {
   const allocation = allocationFor(request);
@@ -222,8 +214,12 @@ async function prepareWarehouseQr(request: PartRequest) {
   try {
     const result = await partRequestsApi.prepareWarehouseQr(request.id, { idempotencyKey: crypto.randomUUID() });
     allocations.value[request.id] = result.allocation;
-    warehouseTokens.value[request.id] = { pickup: result.qrToken, receipt: null };
-    if (result.qrToken) warehouseQrImages.value[request.id] = { pickup: await QRCode.toDataURL(result.qrToken, { width: 220 }), receipt: '' };
+    const receipt = warehouseIssuedTokenSlot(result.allocation?.status) === 'receipt';
+    warehouseTokens.value[request.id] = receipt ? { pickup: null, receipt: result.qrToken } : { pickup: result.qrToken, receipt: null };
+    if (result.qrToken) {
+      const image = await QRCode.toDataURL(result.qrToken, { width: 220 });
+      warehouseQrImages.value[request.id] = receipt ? { pickup: '', receipt: image } : { pickup: image, receipt: '' };
+    }
     if (!result.qrToken) showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
   } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa tạo được mã QR lấy hàng.'); }
   finally { actionLoading.value = false; }
@@ -232,7 +228,14 @@ async function prepareWarehouseQr(request: PartRequest) {
 async function confirmPhysicalHandover(request: PartRequest) {
   const pickup = warehouseTokens.value[request.id]?.pickup;
   const allocation = allocationFor(request);
-  if (!canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocation) || !pickup || actionLoading.value) return;
+  if (actionLoading.value) return;
+  if (!canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocation) || !pickup) {
+    handoverTarget.value = null;
+    showToast('error', allocation?.status === 'handed_over'
+      ? 'Phiếu này đã bàn giao rồi. Đưa mã nhận hàng cho kỹ thuật viên hoặc cấp lại mã nhận.'
+      : 'Mã lấy hàng không còn trong phiên. Tạo lại mã kho rồi xác nhận giao.');
+    return;
+  }
   actionLoading.value = true;
   try {
     const result = await partRequestsApi.confirmWarehouseHandover(request.id, { qrToken: pickup, idempotencyKey: crypto.randomUUID() });
@@ -242,7 +245,13 @@ async function confirmPhysicalHandover(request: PartRequest) {
     handoverTarget.value = null;
     if (!result.qrToken) showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên.');
     else showToast('success', 'Đã xác nhận bàn giao thực tế; tồn kho đã được xuất. Đưa mã nhận hàng riêng cho kỹ thuật viên.');
-  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.'); }
+  } catch (error) {
+    // The dialog covers the inline error cell, so close it and surface the reason.
+    const message = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.');
+    allocationErrors.value[request.id] = message;
+    handoverTarget.value = null;
+    showToast('error', message);
+  }
   finally { actionLoading.value = false; }
 }
 
@@ -575,14 +584,28 @@ const getUsageBadgeClass = (status: string) => {
       <template #cell-actions="{ row }">
         <div class="flex items-center justify-end gap-2">
           <FhButton
-            v-if="canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-if="warehouseTokens[row.id]?.pickup && canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="handoverTarget = row"
+          >Xác nhận đã giao trực tiếp</FhButton>
+          <FhButton
+            v-else-if="canPreparePickupQr(allocationFor(row))"
+            variant="primary"
+            size="sm"
+            :disabled="actionLoading"
+            @click="prepareWarehouseQr(row)"
+          >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+          <FhButton
+            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="handleMarkReady(row)"
           >Chuẩn bị xong</FhButton>
           <FhButton
-            v-else-if="canOperate && canDeliver(row)"
+            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && canDeliver(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -619,22 +642,23 @@ const getUsageBadgeClass = (status: string) => {
         <span v-else-if="allocationFor(row)?.status === 'handed_over'" class="text-sm font-medium text-brand-700">Quản lý đã bàn giao thực tế; tồn đã xuất.</span>
         <span v-else-if="allocationFor(row)?.status === 'ready'" class="text-sm font-medium text-brand-700">Đã có mã lấy hàng; đang chờ bàn giao thực tế.</span>
         <span v-else-if="allocationFor(row)?.status === 'reserved'" class="text-sm font-medium text-brand-700">Đã giữ toàn bộ linh kiện tại một kho.</span>
-        <span v-else-if="allocationFor(row)?.status === 'manual_assistance'" class="text-sm font-medium text-warning-800">Cần quản lý hỗ trợ thủ công; chưa sẵn sàng nhận.</span>
+        <span v-else-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm font-medium text-warning-800">Không có kho đủ linh kiện; thợ tự chuẩn bị.</span>
         <span v-else-if="allocationErrors[row.id]" class="text-sm text-danger-700">{{ allocationErrors[row.id] }}</span>
       </div>
       <template v-if="allocationFor(row)?.mode === 'warehouse'">
         <p v-if="allocationFor(row)?.warehouseName" class="text-sm text-ink-700">Kho: {{ allocationFor(row)?.warehouseName }}<template v-if="allocationFor(row)?.warehouseAddress"> · {{ allocationFor(row)?.warehouseAddress }}</template></p>
-        <p v-if="allocationFor(row)?.reviewRequired" class="text-sm text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
-        <p v-if="allocationFor(row)?.manualAssistanceReason" class="text-sm text-warning-800">Chưa có một kho đủ tồn cho toàn bộ yêu cầu. Có thể nhờ quản lý hỗ trợ thủ công; không tự chia qua nhiều kho.</p>
+        <p
+          v-if="allocationFor(row)?.distanceReference === 'booking_snapshot' && typeof allocationFor(row)?.estimatedStraightLineKm === 'number'"
+          class="text-sm text-warning-800"
+        >Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~{{ allocationFor(row)?.estimatedStraightLineKm?.toFixed(1) }} km; chưa xác minh đường đi/ETA</p>
+        <p v-else-if="allocationFor(row)?.reviewRequired" class="text-sm text-warning-800">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+        <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
         <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
-        <div v-if="allocationFor(row)?.status === 'manual_assistance'" class="flex flex-wrap gap-2">
-          <FhButton v-if="canReserve(row)" variant="secondary" size="sm" :disabled="actionLoading" @click="reserveWarehouse(row)">Thử phân bổ lại</FhButton>
-          <router-link to="/console/warehouses" class="inline-flex min-h-10 items-center text-sm font-medium text-brand-700 underline">Mở kho và tồn thực tế</router-link>
-        </div>
+
         <FhButton v-if="canPreparePickupQr(allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
         <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-brand-200 bg-brand-50 p-3">
           <img :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 bg-white p-1" />
-          <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
+          <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton v-if="canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
         </div>
         <div v-if="warehouseTokens[row.id]?.receipt && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-success-200 bg-success-50 p-3">
           <img :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 bg-white p-1" />
@@ -742,10 +766,29 @@ const getUsageBadgeClass = (status: string) => {
           </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(detailModalRequest.status) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Phí giao hàng</dt><dd><FhMoney :amount="detailModalRequest.shippingFee || 0" /></dd></div>
+          <div class="list-none"><ShippingShareBreakdown :snapshot="detailModalRequest" role="manager" :fulfillment-method="detailModalRequest.fulfillmentMethod" /></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hoàn tất</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</dd></div>
         </dl>
+
+        <DeliveryOperationsPanel
+          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee >= 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
+          :request-id="detailModalRequest.id"
+          :fulfillment-method="detailModalRequest.fulfillmentMethod"
+          :request-type="detailModalRequest.requestType"
+          :shipping-fee="detailModalRequest.shippingFee"
+          audience="manager"
+        />
+        <DeliveryTermsPanel
+          v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee > 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
+          :key="`terms-${detailModalRequest.id}`"
+          :request-id="detailModalRequest.id"
+          :request-type="detailModalRequest.requestType"
+          :fulfillment-method="detailModalRequest.fulfillmentMethod"
+          :shipping-fee="detailModalRequest.shippingFee"
+          audience="manager"
+          :technician-id="detailModalRequest.technicianId"
+        />
 
         <div>
           <h4 class="mb-2 text-sm font-semibold text-ink-900">Linh kiện</h4>

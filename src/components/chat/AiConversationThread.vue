@@ -154,7 +154,10 @@ const latestReplyId = computed(() => {
 
 function answersFor(message: AiChatMessage): string[] {
   if (c.isThinking || message.id !== latestReplyId.value) return [];
-  return quickReplies(message.reply?.clarification?.questionsVi?.[0]);
+  const offered = (message.reply?.clarification?.answerOptionsVi || []).map((o) => o.trim()).filter(Boolean);
+  // The assistant's own answers for its question first; the yes/no guess from
+  // the question's last word only when it sent none.
+  return offered.length ? offered.slice(0, 4) : quickReplies(message.reply?.clarification?.questionsVi?.[0]);
 }
 
 function answer(text: string) {
@@ -265,6 +268,8 @@ defineExpose({ scrollToEnd });
             </div>
 
             <!-- What it found. The booking action lives in the pinned slot. -->
+            <!-- Fades in under the finished text instead of popping in and shoving the thread (PO 08/11). -->
+            <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="opacity-0 translate-y-1">
             <div
               v-if="message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable'"
               class="border-l-2 border-brand-200 pl-3 py-2 space-y-4 [overflow-wrap:anywhere]"
@@ -323,6 +328,7 @@ defineExpose({ scrollToEnd });
 
               <p v-if="message.reply.disclaimerVi" class="text-sm text-ink-700 leading-relaxed">{{ message.reply.disclaimerVi }}</p>
             </div>
+            </Transition>
           </div>
         </div>
       </div>

@@ -115,6 +115,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
           item('Người dùng', '/console/admin/users', Users),
           item('Đánh giá', '/console/admin/reviews', Star),
           item('Cấu hình', '/console/admin/config', Sliders),
+          item('Cấu hình giao hàng', '/console/admin/w3-delivery-policy', Package),
           item('Nhật ký thao tác', '/console/admin/audit-logs', ScrollText),
         ],
       },

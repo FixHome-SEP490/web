@@ -38,6 +38,12 @@ export interface PartRequest {
   status: PartRequestStatus;
   reason?: string | null;
   shippingFee: number;
+  /** Optional read-only delivery snapshot; absent fields remain LEGACY. */
+  shippingPolicyVersion?: string | null;
+  customerShippingShare?: number | null;
+  technicianShippingShare?: number | null;
+  /** Display only when supplied by an authoritative server read. */
+  technicianNetLabor?: number | null;
   additionalCostId?: string | null;
   quotationId?: string | null;
   qrToken?: string | null;
@@ -61,7 +67,7 @@ export interface PartRequest {
 }
 
 export type WarehouseAllocationMode = 'warehouse' | 'legacy';
-export type WarehouseAllocationStatus = 'manual_assistance' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
+export type WarehouseAllocationStatus = 'manual_assistance' | 'stock_unavailable' | 'reserved' | 'ready' | 'handed_over' | 'received' | 'released' | null;
 export interface WarehouseAllocation {
   partRequestId: string;
   mode: WarehouseAllocationMode;
@@ -70,9 +76,12 @@ export interface WarehouseAllocation {
   warehouseName?: string | null;
   warehouseAddress?: string | null;
   responsibleUserId?: string | null;
+  estimatedStraightLineKm?: number | null;
+  distanceReference?: 'booking_snapshot' | null;
   distanceNotVerified?: boolean;
   reviewRequired?: boolean;
   manualAssistanceReason?: string | null;
+  stockUnavailable?: boolean;
   tokenExpiresAt?: string | null;
   tokenVersion?: number;
   handedOverAt?: string | null;
@@ -504,6 +513,21 @@ export const partRequestsApi = {
     return {
       data: res.data.data || [],
       total: res.data.meta?.total || 0,
+    };
+  },
+
+  /** SM: list requests assigned to the manager's warehouses by Backend ownership scope. */
+  async getWarehouseTasks(
+    params?: QueryPartRequestsParams,
+  ): Promise<{ data: PartRequest[]; total: number }> {
+    const res = await apiClient.get<{
+      success: true;
+      data: PartRequest[];
+      meta: { total: number };
+    }>('/part-requests/warehouse-tasks', { params });
+    return {
+      data: res.data.data,
+      total: res.data.meta.total,
     };
   },
 
