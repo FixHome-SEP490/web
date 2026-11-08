@@ -70,6 +70,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function responseData(value: unknown): unknown {
+  if (!isRecord(value) || value.success !== true || !('data' in value)) {
+    throw new Error('Backend returned an invalid warehouse response envelope.');
+  }
+  return value.data;
+}
+
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`Backend returned invalid warehouse ${field}.`);
   return value.trim();
@@ -146,18 +153,19 @@ function normalizePage<T>(value: unknown, normalize: (item: unknown) => T): Ware
 export const warehousesApi = {
   async list(): Promise<Warehouse[]> {
     const response = await apiClient.get<unknown>('/warehouses');
-    if (!Array.isArray(response.data)) throw new Error('Backend returned an invalid warehouse list response.');
-    return response.data.map(normalizeWarehouse);
+    const data = responseData(response.data);
+    if (!Array.isArray(data)) throw new Error('Backend returned an invalid warehouse list response.');
+    return data.map(normalizeWarehouse);
   },
 
   async create(payload: WarehousePayload): Promise<Warehouse> {
     const response = await apiClient.post<unknown>('/warehouses', payload);
-    return normalizeWarehouse(response.data);
+    return normalizeWarehouse(responseData(response.data));
   },
 
   async update(id: string, payload: WarehouseUpdatePayload): Promise<Warehouse> {
     const response = await apiClient.patch<unknown>(`/warehouses/${id}`, payload);
-    return normalizeWarehouse(response.data);
+    return normalizeWarehouse(responseData(response.data));
   },
 
   async remove(id: string): Promise<void> {
@@ -179,6 +187,6 @@ export const warehousesApi = {
       throw new Error('Số lượng điều chỉnh không hợp lệ.');
     }
     const response = await apiClient.post<unknown>(`/warehouses/${id}/stock-adjustments`, payload);
-    return normalizeMovement(response.data);
+    return normalizeMovement(responseData(response.data));
   },
 };
