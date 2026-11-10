@@ -112,7 +112,7 @@ async function topUp() {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-6 pb-16">
+  <div class="w-full space-y-6 pb-16">
     <!-- Header -->
     <div>
       <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">

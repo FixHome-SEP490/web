@@ -130,7 +130,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 </script>
 
 <template>
-  <div class="space-y-6 max-w-4xl mx-auto pb-16">
+  <div class="w-full space-y-6 pb-16">
     <!-- Header banner -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>

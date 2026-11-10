@@ -120,7 +120,7 @@ async function claimCode(code: string) {
 </script>
 
 <template>
-  <main :key="customerId ?? 'guest'" lang="vi" class="mx-auto w-full max-w-[1120px] space-y-5 px-4 py-5 sm:space-y-6 sm:px-6 sm:py-7" data-testid="customer-vouchers-page">
+  <div :key="customerId ?? 'guest'" lang="vi" class="w-full space-y-5 pb-12" data-testid="customer-vouchers-page">
     <header>
       <p class="text-sm font-medium text-brand-700">FixHome · Khách hàng</p>
       <h1 class="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
@@ -163,5 +163,5 @@ async function claimCode(code: string) {
       @claim="claimCode"
       @validate-code="claimCode"
     />
-  </main>
+  </div>
 </template>

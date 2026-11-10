@@ -194,7 +194,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto space-y-6 pb-12">
+  <div class="w-full space-y-6 pb-12">
     <!-- Header -->
     <div class="space-y-1">
       <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
@@ -295,7 +295,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Loading: the shape of the cards -->
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 gap-5" aria-busy="true" aria-label="Đang tải bảo hành">
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" aria-busy="true" aria-label="Đang tải bảo hành">
       <div v-for="i in 2" :key="i" class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <FhSkeleton width="60%" height="22px" />
@@ -368,7 +368,7 @@ onUnmounted(() => {
     </p>
 
     <!-- One surface per order -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       <section
         v-for="order in filteredWarrantyOrders"
         :key="order.orderId"

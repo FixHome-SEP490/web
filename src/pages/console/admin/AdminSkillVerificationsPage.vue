@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { FileText, UploadCloud } from 'lucide-vue-next';
-import { FhButton, FhStatusPill, FhConfirmDialog } from '../../../components';
+import { FileText, UploadCloud, X } from 'lucide-vue-next';
+import { FhButton, FhStatusPill, FhConfirmDialog, FhSkeleton } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
@@ -15,6 +15,7 @@ import {
   type SkillVerification,
   type SkillVerificationStatus,
 } from '../../../api/admin-skill-verifications.api';
+import SkillVerificationDrawer from '../../../components/console/SkillVerificationDrawer.vue';
 import { vnDateString } from '../../../utils/vn-time';
 
 const columns: ConsoleColumn[] = [
@@ -80,13 +81,60 @@ watch(statusFilter, () => {
 });
 watch(page, () => void loadVerifications());
 
-const openDocument = async (verification: SkillVerification, documentId: string) => {
+// ---- Drawer State (Hồ sơ kỹ thuật viên) ----
+const showDrawer = ref(false);
+const selectedVerification = ref<SkillVerification | null>(null);
+
+const openDrawer = async (verification: SkillVerification) => {
+  selectedVerification.value = verification;
+  showDrawer.value = true;
+
   try {
-    const { signedUrl } = await adminSkillVerificationsApi.getDocumentAccess(verification.id, documentId);
-    window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    const fullVerification = await adminSkillVerificationsApi.get(verification.id);
+    if (showDrawer.value && selectedVerification.value?.id === fullVerification.id) {
+      selectedVerification.value = fullVerification;
+    }
   } catch {
-    error.value = 'Chưa mở được tài liệu, vui lòng thử lại.';
+    // The drawer keeps the summary from the list when the full record does not load.
   }
+};
+
+// ---- Document Preview Modal (phóng to ảnh, xem PDF iframe) ----
+const previewUrl = ref('');
+const showPreviewModal = ref(false);
+const previewTitle = ref('');
+const previewDocumentId = ref('');
+const previewLoading = ref(false);
+
+const openDocument = async (
+  verification: SkillVerification,
+  documentId: string,
+  title?: string,
+) => {
+  selectedVerification.value = verification;
+  previewDocumentId.value = documentId;
+  previewTitle.value = title || verification.serviceName || 'Chứng chỉ';
+  previewUrl.value = '';
+  showPreviewModal.value = true;
+  previewLoading.value = true;
+
+  try {
+    const { signedUrl } = await adminSkillVerificationsApi.getDocumentAccess(
+      verification.id,
+      documentId,
+    );
+    previewUrl.value = signedUrl;
+  } catch (reason) {
+    showPreviewModal.value = false;
+    error.value = getErrorMessage(reason, 'Chưa mở được tài liệu, vui lòng thử lại.');
+  } finally {
+    previewLoading.value = false;
+  }
+};
+
+const openDocumentAccess = (title: string, documentId: string) => {
+  if (!selectedVerification.value) return;
+  void openDocument(selectedVerification.value, documentId, title);
 };
 
 // ---- Approve (requires uploading the FixHome-issued certificate) ----
@@ -132,6 +180,7 @@ const confirmApprove = async () => {
     });
     successMessage.value = `Đã duyệt kỹ năng "${verification.serviceName}" cho ${verification.technician?.fullName ?? 'thợ'}.`;
     showApproveModal.value = false;
+    showDrawer.value = false;
     await loadVerifications();
   } catch (reason) {
     approveError.value = getErrorMessage(reason, 'Chưa duyệt được kỹ năng, vui lòng thử lại.');
@@ -166,6 +215,7 @@ const confirmReject = async () => {
     await adminSkillVerificationsApi.reject(verificationToReject.value.id, rejectReason.value.trim());
     successMessage.value = `Đã từ chối kỹ năng "${verificationToReject.value.serviceName}".`;
     showRejectModal.value = false;
+    showDrawer.value = false;
     await loadVerifications();
   } catch (reason) {
     error.value = getErrorMessage(reason, 'Chưa từ chối được yêu cầu, vui lòng thử lại.');
@@ -212,11 +262,19 @@ const formatDate = (value: string) => {
       empty-text="Không có yêu cầu phù hợp."
     >
       <template #cell-technician="{ row }">
-        <div class="font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
+        <button
+          v-if="row.documents.length > 0"
+          type="button"
+          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          @click="openDocument(row, row.documents[0].id, row.documents[0].fileName)"
+        >
+          {{ row.technician?.fullName || 'Kỹ thuật viên' }}
+        </button>
+        <div v-else class="font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
         <div class="truncate text-xs text-ink-500">{{ row.technician?.email || '—' }}</div>
       </template>
       <template #cell-service="{ row }">
-        <span class="text-ink-800">{{ row.serviceName || 'Dịch vụ' }}</span>
+        <span class="text-ink-800 font-medium">{{ row.serviceName || 'Dịch vụ' }}</span>
       </template>
       <template #cell-submittedAt="{ row }">
         <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.submittedAt)) }}</span>
@@ -228,7 +286,7 @@ const formatDate = (value: string) => {
               type="button"
               class="flex max-w-64 items-center gap-1 text-left text-sm text-brand-700 hover:underline"
               :title="document.fileName"
-              @click="openDocument(row, document.id)"
+              @click="openDocument(row, document.id, document.fileName)"
             >
               <FileText :size="13" class="shrink-0" aria-hidden="true" />
               <span class="truncate">{{ document.issuedById ? 'FixHome cấp' : 'Của thợ' }}: {{ document.fileName }}</span>
@@ -241,13 +299,36 @@ const formatDate = (value: string) => {
         <FhStatusPill :status="row.status" :label="statusLabel(row.status)" />
       </template>
       <template #cell-actions="{ row }">
-        <div v-if="row.status === 'PENDING'" class="flex items-center justify-end gap-2">
-          <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="openApprove(row)">
-            Duyệt
-          </FhButton>
-          <ConsoleMoreMenu label="Thao tác khác với yêu cầu">
-            <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
-          </ConsoleMoreMenu>
+        <div class="flex items-center justify-end gap-2">
+          <template v-if="row.status === 'PENDING'">
+            <FhButton variant="primary" size="sm" :loading="actionLoadingId === row.id" :disabled="Boolean(actionLoadingId)" @click="openApprove(row)">
+              Duyệt
+            </FhButton>
+            <ConsoleMoreMenu label="Thao tác khác với yêu cầu">
+              <ConsoleMenuItem v-if="row.documents.length > 0" @click="openDocument(row, row.documents[0].id, row.documents[0].fileName)">
+                Xem chứng chỉ
+              </ConsoleMenuItem>
+              <ConsoleMenuItem @click="openDrawer(row)">
+                Xem hồ sơ kỹ thuật viên
+              </ConsoleMenuItem>
+              <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
+            </ConsoleMoreMenu>
+          </template>
+          <template v-else>
+            <FhButton
+              v-if="row.documents.length > 0"
+              variant="secondary"
+              size="sm"
+              @click="openDocument(row, row.documents[0].id, row.documents[0].fileName)"
+            >
+              Xem chứng chỉ
+            </FhButton>
+            <ConsoleMoreMenu label="Thao tác khác với yêu cầu">
+              <ConsoleMenuItem @click="openDrawer(row)">
+                Xem hồ sơ kỹ thuật viên
+              </ConsoleMenuItem>
+            </ConsoleMoreMenu>
+          </template>
         </div>
       </template>
     </ConsoleTable>
@@ -283,6 +364,7 @@ const formatDate = (value: string) => {
       </div>
     </div>
 
+    <!-- Reject -->
     <FhConfirmDialog
       :open="showRejectModal"
       :loading="actionLoadingId === verificationToReject?.id"
@@ -304,5 +386,78 @@ const formatDate = (value: string) => {
       ></textarea>
       <p v-if="rejectReasonError" class="mt-1 text-sm text-danger-600" role="alert">{{ rejectReasonError }}</p>
     </FhConfirmDialog>
+
+    <!-- Document preview modal (hỗ trợ ảnh, pdf qua iframe, video) -->
+    <div
+      v-if="showPreviewModal"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="doc-preview-title"
+      @click.self="showPreviewModal = false"
+      @keydown.esc="showPreviewModal = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full flex flex-col max-h-[95vh] overflow-hidden">
+        <div class="flex items-center justify-between gap-3 border-b border-ink-100 px-6 py-4">
+          <div class="flex flex-wrap items-center gap-3 truncate">
+            <h3 id="doc-preview-title" class="font-semibold text-ink-900 truncate">{{ previewTitle }}</h3>
+            <div v-if="selectedVerification && selectedVerification.documents.length > 1" class="flex items-center gap-1.5 shrink-0">
+              <button
+                v-for="(doc, idx) in selectedVerification.documents"
+                :key="doc.id"
+                type="button"
+                class="px-2.5 py-1 text-xs rounded-md transition-colors"
+                :class="previewDocumentId === doc.id ? 'bg-brand-600 text-white font-medium' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'"
+                @click="openDocument(selectedVerification, doc.id, doc.fileName)"
+              >
+                {{ doc.issuedById ? 'FixHome cấp' : `Tài liệu ${idx + 1}` }}
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+            aria-label="Đóng"
+            @click="showPreviewModal = false"
+          >
+            <X :size="18" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="relative flex min-h-[500px] flex-1 items-center justify-center overflow-auto bg-ink-100 p-6">
+          <FhSkeleton v-if="previewLoading" width="320px" height="420px" rounded="md" />
+          <template v-else-if="previewUrl">
+            <video
+              v-if="previewTitle.toLowerCase().includes('video')"
+              :src="previewUrl"
+              controls
+              autoplay
+              class="max-w-full max-h-[700px] rounded-lg shadow-lg bg-black"
+            ></video>
+            <img
+              v-else-if="previewTitle.toLowerCase().includes('ảnh') || previewUrl.toLowerCase().includes('.jpg') || previewUrl.toLowerCase().includes('.jpeg') || previewUrl.toLowerCase().includes('.png') || previewUrl.toLowerCase().includes('.webp')"
+              :src="previewUrl"
+              class="max-w-full max-h-[700px] object-contain rounded-lg shadow-lg border border-ink-200 bg-white"
+              :alt="previewTitle"
+            />
+            <iframe
+              v-else
+              :src="previewUrl"
+              :title="previewTitle"
+              class="w-full h-[700px] border-0 rounded-lg shadow-lg bg-white"
+            ></iframe>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skill Verification Drawer ("Hồ sơ kỹ thuật viên") -->
+    <SkillVerificationDrawer
+      v-model:open="showDrawer"
+      :verification="selectedVerification"
+      :loading-approve="actionLoadingId === selectedVerification?.id"
+      @approve="openApprove"
+      @reject="openReject"
+      @preview="openDocumentAccess"
+    />
   </div>
 </template>

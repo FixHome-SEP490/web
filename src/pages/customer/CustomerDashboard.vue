@@ -29,6 +29,7 @@ import { useCachedQuery } from '../../composables/useCachedQuery';
 import { REFERENCE_STALE_TIME } from '../../lib/query-client';
 import { queryKeys } from '../../lib/query-keys';
 import { sharedQueries } from '../../lib/queries';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -62,7 +63,7 @@ function isFixedPrice(svc: ServiceItem): boolean {
 
 // Quick searches under the search box.
 const quickChips = [
-  { id: 'urgent', title: 'Sửa điện nước', icon: Zap, query: 'điện' },
+  { id: 'urgent', title: 'Sửa quạt điện', icon: Zap, query: 'Sửa quạt điện' },
   { id: 'ac', title: 'Vệ sinh máy lạnh', icon: Snowflake, query: 'vệ sinh điều hòa' },
 ];
 
@@ -154,42 +155,54 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- The one emphasis block of the page: search what needs fixing -->
-    <section class="rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-xs">
-      <div class="max-w-2xl space-y-4">
-        <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-balance">Cần sửa gì hôm nay?</h2>
+    <section class="relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-xs">
+      <div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <div class="max-w-2xl space-y-4 flex-1">
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-balance">Cần sửa gì hôm nay?</h2>
 
-        <form class="max-w-xl" role="search" @submit.prevent="handleSearch">
-          <label for="dashboard-search" class="sr-only">Tìm dịch vụ sửa chữa</label>
-          <div class="relative">
-            <input
-              id="dashboard-search"
-              v-model="searchQuery"
-              type="text"
-              placeholder="Điện, nước, máy lạnh, thông cống, tivi…"
-              class="w-full h-13 pl-4 pr-14 rounded-xl bg-white text-ink-900 placeholder:text-ink-400 text-base outline-none focus-visible:ring-4 focus-visible:ring-white/40 shadow-xs"
-            />
+          <form class="max-w-xl" role="search" @submit.prevent="handleSearch">
+            <label for="dashboard-search" class="sr-only">Tìm dịch vụ sửa chữa</label>
+            <div class="relative">
+              <input
+                id="dashboard-search"
+                v-model="searchQuery"
+                type="text"
+                placeholder="Điện, nước, máy lạnh, thông cống, tivi…"
+                class="w-full h-13 pl-4 pr-14 rounded-xl bg-white text-ink-900 placeholder:text-ink-400 text-base outline-none focus-visible:ring-4 focus-visible:ring-white/40 shadow-xs"
+              />
+              <button
+                type="submit"
+                class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white flex items-center justify-center transition-colors"
+                title="Tìm kiếm dịch vụ"
+                aria-label="Tìm kiếm dịch vụ"
+              >
+                <Search :size="18" />
+              </button>
+            </div>
+          </form>
+
+          <div class="flex flex-wrap items-center gap-2">
             <button
-              type="submit"
-              class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white flex items-center justify-center transition-colors"
-              title="Tìm kiếm dịch vụ"
-              aria-label="Tìm kiếm dịch vụ"
+              v-for="chip in quickChips"
+              :key="chip.id"
+              type="button"
+              class="h-8.5 px-3.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-xs sm:text-sm text-white transition-colors shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+              @click="handleChipClick(chip)"
             >
-              <Search :size="18" />
+              <component :is="chip.icon" :size="15" :stroke-width="1.75" />
+              {{ chip.title }}
             </button>
           </div>
-        </form>
+        </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            v-for="chip in quickChips"
-            :key="chip.id"
-            type="button"
-            class="h-8.5 px-3.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-xs sm:text-sm text-white transition-colors shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
-            @click="handleChipClick(chip)"
-          >
-            <component :is="chip.icon" :size="15" :stroke-width="1.75" />
-            {{ chip.title }}
-          </button>
+        <!-- Hero illustration on the right for wide screens -->
+        <div class="hidden md:flex shrink-0 items-center justify-center max-w-[240px] lg:max-w-[280px]">
+          <img
+            :src="'/images/dashboard-hero.png'"
+            alt="Dịch vụ sửa chữa tại nhà FixHome"
+            class="w-full h-auto max-h-52 object-contain drop-shadow-md select-none pointer-events-none"
+            loading="lazy"
+          />
         </div>
       </div>
     </section>
@@ -342,9 +355,18 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         <li v-for="srv in popularServices" :key="srv.id" class="border-b border-ink-100 sm:odd:border-r">
           <button
             type="button"
-            class="w-full px-5 py-3.5 hover:bg-ink-50 transition-colors flex items-center justify-between gap-3 text-left cursor-pointer group"
+            class="w-full px-5 py-3.5 hover:bg-ink-50 transition-colors flex items-center justify-between gap-3.5 text-left cursor-pointer group"
             @click="handleServiceClick(srv)"
           >
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 p-1.5 group-hover:border-brand-200 group-hover:bg-brand-50/60 transition-colors">
+              <img
+                :src="getServiceArtworkUrl(srv)"
+                alt=""
+                loading="lazy"
+                class="h-full w-full object-contain"
+                aria-hidden="true"
+              />
+            </span>
             <div class="min-w-0 flex-1">
               <span class="block text-sm font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate" :title="srv.name">
                 {{ srv.name }}
