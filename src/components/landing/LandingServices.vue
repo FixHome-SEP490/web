@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ArrowRight } from 'lucide-vue-next';
-import { categoryIcon } from '../booking/service-icons';
 import { catalogApi, type ServiceCategory } from '../../api/catalog.api';
 import { useReferenceData } from '../../composables/useCachedQuery';
 import { queryKeys } from '../../lib/query-keys';
 import { FhEmptyState, FhSkeleton } from '../index';
+import { getCategoryArtworkUrl } from '../../utils/service-presentation';
 
 const categories = ref<ServiceCategory[]>([]);
 const loading = ref(true);
@@ -119,12 +119,13 @@ onMounted(loadCategories);
           <div>
             <div class="flex items-center justify-between">
               <span
-                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"
+                class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-ink-150 bg-ink-50 p-2 shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:border-brand-200 group-hover:bg-brand-50/60"
               >
-                <component
-                  :is="categoryIcon(category)"
-                  :size="22"
-                  :stroke-width="1.75"
+                <img
+                  :src="getCategoryArtworkUrl(category)"
+                  alt=""
+                  loading="lazy"
+                  class="h-full w-full object-contain"
                   aria-hidden="true"
                 />
               </span>

@@ -12,6 +12,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { readPage } from '../../api/paging';
 import { getPublicServicePricing, getServicePriceSummaryDisplay } from '../../utils/public-service-pricing';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const router = useRouter();
 const selectedCategoryId = useQueryState('category', (raw) => raw?.trim() ?? '', (value) => value || undefined);
@@ -294,10 +295,6 @@ function categoryName(service: ServiceItem): string {
   return service.category?.name ?? categoryNames.value.get(service.categoryId) ?? '';
 }
 
-function categoryFor(service: ServiceItem): ServiceCategory | undefined {
-  return service.category ?? categories.value.find((category) => category.id === service.categoryId);
-}
-
 function pricing(service: ServiceItem) {
   return getPublicServicePricing(service);
 }
@@ -333,12 +330,22 @@ onBeforeUnmount(() => {
 <template>
   <div class="public-services">
     <section class="services-hero" aria-labelledby="services-title">
-      <div class="services-hero__copy">
-        <p class="services-eyebrow">DỊCH VỤ FIXHOME</p>
-        <h1 id="services-title">Tìm đúng dịch vụ sửa chữa.</h1>
-        <p class="services-hero__lead">
-          Tra cứu dịch vụ và mức giá trước khi đặt lịch.
-        </p>
+      <div class="services-hero__inner">
+        <div class="services-hero__copy">
+          <p class="services-eyebrow">DỊCH VỤ FIXHOME</p>
+          <h1 id="services-title">Tìm đúng dịch vụ sửa chữa.</h1>
+          <p class="services-hero__lead">
+            Tra cứu dịch vụ và mức giá trước khi đặt lịch.
+          </p>
+        </div>
+        <div class="services-hero__illustration" aria-hidden="true">
+          <img
+            :src="'/images/dashboard-hero.png'"
+            alt=""
+            loading="lazy"
+            class="services-hero__img"
+          />
+        </div>
       </div>
 
       <div
@@ -513,7 +520,13 @@ onBeforeUnmount(() => {
           >
             <div class="service-card__top">
               <div class="service-mark" aria-hidden="true">
-                <component :is="categoryIcon(categoryFor(service))" :size="20" :stroke-width="1.75" />
+                <img
+                  :src="getServiceArtworkUrl(service)"
+                  alt=""
+                  loading="lazy"
+                  class="service-mark__img"
+                  aria-hidden="true"
+                />
               </div>
               <div class="service-card__meta">
                 <span v-if="categoryName(service)" class="service-category">{{ categoryName(service) }}</span>
@@ -597,6 +610,33 @@ onBeforeUnmount(() => {
   gap: 13px;
   padding: 22px 0 46px;
   text-align: center;
+}
+
+.services-hero__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 860px);
+}
+
+.services-hero__illustration {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .services-hero__illustration {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .services-hero__img {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.08));
+    pointer-events: none;
+  }
 }
 
 .services-hero__copy { width: min(100%, 800px); }
@@ -862,15 +902,28 @@ onBeforeUnmount(() => {
 .service-card__top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .service-card__meta { display: grid; min-width: 0; gap: 4px; }
 .service-mark {
-  display: grid;
-  width: 40px;
-  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--color-brand-100);
+  border: 1px solid var(--color-ink-150);
   border-radius: var(--radius-md);
+  background: var(--color-ink-50);
+  padding: 3px;
+  overflow: hidden;
+  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+.service-card:hover .service-mark {
   background: var(--color-brand-50);
-  color: var(--color-brand-700);
+  border-color: var(--color-brand-200);
+  transform: scale(1.06);
+}
+.service-mark__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .service-category { color: var(--color-ink-600); font-size: 12px; font-weight: 500; }
 .service-card__mode {
