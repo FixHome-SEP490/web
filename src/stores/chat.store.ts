@@ -10,6 +10,7 @@ import {
 import { chatSocketService, type TypingEvent } from '../services/chat-socket.service';
 import { registerTokenRefreshed } from '../api/client';
 import { useAuthStore } from './auth.store';
+import { coalesce } from '../utils/coalesce';
 import { prepareVideo, VideoPrepError, videoProblemText } from '../lib/video-prep';
 import { uploadErrorText, uploadWithRetry, UploadCancelledError } from '../lib/upload-retry';
 
@@ -207,11 +208,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // The socket set-up and the layout both ask when a page opens: one request serves them.
+  const readConversations = coalesce(() => messagingApi.listConversations());
   async function fetchConversations() {
     if (!authStore.isAuthenticated) return;
     try {
       loadingConversations.value = true;
-      const data = await messagingApi.listConversations();
+      const data = await readConversations();
       conversations.value = data;
     } catch (err) {
       console.error('Failed to load conversations:', err);
