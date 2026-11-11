@@ -58,8 +58,12 @@ describe('Warehouse console API', () => {
     const row = { id: 'pr-1', fulfillmentMethod: 'pickup' };
     apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([row], { total: 2 }) });
 
-    await expect(partRequestsApi.getWarehouseTasks({ page: 1, pageSize: 20, status: 'requested' })).resolves.toEqual({ data: [row], total: 2 });
+    // An older Backend sends no statusCounts: the page then counts the rows it has.
+    await expect(partRequestsApi.getWarehouseTasks({ page: 1, pageSize: 20, status: 'requested' })).resolves.toEqual({ data: [row], total: 2, statusCounts: null });
     expect(apiClientMock.get).toHaveBeenCalledWith('/part-requests/warehouse-tasks', { params: { page: 1, pageSize: 20, status: 'requested' } });
+    // BUG DETECTOR 89: totals per status over the whole filtered queue are passed through.
+    apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([row], { total: 2, statusCounts: { requested: 2, ready: 5 } }) });
+    await expect(partRequestsApi.getWarehouseTasks({ page: 1 })).resolves.toEqual({ data: [row], total: 2, statusCounts: { requested: 2, ready: 5 } });
   });
 
   it('uses only the documented W2 allocation, reserve, QR, handover and technician receive routes', async () => {

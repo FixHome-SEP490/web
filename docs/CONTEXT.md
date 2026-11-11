@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-11 16:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
+> Cập nhật lần cuối: 2026-11-11 19:32 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/bug-detector-1111-web
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-11 19:32 (UTC+7) | ToanAltF4 | fix/bug-detector-1111-web | Sửa BUG DETECTOR 67 (đăng nhập không đi theo redirect của vai trò khác), 78 (đổi kho nhanh không ghi đè tồn), 79 (thử lại điều chỉnh tồn theo đúng kho), 80 (nhãn nhật ký kho W2), 83 (popup bàn giao rõ nội dung), 84 (đọc lại trạng thái khi bàn giao lỗi), 85 (bàn giao xong không báo lỗi vì QR), 89 (thống kê trạng thái từ server), 90 (dùng phân kho gửi kèm, bỏ N request)
 - 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
 - 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm
 - 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-03 07:44 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Làm mới chi tiết dịch vụ công khai với giá theo `priceSummary`, disclosure phạm vi/điều kiện và CTA giữ `serviceId`; Browser kiểm fixture ở viewport di động và desktop, Backend thật/Mobile CHƯA KIỂM CHỨNG.
 - 2026-11-03 07:04 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-hybrid-20261103 | Điều chỉnh W1.02 /services theo phản hồi owner: hero, tiêu đề và tìm kiếm căn giữa như bản cũ; gom danh mục chính, phần còn lại Xem thêm/Thu gọn, giữ lưới 1–4 cột, giá API, tìm kiếm, lọc, phân trang 9 và quyền đặt lịch.
 - 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
-- 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.

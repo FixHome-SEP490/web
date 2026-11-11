@@ -59,7 +59,8 @@ const deleteLoading = ref(false);
 const parts = ref<{ id: string; name: string; sku: string | null; isActive: boolean }[]>([]);
 const partId = ref('');
 const adjustment = ref({ kind: 'stock_in' as 'stock_in' | 'correction', delta: '1', reason: '' });
-const pendingCommand = ref<{ partId: string; delta: number; kind: 'stock_in' | 'correction'; reason: string; idempotencyKey: string } | null>(null);
+// BUG DETECTOR 79: a retry reuses the key only for the same command at the same warehouse.
+const pendingCommand = ref<{ warehouseId: string; partId: string; delta: number; kind: 'stock_in' | 'correction'; reason: string; idempotencyKey: string } | null>(null);
 const quantityError = computed(() => {
   const quantity = Number(adjustment.value.delta);
   if (!Number.isSafeInteger(quantity) || quantity === 0) return 'Nhập số lượng nguyên khác 0.';
@@ -118,27 +119,36 @@ async function loadCatalog() {
   }
 }
 
+// BUG DETECTOR 78: switching warehouse or tab quickly could let a slower, older answer
+// overwrite the rows of the warehouse now on screen. Only the latest load may write.
+let rowsLoad = 0;
 async function loadRows() {
-  if (!selectedId.value) { stock.value = []; movements.value = []; return; }
+  const ticket = ++rowsLoad;
+  if (!selectedId.value) { stock.value = []; movements.value = []; dataLoading.value = false; return; }
+  const warehouseId = selectedId.value;
+  const tab = activeTab.value;
   dataLoading.value = true;
   loadError.value = '';
   try {
     const query = { limit: pageSize, offset: offset.value };
-    if (activeTab.value === 'stock') {
-      const result = await warehousesApi.getStock(selectedId.value, query);
+    if (tab === 'stock') {
+      const result = await warehousesApi.getStock(warehouseId, query);
+      if (ticket !== rowsLoad) return;
       stock.value = result.data;
       stockMeta.value = result.meta;
     } else {
-      const result = await warehousesApi.getMovements(selectedId.value, query);
+      const result = await warehousesApi.getMovements(warehouseId, query);
+      if (ticket !== rowsLoad) return;
       movements.value = result.data;
       movementMeta.value = result.meta;
     }
   } catch (reason) {
+    if (ticket !== rowsLoad) return;
     stock.value = [];
     movements.value = [];
     loadError.value = formatError(reason);
   } finally {
-    dataLoading.value = false;
+    if (ticket === rowsLoad) dataLoading.value = false;
   }
 }
 
@@ -193,12 +203,15 @@ async function deleteWarehouse() {
 async function submitAdjustment() {
   if (!selectedWarehouse.value || !canAdjust.value || saving.value || quantityError.value) return;
   const delta = Number(adjustment.value.delta);
+  const warehouseId = selectedWarehouse.value.id;
   const sameCommand = pendingCommand.value
+    && pendingCommand.value.warehouseId === warehouseId
     && pendingCommand.value.partId === partId.value
     && pendingCommand.value.delta === delta
     && pendingCommand.value.kind === adjustment.value.kind
     && pendingCommand.value.reason === adjustment.value.reason.trim();
   const command = sameCommand ? pendingCommand.value! : {
+    warehouseId,
     partId: partId.value,
     delta,
     kind: adjustment.value.kind,
@@ -208,7 +221,8 @@ async function submitAdjustment() {
   pendingCommand.value = command;
   saving.value = true; error.value = ''; success.value = '';
   try {
-    await warehousesApi.adjustStock(selectedWarehouse.value.id, command);
+    const { warehouseId: target, ...payload } = command;
+    await warehousesApi.adjustStock(target, payload);
     pendingCommand.value = null;
     success.value = 'Đã ghi nhận điều chỉnh tồn kho.';
     await loadRows();
@@ -220,7 +234,12 @@ async function submitAdjustment() {
 const activeStock = computed(() => stock.value.find((row) => row.partId === partId.value));
 const currentPage = computed(() => Math.floor(offset.value / pageSize) + 1);
 const currentTotalPages = computed(() => Math.max(1, Math.ceil((activeTab.value === 'stock' ? stockMeta.value.total : movementMeta.value.total) / pageSize)));
-function movementKind(kind: string) { return kind === 'stock_in' ? 'Nhập kho' : 'Điều chỉnh'; }
+// BUG DETECTOR 80: part request movements now appear in the log beside manual changes.
+const MOVEMENT_KINDS: Record<string, string> = {
+  stock_in: 'Nhập kho', correction: 'Điều chỉnh', reserve: 'Giữ cho yêu cầu', release: 'Nhả giữ',
+  issue: 'Xuất giao thợ', return: 'Nhận trả',
+};
+function movementKind(kind: string) { return MOVEMENT_KINDS[kind] ?? 'Điều chỉnh'; }
 </script>
 
 <template>
