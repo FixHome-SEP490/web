@@ -101,7 +101,7 @@ describe('what each coverage covers', () => {
     expect(describeCoverage({})).toEqual({ kind: null, itemDescription: 'Bảo hành dịch vụ' });
   });
 
-  it('the claim dialog tells labor from a part and how long each is still covered', async () => {
+  it('the claim dialog never asks the customer to pick labor or a part: one claim for the order, with the longest cover shown', async () => {
     const wrapper = mount(WarrantyClaimModal, {
       props: {
         open: true, orderId: 'order-1', orderCode: 'SO-1', serviceName: 'Thay ổ cắm điện', technicianName: 'Kỹ thuật viên A',
@@ -114,11 +114,11 @@ describe('what each coverage covers', () => {
       attachTo: document.body,
     });
     await flushPromises();
-    expect(wrapper.findAll('[data-testid="coverage-kind"]').map((k) => k.text())).toEqual(['Công sửa', 'Linh kiện']);
-    const terms = wrapper.findAll('[data-testid="coverage-term"]').map((t) => t.text());
-    expect(terms[0]).toMatch(/^Bảo hành 30 ngày · đến \d{2}\/\d{2}\/\d{4} · còn 10 ngày$/);
-    expect(terms[1]).toMatch(/^Hết hạn \d{2}\/\d{2}\/\d{4}$/);
-    expect(wrapper.text()).toContain('Ổ cắm Panasonic');
+    expect(wrapper.find('[data-testid="coverage-kind"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="radio"]').exists()).toBe(false);
+    // Only the active item is still covered, so the claim is filed on it.
+    expect(wrapper.get('[data-testid="coverage-term"]').text()).toMatch(/^Bảo hành 30 ngày · đến \d{2}\/\d{2}\/\d{4} · còn 10 ngày$/);
+    expect(wrapper.get('[data-testid="coverage-scope"]').text()).toContain('Ổ cắm Panasonic');
     wrapper.unmount();
   });
 });
@@ -149,17 +149,35 @@ describe('WarrantyClaimModal', () => {
 
   beforeEach(() => vi.clearAllMocks());
 
-  it('preselects the first claimable active coverage and disables one that already has an open claim', async () => {
+  it('files the claim on the free active coverage and never on one that already has an open claim', async () => {
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ warrantyCoverageId: 'cov-active' }) } });
     const wrapper = await mountModal();
-    const radios = wrapper.findAll('input[type="radio"]');
-    expect((radios[1].element as HTMLInputElement).checked).toBe(true);
-    expect(radios[2].attributes('disabled')).toBeDefined();
+    await wrapper.get('#warranty-claim-description').setValue('Vòi sen lại chảy nước yếu sau vài ngày');
+    await wrapper.findAll('button').find((b) => b.text().includes('Gửi yêu cầu bảo hành'))!.trigger('click');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/service-orders/order-1/warranty-claims', expect.objectContaining({ warrantyCoverageId: 'cov-active' }));
     wrapper.unmount();
   });
 
-  it('warns but still allows a claim on an expired coverage', async () => {
-    const wrapper = await mountModal();
-    await wrapper.findAll('input[type="radio"]')[0].setValue();
+  it('keeps a long order to one short line: two names and a count', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, itemDescription: `Linh kiện ${i + 1}`, expiresAt: FUTURE, status: 'ACTIVE' as const }));
+    const wrapper = mount(WarrantyClaimModal, {
+      props: { open: true, orderId: 'order-1', orderCode: 'SO-1', serviceName: 'Sửa', technicianName: 'A', coverages: many, busyCoverageIds: [] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const scope = wrapper.get('[data-testid="coverage-scope"]').text();
+    expect(scope).toContain('Linh kiện 1, Linh kiện 2 và 8 hạng mục khác');
+    expect(scope).not.toContain('Linh kiện 3');
+    wrapper.unmount();
+  });
+
+  it('warns when the only coverage has expired, but still lets the customer send the claim', async () => {
+    const wrapper = mount(WarrantyClaimModal, {
+      props: { open: true, orderId: 'order-1', orderCode: 'SO-1', serviceName: 'Sửa', technicianName: 'A', coverages: [{ id: 'old', itemDescription: 'Van', expiresAt: PAST, status: 'EXPIRED' as const }], busyCoverageIds: [] },
+      attachTo: document.body,
+    });
+    await flushPromises();
     expect(wrapper.text()).toContain('đã hết hạn bảo hành');
     wrapper.unmount();
   });

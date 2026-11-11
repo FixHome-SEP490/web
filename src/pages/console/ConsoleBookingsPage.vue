@@ -262,7 +262,7 @@ async function confirmAssign(candidate: TechnicianCandidate) {
           title="Không có thợ phù hợp"
           description="Chưa có kỹ thuật viên phù hợp khu vực, kỹ năng và giờ hẹn."
         />
-        <ul v-else class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200">
+        <ul v-else class="max-h-72 divide-y divide-ink-100 overflow-y-auto rounded-[var(--radius-sm)] border border-ink-200">
           <li
             v-for="c in candidates"
             :key="c.id"

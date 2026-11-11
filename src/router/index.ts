@@ -419,6 +419,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Khu vực phục vụ', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'admin/profile-reviews',
+        name: 'admin-profile-reviews',
+        component: () => import('../pages/console/admin/AdminProfileReviewsPage.vue'),
+        meta: { title: 'Duyệt hồ sơ', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/visit-offices',
+        name: 'admin-visit-offices',
+        component: () => import('../pages/console/admin/AdminVisitOfficesPage.vue'),
+        meta: { title: 'Trụ sở nhận hồ sơ', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/skill-verifications',
         name: 'admin-skill-verifications',
         component: () => import('../pages/console/admin/AdminSkillVerificationsPage.vue'),

@@ -38,7 +38,7 @@ const claim = (overrides: Record<string, unknown> = {}, detail: Record<string, u
       technicians: [{ id: 'tech-1', fullName: 'Thợ Một', assignedAt: '2026-10-19T08:00:00.000Z', isActive: true }],
       lines: [
         { id: 'line-1', type: 'labor', description: 'Công thay bo mạch', quantity: 1, unitPrice: 300000, lineTotal: 300000, warrantyDays: 30, partSource: null, partWarrantyOption: null, covered: false },
-        { id: 'line-2', type: 'parts_equipment', description: 'Board X', quantity: 1, unitPrice: 700000, lineTotal: 700000, warrantyDays: 90, partSource: 'fixhome', partWarrantyOption: 'included', covered: true },
+        { id: 'line-2', type: 'parts_equipment', description: 'Board X', quantity: 1, unitPrice: 700000, lineTotal: 700000, warrantyDays: 90, partSource: 'fixhome', partWarrantyOption: 'included', covered: true, faulty: true },
       ],
     },
     coverage: { id: 'cov-1', startsAt: '2026-10-20T08:00:00.000Z', expiresAt: '2027-01-20T00:00:00.000Z', warrantyDays: 90, status: 'active' },
@@ -88,8 +88,8 @@ describe('service manager warranty claim page', () => {
 
   it('marks the invoice line the customer is claiming on and shows the money', async () => {
     const wrapper = await mountPage(claim());
-    expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('Đang yêu cầu');
-    expect(wrapper.get('[data-testid="warranty-line-line-1"]').text()).not.toContain('Đang yêu cầu');
+    expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('Thợ báo hỏng');
+    expect(wrapper.get('[data-testid="warranty-line-line-1"]').text()).not.toContain('Thợ báo hỏng');
     expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('FixHome');
     expect(wrapper.findAll('[data-money]').map((m) => m.text())).toEqual(expect.arrayContaining(['700000', '1000000']));
   });
@@ -177,7 +177,7 @@ describe('service manager warranty claim page', () => {
     delete withoutDetail.detail;
     const wrapper = await mountPage(withoutDetail as unknown as WarrantyClaimDetail);
     expect(wrapper.text()).toContain('Máy giặt lại không vắt được');
-    expect(wrapper.text()).toContain('Board X');
+    expect(wrapper.text()).toContain('Sửa máy giặt');
     // Blocks that would only be empty because the data did not arrive are not shown as if they were data.
     expect(wrapper.find('[data-testid="warranty-detail-missing"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Chưa có kỹ thuật viên nào từ chối hoặc vắng mặt.');

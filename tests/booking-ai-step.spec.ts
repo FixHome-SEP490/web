@@ -133,6 +133,48 @@ describe('AI booking form', () => {
     expect(wrapper.get('[data-testid="ai-send"]').attributes('disabled')).toBeUndefined();
   }, 10000);
 
+  it('starts a new session in the chat itself: empty, nothing sent, waiting for the customer (PO 08/11)', async () => {
+    analyze.mockResolvedValue(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    expect(analyze).toHaveBeenCalledTimes(1);
+
+    await wrapper.get('[data-testid="ai-restart"]').trigger('click');
+    await pause();
+    await flushPromises();
+    expect(analyze).toHaveBeenCalledTimes(1);
+    const thread = wrapper.get('[data-testid="ai-thread"]').text();
+    expect(thread).not.toContain('Máy lạnh kêu lạch cạch');
+    expect(thread).not.toContain('Dạ em xem rồi ạ.');
+    expect(wrapper.find('[data-testid="ai-current-service"]').text()).not.toContain('Sửa máy lạnh không mát');
+    expect((wrapper.get('[data-testid="ai-input"]').element as HTMLTextAreaElement).value).toBe('');
+
+    await wrapper.get('[data-testid="ai-input"]').setValue('Tủ lạnh ngăn đá không đông');
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
+    await pause();
+    await flushPromises();
+    expect(analyze).toHaveBeenCalledTimes(2);
+    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Tủ lạnh ngăn đá không đông', sessionId: null }));
+    // The new session's own suggestion is taken, so the customer can book (seen on fixhome.sbs 08/11).
+    expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Sửa máy lạnh không mát');
+    expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
+  }, 10000);
+
+  it('analyses afresh when step 1 was changed after the analysis', async () => {
+    analyze.mockResolvedValue(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    // Back to step 1 through the page's own back action, then a different description.
+    const back = wrapper.findAll('button').find((b) => /Quay lại/.test(b.text()));
+    await back!.trigger('click');
+    await flushPromises();
+    await wrapper.find('textarea').setValue('Máy giặt không vắt');
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await pause();
+    await flushPromises();
+    expect(analyze).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'Máy giặt không vắt', sessionId: null }));
+  }, 10000);
+
   it('lets the customer answer what the assistant asks, and takes the service the assistant chooses', async () => {
     analyze
       .mockResolvedValueOnce(reply({ status: 'needs_clarification', clarification: { questionsVi: ['Tiếng kêu ở cục trong hay cục ngoài ạ?'] } }))

@@ -114,6 +114,19 @@ describe('WarrantyDecisionModal', () => {
       attachTo: document.body,
     });
 
+  it('shows the parts the technician named as faulty, which FixHome supplies by default', async () => {
+    const withLines = claim({
+      status: 'inspected',
+      order: { ...claim().order, partLines: [{ id: 'l1', name: 'Tụ khởi động', quantity: 2, partSource: 'fixhome' }, { id: 'l2', name: 'Cánh quạt', quantity: 1, partSource: 'fixhome' }] },
+      visit: { ...claim().visit, id: 'v1', status: 'inspected', proposedResult: 'covered_part', faultyInvoiceItemIds: ['l1'] } as never,
+    });
+    const wrapper = mountModal('approve', withLines);
+    const lines = wrapper.get('[data-testid="faulty-lines"]').text();
+    expect(lines).toContain('Tụ khởi động');
+    expect(lines).not.toContain('Cánh quạt');
+    wrapper.unmount();
+  });
+
   it('offers only other technicians and requires a choice', async () => {
     const wrapper = mountModal('assign');
     const options = wrapper.findAll('#warranty-assign option').map((o) => o.text());
@@ -142,8 +155,17 @@ describe('WarrantyDecisionModal', () => {
     wrapper.unmount();
   });
 
+  it('shows only the technician proposal at first and keeps the final-result choice behind a button', async () => {
+    const wrapper = mountModal('approve');
+    expect(wrapper.findAll('input[type="radio"]')).toHaveLength(0);
+    expect(wrapper.text()).toContain('Đổi kết luận / chọn linh kiện khác');
+    await wrapper.findAll('button').find((b) => b.text().includes('Đổi kết luận'))!.trigger('click');
+    expect(wrapper.findAll('input[type="radio"]').length).toBeGreaterThan(0);
+  });
+
   it('demands a customer note for not covered and a written reason for changing the technician proposal', async () => {
     const wrapper = mountModal('approve');
+    await wrapper.findAll('button').find((b) => b.text().includes('Đổi kết luận'))!.trigger('click');
     await wrapper.findAll('input[type="radio"]')[2].setValue();
     expect(wrapper.find('#warranty-override-reason').exists()).toBe(true);
     await submit(wrapper).trigger('click');
@@ -173,6 +195,7 @@ describe('WarrantyDecisionModal', () => {
     vi.useFakeTimers();
     try {
       const wrapper = mountModal('approve');
+      await wrapper.findAll('button').find((b) => b.text().includes('Đổi kết luận'))!.trigger('click');
       await wrapper.findAll('input[type="radio"]')[0].setValue();
       await wrapper.get('#warranty-override-reason').setValue('Mối nối lỏng là do lắp, không phải linh kiện.');
 
@@ -387,7 +410,7 @@ describe('ConsoleWarrantyPage', () => {
     const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
     expect(wrapper.text()).not.toContain('Duyệt kết luận');
-    expect(wrapper.text()).toContain('Vòi sen');
+    expect(wrapper.text()).toContain('Sửa đường nước');
     expect(wrapper.get('[data-testid="warranty-read-only"]').text()).toContain('chỉ đọc');
   });
 

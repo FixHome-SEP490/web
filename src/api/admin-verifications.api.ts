@@ -34,6 +34,8 @@ export interface VerificationProfile {
   serviceRadiusKm: number;
   fullAddress?: string | null;
   skills: VerificationProfileSkill[];
+  /** Độ tương thích khuôn mặt CCCD với ảnh chân dung (0-100), null nếu không so khớp. */
+  faceMatchScore?: number | null;
   serviceAreas: string[];
 }
 
@@ -55,6 +57,7 @@ export interface TechnicianVerification {
   gender?: string | null;
   yearsExperience?: number | null;
   skills?: VerificationProfileSkill[];
+  faceMatchScore?: number | null;
   bio?: string | null;
   address?: string | null;
   serviceRadiusKm?: number | null;
@@ -146,6 +149,7 @@ function normalizeVerification(payload: unknown): TechnicianVerification {
     gender: t.gender != null ? String(t.gender) : null,
     yearsExperience: tp.yearsExperience != null ? Number(tp.yearsExperience) : null,
     skills: Array.isArray(tp.skills) ? (tp.skills as VerificationProfileSkill[]) : [],
+    faceMatchScore: verification.faceMatchScore == null ? null : Number(verification.faceMatchScore),
     bio: tp.bio != null ? String(tp.bio) : null,
     address: tp.fullAddress != null ? String(tp.fullAddress) : null,
     serviceRadiusKm: tp.serviceRadiusKm != null ? Number(tp.serviceRadiusKm) : null,

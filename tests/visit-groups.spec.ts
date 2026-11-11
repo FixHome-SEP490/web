@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { reactive } from 'vue';
 enableAutoUnmount(afterEach);
@@ -151,6 +151,10 @@ describe('customer visit page', () => {
     await flushPromises();
     return w;
   }
+
+  // mountPage resets modules, so the first case would also pay the one-off compile of the page;
+  // warm the transform cache here so every case's own timeout measures only its behaviour.
+  beforeAll(async () => { await import('../src/pages/customer/CustomerVisitPage.vue'); }, 30_000);
 
   beforeEach(async () => {
     authSession.user = { id: 'synthetic-customer' };

@@ -84,6 +84,10 @@ describe('Notification bell role-safe references', () => {
     ['CUSTOMER', 'VISIT_CASH_DECLARED', 'VISIT_GROUP', 'visit-1', '/app/visits/visit-1'],
     ['CUSTOMER', 'BOOKING_MATCHING_EXHAUSTED', 'BOOKING', 'booking-1', '/app/bookings/booking-1/candidates'],
     ['CUSTOMER', 'TECHNICIAN_RELEASED', 'BOOKING', 'booking-1', '/app/bookings/booking-1/candidates?released=1'],
+    ['TECHNICIAN', 'WARRANTY_CLAIM_ASSIGNED', 'SERVICE_ORDER', 'order-1', '/tech/warranty'],
+    ['SERVICE_MANAGER', 'WARRANTY_PROPOSAL_READY', 'SERVICE_ORDER', 'order-1', '/console/warranty'],
+    ['SERVICE_MANAGER', 'WARRANTY_AUTO_APPROVED', 'SERVICE_ORDER', 'order-1', '/console/warranty'],
+    ['CUSTOMER', 'WARRANTY_VISIT_RESCHEDULED', 'SERVICE_ORDER', 'order-1', '/app/orders/order-1'],
   ])('keeps %s %s %s on an accessible target', async (role, type, referenceType, referenceId, expected) => {
     await clickNotice(role, notification({ type, referenceType, referenceId }), expected);
   });

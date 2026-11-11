@@ -151,7 +151,7 @@ function goToVisit() {
               v-if="!isAiMinimized"
               type="button"
               class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-              :disabled="turnCount === 0"
+              :disabled="turnCount === 0 && !isThinking"
               title="Bắt đầu phiên mới"
               aria-label="Bắt đầu phiên mới"
               @click.stop="startOver"

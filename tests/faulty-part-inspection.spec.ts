@@ -19,6 +19,7 @@ vi.mock('../src/services/live-updates', () => ({
 vi.mock('../src/services/chat-socket.service', () => ({ chatSocketService: { subscribe: () => () => undefined } }));
 
 import ConsolePartRequestsPage from '../src/pages/console/ConsolePartRequestsPage.vue';
+import PartReturnsQueue from '../src/components/console/PartReturnsQueue.vue';
 import FaultyPartInspectionModal from '../src/components/console/FaultyPartInspectionModal.vue';
 
 const warranty = (overrides: Record<string, unknown> = {}) => ({
@@ -55,11 +56,17 @@ describe('faulty part inspection on the manager page', () => {
   };
   const button = (wrapper: ReturnType<typeof mount>, label: string) => wrapper.findAll('button').find((b) => b.text() === label);
 
-  it('asks for the inspection instead of offering READY until the faulty part was looked at', async () => {
+  it('offers READY without waiting for the faulty part, and asks for the inspection only once the technician brought it back', async () => {
     const wrapper = await mountPage([warranty()]);
-    expect(button(wrapper, 'Kiểm tra linh kiện hỏng')).toBeTruthy();
-    expect(button(wrapper, 'Chuẩn bị xong')).toBeUndefined();
+    expect(button(wrapper, 'Chuẩn bị xong')).toBeTruthy();
+    expect(button(wrapper, 'Kiểm tra linh kiện hỏng')).toBeUndefined();
     expect(text(wrapper)).toContain('Bảo hành');
+
+    // The check itself belongs to the returns page, where the manager receives every part a technician brings back.
+    const back = await mountPage([warranty({ status: 'received', faultyReturnedAt: '2026-11-05T08:00:00Z' })]);
+    expect(button(back, 'Kiểm tra linh kiện hỏng')).toBeUndefined();
+    const queue = mount(PartReturnsQueue, { global: { stubs } }); await flushPromises();
+    expect(button(queue, 'Kiểm tra linh kiện hỏng')).toBeTruthy();
   });
 
   it('offers READY once inspected, and an ordinary request is unaffected', async () => {
@@ -97,6 +104,24 @@ describe('faulty part inspection on the manager page', () => {
     expect(wrapper.text()).toContain('Mã lấy hàng một lần · hết hạn trong 15 phút');
   });
 
+  it('shows a reissued code after handover as the technician receipt, without a dead handover button', async () => {
+    const request = warranty({ id: 'pr-done', requestType: 'quotation' });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'handed_over', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
+    api.getWarehouseAllocation.mockResolvedValue(allocation);
+    api.prepareWarehouseQr.mockResolvedValue({ allocation, qrToken: 'receipt-again' });
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === 'Cấp lại mã nhận')!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Đưa mã nhận hàng riêng này cho kỹ thuật viên');
+    expect(wrapper.text()).not.toContain('Mã lấy hàng một lần');
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Xác nhận đã giao trực tiếp')).toBe(false);
+    expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
+  });
+
   it('keeps Admin on the existing global part request list', async () => {
     auth.hasRole.mockReturnValue(false);
     api.getAll.mockResolvedValue({ data: [], total: 0 });
@@ -107,17 +132,18 @@ describe('faulty part inspection on the manager page', () => {
     wrapper.unmount();
   });
 
-  it('saves the result from the modal and then offers READY for that request', async () => {
-    const wrapper = await mountPage([warranty()]);
-    api.recordFaultyInspection.mockResolvedValueOnce(warranty({ faultyInspectionResult: 'undetermined' }));
+  it('saves the result from the modal once and stops offering the inspection for that request', async () => {
+    api.getAll.mockResolvedValue({ data: [warranty({ status: 'received', faultyReturnedAt: '2026-11-05T08:00:00Z' })], total: 1 });
+    const wrapper = mount(PartReturnsQueue, { global: { stubs } }); await flushPromises();
+    api.recordFaultyInspection.mockResolvedValueOnce(warranty({ status: 'received', faultyReturnedAt: '2026-11-05T08:00:00Z', faultyInspectionResult: 'undetermined' }));
 
     await button(wrapper, 'Kiểm tra linh kiện hỏng')!.trigger('click');
     await wrapper.get('input[value="undetermined"]').setValue();
+    api.getAll.mockResolvedValue({ data: [warranty({ status: 'received', faultyReturnedAt: '2026-11-05T08:00:00Z', faultyInspectionResult: 'undetermined' })], total: 1 });
     await button(wrapper, 'Lưu kết quả')!.trigger('click');
     await flushPromises();
 
     expect(api.recordFaultyInspection).toHaveBeenCalledWith('pr-w', { result: 'undetermined' });
-    expect(button(wrapper, 'Chuẩn bị xong')).toBeTruthy();
     expect(button(wrapper, 'Kiểm tra linh kiện hỏng')).toBeUndefined();
   });
 });

@@ -31,7 +31,7 @@ import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeSt
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
-import { canConfirmWarehouseHandover, warehouseQrAction } from '../../utils/warehouse-fulfillment';
+import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
@@ -214,8 +214,12 @@ async function prepareWarehouseQr(request: PartRequest) {
   try {
     const result = await partRequestsApi.prepareWarehouseQr(request.id, { idempotencyKey: crypto.randomUUID() });
     allocations.value[request.id] = result.allocation;
-    warehouseTokens.value[request.id] = { pickup: result.qrToken, receipt: null };
-    if (result.qrToken) warehouseQrImages.value[request.id] = { pickup: await QRCode.toDataURL(result.qrToken, { width: 220 }), receipt: '' };
+    const receipt = warehouseIssuedTokenSlot(result.allocation?.status) === 'receipt';
+    warehouseTokens.value[request.id] = receipt ? { pickup: null, receipt: result.qrToken } : { pickup: result.qrToken, receipt: null };
+    if (result.qrToken) {
+      const image = await QRCode.toDataURL(result.qrToken, { width: 220 });
+      warehouseQrImages.value[request.id] = receipt ? { pickup: '', receipt: image } : { pickup: image, receipt: '' };
+    }
     if (!result.qrToken) showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
   } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa tạo được mã QR lấy hàng.'); }
   finally { actionLoading.value = false; }
@@ -224,7 +228,14 @@ async function prepareWarehouseQr(request: PartRequest) {
 async function confirmPhysicalHandover(request: PartRequest) {
   const pickup = warehouseTokens.value[request.id]?.pickup;
   const allocation = allocationFor(request);
-  if (!canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocation) || !pickup || actionLoading.value) return;
+  if (actionLoading.value) return;
+  if (!canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocation) || !pickup) {
+    handoverTarget.value = null;
+    showToast('error', allocation?.status === 'handed_over'
+      ? 'Phiếu này đã bàn giao rồi. Đưa mã nhận hàng cho kỹ thuật viên hoặc cấp lại mã nhận.'
+      : 'Mã lấy hàng không còn trong phiên. Tạo lại mã kho rồi xác nhận giao.');
+    return;
+  }
   actionLoading.value = true;
   try {
     const result = await partRequestsApi.confirmWarehouseHandover(request.id, { qrToken: pickup, idempotencyKey: crypto.randomUUID() });
@@ -234,7 +245,13 @@ async function confirmPhysicalHandover(request: PartRequest) {
     handoverTarget.value = null;
     if (!result.qrToken) showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên.');
     else showToast('success', 'Đã xác nhận bàn giao thực tế; tồn kho đã được xuất. Đưa mã nhận hàng riêng cho kỹ thuật viên.');
-  } catch (error) { allocationErrors.value[request.id] = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.'); }
+  } catch (error) {
+    // The dialog covers the inline error cell, so close it and surface the reason.
+    const message = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.');
+    allocationErrors.value[request.id] = message;
+    handoverTarget.value = null;
+    showToast('error', message);
+  }
   finally { actionLoading.value = false; }
 }
 
@@ -350,9 +367,13 @@ const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
 const canMarkLegacyPickupReady = (req: PartRequest) => req.fulfillmentMethod === 'pickup' && allocationFor(req)?.mode === 'legacy';
 const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
-// A warranty part is issued only after the faulty one was inspected; the result decides who pays.
-const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !req.faultyInspectionResult;
-const canReinspect = (req: PartRequest) => req.requestType === 'warranty' && ['requested', 'ready', 'delivering'].includes(req.status.toLowerCase());
+// The technician takes the new part first and brings the faulty one back later; the manager inspects it once it is back, once.
+const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !!req.faultyReturnedAt && !req.faultyInspectionResult;
+const faultyReturnLabel = (req: PartRequest) => {
+  if (req.faultyReturnedAt) return 'Thợ đã nộp';
+  if (!req.faultyReturnDueAt) return 'Chờ thợ nhận linh kiện thay thế';
+  return `${new Date(req.faultyReturnDueAt).getTime() < Date.now() ? 'Quá hạn nộp' : 'Hạn nộp'} ${vnDateTimeString(req.faultyReturnDueAt)}${req.faultyReturnChargedAt ? ', đã trừ ví thợ' : ''}`;
+};
 const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
 const onInspected = (updated: PartRequest) => {
   replaceRow(updated);
@@ -577,13 +598,6 @@ const getUsageBadgeClass = (status: string) => {
             @click="prepareWarehouseQr(row)"
           >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
           <FhButton
-            v-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && needsInspection(row)"
-            variant="primary"
-            size="sm"
-            :disabled="actionLoading"
-            @click="inspectionRequest = row"
-          >Kiểm tra linh kiện hỏng</FhButton>
-          <FhButton
             v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
@@ -644,7 +658,7 @@ const getUsageBadgeClass = (status: string) => {
         <FhButton v-if="canPreparePickupQr(allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
         <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-brand-200 bg-brand-50 p-3">
           <img :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 bg-white p-1" />
-          <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
+          <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton v-if="canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
         </div>
         <div v-if="warehouseTokens[row.id]?.receipt && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-success-200 bg-success-50 p-3">
           <img :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 bg-white p-1" />
@@ -746,8 +760,8 @@ const getUsageBadgeClass = (status: string) => {
           <div v-if="detailModalRequest.requestType === 'warranty'" class="flex justify-between gap-3">
             <dt class="text-ink-500">Linh kiện hỏng</dt>
             <dd class="text-right text-ink-900">
-              {{ inspectionLabel(detailModalRequest.faultyInspectionResult) }}
-              <button v-if="canOperate && canReinspect(detailModalRequest)" type="button" class="ml-2 text-brand-700 hover:underline" @click="inspectionRequest = detailModalRequest">{{ detailModalRequest.faultyInspectionResult ? 'Sửa' : 'Kiểm tra' }}</button>
+              {{ detailModalRequest.faultyInspectionResult ? inspectionLabel(detailModalRequest.faultyInspectionResult) : faultyReturnLabel(detailModalRequest) }}
+              <router-link v-if="canOperate && needsInspection(detailModalRequest)" to="/console/part-returns" class="ml-2 text-brand-700 hover:underline">Kiểm tra ở Hoàn trả linh kiện</router-link>
             </dd>
           </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
