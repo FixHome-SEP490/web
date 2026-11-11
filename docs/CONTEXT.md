@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-08 13:57 (UTC+7) · Người cập nhật (git): foxonworld · Nhánh: foxonworld/fixhome-w2-e2e-web-hotfix-20261108
+> Cập nhật lần cuối: 2026-11-11 16:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,15 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Nâng cấp UI/UX, Design System và Visual Assets 3D (11/11/2026)
+
+- Redesign trang chọn thợ `BookingCandidatesPage`: tinh gọn card kỹ thuật viên, loại bỏ gradient tràn viền, bỏ nhãn giá dư thừa; click tên/avatar mở trực tiếp `TechnicianProfileModal`, click thân thẻ để chọn ưu tiên 1/2. Tinh chỉnh animation và bỏ dấu `+`/`✓` thừa trong suggestion chips của wizard và review modal.
+- Mở rộng Design System `FhEmptyState` với prop `illustration?: string`, hỗ trợ hiển thị tranh 3D mềm mại có shadow thay cho icon phẳng 32px.
+- Đồng bộ kho ảnh 3D từ `mobile/assets` sang `web/public/images/ui/` (`empty-state-search-service.png`, `booking-technician-match.png`, `booking-confirmed.png`, `role-choice-technician.png`, `home-hero-repair-family.png`, `ai-helper-sparkles.png`, `home-appliance-repair.png`).
+- Khách hàng: empty state tại đơn hàng, yêu cầu đặt lịch, lịch sử, bảo hành, thông báo, ví tiền, tìm kiếm dịch vụ và kho voucher đều tích hợp tranh 3D; dashboard có onboarding card gia đình và thumbnail dịch vụ 3D; modal gửi lời mời và đánh giá thành công có tranh xác nhận; trang chi tiết có banner radar tìm thợ trực quan.
+- Kỹ thuật viên: dashboard, lời mời, danh sách công việc, lượt sửa nhiều thiết bị, thu nhập, ví và duyệt/chờ duyệt onboarding dùng minh họa thợ và thiết bị 3D; dialog tóm tắt AI có huy hiệu 3D nổi bật.
+- Toàn bộ đường dẫn ảnh dùng `:src="'/images/...'"` tương thích hoàn toàn Vite SFC/Vitest Windows; loại bỏ icon thừa, build `vue-tsc` và full test pass.
 
 ### Kho W1 và nhận linh kiện W2 trên Web (08/11/2026)
 
@@ -586,6 +595,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
 - 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.
 - 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
 - 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
