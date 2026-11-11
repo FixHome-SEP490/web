@@ -74,6 +74,14 @@ describe('warehouse console page', () => {
     expect(secondPayload.idempotencyKey).not.toBe(firstPayload.idempotencyKey);
   });
 
+  it('labels an active warehouse as active, not as a success message (BUG DETECTOR 91)', async () => {
+    warehouses.getStock.mockResolvedValue(page([]));
+    const wrapper = mount(ConsoleWarehousesPage, { global: { stubs: { RouterLink: true } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Đang hoạt động');
+    expect(wrapper.text()).not.toContain('Thành công');
+  });
+
   it('names part request movements in the log (BUG DETECTOR 80)', async () => {
     warehouses.getStock.mockResolvedValue(page([]));
     warehouses.getMovements.mockResolvedValue(page([

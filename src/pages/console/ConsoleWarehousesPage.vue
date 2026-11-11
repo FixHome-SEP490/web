@@ -269,7 +269,7 @@ function movementKind(kind: string) { return MOVEMENT_KINDS[kind] ?? 'Điều ch
     <template v-else-if="warehouses.length">
       <section class="flex flex-wrap items-end gap-3 rounded-lg border border-ink-200 bg-white p-4">
         <label class="min-w-64 flex-1 space-y-1 text-sm font-medium text-ink-700">Kho<select v-model="selectedId" class="w-full rounded-md border border-ink-300 px-3 py-2"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}<template v-if="warehouse.status !== 'active'"> · Ngừng hoạt động</template></option></select></label>
-        <FhStatusPill :status="selectedWarehouse?.status === 'active' ? 'success' : 'warning'">{{ selectedWarehouse?.status === 'active' ? 'Đang hoạt động' : 'Ngừng hoạt động' }}</FhStatusPill>
+        <FhStatusPill :status="selectedWarehouse?.status === 'active' ? 'success' : 'warning'" :label="selectedWarehouse?.status === 'active' ? 'Đang hoạt động' : 'Ngừng hoạt động'" />
         <span class="text-sm text-ink-600">{{ selectedWarehouse?.address || 'Chưa có địa chỉ' }}</span>
         <span v-if="isAdmin && selectedWarehouse" class="text-sm text-ink-700">
           Quản lý phụ trách: <strong>{{ selectedManager?.fullName || 'Chưa xác định' }}</strong>
