@@ -275,7 +275,8 @@ const LEGACY_MAX_PAGE_SIZE = 100;
 const LEGACY_MAX_ISSUED_QTY = 1_000_000;
 const LEGACY_DEFAULT_PAGE_SIZE = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PART_REQUEST_TYPES: readonly PartRequestType[] = ['pre_repair', 'additional', 'quotation'];
+// Every type the Backend lists; a warranty line without custody is also verified by hand (BUG DETECTOR 92).
+const PART_REQUEST_TYPES: readonly PartRequestType[] = ['pre_repair', 'additional', 'quotation', 'warranty'];
 const PART_REQUEST_STATUSES: readonly PartRequestStatus[] = [
   'requested',
   'ready',
