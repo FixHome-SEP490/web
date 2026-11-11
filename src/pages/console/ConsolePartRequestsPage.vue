@@ -31,7 +31,7 @@ import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeSt
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
-import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction } from '../../utils/warehouse-fulfillment';
+import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction, warehouseQrOpen } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
@@ -210,11 +210,14 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
 
 const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
 const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
-const canPreparePickupQr = (allocation: WarehouseAllocation | null) => canOperate.value && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
+// A closed request (cancelled, completed) or a warranty one has no warehouse code to prepare or reissue: the server refuses it.
+const canPreparePickupQr = (request: PartRequest) => {
+  const allocation = allocationFor(request);
+  return canOperate.value && warehouseQrOpen(request.status, request.requestType) && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
+};
 
 async function prepareWarehouseQr(request: PartRequest) {
-  const allocation = allocationFor(request);
-  if (!canPreparePickupQr(allocation) || actionLoading.value) return;
+  if (!canPreparePickupQr(request) || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const result = await partRequestsApi.prepareWarehouseQr(request.id, { idempotencyKey: crypto.randomUUID() });
@@ -621,21 +624,21 @@ const getUsageBadgeClass = (status: string) => {
             @click="handoverTarget = row"
           >Xác nhận đã giao trực tiếp</FhButton>
           <FhButton
-            v-else-if="canPreparePickupQr(allocationFor(row))"
+            v-else-if="canPreparePickupQr(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="prepareWarehouseQr(row)"
           >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
           <FhButton
-            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="handleMarkReady(row)"
           >Chuẩn bị xong</FhButton>
           <FhButton
-            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && canDeliver(row)"
+            v-else-if="!canPreparePickupQr(row) && canOperate && canDeliver(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -685,7 +688,7 @@ const getUsageBadgeClass = (status: string) => {
         <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
         <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
 
-        <FhButton v-if="canPreparePickupQr(allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+        <FhButton v-if="canPreparePickupQr(row)" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
         <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-brand-200 bg-brand-50 p-3">
           <img :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 bg-white p-1" />
           <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton v-if="canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
