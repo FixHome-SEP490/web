@@ -172,8 +172,9 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
     <FhEmptyState
       v-else-if="claims.length === 0"
+      illustration="/images/ui/booking-confirmed.png"
       title="Chưa có yêu cầu bảo hành"
-      description="Yêu cầu bảo hành cho việc bạn đã làm sẽ hiện ở đây."
+      description="Chất lượng thi công của bạn rất tốt! Yêu cầu bảo hành cho các ca sửa đã hoàn thành sẽ hiện ở đây."
     />
 
     <template v-else>

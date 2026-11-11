@@ -2803,14 +2803,32 @@ async function createAndFindTech() {
                 </div>
               </div>
             </div>
-            <div v-else-if="categories.length > 0" class="space-y-2 rounded-xl border border-dashed border-ink-300 bg-ink-50 p-6 text-center" data-testid="booking-services-empty">
-              <p class="text-sm font-semibold text-ink-800">Không tìm thấy dịch vụ phù hợp</p>
-              <p class="text-sm text-ink-500">Thử từ khóa khác, hoặc bỏ bộ lọc để xem toàn bộ dịch vụ.</p>
-              <button type="button" class="inline-flex min-h-11 items-center rounded-xl border border-ink-200 bg-white px-4 text-sm font-semibold text-brand-700 hover:bg-brand-50" @click="resetServiceFilters">Xóa bộ lọc</button>
+            <div v-else-if="categories.length > 0" class="space-y-3 rounded-2xl border border-dashed border-ink-300 bg-ink-50/70 p-6 text-center" data-testid="booking-services-empty">
+              <div class="mx-auto max-w-[120px] flex items-center justify-center">
+                <img
+                  :src="'/images/ui/empty-state-search-service.png'"
+                  alt=""
+                  class="w-full h-auto max-h-24 object-contain drop-shadow-sm select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="space-y-1">
+                <p class="text-sm font-semibold text-ink-900">Không tìm thấy dịch vụ phù hợp</p>
+                <p class="text-xs sm:text-sm text-ink-500">Thử từ khóa khác hoặc xóa bộ lọc để xem toàn bộ danh mục dịch vụ.</p>
+              </div>
+              <button type="button" class="inline-flex min-h-10 items-center rounded-xl border border-ink-200 bg-white px-4 text-xs sm:text-sm font-semibold text-brand-700 hover:bg-brand-50 shadow-2xs transition-colors" @click="resetServiceFilters">Xóa bộ lọc</button>
             </div>
-            <p v-else-if="!catalogLoadFailed" class="rounded-xl border border-dashed border-ink-300 bg-ink-50 p-6 text-center text-sm text-ink-500" data-testid="booking-catalog-empty">
-              Hiện chưa có dịch vụ nào khả dụng. Vui lòng thử lại sau.
-            </p>
+            <div v-else-if="!catalogLoadFailed" class="space-y-2 rounded-2xl border border-dashed border-ink-300 bg-ink-50/70 p-6 text-center" data-testid="booking-catalog-empty">
+              <div class="mx-auto max-w-[120px] flex items-center justify-center">
+                <img
+                  :src="'/images/ui/empty-state-search-service.png'"
+                  alt=""
+                  class="w-full h-auto max-h-24 object-contain drop-shadow-sm select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <p class="text-sm text-ink-600">Hiện chưa có dịch vụ nào khả dụng. Vui lòng thử lại sau.</p>
+            </div>
             <button
               v-if="!catalogLoading && isDefaultCatalog && matchingServices.length > 8"
               type="button"

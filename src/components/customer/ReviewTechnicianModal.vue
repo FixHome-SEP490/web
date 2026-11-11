@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue';
 import {
   Star,
   X,
-  CheckCircle2,
   Sparkles,
   UserCheck,
   MessageSquare,
@@ -217,8 +216,13 @@ const handleSubmit = async () => {
         <!-- Success Screen / Form -->
         <Transition name="fh-fade-slide" mode="out-in">
           <div v-if="isSuccess" key="success" class="p-8 text-center space-y-4 my-auto">
-            <div class="w-16 h-16 rounded-full bg-success-50 border border-success-200 text-success-600 flex items-center justify-center mx-auto shadow-sm">
-              <CheckCircle2 :size="36" />
+            <div class="mx-auto max-w-[130px] flex items-center justify-center">
+              <img
+                :src="'/images/ui/booking-confirmed.png'"
+                alt="Đánh giá thành công"
+                class="w-full h-auto max-h-32 object-contain drop-shadow-md select-none pointer-events-none"
+                loading="lazy"
+              />
             </div>
             <div class="space-y-1">
               <h3 class="text-lg font-bold text-ink-900">Cảm ơn bạn đã gửi đánh giá!</h3>

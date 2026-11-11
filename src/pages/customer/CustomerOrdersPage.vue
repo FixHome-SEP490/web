@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Search,
   MessageSquare,
-  Receipt,
   AlertCircle,
   RefreshCw,
   X,
@@ -716,17 +715,27 @@ async function confirmCancel() {
     <div
       v-else-if="!hasError && !visitGroupsError && !loadingOrders && !loadingBookings && !loadingVisitGroups && ordersTotal === 0 && bookingsTotal === 0 && visitGroupsTotal === 0"
       data-testid="history-empty-state"
-      class="space-y-2 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
+      class="space-y-3 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
     >
-      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400">
-        <Receipt :size="24" />
+      <div class="mx-auto mb-3 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-36 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
-      <h2 class="text-base font-semibold text-ink-900">
+      <h2 class="text-base sm:text-lg font-semibold text-ink-900">
         {{ search ? 'Không có đơn phù hợp' : activeTab === 'ALL' ? 'Bạn chưa có đơn sửa chữa' : 'Không có đơn ở mục này' }}
       </h2>
       <p class="text-sm text-ink-500 max-w-sm mx-auto text-pretty">
         {{ search ? 'Thử từ khoá khác.' : activeTab === 'ALL' ? 'Đặt thợ để kỹ thuật viên FixHome tới kiểm tra tại nhà bạn.' : 'Chọn mục khác để xem đơn của bạn.' }}
       </p>
+      <div v-if="!search && activeTab === 'ALL'" class="pt-2">
+        <FhButton variant="primary" size="md" @click="router.push('/app/bookings/new')">
+          Đặt thợ ngay
+        </FhButton>
+      </div>
     </div>
 
     <div v-else class="space-y-3">
@@ -862,13 +871,20 @@ async function confirmCancel() {
               </div>
             </div>
 
-            <p
+            <div
               v-else-if="bookingsTotal === 0"
               data-testid="requests-empty"
-              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
-              Không có yêu cầu đặt lịch ở mục này.
-            </p>
+              <img
+                :src="'/images/ui/empty-state-search-service.png'"
+                alt=""
+                class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
+                loading="lazy"
+              />
+              <p class="text-sm font-semibold text-ink-800">Không có yêu cầu đặt lịch ở mục này.</p>
+              <p class="text-xs text-ink-500 mt-0.5">Yêu cầu đang tìm thợ hoặc chờ xác nhận sẽ hiển thị tại đây.</p>
+            </div>
 
             <ul
               v-else
@@ -1022,13 +1038,20 @@ async function confirmCancel() {
               </div>
             </div>
 
-            <p
+            <div
               v-else-if="ordersTotal === 0"
               data-testid="orders-empty"
-              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
-              Không có đơn sửa chữa ở mục này.
-            </p>
+              <img
+                :src="'/images/ui/empty-state-search-service.png'"
+                alt=""
+                class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
+                loading="lazy"
+              />
+              <p class="text-sm font-semibold text-ink-800">Không có đơn sửa chữa ở mục này.</p>
+              <p class="text-xs text-ink-500 mt-0.5">Đơn sửa chữa đang diễn ra sẽ hiển thị tại đây.</p>
+            </div>
 
             <ul
               v-else

@@ -2,13 +2,11 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  Wallet,
   ArrowUpRight,
   ArrowDownLeft,
   AlertCircle,
   CheckCircle2,
   XCircle,
-  CreditCard,
   RefreshCw,
   ChevronRight,
   Landmark,
@@ -600,11 +598,15 @@ const handleWithdraw = async () => {
             <FhButton variant="secondary" size="sm" @click="loadTransactions">Thử lại</FhButton>
           </div>
 
-          <div v-else-if="transactions.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
-            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
-              <Wallet :size="22" class="text-ink-400" />
-            </span>
-            <p class="text-sm text-ink-500">Chưa có biến động số dư.</p>
+          <div v-else-if="transactions.length === 0" class="py-10 flex flex-col items-center gap-2 text-center">
+            <img
+              :src="'/images/ui/empty-state-search-service.png'"
+              alt=""
+              class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
+              loading="lazy"
+            />
+            <p class="text-sm font-semibold text-ink-800">Chưa có biến động số dư</p>
+            <p class="text-xs text-ink-500">Các giao dịch nạp tiền, thu phí nền tảng và nhận thù lao sẽ hiển thị tại đây.</p>
           </div>
 
           <ul v-else class="divide-y divide-ink-100 -mx-2">
@@ -674,11 +676,15 @@ const handleWithdraw = async () => {
             <FhButton variant="secondary" size="sm" @click="loadWithdrawals">Thử lại</FhButton>
           </div>
 
-          <div v-else-if="withdrawals.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
-            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
-              <CreditCard :size="22" class="text-ink-400" />
-            </span>
-            <p class="text-sm text-ink-500">Chưa có lệnh rút tiền.</p>
+          <div v-else-if="withdrawals.length === 0" class="py-10 flex flex-col items-center gap-2 text-center">
+            <img
+              :src="'/images/ui/empty-state-search-service.png'"
+              alt=""
+              class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
+              loading="lazy"
+            />
+            <p class="text-sm font-semibold text-ink-800">Chưa có lệnh rút tiền</p>
+            <p class="text-xs text-ink-500">Lịch sử các yêu cầu rút tiền về tài khoản ngân hàng sẽ hiển thị tại đây.</p>
           </div>
 
           <ul v-else class="divide-y divide-ink-100">

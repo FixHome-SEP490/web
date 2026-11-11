@@ -288,7 +288,16 @@ async function topUp() {
         <p class="text-sm text-ink-700">{{ loadError }}</p>
         <FhButton v-if="!hasPaymentReturn" variant="secondary" size="sm" @click="load">Thử lại</FhButton>
       </div>
-      <p v-else-if="transactions.length === 0" class="text-sm text-ink-500">Chưa có giao dịch nào.</p>
+      <div v-else-if="transactions.length === 0" class="py-8 flex flex-col items-center justify-center text-center space-y-2">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none"
+          loading="lazy"
+        />
+        <p class="text-sm font-semibold text-ink-800">Chưa có giao dịch nào</p>
+        <p class="text-xs text-ink-500">Các biến động nạp tiền, hoàn tiền và thanh toán sẽ hiển thị tại đây.</p>
+      </div>
       <ul
         v-else
         class="divide-y divide-ink-100 transition-opacity"

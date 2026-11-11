@@ -312,10 +312,15 @@ onUnmounted(() => {
     <div
       v-else-if="historyList === 'orders' && !error && items.length === 0"
       data-testid="history-empty"
-      class="py-16 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
+      class="py-14 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
     >
-      <div class="w-16 h-16 rounded-2xl bg-ink-100/80 text-ink-400 flex items-center justify-center mx-auto mb-2">
-        <History :size="32" />
+      <div class="mx-auto mb-2 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-36 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <p class="text-lg font-semibold text-ink-900">
         {{ search ? 'Không có đơn phù hợp.' : filter === 'cancelled' ? 'Bạn chưa có đơn nào đã hủy.' : 'Bạn chưa có đơn sửa chữa nào hoàn thành.' }}
@@ -436,8 +441,15 @@ onUnmounted(() => {
         <FhSkeleton width="75%" height="14px" />
       </div>
     </div>
-    <div v-else-if="historyList === 'visits' && !visitGroupsError && visitGroups.length === 0" data-testid="history-visit-empty" class="space-y-2 rounded-3xl border border-ink-200 bg-white px-6 py-12 text-center">
-      <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400"><History :size="24" /></div>
+    <div v-else-if="historyList === 'visits' && !visitGroupsError && visitGroups.length === 0" data-testid="history-visit-empty" class="space-y-3 rounded-3xl border border-ink-200 bg-white px-6 py-12 text-center shadow-xs">
+      <div class="mx-auto mb-2 max-w-[130px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-28 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
+      </div>
       <h2 class="font-semibold text-ink-900">Chưa có lượt sửa nhiều thiết bị đã kết thúc</h2>
       <p class="text-sm text-ink-500">Các lượt đã hoàn thành, hủy hoặc có thiết bị chưa sửa sẽ hiện ở đây.</p>
     </div>

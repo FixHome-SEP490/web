@@ -5,7 +5,6 @@ import {
   Star,
   MapPin,
   Briefcase,
-  CheckCircle2,
   Send,
   Eye,
   Info,
@@ -348,6 +347,7 @@ const selectedTechs = computed(() => {
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
+      illustration="/images/ui/booking-technician-match.png"
       :title="emptyState.title"
       :description="emptyState.description"
       :action-text="emptyState.action"
@@ -535,11 +535,16 @@ const selectedTechs = computed(() => {
         v-if="inviteSent"
         class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
       >
-        <div class="fh-modal-panel bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-5 shadow-2xl">
-          <div class="w-16 h-16 rounded-full bg-success-50 text-success-600 flex items-center justify-center mx-auto border-2 border-success-200/60 shadow-xs">
-            <CheckCircle2 :size="36" />
+        <div class="fh-modal-panel bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
+          <div class="mx-auto max-w-[130px] flex items-center justify-center">
+            <img
+              :src="'/images/ui/booking-confirmed.png'"
+              alt="Thành công"
+              class="w-full h-auto max-h-32 object-contain drop-shadow-md select-none pointer-events-none"
+              loading="lazy"
+            />
           </div>
-          <div class="space-y-2">
+          <div class="space-y-1.5">
             <h3 class="text-xl font-bold text-ink-900 tracking-tight">Đã gửi lời mời thành công</h3>
             <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
               {{ successMessage }}

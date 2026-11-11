@@ -65,10 +65,10 @@ function isFixedPrice(svc: ServiceItem): boolean {
 
 // Quick searches under the search box.
 const quickChips = [
-  { id: 'ac', title: 'Vệ sinh máy lạnh', icon: Snowflake, query: 'vệ sinh điều hòa' },
-  { id: 'washing', title: 'Sửa máy giặt', icon: Wrench, query: 'sửa máy giặt' },
-  { id: 'fridge', title: 'Sửa tủ lạnh', icon: Snowflake, query: 'sửa tủ lạnh' },
-  { id: 'plumbing', title: 'Điện nước', icon: Droplets, query: 'điện nước' },
+  { id: 'ac', title: 'Vệ sinh máy lạnh', image: '/images/air-conditioner.png', icon: Snowflake, query: 'vệ sinh điều hòa' },
+  { id: 'washing', title: 'Sửa máy giặt', image: '/images/washing-machine.png', icon: Wrench, query: 'sửa máy giặt' },
+  { id: 'fridge', title: 'Sửa tủ lạnh', image: '/images/refrigerator.png', icon: Snowflake, query: 'sửa tủ lạnh' },
+  { id: 'plumbing', title: 'Điện nước', image: '/images/water-pipeline.png', icon: Droplets, query: 'điện nước' },
   { id: 'fan', title: 'Sửa quạt điện', icon: Zap, query: 'sửa quạt điện' },
 ];
 
@@ -262,10 +262,17 @@ async function handleChatForOrder(order: ServiceOrderItem) {
               v-for="chip in quickChips"
               :key="chip.id"
               type="button"
-              class="h-8.5 px-3.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 active:scale-95 text-xs sm:text-sm text-white transition-all duration-150 shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+              class="h-8.5 px-3 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 active:scale-95 text-xs sm:text-sm text-white transition-all duration-150 shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
               @click="handleChipClick(chip)"
             >
-              <component :is="chip.icon" :size="15" :stroke-width="1.75" />
+              <img
+                v-if="chip.image"
+                :src="chip.image"
+                alt=""
+                class="w-4 h-4 object-contain brightness-110"
+                aria-hidden="true"
+              />
+              <component v-else :is="chip.icon" :size="15" :stroke-width="1.75" />
               {{ chip.title }}
             </button>
           </div>
@@ -344,6 +351,37 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           </router-link>
         </li>
       </ul>
+    </section>
+
+    <section
+      v-else-if="orders.length === 0"
+      class="rounded-2xl bg-white border border-ink-200/90 p-5 sm:p-6 shadow-2xs overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-5"
+    >
+      <div class="flex items-center gap-4 sm:gap-5 min-w-0 flex-1">
+        <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
+          <img
+            :src="'/images/ui/home-hero-repair-family.png'"
+            alt="Sửa chữa tại nhà FixHome"
+            class="w-full h-full object-contain drop-shadow-sm select-none pointer-events-none"
+            loading="lazy"
+          />
+        </div>
+        <div class="space-y-1 text-center sm:text-left min-w-0">
+          <h2 class="text-base sm:text-lg font-bold text-ink-900">Trải nghiệm dịch vụ sửa chữa chuẩn 5 sao</h2>
+          <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
+            Thợ có mặt nhanh chóng, báo giá minh bạch trước khi làm và bảo hành linh kiện chính hãng.
+          </p>
+        </div>
+      </div>
+      <FhButton
+        variant="primary"
+        size="md"
+        class="w-full sm:w-auto shrink-0 shadow-xs"
+        @click="router.push('/app/bookings/new')"
+      >
+        Đặt thợ ngay
+        <ChevronRight :size="16" />
+      </FhButton>
     </section>
 
     <!-- Services from the catalogue -->

@@ -2,7 +2,7 @@
 import { computed, ref, onUnmounted, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { useRouter } from 'vue-router';
-import { Mail, Clock, MapPin, Check, ChevronRight, X, Sparkles, Navigation } from 'lucide-vue-next';
+import { Clock, MapPin, Check, ChevronRight, X, Sparkles, Navigation } from 'lucide-vue-next';
 import {
   BookingMediaViewer,
   FhButton,
@@ -187,11 +187,16 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </div>
 
     <div v-else-if="invitations.length === 0" class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3">
-      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
-        <Mail :size="24" />
+      <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/role-choice-technician.png'"
+          alt=""
+          class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <h3 class="text-base font-semibold text-ink-900">Không có lời mời nào đang chờ</h3>
-      <p class="text-sm text-ink-500">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang Công việc.' : 'Lời mời mới sẽ hiện ở đây.' }}</p>
+      <p class="text-sm text-ink-500 max-w-sm mx-auto">{{ autoAccept ? 'Lời mời mới sẽ được tự động nhận và chuyển sang danh sách Công việc.' : 'Khi có khách đặt lịch trong khu vực hoạt động của bạn, lời mời sẽ hiển thị tại đây.' }}</p>
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->

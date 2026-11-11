@@ -753,8 +753,13 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </ul>
 
         <div v-else class="px-6 py-12 text-center space-y-3">
-          <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto">
-            <Briefcase :size="24" />
+          <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+            <img
+              :src="'/images/ui/role-choice-technician.png'"
+              alt=""
+              class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+              loading="lazy"
+            />
           </div>
           <h3 class="text-base font-bold text-ink-900">Chưa có việc đang làm</h3>
           <p class="text-sm text-ink-500 max-w-sm mx-auto text-pretty">

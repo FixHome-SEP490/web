@@ -765,13 +765,26 @@ const confirmMatchingExtension = async () => {
         </div>
 
         <!-- Case 3: Matching in progress -->
-        <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="pt-5 border-t border-ink-100 space-y-2">
-          <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <p class="text-ink-600">Khi kỹ thuật viên nhận, đơn sửa chữa sẽ hiện ở đây.</p>
+        <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="pt-5 border-t border-ink-100 space-y-3">
+          <div class="p-4 sm:p-5 rounded-2xl bg-brand-50/50 border border-brand-100 flex flex-col sm:flex-row items-center gap-4">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
+              <img
+                :src="'/images/ui/booking-technician-match.png'"
+                alt="Đang kết nối thợ"
+                class="w-full h-full object-contain drop-shadow-sm select-none pointer-events-none"
+                loading="lazy"
+              />
+            </div>
+            <div class="flex-1 min-w-0 text-center sm:text-left space-y-1">
+              <h4 class="text-sm sm:text-base font-bold text-ink-900">Đang kết nối kỹ thuật viên phù hợp</h4>
+              <p class="text-xs sm:text-sm text-ink-600 leading-relaxed">
+                Khi kỹ thuật viên nhận việc, đơn sửa chữa sẽ được kích hoạt ngay và hiển thị tại đây.
+              </p>
+            </div>
             <button
               type="button"
               data-testid="booking-refresh-order-link"
-              class="text-sm font-bold text-brand-700 hover:text-brand-800 hover:underline whitespace-nowrap disabled:opacity-50 transition-colors"
+              class="h-9 px-3.5 rounded-xl border border-brand-200 bg-white hover:bg-brand-50 text-xs sm:text-sm font-semibold text-brand-700 hover:text-brand-800 whitespace-nowrap shadow-2xs disabled:opacity-50 transition-colors"
               :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
               @click="refreshOrderLink"
             >
