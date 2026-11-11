@@ -261,9 +261,9 @@ describe('VisitGroup departure and whole-visit warehouse warning', () => {
     } });
     expect(w.find('[data-testid="visit-returns-warning"]').exists()).toBe(false);
     const detail = w.get('[data-testid="visit-return-device-2"]');
-    expect(detail.text()).toContain('qu?n l? d?ch v? c?n ??i so?t');
-    expect(detail.text()).not.toContain('c?n tr? kho');
-    expect(detail.text()).not.toContain('0 linh ki?n');
+    expect(detail.text()).toContain('quản lý dịch vụ cần đối soát');
+    expect(detail.text()).not.toContain('cần trả kho');
+    expect(detail.text()).not.toContain('0 linh kiện');
     expect(mockPost).not.toHaveBeenCalled();
     w.unmount();
   });

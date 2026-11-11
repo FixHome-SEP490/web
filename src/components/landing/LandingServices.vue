@@ -119,7 +119,7 @@ onMounted(loadCategories);
           <div>
             <div class="flex items-center justify-between">
               <span
-                class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-ink-150 bg-ink-50 p-2 shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:border-brand-200 group-hover:bg-brand-50/60"
+                class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-ink-200 bg-ink-50 p-2 shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:border-brand-200 group-hover:bg-brand-50/60"
               >
                 <img
                   :src="getCategoryArtworkUrl(category)"

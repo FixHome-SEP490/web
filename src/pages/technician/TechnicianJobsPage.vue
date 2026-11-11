@@ -202,7 +202,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
 };
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
-const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors ${focusRing}`;
+const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:scale-95 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-all duration-150 ${focusRing}`;
 // ── Sliding Active Background Pill ──
 const jobTabListRef = ref<HTMLElement | null>(null);
 const jobTabRefs = ref<Record<string, HTMLElement | null>>({});
@@ -272,7 +272,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
 
     <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại danh sách công việc">
@@ -283,7 +283,7 @@ onUnmounted(() => {
         :aria-pressed="listView === choice.key"
         :aria-label="choice.label"
         :data-testid="`jobs-list-switch-${choice.key}`"
-        class="h-11 min-w-[10rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        class="h-11 min-w-[10rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
         @click="listView = choice.key"
       >

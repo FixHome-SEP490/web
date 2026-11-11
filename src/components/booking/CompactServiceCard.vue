@@ -51,13 +51,15 @@ const artworkUrl = computed(() => getServiceArtworkUrl(props.service));
           class="h-full w-full object-contain"
           aria-hidden="true"
         />
-        <span
-          v-if="selected"
-          class="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-white ring-2 ring-white"
-          aria-hidden="true"
-        >
-          <Check :size="10" :stroke-width="3" />
-        </span>
+        <Transition name="fh-pop">
+          <span
+            v-if="selected"
+            class="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-white ring-2 ring-white"
+            aria-hidden="true"
+          >
+            <Check :size="10" :stroke-width="3" />
+          </span>
+        </Transition>
       </span>
       <span class="min-w-0 flex-1 text-sm font-medium leading-snug text-ink-900 text-pretty">{{ service.name }}</span>
       <span

@@ -130,7 +130,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div class="flex items-center gap-3 min-w-0">
         <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
@@ -195,11 +195,11 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->
-    <div v-else class="space-y-4">
+    <TransitionGroup v-else tag="div" name="fh-list" class="space-y-4">
       <article
         v-for="inv in invitations"
         :key="inv.id"
-        class="rounded-2xl bg-white border border-ink-200 overflow-hidden"
+        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs hover:border-brand-300 hover:shadow-xs transition-all duration-200"
         :data-testid="`invitation-${inv.id}`"
       >
         <!-- Summary (service, area, session); opens the full detail -->
@@ -246,20 +246,21 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           </FhButton>
         </div>
       </article>
-    </div>
+    </TransitionGroup>
 
     <!-- Full detail -->
-    <div
-      v-if="detailInvitation"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4 overscroll-contain"
-      @click.self="detailInvitation = null"
-    >
+    <Transition name="fh-modal">
       <div
-        class="bg-white rounded-[var(--radius-lg)] max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="invitation-detail-title"
+        v-if="detailInvitation"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overscroll-contain"
+        @click.self="detailInvitation = null"
       >
+        <div
+          class="fh-modal-panel bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invitation-detail-title"
+        >
         <div class="flex items-start justify-between gap-3">
           <h3 id="invitation-detail-title" class="text-lg font-semibold text-ink-900 text-balance">{{ detailInvitation.visitDevices ? `Lượt sửa ${detailInvitation.visitDevices.length} thiết bị` : detailInvitation.booking?.serviceName }}</h3>
           <button
@@ -371,6 +372,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </div>
       </div>
     </div>
+    </Transition>
 
     <AiSummaryDialog
       v-if="detailInvitation?.booking?.aiSummary"

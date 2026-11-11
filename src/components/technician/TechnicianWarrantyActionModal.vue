@@ -137,17 +137,18 @@ async function submit() {
 </script>
 
 <template>
-  <div
-    v-if="open && claim && mode"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
-    @keydown.esc="close"
-  >
+  <Transition name="fh-modal">
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="warranty-action-title"
-      class="bg-white rounded-[var(--radius-lg)] max-w-md w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+      v-if="open && claim && mode"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
+      @keydown.esc="close"
     >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="warranty-action-title"
+        class="fh-modal-panel bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+      >
       <div class="flex items-center justify-between">
         <h3 id="warranty-action-title" class="text-base font-bold text-ink-900">{{ title }}</h3>
         <button type="button" class="p-1 rounded-full hover:bg-ink-100" aria-label="Đóng" @click="close">
@@ -298,4 +299,5 @@ async function submit() {
       </div>
     </div>
   </div>
+  </Transition>
 </template>

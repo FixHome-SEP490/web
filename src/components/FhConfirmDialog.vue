@@ -27,13 +27,14 @@ const emit = defineEmits<{
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs transition-opacity"
-    >
+    <Transition name="fh-modal">
       <div
-        class="bg-white rounded-lg border border-ink-200 shadow-(--shadow-e3) max-w-md w-full overflow-hidden p-6 space-y-4"
+        v-if="open"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
       >
+        <div
+          class="fh-modal-panel bg-white rounded-lg border border-ink-200 shadow-(--shadow-e3) max-w-md w-full overflow-hidden p-6 space-y-4"
+        >
         <!-- Header -->
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-3">
@@ -88,5 +89,6 @@ const emit = defineEmits<{
         </div>
       </div>
     </div>
+    </Transition>
   </Teleport>
 </template>

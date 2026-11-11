@@ -113,7 +113,7 @@ const emptyText = computed(() => {
 });
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
-const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 inline-flex items-center justify-center shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
+const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 active:scale-95 inline-flex items-center justify-center shrink-0 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
 
 // ── Period Tab sliding indicator animation ──
 const periodListRef = ref<HTMLElement | null>(null);
@@ -173,7 +173,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Thu nhập</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="reload">
@@ -322,7 +322,7 @@ onUnmounted(() => {
           <li v-for="payout in payouts" :key="payout.orderId">
             <button
               type="button"
-              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 active:scale-[0.99] transition-all duration-150"
               :class="focusRing"
               :data-testid="`earning-row-${payout.orderId}`"
               @click="router.push(`/tech/jobs/${payout.orderId}`)"

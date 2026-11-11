@@ -19,6 +19,8 @@ import {
   AlertCircle,
   ChevronRight,
   User,
+  Wallet,
+  TrendingUp,
 } from 'lucide-vue-next';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 
@@ -203,7 +205,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 </script>
 
 <template>
-  <div class="space-y-6 pb-6">
+  <div class="w-full mx-auto space-y-5">
     <!-- 1. Who is working and whether jobs reach them right now -->
     <header class="bg-white rounded-2xl border border-ink-200/90 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
       <div class="flex items-center gap-4 min-w-0">
@@ -280,63 +282,65 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </header>
 
     <!-- 2. A job offer waiting for an answer: the main urgent action when there is one -->
-    <section
-      v-if="topInvitation"
-      class="p-5 sm:p-6 rounded-2xl bg-white border-2 border-brand-500 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
-      data-testid="dashboard-invitation"
-    >
-      <div class="min-w-0 flex-1 space-y-2.5">
-        <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-semibold">
-            <span class="w-2 h-2 rounded-full bg-brand-600 animate-ping"></span>
-            Lời mời nhận việc mới
-          </span>
-          <FhCountdown :expires-at="topInvitation.expiresAt" />
-          <span v-if="invitations.length > 1" class="text-xs font-semibold text-ink-600 bg-ink-100 h-6 px-2.5 rounded-lg inline-flex items-center whitespace-nowrap">
-            +{{ invitations.length - 1 }} lời mời khác
-          </span>
-        </div>
-
-        <div>
-          <h2 class="text-lg sm:text-xl font-bold text-ink-900 tracking-tight text-balance">
-            {{ topInvitation.booking?.serviceName || 'Dịch vụ sửa chữa tại nhà' }}
-          </h2>
-          <div class="mt-2 flex flex-col sm:flex-row sm:items-center gap-x-6 gap-y-1.5 text-sm text-ink-700">
-            <span class="flex items-start gap-1.5 min-w-0">
-              <MapPin :size="16" class="text-brand-600 shrink-0 mt-0.5" />
-              <span class="font-medium text-pretty">{{ topInvitation.booking?.addressSummary || 'Khu vực địa phương' }}</span>
+    <Transition name="fh-fade-slide">
+      <section
+        v-if="topInvitation"
+        class="p-5 sm:p-6 rounded-2xl bg-white border-2 border-brand-500 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+        data-testid="dashboard-invitation"
+      >
+        <div class="min-w-0 flex-1 space-y-2.5">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-semibold">
+              <span class="w-2 h-2 rounded-full bg-brand-600 animate-ping"></span>
+              Lời mời nhận việc mới
             </span>
-            <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Clock :size="16" class="text-brand-600 shrink-0" />
-              <span class="text-ink-500">Thời gian:</span>
-              <strong class="font-bold text-ink-900">{{ sessionLabel({ bookingMode: topInvitation.booking?.bookingMode, slot: topInvitation.booking?.slot, start: topInvitation.booking?.preferredStartAt }) }}</strong>
+            <FhCountdown :expires-at="topInvitation.expiresAt" />
+            <span v-if="invitations.length > 1" class="text-xs font-semibold text-ink-600 bg-ink-100 h-6 px-2.5 rounded-lg inline-flex items-center whitespace-nowrap">
+              +{{ invitations.length - 1 }} lời mời khác
             </span>
           </div>
-        </div>
-      </div>
 
-      <div class="grid grid-cols-2 lg:flex items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-ink-100">
-        <FhButton
-          variant="secondary"
-          size="md"
-          class="h-11 px-5 rounded-xl font-semibold border-ink-200 hover:bg-ink-100 text-ink-700"
-          :loading="decliningInvitation"
-          @click="declineTopInvitation"
-        >
-          Từ chối
-        </FhButton>
-        <FhButton
-          variant="primary"
-          size="md"
-          class="h-11 px-5 rounded-xl font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
-          :loading="acceptingInvitation"
-          @click="handleAcceptTopInvitation"
-        >
-          <Check :size="18" />
-          <span>Chấp nhận đơn này</span>
-        </FhButton>
-      </div>
-    </section>
+          <div>
+            <h2 class="text-lg sm:text-xl font-bold text-ink-900 tracking-tight text-balance">
+              {{ topInvitation.booking?.serviceName || 'Dịch vụ sửa chữa tại nhà' }}
+            </h2>
+            <div class="mt-2 flex flex-col sm:flex-row sm:items-center gap-x-6 gap-y-1.5 text-sm text-ink-700">
+              <span class="flex items-start gap-1.5 min-w-0">
+                <MapPin :size="16" class="text-brand-600 shrink-0 mt-0.5" />
+                <span class="font-medium text-pretty">{{ topInvitation.booking?.addressSummary || 'Khu vực địa phương' }}</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <Clock :size="16" class="text-brand-600 shrink-0" />
+                <span class="text-ink-500">Thời gian:</span>
+                <strong class="font-bold text-ink-900">{{ sessionLabel({ bookingMode: topInvitation.booking?.bookingMode, slot: topInvitation.booking?.slot, start: topInvitation.booking?.preferredStartAt }) }}</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:flex items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-ink-100">
+          <FhButton
+            variant="secondary"
+            size="md"
+            class="h-11 px-5 rounded-xl font-semibold border-ink-200 hover:bg-ink-100 text-ink-700"
+            :loading="decliningInvitation"
+            @click="declineTopInvitation"
+          >
+            Từ chối
+          </FhButton>
+          <FhButton
+            variant="primary"
+            size="md"
+            class="h-11 px-5 rounded-xl font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
+            :loading="acceptingInvitation"
+            @click="handleAcceptTopInvitation"
+          >
+            <Check :size="18" />
+            <span>Chấp nhận đơn này</span>
+          </FhButton>
+        </div>
+      </section>
+    </Transition>
 
     <!-- 3. Key metrics grid: 3 punchy, field-ready metric cards (grounded, non-AI) -->
     <section
@@ -346,13 +350,18 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
       <!-- Card 1: Ví thợ & Ký quỹ -->
       <button
         type="button"
-        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-ink-300 transition-colors text-left flex flex-col justify-between min-h-[136px] cursor-pointer"
+        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-brand-300 hover:shadow-xs transition-all text-left flex flex-col justify-between min-h-[142px] cursor-pointer"
         :class="focusRing"
         @click="router.push('/tech/wallet')"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-[13px] font-medium text-ink-500">Số dư ví</span>
-          <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+              <Wallet :size="16" />
+            </div>
+            <span class="text-[13px] font-semibold text-ink-700">Số dư ví</span>
+          </div>
+          <span class="text-xs font-medium text-ink-400 group-hover:text-brand-600 transition-colors inline-flex items-center gap-1">
             Chi tiết
             <span aria-hidden="true">&rarr;</span>
           </span>
@@ -386,10 +395,15 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
       <!-- Card 2: Đơn đang xử lý -->
       <div
-        class="p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs flex flex-col justify-between min-h-[136px]"
+        class="p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs flex flex-col justify-between min-h-[142px]"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-[13px] font-medium text-ink-500">Đang làm</span>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-warning-50 text-warning-600 flex items-center justify-center shrink-0">
+              <Briefcase :size="16" />
+            </div>
+            <span class="text-[13px] font-semibold text-ink-700">Đang làm</span>
+          </div>
           <span
             v-if="activeJobs.length > 0"
             class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-ink-100 text-ink-800 font-num"
@@ -408,12 +422,12 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         <div class="text-xs text-ink-600 flex items-center gap-1.5">
           <template v-if="activeJobs.length > 0">
             <span class="inline-flex items-center gap-1 font-medium text-ink-700">
-              <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-600"></span>
               {{ enRouteJobs.length }} di chuyển
             </span>
             <span class="text-ink-300">·</span>
             <span class="inline-flex items-center gap-1 font-medium text-ink-700">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-warning-500"></span>
               {{ underRepairJobs.length }} đang sửa
             </span>
           </template>
@@ -426,13 +440,18 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
       <!-- Card 3: Hoàn thành tuần này -->
       <button
         type="button"
-        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-ink-300 transition-colors text-left flex flex-col justify-between min-h-[136px] cursor-pointer"
+        class="group p-5 bg-white rounded-2xl border border-ink-200/90 shadow-2xs hover:border-brand-300 hover:shadow-xs transition-all text-left flex flex-col justify-between min-h-[142px] cursor-pointer"
         :class="focusRing"
         @click="router.push('/tech/earnings')"
       >
         <div class="flex items-center justify-between w-full">
-          <span class="text-[13px] font-medium text-ink-500">Hoàn thành tuần này</span>
-          <span class="text-xs font-medium text-ink-400 group-hover:text-ink-700 transition-colors inline-flex items-center gap-1">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-success-50 text-success-600 flex items-center justify-center shrink-0">
+              <TrendingUp :size="16" />
+            </div>
+            <span class="text-[13px] font-semibold text-ink-700">Hoàn thành tuần này</span>
+          </div>
+          <span class="text-xs font-medium text-ink-400 group-hover:text-brand-600 transition-colors inline-flex items-center gap-1">
             Bảng kê
             <span aria-hidden="true">&rarr;</span>
           </span>
@@ -746,9 +765,19 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
       <!-- Section 5: Recent completed jobs -->
       <section v-if="completedJobs.length > 0" class="bg-white rounded-2xl border border-ink-200/90 shadow-xs overflow-hidden">
-        <header class="px-5 sm:px-6 py-4 border-b border-ink-100 flex items-center justify-between">
-          <h2 class="text-lg font-bold text-ink-900">Hoàn thành gần đây</h2>
-          <span class="text-xs text-ink-500 font-medium font-num">{{ completedJobs.length }} đơn đã xong</span>
+        <header class="px-5 sm:px-6 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <h2 class="text-lg font-bold text-ink-900">Hoàn thành gần đây</h2>
+            <span class="text-xs text-ink-500 font-medium font-num">{{ completedJobs.length }} đơn đã xong</span>
+          </div>
+          <router-link
+            to="/tech/jobs"
+            class="h-9 px-3 rounded-xl text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 inline-flex items-center gap-1 whitespace-nowrap transition-colors"
+            :class="focusRing"
+          >
+            <span>Xem lịch sử</span>
+            <ChevronRight :size="16" />
+          </router-link>
         </header>
 
         <ul class="divide-y divide-ink-100">

@@ -98,7 +98,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <router-link
       :to="{ name: 'tech-warranty' }"
       class="inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-ink-900 rounded"

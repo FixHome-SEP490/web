@@ -24,19 +24,20 @@ const hasPrice = computed(() => props.summary.priceMin != null || props.summary.
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50"
-    @click.self="emit('close')"
-    @keydown.esc="emit('close')"
-  >
+  <Transition name="fh-modal">
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="ai-summary-title"
-      class="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-5 max-h-[90dvh] overflow-y-auto overscroll-contain"
-      data-testid="ai-summary-dialog"
+      v-if="open"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50 backdrop-blur-xs"
+      @click.self="emit('close')"
+      @keydown.esc="emit('close')"
     >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-summary-title"
+        class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-5 max-h-[90dvh] overflow-y-auto overscroll-contain"
+        data-testid="ai-summary-dialog"
+      >
       <div class="flex items-start justify-between gap-3">
         <h3 id="ai-summary-title" class="text-lg font-bold text-ink-900 inline-flex items-center gap-2">
           <Sparkles :size="18" class="text-brand-600 shrink-0" /> Tóm tắt vấn đề từ AI
@@ -91,4 +92,5 @@ const hasPrice = computed(() => props.summary.priceMin != null || props.summary.
       </section>
     </div>
   </div>
+  </Transition>
 </template>

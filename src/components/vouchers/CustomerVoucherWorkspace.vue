@@ -127,7 +127,9 @@ function submitCode() {
       <p v-if="!actionsEnabled" class="mt-3 text-sm text-ink-600" role="note">{{ VOUCHER_UNAVAILABLE_MESSAGE }} Mã sẽ không được gửi đi.</p>
     </section>
 
-    <p v-if="feedback" :role="feedbackError ? 'alert' : 'status'" class="rounded-[var(--radius-sm)] border p-3 text-sm leading-6" :class="feedbackError ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'">{{ feedback }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="feedback" :role="feedbackError ? 'alert' : 'status'" class="rounded-[var(--radius-sm)] border p-3 text-sm leading-6" :class="feedbackError ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'">{{ feedback }}</p>
+    </Transition>
 
     <div class="flex flex-col gap-1">
       <h2 class="text-lg font-semibold text-ink-900">Kho ưu đãi</h2>
@@ -146,7 +148,7 @@ function submitCode() {
         :aria-selected="activeTab === tab.key"
         :aria-controls="`voucher-panel-${tab.key}`"
         :tabindex="activeTab === tab.key ? 0 : -1"
-        class="inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] px-3 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 aria-selected:bg-brand-50 aria-selected:text-brand-800"
+        class="inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] px-3 text-sm font-medium text-ink-700 transition-all duration-150 active:scale-[0.98] hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 aria-selected:bg-brand-50 aria-selected:text-brand-800"
         @click="activeTab = tab.key"
       >
         <component :is="tab.icon" :size="17" aria-hidden="true" />
@@ -154,24 +156,26 @@ function submitCode() {
       </button>
     </div>
 
-    <section :id="`voucher-panel-${activeTab}`" role="tabpanel" :aria-labelledby="`voucher-tab-${activeTab}`" tabindex="0" class="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
-      <VoucherStatePanel v-if="activeTab === 'general' && generalLoading" state="loading" />
-      <VoucherStatePanel v-else-if="activeTab === 'general' && generalError" state="error" :message="generalError" @retry="$emit('retryGeneral')" />
-      <VoucherStatePanel v-else-if="state !== 'ready'" :state="state" :message="message" @retry="$emit('retry')" />
-      <VoucherStatePanel v-else-if="activeTab === 'general' && !discoveryAvailable" state="unavailable" title="Khám phá ưu đãi sắp khả dụng" message="Danh sách ưu đãi chung chưa được cung cấp. Nếu bạn đã có mã, hãy nhập mã ở trên để lưu vào ví." />
-      <VoucherStatePanel v-else-if="visibleOffers.length === 0" state="empty" :title="emptyTitle" :message="emptyMessage" />
-      <ul v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4" aria-label="Ưu đãi">
-        <li v-for="offer in visibleOffers" :key="offer.id">
-          <VoucherOfferCard
-            :offer="offer"
-            :connected="actionsEnabled && !busy"
-            :customer-id="customerId"
-            :action-label="offer.walletStatus === 'USED' ? 'Đã sử dụng' : offer.walletStatus === 'EXPIRED' ? 'Đã hết hạn' : offer.walletStatus === 'REVOKED' ? 'Đã thu hồi' : offer.walletStatus ? 'Đã lưu trong ví' : 'Lưu vào ví'"
-            :disabled-reason="!actionsEnabled ? VOUCHER_UNAVAILABLE_MESSAGE : ''"
-            @activate="$emit('claim', offer.code)"
-          />
-        </li>
-      </ul>
-    </section>
+    <Transition name="fh-fade-slide" mode="out-in">
+      <section :key="activeTab" :id="`voucher-panel-${activeTab}`" role="tabpanel" :aria-labelledby="`voucher-tab-${activeTab}`" tabindex="0" class="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+        <VoucherStatePanel v-if="activeTab === 'general' && generalLoading" state="loading" />
+        <VoucherStatePanel v-else-if="activeTab === 'general' && generalError" state="error" :message="generalError" @retry="$emit('retryGeneral')" />
+        <VoucherStatePanel v-else-if="state !== 'ready'" :state="state" :message="message" @retry="$emit('retry')" />
+        <VoucherStatePanel v-else-if="activeTab === 'general' && !discoveryAvailable" state="unavailable" title="Khám phá ưu đãi sắp khả dụng" message="Danh sách ưu đãi chung chưa được cung cấp. Nếu bạn đã có mã, hãy nhập mã ở trên để lưu vào ví." />
+        <VoucherStatePanel v-else-if="visibleOffers.length === 0" state="empty" :title="emptyTitle" :message="emptyMessage" />
+        <ul v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4" aria-label="Ưu đãi">
+          <li v-for="offer in visibleOffers" :key="offer.id">
+            <VoucherOfferCard
+              :offer="offer"
+              :connected="actionsEnabled && !busy"
+              :customer-id="customerId"
+              :action-label="offer.walletStatus === 'USED' ? 'Đã sử dụng' : offer.walletStatus === 'EXPIRED' ? 'Đã hết hạn' : offer.walletStatus === 'REVOKED' ? 'Đã thu hồi' : offer.walletStatus ? 'Đã lưu trong ví' : 'Lưu vào ví'"
+              :disabled-reason="!actionsEnabled ? VOUCHER_UNAVAILABLE_MESSAGE : ''"
+              @activate="$emit('claim', offer.code)"
+            />
+          </li>
+        </ul>
+      </section>
+    </Transition>
   </div>
 </template>
