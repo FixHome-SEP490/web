@@ -860,7 +860,7 @@ const openAvatarModal = () => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto space-y-6 pb-16">
+  <div class="w-full mx-auto space-y-5">
     <!-- Save feedback -->
     <Transition
       enter-active-class="transition duration-200 ease-out"

@@ -347,7 +347,7 @@ const confirmWithdraw = async () => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-6">
+  <div class="w-full mx-auto space-y-5">
     <input
       ref="frontInput"
       type="file"

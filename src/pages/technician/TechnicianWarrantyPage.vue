@@ -134,7 +134,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
@@ -172,8 +172,9 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
     <FhEmptyState
       v-else-if="claims.length === 0"
+      illustration="/images/ui/booking-confirmed.png"
       title="Chưa có yêu cầu bảo hành"
-      description="Yêu cầu bảo hành cho việc bạn đã làm sẽ hiện ở đây."
+      description="Chất lượng thi công của bạn rất tốt! Yêu cầu bảo hành cho các ca sửa đã hoàn thành sẽ hiện ở đây."
     />
 
     <template v-else>

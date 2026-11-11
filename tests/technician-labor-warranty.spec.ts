@@ -64,7 +64,7 @@ describe('Technician labor warranty on the job page', () => {
     const days = form.get('[data-testid="quote-labor-warranty"] input');
     expect((days.element as HTMLInputElement).value).toBe('90');
 
-    await form.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
+    await form.findAll('button').find(b => b.text().includes('Thêm tiền công'))!.trigger('click');
     const [description, price] = form.findAll('input').slice(0, 2);
     await description.setValue('Thay bạc đạn');
     await price.setValue(150000);
@@ -100,7 +100,7 @@ describe('Technician labor warranty on the job page', () => {
     const send = () => w.findAll('button').find(b => b.text().includes('Gửi báo giá cho khách duyệt'))!;
     expect(send().attributes('disabled')).toBeDefined();
     await submitQuote(w);
-    await w.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
+    await w.findAll('button').find(b => b.text().includes('Thêm tiền công'))!.trigger('click');
     await w.get('input[aria-label="Mô tả công việc"]').setValue('Kiểm tra máy');
     await w.get('input[aria-label="Đơn giá"]').setValue(100000);
     expect(send().attributes('disabled')).toBeUndefined();
@@ -179,7 +179,7 @@ describe('Technician labor warranty on the job page', () => {
     parts.vm.$emit('pending-usage', 1);
     await flushPromises();
     expect(w.find('[data-testid="pending-parts-usage"]').exists()).toBe(false);
-    await w.findAll('button').find(b => b.text().includes('Thêm công thợ'))!.trigger('click');
+    await w.findAll('button').find(b => b.text().includes('Thêm tiền công'))!.trigger('click');
     await w.get('input[aria-label="Mô tả công việc"]').setValue('Sửa máy');
     await w.get('input[aria-label="Đơn giá"]').setValue(100000);
     expect(w.findAll('button').find(b => b.text().includes('Gửi báo giá cho khách duyệt'))!.attributes('disabled')).toBeUndefined();

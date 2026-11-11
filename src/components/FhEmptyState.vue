@@ -8,11 +8,13 @@ interface Props {
   description: string;
   actionText?: string;
   icon?: Component;
+  illustration?: string;
 }
 
 withDefaults(defineProps<Props>(), {
   actionText: '',
   icon: () => Inbox,
+  illustration: '',
 });
 
 const emit = defineEmits<{
@@ -22,8 +24,16 @@ const emit = defineEmits<{
 
 <template>
   <div class="flex flex-col items-center justify-center text-center p-8 sm:p-12 max-w-md mx-auto">
-    <!-- 40px Icon in brand-50 tile per P7.7 -->
-    <div class="w-16 h-16 rounded-sm bg-brand-50 flex items-center justify-center text-brand-600 mb-4 border border-brand-100">
+    <!-- 3D Illustration or Icon in brand tile -->
+    <div v-if="illustration" class="mb-5 max-w-[150px] sm:max-w-[180px] flex items-center justify-center">
+      <img
+        :src="illustration"
+        alt=""
+        class="w-full h-auto max-h-40 object-contain drop-shadow-sm select-none pointer-events-none"
+        loading="lazy"
+      />
+    </div>
+    <div v-else class="w-16 h-16 rounded-2xl bg-brand-50 flex items-center justify-center text-brand-600 mb-4 border border-brand-100">
       <component :is="icon" :size="32" :stroke-width="1.75" />
     </div>
 

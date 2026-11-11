@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import {
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   ChevronRight,
@@ -194,7 +193,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto space-y-6 pb-12">
+  <div class="w-full space-y-6 pb-12">
     <!-- Header -->
     <div class="space-y-1">
       <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
@@ -295,7 +294,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Loading: the shape of the cards -->
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 gap-5" aria-busy="true" aria-label="Đang tải bảo hành">
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" aria-busy="true" aria-label="Đang tải bảo hành">
       <div v-for="i in 2" :key="i" class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <FhSkeleton width="60%" height="22px" />
@@ -325,24 +324,34 @@ onUnmounted(() => {
     <!-- Empty completely -->
     <div
       v-else-if="warrantyOrders.length === 0 && total <= PAGE_SIZE"
-      class="text-center py-16 px-6 bg-white rounded-2xl border border-ink-200 space-y-3 shadow-xs"
+      class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3 shadow-xs"
     >
-      <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
-        <ShieldCheck :size="28" />
+      <div class="mx-auto mb-3 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
+        <img
+          :src="'/images/home-appliance-repair.png'"
+          alt=""
+          class="w-full h-auto max-h-36 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <h2 class="text-base sm:text-lg font-semibold text-ink-900">Chưa có đơn nào đang được bảo hành</h2>
       <p class="text-sm text-ink-500 max-w-md mx-auto text-pretty">
-        Đơn hoàn tất và đã thanh toán sẽ có bảo hành ở đây.
+        Đơn sửa chữa hoàn tất và đã thanh toán sẽ tự động kích hoạt gói bảo hành minh bạch tại đây.
       </p>
     </div>
 
     <!-- Search / Filter Empty -->
     <div
       v-else-if="filteredWarrantyOrders.length === 0 && warrantyOrders.length > 0"
-      class="text-center py-12 px-6 bg-white rounded-2xl border border-ink-200 space-y-2 shadow-xs"
+      class="text-center py-12 px-6 bg-white rounded-2xl border border-ink-200 space-y-3 shadow-xs"
     >
-      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 flex items-center justify-center mx-auto mb-2">
-        <Search :size="20" />
+      <div class="mx-auto mb-2 max-w-[120px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-24 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <h2 class="text-base font-semibold text-ink-900">Không tìm thấy đơn bảo hành phù hợp</h2>
       <p class="text-sm text-ink-500 max-w-md mx-auto text-pretty">
@@ -368,7 +377,7 @@ onUnmounted(() => {
     </p>
 
     <!-- One surface per order -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       <section
         v-for="order in filteredWarrantyOrders"
         :key="order.orderId"

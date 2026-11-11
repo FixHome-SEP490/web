@@ -1202,8 +1202,13 @@ const handleLogout = async () => {
         v-else-if="isApproved"
         class="bg-white rounded-3xl p-8 sm:p-12 border border-success-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
-        <div class="w-20 h-20 rounded-full bg-success-100 text-success-600 flex items-center justify-center mx-auto shadow-inner">
-          <CheckCircle2 :size="42" />
+        <div class="mx-auto max-w-[140px] flex items-center justify-center">
+          <img
+            :src="'/images/ui/booking-confirmed.png'"
+            alt="Đã phê duyệt"
+            class="w-full h-auto max-h-36 object-contain drop-shadow-md select-none pointer-events-none"
+            loading="lazy"
+          />
         </div>
         <div class="space-y-2">
           <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ đã được phê duyệt!</h2>
@@ -1266,8 +1271,13 @@ const handleLogout = async () => {
         v-else-if="isSubmitted && !isReviewing"
         class="bg-white rounded-3xl p-8 sm:p-12 border border-warning-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
-        <div class="w-20 h-20 rounded-full bg-warning-100 text-warning-600 flex items-center justify-center mx-auto shadow-inner">
-          <Clock :size="42" />
+        <div class="mx-auto max-w-[140px] flex items-center justify-center">
+          <img
+            :src="'/images/ui/role-choice-technician.png'"
+            alt="Đang chờ phê duyệt"
+            class="w-full h-auto max-h-36 object-contain drop-shadow-md select-none pointer-events-none"
+            loading="lazy"
+          />
         </div>
         <div class="space-y-2">
           <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-100 text-warning-800 text-xs font-bold">

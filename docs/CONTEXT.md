@@ -1,5 +1,6 @@
 # Context repo web — FixHome
 
+> Cập nhật lần cuối: 2026-11-11 16:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 > Cập nhật lần cuối: 2026-11-09 02:48 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
@@ -91,6 +92,15 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Nâng cấp UI/UX, Design System và Visual Assets 3D (11/11/2026)
+
+- Redesign trang chọn thợ `BookingCandidatesPage`: tinh gọn card kỹ thuật viên, loại bỏ gradient tràn viền, bỏ nhãn giá dư thừa; click tên/avatar mở trực tiếp `TechnicianProfileModal`, click thân thẻ để chọn ưu tiên 1/2. Tinh chỉnh animation và bỏ dấu `+`/`✓` thừa trong suggestion chips của wizard và review modal.
+- Mở rộng Design System `FhEmptyState` với prop `illustration?: string`, hỗ trợ hiển thị tranh 3D mềm mại có shadow thay cho icon phẳng 32px.
+- Đồng bộ kho ảnh 3D từ `mobile/assets` sang `web/public/images/ui/` (`empty-state-search-service.png`, `booking-technician-match.png`, `booking-confirmed.png`, `role-choice-technician.png`, `home-hero-repair-family.png`, `ai-helper-sparkles.png`, `home-appliance-repair.png`).
+- Khách hàng: empty state tại đơn hàng, yêu cầu đặt lịch, lịch sử, bảo hành, thông báo, ví tiền, tìm kiếm dịch vụ và kho voucher đều tích hợp tranh 3D; dashboard có onboarding card gia đình và thumbnail dịch vụ 3D; modal gửi lời mời và đánh giá thành công có tranh xác nhận; trang chi tiết có banner radar tìm thợ trực quan.
+- Kỹ thuật viên: dashboard, lời mời, danh sách công việc, lượt sửa nhiều thiết bị, thu nhập, ví và duyệt/chờ duyệt onboarding dùng minh họa thợ và thiết bị 3D; dialog tóm tắt AI có huy hiệu 3D nổi bật.
+- Toàn bộ đường dẫn ảnh dùng `:src="'/images/...'"` tương thích hoàn toàn Vite SFC/Vitest Windows; loại bỏ icon thừa, build `vue-tsc` và full test pass.
 
 ### Kho W1 và nhận linh kiện W2 trên Web (08/11/2026)
 
@@ -588,6 +598,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
 - 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm
 - 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
 - 2026-11-08 21:27 (UTC+7) | ToanAltF4 | fix/ai-new-session-service | Phiên mới trên trang Phân tích cùng AI nhận lại dịch vụ AI gợi ý (đặt lại cờ chọn tay sau khi xoá dịch vụ)
@@ -628,3 +639,11 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
 - 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.
 - 2026-11-02 17:35 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Khóa thu tiền ở trang cha trước reserve và qua timeout/đóng/remount theo attempt cache, chống POST đang chạy qua remount và khóa hóa đơn cũ khi đổi phiên; thêm hồi quy parent–chooser thật.
+- 2026-11-02 14:44 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Phân loại receipt voucher terminal, bỏ hold hết hạn/đã nhả có chứng cứ, khóa thu sau redeemed/refunded và đối chiếu hóa đơn; tách A-B-A và chống gửi trùng đang chạy.
+- 2026-11-02 14:25 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Sửa recovery voucher chưa rõ kết quả: replay đúng attempt không phụ thuộc preview quota mới, giữ snapshot tham khảo và ranh giới khách/scope.
+- 2026-11-02 10:34 (UTC+7) | foxonworld | foxonworld/fixhome-rebook-voucher-history-web-20261102 | Ghi UX rebook urgent/địa chỉ, máy dừng gọn, voucher giữ attempt/giờ phản hồi và lịch sử cựu phân công riêng tư; Backend trước Web và giới hạn runtime.
+- 2026-11-02 01:10 (UTC+7) | foxonworld | foxonworld/fixhome-qa-seven-issues-web-20261102 | Sửa bảy lỗi demo Web: xác nhận ZERO tường minh, ảnh lỗi, điều hướng máy lịch sử, trạng thái dừng/đặt lại UUID legacy, voucher readiness và nghĩa vụ linh kiện; ghi giới hạn QA.
+- 2026-11-01 22:42 (UTC+7) | ToanAltF4 | fix/address-strict-text-coords | Form địa chỉ khách và vị trí thợ kiểm luật địa chỉ của backend trước khi gửi (đủ toạ độ, không emoji, ký tự vô hình, điều khiển, thẻ HTML), lỗi hiện ngay dưới ô (lỗi 29, PO 01/11/2026)
+- 2026-11-01 22:10 (UTC+7) | foxonworld | foxonworld/fixhome-group-stop-web-20261101 | Nối báo cáo dừng cả lượt, bằng chứng/readiness server, subset đặt lại và chi tiết sự cố nhóm SM/Admin; giữ tiền/linh kiện, ghi rõ giới hạn runtime và hợp đồng Backend đang viết.
+- 2026-11-01 21:09 (UTC+7) | foxonworld | foxonworld/fixhome-support-staff-visibility-p0-20261101 | Phase 1: nhận technician_delay, hiển thị máy interrupted/đối soát, nối case theo đơn và gộp báo cáo thợ; dừng cả lượt bị chặn, runtime/Mobile NOT VERIFIED.
+- 2026-11-01 20:36 (UTC+7) | ToanAltF4 | fix/visit-candidates-empty-state | Trang chọn thợ của lượt nhiều thiết bị đọc meta.emptyReason từ visit-groups technician-candidates?diagnostics=1 và hiện cùng các trạng thái như đặt một máy, thanh Đã chọn và Gửi lời mời ẩn khi không có thợ

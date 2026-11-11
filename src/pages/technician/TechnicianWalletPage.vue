@@ -2,13 +2,11 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  Wallet,
   ArrowUpRight,
   ArrowDownLeft,
   AlertCircle,
   CheckCircle2,
   XCircle,
-  CreditCard,
   RefreshCw,
   ChevronRight,
   Landmark,
@@ -359,7 +357,7 @@ const handleWithdraw = async () => {
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto space-y-6">
+  <div class="w-full mx-auto space-y-5">
     <!-- Header: title + quiet refresh -->
     <div class="flex items-center justify-between gap-3">
       <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
@@ -378,28 +376,30 @@ const handleWithdraw = async () => {
     </div>
 
     <!-- VNPay return -->
-    <div
-      v-if="returnBanner"
-      role="status"
-      :class="[
-        'px-4 py-3 rounded-2xl border flex items-center gap-3',
-        returnBanner.type === 'success'
-          ? 'bg-success-50 border-success-200 text-success-800'
-          : 'bg-danger-50 border-danger-200 text-danger-700',
-      ]"
-    >
-      <CheckCircle2 v-if="returnBanner.type === 'success'" :size="18" class="text-success-600 shrink-0" />
-      <XCircle v-else :size="18" class="text-danger-600 shrink-0" />
-      <span class="min-w-0 flex-1 text-sm font-medium text-pretty">{{ returnBanner.message }}</span>
-      <button
-        type="button"
-        class="shrink-0 w-10 h-10 -my-2 -mr-2 rounded-xl flex items-center justify-center opacity-70 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-        aria-label="Đóng thông báo"
-        @click="returnBanner = null"
+    <Transition name="fh-fade-slide">
+      <div
+        v-if="returnBanner"
+        role="status"
+        :class="[
+          'px-4 py-3 rounded-2xl border flex items-center gap-3',
+          returnBanner.type === 'success'
+            ? 'bg-success-50 border-success-200 text-success-800'
+            : 'bg-danger-50 border-danger-200 text-danger-700',
+        ]"
       >
-        <X :size="16" />
-      </button>
-    </div>
+        <CheckCircle2 v-if="returnBanner.type === 'success'" :size="18" class="text-success-600 shrink-0" />
+        <XCircle v-else :size="18" class="text-danger-600 shrink-0" />
+        <span class="min-w-0 flex-1 text-sm font-medium text-pretty">{{ returnBanner.message }}</span>
+        <button
+          type="button"
+          class="shrink-0 w-10 h-10 -my-2 -mr-2 rounded-xl flex items-center justify-center opacity-70 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          aria-label="Đóng thông báo"
+          @click="returnBanner = null"
+        >
+          <X :size="16" />
+        </button>
+      </div>
+    </Transition>
 
     <!-- Loading: same shape as the page -->
     <div v-if="loading" class="space-y-6" aria-busy="true" aria-label="Đang tải ví">
@@ -483,7 +483,7 @@ const handleWithdraw = async () => {
           <div class="flex flex-col sm:flex-row gap-3 shrink-0">
             <button
               type="button"
-              class="h-11 px-5 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-sm font-semibold whitespace-nowrap transition-colors shadow-sm flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              class="h-11 px-5 rounded-xl bg-white text-brand-700 hover:bg-brand-50 active:scale-[0.98] text-sm font-semibold whitespace-nowrap transition-all duration-150 shadow-sm flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
               @click="showTopUpModal = true"
             >
               <ArrowDownLeft :size="16" />
@@ -491,7 +491,7 @@ const handleWithdraw = async () => {
             </button>
             <button
               type="button"
-              class="h-11 px-5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              class="h-11 px-5 rounded-xl bg-white/15 hover:bg-white/25 active:scale-[0.98] border border-white/30 text-white text-sm font-semibold whitespace-nowrap transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
               :disabled="!!withdrawBlockedReason"
               :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
               @click="openWithdraw"
@@ -569,23 +569,25 @@ const handleWithdraw = async () => {
           </button>
         </div>
 
-        <!-- Balance changes -->
-        <div v-if="activeTab === 'transactions'" class="p-4 sm:p-6 space-y-4">
-          <div class="flex items-center gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
-            <button
-              v-for="f in txFilters"
-              :key="f.id"
-              type="button"
-              class="h-10 px-3.5 rounded-full text-sm whitespace-nowrap shrink-0 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-              :class="txFilterType === f.id
-                ? 'bg-brand-50 text-brand-700 font-semibold border-brand-200'
-                : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'"
-              :aria-pressed="txFilterType === f.id"
-              @click="txFilterType = f.id"
-            >
-              {{ f.label }}
-            </button>
-          </div>
+        <!-- Tabs content -->
+        <Transition name="fh-fade-slide" mode="out-in">
+          <!-- Balance changes -->
+          <div v-if="activeTab === 'transactions'" key="transactions" class="p-4 sm:p-6 space-y-4">
+            <div class="flex items-center gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
+              <button
+                v-for="f in txFilters"
+                :key="f.id"
+                type="button"
+                class="h-10 px-3.5 rounded-full text-sm whitespace-nowrap shrink-0 border transition-all duration-150 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                :class="txFilterType === f.id
+                  ? 'bg-brand-50 text-brand-700 font-semibold border-brand-200'
+                  : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'"
+                :aria-pressed="txFilterType === f.id"
+                @click="txFilterType = f.id"
+              >
+                {{ f.label }}
+              </button>
+            </div>
 
           <div v-if="txLoading" aria-busy="true">
             <FhSkeleton height="52px" :count="5" />
@@ -596,11 +598,15 @@ const handleWithdraw = async () => {
             <FhButton variant="secondary" size="sm" @click="loadTransactions">Thử lại</FhButton>
           </div>
 
-          <div v-else-if="transactions.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
-            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
-              <Wallet :size="22" class="text-ink-400" />
-            </span>
-            <p class="text-sm text-ink-500">Chưa có biến động số dư.</p>
+          <div v-else-if="transactions.length === 0" class="py-10 flex flex-col items-center gap-2 text-center">
+            <img
+              :src="'/images/ui/empty-state-search-service.png'"
+              alt=""
+              class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
+              loading="lazy"
+            />
+            <p class="text-sm font-semibold text-ink-800">Chưa có biến động số dư.</p>
+            <p class="text-xs text-ink-500">Các giao dịch nạp tiền, thu phí nền tảng và nhận thù lao sẽ hiển thị tại đây.</p>
           </div>
 
           <ul v-else class="divide-y divide-ink-100 -mx-2">
@@ -660,7 +666,7 @@ const handleWithdraw = async () => {
         </div>
 
         <!-- Withdrawals -->
-        <div v-else-if="activeTab === 'withdrawals'" class="p-4 sm:p-6">
+        <div v-else-if="activeTab === 'withdrawals'" key="withdrawals" class="p-4 sm:p-6">
           <div v-if="wdLoading" aria-busy="true">
             <FhSkeleton height="60px" :count="4" />
           </div>
@@ -670,11 +676,15 @@ const handleWithdraw = async () => {
             <FhButton variant="secondary" size="sm" @click="loadWithdrawals">Thử lại</FhButton>
           </div>
 
-          <div v-else-if="withdrawals.length === 0" class="py-10 flex flex-col items-center gap-3 text-center">
-            <span class="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center">
-              <CreditCard :size="22" class="text-ink-400" />
-            </span>
-            <p class="text-sm text-ink-500">Chưa có lệnh rút tiền.</p>
+          <div v-else-if="withdrawals.length === 0" class="py-10 flex flex-col items-center gap-2 text-center">
+            <img
+              :src="'/images/ui/empty-state-search-service.png'"
+              alt=""
+              class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
+              loading="lazy"
+            />
+            <p class="text-sm font-semibold text-ink-800">Chưa có lệnh rút tiền.</p>
+            <p class="text-xs text-ink-500">Lịch sử các yêu cầu rút tiền về tài khoản ngân hàng sẽ hiển thị tại đây.</p>
           </div>
 
           <ul v-else class="divide-y divide-ink-100">
@@ -712,21 +722,23 @@ const handleWithdraw = async () => {
             </li>
           </ul>
         </div>
+        </Transition>
       </section>
     </template>
 
     <!-- Nạp tiền -->
-    <div
-      v-if="showTopUpModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-      @keydown.esc="!topUpSubmitting && (showTopUpModal = false)"
-    >
+    <Transition name="fh-modal">
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="topup-title"
-        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        v-if="showTopUpModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        @keydown.esc="!topUpSubmitting && (showTopUpModal = false)"
       >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topup-title"
+          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        >
         <div class="flex items-center justify-between gap-3">
           <h3 id="topup-title" class="text-lg font-bold text-ink-900">Nạp tiền vào ví</h3>
           <button
@@ -754,7 +766,7 @@ const handleWithdraw = async () => {
               v-for="amt in topUpPresets"
               :key="amt"
               type="button"
-              class="h-11 px-3 rounded-xl border text-sm font-semibold font-num whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-11 px-3 rounded-xl border text-sm font-semibold font-num whitespace-nowrap transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               :class="topUpAmount === amt
                 ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
                 : 'border-ink-200 bg-white text-ink-700 hover:border-brand-300'"
@@ -807,19 +819,21 @@ const handleWithdraw = async () => {
         </div>
       </div>
     </div>
+  </Transition>
 
     <!-- Rút tiền -->
-    <div
-      v-if="showWithdrawModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-      @keydown.esc="!withdrawSubmitting && (showWithdrawModal = false)"
-    >
+    <Transition name="fh-modal">
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="withdraw-title"
-        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        v-if="showWithdrawModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        @keydown.esc="!withdrawSubmitting && (showWithdrawModal = false)"
       >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="withdraw-title"
+          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        >
         <div class="flex items-center justify-between gap-3">
           <h3 id="withdraw-title" class="text-lg font-bold text-ink-900">Rút tiền về ngân hàng</h3>
           <button
@@ -896,19 +910,21 @@ const handleWithdraw = async () => {
         </div>
       </div>
     </div>
+  </Transition>
 
     <!-- Tài khoản nhận tiền -->
-    <div
-      v-if="showBankModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-      @keydown.esc="!bankSaving && (showBankModal = false)"
-    >
+    <Transition name="fh-modal">
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bank-title"
-        class="bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        v-if="showBankModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        @keydown.esc="!bankSaving && (showBankModal = false)"
       >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bank-title"
+          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+        >
         <div class="flex items-center justify-between gap-3">
           <h3 id="bank-title" class="text-lg font-bold text-ink-900">Tài khoản nhận tiền</h3>
           <button
@@ -982,5 +998,6 @@ const handleWithdraw = async () => {
         </div>
       </div>
     </div>
+  </Transition>
   </div>
 </template>

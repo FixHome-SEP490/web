@@ -20,4 +20,9 @@ describe('Floating assistant visibility', () => {
     route.path = '/app/bookings/new'; route.meta = { hidesAssistant: true };
     expect(mount(AiAssistantWidget).find('button').exists()).toBe(false);
   });
+
+  it('stays hidden on the messages page to avoid covering message input and chat list', () => {
+    route.path = '/app/messages'; route.meta = {};
+    expect(mount(AiAssistantWidget).find('button').exists()).toBe(false);
+  });
 });

@@ -119,17 +119,18 @@ async function submit() {
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overflow-y-auto"
-    @keydown.esc="close"
-  >
+  <Transition name="fh-modal">
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="warranty-claim-title"
-      class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto transition-all"
+      v-if="open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overflow-y-auto"
+      @keydown.esc="close"
     >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="warranty-claim-title"
+        class="fh-modal-panel bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto"
+      >
       <!-- Header -->
       <div class="flex items-start justify-between gap-4">
         <div class="flex items-center gap-3">
@@ -181,16 +182,18 @@ async function submit() {
       </div>
 
       <!-- Expired coverage note -->
-      <div
-        v-if="selected && selected.status !== 'ACTIVE'"
-        role="status"
-        class="p-3 rounded-xl bg-warning-50 border border-warning-200 text-warning-800 text-xs flex items-start gap-2"
-      >
-        <AlertTriangle :size="16" class="text-warning-600 shrink-0 mt-0.5" />
-        <span class="text-pretty">
-          Hạng mục này <strong>đã hết hạn bảo hành</strong>. Bạn vẫn có thể gửi yêu cầu, quản lý dịch vụ FixHome sẽ xem xét và phản hồi hướng hỗ trợ.
-        </span>
-      </div>
+      <Transition name="fh-fade-slide">
+        <div
+          v-if="selected && selected.status !== 'ACTIVE'"
+          role="status"
+          class="p-3 rounded-xl bg-warning-50 border border-warning-200 text-warning-800 text-xs flex items-start gap-2"
+        >
+          <AlertTriangle :size="16" class="text-warning-600 shrink-0 mt-0.5" />
+          <span class="text-pretty">
+            Hạng mục này <strong>đã hết hạn bảo hành</strong>. Bạn vẫn có thể gửi yêu cầu, quản lý dịch vụ FixHome sẽ xem xét và phản hồi hướng hỗ trợ.
+          </span>
+        </div>
+      </Transition>
 
       <!-- Problem Description Textarea -->
       <div class="space-y-1.5">
@@ -252,14 +255,16 @@ async function submit() {
       </div>
 
       <!-- Error message -->
-      <div
-        v-if="error || evidence.error.value"
-        role="alert"
-        class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-700 flex items-center gap-2"
-      >
-        <AlertCircle :size="16" class="shrink-0" />
-        <span class="text-pretty">{{ error || evidence.error.value }}</span>
-      </div>
+      <Transition name="fh-fade-slide">
+        <div
+          v-if="error || evidence.error.value"
+          role="alert"
+          class="p-3 rounded-xl bg-danger-50 border border-danger-200 text-xs text-danger-700 flex items-center gap-2"
+        >
+          <AlertCircle :size="16" class="shrink-0" />
+          <span class="text-pretty">{{ error || evidence.error.value }}</span>
+        </div>
+      </Transition>
 
       <!-- Action buttons -->
       <div class="flex items-center gap-3 pt-1">
@@ -284,5 +289,6 @@ async function submit() {
         </FhButton>
       </div>
     </div>
-  </div>
+    </div>
+  </Transition>
 </template>

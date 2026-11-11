@@ -32,6 +32,7 @@ const busy = ref(false);
 const videoEl = ref<HTMLVideoElement | null>(null);
 const dialogEl = ref<HTMLElement | null>(null);
 const stillUrl = ref<string | null>(null);
+const shutterFlash = ref(false);
 let stillFile: File | null = null;
 const capturedShots = ref<Array<{ file: File; url: string }>>([]);
 const multiple = computed(() => props.mode === 'product' && props.multiple === true);
@@ -222,6 +223,10 @@ async function shoot() {
   if (!video || !shutterEnabled.value) return;
   busy.value = true;
   shotError.value = '';
+  shutterFlash.value = true;
+  setTimeout(() => {
+    shutterFlash.value = false;
+  }, 120);
   try {
     const sourceWidth = video.videoWidth || video.clientWidth || 1280;
     const sourceHeight = video.videoHeight || video.clientHeight || 960;
@@ -397,6 +402,12 @@ onBeforeUnmount(() => {
       <!-- The preview gives up height when kept photos and the send button need room, so the buttons stay on screen. -->
       <div class="relative flex-1 min-h-0 sm:flex-initial sm:aspect-[3/4] bg-black overflow-hidden">
         <!-- Live preview; the front camera is mirrored on screen like a mirror -->
+        <!-- Shutter flash animation overlay -->
+        <div
+          v-if="shutterFlash"
+          class="absolute inset-0 z-20 bg-white pointer-events-none transition-opacity duration-100"
+          aria-hidden="true"
+        />
         <video
           v-show="phase === 'live' || phase === 'starting'"
           ref="videoEl"
@@ -476,19 +487,19 @@ onBeforeUnmount(() => {
         <p v-if="shotError" class="text-sm text-danger-200" role="alert">{{ shotError }}</p>
         <div v-if="multiple && capturedShots.length" class="w-full space-y-2" aria-label="Ảnh đã chụp">
           <p class="text-xs text-white/80">Đã chụp {{ capturedShots.length }}/{{ maxShots }} ảnh</p>
-          <div class="flex gap-2 overflow-x-auto pb-1">
-            <div v-for="(shot, index) in capturedShots" :key="shot.url" class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/30" data-testid="camera-thumbnail">
+          <TransitionGroup name="fh-pop" tag="div" class="flex gap-2 overflow-x-auto pb-1">
+            <div v-for="(shot, index) in capturedShots" :key="shot.url" class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/30 transition-all duration-150 hover:border-white/60" data-testid="camera-thumbnail">
               <img :src="shot.url" :alt="`Ảnh đã chụp ${index + 1}`" class="h-full w-full object-cover" />
-              <button type="button" class="absolute right-0 top-0 h-7 w-7 rounded-bl-lg bg-ink-900/80 text-white" :aria-label="`Bỏ ảnh ${index + 1}`" data-testid="camera-remove-shot" @click="removeCapturedShot(index)">
+              <button type="button" class="absolute right-0 top-0 h-7 w-7 rounded-bl-lg bg-ink-900/80 text-white hover:bg-ink-900 transition-colors" :aria-label="`Bỏ ảnh ${index + 1}`" data-testid="camera-remove-shot" @click="removeCapturedShot(index)">
                 <X :size="14" class="mx-auto" />
               </button>
             </div>
-          </div>
+          </TransitionGroup>
         </div>
         <button
           v-if="phase === 'live' || phase === 'starting'"
           type="button"
-          class="w-[72px] h-[72px] rounded-full bg-white ring-4 ring-white/30 text-ink-900 flex items-center justify-center transition-opacity disabled:opacity-40 focus-visible:outline-none focus-visible:ring-brand-500"
+          class="w-[72px] h-[72px] rounded-full bg-white ring-4 ring-white/30 text-ink-900 flex items-center justify-center transition-all duration-150 active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-brand-500"
           aria-label="Chụp ảnh"
           :disabled="!shutterEnabled"
           data-autofocus

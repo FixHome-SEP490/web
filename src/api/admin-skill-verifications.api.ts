@@ -88,10 +88,12 @@ export const adminSkillVerificationsApi = {
   },
 
   async getDocumentAccess(id: string, documentId: string): Promise<{ signedUrl: string }> {
-    const res = await apiClient.get<{ data: { signedUrl: string } }>(
+    const res = await apiClient.get<{ signedUrl?: string; data?: { signedUrl: string } }>(
       `/admin/technician-skill-verifications/${id}/documents/${documentId}/access`,
     );
-    return res.data.data;
+    const signedUrl = res.data.signedUrl ?? res.data.data?.signedUrl;
+    if (!signedUrl) throw new Error('Backend did not return a signed document URL.');
+    return { signedUrl };
   },
 
   /** Uploads raw bytes straight to Supabase Storage — different origin, must

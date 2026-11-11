@@ -176,8 +176,9 @@ async function submit() {
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 sm:items-center sm:p-4" @click.self="close" @keydown="keydown">
-      <section ref="dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="cannot-continue-title" aria-describedby="cannot-continue-hint" :aria-busy="busy || uploading" class="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-ink-700 shadow-(--shadow-e3) outline-none sm:rounded-2xl sm:p-6" data-testid="cannot-continue-dialog">
+    <Transition name="fh-modal" appear>
+      <div class="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 backdrop-blur-xs sm:items-center sm:p-4" @click.self="close" @keydown="keydown">
+        <section ref="dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="cannot-continue-title" aria-describedby="cannot-continue-hint" :aria-busy="busy || uploading" class="fh-modal-panel fh-modal-panel--sheet max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-ink-700 shadow-(--shadow-e3) outline-none sm:rounded-2xl sm:p-6" data-testid="cannot-continue-dialog">
         <header class="flex items-start justify-between gap-2">
           <h2 id="cannot-continue-title" class="text-lg font-semibold text-ink-900">{{ unified ? 'Báo cáo vấn đề sửa chữa' : 'Không thể tiếp tục máy đang chọn' }}</h2>
           <button type="button" :disabled="busy || uploading" aria-label="Đóng" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-600" @click="close"><X :size="20" /></button>
@@ -212,7 +213,7 @@ async function submit() {
           <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" aria-label="Chọn ảnh chứng cứ" :disabled="locked || busy || uploading" @change="filesChanged" />
           <p v-if="uploading" role="status">Đang tải ảnh…</p>
           <p v-if="failedPhotos" role="status">Ảnh chưa gửi thành công. Thử lại từng ảnh hoặc xóa ảnh lỗi để tiếp tục không kèm ảnh đó; ảnh không bắt buộc.</p>
-          <ul v-if="photos.length" class="grid grid-cols-3 gap-2"><li v-for="(photo, index) in photos" :key="photo.url" class="min-w-0"><img :src="photo.url" :alt="`Ảnh chứng cứ ${index + 1}`" class="aspect-square w-full rounded-xl object-cover" /><button type="button" :disabled="locked || busy || uploading" :aria-label="`Xóa ảnh ${index + 1}`" class="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg focus-visible:ring-2 focus-visible:ring-brand-600" @click="removePhoto(index)"><Trash2 :size="16" />Xóa</button><p v-if="photo.error" role="alert" class="break-words text-danger-700">{{ photo.error }}</p><FhButton v-if="photo.error" variant="secondary" size="md" :disabled="locked || busy || uploading" @click="retryPhoto(index)">Thử lại ảnh</FhButton></li></ul>
+          <TransitionGroup v-if="photos.length" name="fh-list" tag="ul" class="grid grid-cols-3 gap-2"><li v-for="(photo, index) in photos" :key="photo.url" class="min-w-0 transition-all duration-150"><img :src="photo.url" :alt="`Ảnh chứng cứ ${index + 1}`" class="aspect-square w-full rounded-xl object-cover" /><button type="button" :disabled="locked || busy || uploading" :aria-label="`Xóa ảnh ${index + 1}`" class="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg text-ink-600 hover:text-danger-700 transition-colors focus-visible:ring-2 focus-visible:ring-brand-600" @click="removePhoto(index)"><Trash2 :size="16" />Xóa</button><p v-if="photo.error" role="alert" class="break-words text-danger-700">{{ photo.error }}</p><FhButton v-if="photo.error" variant="secondary" size="md" :disabled="locked || busy || uploading" @click="retryPhoto(index)">Thử lại ảnh</FhButton></li></TransitionGroup>
         </fieldset>
         <fieldset v-if="mode === 'support' && !groupScope && evidence?.length" :disabled="busy" class="space-y-2"><legend class="font-medium">Ảnh đã có (không bắt buộc)</legend><label v-for="item in evidence" :key="item.url" class="flex min-h-11 items-center gap-3"><input v-model="supportEvidence" type="checkbox" :value="item.url" data-testid="report-support-evidence" />{{ item.label }}</label></fieldset>
         <div v-if="parts.length || !partsKnown" class="space-y-2 rounded-xl bg-warning-50 p-3 text-warning-800">
@@ -226,6 +227,7 @@ async function submit() {
         <footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><FhButton variant="secondary" size="md" :disabled="busy || uploading" @click="close">Quay lại</FhButton><FhButton :variant="mode === 'support' && !groupScope ? 'primary' : 'danger'" size="md" :disabled="!ready" :loading="busy" data-testid="cannot-continue-submit" @click="submit">{{ groupScope ? (locked ? 'Đối chiếu cùng lệnh cả lượt' : 'Xác nhận dừng cả lượt') : mode === 'support' ? 'Gửi báo cáo hỗ trợ' : locked ? 'Thử lại cùng nội dung' : 'Xác nhận không thể tiếp tục' }}</FhButton></footer>
       </section>
     </div>
+    </Transition>
     <CameraCapture v-if="camera" mode="product" title="Chụp ảnh chứng cứ" multiple :max-shots="3 - photos.length" @capture="files => addFiles(Array.isArray(files) ? files : [files])" @close="closeCamera" />
   </Teleport>
 </template>

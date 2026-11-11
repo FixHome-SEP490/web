@@ -1377,7 +1377,7 @@ const parsedReview = computed(() => {
             <span>Kỹ thuật viên đã hoàn thành, mời bạn thanh toán</span>
           </h2>
           <p class="text-sm text-ink-600 text-pretty">
-            {{ billing.mismatch ? 'Thông tin hóa đơn cần được FixHome đối chiếu trước khi thanh toán.' : billing.total === 0 ? 'Hóa đơn không phát sinh phí. Vui lòng xác nhận hoàn tất.' : billing.total !== null && billing.total < 5000 ? 'Trả bằng ví hoặc tiền mặt cho kỹ thuật viên.' : 'Trả qua ví, VNPay hoặc tiền mặt cho kỹ thuật viên.' }} Chưa hài lòng thì gửi khiếu nại ở cuối trang.
+            {{ billing.mismatch ? 'Thông tin hóa đơn cần được FixHome đối chiếu trước khi thanh toán.' : billing.total === 0 ? 'Hóa đơn không phát sinh phí. Vui lòng xác nhận hoàn tất.' : billing.total !== null && billing.total < 5000 ? 'Trả bằng ví hoặc tiền mặt cho kỹ thuật viên.' : 'Trả qua ví, VNPay hoặc tiền mặt cho kỹ thuật viên.' }}
           </p>
         </div>
         <div class="flex items-center gap-4 shrink-0">
@@ -1401,21 +1401,47 @@ const parsedReview = computed(() => {
       <!-- Cash: the customer confirms what they paid -->
       <section
         v-if="cashSettlement && cashSettlement.status === 'pending_confirmation'"
-        class="order-1 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4"
+        class="order-1 rounded-2xl bg-white border border-brand-200 p-5 sm:p-6 space-y-4 shadow-xs"
         data-testid="cash-confirmation"
       >
-        <div class="space-y-1">
-          <h2 class="text-base font-semibold text-ink-900">Xác nhận tiền mặt</h2>
-          <p class="text-sm text-ink-600 text-pretty">
-            Kỹ thuật viên báo đã thu
-            <strong class="text-ink-900 font-num whitespace-nowrap"><FhMoney :amount="cashSettlement.declaredAmount" /></strong>.
-            <template v-if="cashSettlement.technicianNotes"> Ghi chú: {{ cashSettlement.technicianNotes }}</template>
-          </p>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="space-y-1">
+            <h2 class="text-base font-semibold text-ink-900 flex items-center gap-2">
+              <Banknote :size="18" class="text-brand-600 shrink-0" />
+              <span>Xác nhận thanh toán tiền mặt</span>
+            </h2>
+            <p class="text-sm text-ink-600 text-pretty">
+              Kỹ thuật viên báo đã thu:
+              <strong class="text-ink-900 font-num text-base whitespace-nowrap"><FhMoney :amount="cashSettlement.declaredAmount" /></strong>
+              <template v-if="cashSettlement.technicianNotes"> · Ghi chú: {{ cashSettlement.technicianNotes }}</template>
+            </p>
+          </div>
+          <!-- 1-touch primary confirmation button (first button in container for test stability) -->
+          <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <FhButton
+              variant="primary"
+              size="md"
+              :disabled="actionLoading || paymentBlocked || confirmCashAmount === ''"
+              @click="handleConfirmCashPayment"
+            >
+              {{ confirmCashAmount === cashSettlement.declaredAmount ? 'Xác nhận đúng số tiền' : 'Xác nhận & thanh toán' }}
+            </FhButton>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="pt-3 border-t border-ink-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label class="block text-sm">
-            <span class="block font-medium text-ink-700 mb-1">Số tiền bạn đã trả (₫)</span>
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-medium text-ink-700">Số tiền bạn đã trả (₫)</span>
+              <button
+                v-if="confirmCashAmount !== cashSettlement.declaredAmount"
+                type="button"
+                class="text-xs text-brand-600 hover:underline font-medium"
+                @click="confirmCashAmount = cashSettlement.declaredAmount; cashMismatchNote = ''"
+              >
+                Đặt lại đúng số báo thu
+              </button>
+            </div>
             <input
               v-model.number="confirmCashAmount"
               type="number" min="0" step="1000" inputmode="numeric"
@@ -1434,17 +1460,6 @@ const parsedReview = computed(() => {
               class="w-full p-2.5 bg-white border border-ink-200 rounded-xl"
             ></textarea>
           </label>
-        </div>
-
-        <div class="flex justify-end">
-          <FhButton
-            variant="primary"
-            size="md"
-            :disabled="actionLoading || paymentBlocked || confirmCashAmount === ''"
-            @click="handleConfirmCashPayment"
-          >
-            Xác nhận số tiền &amp; thanh toán
-          </FhButton>
         </div>
       </section>
 
@@ -1755,7 +1770,14 @@ const parsedReview = computed(() => {
         >
           <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
             <div class="pt-4 space-y-5">
-              <div v-if="oldFinanceReview" data-testid="stopped-work-finance" class="space-y-2 text-ink-700"><p>Báo giá cũ chỉ để xem lịch sử, không phải yêu cầu thanh toán cho công việc đã dừng.</p><p>Số tiền phải trả: Chưa xác định. Hoàn tiền: Chưa xác định.</p><p>FixHome đang đối soát nghĩa vụ cũ. Đặt lịch mới độc lập với việc đối soát và nhận linh kiện cũ.</p></div>
+              <div v-if="oldFinanceReview" data-testid="stopped-work-finance" class="p-4 rounded-xl border border-ink-200 bg-ink-50/70 space-y-2 text-sm text-ink-700">
+                <p class="font-medium text-ink-900">Báo giá cũ chỉ lưu để xem lịch sử, không phải yêu cầu thanh toán cho công việc đã dừng.</p>
+                <div class="flex flex-wrap gap-4 text-xs font-medium text-ink-600">
+                  <span>Số tiền phải trả: <strong class="text-ink-900">Chưa xác định</strong></span>
+                  <span>Hoàn tiền: <strong class="text-ink-900">Chưa xác định</strong></span>
+                </div>
+                <p class="text-xs text-ink-500">FixHome đang đối soát nghĩa vụ cũ. Đặt lịch mới độc lập với việc đối soát và nhận linh kiện cũ.</p>
+              </div>
               <p v-else-if="notQuotedYet" class="text-ink-600 text-pretty" data-testid="order-not-quoted">
                 {{ order.status === 'CANCELLED' ? 'Đơn đã huỷ trước khi có báo giá.' : 'Kỹ thuật viên sẽ báo giá sau khi kiểm tra tại nhà.' }}
               </p>
@@ -1862,26 +1884,37 @@ const parsedReview = computed(() => {
                   </ul>
                 </div>
 
-                <div class="pt-4 border-t border-ink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div class="flex items-baseline gap-3">
-                    <span class="text-ink-500">Tổng cộng</span>
-                    <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
-                  </div>
-                  <div v-if="canDecideQuotation" class="flex items-center gap-2">
-                    <FhButton variant="secondary" size="md" :disabled="actionLoading || !!quotationCheckId" @click="handleRejectQuotation">
-                      Từ chối báo giá
-                    </FhButton>
-                    <FhButton variant="primary" size="md" :disabled="actionLoading || !!quotationCheckId" :loading="quotationPending" @click="handleApproveQuotation">
-                      Duyệt báo giá
-                    </FhButton>
-                  </div>
+                <div class="pt-4 border-t border-ink-200 flex items-baseline justify-between gap-3">
+                  <span class="text-ink-500 font-medium">Tổng cộng</span>
+                  <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
                 </div>
-                <p v-if="quotationFeedback" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="quotationFeedback.type === 'error' ? 'alert' : 'status'" class="text-sm" :class="quotationFeedback.type === 'error' ? 'text-danger-700' : 'text-success-700'">{{ quotationFeedback.text }}</p>
-                <p v-if="quotationPending" role="status" class="text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
-                <FhButton v-if="quotationCheckId && !quotationPending" variant="secondary" size="md" :disabled="actionLoading" data-testid="quotation-check-status" @click="checkQuotationApproval">Kiểm tra trạng thái</FhButton>
               </template>
             </div>
           </div>
+        </div>
+
+        <!-- Actions & feedback exposed outside accordion so quotation decision is always visible -->
+        <div
+          v-if="canDecideQuotation || quotationFeedback || quotationPending || quotationCheckId"
+          class="border-t border-brand-100 bg-brand-50/50 p-4 sm:p-5 space-y-3"
+        >
+          <div v-if="canDecideQuotation" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-0.5">
+              <p class="text-sm font-semibold text-brand-900">Xác nhận báo giá dịch vụ</p>
+              <p class="text-xs text-brand-700">Vui lòng kiểm tra chi tiết các khoản phí trước khi xác nhận.</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <FhButton variant="secondary" size="md" :disabled="actionLoading || !!quotationCheckId" @click="handleRejectQuotation">
+                Từ chối báo giá
+              </FhButton>
+              <FhButton variant="primary" size="md" :disabled="actionLoading || !!quotationCheckId" :loading="quotationPending" @click="handleApproveQuotation">
+                Duyệt báo giá
+              </FhButton>
+            </div>
+          </div>
+          <p v-if="quotationFeedback" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="quotationFeedback.type === 'error' ? 'alert' : 'status'" class="text-sm" :class="quotationFeedback.type === 'error' ? 'text-danger-700' : 'text-success-700'">{{ quotationFeedback.text }}</p>
+          <p v-if="quotationPending" role="status" class="text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
+          <FhButton v-if="quotationCheckId && !quotationPending" variant="secondary" size="md" :disabled="actionLoading" data-testid="quotation-check-status" @click="checkQuotationApproval">Kiểm tra trạng thái</FhButton>
         </div>
       </section>
 

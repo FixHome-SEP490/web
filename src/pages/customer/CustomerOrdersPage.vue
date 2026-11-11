@@ -11,18 +11,21 @@ import {
   ChevronRight,
   Search,
   MessageSquare,
-  Receipt,
   AlertCircle,
   RefreshCw,
   X,
+  Trash2,
+  Clock,
 } from 'lucide-vue-next';
 import {
   FhButton,
+  FhConfirmDialog,
   FhMoney,
   FhPagination,
   FhSkeleton,
   FhStatusPill,
 } from '../../components';
+import { toast } from 'vue-sonner';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { visitGroupsApi, type VisitGroupPageDevice, type VisitGroupPageItem } from '../../api/visit-groups.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
@@ -119,12 +122,20 @@ async function readMergedPage<T extends DatedItem>(options: {
   search: string;
   fetchPage: (page: number, pageSize: number, status: string) => Promise<PageResult<T>>;
   searchableText: (item: T) => string;
+  onStatusTotals?: (totals: Record<string, number>) => void;
 }): Promise<PageResult<T>> {
   const query = foldSearchText(options.search.trim());
   const wanted = query ? null : options.page * options.pageSize;
   const groups = await Promise.all(
     options.statuses.map((status) => readStatusPrefix(status, wanted, options.fetchPage)),
   );
+  if (options.onStatusTotals) {
+    const totals: Record<string, number> = {};
+    for (let i = 0; i < options.statuses.length; i++) {
+      totals[options.statuses[i]] = groups[i].total;
+    }
+    options.onStatusTotals(totals);
+  }
   const unique = new Map<string, T>();
   for (const item of groups.flatMap((group) => group.items).sort(newestFirst)) unique.set(item.id, item);
   const rows = [...unique.values()]
@@ -153,11 +164,15 @@ function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<Ser
   });
 }
 
-function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<BookingItem>> {
+const bookingStatusTotals = ref<Record<string, number>>({});
+
+async function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<BookingItem>> {
   const statuses = BOOKING_STATES[activeTab.value];
   if (statuses.length === 0) return emptyPage<BookingItem>(page, pageSize);
   if (statuses.length === 1 && !search.value) {
-    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
+    const result = await bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
+    bookingStatusTotals.value = { ...bookingStatusTotals.value, [statuses[0]]: result.total };
+    return result;
   }
   return readMergedPage({
     page,
@@ -167,8 +182,21 @@ function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<B
     fetchPage: (statusPage, statusPageSize, status) =>
       bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
     searchableText: (booking) => booking.serviceName ?? '',
+    onStatusTotals: (totals) => {
+      bookingStatusTotals.value = { ...bookingStatusTotals.value, ...totals };
+    },
   });
 }
+
+const pendingBookingsCount = computed(() => {
+  if (activeTab.value === 'IN_PROGRESS') {
+    return bookingsTotal.value;
+  }
+  if (activeTab.value === 'CANCELLED' || activeTab.value === 'COMPLETED') {
+    return 0;
+  }
+  return (bookingStatusTotals.value['submitted'] ?? 0) + (bookingStatusTotals.value['matching'] ?? 0);
+});
 
 const ordersList = usePagedList<ServiceOrderItem>({
   key: () => queryKeys.orders.customerList({ tab: activeTab.value, search: search.value }),
@@ -415,10 +443,155 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
     }
   }
 }
+
+// ── Bulk Selection & Cancellation for Booking Requests ──
+const selectedBookingIds = ref<string[]>([]);
+const targetSingleBooking = ref<BookingItem | null>(null);
+const showCancelDialog = ref(false);
+const cancelReasonSelected = ref('Thay đổi nhu cầu / kế hoạch');
+const customCancelReason = ref('');
+const bulkCancelling = ref(false);
+
+const PRESET_CANCEL_REASONS = [
+  'Thay đổi nhu cầu / kế hoạch',
+  'Đã tìm được thợ sửa chữa khác',
+  'Đặt nhầm dịch vụ hoặc thời gian',
+  'Lý do khác',
+];
+
+const canCancel = (booking: BookingItem) =>
+  ['SUBMITTED', 'MATCHING', 'CLOSED'].includes(booking.status) && !booking.visitGroupId;
+
+const cancellableBookings = computed(() =>
+  bookings.value.filter((b) => canCancel(b))
+);
+
+const isAllSelected = computed(() =>
+  cancellableBookings.value.length > 0 &&
+  cancellableBookings.value.every((b) => selectedBookingIds.value.includes(b.id))
+);
+
+const isPartiallySelected = computed(() =>
+  selectedBookingIds.value.length > 0 && !isAllSelected.value
+);
+
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    selectedBookingIds.value = [];
+  } else {
+    selectedBookingIds.value = cancellableBookings.value.map((b) => b.id);
+  }
+}
+
+function toggleSelectBooking(id: string) {
+  const index = selectedBookingIds.value.indexOf(id);
+  if (index > -1) {
+    selectedBookingIds.value.splice(index, 1);
+  } else {
+    selectedBookingIds.value.push(id);
+  }
+}
+
+function clearSelection() {
+  selectedBookingIds.value = [];
+}
+
+// Clear selection when changing page, tab, list, or search
+watch([bookingsPage, activeTab, chosenList, search], () => {
+  clearSelection();
+});
+
+function openBulkCancelDialog() {
+  if (selectedBookingIds.value.length === 0) return;
+  targetSingleBooking.value = null;
+  cancelReasonSelected.value = 'Thay đổi nhu cầu / kế hoạch';
+  customCancelReason.value = '';
+  showCancelDialog.value = true;
+}
+
+function openSingleCancel(booking: BookingItem) {
+  targetSingleBooking.value = booking;
+  cancelReasonSelected.value = 'Thay đổi nhu cầu / kế hoạch';
+  customCancelReason.value = '';
+  showCancelDialog.value = true;
+}
+
+function closeCancelDialog() {
+  if (bulkCancelling.value) return;
+  showCancelDialog.value = false;
+  targetSingleBooking.value = null;
+}
+
+const cancelDialogTitle = computed(() => {
+  if (targetSingleBooking.value) {
+    return 'Huỷ yêu cầu đặt lịch';
+  }
+  return `Huỷ ${selectedBookingIds.value.length} yêu cầu đặt lịch`;
+});
+
+const cancelDialogConsequence = computed(() => {
+  if (targetSingleBooking.value) {
+    return `Bạn có chắc muốn huỷ yêu cầu "${targetSingleBooking.value.serviceName}"? Hệ thống sẽ ngừng tìm thợ cho yêu cầu này.`;
+  }
+  return `Bạn đang chọn huỷ ${selectedBookingIds.value.length} yêu cầu đặt lịch đã chọn. Hệ thống sẽ ngừng tìm thợ cho các yêu cầu này.`;
+});
+
+async function confirmCancel() {
+  const idsToCancel = targetSingleBooking.value
+    ? [targetSingleBooking.value.id]
+    : [...selectedBookingIds.value];
+
+  if (idsToCancel.length === 0 || bulkCancelling.value) return;
+
+  const reason = cancelReasonSelected.value === 'Lý do khác'
+    ? (customCancelReason.value.trim() || 'Khách hàng huỷ yêu cầu')
+    : cancelReasonSelected.value;
+
+  bulkCancelling.value = true;
+  let successCount = 0;
+  let failCount = 0;
+
+  try {
+    const results = await Promise.allSettled(
+      idsToCancel.map((id) => bookingsApi.cancelBooking(id, reason))
+    );
+
+    for (const res of results) {
+      if (res.status === 'fulfilled') {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        idsToCancel.length === 1
+          ? 'Đã huỷ yêu cầu đặt lịch thành công.'
+          : `Đã huỷ thành công ${successCount} yêu cầu đặt lịch.`
+      );
+    }
+    if (failCount > 0) {
+      toast.error(`Có ${failCount} yêu cầu không thể huỷ. Vui lòng kiểm tra lại.`);
+    }
+
+    clearSelection();
+    showCancelDialog.value = false;
+    targetSingleBooking.value = null;
+    await retryBookings();
+    if (ordersTotal.value > 0) {
+      void retryOrders();
+    }
+  } catch {
+    toast.error('Có lỗi xảy ra khi huỷ yêu cầu. Vui lòng thử lại.');
+  } finally {
+    bulkCancelling.value = false;
+  }
+}
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-5 pb-12">
+  <div class="w-full space-y-5 pb-12">
     <h1 class="text-2xl font-bold tracking-tight text-ink-900">Đơn của tôi</h1>
 
     <div class="relative">
@@ -542,17 +715,27 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
     <div
       v-else-if="!hasError && !visitGroupsError && !loadingOrders && !loadingBookings && !loadingVisitGroups && ordersTotal === 0 && bookingsTotal === 0 && visitGroupsTotal === 0"
       data-testid="history-empty-state"
-      class="space-y-2 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
+      class="space-y-3 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
     >
-      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400">
-        <Receipt :size="24" />
+      <div class="mx-auto mb-3 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-36 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
-      <h2 class="text-base font-semibold text-ink-900">
+      <h2 class="text-base sm:text-lg font-semibold text-ink-900">
         {{ search ? 'Không có đơn phù hợp' : activeTab === 'ALL' ? 'Bạn chưa có đơn sửa chữa' : 'Không có đơn ở mục này' }}
       </h2>
       <p class="text-sm text-ink-500 max-w-sm mx-auto text-pretty">
         {{ search ? 'Thử từ khoá khác.' : activeTab === 'ALL' ? 'Đặt thợ để kỹ thuật viên FixHome tới kiểm tra tại nhà bạn.' : 'Chọn mục khác để xem đơn của bạn.' }}
       </p>
+      <div v-if="!search && activeTab === 'ALL'" class="pt-2">
+        <FhButton variant="primary" size="md" @click="router.push('/app/bookings/new')">
+          Đặt thợ ngay
+        </FhButton>
+      </div>
     </div>
 
     <div v-else class="space-y-3">
@@ -562,8 +745,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           v-for="choice in listChoices"
           :key="choice.key"
           type="button"
-          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
-          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
+          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
+          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
           :aria-pressed="listView === choice.key"
           :aria-label="choice.label"
           :data-testid="`list-switch-${choice.key}`"
@@ -573,14 +756,15 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
           <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
           <span
             v-if="!choice.loading"
-            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs"
+            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs transition-colors"
             :class="listView === choice.key ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'"
           >{{ choice.count }}</span>
         </button>
       </div>
 
+      <Transition name="fh-fade-slide" mode="out-in">
       <!-- One server-paged parent row per multi-device visit. -->
-      <section v-if="listView === 'visits'" class="space-y-2" data-testid="visit-groups-section">
+      <section v-if="listView === 'visits'" key="visits" class="space-y-2" data-testid="visit-groups-section">
         <div
           v-if="visitGroupsError"
           role="alert"
@@ -634,7 +818,51 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </section>
 
       <!-- Bookings with no technician yet, so no service order -->
-      <section v-if="listView === 'requests'" class="space-y-2" data-testid="requests-section">
+      <section v-else-if="listView === 'requests'" :key="`requests-${activeTab}`" class="space-y-3" data-testid="requests-section">
+          <!-- Bulk actions toolbar -->
+          <div
+            v-if="!loadingBookings && cancellableBookings.length > 0"
+            class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5 shadow-2xs transition-colors"
+            data-testid="requests-bulk-bar"
+          >
+            <div class="flex items-center gap-3">
+              <label class="flex cursor-pointer items-center gap-2 select-none text-xs sm:text-sm font-medium text-ink-700">
+                <input
+                  type="checkbox"
+                  :checked="isAllSelected"
+                  :indeterminate.prop="isPartiallySelected"
+                  data-testid="select-all-requests"
+                  class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                  @change="toggleSelectAll"
+                />
+                <span>{{ isAllSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}</span>
+              </label>
+              <span v-if="selectedBookingIds.length > 0" class="text-xs text-ink-500 font-num">
+                (Đã chọn {{ selectedBookingIds.length }} / {{ cancellableBookings.length }})
+              </span>
+            </div>
+
+            <div v-if="selectedBookingIds.length > 0" class="flex items-center gap-2">
+              <button
+                type="button"
+                class="rounded-lg px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900 transition-colors"
+                @click="clearSelection"
+              >
+                Bỏ chọn
+              </button>
+              <FhButton
+                variant="danger"
+                size="sm"
+                data-testid="bulk-cancel-button"
+                :loading="bulkCancelling"
+                @click="openBulkCancelDialog"
+              >
+                <Trash2 :size="14" class="mr-1.5" />
+                Huỷ {{ selectedBookingIds.length }} yêu cầu
+              </FhButton>
+            </div>
+          </div>
+
           <div class="space-y-2">
             <div v-if="loadingBookings" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải yêu cầu">
               <div v-for="i in 2" :key="i" class="px-5 py-4 space-y-2">
@@ -643,13 +871,19 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               </div>
             </div>
 
-            <p
+            <div
               v-else-if="bookingsTotal === 0"
-              data-testid="requests-empty"
-              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
-              Không có yêu cầu đặt lịch ở mục này.
-            </p>
+              <img
+                :src="'/images/ui/empty-state-search-service.png'"
+                alt=""
+                class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
+                loading="lazy"
+              />
+              <p data-testid="requests-empty" class="text-sm font-semibold text-ink-800">Không có yêu cầu đặt lịch ở mục này.</p>
+              <p class="text-xs text-ink-500 mt-0.5">Yêu cầu đang tìm thợ hoặc chờ xác nhận sẽ hiển thị tại đây.</p>
+            </div>
 
             <ul
               v-else
@@ -664,26 +898,80 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
                 role="link"
                 tabindex="0"
                 class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-ink-50 focus-visible:bg-ink-50 focus-visible:outline-none sm:px-5"
+                :class="{ 'bg-brand-50/25': selectedBookingIds.includes(booking.id) }"
                 @click="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.enter="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.space.prevent="router.push(`/app/bookings/${booking.id}`)"
               >
+                <!-- Selection checkbox on the left -->
+                <div
+                  v-if="canCancel(booking)"
+                  class="flex shrink-0 items-center pr-1"
+                  @click.stop
+                >
+                  <input
+                    type="checkbox"
+                    :checked="selectedBookingIds.includes(booking.id)"
+                    :data-testid="`select-booking-${booking.id}`"
+                    :aria-label="`Chọn yêu cầu ${booking.serviceName}`"
+                    class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                    @change="toggleSelectBooking(booking.id)"
+                  />
+                </div>
+                <div
+                  v-else
+                  class="flex shrink-0 items-center pr-1 opacity-25 cursor-not-allowed"
+                  title="Yêu cầu này đã huỷ, không thể chọn"
+                  @click.stop
+                >
+                  <input
+                    type="checkbox"
+                    disabled
+                    class="h-4 w-4 rounded border-ink-200 cursor-not-allowed"
+                  />
+                </div>
+
                 <div class="min-w-0 flex-1 space-y-1.5">
                   <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
-                    <h3 class="font-semibold text-ink-900">{{ booking.serviceName }}</h3>
+                    <div class="flex items-center gap-2 min-w-0">
+                      <h3 class="font-semibold text-ink-900 truncate">{{ booking.serviceName }}</h3>
+                      <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-1.5 py-0.5 text-xs text-ink-700 font-num">
+                        x{{ booking.quantity }}
+                      </span>
+                    </div>
                     <FhStatusPill
                       :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
                       :label="pendingLabel(booking)"
                     />
                   </div>
-                  <p class="flex min-w-0 items-center gap-1.5 text-sm text-ink-500">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-500">
                     <span class="font-num shrink-0">{{ vnDateString(booking.createdAt) }}</span>
-                    <span aria-hidden="true">·</span>
-                    <MapPin :size="14" class="shrink-0 text-ink-400" />
-                    <span class="truncate" :title="booking.addressSummary">{{ booking.addressSummary }}</span>
-                  </p>
+                    <template v-if="booking.preferredAt">
+                      <span aria-hidden="true">·</span>
+                      <span class="flex items-center gap-1 font-num text-ink-600">
+                        <Clock :size="13" class="shrink-0 text-ink-400" />
+                        <span>Hẹn: {{ vnDateTimeString(booking.preferredAt) }}</span>
+                      </span>
+                    </template>
+                    <template v-if="booking.addressSummary">
+                      <span aria-hidden="true">·</span>
+                      <p class="flex min-w-0 items-center gap-1">
+                        <MapPin :size="14" class="shrink-0 text-ink-400" />
+                        <span class="truncate" :title="booking.addressSummary">{{ booking.addressSummary }}</span>
+                      </p>
+                    </template>
+                  </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
+                  <button
+                    v-if="canCancel(booking)"
+                    type="button"
+                    class="rounded-lg px-2.5 py-1 text-xs font-semibold text-danger-700 hover:bg-danger-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                    :data-testid="`cancel-booking-btn-${booking.id}`"
+                    @click.stop="openSingleCancel(booking)"
+                  >
+                    Huỷ
+                  </button>
                   <FhButton
                     v-if="booking.status === 'CANCELLED'"
                     variant="secondary"
@@ -709,7 +997,38 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
       </section>
 
       <!-- Service orders -->
-      <section v-else-if="listView === 'orders'" class="space-y-2" data-testid="orders-section">
+      <section v-else-if="listView === 'orders'" :key="`orders-${activeTab}`" class="space-y-3" data-testid="orders-section">
+          <!-- Pending booking requests callout banner when viewing orders -->
+          <Transition name="fh-fade-slide">
+            <div
+              v-if="pendingBookingsCount > 0 && (activeTab === 'ALL' || activeTab === 'IN_PROGRESS')"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50/60 p-3.5 sm:p-4 transition-colors"
+              data-testid="pending-requests-callout"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
+                  <Clock :size="20" />
+                </div>
+                <div class="min-w-0">
+                  <p class="font-semibold text-brand-900 text-sm">
+                    Bạn có {{ pendingBookingsCount }} yêu cầu đặt lịch đang tìm thợ
+                  </p>
+                  <p class="text-xs text-brand-700 truncate">
+                    Hệ thống đang kết nối kỹ thuật viên phù hợp cho bạn
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition-all duration-150"
+                @click="chosenList = 'requests'"
+              >
+                <span>Xem yêu cầu</span>
+                <ChevronRight :size="14" />
+              </button>
+            </div>
+          </Transition>
+
           <div class="space-y-2">
             <div v-if="loadingOrders" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
               <div v-for="i in 3" :key="i" class="px-5 py-4 space-y-2">
@@ -718,13 +1037,19 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
               </div>
             </div>
 
-            <p
+            <div
               v-else-if="ordersTotal === 0"
-              data-testid="orders-empty"
-              class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
-              Không có đơn sửa chữa ở mục này.
-            </p>
+              <img
+                :src="'/images/ui/empty-state-search-service.png'"
+                alt=""
+                class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
+                loading="lazy"
+              />
+              <p data-testid="orders-empty" class="text-sm font-semibold text-ink-800">Không có đơn sửa chữa ở mục này.</p>
+              <p class="text-xs text-ink-500 mt-0.5">Đơn sửa chữa đang diễn ra sẽ hiển thị tại đây.</p>
+            </div>
 
             <ul
               v-else
@@ -800,14 +1125,94 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
             />
           </div>
       </section>
+      </Transition>
     </div>
 
     <RebookDialog
-      v-if="rebookFor"
       :open="!!rebookFor"
-      :booking-id="rebookFor.bookingId"
-      :service-name="rebookFor.serviceName"
+      :booking-id="rebookFor?.bookingId ?? ''"
+      :service-name="rebookFor?.serviceName"
       @close="rebookFor = null"
     />
+
+    <!-- Floating bulk action bar -->
+    <transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="transform translate-y-6 opacity-0"
+      enter-to-class="transform translate-y-0 opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="transform translate-y-0 opacity-100"
+      leave-to-class="transform translate-y-6 opacity-0"
+    >
+      <div
+        v-if="selectedBookingIds.length > 0"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl border border-ink-200 bg-white/95 backdrop-blur-md px-5 py-3 shadow-xl"
+        data-testid="floating-bulk-bar"
+      >
+        <div class="flex items-center gap-2 text-sm font-medium text-ink-900">
+          <span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white font-num">
+            {{ selectedBookingIds.length }}
+          </span>
+          <span class="hidden sm:inline">yêu cầu đã chọn</span>
+        </div>
+        <div class="h-4 w-px bg-ink-200" />
+        <button
+          type="button"
+          class="text-xs font-semibold text-ink-600 hover:text-ink-900 px-2 py-1 transition-colors"
+          @click="clearSelection"
+        >
+          Bỏ chọn
+        </button>
+        <FhButton
+          variant="danger"
+          size="sm"
+          :loading="bulkCancelling"
+          @click="openBulkCancelDialog"
+        >
+          <Trash2 :size="14" class="mr-1.5" />
+          Huỷ các yêu cầu
+        </FhButton>
+      </div>
+    </transition>
+
+    <!-- Confirm dialog for cancelling request(s) -->
+    <FhConfirmDialog
+      :open="showCancelDialog"
+      :title="cancelDialogTitle"
+      :consequence="cancelDialogConsequence"
+      confirm-text="Xác nhận huỷ"
+      cancel-text="Quay lại"
+      :danger="true"
+      :loading="bulkCancelling"
+      @confirm="confirmCancel"
+      @cancel="closeCancelDialog"
+    >
+      <div class="space-y-3 pt-2 text-sm text-ink-700">
+        <label class="block font-medium text-ink-900">Lý do huỷ:</label>
+        <div class="space-y-2">
+          <label
+            v-for="reasonOption in PRESET_CANCEL_REASONS"
+            :key="reasonOption"
+            class="flex items-center gap-2.5 cursor-pointer text-xs sm:text-sm text-ink-800"
+          >
+            <input
+              v-model="cancelReasonSelected"
+              type="radio"
+              :value="reasonOption"
+              class="text-brand-600 focus:ring-brand-500"
+            />
+            <span>{{ reasonOption }}</span>
+          </label>
+        </div>
+        <input
+          v-if="cancelReasonSelected === 'Lý do khác'"
+          v-model="customCancelReason"
+          type="text"
+          maxlength="200"
+          placeholder="Nhập lý do huỷ cụ thể..."
+          class="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
+        />
+      </div>
+    </FhConfirmDialog>
   </div>
 </template>

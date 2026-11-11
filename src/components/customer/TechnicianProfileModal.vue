@@ -165,18 +165,19 @@ const handleClose = () => emit('close');
 </script>
 
 <template>
-  <div
-    v-if="isOpen && candidate"
-    class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/60 backdrop-blur-xs transition-opacity duration-200"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="modal-technician-name"
-    @click.self="handleClose"
-    @keydown.esc="handleClose"
-  >
+  <Transition name="fh-modal">
     <div
-      class="bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[92dvh] flex flex-col shadow-(--shadow-e3) border border-ink-200/90 overflow-hidden transform transition-all duration-200 ease-out animate-in fade-in zoom-in-95 sm:zoom-in-95"
+      v-if="isOpen && candidate"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/60 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-technician-name"
+      @click.self="handleClose"
+      @keydown.esc="handleClose"
     >
+      <div
+        class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[92dvh] flex flex-col shadow-(--shadow-e3) border border-ink-200/90 overflow-hidden"
+      >
       <!-- Header Hero Card -->
       <div class="px-5 sm:px-6 pt-5 pb-4 border-b border-ink-100 bg-gradient-to-b from-brand-50/40 via-white to-white shrink-0">
         <div class="flex items-start gap-4">
@@ -294,105 +295,107 @@ const handleClose = () => emit('close');
 
       <!-- Body Content -->
       <div class="px-5 sm:px-6 py-4 overflow-y-auto space-y-4 text-xs sm:text-sm text-ink-800 flex-1">
-        <template v-if="activeTab === 'about'">
-          <p v-if="candidate.bio" class="text-ink-700 leading-relaxed text-pretty whitespace-pre-line bg-ink-50/50 p-3.5 rounded-2xl border border-ink-100">
-            {{ candidate.bio }}
-          </p>
+        <Transition name="fh-fade-slide" mode="out-in">
+          <div v-if="activeTab === 'about'" key="about" class="space-y-4">
+            <p v-if="candidate.bio" class="text-ink-700 leading-relaxed text-pretty whitespace-pre-line bg-ink-50/50 p-3.5 rounded-2xl border border-ink-100">
+              {{ candidate.bio }}
+            </p>
 
-          <ul class="rounded-2xl border border-ink-200/90 divide-y divide-ink-100 bg-white overflow-hidden shadow-2xs">
-            <li class="px-4 py-3 flex items-start gap-3 bg-brand-50/20">
-              <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
-              <span class="text-pretty text-ink-800 font-medium">Hồ sơ và tay nghề cho dịch vụ này đã được FixHome duyệt.</span>
-            </li>
-            <li class="px-4 py-3 flex items-center justify-between gap-3">
-              <span class="flex items-center gap-2.5 text-ink-600">
-                <Wrench :size="16" class="text-ink-400 shrink-0" />
-                <span>Giá công tham khảo</span>
-              </span>
-              <span class="font-bold text-ink-900 font-num whitespace-nowrap">
-                <FhMoney v-if="candidate.listedLaborPrice" :amount="candidate.listedLaborPrice" />
-                <template v-else>Theo báo giá</template>
-              </span>
-            </li>
-            <li v-if="candidate.typicalWarrantyDays" class="px-4 py-3 flex items-center justify-between gap-3">
-              <span class="flex items-center gap-2.5 text-ink-600">
-                <ClipboardCheck :size="16" class="text-ink-400 shrink-0" />
-                <span>Bảo hành thường áp dụng</span>
-              </span>
-              <span class="font-bold text-ink-900 font-num whitespace-nowrap px-2 py-0.5 rounded-lg bg-brand-50 text-brand-700 text-xs">
-                {{ candidate.typicalWarrantyDays }} ngày
-              </span>
-            </li>
-          </ul>
-
-          <div class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900 text-pretty flex items-start gap-2.5">
-            <Award :size="18" class="text-warning-600 shrink-0 mt-0.5" />
-            <span class="text-xs sm:text-sm leading-relaxed">
-              Giá công chỉ để tham khảo. Kỹ thuật viên sẽ báo giá cụ thể sau khi kiểm tra thiết bị, và chỉ sửa khi bạn đồng ý.
-            </span>
-          </div>
-        </template>
-
-        <template v-else>
-          <div v-if="loadingReviews" role="status" aria-label="Đang tải đánh giá" class="space-y-3 py-2">
-            <FhSkeleton height="64px" rounded="md" />
-            <FhSkeleton height="16px" :count="3" />
-          </div>
-
-          <template v-else-if="reviews.length > 0">
-            <div class="flex items-center gap-5 p-4 rounded-2xl bg-ink-50/80 border border-ink-100">
-              <div class="text-center shrink-0 px-2">
-                <div class="text-3xl sm:text-4xl font-bold text-ink-900 font-num tracking-tight">
-                  {{ ratingLabel(candidate.averageRating, candidate.ratingCount) }}
-                </div>
-                <div class="flex items-center justify-center gap-0.5 my-1 text-warning-400">
-                  <Star v-for="i in 5" :key="i" :size="13" class="fill-warning-400 text-warning-500" />
-                </div>
-                <div class="text-xs text-ink-500 whitespace-nowrap">{{ reviews.length }} nhận xét</div>
-              </div>
-              <div class="flex-1 space-y-1.5 pl-2 border-l border-ink-200/70">
-                <div v-for="star in [5, 4, 3, 2, 1]" :key="star" class="flex items-center gap-2 text-xs text-ink-600">
-                  <span class="w-9 font-num shrink-0 whitespace-nowrap">{{ star }} sao</span>
-                  <div class="flex-1 h-2 rounded-full bg-ink-200/80 overflow-hidden">
-                    <div class="h-full bg-warning-400 rounded-full transition-all duration-300" :style="{ width: `${starStats.pct(starStats.counts[star])}%` }" />
-                  </div>
-                  <span class="w-6 text-right font-num text-ink-500 shrink-0">{{ starStats.counts[star] }}</span>
-                </div>
-              </div>
-            </div>
-
-            <ul class="divide-y divide-ink-100/80">
-              <li v-for="r in reviews" :key="r.id" class="py-3.5 space-y-1.5">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="font-semibold text-ink-900">{{ r.customerName || 'Khách hàng FixHome' }}</span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-50 border border-warning-200 text-warning-800 font-num text-xs font-semibold whitespace-nowrap">
-                    <Star :size="12" class="fill-warning-400 text-warning-500" />
-                    {{ r.rating }}/5
-                  </span>
-                </div>
-                <div v-if="parseReviewContent(r.comment).tags.length > 0" class="flex flex-wrap gap-1.5">
-                  <span
-                    v-for="tag in parseReviewContent(r.comment).tags"
-                    :key="tag"
-                    class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-100"
-                  >
-                    {{ tag }}
-                  </span>
-                </div>
-                <p v-if="parseReviewContent(r.comment).text" class="text-ink-700 leading-relaxed text-pretty">
-                  {{ parseReviewContent(r.comment).text }}
-                </p>
-                <p class="text-xs text-ink-400 font-num">{{ vnDateString(r.createdAt) }}</p>
+            <ul class="rounded-2xl border border-ink-200/90 divide-y divide-ink-100 bg-white overflow-hidden shadow-2xs">
+              <li class="px-4 py-3 flex items-start gap-3 bg-brand-50/20">
+                <ShieldCheck :size="18" class="text-brand-600 shrink-0 mt-0.5" />
+                <span class="text-pretty text-ink-800 font-medium">Hồ sơ và tay nghề cho dịch vụ này đã được FixHome duyệt.</span>
+              </li>
+              <li class="px-4 py-3 flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2.5 text-ink-600">
+                  <Wrench :size="16" class="text-ink-400 shrink-0" />
+                  <span>Giá công tham khảo</span>
+                </span>
+                <span class="font-bold text-ink-900 font-num whitespace-nowrap">
+                  <FhMoney v-if="candidate.listedLaborPrice" :amount="candidate.listedLaborPrice" />
+                  <template v-else>Theo báo giá</template>
+                </span>
+              </li>
+              <li v-if="candidate.typicalWarrantyDays" class="px-4 py-3 flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2.5 text-ink-600">
+                  <ClipboardCheck :size="16" class="text-ink-400 shrink-0" />
+                  <span>Bảo hành thường áp dụng</span>
+                </span>
+                <span class="font-bold text-ink-900 font-num whitespace-nowrap px-2 py-0.5 rounded-lg bg-brand-50 text-brand-700 text-xs">
+                  {{ candidate.typicalWarrantyDays }} ngày
+                </span>
               </li>
             </ul>
-          </template>
 
-          <FhEmptyState
-            v-else
-            title="Chưa có đánh giá nào"
-            description="Kỹ thuật viên này chưa nhận được đánh giá nào từ khách hàng."
-          />
-        </template>
+            <div class="p-3.5 rounded-2xl bg-warning-50 border border-warning-200 text-warning-900 text-pretty flex items-start gap-2.5">
+              <Award :size="18" class="text-warning-600 shrink-0 mt-0.5" />
+              <span class="text-xs sm:text-sm leading-relaxed">
+                Giá công chỉ để tham khảo. Kỹ thuật viên sẽ báo giá cụ thể sau khi kiểm tra thiết bị, và chỉ sửa khi bạn đồng ý.
+              </span>
+            </div>
+          </div>
+
+          <div v-else key="reviews" class="space-y-4">
+            <div v-if="loadingReviews" role="status" aria-label="Đang tải đánh giá" class="space-y-3 py-2">
+              <FhSkeleton height="64px" rounded="md" />
+              <FhSkeleton height="16px" :count="3" />
+            </div>
+
+            <template v-else-if="reviews.length > 0">
+              <div class="flex items-center gap-5 p-4 rounded-2xl bg-ink-50/80 border border-ink-100">
+                <div class="text-center shrink-0 px-2">
+                  <div class="text-3xl sm:text-4xl font-bold text-ink-900 font-num tracking-tight">
+                    {{ ratingLabel(candidate.averageRating, candidate.ratingCount) }}
+                  </div>
+                  <div class="flex items-center justify-center gap-0.5 my-1 text-warning-400">
+                    <Star v-for="i in 5" :key="i" :size="13" class="fill-warning-400 text-warning-500" />
+                  </div>
+                  <div class="text-xs text-ink-500 whitespace-nowrap">{{ reviews.length }} nhận xét</div>
+                </div>
+                <div class="flex-1 space-y-1.5 pl-2 border-l border-ink-200/70">
+                  <div v-for="star in [5, 4, 3, 2, 1]" :key="star" class="flex items-center gap-2 text-xs text-ink-600">
+                    <span class="w-9 font-num shrink-0 whitespace-nowrap">{{ star }} sao</span>
+                    <div class="flex-1 h-2 rounded-full bg-ink-200/80 overflow-hidden">
+                      <div class="h-full bg-warning-400 rounded-full transition-all duration-300" :style="{ width: `${starStats.pct(starStats.counts[star])}%` }" />
+                    </div>
+                    <span class="w-6 text-right font-num text-ink-500 shrink-0">{{ starStats.counts[star] }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <ul class="divide-y divide-ink-100/80">
+                <li v-for="r in reviews" :key="r.id" class="py-3.5 space-y-1.5">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-semibold text-ink-900">{{ r.customerName || 'Khách hàng FixHome' }}</span>
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-50 border border-warning-200 text-warning-800 font-num text-xs font-semibold whitespace-nowrap">
+                      <Star :size="12" class="fill-warning-400 text-warning-500" />
+                      {{ r.rating }}/5
+                    </span>
+                  </div>
+                  <div v-if="parseReviewContent(r.comment).tags.length > 0" class="flex flex-wrap gap-1.5">
+                    <span
+                      v-for="tag in parseReviewContent(r.comment).tags"
+                      :key="tag"
+                      class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-100"
+                    >
+                      {{ tag }}
+                    </span>
+                  </div>
+                  <p v-if="parseReviewContent(r.comment).text" class="text-ink-700 leading-relaxed text-pretty">
+                    {{ parseReviewContent(r.comment).text }}
+                  </p>
+                  <p class="text-xs text-ink-400 font-num">{{ vnDateString(r.createdAt) }}</p>
+                </li>
+              </ul>
+            </template>
+
+            <FhEmptyState
+              v-else
+              title="Chưa có đánh giá nào"
+              description="Kỹ thuật viên này chưa nhận được đánh giá nào từ khách hàng."
+            />
+          </div>
+        </Transition>
       </div>
 
       <!-- Footer Action Area -->
@@ -418,6 +421,7 @@ const handleClose = () => emit('close');
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </Transition>
 </template>
 
