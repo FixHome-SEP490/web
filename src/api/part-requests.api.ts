@@ -31,6 +31,8 @@ export interface PartRequestItem {
 
 export interface PartRequest {
   id: string;
+  /** Sent with the manager's warehouse queue so the list needs no call per row (BUG DETECTOR 90). */
+  warehouseAllocation?: WarehouseAllocation | null;
   serviceOrderId: string;
   technicianId: string;
   requestType: PartRequestType;
@@ -87,6 +89,13 @@ export interface WarehouseAllocation {
   handedOverAt?: string | null;
   receivedAt?: string | null;
 }
+/** One page of the list; statusCounts covers every status over the same filters (BUG DETECTOR 89). */
+export interface PartRequestPage {
+  data: PartRequest[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+}
+
 export interface WarehouseAllocationCommandPayload { idempotencyKey: string }
 export interface WarehouseQrResponse { allocation: WarehouseAllocation; qrToken: string | null }
 
@@ -505,29 +514,31 @@ export const partRequestsApi = {
    */
   async getAll(
     params?: QueryPartRequestsParams,
-  ): Promise<{ data: PartRequest[]; total: number }> {
+  ): Promise<PartRequestPage> {
     const res = await apiClient.get<{
       data: PartRequest[];
-      meta: { total: number };
+      meta: { total: number; statusCounts?: Record<string, number> };
     }>('/part-requests', { params });
     return {
       data: res.data.data || [],
       total: res.data.meta?.total || 0,
+      statusCounts: res.data.meta?.statusCounts ?? null,
     };
   },
 
   /** SM: list requests assigned to the manager's warehouses by Backend ownership scope. */
   async getWarehouseTasks(
     params?: QueryPartRequestsParams,
-  ): Promise<{ data: PartRequest[]; total: number }> {
+  ): Promise<PartRequestPage> {
     const res = await apiClient.get<{
       success: true;
       data: PartRequest[];
-      meta: { total: number };
+      meta: { total: number; statusCounts?: Record<string, number> };
     }>('/part-requests/warehouse-tasks', { params });
     return {
       data: res.data.data,
       total: res.data.meta.total,
+      statusCounts: res.data.meta.statusCounts ?? null,
     };
   },
 
