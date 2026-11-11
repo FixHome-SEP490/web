@@ -122,6 +122,18 @@ describe('faulty part inspection on the manager page', () => {
     expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
   });
 
+  it.each(['cancelled', 'completed'])('offers no warehouse code on a %s request, so the manager cannot hit the server refusal', async (status) => {
+    const request = warranty({ id: `pr-${status}`, requestType: 'pre_repair', status });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'handed_over', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [{ ...request, warehouseAllocation: allocation }], total: 1 });
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.findAll('button').some((button) => ['Cấp lại mã nhận', 'Chuẩn bị mã kho'].includes(button.text()))).toBe(false);
+    expect(api.prepareWarehouseQr).not.toHaveBeenCalled();
+  });
+
   it('keeps Admin on the existing global part request list', async () => {
     auth.hasRole.mockReturnValue(false);
     api.getAll.mockResolvedValue({ data: [], total: 0 });
