@@ -736,8 +736,8 @@ async function confirmCancel() {
           v-for="choice in listChoices"
           :key="choice.key"
           type="button"
-          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
-          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
+          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
+          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
           :aria-pressed="listView === choice.key"
           :aria-label="choice.label"
           :data-testid="`list-switch-${choice.key}`"
@@ -747,14 +747,15 @@ async function confirmCancel() {
           <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
           <span
             v-if="!choice.loading"
-            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs"
+            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs transition-colors"
             :class="listView === choice.key ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'"
           >{{ choice.count }}</span>
         </button>
       </div>
 
+      <Transition name="fh-fade-slide" mode="out-in">
       <!-- One server-paged parent row per multi-device visit. -->
-      <section v-if="listView === 'visits'" class="space-y-2" data-testid="visit-groups-section">
+      <section v-if="listView === 'visits'" key="visits" class="space-y-2" data-testid="visit-groups-section">
         <div
           v-if="visitGroupsError"
           role="alert"
@@ -808,7 +809,7 @@ async function confirmCancel() {
       </section>
 
       <!-- Bookings with no technician yet, so no service order -->
-      <section v-if="listView === 'requests'" class="space-y-3" data-testid="requests-section">
+      <section v-else-if="listView === 'requests'" :key="`requests-${activeTab}`" class="space-y-3" data-testid="requests-section">
           <!-- Bulk actions toolbar -->
           <div
             v-if="!loadingBookings && cancellableBookings.length > 0"
@@ -981,35 +982,37 @@ async function confirmCancel() {
       </section>
 
       <!-- Service orders -->
-      <section v-else-if="listView === 'orders'" class="space-y-3" data-testid="orders-section">
+      <section v-else-if="listView === 'orders'" :key="`orders-${activeTab}`" class="space-y-3" data-testid="orders-section">
           <!-- Pending booking requests callout banner when viewing orders -->
-          <div
-            v-if="pendingBookingsCount > 0 && (activeTab === 'ALL' || activeTab === 'IN_PROGRESS')"
-            class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50/60 p-3.5 sm:p-4 transition-colors"
-            data-testid="pending-requests-callout"
-          >
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
-                <Clock :size="20" />
-              </div>
-              <div class="min-w-0">
-                <p class="font-semibold text-brand-950 text-sm">
-                  Bạn có {{ pendingBookingsCount }} yêu cầu đặt lịch đang tìm thợ
-                </p>
-                <p class="text-xs text-brand-700 truncate">
-                  Hệ thống đang kết nối kỹ thuật viên phù hợp cho bạn
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 transition-colors"
-              @click="chosenList = 'requests'"
+          <Transition name="fh-fade-slide">
+            <div
+              v-if="pendingBookingsCount > 0 && (activeTab === 'ALL' || activeTab === 'IN_PROGRESS')"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50/60 p-3.5 sm:p-4 transition-colors"
+              data-testid="pending-requests-callout"
             >
-              <span>Xem yêu cầu</span>
-              <ChevronRight :size="14" />
-            </button>
-          </div>
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
+                  <Clock :size="20" />
+                </div>
+                <div class="min-w-0">
+                  <p class="font-semibold text-brand-900 text-sm">
+                    Bạn có {{ pendingBookingsCount }} yêu cầu đặt lịch đang tìm thợ
+                  </p>
+                  <p class="text-xs text-brand-700 truncate">
+                    Hệ thống đang kết nối kỹ thuật viên phù hợp cho bạn
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition-all duration-150"
+                @click="chosenList = 'requests'"
+              >
+                <span>Xem yêu cầu</span>
+                <ChevronRight :size="14" />
+              </button>
+            </div>
+          </Transition>
 
           <div class="space-y-2">
             <div v-if="loadingOrders" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
@@ -1101,13 +1104,13 @@ async function confirmCancel() {
             />
           </div>
       </section>
+      </Transition>
     </div>
 
     <RebookDialog
-      v-if="rebookFor"
       :open="!!rebookFor"
-      :booking-id="rebookFor.bookingId"
-      :service-name="rebookFor.serviceName"
+      :booking-id="rebookFor?.bookingId ?? ''"
+      :service-name="rebookFor?.serviceName"
       @close="rebookFor = null"
     />
 

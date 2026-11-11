@@ -160,7 +160,7 @@ function submitCode() {
       <VoucherStatePanel v-else-if="state !== 'ready'" :state="state" :message="message" @retry="$emit('retry')" />
       <VoucherStatePanel v-else-if="activeTab === 'general' && !discoveryAvailable" state="unavailable" title="Khám phá ưu đãi sắp khả dụng" message="Danh sách ưu đãi chung chưa được cung cấp. Nếu bạn đã có mã, hãy nhập mã ở trên để lưu vào ví." />
       <VoucherStatePanel v-else-if="visibleOffers.length === 0" state="empty" :title="emptyTitle" :message="emptyMessage" />
-      <ul v-else class="space-y-3" aria-label="Ưu đãi">
+      <ul v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4" aria-label="Ưu đãi">
         <li v-for="offer in visibleOffers" :key="offer.id">
           <VoucherOfferCard
             :offer="offer"

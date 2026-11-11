@@ -18,6 +18,8 @@ import {
   Award,
   Tag,
   Phone,
+  Wrench,
+  Droplets,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
 import type { ServiceOrderItem } from '../../api/orders.api';
@@ -63,8 +65,11 @@ function isFixedPrice(svc: ServiceItem): boolean {
 
 // Quick searches under the search box.
 const quickChips = [
-  { id: 'urgent', title: 'Sửa quạt điện', icon: Zap, query: 'Sửa quạt điện' },
   { id: 'ac', title: 'Vệ sinh máy lạnh', icon: Snowflake, query: 'vệ sinh điều hòa' },
+  { id: 'washing', title: 'Sửa máy giặt', icon: Wrench, query: 'sửa máy giặt' },
+  { id: 'fridge', title: 'Sửa tủ lạnh', icon: Snowflake, query: 'sửa tủ lạnh' },
+  { id: 'plumbing', title: 'Điện nước', icon: Droplets, query: 'điện nước' },
+  { id: 'fan', title: 'Sửa quạt điện', icon: Zap, query: 'sửa quạt điện' },
 ];
 
 const promises = [
@@ -135,7 +140,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 </script>
 
 <template>
-  <div class="space-y-6 pb-4">
+  <div class="space-y-6 pb-6">
     <!-- Greeting and the address the technician comes to -->
     <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight min-w-0 text-balance">
@@ -153,6 +158,77 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         <ChevronRight :size="16" class="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" />
       </router-link>
     </section>
+
+    <!-- Order in progress (promoted to top when present) -->
+    <Transition name="fh-fade-slide">
+      <section
+        v-if="activeOrder"
+        class="rounded-2xl bg-white border border-brand-200/90 shadow-2xs p-5 space-y-4 relative overflow-hidden transition-all duration-200 hover:border-brand-300 hover:shadow-(--shadow-e2)"
+        data-testid="dashboard-active-order"
+      >
+        <div class="flex items-center justify-between gap-3 pb-3 border-b border-ink-100">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="relative flex h-2.5 w-2.5 shrink-0">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-600"></span>
+            </span>
+            <h2 class="text-sm font-semibold text-ink-900">Đơn đang thực hiện</h2>
+            <span class="text-xs text-ink-500 font-num">#{{ activeOrder.code }}</span>
+          </div>
+          <FhStatusPill :status="activeOrder.status" />
+        </div>
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="min-w-0 space-y-1.5 flex-1">
+            <p class="text-base font-semibold text-ink-900 text-pretty">{{ activeOrder.serviceName }}</p>
+
+            <p class="text-xs sm:text-sm text-ink-600 flex items-start gap-1.5 min-w-0">
+              <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
+              <span class="truncate" :title="activeOrder.addressSummary">{{ activeOrder.addressSummary }}</span>
+            </p>
+
+            <div v-if="activeOrder.technician" class="pt-1 flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-full overflow-hidden bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs shrink-0">
+                <img
+                  v-if="activeOrder.technician.avatarUrl"
+                  :src="activeOrder.technician.avatarUrl"
+                  :alt="activeOrder.technician.fullName"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else>{{ activeOrder.technician.fullName.charAt(0) }}</span>
+              </div>
+              <div class="min-w-0 flex items-center gap-2 flex-wrap text-xs sm:text-sm">
+                <span class="font-medium text-ink-900 truncate">{{ activeOrder.technician.fullName }}</span>
+                <span class="text-ink-500 shrink-0">
+                  <template v-if="formatRating(activeOrder.technician.averageRating)">· <span class="text-warning-600">★</span> {{ formatRating(activeOrder.technician.averageRating) }}</template>
+                  <template v-else>· Chưa có đánh giá</template>
+                </span>
+                <a
+                  v-if="activeOrder.technician.phoneNumber"
+                  :href="`tel:${activeOrder.technician.phoneNumber}`"
+                  class="font-num text-ink-600 hover:text-brand-600 inline-flex items-center gap-1 font-medium whitespace-nowrap ml-1"
+                  :title="`Gọi ${activeOrder.technician.phoneNumber}`"
+                >
+                  <Phone :size="12" class="text-brand-600" />
+                  {{ activeOrder.technician.phoneNumber }}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-ink-100">
+            <FhButton v-if="activeOrder.technician" variant="secondary" size="sm" @click="handleChatForOrder(activeOrder)">
+              <MessageSquare :size="15" />
+              Nhắn tin
+            </FhButton>
+            <FhButton variant="primary" size="sm" @click="router.push(`/app/orders/${activeOrder.id}`)">
+              Xem tiến độ
+              <ChevronRight :size="15" />
+            </FhButton>
+          </div>
+        </div>
+      </section>
+    </Transition>
 
     <!-- The one emphasis block of the page: search what needs fixing -->
     <section class="relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-xs">
@@ -172,7 +248,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
               />
               <button
                 type="submit"
-                class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white flex items-center justify-center transition-colors"
+                class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 active:scale-95 text-white flex items-center justify-center transition-all duration-150"
                 title="Tìm kiếm dịch vụ"
                 aria-label="Tìm kiếm dịch vụ"
               >
@@ -186,7 +262,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
               v-for="chip in quickChips"
               :key="chip.id"
               type="button"
-              class="h-8.5 px-3.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-xs sm:text-sm text-white transition-colors shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+              class="h-8.5 px-3.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 active:scale-95 text-xs sm:text-sm text-white transition-all duration-150 shrink-0 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
               @click="handleChipClick(chip)"
             >
               <component :is="chip.icon" :size="15" :stroke-width="1.75" />
@@ -203,72 +279,6 @@ async function handleChatForOrder(order: ServiceOrderItem) {
             class="w-full h-auto max-h-52 object-contain drop-shadow-md select-none pointer-events-none"
             loading="lazy"
           />
-        </div>
-      </div>
-    </section>
-
-    <!-- Order in progress -->
-    <section
-      v-if="activeOrder"
-      class="rounded-2xl bg-white border border-ink-200 shadow-xs p-5 space-y-4"
-      data-testid="dashboard-active-order"
-    >
-      <div class="flex items-center justify-between gap-3 pb-3 border-b border-ink-100">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="w-2.5 h-2.5 rounded-full bg-brand-600 shrink-0" />
-          <h2 class="text-sm font-semibold text-ink-900">Đơn đang thực hiện</h2>
-          <span class="text-xs text-ink-500 font-num">#{{ activeOrder.code }}</span>
-        </div>
-        <FhStatusPill :status="activeOrder.status" />
-      </div>
-
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="min-w-0 space-y-1.5 flex-1">
-          <p class="text-base font-semibold text-ink-900 text-pretty">{{ activeOrder.serviceName }}</p>
-
-          <p class="text-xs sm:text-sm text-ink-600 flex items-start gap-1.5 min-w-0">
-            <MapPin :size="15" class="text-ink-400 shrink-0 mt-0.5" />
-            <span class="truncate" :title="activeOrder.addressSummary">{{ activeOrder.addressSummary }}</span>
-          </p>
-
-          <div v-if="activeOrder.technician" class="pt-1 flex items-center gap-2.5 min-w-0">
-            <div class="w-8 h-8 rounded-full overflow-hidden bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs shrink-0">
-              <img
-                v-if="activeOrder.technician.avatarUrl"
-                :src="activeOrder.technician.avatarUrl"
-                :alt="activeOrder.technician.fullName"
-                class="w-full h-full object-cover"
-              />
-              <span v-else>{{ activeOrder.technician.fullName.charAt(0) }}</span>
-            </div>
-            <div class="min-w-0 flex items-center gap-2 flex-wrap text-xs sm:text-sm">
-              <span class="font-medium text-ink-900 truncate">{{ activeOrder.technician.fullName }}</span>
-              <span class="text-ink-500 shrink-0">
-                <template v-if="formatRating(activeOrder.technician.averageRating)">· <span class="text-warning-600">★</span> {{ formatRating(activeOrder.technician.averageRating) }}</template>
-                <template v-else>· Chưa có đánh giá</template>
-              </span>
-              <a
-                v-if="activeOrder.technician.phoneNumber"
-                :href="`tel:${activeOrder.technician.phoneNumber}`"
-                class="font-num text-ink-600 hover:text-brand-600 inline-flex items-center gap-1 font-medium whitespace-nowrap ml-1"
-                :title="`Gọi ${activeOrder.technician.phoneNumber}`"
-              >
-                <Phone :size="12" class="text-brand-600" />
-                {{ activeOrder.technician.phoneNumber }}
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-ink-100">
-          <FhButton v-if="activeOrder.technician" variant="secondary" size="sm" @click="handleChatForOrder(activeOrder)">
-            <MessageSquare :size="15" />
-            Nhắn tin
-          </FhButton>
-          <FhButton variant="secondary" size="sm" @click="router.push(`/app/orders/${activeOrder.id}`)">
-            Xem tiến độ
-            <ChevronRight :size="15" />
-          </FhButton>
         </div>
       </div>
     </section>
@@ -301,14 +311,16 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         </router-link>
       </div>
 
-      <dl class="grid grid-cols-3 border-y border-ink-100 divide-x divide-ink-100 bg-ink-50/50">
-        <div v-for="stat in statTiles" :key="stat.label" class="px-5 py-3">
-          <dt class="text-xs sm:text-sm text-ink-500 whitespace-nowrap">{{ stat.label }}</dt>
-          <dd class="text-xl font-semibold text-ink-900 font-num mt-0.5">{{ stat.value }}</dd>
-        </div>
-      </dl>
+      <div class="px-5 pb-3">
+        <dl class="grid grid-cols-3 gap-3">
+          <div v-for="stat in statTiles" :key="stat.label" class="rounded-xl bg-ink-50/70 p-3 text-center border border-ink-100/60 transition-colors">
+            <dt class="text-xs sm:text-sm text-ink-500 whitespace-nowrap">{{ stat.label }}</dt>
+            <dd class="text-xl font-semibold text-ink-900 font-num mt-0.5">{{ stat.value }}</dd>
+          </div>
+        </dl>
+      </div>
 
-      <ul class="divide-y divide-ink-100">
+      <ul class="divide-y divide-ink-100 border-t border-ink-100">
         <li v-for="order in recentOrders" :key="order.id">
           <router-link
             :to="`/app/orders/${order.id}`"
@@ -355,10 +367,10 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         <li v-for="srv in popularServices" :key="srv.id" class="border-b border-ink-100 sm:odd:border-r">
           <button
             type="button"
-            class="w-full px-5 py-3.5 hover:bg-ink-50 transition-colors flex items-center justify-between gap-3.5 text-left cursor-pointer group"
+            class="w-full px-5 py-3.5 hover:bg-ink-50 active:bg-ink-100/80 transition-all duration-150 flex items-center justify-between gap-3.5 text-left cursor-pointer group"
             @click="handleServiceClick(srv)"
           >
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 p-1.5 group-hover:border-brand-200 group-hover:bg-brand-50/60 transition-colors">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 p-1.5 group-hover:border-brand-200 group-hover:bg-brand-50/60 group-hover:scale-105 transition-all duration-150">
               <img
                 :src="getServiceArtworkUrl(srv)"
                 alt=""

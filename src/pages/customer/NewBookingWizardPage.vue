@@ -2687,7 +2687,7 @@ async function createAndFindTech() {
             >
               <div
                 v-if="!savedDevicesExpanded && extraDevices.length"
-                class="flex flex-wrap items-center gap-2 rounded-xl border border-ink-150 bg-ink-50/60 px-3.5 py-2.5 text-xs text-ink-700"
+                class="flex flex-wrap items-center gap-2 rounded-xl border border-ink-200 bg-ink-50/60 px-3.5 py-2.5 text-xs text-ink-700"
               >
                 <span
                   v-for="(device, index) in extraDevices"
@@ -2731,10 +2731,12 @@ async function createAndFindTech() {
               </ol>
             </transition>
 
-            <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-2.5" role="status">
-              <span class="text-xs text-ink-700">Đã bỏ một thiết bị.</span>
-              <button type="button" class="min-h-9 text-xs font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
-            </div>
+            <Transition name="fh-fade-slide">
+              <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-2.5" role="status">
+                <span class="text-xs text-ink-700">Đã bỏ một thiết bị.</span>
+                <button type="button" class="min-h-9 text-xs font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+              </div>
+            </Transition>
           </section>
 
           <section
@@ -2984,11 +2986,11 @@ async function createAndFindTech() {
                   v-for="sym in categorySymptoms"
                   :key="sym"
                   type="button"
-                  class="h-11 rounded-full border px-3 text-sm transition-colors"
-                  :class="hasSymptom(sym) ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'border-ink-200 bg-ink-50 text-ink-600 hover:border-brand-300'"
+                  class="h-11 rounded-full border px-3.5 text-sm transition-all duration-150 active:scale-95 cursor-pointer select-none"
+                  :class="hasSymptom(sym) ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700 shadow-xs ring-1 ring-brand-500/20' : 'border-ink-200 bg-ink-50 text-ink-600 hover:border-brand-300 hover:bg-white'"
                   :aria-pressed="hasSymptom(sym)"
                   @click="toggleSymptom(sym)"
-                >{{ hasSymptom(sym) ? '✓' : '+' }} {{ sym }}</button>
+                >{{ sym }}</button>
               </div>
 
               <div class="flex flex-wrap items-center gap-3 pt-2" aria-label="Ảnh hiện trạng">
@@ -3318,7 +3320,7 @@ async function createAndFindTech() {
             <h3 class="font-semibold text-ink-900">Thiết bị trong lượt</h3>
             <span class="whitespace-nowrap text-ink-500">{{ visitDeviceCount }}/{{ visitDeviceLimit }} thiết bị</span>
           </div>
-          <ol v-if="reviewDevices.length" class="divide-y divide-ink-100">
+          <TransitionGroup v-if="reviewDevices.length" tag="ol" name="fh-list" class="divide-y divide-ink-100">
             <li v-for="(device, index) in reviewDevices" :key="device.key" class="space-y-2.5 py-4 first:pt-0 last:pb-0" :data-testid="`visit-review-device-${index}`">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
@@ -3337,11 +3339,13 @@ async function createAndFindTech() {
                 <img v-for="(photo, photoIndex) in device.photos" :key="photo.localId" :src="photo.previewUrl" :alt="`Ảnh ${photoIndex + 1} của máy ${index + 1}`" class="h-12 w-12 rounded-lg border border-ink-200 object-cover" />
               </div>
             </li>
-          </ol>
-          <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
-            <span>Đã bỏ một thiết bị.</span>
-            <button type="button" class="min-h-11 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
-          </div>
+          </TransitionGroup>
+          <Transition name="fh-fade-slide">
+            <div v-if="recentlyRemovedDevice" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-50 px-3 py-2" role="status">
+              <span>Đã bỏ một thiết bị.</span>
+              <button type="button" class="min-h-11 font-semibold text-brand-700 hover:underline" data-testid="visit-device-undo" @click="undoRemoveExtraDevice">Hoàn tác</button>
+            </div>
+          </Transition>
           <FhButton v-if="canAddDevice" variant="secondary" size="md" :disabled="loading" data-testid="visit-add-device" @click="selectedServiceId ? addAnotherDevice() : step = 1">
             <Plus :size="16" class="mr-1.5" /> Thêm thiết bị khác
           </FhButton>
@@ -3408,9 +3412,9 @@ async function createAndFindTech() {
             </div>
           </template>
           <p v-if="summaryPrice.kind === 'firm'" class="text-xs leading-relaxed text-ink-500" data-testid="confirm-fixed-price-scope">
-            Chưa gồm linh kiện hoặc phát sinh ngoài phạm vi (thợ báo giá và bạn duyệt trước khi làm).
+            Chưa gồm linh kiện hoặc phát sinh ngoài phạm vi (kỹ thuật viên sẽ báo giá và bạn duyệt trước khi làm).
           </p>
-          <p v-else class="text-xs text-ink-500" data-testid="confirm-v2-range-note">Thợ kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.</p>
+          <p v-else class="text-xs text-ink-500" data-testid="confirm-v2-range-note">Kỹ thuật viên kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.</p>
         </section>
 
         <div v-if="chatAttachmentSummary" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="confirm-attachments">
