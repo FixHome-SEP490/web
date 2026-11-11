@@ -9,7 +9,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { AlertTriangle, Check, Clock, Info, X } from 'lucide-vue-next';
 import FhMoney from '../FhMoney.vue';
-import { categoryIcon } from './service-icons';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import {
   fixedPriceValue,
   isServiceBookable,
@@ -55,7 +55,12 @@ const categoryLabel = computed(() => {
   if (service && 'categoryName' in service && service.categoryName) return service.categoryName;
   return props.categoryName ?? '';
 });
-const icon = computed(() => categoryIcon({ name: categoryLabel.value }));
+const artworkUrl = computed(() => getServiceArtworkUrl({
+  code: shown.value?.code,
+  slug: shown.value?.slug,
+  name: shown.value?.name,
+  categoryName: categoryLabel.value,
+}));
 const scope = computed(
   () =>
     shown.value?.scopeDescription ||
@@ -192,9 +197,15 @@ onBeforeUnmount(releasePageScroll);
 
           <div class="flex items-start gap-3 border-b border-ink-100 p-5">
             <span
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50 text-brand-600"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50 p-1.5"
             >
-              <component :is="icon" :size="19" />
+              <img
+                :src="artworkUrl"
+                alt=""
+                loading="lazy"
+                class="h-full w-full object-contain"
+                aria-hidden="true"
+              />
             </span>
             <div class="min-w-0 flex-1">
               <p v-if="categoryLabel" class="text-[11px] font-medium text-ink-500">{{ categoryLabel }}</p>

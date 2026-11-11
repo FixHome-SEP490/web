@@ -20,6 +20,10 @@ export interface WarrantyVisitView {
   notCoveredReasonCode: NotCoveredReason | string | null;
   findings: string | null;
   evidenceRefs: string[] | null;
+  /** Part lines of the original invoice the technician named as faulty (part fault only). */
+  faultyInvoiceItemIds?: string[] | null;
+  /** How many of each named line are faulty (line id → count); missing = the whole line. */
+  faultyQuantities?: Record<string, number> | null;
   reServiceNotes: string | null;
   reServiceEvidenceRefs: string[] | null;
   completedAt: string | null;
@@ -35,9 +39,21 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
     addressSummary: string;
     customerName: string;
     customerPhone: string;
+    /** Part lines of the original invoice: the technician picks the faulty ones for a part fault. */
+    partLines?: { id: string; name: string; quantity: number; partSource: string | null }[];
   };
   coverage: { id: string; itemDescription: string; expiresAt: string } | null;
   visit: WarrantyVisitView | null;
+  /** The free warranty part and the return of the faulty one. */
+  partRequest?: {
+    id: string;
+    status: string;
+    faultyReturnDueAt: string | null;
+    faultyReturnedAt: string | null;
+    faultyReturnChargedAt: string | null;
+    faultyInspectionResult: 'manufacturer' | 'installation' | 'undetermined' | null;
+    chargeTechnician: boolean;
+  } | null;
   /** A decline or missed response waiting for a manager, or the verdict. */
   declineReview?: DeclineReview | null;
   declineReasonCode?: string | null;
@@ -45,6 +61,8 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
   /** Whole VND returned to the customer wallet when the item could not be fixed. */
   refundAmount?: number | null;
   noShowFlaggedAt?: string | null;
+  /** A workmanship fault without parts, approved by the system instead of a manager. */
+  autoApproved?: boolean;
 }
 
 type Person = { id: string; fullName: string } | null;
@@ -84,6 +102,9 @@ export interface WarrantyClaimDetail extends StaffWarrantyClaim {
         partSource: string | null;
         partWarrantyOption: string | null;
         covered: boolean;
+        /** The technician named this line as faulty. */
+        faulty?: boolean;
+        faultyQuantity?: number;
       }[];
     };
     coverage: { id: string; startsAt: string; expiresAt: string; warrantyDays: number; status: string } | null;
@@ -96,6 +117,11 @@ export interface WarrantyClaimDetail extends StaffWarrantyClaim {
       faultyInspectionNote: string | null;
       faultyInspectionEvidence: string[] | null;
       faultyInspectedAt: string | null;
+      faultyReturnDueAt?: string | null;
+      faultyReturnedAt?: string | null;
+      faultyReturnNote?: string | null;
+      faultyReturnEvidence?: string[] | null;
+      faultyReturnChargedAt?: string | null;
       items: { id: string; name: string; quantity: number; unitPrice: number; usageStatus: string }[];
     } | null;
     otherClaims: { id: string; status: string; submittedAt: string; itemDescription: string }[];
@@ -124,6 +150,10 @@ export interface ProposeInspectionPayload {
   notCoveredReasonCode?: NotCoveredReason;
   findings: string;
   evidenceRefs?: string[];
+  /** Required for covered_part: the part lines of the original invoice that are faulty. */
+  faultyInvoiceItemIds?: string[];
+  /** How many of each faulty line are faulty (1..quantity bought); omit for the whole line. */
+  faultyQuantities?: Record<string, number>;
 }
 
 async function post(claimId: string, action: string, body: object): Promise<StaffWarrantyClaim> {
@@ -168,7 +198,10 @@ export const warrantyClaimsApi = {
     }
   },
 
-  accept: (claimId: string, payload: { scheduledAt?: string }) => post(claimId, 'accept', payload),
+  accept: (claimId: string, payload: { scheduledAt: string }) => post(claimId, 'accept', payload),
+
+  /** Moves the inspection time until check-in; the customer is told. */
+  reschedule: (claimId: string, payload: { scheduledAt: string }) => post(claimId, 'reschedule', payload),
 
   decline: (claimId: string, payload: { reasonCode: DeclineReason; note?: string }) =>
     post(claimId, 'decline', payload),

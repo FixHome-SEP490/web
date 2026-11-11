@@ -7,7 +7,6 @@ import {
   Navigation,
   MessageSquare,
   Phone,
-  Briefcase,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -202,7 +201,7 @@ const getGoogleMapsUrl = (job: ServiceOrderItem) => {
 };
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
-const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-colors ${focusRing}`;
+const secondaryAction = `h-10 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 active:scale-95 text-sm font-medium text-ink-700 inline-flex items-center gap-2 whitespace-nowrap transition-all duration-150 ${focusRing}`;
 // ── Sliding Active Background Pill ──
 const jobTabListRef = ref<HTMLElement | null>(null);
 const jobTabRefs = ref<Record<string, HTMLElement | null>>({});
@@ -272,7 +271,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
 
     <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại danh sách công việc">
@@ -283,7 +282,7 @@ onUnmounted(() => {
         :aria-pressed="listView === choice.key"
         :aria-label="choice.label"
         :data-testid="`jobs-list-switch-${choice.key}`"
-        class="h-11 min-w-[10rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        class="h-11 min-w-[10rem] flex-1 whitespace-nowrap rounded-xl border px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'"
         @click="listView = choice.key"
       >
@@ -320,8 +319,15 @@ onUnmounted(() => {
         <span>{{ userFacingError(visitGroupsError, 'Không thể tải lượt sửa nhiều thiết bị. Vui lòng thử lại.') }}</span>
         <FhButton variant="secondary" size="sm" class="h-10" :disabled="loadingVisitGroups" @click="retryVisitGroups">Thử lại</FhButton>
       </div>
-      <div v-else-if="visitGroupsTotal === 0" data-testid="technician-visit-groups-empty" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center">
-        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400"><Briefcase :size="24" /></div>
+      <div v-else-if="visitGroupsTotal === 0" data-testid="technician-visit-groups-empty" class="space-y-3 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center shadow-xs">
+        <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+          <img
+            :src="'/images/home-appliance-repair.png'"
+            alt=""
+            class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+            loading="lazy"
+          />
+        </div>
         <h2 class="font-semibold text-ink-900">Chưa có lượt sửa nhiều thiết bị được phân công</h2>
         <p class="text-sm text-ink-500">Các lượt được giao trọn vẹn cho bạn sẽ hiện ở đây.</p>
       </div>
@@ -430,15 +436,20 @@ onUnmounted(() => {
 
     <div
       v-else-if="jobs.length === 0"
-      class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3"
+      class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3 shadow-xs"
     >
-      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
-        <Briefcase :size="24" />
+      <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/role-choice-technician.png'"
+          alt=""
+          class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <h3 class="text-base font-semibold text-ink-900">
         {{ activeTab === 'all' ? 'Chưa có công việc nào' : 'Không có công việc ở mục này' }}
       </h3>
-      <p v-if="activeTab === 'all'" class="text-sm text-ink-500">Đơn bạn nhận sẽ hiện ở đây.</p>
+      <p v-if="activeTab === 'all'" class="text-sm text-ink-500">Đơn sửa chữa bạn nhận sẽ hiện ở đây.</p>
     </div>
 
     <!-- One surface, one row per job -->

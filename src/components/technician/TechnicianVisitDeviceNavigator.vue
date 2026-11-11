@@ -66,7 +66,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
       <template v-for="device in devices" :key="device.bookingId">
         <div
           v-if="device.serviceOrderId === activeOrderId"
-          class="visit-device min-w-0 rounded-xl border border-brand-600 bg-brand-50 p-3"
+          class="visit-device min-w-0 rounded-xl border-2 border-brand-600 bg-brand-50 p-3 shadow-xs transition-all duration-150"
           aria-current="page"
           role="group"
           :aria-label="`Máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
@@ -85,7 +85,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         <router-link
           v-else-if="device.serviceOrderId"
           :to="`/tech/jobs/${device.serviceOrderId}`"
-          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-white p-3 transition-colors motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-white p-3 transition-all duration-150 motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           :aria-label="`Mở máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >
@@ -118,12 +118,14 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
     >
       Xử lý tiếp: Máy {{ nextOpen.sequence }}
     </router-link>
-    <div v-if="pendingReadyPartRequest" class="flex flex-wrap items-center justify-between gap-x-3 rounded-xl bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-live="polite" data-testid="tech-visit-ready-parts-alert">
-      <p class="flex min-w-0 flex-[1_1_12rem] items-center gap-2"><PackageCheck :size="20" class="shrink-0" aria-hidden="true" /><span>Máy {{ pendingReadyPartRequest.sequence }} có linh kiện sẵn sàng nhận.</span></p>
-      <button type="button" class="min-h-11 rounded-lg px-2 font-semibold text-warning-900 underline underline-offset-4 hover:bg-warning-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${pendingReadyPartRequest.sequence} và khu vực linh kiện`" data-testid="tech-visit-ready-parts-action" @click="emit('openParts', pendingReadyPartRequest.orderId)">
-        Xem linh kiện máy {{ pendingReadyPartRequest.sequence }}
-      </button>
-    </div>
+    <Transition name="fh-fade-slide">
+      <div v-if="pendingReadyPartRequest" class="flex flex-wrap items-center justify-between gap-x-3 rounded-xl bg-warning-50 px-3 py-2 text-sm text-warning-900" role="status" aria-live="polite" data-testid="tech-visit-ready-parts-alert">
+        <p class="flex min-w-0 flex-[1_1_12rem] items-center gap-2"><PackageCheck :size="20" class="shrink-0" aria-hidden="true" /><span>Máy {{ pendingReadyPartRequest.sequence }} có linh kiện sẵn sàng nhận.</span></p>
+        <button type="button" class="min-h-11 rounded-lg px-2 font-semibold text-warning-900 underline underline-offset-4 hover:bg-warning-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${pendingReadyPartRequest.sequence} và khu vực linh kiện`" data-testid="tech-visit-ready-parts-action" @click="emit('openParts', pendingReadyPartRequest.orderId)">
+          Xem linh kiện máy {{ pendingReadyPartRequest.sequence }}
+        </button>
+      </div>
+    </Transition>
   </nav>
 </template>
 

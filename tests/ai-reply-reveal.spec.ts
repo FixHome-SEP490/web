@@ -97,6 +97,30 @@ describe('a reply written out', () => {
     expect(c.isRevealing.value).toBe(false);
   });
 
+  it('drops a reply that arrives after the customer started a new session', async () => {
+    let answer!: (value: typeof reply) => void;
+    analyze.mockReset().mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    const c = useAiConversation({ dwellMs: 0, revealMs: 0 });
+    const sending = c.sendTurn('máy lạnh không mát', []);
+    c.startOver();
+    expect(c.isThinking.value).toBe(false);
+    answer({ ...reply, sessionId: 'old-session' } as typeof reply);
+    await sending;
+    // Nothing of the old session comes back: no id to continue it, no text, no pinned service.
+    expect(c.sessionId.value).toBeNull();
+    expect(c.turnCount.value).toBe(0);
+    expect(c.pinnedService.value).toBeNull();
+    expect(c.messages.value.some((m) => m.sender === 'user' || m.reply)).toBe(false);
+    expect(c.isThinking.value).toBe(false);
+  });
+
+  it('writes the reply where the holding line was, without a second bubble', async () => {
+    const c = useAiConversation({ dwellMs: 0, revealMs: 0 });
+    await c.sendTurn('máy lạnh không mát', []);
+    expect(c.messages.value.filter((m) => m.sender === 'bot' && !m.reply).every((m) => !m.isAcknowledgement)).toBe(true);
+    expect(c.messages.value.at(-1)!.text).toBe(ANSWER);
+  });
+
   it('stops writing into a conversation the customer started over', async () => {
     vi.useFakeTimers();
     try {

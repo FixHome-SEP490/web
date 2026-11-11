@@ -112,7 +112,7 @@ async function topUp() {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto space-y-6 pb-16">
+  <div class="w-full space-y-6 pb-16">
     <!-- Header -->
     <div>
       <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
@@ -125,31 +125,33 @@ async function topUp() {
     </div>
 
     <!-- A return query is not a payment confirmation. -->
-    <div
-      v-if="hasPaymentReturn"
-      role="status"
-      data-testid="topup-result"
-      :aria-busy="loading || refreshing"
-      class="rounded-2xl border border-brand-200 bg-brand-50/90 p-4 text-sm text-brand-800 flex flex-col sm:flex-row sm:items-start gap-3 shadow-xs"
-    >
-      <div class="flex items-start gap-3 min-w-0 flex-1">
-        <RefreshCw :size="20" class="text-brand-600 shrink-0 mt-0.5" aria-hidden="true" />
-        <div class="space-y-0.5">
-          <p class="font-bold">{{ paymentStatusMessage.title }}</p>
-          <p class="text-pretty">{{ paymentStatusMessage.description }}</p>
-        </div>
-      </div>
-      <FhButton
-        variant="secondary"
-        size="sm"
-        data-testid="wallet-payment-refresh"
-        aria-label="Làm mới số dư và lịch sử ví"
-        :disabled="loading || refreshing"
-        @click="load"
+    <Transition name="fh-fade-slide">
+      <div
+        v-if="hasPaymentReturn"
+        role="status"
+        data-testid="topup-result"
+        :aria-busy="loading || refreshing"
+        class="rounded-2xl border border-brand-200 bg-brand-50/90 p-4 text-sm text-brand-800 flex flex-col sm:flex-row sm:items-start gap-3 shadow-xs"
       >
-        Làm mới
-      </FhButton>
-    </div>
+        <div class="flex items-start gap-3 min-w-0 flex-1">
+          <RefreshCw :size="20" class="text-brand-600 shrink-0 mt-0.5" :class="{ 'animate-spin': loading || refreshing }" aria-hidden="true" />
+          <div class="space-y-0.5">
+            <p class="font-bold">{{ paymentStatusMessage.title }}</p>
+            <p class="text-pretty">{{ paymentStatusMessage.description }}</p>
+          </div>
+        </div>
+        <FhButton
+          variant="secondary"
+          size="sm"
+          data-testid="wallet-payment-refresh"
+          aria-label="Làm mới số dư và lịch sử ví"
+          :disabled="loading || refreshing"
+          @click="load"
+        >
+          Làm mới
+        </FhButton>
+      </div>
+    </Transition>
 
     <!-- Balance and top-up: one surface -->
     <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden">
@@ -166,8 +168,8 @@ async function topUp() {
             v-for="choice in ACTIONS"
             :key="choice.key"
             type="button"
-            class="h-11 rounded-xl border text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-            :class="action === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-700 hover:border-ink-300'"
+            class="h-11 rounded-xl border text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            :class="action === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
             :aria-pressed="action === choice.key"
             :data-testid="`wallet-action-${choice.key}`"
             @click="action = choice.key"
@@ -178,78 +180,84 @@ async function topUp() {
         </div>
       </div>
 
-      <div v-if="action === 'withdraw'" class="p-5 border-t border-ink-100">
-        <CustomerWithdrawPanel />
-      </div>
-
-      <!-- Top-up Section -->
-      <div v-else class="p-6 sm:p-8 space-y-5 border-t border-ink-100">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-            <CreditCard :size="18" class="text-brand-600" />
-            <span>Nạp tiền qua VNPay</span>
-          </h2>
-          <span class="text-xs text-ink-500 font-medium hidden sm:inline">Hỗ trợ mọi ngân hàng & thẻ ATM / QR</span>
+      <Transition name="fh-fade-slide" mode="out-in">
+        <div v-if="action === 'withdraw'" key="withdraw" class="p-5 border-t border-ink-100">
+          <CustomerWithdrawPanel />
         </div>
 
-        <!-- Presets Buttons -->
-        <div class="space-y-2">
-          <p class="text-xs font-medium text-ink-600">Chọn nhanh số tiền nạp:</p>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <button
-              v-for="preset in PRESETS"
-              :key="preset"
-              type="button"
-              class="h-11 rounded-xl border text-sm font-bold font-num whitespace-nowrap transition-all flex items-center justify-center cursor-pointer select-none"
-              :class="Number(amountText) === preset
-                ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs scale-[1.02]'
-                : 'border-ink-200 text-ink-700 bg-white hover:border-brand-300 hover:bg-brand-50/30'"
-              :aria-pressed="Number(amountText) === preset"
-              @click="amountText = String(preset)"
-            >
-              <FhMoney :amount="preset" />
-            </button>
+        <!-- Top-up Section -->
+        <div v-else key="topup" class="p-6 sm:p-8 space-y-5 border-t border-ink-100">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
+              <CreditCard :size="18" class="text-brand-600" />
+              <span>Nạp tiền qua VNPay</span>
+            </h2>
+            <span class="text-xs text-ink-500 font-medium hidden sm:inline">Hỗ trợ mọi ngân hàng & thẻ ATM / QR</span>
           </div>
-        </div>
 
-        <!-- Custom Input & Submit Button -->
-        <div class="space-y-2 pt-1">
-          <p class="text-xs font-medium text-ink-600">Hoặc nhập số tiền khác:</p>
-          <div class="flex flex-col sm:flex-row gap-3">
-            <div class="relative flex-1 min-w-0">
-              <input
-                v-model="amountText"
-                type="number"
-                inputmode="numeric"
-                min="10000"
-                max="50000000"
-                step="10000"
-                placeholder="Số tiền khác (từ 10.000 ₫)"
-                aria-label="Số tiền nạp"
-                data-testid="topup-amount"
-                class="w-full h-11.5 rounded-xl border border-ink-200 px-3.5 text-base sm:text-sm font-semibold font-num text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:font-normal placeholder:text-ink-400"
-              />
+          <!-- Presets Buttons -->
+          <div class="space-y-2">
+            <p class="text-xs font-medium text-ink-600">Chọn nhanh số tiền nạp:</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <button
+                v-for="preset in PRESETS"
+                :key="preset"
+                type="button"
+                class="h-11 rounded-xl border text-sm font-bold font-num whitespace-nowrap transition-all duration-150 active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                :class="Number(amountText) === preset
+                  ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs scale-[1.02]'
+                  : 'border-ink-200 text-ink-700 bg-white hover:border-brand-300 hover:bg-brand-50/30'"
+                :aria-pressed="Number(amountText) === preset"
+                @click="amountText = String(preset)"
+              >
+                <FhMoney :amount="preset" />
+              </button>
             </div>
-            <FhButton
-              variant="primary"
-              size="md"
-              :loading="redirecting"
-              data-testid="topup-submit"
-              class="h-11.5 px-6 font-semibold shrink-0"
-              @click="topUp"
-            >
-              Nạp qua VNPay
-            </FhButton>
           </div>
-          <p v-if="topUpError" role="alert" class="text-xs font-semibold text-danger-700 flex items-center gap-1.5 pt-1">
-            <AlertCircle :size="14" class="shrink-0" />
-            <span>{{ topUpError }}</span>
-          </p>
+
+          <!-- Custom Input & Submit Button -->
+          <div class="space-y-2 pt-1">
+            <p class="text-xs font-medium text-ink-600">Hoặc nhập số tiền khác:</p>
+            <div class="flex flex-col sm:flex-row gap-3">
+              <div class="relative flex-1 min-w-0">
+                <input
+                  v-model="amountText"
+                  type="number"
+                  inputmode="numeric"
+                  min="10000"
+                  max="50000000"
+                  step="10000"
+                  placeholder="Số tiền khác (từ 10.000 ₫)"
+                  aria-label="Số tiền nạp"
+                  data-testid="topup-amount"
+                  class="w-full h-11.5 rounded-xl border border-ink-200 px-3.5 text-base sm:text-sm font-semibold font-num text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:font-normal placeholder:text-ink-400"
+                />
+              </div>
+              <FhButton
+                variant="primary"
+                size="md"
+                :loading="redirecting"
+                data-testid="topup-submit"
+                class="h-11.5 px-6 font-semibold shrink-0"
+                @click="topUp"
+              >
+                Nạp qua VNPay
+              </FhButton>
+            </div>
+            <Transition name="fh-fade-slide">
+              <p v-if="topUpError" role="alert" class="text-xs font-semibold text-danger-700 flex items-center gap-1.5 pt-1">
+                <AlertCircle :size="14" class="shrink-0" />
+                <span>{{ topUpError }}</span>
+              </p>
+            </Transition>
+          </div>
         </div>
-      </div>
+      </Transition>
     </section>
 
-    <CustomerWithdrawalHistory v-if="action === 'withdraw'" />
+    <Transition name="fh-fade-slide">
+      <CustomerWithdrawalHistory v-if="action === 'withdraw'" />
+    </Transition>
 
     <!-- History Section -->
     <section class="rounded-3xl border border-ink-200/90 bg-white p-6 sm:p-8 space-y-4 shadow-xs">
@@ -280,7 +288,16 @@ async function topUp() {
         <p class="text-sm text-ink-700">{{ loadError }}</p>
         <FhButton v-if="!hasPaymentReturn" variant="secondary" size="sm" @click="load">Thử lại</FhButton>
       </div>
-      <p v-else-if="transactions.length === 0" class="text-sm text-ink-500">Chưa có giao dịch nào.</p>
+      <div v-else-if="transactions.length === 0" class="py-8 flex flex-col items-center justify-center text-center space-y-2">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none"
+          loading="lazy"
+        />
+        <p class="text-sm font-semibold text-ink-800">Chưa có giao dịch nào</p>
+        <p class="text-xs text-ink-500">Các biến động nạp tiền, hoàn tiền và thanh toán sẽ hiển thị tại đây.</p>
+      </div>
       <ul
         v-else
         class="divide-y divide-ink-100 transition-opacity"

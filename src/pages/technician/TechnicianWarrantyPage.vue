@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
+import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
 import { FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
@@ -134,7 +134,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
@@ -172,8 +172,9 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
     <FhEmptyState
       v-else-if="claims.length === 0"
+      illustration="/images/ui/booking-confirmed.png"
       title="Chưa có yêu cầu bảo hành"
-      description="Yêu cầu bảo hành cho việc bạn đã làm sẽ hiện ở đây."
+      description="Chất lượng thi công của bạn rất tốt! Yêu cầu bảo hành cho các ca sửa đã hoàn thành sẽ hiện ở đây."
     />
 
     <template v-else>
@@ -224,7 +225,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                   <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] bg-warning-50 text-xs font-medium text-warning-800 whitespace-nowrap">Gửi sau hạn</span>
                   <span class="text-ink-500 whitespace-nowrap">{{ vnDateString(claim.submittedAt) }}</span>
                 </div>
-                <h3 class="font-semibold text-base sm:text-lg text-ink-900 text-balance">{{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</h3>
+                <h3 class="font-semibold text-base sm:text-lg text-ink-900 text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h3>
                 <p class="flex items-start gap-1.5 text-ink-900">
                   <User :size="14" class="h-5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                   <span>
@@ -262,6 +263,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 <FhButton variant="secondary" size="sm" class="h-10" @click.stop="openModal(claim, 'decline')"><X :size="16" aria-hidden="true" /> Không nhận được</FhButton>
               </template>
               <template v-else-if="claim.status === 'accepted'">
+                <FhButton v-if="!checkedIn(claim)" variant="secondary" size="sm" class="h-10" :disabled="!!busyId" @click.stop="openModal(claim, 'reschedule')"><CalendarClock :size="16" aria-hidden="true" /> Đổi lịch</FhButton>
                 <FhButton
                   v-if="!checkedIn(claim)"
                   variant="primary"

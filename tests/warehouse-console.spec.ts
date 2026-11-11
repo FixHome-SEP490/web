@@ -6,7 +6,7 @@ vi.mock('../src/api/client', () => ({ default: apiClientMock }));
 import { warehousesApi } from '../src/api/warehouses.api';
 import { partRequestsApi } from '../src/api/part-requests.api';
 import { consoleNavigation } from '../src/components/console/console-navigation';
-import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseQrAction, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
+import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseIssuedTokenSlot, warehouseQrAction, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
 import router from '../src/router';
 
 describe('Warehouse console API', () => {
@@ -110,6 +110,10 @@ describe('Warehouse console API', () => {
     expect(warehouseQrAction('ready')).toBe('prepare');
     expect(warehouseQrAction('handed_over')).toBe('reissue');
     expect(warehouseQrAction('received')).toBe(null);
+    // Reissue after handover returns the technician receipt code, not a pickup code.
+    expect(warehouseIssuedTokenSlot('handed_over')).toBe('receipt');
+    expect(warehouseIssuedTokenSlot('ready')).toBe('pickup');
+    expect(warehouseIssuedTokenSlot('reserved')).toBe('pickup');
   });
 
   it('labels stock as returned only after a warehouse manager acceptance is recorded', () => {

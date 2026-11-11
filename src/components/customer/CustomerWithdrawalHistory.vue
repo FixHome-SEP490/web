@@ -44,7 +44,15 @@ const loadError = computed(() => (error.value ? userFacingError(error.value, 'Ch
       <p class="text-sm text-ink-700">{{ loadError }}</p>
       <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
     </div>
-    <p v-else-if="items.length === 0" class="text-sm text-ink-500">Chưa có lệnh rút tiền nào.</p>
+    <div v-else-if="items.length === 0" class="py-6 flex flex-col items-center justify-center text-center space-y-2">
+      <img
+        :src="'/images/ui/empty-state-search-service.png'"
+        alt=""
+        class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none"
+        loading="lazy"
+      />
+      <p class="text-sm text-ink-500">Chưa có lệnh rút tiền nào.</p>
+    </div>
     <ul v-else class="divide-y divide-ink-100 transition-opacity" :class="{ 'opacity-60': changingPage }" :aria-busy="changingPage" data-testid="withdrawal-rows">
       <li v-for="w in items" :key="w.id" class="py-3 text-sm space-y-1">
         <div class="flex items-start justify-between gap-3">

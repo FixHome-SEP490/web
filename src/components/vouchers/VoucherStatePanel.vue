@@ -39,6 +39,14 @@ const panelContent = {
       <FhSkeleton height="80px" width="100%" />
       <FhSkeleton height="80px" width="100%" />
     </div>
+    <div v-else-if="state === 'empty'" class="mb-3 max-w-[130px] flex items-center justify-center" aria-hidden="true">
+      <img
+        :src="'/images/ui/empty-state-search-service.png'"
+        alt=""
+        class="w-full h-auto max-h-28 object-contain drop-shadow-sm select-none pointer-events-none"
+        loading="lazy"
+      />
+    </div>
     <div v-else class="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-sm)] bg-ink-50 text-ink-700" aria-hidden="true">
       <component :is="panelContent[state].icon" :size="22" />
     </div>

@@ -120,32 +120,34 @@ async function claimCode(code: string) {
 </script>
 
 <template>
-  <main :key="customerId ?? 'guest'" lang="vi" class="mx-auto w-full max-w-[1120px] space-y-5 px-4 py-5 sm:space-y-6 sm:px-6 sm:py-7" data-testid="customer-vouchers-page">
+  <div :key="customerId ?? 'guest'" lang="vi" class="w-full space-y-5 pb-12" data-testid="customer-vouchers-page">
     <header>
       <p class="text-sm font-medium text-brand-700">FixHome · Khách hàng</p>
       <h1 class="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
       <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-600">Ưu đãi chung đã lưu và voucher dành riêng cho bạn, trong cùng một ví.</p>
     </header>
 
-    <section
-      v-if="returnTarget"
-      class="rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-4 sm:p-5"
-      data-testid="voucher-return-to-checkout"
-      aria-labelledby="voucher-return-heading"
-    >
-      <h2 id="voucher-return-heading" class="text-base font-semibold text-ink-900">Chọn voucher cho lượt thanh toán</h2>
-      <p class="mt-1 text-sm leading-5 text-ink-700">Chọn voucher đã lưu để quay lại đơn hàng. Máy chủ sẽ kiểm tra điều kiện và hiển thị số tiền trước khi bạn xác nhận giữ chỗ.</p>
-      <ul v-if="returnableOffers.length" class="mt-3 space-y-2">
-        <li v-for="offer in returnableOffers" :key="offer.id" class="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-brand-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-          <span class="min-w-0">
-            <span class="block text-sm font-semibold text-ink-900">{{ offer.title }}</span>
-            <span class="block text-xs leading-5 text-ink-600">{{ offer.code }} · {{ offer.kind === 'GENERAL' ? 'Ưu đãi chung' : 'Ưu đãi cá nhân' }}</span>
-          </span>
-          <FhButton variant="secondary" size="md" class="w-full sm:w-auto" @click="returnToCheckout(offer.id)">Sử dụng</FhButton>
-        </li>
-      </ul>
-      <p v-else class="mt-3 text-sm text-ink-700" role="status">Ví chưa có voucher đang dùng được. Bạn có thể lưu một ưu đãi chung bên dưới rồi quay lại lượt thanh toán.</p>
-    </section>
+    <Transition name="fh-fade-slide">
+      <section
+        v-if="returnTarget"
+        class="rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-4 sm:p-5"
+        data-testid="voucher-return-to-checkout"
+        aria-labelledby="voucher-return-heading"
+      >
+        <h2 id="voucher-return-heading" class="text-base font-semibold text-ink-900">Chọn voucher cho lượt thanh toán</h2>
+        <p class="mt-1 text-sm leading-5 text-ink-700">Chọn voucher đã lưu để quay lại đơn hàng. Máy chủ sẽ kiểm tra điều kiện và hiển thị số tiền trước khi bạn xác nhận giữ chỗ.</p>
+        <ul v-if="returnableOffers.length" class="mt-3 space-y-2">
+          <li v-for="offer in returnableOffers" :key="offer.id" class="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-brand-100 bg-white p-3 transition-all duration-150 hover:border-brand-300 hover:shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold text-ink-900">{{ offer.title }}</span>
+              <span class="block text-xs leading-5 text-ink-600">{{ offer.code }} · {{ offer.kind === 'GENERAL' ? 'Ưu đãi chung' : 'Ưu đãi cá nhân' }}</span>
+            </span>
+            <FhButton variant="secondary" size="md" class="w-full sm:w-auto" @click="returnToCheckout(offer.id)">Sử dụng</FhButton>
+          </li>
+        </ul>
+        <p v-else class="mt-3 text-sm text-ink-700" role="status">Ví chưa có voucher đang dùng được. Bạn có thể lưu một ưu đãi chung bên dưới rồi quay lại lượt thanh toán.</p>
+      </section>
+    </Transition>
 
     <CustomerVoucherWorkspace
       :state="state"
@@ -163,5 +165,5 @@ async function claimCode(code: string) {
       @claim="claimCode"
       @validate-code="claimCode"
     />
-  </main>
+  </div>
 </template>

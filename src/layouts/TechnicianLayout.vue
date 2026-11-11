@@ -130,6 +130,9 @@ const pingLocation = () => {
 };
 
 onMounted(async () => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.overflowY = 'scroll';
+  }
   chatStore.initSocket();
   // A technician must be reachable by voice from any screen, not only the chat.
   callStore.initCallSignalling();
@@ -144,6 +147,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.overflowY = '';
+  }
   invitationPoll?.();
   stopJobCount?.();
   if (locationPing) clearInterval(locationPing);
@@ -276,7 +282,7 @@ const tabItems: TabNavItem[] = [
 
     <div class="flex-1 min-w-0 min-h-screen flex flex-col">
       <header class="sticky top-0 z-20 bg-white border-b border-ink-200">
-        <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+        <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 max-w-360 mx-auto">
           <!-- Logo only when the sidebar is hidden (narrow screens) -->
           <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0" aria-label="FixHome - Trang chủ">
             <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg" />
@@ -391,7 +397,7 @@ const tabItems: TabNavItem[] = [
         :class="onboardingBanner.tone === 'alert' ? 'bg-danger-50 border-danger-200' : 'bg-warning-50 border-warning-200'"
         :role="onboardingBanner.tone === 'alert' ? 'alert' : 'status'"
       >
-        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+        <div class="max-w-360 mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
           <p
             class="flex items-start gap-2.5 text-pretty"
             :class="onboardingBanner.tone === 'alert' ? 'text-danger-700' : 'text-warning-800'"
@@ -421,7 +427,7 @@ const tabItems: TabNavItem[] = [
         role="alert"
         data-testid="wallet-notice-compact"
       >
-        <div class="max-w-6xl mx-auto flex items-center justify-between gap-3 text-xs">
+        <div class="max-w-360 mx-auto flex items-center justify-between gap-3 text-xs">
           <p class="flex min-w-0 items-center gap-2 text-danger-700">
             <Wallet :size="14" class="shrink-0 text-danger-600" />
             <span class="truncate">Ví dưới mức ký quỹ <strong class="font-semibold">{{ formatVnd(walletSummary.minimumBalance) }}</strong></span>
@@ -437,7 +443,7 @@ const tabItems: TabNavItem[] = [
         class="border-b bg-danger-50 border-danger-200 px-4 sm:px-6 lg:px-8 py-3"
         role="alert"
       >
-        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+        <div class="max-w-360 mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
           <p class="flex items-start gap-2.5 text-danger-700 text-pretty">
             <Wallet :size="18" class="shrink-0 mt-0.5 text-danger-600" />
             <span>
@@ -458,7 +464,7 @@ const tabItems: TabNavItem[] = [
         </div>
       </div>
 
-      <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-36 lg:pb-10'">
+      <main class="flex-1 w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8" :class="onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-36 lg:pb-10'">
         <router-view />
       </main>
     </div>

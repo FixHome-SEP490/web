@@ -35,6 +35,8 @@ const overrideReason = ref('');
 const reviewValid = ref(true);
 const reviewNote = ref('');
 const partSearch = ref('');
+// The manager normally just approves what the technician proposed; changing it is the exception.
+const changing = ref(false);
 const partOptions = ref<FixHomePart[]>([]);
 const partId = ref('');
 const partQty = ref(1);
@@ -48,6 +50,11 @@ const notCovered = computed(() => result.value === 'not_covered');
 const overriding = computed(() => !!proposal.value && result.value !== proposal.value);
 // A workmanship fault can still need a FixHome part; the technician then pays for it.
 const workmanship = computed(() => result.value === 'covered_workmanship');
+// What the technician saw: a part fault supplies exactly these FixHome lines unless the manager picks others.
+const faultyLines = computed(() => {
+  const ids = new Set(props.claim?.visit?.faultyInvoiceItemIds ?? []);
+  return (props.claim?.order.partLines ?? []).filter((line) => ids.has(line.id));
+});
 const unfixed = computed(() => outcome.value === 'unfixed');
 const customerAgreed = computed(
   () => props.claim?.status === 'awaiting_customer' && props.claim.customerResponse === 'agreed',
@@ -74,6 +81,7 @@ watch(open, (isOpen) => {
   overrideReason.value = '';
   reviewValid.value = true;
   reviewNote.value = '';
+  changing.value = false;
   partSearch.value = '';
   partOptions.value = [];
   partId.value = '';
@@ -193,7 +201,7 @@ async function submit() {
       <div class="p-3 rounded-[var(--radius-sm)] bg-ink-50 text-xs space-y-1">
         <p>
           Đơn <span class="font-mono font-bold text-brand-700">{{ claim.order.code }}</span> ·
-          {{ claim.coverage?.itemDescription || 'Bảo hành dịch vụ' }} · Khách hàng: {{ claim.order.customerName }}
+          {{ claim.order.serviceName || 'Bảo hành dịch vụ' }} · Khách hàng: {{ claim.order.customerName }}
         </p>
         <p class="whitespace-pre-line text-ink-700">{{ claim.description }}</p>
         <p v-if="claim.submittedAfterExpiry" class="text-warning-700">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành.</p>
@@ -228,7 +236,11 @@ async function submit() {
             </a>
           </div>
         </div>
-        <fieldset class="space-y-1.5">
+        <div v-if="!changing" class="flex items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] border border-ink-200 text-xs">
+          <span class="text-ink-700">Kết luận cuối cùng: <strong class="text-ink-900">{{ inspectionResultLabels[result] }}</strong></span>
+          <button type="button" class="shrink-0 font-medium text-brand-700 hover:underline" @click="changing = true">Đổi kết luận / chọn linh kiện khác</button>
+        </div>
+        <fieldset v-if="changing" class="space-y-1.5">
           <legend class="text-xs font-medium text-ink-700 mb-1">Kết luận cuối cùng</legend>
           <label
             v-for="(label, value) in inspectionResultLabels"
@@ -251,7 +263,14 @@ async function submit() {
             class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
           ></textarea>
         </div>
-        <div v-if="workmanship" class="space-y-1.5 p-3 rounded-[var(--radius-sm)] border border-ink-200">
+        <div v-if="result === 'covered_part' && faultyLines.length" class="space-y-1 p-3 rounded-[var(--radius-sm)] border border-ink-200" data-testid="faulty-lines">
+          <p class="text-xs font-medium text-ink-700">Kỹ thuật viên báo linh kiện hỏng</p>
+          <ul class="text-sm text-ink-900">
+            <li v-for="line in faultyLines" :key="line.id">{{ line.name }} <span class="text-ink-500">× {{ claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity }}<template v-if="(claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity) !== line.quantity"> / {{ line.quantity }}</template></span></li>
+          </ul>
+          <p class="text-xs text-ink-500">FixHome cấp đúng các linh kiện này (dòng linh kiện thợ tự mua thì thợ tự thay).</p>
+        </div>
+        <div v-if="changing && workmanship" class="space-y-1.5 p-3 rounded-[var(--radius-sm)] border border-ink-200">
           <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
           <input
             v-model="partSearch"

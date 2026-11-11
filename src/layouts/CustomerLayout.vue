@@ -287,11 +287,11 @@ const handleLogout = async () => {
   <!-- The bottom tab bar is 64px below lg; --fh-dock lifts floating buttons above it. -->
   <div
     class="min-h-screen flex flex-col bg-ink-50 text-ink-900"
-    :class="hasActionBar ? '[--fh-dock:10rem] lg:[--fh-dock:6rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
+    :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/90 shadow-2xs">
       <!-- The desktop nav collapses before the booking actions and account controls compete for width. -->
-      <div class="max-w-7xl 2xl:max-w-[90rem] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">
           <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0 group" aria-label="FixHome - Trang chủ">
             <img :src="'/logo.png'" alt="" class="w-9 h-9 object-contain rounded-xl group-hover:scale-105 transition-transform" />
@@ -423,7 +423,7 @@ const handleLogout = async () => {
 
     <!-- A real restriction on the account: an alert, so red. -->
     <div v-if="isSuspended" class="bg-danger-50 border-b border-danger-200 px-4 py-3" role="alert">
-      <p class="max-w-280 mx-auto flex items-start sm:items-center justify-center gap-2 text-sm font-medium text-danger-700 text-pretty">
+      <p class="w-full flex items-start sm:items-center justify-center gap-2 text-sm font-medium text-danger-700 text-pretty">
         <ShieldAlert :size="18" class="shrink-0 text-danger-600" />
         <span>
           Tài khoản của bạn đang bị giới hạn tạo yêu cầu mới
@@ -436,9 +436,8 @@ const handleLogout = async () => {
     </div>
 
     <main
-      class="flex-1 max-w-280 w-full mx-auto px-4 sm:px-6"
+      class="flex-1 w-full px-4 sm:px-6 lg:px-8"
       :class="[onChatPage ? 'pt-4 sm:pt-6 pb-4' : 'pt-6 sm:pt-8 pb-44 sm:pb-48 lg:pb-10', { 'customer-main--booking-wide': bookingStep1Wide }]"
-      :style="bookingStep1Wide ? { maxWidth: '1120px' } : undefined"
       data-testid="customer-layout-main"
     >
       <router-view v-slot="{ Component, route: current }">

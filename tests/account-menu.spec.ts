@@ -131,7 +131,7 @@ describe('customer layout booking width', () => {
     const { wrapper } = await mountAs('customer', UserRole.CUSTOMER);
     const main = wrapper.get('[data-testid="customer-layout-main"]');
 
-    expect(main.classes()).toContain('max-w-280');
+    expect(main.classes()).toContain('w-full');
     expect(main.classes()).not.toContain('customer-main--booking-wide');
     wrapper.unmount();
   });

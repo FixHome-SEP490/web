@@ -9,7 +9,6 @@ import {
   Sparkles,
   Clock,
   Search,
-  Inbox,
   ChevronRight,
   DollarSign,
   CheckCircle2,
@@ -130,7 +129,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 </script>
 
 <template>
-  <div class="space-y-6 max-w-4xl mx-auto pb-16">
+  <div class="w-full space-y-6 pb-16">
     <!-- Header banner -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
@@ -249,10 +248,15 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
     <div
       v-else-if="filteredNotifications.length === 0"
       data-testid="notifications-empty"
-      class="py-16 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
+      class="py-14 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
     >
-      <div class="w-16 h-16 rounded-2xl bg-ink-100/80 flex items-center justify-center text-ink-400 mx-auto mb-2">
-        <Inbox :size="32" />
+      <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/empty-state-search-service.png'"
+          alt=""
+          class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <p class="text-base sm:text-lg font-semibold text-ink-900">
         {{ hasFilter ? (total > PAGE_SIZE ? 'Trang này không có thông báo phù hợp.' : 'Không có thông báo nào phù hợp.') : 'Bạn chưa có thông báo nào.' }}

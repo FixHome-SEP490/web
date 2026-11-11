@@ -206,7 +206,7 @@ onMounted(() => void loadQueue());
           <router-link
             :to="`/console/warranty/${row.id}`"
             class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          >{{ row.coverage?.itemDescription || 'Bảo hành dịch vụ' }}</router-link>
+          >{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</router-link>
           <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
         </template>
         <template #cell-status="{ row }">
@@ -216,6 +216,7 @@ onMounted(() => void loadQueue());
               :class="warrantyClaimToneClasses[meta(row).tone]"
             >{{ meta(row).label }}</span>
             <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap text-xs font-medium text-warning-700">Gửi sau hạn</span>
+            <span v-if="row.autoApproved" class="whitespace-nowrap text-xs font-medium text-ink-500">Tự động duyệt</span>
           </div>
         </template>
         <template #cell-technician="{ row }">

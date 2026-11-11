@@ -7,6 +7,7 @@ import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 import { getHttpStatus } from '../../api/client';
 import { getPublicServicePricing } from '../../utils/public-service-pricing';
 import { useSmoothScroll } from '../../composables/useSmoothScroll';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const route = useRoute();
 const router = useRouter();
@@ -194,28 +195,50 @@ function goBack() {
 
     <div v-else-if="service" class="detail-layout">
       <header class="detail-intro">
-        <div class="detail-eyebrow">
-          <span class="detail-icon"><Wrench :size="17" :stroke-width="1.8" aria-hidden="true" /></span>
-          <span>{{ service.category?.name ?? 'Dịch vụ tại nhà' }}</span>
-        </div>
-        <h1>{{ service.name }}</h1>
-        <p v-if="introDescription" class="detail-lead">{{ introDescription }}</p>
-        <div class="detail-facts" aria-label="Thông tin dịch vụ">
-          <div v-if="service.estimatedMinutes > 0" class="detail-fact">
-            <Clock :size="16" aria-hidden="true" />
-            <span>Thời lượng dự kiến</span>
-            <strong>~{{ service.estimatedMinutes }} phút</strong>
+        <div class="detail-intro__layout">
+          <div class="detail-intro__content">
+            <div class="detail-eyebrow">
+              <span class="detail-icon"><Wrench :size="17" :stroke-width="1.8" aria-hidden="true" /></span>
+              <span>{{ service.category?.name ?? 'Dịch vụ tại nhà' }}</span>
+            </div>
+            <h1>{{ service.name }}</h1>
+            <p v-if="introDescription" class="detail-lead">{{ introDescription }}</p>
+            <div class="detail-facts" aria-label="Thông tin dịch vụ">
+              <div v-if="service.estimatedMinutes > 0" class="detail-fact">
+                <Clock :size="16" aria-hidden="true" />
+                <span>Thời lượng dự kiến</span>
+                <strong>~{{ service.estimatedMinutes }} phút</strong>
+              </div>
+              <div class="detail-fact detail-fact--status">
+                <span class="detail-status-dot" :class="{ 'detail-status-dot--off': !service.isActive }" aria-hidden="true"></span>
+                <span>{{ service.isActive ? 'Đang nhận yêu cầu' : 'Tạm ngưng nhận yêu cầu' }}</span>
+              </div>
+            </div>
           </div>
-          <div class="detail-fact detail-fact--status">
-            <span class="detail-status-dot" :class="{ 'detail-status-dot--off': !service.isActive }" aria-hidden="true"></span>
-            <span>{{ service.isActive ? 'Đang nhận yêu cầu' : 'Tạm ngưng nhận yêu cầu' }}</span>
+
+          <div class="detail-intro__artwork" aria-hidden="true">
+            <div class="detail-artwork-card">
+              <img
+                :src="getServiceArtworkUrl(service)"
+                :alt="service.name"
+                class="detail-artwork-img"
+                loading="eager"
+              />
+            </div>
           </div>
         </div>
       </header>
 
       <aside class="booking-panel" aria-labelledby="booking-title">
         <div class="booking-panel__topline">
-          <span class="booking-panel__icon"><Wrench :size="19" :stroke-width="1.8" aria-hidden="true" /></span>
+          <span class="booking-panel__icon">
+            <img
+              :src="getServiceArtworkUrl(service)"
+              alt=""
+              class="w-full h-full object-contain p-1"
+              aria-hidden="true"
+            />
+          </span>
           <span class="booking-panel__category">Giá và đặt lịch</span>
         </div>
         <h2 id="booking-title" class="sr-only">Đặt dịch vụ này</h2>
@@ -304,6 +327,33 @@ function goBack() {
 
 .detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, 360px); grid-template-areas: 'intro panel' 'information panel'; align-items: start; column-gap: clamp(44px, 6.2vw, 104px); row-gap: 34px; }
 .detail-intro { grid-area: intro; min-width: 0; padding: 12px 0 28px; border-bottom: 1px solid var(--color-ink-200); }
+.detail-intro__layout { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
+.detail-intro__content { flex: 1; min-width: 0; }
+.detail-intro__artwork { display: none; flex-shrink: 0; }
+@media (min-width: 640px) {
+  .detail-intro__artwork { display: flex; align-items: center; justify-content: center; }
+  .detail-artwork-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 136px;
+    height: 136px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--color-brand-50) 0%, var(--color-ink-50) 100%);
+    border: 1px solid var(--color-brand-100);
+    padding: 12px;
+    box-shadow: var(--shadow-e1);
+  }
+  .detail-artwork-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.08));
+  }
+}
+@media (min-width: 1024px) {
+  .detail-artwork-card { width: 160px; height: 160px; padding: 16px; }
+}
 .detail-eyebrow { display: flex; align-items: center; gap: 10px; color: var(--color-brand-800); font-size: 13px; font-weight: 600; }
 .detail-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-brand-100); border-radius: var(--radius-sm); background: var(--color-brand-50); color: var(--color-brand-700); }
 .detail-intro h1 { max-width: 900px; margin: 20px 0 0; font-size: clamp(34px, 3.4vw, 52px); line-height: 1.12; letter-spacing: -0.04em; font-weight: 700; text-wrap: balance; overflow-wrap: anywhere; }

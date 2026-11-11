@@ -55,6 +55,11 @@ export interface PartRequest {
   /** Warranty only: what the manager found on the faulty part; it decides who pays the new one. */
   faultyInspectionResult?: FaultyInspectionResult | null;
   faultyInspectionNote?: string | null;
+  faultyInspectedAt?: string | null;
+  /** The technician brings the faulty part back within a deadline after receiving the replacement. */
+  faultyReturnDueAt?: string | null;
+  faultyReturnedAt?: string | null;
+  faultyReturnChargedAt?: string | null;
   chargeTechnician?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -556,7 +561,13 @@ export const partRequestsApi = {
     return response.data.data;
   },
 
-  /** SM records what the faulty part of a warranty request shows; required before READY. */
+  /** The technician reports the faulty part was brought back to the warehouse. */
+  async returnFaultyPart(requestId: string, payload: { note?: string; evidenceRefs?: string[] } = {}): Promise<PartRequest> {
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-return`, payload);
+    return res.data.data;
+  },
+
+  /** SM records what the faulty part shows, once the technician brought it back; the result says who pays the new one. */
   async recordFaultyInspection(
     requestId: string,
     payload: { result: FaultyInspectionResult; note?: string; evidenceRefs?: string[] },

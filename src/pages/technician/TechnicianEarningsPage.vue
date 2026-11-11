@@ -113,7 +113,7 @@ const emptyText = computed(() => {
 });
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
-const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 inline-flex items-center justify-center shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
+const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 active:scale-95 inline-flex items-center justify-center shrink-0 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
 
 // ── Period Tab sliding indicator animation ──
 const periodListRef = ref<HTMLElement | null>(null);
@@ -173,7 +173,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Thu nhập</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="reload">
@@ -309,8 +309,17 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-else-if="payouts.length === 0" class="px-6 py-12 text-center" data-testid="earnings-empty">
-          <p class="text-base font-semibold text-ink-900">{{ emptyText }}</p>
+        <div v-else-if="payouts.length === 0" class="px-6 py-12 text-center space-y-3">
+          <div class="mx-auto mb-2 max-w-[130px] flex items-center justify-center">
+            <img
+              :src="'/images/ui/empty-state-search-service.png'"
+              alt=""
+              class="w-full h-auto max-h-28 object-contain drop-shadow-sm select-none pointer-events-none"
+              loading="lazy"
+            />
+          </div>
+          <p data-testid="earnings-empty" class="text-base font-semibold text-ink-900">{{ emptyText }}</p>
+          <p class="text-sm text-ink-500 max-w-sm mx-auto">Các khoản thu nhập từ đơn sửa chữa hoàn tất sẽ hiển thị tại đây.</p>
         </div>
 
         <ul
@@ -322,7 +331,7 @@ onUnmounted(() => {
           <li v-for="payout in payouts" :key="payout.orderId">
             <button
               type="button"
-              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 active:scale-[0.99] transition-all duration-150"
               :class="focusRing"
               :data-testid="`earning-row-${payout.orderId}`"
               @click="router.push(`/tech/jobs/${payout.orderId}`)"

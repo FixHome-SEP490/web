@@ -2,7 +2,7 @@
 import { computed, ref, onUnmounted, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { useRouter } from 'vue-router';
-import { Mail, Clock, MapPin, Check, ChevronRight, X, Sparkles, Navigation } from 'lucide-vue-next';
+import { Clock, MapPin, Check, ChevronRight, X, Sparkles, Navigation } from 'lucide-vue-next';
 import {
   BookingMediaViewer,
   FhButton,
@@ -130,7 +130,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-5">
+  <div class="w-full mx-auto space-y-5">
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div class="flex items-center gap-3 min-w-0">
         <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
@@ -187,19 +187,24 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </div>
 
     <div v-else-if="invitations.length === 0" class="text-center py-14 px-6 bg-white rounded-2xl border border-ink-200 space-y-3">
-      <div class="w-12 h-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
-        <Mail :size="24" />
+      <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
+        <img
+          :src="'/images/ui/role-choice-technician.png'"
+          alt=""
+          class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
+          loading="lazy"
+        />
       </div>
       <h3 class="text-base font-semibold text-ink-900">Không có lời mời nào đang chờ</h3>
-      <p class="text-sm text-ink-500">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang Công việc.' : 'Lời mời mới sẽ hiện ở đây.' }}</p>
+      <p class="text-sm text-ink-500 max-w-sm mx-auto">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang danh sách Công việc.' : 'Khi có khách đặt lịch trong khu vực hoạt động của bạn, lời mời sẽ hiển thị tại đây.' }}</p>
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->
-    <div v-else class="space-y-4">
+    <TransitionGroup v-else tag="div" name="fh-list" class="space-y-4">
       <article
         v-for="inv in invitations"
         :key="inv.id"
-        class="rounded-2xl bg-white border border-ink-200 overflow-hidden"
+        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs hover:border-brand-300 hover:shadow-xs transition-all duration-200"
         :data-testid="`invitation-${inv.id}`"
       >
         <!-- Summary (service, area, session); opens the full detail -->
@@ -246,20 +251,21 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           </FhButton>
         </div>
       </article>
-    </div>
+    </TransitionGroup>
 
     <!-- Full detail -->
-    <div
-      v-if="detailInvitation"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4 overscroll-contain"
-      @click.self="detailInvitation = null"
-    >
+    <Transition name="fh-modal">
       <div
-        class="bg-white rounded-[var(--radius-lg)] max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="invitation-detail-title"
+        v-if="detailInvitation"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overscroll-contain"
+        @click.self="detailInvitation = null"
       >
+        <div
+          class="fh-modal-panel bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invitation-detail-title"
+        >
         <div class="flex items-start justify-between gap-3">
           <h3 id="invitation-detail-title" class="text-lg font-semibold text-ink-900 text-balance">{{ detailInvitation.visitDevices ? `Lượt sửa ${detailInvitation.visitDevices.length} thiết bị` : detailInvitation.booking?.serviceName }}</h3>
           <button
@@ -371,6 +377,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         </div>
       </div>
     </div>
+    </Transition>
 
     <AiSummaryDialog
       v-if="detailInvitation?.booking?.aiSummary"

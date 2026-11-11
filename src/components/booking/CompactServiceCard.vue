@@ -6,6 +6,7 @@ import { computed } from 'vue';
 import { Check, Info } from 'lucide-vue-next';
 import { catalogPriceLabel } from './booking-price';
 import { isServiceBookable, type BookingCatalogService } from './booking-service-catalog';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const props = withDefaults(
   defineProps<{
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 
 const bookable = computed(() => isServiceBookable(props.service));
 const price = computed(() => catalogPriceLabel(props.service));
+const artworkUrl = computed(() => getServiceArtworkUrl(props.service));
 </script>
 
 <template>
@@ -34,14 +36,31 @@ const price = computed(() => catalogPriceLabel(props.service));
   >
     <button
       type="button"
-      class="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 pr-2 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+      class="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 pr-2 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
       :aria-pressed="selected"
       :aria-label="`Chọn dịch vụ ${service.name}`"
       :data-service-id="service.id"
       data-testid="booking-service-card"
       @click="emit('select', service.id)"
     >
-      <Check v-if="selected" :size="16" class="shrink-0 text-brand-700" aria-hidden="true" />
+      <span class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-100 bg-ink-50 p-1">
+        <img
+          :src="artworkUrl"
+          alt=""
+          loading="lazy"
+          class="h-full w-full object-contain"
+          aria-hidden="true"
+        />
+        <Transition name="fh-pop">
+          <span
+            v-if="selected"
+            class="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-white ring-2 ring-white"
+            aria-hidden="true"
+          >
+            <Check :size="10" :stroke-width="3" />
+          </span>
+        </Transition>
+      </span>
       <span class="min-w-0 flex-1 text-sm font-medium leading-snug text-ink-900 text-pretty">{{ service.name }}</span>
       <span
         class="shrink-0 whitespace-nowrap text-sm"

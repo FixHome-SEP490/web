@@ -16,9 +16,11 @@ const route = useRoute();
 
 const isAiMinimized = ref(false);
 
+const onMessagesPage = computed(() => /^\/(app|tech)\/messages/.test(route.path));
+
 // Sits above the chat launcher except on the messages page where there is no human chat launcher.
 const stackedAboveChat = computed(
-  () => !/^\/(app|tech)\/messages/.test(route.path),
+  () => !onMessagesPage.value,
 );
 
 // Shared with the chat panel so the two never open together.
@@ -30,8 +32,8 @@ const isOpen = computed({
 // Shared with the booking form, which continues it after "Đặt thợ".
 const conversation = useSharedAiConversation();
 
-/** Pages that hold the assistant conversation themselves (the booking form). */
-const hiddenHere = computed(() => route.meta?.hidesAssistant === true);
+/** Pages that hold the assistant conversation themselves (the booking form) or full-screen message pages. */
+const hiddenHere = computed(() => route.meta?.hidesAssistant === true || onMessagesPage.value);
 const { turnCount, pinnedService, pinnedDevices, sessionId, lastReply, startOver, loadHoldingLines, customerWords, isThinking, messages, attachments } = conversation;
 
 /**
@@ -149,7 +151,7 @@ function goToVisit() {
               v-if="!isAiMinimized"
               type="button"
               class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-              :disabled="turnCount === 0"
+              :disabled="turnCount === 0 && !isThinking"
               title="Bắt đầu phiên mới"
               aria-label="Bắt đầu phiên mới"
               @click.stop="startOver"

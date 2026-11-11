@@ -5,9 +5,12 @@ import {
   Star,
   MapPin,
   Briefcase,
-  CheckCircle2,
   Send,
   Eye,
+  Info,
+  Check,
+  Plus,
+  ShieldCheck,
 } from 'lucide-vue-next';
 import {
   FhBackLink,
@@ -15,7 +18,6 @@ import {
   FhSkeleton,
   FhStatusPill,
   FhEmptyState,
-  FhMoney,
   TechnicianProfileModal,
 } from '../../components';
 import { bookingsApi, type TechnicianCandidate, type CandidateEmptyReason } from '../../api/bookings.api';
@@ -211,6 +213,32 @@ const selectedCount = computed(() => selectedIds.value.length);
 const successMessage = computed(() => selectedCount.value === 1
   ? 'Đã gửi lời mời cho kỹ thuật viên đã chọn.'
   : 'Đã gửi lời mời cho thợ ưu tiên số 1. Thợ số 2 sẽ chỉ nhận lời mời nếu thợ số 1 từ chối hoặc hết hạn phản hồi.');
+
+type SortOption = 'recommended' | 'distance' | 'rating';
+const sortBy = ref<SortOption>('recommended');
+
+const sortOptions = [
+  { key: 'recommended' as const, label: 'Gợi ý tốt nhất' },
+  { key: 'distance' as const, label: 'Gần bạn nhất' },
+  { key: 'rating' as const, label: 'Đánh giá cao' },
+];
+
+const sortedCandidates = computed(() => {
+  const list = [...candidates.value];
+  if (sortBy.value === 'distance') {
+    return list.sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+  }
+  if (sortBy.value === 'rating') {
+    return list.sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0));
+  }
+  return list;
+});
+
+const selectedTechs = computed(() => {
+  return selectedIds.value
+    .map((id) => candidates.value.find((c) => c.id === id))
+    .filter((c): c is TechnicianCandidate => c != null);
+});
 </script>
 
 <template>
@@ -261,16 +289,16 @@ const successMessage = computed(() => selectedCount.value === 1
     </div>
 
     <!-- Customer-ranked invitations policy callout -->
-    <div class="p-4 rounded-2xl bg-gradient-to-r from-brand-50/60 to-warning-50/50 border border-brand-200/70 text-ink-800 text-sm shadow-xs">
-      <div class="flex items-start gap-3">
-        <div class="w-7 h-7 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center shrink-0 text-xs font-bold">
-          TIP
+    <div class="rounded-2xl border border-ink-200/80 bg-ink-50/70 p-4 text-ink-700 text-xs sm:text-sm shadow-2xs">
+      <div class="flex items-start gap-3.5">
+        <div class="w-8 h-8 rounded-xl bg-white border border-ink-200/90 text-brand-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+          <Info :size="16" aria-hidden="true" />
         </div>
-        <div class="leading-relaxed text-pretty space-y-1">
-          <p class="font-semibold text-ink-900">Chọn 1 hoặc 2 kỹ thuật viên theo thứ tự ưu tiên</p>
-          <p class="text-xs sm:text-sm text-ink-600">
-            • <strong>Chọn 1 người:</strong> Chọn 1 người thì người đó được mời ngay.<br />
-            • <strong>Chọn 2 người:</strong> Người số 1 nhận lời mời trước; người số 2 là dự phòng và chỉ được mời khi người số 1 từ chối hoặc hết hạn phản hồi.
+        <div class="min-w-0 flex-1 space-y-1">
+          <h2 class="font-semibold text-ink-900 text-sm">Chọn 1 hoặc 2 kỹ thuật viên theo thứ tự ưu tiên</h2>
+          <p class="text-xs text-ink-600 leading-relaxed text-pretty">
+            • <strong class="font-medium text-ink-800">Chọn 1 người:</strong> Chọn 1 người thì người đó được mời ngay.<br class="hidden sm:inline" />
+            • <strong class="font-medium text-ink-800">Chọn 2 người:</strong> Người số 1 nhận lời mời trước; người số 2 là dự phòng và chỉ được mời khi người số 1 từ chối hoặc hết hạn phản hồi.
           </p>
         </div>
       </div>
@@ -319,6 +347,7 @@ const successMessage = computed(() => selectedCount.value === 1
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
+      illustration="/images/ui/booking-technician-match.png"
       :title="emptyState.title"
       :description="emptyState.description"
       :action-text="emptyState.action"
@@ -330,206 +359,253 @@ const successMessage = computed(() => selectedCount.value === 1
       </template>
     </FhEmptyState>
 
-    <!-- Candidates Cards -->
-    <div v-else class="space-y-3.5">
+    <!-- Candidates Section -->
+    <div v-else class="space-y-3">
+      <!-- Filter / Sort Toolbar (Only when multiple candidates) -->
+      <div v-if="candidates.length > 1" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+        <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+          {{ candidates.length }} kỹ thuật viên phù hợp
+        </span>
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" role="group" aria-label="Sắp xếp danh sách">
+          <button
+            v-for="sort in sortOptions"
+            :key="sort.key"
+            type="button"
+            class="h-8 px-3 rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap active:scale-95 cursor-pointer"
+            :class="sortBy === sort.key ? 'bg-ink-900 text-white shadow-2xs font-semibold' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50 hover:border-ink-300'"
+            @click="sortBy = sort.key"
+          >
+            {{ sort.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Candidate Cards (Compact height, direct profile trigger on name/avatar) -->
       <div
-        v-for="tech in candidates"
+        v-for="tech in sortedCandidates"
         :key="tech.id"
         role="button"
         tabindex="0"
         :aria-pressed="selectedIds.includes(tech.id)"
-        class="group relative p-4 sm:p-5 rounded-2xl border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 cursor-pointer select-none"
+        class="group relative p-3.5 sm:p-4 rounded-2xl border bg-white flex flex-col gap-2.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.99]"
         :class="selectedIds.includes(tech.id)
-          ? 'border-brand-600 bg-brand-50/20 ring-2 ring-brand-500/25 shadow-sm'
-          : 'border-ink-200 hover:border-ink-300 hover:shadow-xs'"
+          ? 'border-brand-600 bg-brand-50/20 ring-2 ring-brand-500/20 shadow-xs'
+          : 'border-ink-200/90 hover:border-brand-300 hover:shadow-2xs'"
         @click="toggleSelect(tech.id)"
         @keydown.enter.prevent="toggleSelect(tech.id)"
         @keydown.space.prevent="toggleSelect(tech.id)"
       >
-        <!-- Selection Priority Flag (Top Right on Mobile) -->
-        <div
-          v-if="selectedIds.includes(tech.id)"
-          class="sm:hidden self-start px-2.5 py-0.5 rounded-full text-xs font-bold text-brand-700 bg-brand-100 border border-brand-200"
-        >
-          #{{ selectedIds.indexOf(tech.id) + 1 }} {{ selectedIds.indexOf(tech.id) === 0 ? 'Ưu tiên chính' : 'Dự phòng' }}
-        </div>
+        <!-- Top Row: Checkbox, Profile Trigger (Avatar + Name), and Selection Pill -->
+        <div class="flex items-center justify-between gap-3 min-w-0">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <!-- Native Checkbox for accessibility and unit test contracts -->
+            <div class="shrink-0" @click.stop>
+              <input
+                type="checkbox"
+                :checked="selectedIds.includes(tech.id)"
+                :aria-label="`Chọn ${tech.fullName}`"
+                data-testid="select-technician-btn"
+                class="w-5 h-5 rounded-md border-ink-300 text-brand-600 focus:ring-brand-500 cursor-pointer transition-colors"
+                @change="handleCheckboxChange($event, tech.id)"
+              />
+            </div>
 
-        <div class="flex items-start sm:items-center gap-4 min-w-0 flex-1">
-          <!-- Checkbox -->
-          <div class="pt-1 sm:pt-0 shrink-0">
-            <input
-              type="checkbox"
-              :checked="selectedIds.includes(tech.id)"
-              :aria-label="`Chọn ${tech.fullName}`"
-              data-testid="select-technician-btn"
-              class="w-5 h-5 rounded-md text-brand-600 border-ink-300 focus:ring-brand-500 cursor-pointer"
-              @click.stop
-              @change="handleCheckboxChange($event, tech.id)"
-            />
+            <!-- Profile Trigger: Click Avatar or Name to open Profile Modal -->
+            <button
+              type="button"
+              data-testid="view-profile-btn"
+              class="group/profile text-left flex items-center gap-3 min-w-0 cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl transition-all"
+              title="Nhấn để xem hồ sơ kỹ thuật viên"
+              :aria-label="`Xem hồ sơ kỹ thuật viên ${tech.fullName}`"
+              @click.stop="openProfileModal(tech)"
+            >
+              <!-- Avatar with Online Dot and Selection Priority Badge -->
+              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-brand-100/70 to-brand-50 text-brand-700 border border-brand-200/70 flex items-center justify-center font-bold text-base shrink-0 relative shadow-2xs group-hover/profile:border-brand-400 group-hover/profile:scale-105 transition-all">
+                <img
+                  v-if="tech.avatarUrl"
+                  :src="tech.avatarUrl"
+                  :alt="tech.fullName"
+                  class="w-full h-full object-cover rounded-xl"
+                />
+                <span v-else>{{ tech.fullName.charAt(0) }}</span>
+                <Transition name="fh-pop">
+                  <span
+                    v-if="selectedIds.includes(tech.id)"
+                    class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-brand-600 text-white text-[11px] font-bold font-num rounded-full flex items-center justify-center border-2 border-white shadow-xs"
+                  >
+                    #{{ selectedIds.indexOf(tech.id) + 1 }}
+                  </span>
+                </Transition>
+                <span
+                  v-if="tech.isAvailable !== false"
+                  class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success-500 border-2 border-white shadow-2xs"
+                  title="Đang sẵn sàng nhận đơn"
+                />
+              </div>
+
+              <!-- Name & Ratings -->
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <h3 class="font-bold text-sm sm:text-base text-ink-900 group-hover/profile:text-brand-700 group-hover/profile:underline transition-colors truncate">
+                    {{ tech.fullName }}
+                  </h3>
+                  <Eye :size="13" class="text-ink-400 group-hover/profile:text-brand-600 shrink-0 opacity-60 group-hover/profile:opacity-100 transition-opacity" />
+                  <FhStatusPill status="COMPLETED" label="Đã xác thực" />
+                </div>
+
+                <!-- Rating & Distance line -->
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-600 mt-0.5">
+                  <span class="flex items-center gap-1 whitespace-nowrap font-num font-medium text-ink-900">
+                    <template v-if="hasRating(tech.averageRating, tech.ratingCount)">
+                      <Star :size="12" class="text-warning-500 fill-warning-400 shrink-0" />
+                      <span class="font-bold">{{ ratingLabel(tech.averageRating, tech.ratingCount) }}</span>
+                      <span class="text-ink-400 font-normal">({{ tech.ratingCount }})</span>
+                    </template>
+                    <template v-else>
+                      <span class="text-ink-400 font-normal">Chưa có đánh giá</span>
+                    </template>
+                  </span>
+
+                  <template v-if="tech.distanceKm != null">
+                    <span class="text-ink-300" aria-hidden="true">·</span>
+                    <span class="flex items-center gap-1 whitespace-nowrap font-num text-ink-600">
+                      <MapPin :size="11" class="text-ink-400 shrink-0" />
+                      <span>Cách {{ tech.distanceKm }} km</span>
+                    </span>
+                  </template>
+                </div>
+              </div>
+            </button>
           </div>
 
-          <!-- Avatar with Priority Number and Online Dot -->
-          <div class="w-13 h-13 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 border border-brand-200/60 flex items-center justify-center font-bold text-lg shrink-0 relative shadow-2xs">
-            {{ tech.fullName.charAt(0) }}
+          <!-- Selection Badge / Indicator (Right Side) -->
+          <div class="shrink-0 pointer-events-none">
             <span
               v-if="selectedIds.includes(tech.id)"
-              class="absolute -top-1.5 -right-1.5 w-6 h-6 bg-brand-600 text-white text-xs font-bold font-num rounded-full flex items-center justify-center border-2 border-white shadow-xs transition-transform transform scale-100"
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-num shadow-2xs transition-all duration-200"
+              :class="selectedIds.indexOf(tech.id) === 0 ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-800 border border-brand-200'"
             >
-              #{{ selectedIds.indexOf(tech.id) + 1 }}
+              <Check :size="13" class="stroke-[3]" />
+              <span>#{{ selectedIds.indexOf(tech.id) + 1 }} {{ selectedIds.indexOf(tech.id) === 0 ? 'Ưu tiên chính' : 'Dự phòng' }}</span>
             </span>
             <span
-              v-if="tech.isAvailable !== false"
-              class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success-500 border-2 border-white shadow-2xs"
-              title="Đang sẵn sàng nhận đơn"
-            />
-          </div>
-
-          <!-- Details & Meta -->
-          <div class="space-y-1.5 min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="font-bold text-base text-ink-900 group-hover:text-brand-700 transition-colors">
-                {{ tech.fullName }}
-              </h3>
-              <FhStatusPill status="COMPLETED" label="Đã xác thực" />
-              <span
-                v-if="selectedIds.includes(tech.id)"
-                class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-brand-700 bg-brand-100/80 border border-brand-200"
-              >
-                #{{ selectedIds.indexOf(tech.id) + 1 }} {{ selectedIds.indexOf(tech.id) === 0 ? 'Ưu tiên chính' : 'Dự phòng' }}
-              </span>
-            </div>
-
-            <!-- Stats Row -->
-            <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs sm:text-sm text-ink-600">
-              <span class="flex items-center gap-1 whitespace-nowrap font-num font-medium text-ink-900">
-                <template v-if="hasRating(tech.averageRating, tech.ratingCount)">
-                  <Star :size="14" class="text-amber-500 fill-amber-400 shrink-0" />
-                  <span>{{ ratingLabel(tech.averageRating, tech.ratingCount) }}</span>
-                  <span class="text-ink-400 font-normal">({{ tech.ratingCount }})</span>
-                </template>
-                <template v-else>
-                  <span class="text-ink-400 font-normal">Chưa có đánh giá</span>
-                </template>
-              </span>
-
-              <span v-if="tech.reliabilityScore != null" class="whitespace-nowrap flex items-center gap-1 text-ink-700">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Độ tin cậy <span class="font-num font-semibold text-ink-900">{{ tech.reliabilityScore }}%</span>
-              </span>
-
-              <span class="flex items-center gap-1.5 whitespace-nowrap text-ink-600">
-                <Briefcase :size="13" class="text-ink-400 shrink-0" />
-                <span>{{ tech.yearsExperience }} năm kinh nghiệm</span>
-              </span>
-
-              <span v-if="tech.distanceKm != null" class="flex items-center gap-1 whitespace-nowrap font-num text-ink-600">
-                <MapPin :size="13" class="text-ink-400 shrink-0" />
-                <span>Cách {{ tech.distanceKm }} km</span>
-              </span>
-            </div>
-
-            <!-- Pricing & Warranty Row -->
-            <div v-if="tech.listedLaborPrice" class="text-xs sm:text-sm text-ink-600 pt-0.5 flex flex-wrap items-center gap-2">
-              <span>Giá công tham khảo:</span>
-              <span class="font-num font-bold text-ink-900 bg-ink-100/70 px-2 py-0.5 rounded-md">
-                <FhMoney :amount="tech.listedLaborPrice" />
-              </span>
-              <span v-if="tech.typicalWarrantyDays" class="text-ink-500 inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md border border-emerald-100">
-                Bảo hành {{ tech.typicalWarrantyDays }} ngày
-              </span>
-            </div>
+              v-else
+              class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-ink-500 bg-ink-100/70 group-hover:bg-brand-50 group-hover:text-brand-700 transition-colors"
+            >
+              <Plus :size="12" /> Chọn thợ
+            </span>
           </div>
         </div>
 
-        <!-- Action Button -->
-        <div class="flex items-center justify-end sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-ink-100">
-          <FhButton
-            variant="secondary"
-            size="sm"
-            data-testid="view-profile-btn"
-            class="w-full sm:w-auto shadow-2xs group-hover:border-ink-400"
-            @click.stop="openProfileModal(tech)"
-          >
-            <Eye :size="14" class="text-ink-500" />
-            <span>Xem hồ sơ</span>
-          </FhButton>
+        <!-- Trust Highlights Row (Aligned neatly with content) -->
+        <div class="flex flex-wrap items-center gap-1.5 pl-8 sm:pl-16 text-[11px] sm:text-xs">
+          <span v-if="tech.reliabilityScore != null" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-ink-50 text-ink-700 border border-ink-100 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-success-500"></span>
+            Độ tin cậy <span class="font-num font-bold text-ink-900">{{ tech.reliabilityScore }}%</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-ink-50 text-ink-700 border border-ink-100 font-medium">
+            <Briefcase :size="11" class="text-ink-400 shrink-0" />
+            <span>{{ tech.yearsExperience }} năm kinh nghiệm</span>
+          </span>
+          <span v-if="tech.typicalWarrantyDays" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-success-50 text-success-800 border border-success-200/70 font-medium">
+            <ShieldCheck :size="11" class="text-success-600 shrink-0" />
+            <span>Bảo hành {{ tech.typicalWarrantyDays }} ngày</span>
+          </span>
         </div>
       </div>
     </div>
 
     <!-- Technician Profile Modal -->
-    <TechnicianProfileModal
-      v-if="isProfileModalOpen && selectedCandidateForModal"
-      :is-open="isProfileModalOpen"
-      :candidate="selectedCandidateForModal"
-      :is-selected="selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false"
-      :priority-index="selectedCandidateForModal ? selectedIds.indexOf(selectedCandidateForModal.id) : -1"
-      :can-select="selectedIds.length < 2 || (selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false)"
-      @close="closeProfileModal"
-      @toggle-select="handleModalToggleSelect"
-    />
+    <Transition name="fh-modal">
+      <TechnicianProfileModal
+        v-if="isProfileModalOpen && selectedCandidateForModal"
+        :is-open="isProfileModalOpen"
+        :candidate="selectedCandidateForModal"
+        :is-selected="selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false"
+        :priority-index="selectedCandidateForModal ? selectedIds.indexOf(selectedCandidateForModal.id) : -1"
+        :can-select="selectedIds.length < 2 || (selectedCandidateForModal ? selectedIds.includes(selectedCandidateForModal.id) : false)"
+        @close="closeProfileModal"
+        @toggle-select="handleModalToggleSelect"
+      />
+    </Transition>
 
     <!-- Success Feedback Modal with Smooth Transitions -->
-    <div
-      v-if="inviteSent"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
-    >
-      <div class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
-        <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border-2 border-emerald-200/60 shadow-xs">
-          <CheckCircle2 :size="36" />
+    <Transition name="fh-modal">
+      <div
+        v-if="inviteSent"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
+      >
+        <div class="fh-modal-panel bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
+          <div class="mx-auto max-w-[130px] flex items-center justify-center">
+            <img
+              :src="'/images/ui/booking-confirmed.png'"
+              alt="Thành công"
+              class="w-full h-auto max-h-32 object-contain drop-shadow-md select-none pointer-events-none"
+              loading="lazy"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <h3 class="text-xl font-bold text-ink-900 tracking-tight">Đã gửi lời mời thành công</h3>
+            <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
+              {{ successMessage }}
+            </p>
+          </div>
+          <FhButton
+            data-testid="view-matching-booking"
+            variant="primary"
+            size="md"
+            class="w-full justify-center shadow-xs"
+            @click="router.push(backTarget)"
+          >
+            Xem trạng thái yêu cầu
+          </FhButton>
         </div>
-        <div class="space-y-2">
-          <h3 class="text-xl font-bold text-ink-900 tracking-tight">Đã gửi lời mời thành công</h3>
-          <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
-            {{ successMessage }}
-          </p>
-        </div>
-        <FhButton
-          data-testid="view-matching-booking"
-          variant="primary"
-          size="md"
-          class="w-full justify-center shadow-xs"
-          @click="router.push(backTarget)"
-        >
-          Xem trạng thái yêu cầu
-        </FhButton>
       </div>
-    </div>
+    </Transition>
 
     <!-- Floating Sticky Action Bar -->
-    <div
-      v-if="showsActionBar"
-      data-testid="candidates-action-bar"
-      class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)"
-    >
-      <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
-        <div class="flex items-center gap-2.5">
-          <div class="flex items-center gap-1.5">
-            <span
-              class="w-3 h-3 rounded-full transition-colors"
-              :class="selectedCount >= 1 ? 'bg-brand-600 ring-2 ring-brand-200' : 'bg-ink-200'"
-            ></span>
-            <span
-              class="w-3 h-3 rounded-full transition-colors"
-              :class="selectedCount >= 2 ? 'bg-brand-600 ring-2 ring-brand-200' : 'bg-ink-200'"
-            ></span>
+    <Transition name="fh-dock">
+      <div
+        v-if="showsActionBar"
+        data-testid="candidates-action-bar"
+        class="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom))] lg:bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 py-3.5 shadow-(--shadow-e2)"
+      >
+        <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span
+                class="w-3 h-3 rounded-full transition-all duration-200"
+                :class="selectedCount >= 1 ? 'bg-brand-600 ring-2 ring-brand-200 scale-110' : 'bg-ink-200'"
+              ></span>
+              <span
+                class="w-3 h-3 rounded-full transition-all duration-200"
+                :class="selectedCount >= 2 ? 'bg-brand-600 ring-2 ring-brand-200 scale-110' : 'bg-ink-200'"
+              ></span>
+            </div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-ink-900 whitespace-nowrap">
+                Đã chọn: <strong class="font-num text-brand-700 font-bold">{{ selectedCount }}</strong>/2
+              </div>
+              <div class="text-xs text-ink-500 truncate hidden sm:block">
+                <template v-if="selectedCount === 0">Chọn ít nhất 1 thợ chính để gửi lời mời</template>
+                <template v-else-if="selectedCount === 1">Thợ chính: <span class="font-medium text-ink-800">{{ selectedTechs[0]?.fullName }}</span> · Có thể chọn thêm 1 thợ dự phòng</template>
+                <template v-else>Thợ #1: <span class="font-medium text-ink-800">{{ selectedTechs[0]?.fullName }}</span> · Thợ #2: <span class="font-medium text-ink-800">{{ selectedTechs[1]?.fullName }}</span></template>
+              </div>
+            </div>
           </div>
-          <div class="text-sm text-ink-600 whitespace-nowrap">
-            Đã chọn: <strong class="text-ink-900 font-num font-bold">{{ selectedCount }}</strong>/2
-          </div>
-        </div>
 
-        <FhButton
-          variant="primary"
-          size="md"
-          :disabled="selectedCount < 1"
-          :loading="sending"
-          class="px-6 shadow-xs"
-          @click="handleSendShortlist"
-        >
-          <Send :size="15" /> Gửi lời mời
-        </FhButton>
+          <FhButton
+            variant="primary"
+            size="md"
+            :disabled="selectedCount < 1"
+            :loading="sending"
+            class="px-6 shadow-xs shrink-0"
+            @click="handleSendShortlist"
+          >
+            <Send :size="15" /> Gửi lời mời
+          </FhButton>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
