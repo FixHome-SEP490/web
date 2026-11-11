@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-11 21:59 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/legacy-review-warranty
+> Cập nhật lần cuối: 2026-11-12 00:51 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: perf/web-duplicate-reads
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-12 00:51 (UTC+7) | ToanAltF4 | perf/web-duplicate-reads | Tối ưu tốc độ: thanh bên của thợ đếm việc đang làm bằng 1 request nhỏ (statuses, pageSize=1) thay vì tải cả danh sách đơn; danh sách hội thoại và số thông báo chưa đọc gộp các lần gọi trùng khi mở trang (coalesce).
 - 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được
 - 2026-11-11 21:38 (UTC+7) | ToanAltF4 | fix/warehouse-status-label | Nhãn trạng thái kho đang hoạt động hiện Đang hoạt động thay vì Thành công (BUG 91); test chặn truyền chữ vào giữa thẻ FhStatusPill
 - 2026-11-11 21:20 (UTC+7) | ToanAltF4 | fix/warehouse-log-w2-kinds | Nhật ký kho đọc được dòng W2 (giữ/nhả/xuất/hoàn, người thao tác có thể trống); bản #234 hiện Chưa tải được vì hàm chuẩn hoá chỉ nhận nhập kho/điều chỉnh
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-04 11:25 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Console bảo hành: xét từ chối hoặc không đến, đóng không khắc phục được kèm hoàn tiền, lý do đổi kết luận, chọn linh kiện khi lỗi do công, ảnh đơn gốc; thợ thấy lý do từ chối nào được kiểm tra.
 - 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
 - 2026-11-03 08:00 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Giữ `priceSummary.fixed_range` là tiền công theo phạm vi cả khi hai đầu bằng nhau; hiện một số, bỏ đơn vị kế thừa và ghi rõ khảo sát/xác nhận trước sửa.
-- 2026-11-03 07:55 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Rút gọn copy W1.04 `/how-it-works`: bỏ section nguyên tắc lặp, mỗi bước còn một câu, ghi chú phụ trong `<details>` đóng mặc định; giữ rõ chọn 1–2 thợ và duyệt chi phí phát sinh. BodyChars 1393–1499 so với live 1809–1915; CTA `/app/bookings/new`.
