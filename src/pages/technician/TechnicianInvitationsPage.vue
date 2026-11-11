@@ -196,7 +196,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         />
       </div>
       <h3 class="text-base font-semibold text-ink-900">Không có lời mời nào đang chờ</h3>
-      <p class="text-sm text-ink-500 max-w-sm mx-auto">{{ autoAccept ? 'Lời mời mới sẽ được tự động nhận và chuyển sang danh sách Công việc.' : 'Khi có khách đặt lịch trong khu vực hoạt động của bạn, lời mời sẽ hiển thị tại đây.' }}</p>
+      <p class="text-sm text-ink-500 max-w-sm mx-auto">{{ autoAccept ? 'Lời mời mới sẽ được tự nhận và chuyển sang danh sách Công việc.' : 'Khi có khách đặt lịch trong khu vực hoạt động của bạn, lời mời sẽ hiển thị tại đây.' }}</p>
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->

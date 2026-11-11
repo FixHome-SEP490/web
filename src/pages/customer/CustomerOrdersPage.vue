@@ -873,7 +873,6 @@ async function confirmCancel() {
 
             <div
               v-else-if="bookingsTotal === 0"
-              data-testid="requests-empty"
               class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
               <img
@@ -882,7 +881,7 @@ async function confirmCancel() {
                 class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
                 loading="lazy"
               />
-              <p class="text-sm font-semibold text-ink-800">Không có yêu cầu đặt lịch ở mục này.</p>
+              <p data-testid="requests-empty" class="text-sm font-semibold text-ink-800">Không có yêu cầu đặt lịch ở mục này.</p>
               <p class="text-xs text-ink-500 mt-0.5">Yêu cầu đang tìm thợ hoặc chờ xác nhận sẽ hiển thị tại đây.</p>
             </div>
 
@@ -1040,7 +1039,6 @@ async function confirmCancel() {
 
             <div
               v-else-if="ordersTotal === 0"
-              data-testid="orders-empty"
               class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
             >
               <img
@@ -1049,7 +1047,7 @@ async function confirmCancel() {
                 class="w-20 h-20 object-contain mb-2 opacity-90 select-none pointer-events-none"
                 loading="lazy"
               />
-              <p class="text-sm font-semibold text-ink-800">Không có đơn sửa chữa ở mục này.</p>
+              <p data-testid="orders-empty" class="text-sm font-semibold text-ink-800">Không có đơn sửa chữa ở mục này.</p>
               <p class="text-xs text-ink-500 mt-0.5">Đơn sửa chữa đang diễn ra sẽ hiển thị tại đây.</p>
             </div>
 

@@ -605,7 +605,7 @@ const handleWithdraw = async () => {
               class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
               loading="lazy"
             />
-            <p class="text-sm font-semibold text-ink-800">Chưa có biến động số dư</p>
+            <p class="text-sm font-semibold text-ink-800">Chưa có biến động số dư.</p>
             <p class="text-xs text-ink-500">Các giao dịch nạp tiền, thu phí nền tảng và nhận thù lao sẽ hiển thị tại đây.</p>
           </div>
 
@@ -683,7 +683,7 @@ const handleWithdraw = async () => {
               class="w-16 h-16 object-contain opacity-90 select-none pointer-events-none mb-1"
               loading="lazy"
             />
-            <p class="text-sm font-semibold text-ink-800">Chưa có lệnh rút tiền</p>
+            <p class="text-sm font-semibold text-ink-800">Chưa có lệnh rút tiền.</p>
             <p class="text-xs text-ink-500">Lịch sử các yêu cầu rút tiền về tài khoản ngân hàng sẽ hiển thị tại đây.</p>
           </div>
 

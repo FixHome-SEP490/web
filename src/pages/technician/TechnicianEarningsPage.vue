@@ -309,7 +309,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-else-if="payouts.length === 0" class="px-6 py-12 text-center space-y-3" data-testid="earnings-empty">
+        <div v-else-if="payouts.length === 0" class="px-6 py-12 text-center space-y-3">
           <div class="mx-auto mb-2 max-w-[130px] flex items-center justify-center">
             <img
               :src="'/images/ui/empty-state-search-service.png'"
@@ -318,7 +318,7 @@ onUnmounted(() => {
               loading="lazy"
             />
           </div>
-          <p class="text-base font-semibold text-ink-900">{{ emptyText }}</p>
+          <p data-testid="earnings-empty" class="text-base font-semibold text-ink-900">{{ emptyText }}</p>
           <p class="text-sm text-ink-500 max-w-sm mx-auto">Các khoản thu nhập từ đơn sửa chữa hoàn tất sẽ hiển thị tại đây.</p>
         </div>
 
