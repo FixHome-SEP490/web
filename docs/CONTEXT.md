@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 13:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-booking-description-1211
+> Cập nhật lần cuối: 2026-11-12 17:15 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/f3-parts-sourcing
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
 - 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
 - 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
 - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
-- 2026-11-04 12:10 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Trang yêu cầu linh kiện của SM thêm loại Bảo hành và bước kiểm tra linh kiện hỏng trước khi chuẩn bị xong.

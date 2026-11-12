@@ -4,6 +4,7 @@ import { filterParams, readPage, type ListFilter, type PageResult } from './pagi
 import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 import type { BookingSlot } from '../utils/booking-session';
 import { readFailedWorkFinance } from './stopped-work-finance.api';
+import { readPartsSourcing, type PartsSourcing } from '../utils/parts-sourcing';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -646,6 +647,9 @@ export const ordersApi = {
   async submitQuotation(orderId: string, items: QuotationItemPayload[]): Promise<Record<string, unknown>> { const res = await apiClient.post<{data: Record<string,unknown>}>(`/service-orders/${orderId}/quotations`, {items: items.map(item => ({...item, type: item.type === 'LABOR' ? 'labor' : 'parts_equipment'}))}); return res.data.data; },
 
   async approveQuotation(quotationId: string): Promise<Record<string, unknown>> { const res = await apiClient.post<{data: Record<string,unknown>}>(`/quotations/${quotationId}/decision`, {action:'APPROVE'}); return res.data.data; },
+
+  /** F3: can the FixHome parts of this pending quote be supplied now (advisory; approval re-checks). */
+  async getQuotationPartsSourcing(quotationId: string): Promise<PartsSourcing | null> { const res = await apiClient.get<{data: unknown}>(`/quotations/${quotationId}/parts-sourcing`); return readPartsSourcing(res.data.data); },
 
   async rejectQuotation(quotationId: string, reason?: string): Promise<Record<string, unknown>> { void reason; const res = await apiClient.post<{data: Record<string,unknown>}>(`/quotations/${quotationId}/decision`, {action:'REJECT'}); return res.data.data; },
 
