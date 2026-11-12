@@ -15,7 +15,6 @@ vi.mock('../src/stores/chat.store', () => ({
 import TechnicianJobsPage from '../src/pages/technician/TechnicianJobsPage.vue';
 import CustomerWarrantiesPage from '../src/pages/customer/CustomerWarrantiesPage.vue';
 import ConsoleOrdersPage from '../src/pages/console/ConsoleOrdersPage.vue';
-import ConsoleBookingsPage from '../src/pages/console/ConsoleBookingsPage.vue';
 import ConsoleCancellationsPage from '../src/pages/console/ConsoleCancellationsPage.vue';
 import ServiceAreasPage from '../src/pages/console/ServiceAreasPage.vue';
 import CustomerNotificationsPage from '../src/pages/customer/CustomerNotificationsPage.vue';
@@ -206,40 +205,6 @@ describe('Console cancellations', () => {
 });
 
 describe('Console bookings to assign', () => {
-  it('keeps "Cần gán thợ" and "Đã quá hạn", sorted by appointment and paged on the server', async () => {
-    const booking = (id: string, status: string, preferredStartAt: string) => ({
-      id, status, serviceName: `Dịch vụ ${id}`, addressSummary: 'Quận 1', preferredStartAt, createdAt: '2026-10-01T00:00:00Z',
-    });
-    mockGet.mockImplementation(async (_url: string, opts: { params: Params }) => {
-      const overdue = opts.params.overdue === 'true';
-      if (opts.params.pageSize === 1) return listed([], overdue ? 4 : 31);
-      if (overdue) return listed([booking('late', 'closed', '2020-01-01T00:00:00Z')], 4);
-      return listed([booking(`s${opts.params.page}`, 'submitted', '2099-01-01T00:00:00Z')], 31);
-    });
-    const wrapper = mount(ConsoleBookingsPage, { global: { stubs } });
-    await flushPromises();
-    const lists = () => paramsOf('/bookings').filter((p) => p.pageSize === 20);
-    const view = { statuses: 'submitted,matching,closed', sort: 'appointment' };
-    expect(lists()).toEqual([{ page: 1, pageSize: 20, ...view, overdue: 'false' }]);
-    const tabs = wrapper.findAll('[role="tab"]').map((t) => t.text().replace(/\s+/g, ' ').trim());
-    expect(tabs).toEqual(['Cần gán thợ 31', 'Đã quá hạn 4']);
-    expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–20 / 31');
-    expect(wrapper.text()).toContain('Gán thợ');
-
-    await wrapper.get('[data-testid="pagination-page-2"]').trigger('click');
-    await flushPromises();
-    expect(lists().at(-1)).toEqual({ page: 2, pageSize: 20, ...view, overdue: 'false' });
-
-    await wrapper.findAll('[role="tab"]')[1].trigger('click');
-    await flushPromises();
-    expect(lists().at(-1)).toEqual({ page: 1, pageSize: 20, ...view, overdue: 'true' });
-    // A request whose time has passed cannot be assigned any more.
-    expect(wrapper.text()).toContain('Chờ khách đặt lại');
-    expect(wrapper.findAll('button').some((b) => b.text() === 'Gán thợ')).toBe(false);
-  });
-});
-
-describe('Service areas', () => {
   it('pages the loaded list 20 rows at a time and starts again after a filter', async () => {
     const areas = Array.from({ length: 45 }, (_, i) => ({
       id: `a${i}`, provinceCode: i < 30 ? '01' : '79', provinceName: i < 30 ? 'Hà Nội' : 'TP. Hồ Chí Minh',

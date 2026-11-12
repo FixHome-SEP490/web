@@ -184,15 +184,16 @@ describe('ConsoleOrderDetail read-only regression', () => {
     expect(source).not.toContain(artifact);
   });
 
-  it('keeps the page as read-only context with exception-handling navigation', () => {
-    expect(source).toContain('chỉ đọc');
+  it('keeps exception handling in support and cancels only through the real cancel API (PO 12/11/2026)', () => {
+    // The only write on this page: a Service Manager cancels before repair starts.
+    expect(source.match(/ordersApi\.\w+/g)).toEqual(['ordersApi.cancelOrder']);
+    expect(source).toMatch(/isServiceManager\.value\s*&& \['accepted', 'en_route'\]/);
     expect(source).toContain('/console/support');
     expect(source).toContain('/console/cancellations');
     expect(source).toContain('consoleOrderContextApi.getConsoleOrderContext');
   });
 
   it.each([
-    'ordersApi',
     'getCustomerOrders',
     'customerName',
     'customerPhone',

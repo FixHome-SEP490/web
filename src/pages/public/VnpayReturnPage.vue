@@ -9,7 +9,7 @@ import { useAuthStore } from '../../stores/auth';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const isTechnician = authStore.user?.role === 'TECHNICIAN';
+const isTechnician = authStore.userRole === 'TECHNICIAN';
 
 // Return query values are untrusted. They can start a server check, but only
 // the order's paymentStatus can confirm a successful invoice payment.

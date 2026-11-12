@@ -10,6 +10,7 @@ import { warehousesApi, type StockMovement, type Warehouse, type WarehouseStockR
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import { adminUsersApi, type AdminUserRecord } from '../../api/admin-users.api';
 import { userFacingError } from '../../utils/user-facing-error';
+import { getHttpStatus } from '../../api/client';
 import { canAdministerWarehouse } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
@@ -226,12 +227,41 @@ async function submitAdjustment() {
     pendingCommand.value = null;
     success.value = 'Đã ghi nhận điều chỉnh tồn kho.';
     await loadRows();
+    void loadPicked();
     activeTab.value = 'stock';
-  } catch (reason) { error.value = formatError(reason, 'Chưa ghi nhận được điều chỉnh. Có thể thử lại cùng lệnh.'); }
+  } catch (reason) {
+    // W-10: a definite refusal (4xx) is not worth retrying: free the form so the manager can fix it.
+    // Only a lost answer (network, timeout, 5xx) keeps the same command for a safe retry.
+    const status = getHttpStatus(reason);
+    const refused = status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
+    if (refused) {
+      pendingCommand.value = null;
+      error.value = status === 422
+        ? 'Không ghi nhận được: số lượng trừ vượt tồn khả dụng, hoặc thay đổi bằng 0. Kiểm tra lại số lượng.'
+        : formatError(reason, 'Không ghi nhận được điều chỉnh. Kiểm tra lại thông tin.');
+    } else {
+      error.value = formatError(reason, 'Chưa xác nhận được kết quả. Có thể thử lại cùng lệnh.');
+    }
+  }
   finally { saving.value = false; }
 }
 
-const activeStock = computed(() => stock.value.find((row) => row.partId === partId.value));
+// W-11: the chosen SKU may sit on another page of the stock list (20 of 888 rows), so read its row from the server.
+const pickedStock = ref<WarehouseStockRow | null>(null);
+let pickedLoad = 0;
+async function loadPicked() {
+  const part = partId.value;
+  const warehouseId = selectedId.value;
+  const ticket = ++pickedLoad;
+  pickedStock.value = null;
+  if (!part || !warehouseId || stock.value.some((row) => row.partId === part)) return;
+  try {
+    const result = await warehousesApi.getStock(warehouseId, { partId: part, limit: 1, offset: 0 });
+    if (ticket === pickedLoad) pickedStock.value = result.data.find((row) => row.partId === part) ?? null;
+  } catch { /* the hint stays empty; the server still checks the balance */ }
+}
+watch([partId, selectedId], () => { void loadPicked(); });
+const activeStock = computed(() => stock.value.find((row) => row.partId === partId.value) ?? pickedStock.value);
 const currentPage = computed(() => Math.floor(offset.value / pageSize) + 1);
 const currentTotalPages = computed(() => Math.max(1, Math.ceil((activeTab.value === 'stock' ? stockMeta.value.total : movementMeta.value.total) / pageSize)));
 // BUG DETECTOR 80: part request movements now appear in the log beside manual changes.

@@ -315,12 +315,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Đơn sửa chữa', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
-        path: 'bookings',
-        name: 'console-bookings',
-        component: () => import('../pages/console/ConsoleBookingsPage.vue'),
-        meta: { title: 'Gán thợ', roles: ['SERVICE_MANAGER', 'ADMIN'] },
-      },
-      {
         path: 'orders/:id',
         name: 'console-order-detail',
         component: () => import('../pages/console/ConsoleOrderDetailPage.vue'),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toBankAccountName } from '../../../utils/formatters';
 import { computed, onMounted, ref } from 'vue';
 import { FhButton } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
@@ -88,9 +89,9 @@ const VALUE_LABELS: Record<string, string> = {
   false: 'Tắt',
 };
 const valueLabel = (value: string) => VALUE_LABELS[value] ?? value;
+const foldText = (value: string) => toBankAccountName(value).toLowerCase();
 
 const searchQuery = ref('');
-const statusFilter = ref<ConfigEffectStatus | ''>('');
 const loadFailed = ref(false);
 const remoteConfigs = ref<AdminConfigItem[]>([]);
 const loading = ref(true);
@@ -126,10 +127,13 @@ const configRows = computed<ConfigRow[]>(() => {
       updatedAt: config.updatedAt,
       available: true,
     }));
-  const query = searchQuery.value.trim().toLowerCase();
+  // W-2: "ban kinh" finds "Bán kính".
+  const query = foldText(searchQuery.value.trim());
+  // PO 12/11/2026: a setting the server does not apply yet (TO_WIRE, NOT_IMPLEMENTED,
+  // STALE_REVIEW) would save and change nothing, so the page lists only applied settings.
   return [...knownRows, ...unknownRows].filter((row) =>
-    (!statusFilter.value || row.effectStatus === statusFilter.value)
-    && (!query || `${row.key} ${row.description} ${STATUS_LABELS[row.effectStatus] ?? ''}`.toLowerCase().includes(query)),
+    row.available && row.effectStatus === 'ACTIVE'
+    && (!query || foldText(`${row.key} ${row.description} ${STATUS_LABELS[row.effectStatus] ?? ''}`).includes(query)),
   );
 });
 
@@ -234,10 +238,6 @@ const statusClass = (status: ConfigEffectStatus) => ({
 
     <div class="flex flex-wrap items-center gap-2">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm tham số" label="Tìm tham số cấu hình" />
-      <select v-model="statusFilter" :class="consoleField" aria-label="Lọc theo hiệu lực">
-        <option value="">Mọi trạng thái</option>
-        <option v-for="(label, key) in STATUS_LABELS" :key="key" :value="key">{{ label }}</option>
-      </select>
     </div>
 
     <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">

@@ -38,6 +38,14 @@ export interface DeliveryPhysicalPreview {
   courierPayment: 'NOT_RECORDED';
   blockers: Blocker[];
   actions: { reserve: 'BLOCKED'; issueToCourier: 'BLOCKED'; dispatch: 'BLOCKED'; technicianReceipt: 'BLOCKED' };
+  /** W-16: paid W3 path only — the recorded physical step and the actual fee split. */
+  progress: DeliveryPhysicalProgress | null;
+}
+export interface DeliveryPhysicalProgress {
+  status: AssessmentStatus;
+  actualShippingFee: number | null;
+  customerShippingShare: number | null;
+  technicianShippingShare: number | null;
 }
 const invalid = (): never => { throw new Error('Chưa thể đối chiếu trạng thái giao linh kiện.'); };
 function record(value: unknown): Record<string, unknown> {
@@ -60,8 +68,9 @@ export function isDeliveryPhysicalRequestId(value: unknown): value is string {
 function readPreview(body: unknown, requestId: string): DeliveryPhysicalPreview {
   const envelope = record(body);
   if (envelope.success !== true || envelope.statusCode !== 200 || typeof envelope.message !== 'string') return invalid();
-  const data = shape(envelope.data, ['mode', 'consistency', 'requestId', 'eligibility', 'reason', 'lastAssessment',
-    'physicalExecution', 'financialExecution', 'evidence', 'actualCourierCost', 'courierPayment', 'blockers', 'actions']);
+  const keys = ['mode', 'consistency', 'requestId', 'eligibility', 'reason', 'lastAssessment',
+    'physicalExecution', 'financialExecution', 'evidence', 'actualCourierCost', 'courierPayment', 'blockers', 'actions'];
+  const data = shape(envelope.data, Object.hasOwn(record(envelope.data), 'progress') ? [...keys, 'progress'] : keys);
   if (data.mode !== 'NON_EXECUTABLE_PREVIEW' || data.consistency !== 'NON_ATOMIC' || data.requestId !== requestId
     || data.physicalExecution !== 'BLOCKED' || data.financialExecution !== 'BLOCKED'
     || data.actualCourierCost !== null || data.courierPayment !== 'NOT_RECORDED') return invalid();
@@ -84,8 +93,17 @@ function readPreview(body: unknown, requestId: string): DeliveryPhysicalPreview 
   if (!requiredBlockers.every(value => blockers.includes(value))) return invalid();
   const actions = shape(data.actions, ['reserve', 'issueToCourier', 'dispatch', 'technicianReceipt']);
   if (Object.values(actions).some(value => value !== 'BLOCKED')) return invalid();
+  let progress: DeliveryPhysicalProgress | null = null;
+  if (data.progress != null) {
+    const p = shape(data.progress, ['status', 'actualShippingFee', 'customerShippingShare', 'technicianShippingShare']);
+    const money = (value: unknown) => (value === null ? null
+      : typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : invalid());
+    progress = { status: member(p.status, ['INELIGIBLE', 'PENDING_ASSISTANCE', 'RESERVED', 'RELEASED', 'ISSUED_TO_COURIER', 'DISPATCH_RECORDED', 'TECHNICIAN_RECEIVED']),
+      actualShippingFee: money(p.actualShippingFee), customerShippingShare: money(p.customerShippingShare),
+      technicianShippingShare: money(p.technicianShippingShare) };
+  }
   // Construct the typed projection only after all authority and money fields are checked.
-  return { mode: 'NON_EXECUTABLE_PREVIEW', consistency: 'NON_ATOMIC', requestId, eligibility, reason, lastAssessment,
+  return { progress, mode: 'NON_EXECUTABLE_PREVIEW', consistency: 'NON_ATOMIC', requestId, eligibility, reason, lastAssessment,
     physicalExecution: 'BLOCKED', financialExecution: 'BLOCKED', evidence, actualCourierCost: null,
     courierPayment: 'NOT_RECORDED', blockers,
     actions: { reserve: 'BLOCKED', issueToCourier: 'BLOCKED', dispatch: 'BLOCKED', technicianReceipt: 'BLOCKED' } };

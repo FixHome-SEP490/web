@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayPartRequestStatus, isW3Delivery } from '../utils/w3-delivery-stage';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
   Package,
@@ -1345,9 +1346,9 @@ const getStatusBadgeClass = (status: string) => {
             <div class="flex min-w-0 flex-wrap items-center gap-2">
               <span
                 class="px-2 py-1 rounded text-xs font-semibold border"
-                :class="getStatusBadgeClass(pr.status)"
+                :class="getStatusBadgeClass(displayPartRequestStatus(pr))"
               >
-                {{ formatStatusText(pr.status) }}
+                {{ formatStatusText(displayPartRequestStatus(pr)) }}
               </span>
 
               <span
@@ -1424,7 +1425,7 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- Pending Preparation State -->
           <div
-            v-if="pr.status === 'requested' && warehouseAllocationFor(pr)?.status !== 'stock_unavailable'"
+            v-if="displayPartRequestStatus(pr) === 'requested' && !isW3Delivery(pr) && warehouseAllocationFor(pr)?.status !== 'stock_unavailable'"
             class="p-2.5 rounded-lg bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
           >
             <div class="flex items-center gap-2 text-xs text-warning-800">

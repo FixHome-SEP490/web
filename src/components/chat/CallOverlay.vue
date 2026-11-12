@@ -109,7 +109,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             v-if="callStore.peerRoleLabel"
             class="mt-0.5 text-xs text-ink-500 font-medium flex items-center gap-1"
           >
-            <Wrench v-if="callStore.peer?.role === 'TECHNICIAN'" :size="11" />
+            <Wrench v-if="callStore.peer?.role?.toUpperCase() === 'TECHNICIAN'" :size="11" />
             <UserCheck v-else :size="11" />
             {{ callStore.peerRoleLabel }}
           </p>

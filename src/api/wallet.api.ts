@@ -253,12 +253,15 @@ export const walletApi = {
     page?: number;
     limit?: number;
     search?: string;
-    status?: string;
+    /** W-9: the server filters on `eligible=true|false`, it has no `status` for wallets. */
+    eligible?: boolean;
   }): Promise<PaginatedResult<WalletListItem>> {
     const res = await apiClient.get<{
       data: WalletListItem[];
       meta: PaginationMeta;
-    }>('/service-manager/wallets', { params: query });
+    }>('/service-manager/wallets', {
+      params: { ...query, eligible: query?.eligible === undefined ? undefined : String(query.eligible) },
+    });
     return res.data;
   },
 
