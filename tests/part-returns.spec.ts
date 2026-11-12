@@ -746,6 +746,17 @@ describe('part-requests.api legacy manual review contract (T3b/T3c)', () => {
     expect(page).toEqual({ data: [legacyRecord()], total: 1, page: 1, pageSize: 20 });
   });
 
+  it('reads warranty lines too, as the Backend lists them (BUG DETECTOR 92, seen on fixhome.sbs 11/11)', async () => {
+    const { partRequestsApi: api } = await loadActualApi();
+    // One warranty line made the whole block show "Chưa tải được"; the manager could verify nothing.
+    const warranty = { ...legacyRecord(), requestType: 'warranty', requestStatus: 'completed', manualReviewState: 'UNKNOWN', lastManualReview: null };
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: [legacyRecord(), warranty], meta: { total: 2, page: 1, pageSize: 20 } },
+    });
+    const page = await api.getLegacyManualReview();
+    expect(page.data.map((row) => row.requestType)).toEqual([legacyRecord().requestType, 'warranty']);
+  });
+
   it('clamps page and pageSize to the Backend bounds and never changes the endpoint', async () => {
     const { partRequestsApi: api } = await loadActualApi();
     apiClientMock.get.mockResolvedValueOnce({

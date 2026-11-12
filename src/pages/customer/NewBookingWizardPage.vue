@@ -579,6 +579,15 @@ const aiSessionId = computed(() => {
   return id && SESSION_PATTERN.test(id) ? id : null;
 });
 const aiSuggested = computed(() => aiConversation.pinnedService.value);
+/**
+ * What the technician will read as "Tình trạng": in the AI flow, everything the
+ * customer told the assistant without the turns' "sai rồi" (customerWords), not
+ * only the first message typed in step 1, which may be the symptom the customer
+ * later turned down (BUG 23, 12/11/2026). The confirm step shows exactly what is sent.
+ */
+const bookingDescription = computed(() =>
+  isAiFlow ? (aiConversation.customerWords() || description.value).trim() : description.value.trim(),
+);
 // The latest reply may only answer a question; the appliance comes from the last one that named it.
 const aiRecap = computed(() => {
   if (!aiSessionId.value) return null;
@@ -2302,7 +2311,7 @@ async function createAndFindTech() {
       serviceId: selectedServiceId.value,
       addressId: selectedAddressId.value,
       // Only the customer's own words; a firm-priced job may go without (PO 21/10/2026).
-      description: isAiFlow ? (aiConversation.customerWords() || description.value) : description.value.trim(),
+      description: bookingDescription.value,
       ...schedule,
       ...(customerNote.value.trim() ? { customerNote: customerNote.value.trim() } : {}),
       quantity: isFixedPrice.value ? quantity.value : 1,
@@ -3408,9 +3417,9 @@ async function createAndFindTech() {
             </div>
             <button type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" :data-testid="extraDevices.length ? 'visit-current-device-edit' : undefined" @click="step = 1">{{ extraDevices.length ? `Sửa máy ${extraDevices.length + 1}` : 'Sửa' }}</button>
           </div>
-          <div v-if="selectedServiceId && !extraDevices.length && description.trim()" class="flex gap-4 px-5 py-4 sm:px-6">
+          <div v-if="selectedServiceId && !extraDevices.length && bookingDescription" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Tình trạng</span>
-            <p class="min-w-0 flex-1 text-ink-900 text-pretty">{{ description.trim() }}</p>
+            <p class="min-w-0 flex-1 text-ink-900 text-pretty" data-testid="confirm-description">{{ bookingDescription }}</p>
             <button v-if="!isAiFlow" type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 1">Sửa</button>
           </div>
           <div v-if="selectedServiceId && !extraDevices.length && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">

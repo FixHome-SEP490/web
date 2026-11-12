@@ -6,7 +6,7 @@ vi.mock('../src/api/client', () => ({ default: apiClientMock }));
 import { warehousesApi } from '../src/api/warehouses.api';
 import { partRequestsApi } from '../src/api/part-requests.api';
 import { consoleNavigation } from '../src/components/console/console-navigation';
-import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseIssuedTokenSlot, warehouseQrAction, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
+import { canAdministerWarehouse, canConfirmWarehouseHandover, canTechnicianAcknowledgeWarehousePickup, warehouseIssuedTokenSlot, warehouseQrAction, warehouseQrOpen, warehouseReturnAccepted } from '../src/utils/warehouse-fulfillment';
 import router from '../src/router';
 
 describe('Warehouse console API', () => {
@@ -34,6 +34,21 @@ describe('Warehouse console API', () => {
     expect(stock.data[0]?.available).toBe(0);
   });
 
+  it('reads W2 part request movements in the warehouse log (BUG DETECTOR 80, seen on fixhome.sbs 11/11)', async () => {
+    const at = '2026-11-11T09:00:00.000Z';
+    apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([
+      { id: 'm1', warehouseId: 'warehouse-1', partId: 'part-1', actorUserId: 'sm-1', kind: 'stock_in', delta: 5, reason: 'Nhập hàng', idempotencyKey: 'k1', onHandAfter: 5, reservedAfter: 0, createdAt: at, partRequestId: null },
+      { id: 'm2', warehouseId: 'warehouse-1', partId: 'part-1', actorUserId: null, kind: 'reserve', delta: 0, reason: 'Phiếu PR-1A2B3C4D', idempotencyKey: 'auto:pr-1', onHandAfter: 5, reservedAfter: 2, createdAt: at, partRequestId: 'pr-1' },
+      { id: 'm3', warehouseId: 'warehouse-1', partId: 'part-1', actorUserId: 'sm-1', kind: 'issue', delta: -2, reason: 'Phiếu PR-1A2B3C4D', idempotencyKey: 'k3', onHandAfter: 3, reservedAfter: 0, createdAt: at, partRequestId: 'pr-1' },
+    ], { total: 3, limit: 25, offset: 0 }) });
+    const log = await warehousesApi.getMovements('warehouse-1', { limit: 25, offset: 0 });
+    expect(log.data.map((row) => [row.kind, row.actorUserId, row.partRequestId])).toEqual([
+      ['stock_in', 'sm-1', null], ['reserve', null, 'pr-1'], ['issue', 'sm-1', 'pr-1'],
+    ]);
+    apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([{ id: 'm4', warehouseId: 'warehouse-1', partId: 'part-1', actorUserId: 'sm-1', kind: 'teleport', delta: 1, reason: 'x', idempotencyKey: 'k', onHandAfter: 1, reservedAfter: 0, createdAt: at }], { total: 1, limit: 25, offset: 0 }) });
+    await expect(warehousesApi.getMovements('warehouse-1')).rejects.toThrow('invalid stock movement');
+  });
+
   it('sends one stock adjustment with the selected catalog id and stable idempotency key', async () => {
     const payload = { partId: 'real-catalog-part', delta: 8, kind: 'stock_in' as const, reason: 'Nhập lô kiểm kê', idempotencyKey: '00000000-0000-4000-8000-000000000001' };
     apiClientMock.post.mockResolvedValueOnce({ data: backendEnvelope({ id: 'movement-1', warehouseId: 'warehouse-1', ...payload, actorUserId: 'sm-1', onHandAfter: 8, reservedAfter: 0, createdAt: '2026-11-04T00:00:00.000Z' }) });
@@ -58,8 +73,12 @@ describe('Warehouse console API', () => {
     const row = { id: 'pr-1', fulfillmentMethod: 'pickup' };
     apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([row], { total: 2 }) });
 
-    await expect(partRequestsApi.getWarehouseTasks({ page: 1, pageSize: 20, status: 'requested' })).resolves.toEqual({ data: [row], total: 2 });
+    // An older Backend sends no statusCounts: the page then counts the rows it has.
+    await expect(partRequestsApi.getWarehouseTasks({ page: 1, pageSize: 20, status: 'requested' })).resolves.toEqual({ data: [row], total: 2, statusCounts: null });
     expect(apiClientMock.get).toHaveBeenCalledWith('/part-requests/warehouse-tasks', { params: { page: 1, pageSize: 20, status: 'requested' } });
+    // BUG DETECTOR 89: totals per status over the whole filtered queue are passed through.
+    apiClientMock.get.mockResolvedValueOnce({ data: backendEnvelope([row], { total: 2, statusCounts: { requested: 2, ready: 5 } }) });
+    await expect(partRequestsApi.getWarehouseTasks({ page: 1 })).resolves.toEqual({ data: [row], total: 2, statusCounts: { requested: 2, ready: 5 } });
   });
 
   it('uses only the documented W2 allocation, reserve, QR, handover and technician receive routes', async () => {
@@ -110,6 +129,12 @@ describe('Warehouse console API', () => {
     expect(warehouseQrAction('ready')).toBe('prepare');
     expect(warehouseQrAction('handed_over')).toBe('reissue');
     expect(warehouseQrAction('received')).toBe(null);
+    // A closed or warranty request gets no code: the server refuses it (BUG DETECTOR 94).
+    expect(warehouseQrOpen('ready', 'pre_repair')).toBe(true);
+    expect(warehouseQrOpen('RECEIVED', 'quotation')).toBe(true);
+    expect(warehouseQrOpen('cancelled', 'pre_repair')).toBe(false);
+    expect(warehouseQrOpen('COMPLETED', 'additional')).toBe(false);
+    expect(warehouseQrOpen('requested', 'warranty')).toBe(false);
     // Reissue after handover returns the technician receipt code, not a pickup code.
     expect(warehouseIssuedTokenSlot('handed_over')).toBe('receipt');
     expect(warehouseIssuedTokenSlot('ready')).toBe('pickup');

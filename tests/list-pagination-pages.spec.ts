@@ -84,24 +84,26 @@ describe('Technician jobs', () => {
 });
 
 describe('Customer warranties', () => {
-  it('reads ten completed orders a page and the warranties of those orders only', async () => {
+  it('reads ten completed orders a page and the warranties of those orders in one read', async () => {
     const completed = many('c', 10, 'completed');
+    const warranty = (id: string) => [{ id: `w-${id}`, startsAt: '2030-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', status: 'active' }];
     mockGet.mockImplementation(async (url: string, opts?: { params: Params }) => {
       if (url === '/service-orders/my') {
         return opts!.params.page === 1 ? listed(completed, 12) : listed([order('c11', 'completed'), order('c12', 'completed')], 12);
       }
-      if (url.endsWith('/warranty-claims')) return { data: { data: [] } };
-      const id = url.split('/')[2];
-      // Only some orders carry a warranty.
-      return { data: { data: ['c1', 'c2', 'c11'].includes(id) ? [{ id: `w-${id}`, startsAt: '2030-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', status: 'active' }] : [] } };
+      if (url === '/warranties/mine') {
+        // Only some orders carry a warranty.
+        const ids = String(opts!.params.orderIds).split(',');
+        return { data: { data: ids.map((orderId) => ({ orderId, coverages: ['c1', 'c2', 'c11'].includes(orderId) ? warranty(orderId) : [], claims: [] })) } };
+      }
+      throw new Error(`unexpected read ${url}`);
     });
     const wrapper = mount(CustomerWarrantiesPage, { global: { stubs } });
     await flushPromises();
 
     expect(paramsOf('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'completed' }]);
-    const warrantyCalls = mockGet.mock.calls.map(([u]) => u as string).filter((u) => u.endsWith('/warranties'));
-    expect(warrantyCalls).toHaveLength(10);
-    expect(warrantyCalls.every((u) => completed.some((o) => u === `/service-orders/${o.id}/warranties`))).toBe(true);
+    expect(paramsOf('/warranties/mine')).toEqual([{ orderIds: completed.map((o) => o.id).join(',') }]);
+    expect(mockGet.mock.calls.map(([u]) => u as string).filter((u) => u.startsWith('/service-orders/c'))).toEqual([]);
     expect(wrapper.findAll('[data-testid^="warranty-order-"]').map((s) => s.attributes('data-testid'))).toEqual(['warranty-order-c1', 'warranty-order-c2']);
     expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–10 / 12');
 
@@ -109,11 +111,23 @@ describe('Customer warranties', () => {
     await wrapper.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
     expect(paramsOf('/service-orders/my')).toEqual([{ page: 2, pageSize: 10, status: 'completed' }]);
-    expect(mockGet.mock.calls.map(([u]) => u as string).filter((u) => u.endsWith('/warranties'))).toEqual([
-      '/service-orders/c11/warranties',
-      '/service-orders/c12/warranties',
-    ]);
+    expect(paramsOf('/warranties/mine')).toEqual([{ orderIds: 'c11,c12' }]);
     expect(wrapper.findAll('[data-testid^="warranty-order-"]').map((s) => s.attributes('data-testid'))).toEqual(['warranty-order-c11']);
+  });
+
+  it('reads order by order, as before, when the page read fails', async () => {
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === '/service-orders/my') return listed(many('c', 3, 'completed'), 3);
+      if (url === '/warranties/mine') throw Object.assign(new Error('Not Found'), { response: { status: 404 } });
+      if (url.endsWith('/warranty-claims')) throw new Error('claims down');
+      const id = url.split('/')[2];
+      return { data: { data: id === 'c2' ? [{ id: 'w-c2', startsAt: '2030-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', status: 'active' }] : [] } };
+    });
+    const wrapper = mount(CustomerWarrantiesPage, { global: { stubs } });
+    await flushPromises();
+    expect(mockGet.mock.calls.map(([u]) => u as string).filter((u) => u.endsWith('/warranties'))).toEqual(['/service-orders/c1/warranties', '/service-orders/c2/warranties', '/service-orders/c3/warranties']);
+    // A claims error still shows the warranty itself.
+    expect(wrapper.findAll('[data-testid^="warranty-order-"]').map((s) => s.attributes('data-testid'))).toEqual(['warranty-order-c2']);
   });
 
   it('tells a page without warranties apart from no warranty at all', async () => {

@@ -427,37 +427,33 @@ async function fetchOrderBundle(kinds?: OrderChangeKind[]): Promise<CustomerOrde
   const touched = (...names: OrderChangeKind[]) => all || names.some((name) => kinds!.includes(name));
   const data = await ordersApi.getOrder(orderId);
   const completed = data.status === 'COMPLETED' || (data.status as string) === 'completed';
-  const invoice = touched('invoice', 'cash', 'quotation', 'additional_cost', 'part') ? await optional(() => ordersApi.getInvoice(orderId)) : previous?.invoice;
-  const settlement = touched('cash', 'invoice') ? await optional(() => ordersApi.getCashSettlement(orderId)) : previous?.settlement;
   const cashIntent = previous?.cashIntent ?? null;
   if (touched('cash', 'invoice')) void refreshCashIntent(data.id);
-  // Before and after photos from the technician.
-  let evidences: OrderEvidence[] = previous?.evidences ?? [];
-  if (touched('evidence', 'arrival')) {
-    try {
-      evidences = await ordersApi.getEvidence(orderId);
-    } catch {
-      evidences = [];
-    }
-  }
   // The original booking, for the description and the diagnosis: it does not change once the order exists,
   // except its invitations while the order waits for a new technician.
   const bookingId = data.bookingId;
   const waitingForTechnician = ['ACCEPTED', 'EN_ROUTE'].includes(String(data.status).toUpperCase()) && !data.technician;
-  const booking = previous?.booking && !waitingForTechnician
-    ? previous.booking
-    : (bookingId ? await optional(() => bookingsApi.getBooking(bookingId)) : undefined);
-  const review = data.status === 'COMPLETED' ? (all || previous?.review === undefined ? await optional(() => reviewsApi.getByOrder(orderId)) : previous.review) : undefined;
-  // Additional costs exist only once the repair started.
-  const costs =
+  // Every read below needs only the order, so they go out together: the page used to wait for each in turn
+  // (about 8 s on a completed order, 12/11/2026). Each one still decides on its own whether to read or keep.
+  const [invoice, settlement, evidences, booking, review, costs, warranties, claims, parts] = await Promise.all([
+    touched('invoice', 'cash', 'quotation', 'additional_cost', 'part') ? optional(() => ordersApi.getInvoice(orderId)) : previous?.invoice,
+    touched('cash', 'invoice') ? optional(() => ordersApi.getCashSettlement(orderId)) : previous?.settlement,
+    // Before and after photos from the technician.
+    touched('evidence', 'arrival') ? ordersApi.getEvidence(orderId).catch((): OrderEvidence[] => []) : (previous?.evidences ?? []),
+    previous?.booking && !waitingForTechnician
+      ? previous.booking
+      : (bookingId ? optional(() => bookingsApi.getBooking(bookingId)) : undefined),
+    data.status === 'COMPLETED' ? (all || previous?.review === undefined ? optional(() => reviewsApi.getByOrder(orderId)) : previous.review) : undefined,
+    // Additional costs exist only once the repair started.
     data.status === 'UNDER_REPAIR' || data.status === 'COMPLETED'
-      ? touched('additional_cost', 'part') ? await optional(() => ordersApi.getAdditionalCosts(orderId)) : previous?.costs
-      : undefined;
-  const warranties = completed
-    ? touched('warranty') ? await optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[]) : previous?.warranties
-    : undefined;
-  const claims = completed ? (touched('warranty') ? await optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : previous?.claims) : undefined;
-  const parts = touched('part', 'invoice', 'quotation', 'additional_cost') ? await optional(() => partRequestsApi.getByOrderId(orderId)) : previous?.parts;
+      ? touched('additional_cost', 'part') ? optional(() => ordersApi.getAdditionalCosts(orderId)) : previous?.costs
+      : undefined,
+    completed
+      ? touched('warranty') ? optional(async () => (await ordersApi.getOrderWarranties(orderId)) as OrderWarrantyRecord[]) : previous?.warranties
+      : undefined,
+    completed ? (touched('warranty') ? optional(() => ordersApi.getOrderWarrantyClaims(orderId)) : previous?.claims) : undefined,
+    touched('part', 'invoice', 'quotation', 'additional_cost') ? optional(() => partRequestsApi.getByOrderId(orderId)) : previous?.parts,
+  ]);
   return {
     order: data,
     invoice,

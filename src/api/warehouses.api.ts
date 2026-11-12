@@ -2,6 +2,9 @@ import apiClient from './client';
 
 export type WarehouseStatus = 'active' | 'inactive';
 export type StockAdjustmentKind = 'stock_in' | 'correction';
+/** Manual changes plus part request work (W2), read together since BUG DETECTOR 80. */
+export type StockMovementKind = StockAdjustmentKind | 'reserve' | 'release' | 'issue' | 'return';
+const MOVEMENT_KINDS: readonly StockMovementKind[] = ['stock_in', 'correction', 'reserve', 'release', 'issue', 'return'];
 
 export interface Warehouse {
   id: string;
@@ -38,14 +41,17 @@ export interface StockMovement {
   id: string;
   warehouseId: string;
   partId: string;
-  actorUserId: string;
-  kind: StockAdjustmentKind;
+  /** Null for a W2 movement the system made on its own. */
+  actorUserId: string | null;
+  kind: StockMovementKind;
   delta: number;
   reason: string;
   idempotencyKey: string;
   onHandAfter: number;
   reservedAfter: number;
   createdAt: string;
+  /** The part request a W2 movement belongs to; null for manual changes. */
+  partRequestId?: string | null;
 }
 
 export interface WarehousePage<T> {
@@ -118,21 +124,22 @@ function normalizeStock(value: unknown): WarehouseStockRow {
 }
 
 function normalizeMovement(value: unknown): StockMovement {
-  if (!isRecord(value) || (value.kind !== 'stock_in' && value.kind !== 'correction')) {
+  if (!isRecord(value) || !MOVEMENT_KINDS.includes(value.kind as StockMovementKind)) {
     throw new Error('Backend returned an invalid stock movement response.');
   }
   return {
     id: requiredString(value.id, 'movement id'),
     warehouseId: requiredString(value.warehouseId, 'movement warehouse id'),
     partId: requiredString(value.partId, 'movement part id'),
-    actorUserId: requiredString(value.actorUserId, 'movement actor id'),
-    kind: value.kind,
+    actorUserId: value.actorUserId == null ? null : requiredString(value.actorUserId, 'movement actor id'),
+    kind: value.kind as StockMovementKind,
     delta: Number.isInteger(value.delta) ? Number(value.delta) : (() => { throw new Error('Backend returned an invalid stock movement delta.'); })(),
     reason: requiredString(value.reason, 'movement reason'),
     idempotencyKey: requiredString(value.idempotencyKey, 'movement idempotency key'),
     onHandAfter: integer(value.onHandAfter, 'movement on-hand quantity'),
     reservedAfter: integer(value.reservedAfter, 'movement reserved quantity'),
     createdAt: requiredString(value.createdAt, 'movement timestamp'),
+    partRequestId: typeof value.partRequestId === 'string' ? value.partRequestId : null,
   };
 }
 

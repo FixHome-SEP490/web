@@ -5,6 +5,7 @@ import { notificationsApi, type NotificationItem } from '../api/notifications.ap
 import { useAuthStore } from './auth';
 import { chatSocketService, type NotificationNewEvent } from '../services/chat-socket.service';
 import { whileOffline } from '../services/live-updates';
+import { coalesce } from '../utils/coalesce';
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const notifications = ref<NotificationItem[]>([]);
@@ -21,10 +22,12 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   const hasUnread = computed(() => unreadCount.value > 0);
 
+  // The layout and the bell both ask when a page opens: one request serves them.
+  const readUnreadCount = coalesce(() => notificationsApi.getUnreadCount());
   const fetchUnreadCount = async () => {
     if (!authStore.isAuthenticated) return;
     try {
-      const count = await notificationsApi.getUnreadCount();
+      const count = await readUnreadCount();
       unreadCount.value = count;
     } catch {
       // Non-blocking

@@ -24,6 +24,12 @@ export function canConfirmWarehouseHandover(
     && allocation.responsibleUserId === userId;
 }
 
+/** Whether the request can still get a warehouse pickup or receipt code: not once it is closed or for warranty parts. */
+export function warehouseQrOpen(status: string | null | undefined, requestType: string | null | undefined): boolean {
+  const state = String(status ?? '').toLowerCase();
+  return state !== 'cancelled' && state !== 'completed' && String(requestType ?? '').toLowerCase() !== 'warranty';
+}
+
 export function warehouseQrAction(status: WarehouseAllocation['status']): 'prepare' | 'reissue' | null {
   if (status === 'reserved' || status === 'ready') return 'prepare';
   if (status === 'handed_over') return 'reissue';

@@ -7,7 +7,8 @@ import { defineComponent, h } from 'vue';
  * the bottom tabs on phones, and the avatar menu only for what the tabs lack.
  */
 
-const { route, push, toast, wallet, profileApi } = vi.hoisted(() => ({
+const { route, push, toast, wallet, profileApi, orders } = vi.hoisted(() => ({
+  orders: { getTechnicianJobs: vi.fn(), getTechnicianJobsPage: vi.fn() },
   route: { meta: {} as Record<string, unknown> },
   push: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
@@ -26,7 +27,7 @@ vi.mock('../src/stores/chat.store', () => ({
   useChatStore: () => ({ initSocket: vi.fn(), totalUnreadCount: 0 }),
 }));
 vi.mock('../src/stores/call.store', () => ({ useCallStore: () => ({ initCallSignalling: vi.fn() }) }));
-vi.mock('../src/api/orders.api', () => ({ ordersApi: { getTechnicianJobs: vi.fn().mockResolvedValue([]) } }));
+vi.mock('../src/api/orders.api', () => ({ ordersApi: orders }));
 vi.mock('../src/api/bookings.api', () => ({ bookingsApi: { getMyInvitations: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../src/api/technician-profile.api', () => ({ technicianProfileApi: profileApi }));
 vi.mock('../src/api/technician-onboarding.api', () => ({
@@ -69,6 +70,17 @@ describe('TechnicianLayout menus', () => {
     Object.assign(wallet, { balance: 500000, eligibleForJobs: true });
     profileApi.getMyProfile.mockResolvedValue({ isAvailable: true });
     profileApi.updateMyProfile.mockResolvedValue({});
+    orders.getTechnicianJobsPage.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 1 });
+  });
+
+  it('counts the jobs being worked on with one small request, not the whole job list', async () => {
+    orders.getTechnicianJobsPage.mockResolvedValue({ items: [{ id: 'o-1' }], total: 3, page: 1, pageSize: 1 });
+    const wrapper = await mountLayout();
+    expect(orders.getTechnicianJobsPage).toHaveBeenCalledTimes(1);
+    expect(orders.getTechnicianJobsPage).toHaveBeenCalledWith(1, 1, { statuses: ['accepted', 'en_route', 'under_repair'] });
+    expect(orders.getTechnicianJobs).not.toHaveBeenCalled();
+    expect(wrapper.findAll('a[href="/tech/jobs"]').some((a) => a.text().includes('3'))).toBe(true);
+    wrapper.unmount();
   });
 
   it('will not switch jobs on below the deposit floor and points to the wallet', async () => {
