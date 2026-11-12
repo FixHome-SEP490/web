@@ -66,6 +66,22 @@ afterEach(() => stopLive());
 const calls = () => Object.fromEntries(Object.entries(api).map(([name, fn]) => [name, fn.mock.calls.length]));
 
 describe('CustomerOrderDetailPage live', () => {
+  it('asks for every part of the page together once the order is known, without waiting for each in turn', async () => {
+    // The invoice answers only at the end: the booking, photos and costs must already have been asked for (12/11/2026).
+    let answer: (value: unknown) => void = () => undefined;
+    api.getInvoice.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const w = mount(CustomerOrderDetailPage, { global: { stubs } });
+    await flushPromises();
+    expect(api.getInvoice).toHaveBeenCalledTimes(1);
+    expect(api.getBooking).toHaveBeenCalledTimes(1);
+    expect(api.getEvidence).toHaveBeenCalledTimes(1);
+    expect(api.getAdditionalCosts).toHaveBeenCalledTimes(1);
+    expect(api.getCashSettlement).toHaveBeenCalledTimes(1);
+    answer({ id: 'inv-1', grandTotal: 400000 });
+    await flushPromises();
+    w.unmount();
+  });
+
   it('reads only the photos (and the order) when the technician adds one, everything on a status change', async () => {
     const w = mount(CustomerOrderDetailPage, { global: { stubs } });
     await flushPromises();

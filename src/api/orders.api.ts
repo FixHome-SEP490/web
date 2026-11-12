@@ -444,6 +444,50 @@ function normalizeAdditionalCost(rec: AdditionalCostRecord): AdditionalCostRecor
   };
 }
 
+/** One completed order with its coverages and claims, as the warranties page shows it; null when it has no coverage. */
+function warrantyGroup(order: ServiceOrderItem, coverages: WarrantyCoverageRecord[], claims: WarrantyClaimView[]): OrderWarrantyGroup | null {
+  if (coverages.length === 0) return null;
+  const now = new Date();
+  const hasActive = coverages.some(
+    (c) => new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE'
+  );
+
+  let maxExpires = coverages[0].expiresAt;
+  let minStarts = coverages[0].startsAt;
+  coverages.forEach((c) => {
+    if (new Date(c.expiresAt).getTime() > new Date(maxExpires).getTime()) {
+      maxExpires = c.expiresAt;
+    }
+    if (new Date(c.startsAt).getTime() < new Date(minStarts).getTime()) {
+      minStarts = c.startsAt;
+    }
+  });
+
+  return {
+    orderId: order.id,
+    orderCode: order.code,
+    serviceName: order.serviceName,
+    technicianName: order.technician?.fullName || 'Kỹ thuật viên FixHome',
+    technicianPhone: order.technician?.phoneNumber,
+    completedAt: order.completedAt ?? undefined,
+    coverages: coverages.map((c) => ({
+      id: c.id,
+      invoiceItemId: c.invoiceItemId,
+      warrantyDaysSnapshot: c.warrantyDaysSnapshot || 0,
+      ...describeCoverage(c),
+      startsAt: c.startsAt,
+      expiresAt: c.expiresAt,
+      voided: c.status?.toUpperCase() === 'VOIDED',
+      status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
+    })),
+    minStartsAt: minStarts,
+    maxExpiresAt: maxExpires,
+    hasActiveCoverage: hasActive,
+    status: hasActive ? 'ACTIVE' : 'EXPIRED',
+    claims,
+  };
+}
+
 export const ordersApi = {
   // ── Queries ──
 
@@ -812,66 +856,41 @@ export const ordersApi = {
    */
   async getOrderWarrantiesPage(page: number, pageSize: number): Promise<PageResult<OrderWarrantyGroup>> {
     const orders = await this.getMyOrdersPage(page, pageSize, { status: 'completed' });
-    const groups = await Promise.all(
-      orders.items.map(async (order): Promise<OrderWarrantyGroup | null> => {
-        try {
-          const res = await apiClient.get<{ data: WarrantyCoverageRecord[] }>(`/service-orders/${order.id}/warranties`);
-
-          const coverages = res.data?.data || [];
-          if (coverages.length === 0) return null;
-
-          const now = new Date();
-          const hasActive = coverages.some(
-            (c) => new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE'
-          );
-
-          let maxExpires = coverages[0].expiresAt;
-          let minStarts = coverages[0].startsAt;
-          coverages.forEach((c) => {
-            if (new Date(c.expiresAt).getTime() > new Date(maxExpires).getTime()) {
-              maxExpires = c.expiresAt;
-            }
-            if (new Date(c.startsAt).getTime() < new Date(minStarts).getTime()) {
-              minStarts = c.startsAt;
-            }
-          });
-
-          let claims: WarrantyClaimView[] = [];
+    if (!orders.items.length) return { ...orders, items: [] };
+    let groups: (OrderWarrantyGroup | null)[];
+    try {
+      // One read for the whole page (it used to be two per order, 12/11/2026).
+      const res = await apiClient.get<{ data: { orderId: string; coverages: WarrantyCoverageRecord[]; claims: WarrantyClaimView[] }[] }>(
+        '/warranties/mine',
+        { params: { orderIds: orders.items.map((order) => order.id).join(',') } },
+      );
+      const byOrder = new Map((res.data?.data || []).map((row) => [row.orderId.toLowerCase(), row]));
+      groups = orders.items.map((order) => {
+        const row = byOrder.get(String(order.id).toLowerCase());
+        return row ? warrantyGroup(order, row.coverages || [], row.claims || []) : null;
+      });
+    } catch {
+      // A server without the page read, or a page it refuses: read order by order as before.
+      groups = await Promise.all(
+        orders.items.map(async (order): Promise<OrderWarrantyGroup | null> => {
           try {
-            claims = await this.getOrderWarrantyClaims(order.id);
+            const res = await apiClient.get<{ data: WarrantyCoverageRecord[] }>(`/service-orders/${order.id}/warranties`);
+            const coverages = res.data?.data || [];
+            if (coverages.length === 0) return null;
+            let claims: WarrantyClaimView[] = [];
+            try {
+              claims = await this.getOrderWarrantyClaims(order.id);
+            } catch {
+              // a claims fetch error must not hide the warranty itself
+            }
+            return warrantyGroup(order, coverages, claims);
           } catch {
-            // a claims fetch error must not hide the warranty itself
+            // one order that cannot be read does not hide the others
+            return null;
           }
-
-          return {
-            orderId: order.id,
-            orderCode: order.code,
-            serviceName: order.serviceName,
-            technicianName: order.technician?.fullName || 'Kỹ thuật viên FixHome',
-            technicianPhone: order.technician?.phoneNumber,
-            completedAt: order.completedAt ?? undefined,
-            coverages: coverages.map((c) => ({
-              id: c.id,
-              invoiceItemId: c.invoiceItemId,
-              warrantyDaysSnapshot: c.warrantyDaysSnapshot || 0,
-              ...describeCoverage(c),
-              startsAt: c.startsAt,
-              expiresAt: c.expiresAt,
-              voided: c.status?.toUpperCase() === 'VOIDED',
-              status: (new Date(c.expiresAt).getTime() > now.getTime() && c.status?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
-            })),
-            minStartsAt: minStarts,
-            maxExpiresAt: maxExpires,
-            hasActiveCoverage: hasActive,
-            status: hasActive ? 'ACTIVE' : 'EXPIRED',
-            claims,
-          };
-        } catch {
-          // one order that cannot be read does not hide the others
-          return null;
-        }
-      })
-    );
+        })
+      );
+    }
 
     return { ...orders, items: groups.filter((group): group is OrderWarrantyGroup => group !== null) };
   },
