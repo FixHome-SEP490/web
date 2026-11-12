@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
+import TechnicianPrivateNote from '../../components/technician/TechnicianPrivateNote.vue';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
@@ -2954,6 +2955,7 @@ const toggleMore = async () => {
         </div>
         </details>
       </section>
+      <div class="order-3 min-w-0 lg:col-start-2"><TechnicianPrivateNote :order-id="jobIdRef" /></div>
 
       <!-- Result of the last action -->
       <div

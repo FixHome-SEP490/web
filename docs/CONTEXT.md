@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 23:54 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-console-followup-1211
+> Cập nhật lần cuối: 2026-11-13 00:37 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: feat/price-variants-tech-note-1211
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-13 00:37 (UTC+7) | ToanAltF4 | feat/price-variants-tech-note-1211 | ADMIN 47 sửa mức giá theo thiết bị trong hộp Sửa dịch vụ; TECH 42 ghi chú riêng của thợ trên trang việc (lưu server)
 - 2026-11-12 23:54 (UTC+7) | ToanAltF4 | fix/web-console-followup-1211 | Sửa dịch vụ: bỏ giá rỗng (fixedPrice null) khỏi payload, API từ chối null (W-7 lần 2)
 - 2026-11-12 23:13 (UTC+7) | ToanAltF4 | fix/web-console-bugs-1211 | Sửa lỗi console 12/11: Người dùng (lọc vai trò, Đã khoá, xem chi tiết, SĐT thợ), sửa dịch vụ gửi giá dạng số, lọc xác minh/ví, điều chỉnh tồn (lỗi 4xx mở lại form, tồn SKU ở trang khác), khối W3 theo userRole, tiến trình W3 có phí, dòng phí giao trên hoá đơn thợ, chữ trang chính sách W3, SM huỷ đơn, gỡ trang Gán thợ và Đổi thợ trực tiếp (PO: nền tảng không gán thợ), trang Cấu hình chỉ hiện tham số đang áp dụng
 - 2026-11-12 18:58 (UTC+7) | ToanAltF4 | fix/sheet-trace-1211 | SM 46 mã kho: lỗi vẽ QR không thành báo lỗi, mất phản hồi thì đọc lại trạng thái, có nút sao chép mã; hàng đợi hoàn trả đọc warehouseAllocated từ server, bỏ N+1 warehouse-allocation
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-05 19:51 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Admin W3 DRAFT/preview fail-closed, source review và mock QA 360/768/1440; rút nhãn menu theo design system không nới test, full Web 2446/2446 PASS, focused 65/65 và lint/typecheck/build PASS; không kích hoạt tài chính.
 - 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
 - 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
-- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.

@@ -203,3 +203,30 @@ export const catalogApi = {
     return unwrapService(res.data, 'Backend returned an invalid service response.');
   },
 };
+
+/** ADMIN 47: a Catalog V3 price tier of a service. The code is fixed; price, scope and availability are edited. */
+export interface ServicePriceVariant {
+  id: string;
+  serviceId: string;
+  variantCode: string;
+  deviceAttributes: Record<string, unknown>;
+  fixedLaborPriceVnd: number;
+  includedScope: string;
+  excludedScope: string | null;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export const priceVariantsApi = {
+  async list(serviceId: string): Promise<ServicePriceVariant[]> {
+    const res = await apiClient.get<{ data?: ServicePriceVariant[] } | ServicePriceVariant[]>(`/admin/services/${serviceId}/price-variants`);
+    const body = res.data as { data?: ServicePriceVariant[] } | ServicePriceVariant[];
+    return Array.isArray(body) ? body : body.data ?? [];
+  },
+  async update(serviceId: string, variantId: string,
+    patch: Partial<Pick<ServicePriceVariant, 'fixedLaborPriceVnd' | 'includedScope' | 'excludedScope' | 'isActive'>>): Promise<ServicePriceVariant> {
+    const res = await apiClient.patch<{ data?: ServicePriceVariant } | ServicePriceVariant>(`/admin/services/${serviceId}/price-variants/${variantId}`, patch);
+    const body = res.data as { data?: ServicePriceVariant } | ServicePriceVariant;
+    return 'data' in body && body.data ? body.data : body as ServicePriceVariant;
+  },
+};
