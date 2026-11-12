@@ -171,8 +171,10 @@ const loadReturns = async () => {
   try {
     const rows = await partRequestsApi.getPendingReturns();
     if (version !== returnsLoadVersion) return;
-    const requestIds = [...new Set(rows.map((row) => row.partRequestId))];
     warehouseAcceptedRequests.value = {};
+    // The queue marks W2 returns itself; only rows from a server without that mark are read one by one.
+    for (const row of rows) if (row.warehouseAllocated === true) warehouseAcceptedRequests.value[row.partRequestId] = true;
+    const requestIds = [...new Set(rows.filter((row) => row.warehouseAllocated === undefined).map((row) => row.partRequestId))];
     await Promise.all(requestIds.map(async (requestId) => {
       try {
         const allocation = await partRequestsApi.getWarehouseAllocation(requestId);
