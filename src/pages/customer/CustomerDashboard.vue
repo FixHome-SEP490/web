@@ -269,7 +269,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                 v-if="chip.image"
                 :src="chip.image"
                 alt=""
-                class="w-4 h-4 object-contain brightness-110"
+                class="w-5 h-5 object-contain brightness-110 select-none pointer-events-none"
                 aria-hidden="true"
               />
               <component v-else :is="chip.icon" :size="15" :stroke-width="1.75" />
@@ -405,15 +405,15 @@ async function handleChatForOrder(order: ServiceOrderItem) {
         <li v-for="srv in popularServices" :key="srv.id" class="border-b border-ink-100 sm:odd:border-r">
           <button
             type="button"
-            class="w-full px-5 py-3.5 hover:bg-ink-50 active:bg-ink-100/80 transition-all duration-150 flex items-center justify-between gap-3.5 text-left cursor-pointer group"
+            class="w-full px-5 py-3.5 hover:bg-ink-50 active:bg-ink-100/80 transition-colors duration-150 flex items-center justify-between gap-3.5 text-left cursor-pointer group"
             @click="handleServiceClick(srv)"
           >
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 p-1.5 group-hover:border-brand-200 group-hover:bg-brand-50/60 group-hover:scale-105 transition-all duration-150">
+            <span class="flex h-14 w-14 shrink-0 items-center justify-center transition-transform duration-200 group-hover:scale-105">
               <img
                 :src="getServiceArtworkUrl(srv)"
                 alt=""
                 loading="lazy"
-                class="h-full w-full object-contain"
+                class="h-full w-full object-contain drop-shadow-2xs select-none pointer-events-none"
                 aria-hidden="true"
               />
             </span>
@@ -428,7 +428,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                 Báo giá sau khi kiểm tra
               </span>
             </div>
-            <ChevronRight :size="16" class="text-ink-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+            <ChevronRight :size="16" class="text-ink-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
           </button>
         </li>
       </ul>

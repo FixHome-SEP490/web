@@ -623,7 +623,7 @@ async function confirmCancel() {
     >
       <!-- Sliding active background pill -->
       <div
-        class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-[transform,width,height,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
         :style="indicatorStyle"
         aria-hidden="true"
       />
@@ -737,15 +737,15 @@ async function confirmCancel() {
       </div>
     </div>
 
-    <div v-else class="space-y-3 animate-slide-up-delay-2">
-      <!-- Repair orders or booking requests: one list at a time -->
-      <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn danh sách">
+    <div v-else class="space-y-4 animate-slide-up-delay-2">
+      <!-- Repair orders or booking requests: segmented pill switcher -->
+      <div class="inline-flex w-full sm:w-auto max-w-full gap-1 overflow-x-auto scrollbar-none rounded-xl bg-ink-100/85 p-1" role="group" aria-label="Chọn danh sách">
         <button
           v-for="choice in listChoices"
           :key="choice.key"
           type="button"
-          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-[colors,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
-          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200/80 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
+          class="flex h-9 min-w-[5.5rem] flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-3.5 sm:text-sm cursor-pointer"
+          :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
           :aria-pressed="listView === choice.key"
           :aria-label="choice.label"
           :data-testid="`list-switch-${choice.key}`"
@@ -755,8 +755,8 @@ async function confirmCancel() {
           <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
           <span
             v-if="!choice.loading"
-            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs transition-colors"
-            :class="listView === choice.key ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'"
+            class="shrink-0 rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none transition-colors"
+            :class="listView === choice.key ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
           >{{ choice.count }}</span>
         </button>
       </div>
@@ -781,23 +781,34 @@ async function confirmCancel() {
           Chưa có lượt sửa nhiều thiết bị.
         </p>
         <ul v-else-if="visitGroups.length" class="space-y-3 transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
-          <li v-for="group in visitGroups" :key="group.id" :data-testid="`visit-group-card-${group.id}`" class="rounded-2xl border border-ink-200/80 bg-white p-4 sm:p-5 space-y-3 transition-[border-color] hover:border-ink-300">
+          <li
+            v-for="(group, idx) in visitGroups"
+            :key="group.id"
+            :data-testid="`visit-group-card-${group.id}`"
+            class="animate-slide-up rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 space-y-3.5 shadow-2xs transition-[border-color,box-shadow] duration-200 hover:border-brand-300/80 hover:shadow-sm"
+            :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
+          >
             <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="min-w-0">
-                <h2 class="font-bold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
-                <p :data-testid="`visit-group-time-${group.id}`" class="mt-1 text-xs text-ink-500 font-num">
-                  Tạo {{ vnDateString(group.createdAt) }}
-                  <span aria-hidden="true" class="mx-1.5">·</span>
-                  Lịch hẹn: <span class="font-medium text-ink-700">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span>
-                </p>
+              <div class="min-w-0 space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span :class="`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
+                    {{ visitGroupStatus(group).label }}
+                  </span>
+                  <span :data-testid="`visit-group-time-${group.id}`" class="text-xs text-ink-500 font-num">
+                    Tạo {{ vnDateString(group.createdAt) }} · Hẹn <span class="font-medium text-ink-700">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span>
+                  </span>
+                </div>
+                <h2 class="text-base font-bold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
               </div>
-              <span :class="`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
-                {{ visitGroupStatus(group).label }}
-              </span>
             </div>
-            <ul class="divide-y divide-ink-100 border-t border-b border-ink-100" aria-label="Thiết bị trong lượt sửa">
-              <li v-for="item in group.items" :key="item.itemId" :data-testid="`visit-group-device-${group.id}-${item.sequence}`" class="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5 text-sm">
-                <span class="min-w-0 flex-1 text-ink-800">
+            <ul class="grid gap-2 sm:grid-cols-2" aria-label="Thiết bị trong lượt sửa">
+              <li
+                v-for="item in group.items"
+                :key="item.itemId"
+                :data-testid="`visit-group-device-${group.id}-${item.sequence}`"
+                class="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-ink-50/80 px-3 py-2 text-sm"
+              >
+                <span class="min-w-0 flex-1 truncate text-ink-800">
                   <span class="font-medium">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
                   <span v-if="item.serviceName" class="text-ink-500"> · {{ item.serviceName }}</span>
                 </span>
@@ -806,8 +817,8 @@ async function confirmCancel() {
                 </span>
               </li>
             </ul>
-            <div class="flex justify-end pt-1">
-              <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs sm:text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <div class="flex justify-end border-t border-ink-100 pt-2.5">
+              <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-9 items-center gap-1 rounded-xl px-3 text-xs sm:text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 Xem lượt sửa <ChevronRight :size="15" aria-hidden="true" />
               </router-link>
             </div>
@@ -891,15 +902,16 @@ async function confirmCancel() {
               :aria-busy="changingBookingsPage"
             >
               <li
-                v-for="booking in bookings"
+                v-for="(booking, idx) in bookings"
                 :key="booking.id"
                 :data-testid="`booking-card-${booking.id}`"
                 role="link"
                 tabindex="0"
-                class="group rounded-2xl border bg-white p-4 sm:p-5 transition-[border-color,background-color] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                class="animate-slide-up group rounded-2xl border bg-white p-4 sm:p-5 shadow-2xs transition-[border-color,box-shadow,background-color] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
                 :class="selectedBookingIds.includes(booking.id)
-                  ? 'border-brand-500/60 bg-brand-50/20'
-                  : 'border-ink-200/80 hover:border-ink-300'"
+                  ? 'border-brand-500/70 bg-brand-50/20'
+                  : 'border-ink-200/85 hover:border-brand-300/80 hover:shadow-sm'"
                 @click="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.enter="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.space.prevent="router.push(`/app/bookings/${booking.id}`)"
@@ -921,42 +933,42 @@ async function confirmCancel() {
                     />
                   </div>
 
-                  <div class="min-w-0 flex-1 space-y-1.5">
-                    <div class="flex flex-wrap items-start justify-between gap-2.5">
-                      <div class="flex items-center gap-2 min-w-0">
-                        <h3 class="text-[15px] sm:text-base font-bold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
-                          {{ booking.serviceName }}
-                        </h3>
-                        <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-1.5 py-0.5 text-xs text-ink-700 font-num font-medium">
-                          ×{{ booking.quantity }}
-                        </span>
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <FhStatusPill
+                          :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
+                          :label="pendingLabel(booking)"
+                        />
+                        <span class="font-num text-xs text-ink-500 shrink-0">Đặt {{ vnDateString(booking.createdAt) }}</span>
                       </div>
-                      <FhStatusPill
-                        :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
-                        :label="pendingLabel(booking)"
-                      />
+                      <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
+                        ×{{ booking.quantity }}
+                      </span>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500">
-                      <span class="font-num shrink-0">Đặt {{ vnDateString(booking.createdAt) }}</span>
-                      <template v-if="booking.preferredAt">
-                        <span aria-hidden="true">·</span>
-                        <span class="font-num font-medium text-ink-700">Hẹn {{ vnDateTimeString(booking.preferredAt) }}</span>
-                      </template>
-                      <template v-if="booking.addressSummary">
-                        <span aria-hidden="true">·</span>
-                        <span class="truncate max-w-full sm:max-w-md" :title="booking.addressSummary">{{ booking.addressSummary }}</span>
-                      </template>
+                    <div class="flex items-center justify-between gap-2">
+                      <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
+                        {{ booking.serviceName }}
+                      </h3>
+                      <ChevronRight :size="17" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] shrink-0 hidden sm:block" />
+                    </div>
+
+                    <div v-if="booking.preferredAt || booking.addressSummary" class="rounded-xl bg-ink-50/75 px-3 py-2 space-y-0.5 text-xs sm:text-sm">
+                      <p v-if="booking.preferredAt" class="font-num font-medium text-ink-800">
+                        <span class="text-ink-400 font-normal">Lịch hẹn:</span> {{ vnDateTimeString(booking.preferredAt) }}
+                      </p>
+                      <p v-if="booking.addressSummary" class="text-ink-600 truncate" :title="booking.addressSummary">
+                        <span class="text-ink-400">Địa chỉ:</span> {{ booking.addressSummary }}
+                      </p>
                     </div>
                   </div>
-
-                  <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] shrink-0 mt-0.5 hidden sm:block" />
                 </div>
 
                 <!-- Quiet bottom actions row -->
                 <div
                   v-if="canCancel(booking) || booking.status === 'CANCELLED'"
-                  class="mt-3 pt-3 border-t border-ink-100 flex items-center justify-end gap-2.5"
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-end gap-2.5"
                 >
                   <button
                     v-if="canCancel(booking)"
@@ -1052,77 +1064,84 @@ async function confirmCancel() {
               :aria-busy="changingOrdersPage"
             >
               <li
-                v-for="order in orders"
+                v-for="(order, idx) in orders"
                 :key="order.id"
                 :data-testid="`order-card-${order.id}`"
                 role="link"
                 tabindex="0"
-                class="group rounded-2xl border border-ink-200/80 bg-white p-4 sm:p-5 transition-[border-color] cursor-pointer hover:border-ink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                class="animate-slide-up group rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs transition-[border-color,box-shadow] duration-200 cursor-pointer hover:border-brand-300/80 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
                 @click="router.push(`/app/orders/${order.id}`)"
                 @keydown.enter="router.push(`/app/orders/${order.id}`)"
                 @keydown.space.prevent="router.push(`/app/orders/${order.id}`)"
               >
                 <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 flex-1 space-y-1.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <h3 class="text-[15px] sm:text-base font-bold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty">
-                        {{ order.serviceName }}
-                      </h3>
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <FhStatusPill
                         :status="orderPill(order).status"
                         :label="orderPill(order).label"
                       />
+                      <span class="font-num text-xs font-medium text-ink-500 whitespace-nowrap">#{{ order.code || order.id.slice(0, 8) }}</span>
+                      <span class="text-ink-300" aria-hidden="true">·</span>
+                      <span class="font-num text-xs text-ink-500 whitespace-nowrap">{{ vnDateString(order.createdAt) }}</span>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500">
-                      <span class="font-num font-medium text-ink-600">#{{ order.code || order.id.slice(0, 8) }}</span>
-                      <span aria-hidden="true">·</span>
-                      <span class="font-num">{{ vnDateString(order.createdAt) }}</span>
-                      <span aria-hidden="true">·</span>
-                      <span class="text-ink-700">
-                        <template v-if="order.technician">
-                          <span class="font-medium">{{ order.technician.fullName }}</span>
-                          <span v-if="formatRating(order.technician.averageRating)" class="text-ink-500 whitespace-nowrap font-num"> · ★ {{ formatRating(order.technician.averageRating) }}</span>
-                        </template>
-                        <span v-else-if="awaitingReplacement(order)" class="text-ink-500">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
-                        <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
-                      </span>
+                    <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty leading-snug">
+                      {{ order.serviceName }}
+                    </h3>
+
+                    <div class="flex items-center gap-2.5 rounded-xl bg-ink-50/75 px-3 py-2 text-xs sm:text-sm">
+                      <template v-if="order.technician">
+                        <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white">
+                          {{ order.technician.fullName.charAt(0) }}
+                        </span>
+                        <span class="min-w-0 truncate font-medium text-ink-800">{{ order.technician.fullName }}</span>
+                        <span v-if="formatRating(order.technician.averageRating)" class="text-ink-500 whitespace-nowrap font-num">★ {{ formatRating(order.technician.averageRating) }}</span>
+                      </template>
+                      <span v-else-if="awaitingReplacement(order)" class="text-ink-600">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
+                      <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
                     </div>
                   </div>
 
-                  <div class="flex items-center gap-2.5 shrink-0 pt-0.5">
-                    <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-sm sm:text-base font-bold text-ink-900">
+                  <div class="flex flex-col items-end gap-1 shrink-0 pt-0.5">
+                    <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-base sm:text-[17px] font-bold text-ink-900">
                       <FhMoney :amount="order.grandTotal" />
                     </span>
-                    <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] hidden sm:block" />
+                    <span v-else class="text-xs font-medium text-ink-400 whitespace-nowrap">Chờ báo giá</span>
                   </div>
                 </div>
 
                 <!-- Actions bar -->
                 <div
-                  v-if="order.technician || canRebookOrder(order)"
-                  class="mt-3.5 pt-3 border-t border-ink-100 flex items-center justify-end gap-2.5"
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-between gap-2.5"
                 >
-                  <button
-                    v-if="order.technician"
-                    type="button"
-                    class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-600 cursor-pointer"
-                    aria-label="Nhắn tin với kỹ thuật viên"
-                    title="Nhắn tin với kỹ thuật viên"
-                    @click="(e) => handleChat(order, e)"
-                  >
-                    <MessageSquare :size="14" />
-                    <span>Nhắn tin</span>
-                  </button>
-                  <FhButton
-                    v-if="canRebookOrder(order)"
-                    variant="secondary"
-                    size="sm"
-                    :data-testid="`rebook-order-${order.id}`"
-                    @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
-                  >
-                    Đặt lại thợ
-                  </FhButton>
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="order.technician"
+                      type="button"
+                      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-600 cursor-pointer"
+                      aria-label="Nhắn tin với kỹ thuật viên"
+                      title="Nhắn tin với kỹ thuật viên"
+                      @click="(e) => handleChat(order, e)"
+                    >
+                      <MessageSquare :size="14" />
+                      <span>Nhắn tin</span>
+                    </button>
+                    <FhButton
+                      v-if="canRebookOrder(order)"
+                      variant="secondary"
+                      size="sm"
+                      :data-testid="`rebook-order-${order.id}`"
+                      @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
+                    >
+                      Đặt lại thợ
+                    </FhButton>
+                  </div>
+                  <span class="ml-auto inline-flex items-center gap-0.5 text-xs font-semibold text-ink-400 group-hover:text-brand-600 transition-colors">
+                    <span>Chi tiết</span>
+                    <ChevronRight :size="15" />
+                  </span>
                 </div>
               </li>
             </ul>

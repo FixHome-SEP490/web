@@ -141,51 +141,50 @@ const isActive = (item: NavItem) => {
 
 <template>
   <aside
-    class="sidebar-root h-screen sticky top-0 flex flex-col justify-between overflow-x-hidden select-none z-30 transition-[width] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none will-change-[width]"
+    class="sidebar-root h-screen sticky top-0 flex flex-col justify-between overflow-x-hidden transition-[width] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none will-change-[width] select-none z-30"
     :class="[
       isCollapsed ? 'sidebar-collapsed w-20' : 'sidebar-expanded w-64',
     ]"
   >
-    <div class="flex-1 min-h-0 flex flex-col pt-5">
-      <!-- Header Area (Logo & Trigger): constant geometry so logo never jumps -->
-      <div class="relative mb-5 px-4 flex items-center h-12 shrink-0">
-        <!-- Expanded Mode: Logo & Brand on left + Collapse button on right -->
+    <div class="flex-1 min-h-0 flex flex-col pt-6">
+      <!-- Header Area (Logo & Trigger): fixed left anchor prevents logo jump -->
+      <div class="relative mb-6 flex items-center h-12 px-[18px] shrink-0">
+        <!-- Expanded Mode: Logo & Brand on left -->
         <template v-if="!isCollapsed">
-          <router-link :to="homePath" class="flex items-center min-w-0 flex-1 pr-9 group/brand focus-visible:outline-none" aria-label="FixHome">
-            <div class="w-12 h-11 shrink-0 flex items-center justify-center">
-              <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs border border-ink-200/60 transition-transform duration-150 group-hover/brand:scale-105" />
-            </div>
-            <div class="flex flex-col leading-tight min-w-0 pl-0.5">
+          <router-link :to="homePath" class="flex items-center gap-2.5 pr-10 min-w-0" aria-label="FixHome">
+            <img :src="'/logo.png'" alt="FixHome" class="w-9 h-9 object-contain rounded-xl shrink-0 bg-white p-0.5 shadow-xs" />
+            <div class="flex flex-col leading-tight min-w-0">
               <span class="text-lg font-bold tracking-tight whitespace-nowrap truncate">
                 <template v-if="title === 'FixHome'">
                   <span class="text-brand-600">Fix</span><span class="text-success-600">Home</span>
                 </template>
                 <template v-else>
-                  <span class="text-ink-900">{{ title }}</span>
+                  <span class="text-slate-900">{{ title }}</span>
                 </template>
               </span>
-              <span v-if="subtitle" class="text-xs text-ink-500 font-medium whitespace-nowrap truncate">
+              <span v-if="subtitle" class="text-xs text-slate-500 font-medium whitespace-nowrap truncate">
                 {{ subtitle }}
               </span>
             </div>
           </router-link>
 
+          <!-- Collapse Trigger: Separate in Top-Right Corner -->
           <button
             type="button"
-            class="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 text-ink-400 hover:text-brand-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 flex items-center justify-center rounded-lg hover:bg-brand-50 active:scale-95 cursor-pointer"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600 transition-colors duration-150 focus:outline-none flex items-center justify-center p-2 rounded-lg hover:bg-brand-50 cursor-pointer"
             title="Thu gọn menu"
             aria-label="Thu gọn menu"
             @click="isCollapsed = true"
           >
-            <PanelLeftClose :size="18" />
+            <PanelLeftClose :size="20" />
           </button>
         </template>
 
-        <!-- Collapsed Mode: Top Logo Button aligned on exact same 48px left axis -->
+        <!-- Collapsed Mode: Top Logo Button with Hover-to-Open -->
         <button
           v-else
           type="button"
-          class="group/logo relative w-12 h-11 rounded-xl flex items-center justify-center transition-colors duration-150 hover:bg-brand-50 active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          class="group/logo relative w-11 h-11 rounded-xl flex items-center justify-center transition-colors duration-150 hover:bg-brand-50 cursor-pointer focus:outline-none"
           title="Mở rộng menu"
           aria-label="Mở rộng menu"
           @click="isCollapsed = false"
@@ -195,33 +194,28 @@ const isActive = (item: NavItem) => {
           <img
             :src="'/logo.png'"
             alt="FixHome"
-            class="w-9 h-9 object-contain rounded-xl bg-white p-0.5 shadow-xs border border-ink-200/60 transition-opacity duration-150 group-hover/logo:opacity-0"
+            class="w-9 h-9 object-contain rounded-xl bg-white p-0.5 shadow-xs transition-opacity duration-150 group-hover/logo:opacity-0"
           />
           <PanelLeftOpen
-            :size="19"
-            class="absolute text-ink-500 group-hover/logo:text-brand-600 opacity-0 group-hover/logo:opacity-100 transition-opacity duration-150"
+            :size="20"
+            class="absolute text-slate-400 group-hover/logo:text-brand-600 opacity-0 group-hover/logo:opacity-100 transition-opacity duration-150"
           />
         </button>
       </div>
 
-      <!-- Navigation: fixed icon column (w-12) and constant group header height (h-6) prevent vertical & horizontal jitter -->
-      <div class="nav-container flex-1 overflow-y-auto overflow-x-hidden px-4">
+      <!-- Navigation: fixed Y height per group/item eliminates vertical jumping while preserving the curved active tab -->
+      <div class="nav-container flex-1 overflow-y-auto overflow-x-hidden">
         <div v-for="(group, idx) in navigation" :key="idx" class="mb-4 last:mb-2">
           <div
             v-if="getGroupTitle(group)"
-            class="relative h-6 mb-1 flex items-center px-3 overflow-hidden"
+            class="relative h-5 mb-1.5 px-6 flex items-center overflow-hidden"
           >
             <span
-              class="text-[11px] font-semibold tracking-wider uppercase text-ink-400 whitespace-nowrap truncate transition-opacity duration-150"
+              class="text-xs font-semibold text-slate-400 whitespace-nowrap transition-opacity duration-150"
               :class="isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'"
             >
               {{ getGroupTitle(group) }}
             </span>
-            <span
-              aria-hidden="true"
-              class="absolute left-1/2 -translate-x-1/2 w-5 h-px rounded-full bg-ink-200 transition-opacity duration-150"
-              :class="isCollapsed ? 'opacity-100' : 'opacity-0'"
-            />
           </div>
 
           <div class="flex flex-col gap-1">
@@ -229,43 +223,30 @@ const isActive = (item: NavItem) => {
               v-for="item in group.items"
               :key="getItemPath(item)"
               :to="getItemPath(item)"
-              class="nav-item group flex h-11 w-full items-center rounded-xl overflow-hidden transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-              :class="
-                isActive(item)
-                  ? 'active bg-brand-50 text-brand-700 font-semibold shadow-2xs ring-1 ring-brand-500/15'
-                  : 'text-ink-600 font-medium hover:bg-ink-100/70 hover:text-ink-900'
-              "
+              class="nav-item group"
+              :class="{ 'active': isActive(item) }"
               @mouseenter="(e) => { showTooltip(e, item.label, getBadge(item)); prefetchRoute(getItemPath(item)); }"
               @focus="prefetchRoute(getItemPath(item))"
               @mouseleave="hideTooltip"
             >
-              <div class="icon-wrapper w-12 h-11 shrink-0 relative flex items-center justify-center">
-                <component
-                  :is="item.icon"
-                  :size="20"
-                  :stroke-width="isActive(item) ? 2.25 : 2"
-                  class="transition-transform duration-150 group-hover:scale-105"
-                />
+              <div class="icon-wrapper shrink-0 relative flex items-center justify-center">
+                <component :is="item.icon" :size="20" stroke-width="2.25" />
                 <span
-                  v-if="getBadge(item)"
-                  class="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center ring-2 ring-white transition-opacity duration-150"
-                  :class="isCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+                  v-if="isCollapsed && getBadge(item)"
+                  class="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold inline-flex items-center justify-center ring-2 ring-white"
                 >
                   {{ getBadge(item) }}
                 </span>
               </div>
-
               <span
-                class="flex-1 min-w-0 pr-2 text-sm whitespace-nowrap overflow-hidden truncate transition-[opacity,transform] duration-150"
-                :class="isCollapsed ? 'opacity-0 -translate-x-1 pointer-events-none' : 'opacity-100 translate-x-0'"
+                class="flex-1 whitespace-nowrap overflow-hidden truncate transition-opacity duration-150"
+                :class="isCollapsed ? 'hidden' : 'opacity-100'"
               >
                 {{ item.label }}
               </span>
-
               <span
-                v-if="getBadge(item)"
-                class="mr-3 min-w-5 h-5 px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold font-num inline-flex items-center justify-center shrink-0 transition-opacity duration-150"
-                :class="isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'"
+                v-if="!isCollapsed && getBadge(item)"
+                class="min-w-5 h-5 px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold font-num inline-flex items-center justify-center shrink-0 ml-auto"
               >
                 {{ getBadge(item) }}
               </span>
@@ -276,7 +257,7 @@ const isActive = (item: NavItem) => {
     </div>
 
     <!-- User profile -->
-    <div v-if="showProfile" class="shrink-0 px-4 pb-3 pt-2 border-t border-ink-100/80">
+    <div v-if="showProfile" class="shrink-0 px-2 pb-2">
       <div
         ref="profileMenu"
         class="relative"
@@ -286,9 +267,10 @@ const isActive = (item: NavItem) => {
         <button
           ref="profileTrigger"
           type="button"
-          class="profile-trigger flex h-11 w-full items-center rounded-xl overflow-hidden text-ink-700 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="profile-trigger flex h-11 w-full items-center gap-3 rounded-xl px-2.5 text-slate-700 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2"
           :class="[
-            showProfileDropdown ? 'bg-ink-100 text-ink-900' : 'bg-transparent hover:bg-ink-100/70'
+            isCollapsed ? 'justify-center px-0' : 'text-left',
+            showProfileDropdown ? 'bg-slate-100 shadow-inner' : 'bg-transparent hover:bg-slate-50'
           ]"
           :aria-label="fullName"
           :aria-expanded="showProfileDropdown"
@@ -296,15 +278,13 @@ const isActive = (item: NavItem) => {
           :title="fullName"
           @click="showProfileDropdown = !showProfileDropdown"
         >
-          <span class="w-12 h-11 shrink-0 flex items-center justify-center">
-            <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full profile-avatar text-sm font-semibold shadow-2xs">
-              <img v-if="userAvatar && !avatarFailed" :src="userAvatar" alt="" class="h-full w-full object-cover" @error="avatarFailed = true" />
-              <span v-else aria-hidden="true">{{ userInitial }}</span>
-            </span>
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full profile-avatar text-sm font-semibold">
+            <img v-if="userAvatar && !avatarFailed" :src="userAvatar" alt="" class="h-full w-full object-cover" @error="avatarFailed = true" />
+            <span v-else aria-hidden="true">{{ userInitial }}</span>
           </span>
           <span
-            class="min-w-0 flex-1 pr-3 text-left truncate text-sm font-semibold transition-[opacity,transform] duration-150"
-            :class="isCollapsed ? 'opacity-0 -translate-x-1 pointer-events-none' : 'opacity-100 translate-x-0'"
+            class="min-w-0 flex-1 truncate text-sm font-semibold transition-opacity duration-150"
+            :class="isCollapsed ? 'hidden' : 'opacity-100'"
           >
             {{ fullName }}
           </span>
@@ -313,24 +293,24 @@ const isActive = (item: NavItem) => {
           <div
             v-if="showProfileDropdown"
             :id="profileMenuId"
-            class="profile-dropdown absolute bottom-full left-0 z-50 mb-2 overflow-hidden rounded-2xl border border-ink-200 bg-white p-1.5 text-sm shadow-xl"
+            class="profile-dropdown absolute bottom-full left-0 z-50 mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"
             :class="isCollapsed ? 'w-48' : 'w-full'"
           >
             <button
               type="button"
-              class="group flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left font-semibold text-ink-700 transition-colors duration-150 hover:bg-ink-50 focus-visible:outline-2"
+              class="group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-2"
               data-testid="change-avatar"
               @click="openAvatarDialog"
             >
-              <Camera :size="18" aria-hidden="true" class="shrink-0 text-ink-500" />
+              <Camera :size="18" aria-hidden="true" class="shrink-0 text-slate-500" />
               <span>Đổi ảnh đại diện</span>
             </button>
             <button
               type="button"
-              class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left font-semibold text-danger-600 transition-colors duration-150 hover:bg-danger-50 hover:text-danger-700 active:bg-danger-100 focus-visible:outline-2"
+              class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-600 transition-colors duration-150 hover:bg-rose-50 hover:text-rose-700 active:bg-rose-100 focus-visible:outline-2"
               @click="handleLogout"
             >
-              <LogOut :size="18" aria-hidden="true" class="shrink-0 text-danger-500 transition-colors group-hover:text-danger-600" />
+              <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-500 transition-colors group-hover:text-rose-600" />
               <span>Đăng xuất</span>
             </button>
           </div>
@@ -346,7 +326,7 @@ const isActive = (item: NavItem) => {
     <Teleport to="body">
       <div
         v-if="hoveredItem && isCollapsed"
-        class="fixed left-22 px-3 py-1.5 bg-ink-900 text-white text-xs font-semibold rounded-lg z-[9999] shadow-lg border border-ink-800 pointer-events-none -translate-y-1/2 whitespace-nowrap"
+        class="fixed left-22 px-3 py-2 bg-slate-800 text-white text-xs font-semibold rounded-lg z-[9999] shadow-xl border border-slate-700 pointer-events-none transform -translate-y-1/2 whitespace-nowrap"
         :style="{ top: hoveredItem.top + 'px' }"
       >
         {{ hoveredItem.label }}
@@ -357,10 +337,10 @@ const isActive = (item: NavItem) => {
 
 <style scoped>
 .sidebar-root {
-  --sidebar-accent: var(--color-brand-600, #2563eb);
+  --sidebar-accent: #3b82f6;
   background-color: #ffffff;
-  color: var(--color-ink-600, #475569);
-  border-right: 1px solid var(--color-ink-200, #e2e8f0);
+  color: #64748b;
+  border-right: 1px solid #e2e8f0;
 }
 
 /* Custom Scrollbar for Nav */
@@ -369,6 +349,106 @@ const isActive = (item: NavItem) => {
 }
 .nav-container::-webkit-scrollbar {
   display: none;
+}
+
+/* Nav Item Base: transition ONLY color/background-color so layout width never wobbles */
+.nav-item {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  gap: 1rem;
+  color: #64748b;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-weight: 600;
+  font-size: 0.9rem;
+  position: relative;
+}
+
+.nav-item:hover:not(.active) {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+/* --- Expanded State: exact curved tab --- */
+.sidebar-expanded .nav-item {
+  padding: 0 1.5rem;
+  border-radius: 24px 0 0 24px;
+  width: calc(100% + 1px);
+}
+
+.sidebar-expanded .nav-item.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border-right: 1px solid #eff6ff;
+}
+
+/* Inverted Border Radius for Expanded Active Item */
+.sidebar-expanded .nav-item::before,
+.sidebar-expanded .nav-item::after {
+  content: '';
+  position: absolute;
+  right: 1px;
+  width: 24px;
+  height: 24px;
+  background-color: transparent;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.sidebar-expanded .nav-item.active::before,
+.sidebar-expanded .nav-item.active::after {
+  opacity: 1;
+}
+
+.sidebar-expanded .nav-item::before {
+  top: -24px;
+  border-bottom-right-radius: 24px;
+  box-shadow: 12px 12px 0 12px #eff6ff;
+}
+
+.sidebar-expanded .nav-item::after {
+  bottom: -24px;
+  border-top-right-radius: 24px;
+  box-shadow: 12px -12px 0 12px #eff6ff;
+}
+
+/* --- Collapsed State --- */
+.sidebar-collapsed .nav-item {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.sidebar-collapsed .nav-item .icon-wrapper {
+  margin: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-collapsed .nav-item.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.sidebar-collapsed .profile-trigger {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
 }
 
 .profile-trigger,
@@ -386,12 +466,12 @@ const isActive = (item: NavItem) => {
 .profile-dropdown-enter-active,
 .profile-dropdown-leave-active {
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: bottom left;
+  transform-origin: bottom center;
 }
 
 .profile-dropdown-enter-from,
 .profile-dropdown-leave-to {
   opacity: 0;
-  transform: translateY(6px) scale(0.96);
+  transform: translateY(10px) scale(0.96);
 }
 </style>

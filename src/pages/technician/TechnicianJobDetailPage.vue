@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
+import TechnicianJobStepper from '../../components/technician/TechnicianJobStepper.vue';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -3009,21 +3010,8 @@ const toggleMore = async () => {
         <button type="button" class="mt-1 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="animate-slide-up order-1 lg:col-start-1">
-        <div v-if="!isCancelled" class="mb-4 space-y-2" aria-hidden="true">
-          <div class="flex items-center justify-between gap-2 text-xs">
-            <span class="font-semibold uppercase tracking-wide text-brand-700">
-              {{ isCompleted ? 'Hoàn thành công việc' : `Tiến độ bước ${currentStepNumber}/5` }}
-            </span>
-            <span class="font-num font-medium text-ink-500">{{ isCompleted ? '5/5' : `${currentStepNumber}/5` }}</span>
-          </div>
-          <div class="grid grid-cols-5 gap-1.5">
-            <span
-              v-for="step in steps"
-              :key="`bar-${step.n}`"
-              class="h-1.5 rounded-full transition-colors duration-300"
-              :class="step.state === 'done' ? 'bg-brand-600' : step.state === 'current' ? 'bg-brand-500 ring-2 ring-brand-100' : 'bg-ink-200'"
-            />
-          </div>
+        <div v-if="!isCancelled" class="mb-4 pb-3.5 border-b border-ink-100">
+          <TechnicianJobStepper :steps="steps" />
         </div>
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
         <p v-if="nowStep.hint" class="mt-1 text-sm text-ink-600 text-pretty">{{ nowStep.hint }}</p>
@@ -3318,30 +3306,36 @@ const toggleMore = async () => {
             </button>
           </div>
           <Transition name="fh-fade-slide">
-            <ol v-if="stepsExpanded" id="job-steps" class="mt-2 space-y-1" data-testid="job-steps">
-              <li v-for="step in steps" :key="step.n" class="text-sm">
+            <ol v-if="stepsExpanded" id="job-steps" class="mt-3 space-y-0.5" data-testid="job-steps">
+              <li v-for="(step, sIdx) in steps" :key="step.n" class="relative text-sm">
+                <span
+                  v-if="sIdx < steps.length - 1"
+                  aria-hidden="true"
+                  class="pointer-events-none absolute left-[18px] top-8 bottom-0 w-px"
+                  :class="step.state === 'done' ? 'bg-brand-200' : 'bg-ink-200/80'"
+                />
                 <button
                   type="button"
-                  class="w-full flex items-center gap-3 py-1.5 text-left rounded-lg disabled:cursor-default"
+                  class="relative z-10 w-full flex items-center gap-3 px-2 py-2 text-left rounded-xl transition-colors hover:bg-ink-50/75 disabled:hover:bg-transparent disabled:cursor-default cursor-pointer"
                   :disabled="step.state === 'todo'"
                   :aria-expanded="openStep === step.n"
                   :data-testid="`step-row-${step.n}`"
                   @click="toggleStep(step.n)"
                 >
-                  <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 text-success-600" />
-                  <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] rounded-full border-[5px] border-brand-600 ring-3 ring-brand-100" />
-                  <Circle v-else :size="18" class="shrink-0 text-ink-300" />
+                  <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 bg-white text-success-600" />
+                  <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] bg-white rounded-full border-[5px] border-brand-600 ring-3 ring-brand-100" />
+                  <Circle v-else :size="18" class="shrink-0 bg-white text-ink-300" />
                   <span
                     class="flex-1 min-w-0"
-                    :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'text-ink-600' : 'text-ink-500'"
+                    :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'font-medium text-ink-700' : 'text-ink-400'"
                   >
                     {{ step.label }}
                   </span>
-                  <span v-if="step.state === 'current'" class="shrink-0 text-xs font-medium text-brand-700 whitespace-nowrap">Đang làm</span>
+                  <span v-if="step.state === 'current'" class="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 whitespace-nowrap">Đang làm</span>
                   <ChevronDown v-if="step.state !== 'todo'" :size="16" class="shrink-0 text-ink-400 transition-transform duration-200" :class="{ 'rotate-180': openStep === step.n }" />
                 </button>
                 <Transition name="fh-fade-slide">
-                  <div v-if="openStep === step.n" class="ml-[30px] mb-2 space-y-2 text-ink-700" :data-testid="`step-detail-${step.n}`">
+                  <div v-if="openStep === step.n" class="ml-[34px] mb-2.5 rounded-xl bg-ink-50/80 px-3.5 py-2.5 space-y-2 text-ink-700" :data-testid="`step-detail-${step.n}`">
                     <template v-if="step.n === 1">
                       <p>{{ reachedAt('en_route') ? `Xuất phát lúc ${vnDateTimeString(reachedAt('en_route')!)}` : 'Chưa xuất phát.' }}</p>
                     </template>

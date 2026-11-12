@@ -1,7 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-11 16:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
-> Cập nhật lần cuối: 2026-11-09 02:48 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-12 23:30 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -92,6 +91,18 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Redesign UI/UX khu Thợ, Khách hàng và Công khai (12/11/2026)
+
+- **Khu Thợ**: Tạo `TechnicianJobStepper.vue` dùng chung tiến trình 5 bước (compact trên `TechnicianDashboard.vue`, đầy đủ nhãn trên `TechnicianJobDetailPage.vue`); nâng cấp `TechnicianJobsPage.vue` thành card 3 vùng + segmented switcher (`Đơn lẻ`/`Nhiều máy`/`Lịch sử`); làm gọn `TechnicianJobDetailPage.vue` (cột tài chính sticky, cấu trúc lại báo giá/phát sinh, `job-summary`/`job-details` hợp nhất, timeline dọc); đồng bộ `TechnicianWarrantyDetailPage.vue` (2 cột), `TechnicianOnboardingPage.vue`, `TechnicianProfilePage.vue`/`TechnicianWeekCalendar.vue`, `TechnicianLayout.vue`, `AppSidebar.vue` và `MessagesPage.vue` (bỏ `TechnicianEarningsChart.vue` ở `TechnicianEarningsPage.vue`).
+- **Khu Khách hàng & Công khai**: Làm gọn card list và segmented switcher ở `CustomerOrdersPage.vue`; chuyển `CustomerOrderDetailPage.vue` sang bố cục 2 cột trên desktop và gộp khối tiến trình/ảnh sửa chữa; loại bỏ style AI/màu cầu vồng/badge thừa ở `BookingDetailPage.vue`; tái cấu trúc `CustomerVisitPage.vue` (Summary Header Card hợp nhất, `visit-device-selector` tinh gọn, bố cục 2 cột desktop với `visit-checkout` sticky, transition `fh-modal` và anatomical loading skeleton); gỡ khung viền + phóng to artwork PNG không nền ở `LandingServices.vue`, `ServicesPage.vue` và `CustomerDashboard.vue`, đồng thời thay nền card vàng nâu `--color-ink-25` ở trang công khai bằng nền slate sáng sạch.
+- **Phạm vi & Kiểm chứng**: Không đổi API, hợp đồng hay quyền truy cập; `npm test` (`227/227` file, `2678/2678` test), `npm run typecheck` (`vue-tsc -b`) và `npm run lint` (`0` warnings) đều PASS; kiểm tra trực tiếp trên trình duyệt CHƯA KIỂM CHỨNG.
+
+### Dashboard và hồ sơ kỹ thuật viên (12/11/2026)
+
+- Dashboard ưu tiên lời mời và đơn đang xử lý, dùng hướng dẫn bước tiếp theo thay thanh tiến độ lặp; ví và lịch sử nằm sau công việc. Bỏ tổng tiền và số đơn tuần suy ra từ danh sách tải về; dẫn sang trang Thu nhập để đối soát.
+- Hồ sơ dùng menu dọc trên desktop và chọn mục trên điện thoại; hỗ trợ điều hướng bàn phím, giữ bản nháp khi đổi mục, báo thay đổi chưa lưu ở thông tin/lịch/khu vực. Lịch xem trước thu gọn sau phần chỉnh sửa. API và quyền giữ nguyên.
+- Đã đối chiếu code màn Home/Profile của Mobile; không sửa Mobile. Kiểm tra giao diện render trên trình duyệt và thiết bị CHƯA KIỂM CHỨNG vì công cụ không xác định được URL Chrome.
 
 ### Nâng cấp UI/UX, Design System và Visual Assets 3D (11/11/2026)
 
@@ -430,6 +441,7 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Web tích hợp cash intent theo cờ capability, giữ giá trị và trạng thái theo phản hồi Backend; cash của lượt vẫn là một intent toàn nhóm. Đọc capability chạy riêng, lỗi/độ trễ chỉ khóa lựa chọn cash chứ không chặn nội dung đơn/lượt. Báo cáo kỹ thuật viên dùng kết luận trách nhiệm có version riêng với xử lý vận hành thay thợ/đóng để khách đặt lại. B4 chỉ thêm giữ nội dung sự cố terminal trong lúc tải lại lượt và gộp GET checkout đang chạy cùng khóa; browser, Backend DEV và Mobile parity CHƯA KIỂM CHỨNG.
 
 ### Lịch sử changelog đã lưu trữ
+
 - 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 
 ### Tích hợp BUG DETECTOR Web (2026-10-30, đang chờ PR)
@@ -533,6 +545,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Đợt 12/11/2026: Toàn bộ các màn đã redesign UI/UX ngày 12/11 (Thợ, Khách hàng, Landing/Services; đã gỡ `TechnicianEarningsChart.vue`) pass kiểm tra unit test + typecheck + lint, nhưng giao diện render trực tiếp trên trình duyệt thật CHƯA KIỂM CHỨNG.
+
 - W3 DELIVERY phí dương và 0 ₫, bằng chứng/đồng thuận, physical handoff và frozen invoice snapshot đã merge/deploy DEV trong ngày 07/11. Đợt sửa W1–W3 auditfix xử lý đổi đơn A→B (remount và hủy subscription cũ) và hiển thị tổng chia 70/30 từ từng shipment làm tròn riêng, không tính lại trên tổng. Focused Web RED→GREEN 22/22, typecheck/lint PASS; PR/DEV deploy của đợt sửa đang chờ. UAT đăng nhập do owner tự kiểm tra, CHƯA KIỂM CHỨNG.
 - W3 Admin lifecycle Web source nối API mới trong Backend worktree đang phát triển. Chỉ cấu hình vận hành; `ACTIVE` không mở Finance 70/30, không payout, không legal/ledger approval. Cần Lead review source/schema và phối hợp release Backend trước runtime QA; migration/DB/JWT/DEV/browser: NOT VERIFIED. Khi Backend chỉ là bản cũ (lifecycle GET 404), Web giữ legacy DRAFT; 503 hoặc schema sai đóng action lifecycle.
 
@@ -598,6 +612,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+
+- 2026-11-12 23:30 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX hàng loạt cho Thợ (Jobs/JobDetail/Stepper/Warranty/Onboarding/Profile; bỏ `TechnicianEarningsChart.vue`), Khách (Orders/OrderDetail/BookingDetail/CustomerVisit + skeleton/Dashboard) và Công khai (Services/LandingServices); `typecheck`, `lint` và test liên quan PASS, trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-12 19:29 (UTC+7) | Lạc Vỹ | LacVy | Dashboard ưu tiên công việc; hồ sơ đổi điều hướng, báo bản nháp chưa lưu và thu gọn lịch xem trước; chưa xác minh giao diện trình duyệt.
 - 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
 - 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm
 - 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
@@ -636,5 +653,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-03 07:55 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Rút gọn copy W1.04 `/how-it-works`: bỏ section nguyên tắc lặp, mỗi bước còn một câu, ghi chú phụ trong `<details>` đóng mặc định; giữ rõ chọn 1–2 thợ và duyệt chi phí phát sinh. BodyChars 1393–1499 so với live 1809–1915; CTA `/app/bookings/new`.
 - 2026-11-03 07:44 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-03-service-detail-preview-20261103 | Làm mới chi tiết dịch vụ công khai với giá theo `priceSummary`, disclosure phạm vi/điều kiện và CTA giữ `serviceId`; Browser kiểm fixture ở viewport di động và desktop, Backend thật/Mobile CHƯA KIỂM CHỨNG.
 - 2026-11-03 07:04 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-hybrid-20261103 | Điều chỉnh W1.02 /services theo phản hồi owner: hero, tiêu đề và tìm kiếm căn giữa như bản cũ; gom danh mục chính, phần còn lại Xem thêm/Thu gọn, giữ lưới 1–4 cột, giá API, tìm kiếm, lọc, phân trang 9 và quyền đặt lịch.
-- 2026-11-03 06:26 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-02-services-20261103 | Mở rộng bố cục `/services`, gom danh mục thành chip tự xuống dòng và tăng lưới desktop; giữ giá từ API, bộ lọc, luồng đặt lịch và phân trang 9 mục.
-- 2026-11-02 21:37 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-01-landing-20261102 | Làm mới landing, ghi đúng bước chọn kỹ thuật viên và gửi lời mời; AI chỉ gợi ý, việc khảo sát có báo giá để khách duyệt.

@@ -891,39 +891,37 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex-direction: column;
   padding: 24px;
-  border: 1px solid var(--color-ink-200);
+  border: 1px solid #e2e8f0;
   border-radius: var(--radius-lg);
-  background: var(--color-ink-25);
+  background: #ffffff;
   box-shadow: var(--shadow-e1);
   animation: service-card-enter 260ms var(--service-ease) both;
   transition: border-color 180ms var(--service-ease), box-shadow 180ms var(--service-ease), transform 180ms var(--service-ease);
 }
-.service-card:hover { border-color: var(--color-ink-300); box-shadow: var(--shadow-e2); transform: translateY(-2px); }
-.service-card__top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.service-card:hover { border-color: var(--color-brand-300); box-shadow: var(--shadow-e2); transform: translateY(-2px); }
+.service-card__top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .service-card__meta { display: grid; min-width: 0; gap: 4px; }
 .service-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 64px;
+  height: 64px;
   flex: 0 0 auto;
-  border: 1px solid var(--color-ink-150);
-  border-radius: var(--radius-md);
-  background: var(--color-ink-50);
-  padding: 3px;
-  overflow: hidden;
-  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
+  transition: transform 200ms var(--service-ease);
 }
 .service-card:hover .service-mark {
-  background: var(--color-brand-50);
-  border-color: var(--color-brand-200);
-  transform: scale(1.06);
+  transform: scale(1.07);
 }
 .service-mark__img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.08));
 }
 .service-category { color: var(--color-ink-600); font-size: 12px; font-weight: 500; }
 .service-card__mode {

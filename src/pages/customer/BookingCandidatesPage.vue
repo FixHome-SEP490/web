@@ -242,7 +242,7 @@ const selectedTechs = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6 pb-28">
+  <div class="w-full space-y-5 pb-16">
     <!-- Rebook notice when former tech is busy -->
     <div
       v-if="rebookedChoose"

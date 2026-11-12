@@ -7,7 +7,6 @@ import { useRouter } from 'vue-router';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next';
 
 import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
-import TechnicianEarningsChart from '../../components/technician/TechnicianEarningsChart.vue';
 import { technicianEarningsApi, type EarningsPayout, type EarningsSummary } from '../../api/technician-earnings.api';
 import type { PageResult } from '../../api/paging';
 import { usePagedList } from '../../composables/usePagedList';
@@ -293,25 +292,6 @@ onUnmounted(() => {
             <ChevronRight :size="16" aria-hidden="true" class="transition-transform duration-150 group-hover:translate-x-0.5" />
           </span>
         </button>
-      </section>
-
-      <section
-        v-if="!loading && (kind === 'week' || kind === 'month') && payouts.length > 0"
-        class="animate-slide-up-delay-1 bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 shadow-2xs space-y-3"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-base font-semibold text-ink-900">
-            {{ kind === 'week' ? 'Thu nhập từng ngày trong tuần' : 'Thu nhập theo ngày trong tháng' }}
-          </h2>
-          <span v-if="total > payouts.length" class="text-xs text-ink-500 font-num">
-            Hiển thị {{ payouts.length }}/{{ total }} đơn trong trang này
-          </span>
-        </div>
-        <TechnicianEarningsChart
-          :payouts="payouts"
-          :period="period"
-          :highlight-today="atLatest"
-        />
       </section>
 
       <section class="animate-slide-up-delay-2 bg-white rounded-2xl border border-ink-200 overflow-hidden shadow-2xs">

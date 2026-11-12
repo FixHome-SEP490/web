@@ -33,6 +33,7 @@ import { periodContaining } from '../../utils/earnings-period';
 import { hasRating, ratingLabel } from '../../utils/formatters';
 import { bookingsApi, type InvitationItem } from '../../api/bookings.api';
 import { sessionLabel } from '../../utils/booking-session';
+import TechnicianJobStepper from '../../components/technician/TechnicianJobStepper.vue';
 import { availabilityText, type TechnicianAvailability } from '../../utils/availability';
 import { technicianProfileApi, type TechnicianProfileView } from '../../api/technician-profile.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -185,14 +186,35 @@ const currentDateFormatted = computed(() =>
 /** 1.250.000 ₫, with a non-breaking space so the unit never wraps away. */
 const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} ₫`;
 
-const isOneOf = (job: ServiceOrderItem, statuses: string[]) => statuses.includes(String(job.status).toUpperCase());
-
 const nextStep = (job: ServiceOrderItem) => {
   if (job.completionRequestedAt) return 'Đã gửi yêu cầu hoàn thành. Xem chi tiết để theo dõi xác nhận và thanh toán.';
   if (['UNDER_REPAIR', 'IN_PROGRESS'].includes(String(job.status).toUpperCase())) {
     return (job.beforeEvidenceCount ?? 0) > 0 ? 'Tiếp tục báo giá và sửa chữa trong chi tiết đơn.' : 'Chụp ảnh hiện trạng trước khi tiếp tục sửa chữa.';
   }
   return String(job.status).toUpperCase() === 'EN_ROUTE' ? 'Đang di chuyển. Mở chi tiết đơn khi đến nơi.' : 'Đã nhận đơn. Kiểm tra lịch hẹn và bắt đầu di chuyển.';
+};
+
+const dashboardStepNumber = (job: ServiceOrderItem): 1 | 2 | 3 | 4 | 5 => {
+  const s = String(job.status).toUpperCase();
+  if (s === 'COMPLETED' || job.completionRequestedAt) return 5;
+  if (['UNDER_REPAIR', 'IN_PROGRESS'].includes(s)) return 4;
+  if (s === 'EN_ROUTE' && job.arrivalVerified && (job.beforeEvidenceCount ?? 0) > 0) return 3;
+  if (s === 'EN_ROUTE') return 2;
+  return 1;
+};
+
+const dashboardStepsForJob = (job: ServiceOrderItem) => {
+  const current = dashboardStepNumber(job);
+  const allDone = String(job.status).toUpperCase() === 'COMPLETED';
+  return ['Xuất phát', 'Check-in, ảnh', 'Báo giá', 'Sửa xong, ảnh', 'Thu tiền'].map((label, idx) => {
+    const n = idx + 1;
+    const done = allDone || n < current;
+    return {
+      n,
+      label,
+      state: done ? ('done' as const) : n === current ? ('current' as const) : ('todo' as const),
+    };
+  });
 };
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
@@ -484,24 +506,9 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 </div>
               </div>
 
-              <!-- Flat 4-step mini progress tracker + next instruction -->
-              <div class="pt-3 border-t border-ink-100/80 space-y-2.5">
-                <div class="h-1.5 w-full rounded-full bg-ink-100 overflow-hidden" aria-hidden="true">
-                  <div
-                    class="h-full rounded-full bg-brand-600 transition-[width] duration-300 ease-out"
-                    :style="{
-                      width: isOneOf(job, ['COMPLETED'])
-                        ? '100%'
-                        : job.completionRequestedAt
-                          ? '80%'
-                          : (job.beforeEvidenceCount ?? 0) > 0
-                            ? '60%'
-                            : (job.arrivalVerified || isOneOf(job, ['UNDER_REPAIR', 'IN_PROGRESS']))
-                              ? '35%'
-                              : isOneOf(job, ['EN_ROUTE']) ? '18%' : '8%'
-                    }"
-                  />
-                </div>
+              <!-- 5-step connected node progress tracker + next instruction -->
+              <div class="pt-3 border-t border-ink-100/80 space-y-2">
+                <TechnicianJobStepper :steps="dashboardStepsForJob(job)" compact />
                 <p class="text-sm text-ink-600">{{ nextStep(job) }}</p>
               </div>
 
