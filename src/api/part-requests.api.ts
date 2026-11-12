@@ -169,6 +169,8 @@ export interface PartCustodyReturnRecord {
   orderId?: string;
   technicianId?: string;
   technicianName?: string | null;
+  /** The return goes back into a W2 warehouse's stock; the queue marks it for the whole page in one read. */
+  warehouseAllocated?: boolean;
 }
 
 export interface DeclareReturnPayload {
