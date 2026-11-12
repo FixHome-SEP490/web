@@ -256,13 +256,13 @@ defineExpose({ scrollToEnd });
         </template>
 
         <div v-else class="flex gap-2">
-          <div class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center shrink-0 mt-0.5">
+          <div class="w-7 h-7 rounded-full bg-brand-50 ring-1 ring-brand-200/80 flex items-center justify-center shrink-0 mt-0.5">
             <Bot :size="14" class="text-brand-700" />
           </div>
           <div class="flex-1 min-w-0 space-y-2">
             <div
-              class="rounded-2xl rounded-bl-sm px-3.5 py-2 border"
-              :class="message.isAcknowledgement ? 'bg-ink-100/70 border-ink-100 text-ink-500 italic' : 'bg-white border-ink-100 text-ink-900'"
+              class="rounded-2xl rounded-bl-sm px-3.5 py-2.5"
+              :class="message.isAcknowledgement ? 'bg-ink-100/75 text-ink-500 italic' : 'bg-white ring-1 ring-ink-200/80 shadow-2xs text-ink-900'"
             >
               <p class="text-base leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{{ message.text }}</p>
             </div>
@@ -272,7 +272,7 @@ defineExpose({ scrollToEnd });
             <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="opacity-0 translate-y-1">
             <div
               v-if="message.reply && !message.isAcknowledgement && message.reply.status !== 'unavailable'"
-              class="border-l-2 border-brand-200 pl-3 py-2 space-y-4 [overflow-wrap:anywhere]"
+              class="rounded-xl bg-white/90 ring-1 ring-ink-200/75 px-3.5 py-3 space-y-4 [overflow-wrap:anywhere]"
               data-testid="ai-reply-details"
             >
               <!-- Safety first: a warning read after a list of faults is a warning nobody acted on. -->
@@ -336,9 +336,11 @@ defineExpose({ scrollToEnd });
       <ChatTypingDots v-if="c.isThinking && !c.isRevealing" />
       </div>
     </div>
-    <button v-if="!followingLatest" type="button" class="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-[var(--shadow-e2)] hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-600" data-testid="ai-jump-latest" @click="scrollToEnd">
-      <ArrowDown :size="16" aria-hidden="true" /> Tin nhắn mới nhất
-    </button>
+    <Transition name="fh-fade-slide">
+      <button v-if="!followingLatest" type="button" class="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full ring-1 ring-brand-200/90 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-[var(--shadow-e2)] hover:bg-brand-50 transition-colors focus-visible:outline-2 focus-visible:outline-brand-600" data-testid="ai-jump-latest" @click="scrollToEnd">
+        <ArrowDown :size="16" aria-hidden="true" /> Tin nhắn mới nhất
+      </button>
+    </Transition>
     </div>
 
     <slot name="pinned" />
@@ -407,9 +409,9 @@ defineExpose({ scrollToEnd });
     <p v-else-if="c.needsDescription" class="px-3.5 pb-1 text-sm text-warning-800" data-testid="ai-needs-description">{{ DESCRIBE_BEFORE_SEND }}</p>
 
     <!-- Composer -->
-    <div class="flex shrink-0 items-end gap-2 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] border-t border-ink-200 bg-white">
+    <div class="flex shrink-0 items-end gap-2 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] border-t border-ink-100 bg-white">
       <input ref="fileInput" type="file" :accept="ACCEPT" multiple class="hidden" data-testid="ai-file-input" @change="onFiles" />
-      <button type="button" class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-brand-600 hover:bg-brand-50" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
+      <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors shrink-0" title="Gửi ảnh hoặc video thiết bị" aria-label="Gửi ảnh hoặc video thiết bị" @click="fileInput?.click()">
         <ImageIcon :size="19" />
       </button>
       <textarea
@@ -419,12 +421,12 @@ defineExpose({ scrollToEnd });
         :placeholder="placeholder"
         data-testid="ai-input"
         aria-label="Nhắn cho trợ lý AI"
-        class="min-w-0 flex-1 resize-none rounded-xl bg-ink-100/70 px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-brand-200 max-h-28"
+        class="min-w-0 flex-1 resize-none rounded-2xl border border-transparent bg-ink-100/75 px-3.5 py-2.5 text-base text-ink-900 placeholder:text-ink-500 focus:bg-white focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all max-h-28"
         @keydown.enter.exact.prevent="c.canSend && c.send()"
       ></textarea>
       <button
         type="button"
-        class="w-11 h-11 rounded-full bg-brand-600 text-white flex items-center justify-center disabled:bg-ink-300 shrink-0"
+        class="w-10 h-10 rounded-full bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center disabled:bg-ink-300 transition-colors shrink-0"
         :disabled="!c.canSend"
         title="Gửi"
         aria-label="Gửi"

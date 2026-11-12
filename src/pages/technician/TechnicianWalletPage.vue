@@ -359,7 +359,7 @@ const handleWithdraw = async () => {
 <template>
   <div class="w-full mx-auto space-y-5">
     <!-- Header: title + quiet refresh -->
-    <div class="flex items-center justify-between gap-3">
+    <div class="animate-slide-up flex items-center justify-between gap-3">
       <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
         Ví của tôi
       </h1>
@@ -457,7 +457,7 @@ const handleWithdraw = async () => {
       </div>
 
       <!-- Balance: the page's one accent block, holding both money actions -->
-      <section class="p-5 sm:p-7 rounded-3xl bg-brand-600 text-white shadow-md space-y-6">
+      <section class="animate-slide-up p-5 sm:p-7 rounded-2xl bg-linear-to-br from-brand-600 via-brand-600 to-brand-700 text-white shadow-md border border-brand-500/40 space-y-6">
         <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
           <div class="min-w-0 space-y-1">
             <div class="flex flex-wrap items-center gap-2">
@@ -483,7 +483,7 @@ const handleWithdraw = async () => {
           <div class="flex flex-col sm:flex-row gap-3 shrink-0">
             <button
               type="button"
-              class="h-11 px-5 rounded-xl bg-white text-brand-700 hover:bg-brand-50 active:scale-[0.98] text-sm font-semibold whitespace-nowrap transition-all duration-150 shadow-sm flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              class="h-11 px-5 rounded-xl bg-white text-brand-700 hover:bg-brand-50 active:scale-[0.98] text-sm font-semibold whitespace-nowrap transition-[background-color,transform,box-shadow] duration-150 shadow-sm flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600 cursor-pointer"
               @click="showTopUpModal = true"
             >
               <ArrowDownLeft :size="16" />
@@ -491,7 +491,7 @@ const handleWithdraw = async () => {
             </button>
             <button
               type="button"
-              class="h-11 px-5 rounded-xl bg-white/15 hover:bg-white/25 active:scale-[0.98] border border-white/30 text-white text-sm font-semibold whitespace-nowrap transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600"
+              class="h-11 px-5 rounded-xl bg-white/15 hover:bg-white/25 active:scale-[0.98] border border-white/30 text-white text-sm font-semibold whitespace-nowrap transition-[background-color,transform,border-color] duration-150 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-600 cursor-pointer"
               :disabled="!!withdrawBlockedReason"
               :title="withdrawBlockedReason ?? 'Rút tiền về tài khoản ngân hàng'"
               @click="openWithdraw"
@@ -526,7 +526,7 @@ const handleWithdraw = async () => {
       </section>
 
       <!-- Receiving bank account -->
-      <section class="px-4 sm:px-5 py-3.5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-3">
+      <section class="animate-slide-up-delay-1 px-4 sm:px-5 py-3.5 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-3">
         <Landmark :size="20" class="text-ink-500 shrink-0" />
         <div v-if="bankAccount" class="min-w-0 flex-1">
           <div class="text-sm font-semibold text-ink-900 truncate">
@@ -543,7 +543,7 @@ const handleWithdraw = async () => {
       </section>
 
       <!-- History -->
-      <section class="bg-white rounded-3xl border border-ink-200/80 shadow-xs overflow-hidden">
+      <section class="animate-slide-up-delay-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
         <div role="tablist" class="flex items-center border-b border-ink-200 px-4 sm:px-6 pt-2 gap-6 overflow-x-auto">
           <button
             type="button"
@@ -578,7 +578,7 @@ const handleWithdraw = async () => {
                 v-for="f in txFilters"
                 :key="f.id"
                 type="button"
-                class="h-10 px-3.5 rounded-full text-sm whitespace-nowrap shrink-0 border transition-all duration-150 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                class="h-10 px-3.5 rounded-full text-sm whitespace-nowrap shrink-0 border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
                 :class="txFilterType === f.id
                   ? 'bg-brand-50 text-brand-700 font-semibold border-brand-200'
                   : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'"
@@ -730,14 +730,14 @@ const handleWithdraw = async () => {
     <Transition name="fh-modal">
       <div
         v-if="showTopUpModal"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50 backdrop-blur-xs"
         @keydown.esc="!topUpSubmitting && (showTopUpModal = false)"
       >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="topup-title"
-          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-(--shadow-e3) space-y-5"
         >
         <div class="flex items-center justify-between gap-3">
           <h3 id="topup-title" class="text-lg font-bold text-ink-900">Nạp tiền vào ví</h3>
@@ -766,7 +766,7 @@ const handleWithdraw = async () => {
               v-for="amt in topUpPresets"
               :key="amt"
               type="button"
-              class="h-11 px-3 rounded-xl border text-sm font-semibold font-num whitespace-nowrap transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-11 px-3 rounded-xl border text-sm font-semibold font-num whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
               :class="topUpAmount === amt
                 ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-600/20'
                 : 'border-ink-200 bg-white text-ink-700 hover:border-brand-300'"
@@ -825,14 +825,14 @@ const handleWithdraw = async () => {
     <Transition name="fh-modal">
       <div
         v-if="showWithdrawModal"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50 backdrop-blur-xs"
         @keydown.esc="!withdrawSubmitting && (showWithdrawModal = false)"
       >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="withdraw-title"
-          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-(--shadow-e3) space-y-5"
         >
         <div class="flex items-center justify-between gap-3">
           <h3 id="withdraw-title" class="text-lg font-bold text-ink-900">Rút tiền về ngân hàng</h3>
@@ -916,14 +916,14 @@ const handleWithdraw = async () => {
     <Transition name="fh-modal">
       <div
         v-if="showBankModal"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50 backdrop-blur-xs"
         @keydown.esc="!bankSaving && (showBankModal = false)"
       >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="bank-title"
-          class="fh-modal-panel bg-white rounded-3xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-(--shadow-e3) space-y-5"
         >
         <div class="flex items-center justify-between gap-3">
           <h3 id="bank-title" class="text-lg font-bold text-ink-900">Tài khoản nhận tiền</h3>

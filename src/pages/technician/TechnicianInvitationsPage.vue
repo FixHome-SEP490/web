@@ -131,7 +131,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+    <div class="animate-slide-up flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div class="flex items-center gap-3 min-w-0">
         <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
         <span
@@ -200,11 +200,11 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     </div>
 
     <!-- Each invitation is its own decision, so its own card -->
-    <TransitionGroup v-else tag="div" name="fh-list" class="space-y-4">
+    <TransitionGroup v-else tag="div" name="fh-list" class="animate-slide-up-delay-1 space-y-4">
       <article
         v-for="inv in invitations"
         :key="inv.id"
-        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs hover:border-brand-300 hover:shadow-xs transition-all duration-200"
+        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs hover:border-brand-300 hover:shadow-xs transition-[border-color,box-shadow] duration-200"
         :data-testid="`invitation-${inv.id}`"
       >
         <!-- Summary (service, area, session); opens the full detail -->
@@ -257,11 +257,11 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     <Transition name="fh-modal">
       <div
         v-if="detailInvitation"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4 overscroll-contain"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-900/50 backdrop-blur-xs sm:p-4 overscroll-contain"
         @click.self="detailInvitation = null"
       >
         <div
-          class="fh-modal-panel bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-2xl sm:rounded-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-(--shadow-e3)"
           role="dialog"
           aria-modal="true"
           aria-labelledby="invitation-detail-title"

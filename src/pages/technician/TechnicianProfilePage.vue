@@ -7,7 +7,7 @@ import ReputationCard from '../../components/account/ReputationCard.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
 import TechnicianWeekCalendar from '../../components/technician/TechnicianWeekCalendar.vue';
 import ServiceAreaPicker from '../../components/technician/ServiceAreaPicker.vue';
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import {
   MapPin,
   CheckCircle2,
@@ -71,61 +71,19 @@ const openChecklistItem = (item: { targetTab: TabKey; to?: string }) => {
   if (!item.to) activeTab.value = item.targetTab;
 };
 
-// ── Profile Tab sliding indicator animation ──
-const profileTabListRef = ref<HTMLElement | null>(null);
 const profileTabRefs = ref<Record<string, HTMLElement | null>>({});
-const profileIndicatorStyle = ref<Record<string, string>>({
-  opacity: '0',
-});
-
-function updateProfileTabIndicator() {
-  const activeEl = profileTabRefs.value[activeTab.value];
-  const container = profileTabListRef.value;
-  if (!activeEl || !container) {
-    profileIndicatorStyle.value = { opacity: '0' };
-    return;
-  }
-  const left = activeEl.offsetLeft;
-  const top = activeEl.offsetTop;
-  const width = activeEl.offsetWidth;
-  const height = activeEl.offsetHeight;
-
-  profileIndicatorStyle.value = {
-    transform: `translate3d(${left}px, ${top}px, 0)`,
-    width: `${width}px`,
-    height: `${height}px`,
-    opacity: '1',
-  };
-}
-
-let profileTabResizeObserver: ResizeObserver | null = null;
-
-watch(activeTab, () => {
-  void nextTick(updateProfileTabIndicator);
-});
-
-onMounted(() => {
-  void nextTick(() => {
-    updateProfileTabIndicator();
-    setTimeout(updateProfileTabIndicator, 60);
-  });
-  if (typeof window !== 'undefined') {
-    window.addEventListener('resize', updateProfileTabIndicator);
-    if (profileTabListRef.value && typeof ResizeObserver !== 'undefined') {
-      profileTabResizeObserver = new ResizeObserver(() => {
-        updateProfileTabIndicator();
-      });
-      profileTabResizeObserver.observe(profileTabListRef.value);
-    }
-  }
-});
-
-onUnmounted(() => {
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', updateProfileTabIndicator);
-  }
-  profileTabResizeObserver?.disconnect();
-});
+const onTabKeydown = (event: KeyboardEvent, key: TabKey) => {
+  const index = profileTabs.findIndex((tab) => tab.key === key);
+  let target = index;
+  if (['ArrowRight', 'ArrowDown'].includes(event.key)) target = (index + 1) % profileTabs.length;
+  else if (['ArrowLeft', 'ArrowUp'].includes(event.key)) target = (index + profileTabs.length - 1) % profileTabs.length;
+  else if (event.key === 'Home') target = 0;
+  else if (event.key === 'End') target = profileTabs.length - 1;
+  else return;
+  event.preventDefault();
+  activeTab.value = profileTabs[target].key;
+  profileTabRefs.value[activeTab.value]?.focus();
+};
 
 const loading = ref(true);
 const loadError = ref('');
@@ -236,18 +194,21 @@ const setScheduleTime = (day: number, field: 'startTime' | 'endTime', value: str
 };
 
 const handleSaveSchedule = async () => {
+  if (savingSchedule.value) return;
   const invalidDay = weeklyScheduleDraft.value.findIndex((slot) => slot.enabled && slot.startTime >= slot.endTime);
   if (invalidDay >= 0) {
     showFeedback(`${DAY_NAMES[invalidDay]}: giờ kết thúc phải sau giờ bắt đầu.`, 'error');
     return;
   }
   savingSchedule.value = true;
+  const submittedDraft = JSON.stringify(weeklyScheduleDraft.value);
   try {
     const schedules = weeklyScheduleDraft.value
       .map((slot, dayOfWeek) => ({ ...slot, dayOfWeek }))
       .filter((slot) => slot.enabled)
       .map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime }));
     await technicianProfileApi.updateMySchedule(schedules);
+    savedScheduleDraft.value = submittedDraft;
     await loadProfile();
     showFeedback('Đã lưu lịch làm việc.');
   } catch (err) {
@@ -648,6 +609,7 @@ const syncLocationStateFromAddress = () => {
 };
 
 const handleSaveLocation = async () => {
+  if (savingLocation.value) return;
   if (!locationLine1.value.trim() || locationLat.value === '' || locationLng.value === '') {
     showFeedback('Vui lòng tìm địa chỉ hoặc chọn vị trí trên bản đồ.', 'error');
     return;
@@ -662,6 +624,7 @@ const handleSaveLocation = async () => {
     return;
   }
   savingLocation.value = true;
+  const submittedDraft = locationDraftKey();
   try {
     const addressDto = {
       line1: normalizeAddressText(locationLine1.value),
@@ -689,6 +652,7 @@ const handleSaveLocation = async () => {
       savedServiceAreas.value = saved.map((a) => ({ ...a }));
       serviceAreas.value = saved.map((a) => ({ ...a }));
     }
+    savedLocationDraft.value = submittedDraft;
     await loadProfile();
     showFeedback('Đã lưu khu vực nhận việc.');
   } catch {
@@ -800,14 +764,24 @@ const loadProfile = async () => {
     technicianAddress.value = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
     kycVerification.value = kyc;
 
-    fullName.value = authStore.user?.fullName || '';
-    phoneNumber.value = authStore.user?.phoneNumber || '';
-    bio.value = profile.bio || '';
-    yearsExperience.value = profile.yearsExperience || 0;
+    // Refreshing one section must not discard unsaved edits in another section.
+    if (!savedInfoDraft.value || !infoChanged.value) {
+      fullName.value = authStore.user?.fullName || '';
+      phoneNumber.value = authStore.user?.phoneNumber || '';
+      bio.value = profile.bio || '';
+      yearsExperience.value = profile.yearsExperience || 0;
+      savedInfoDraft.value = infoDraftKey();
+    }
     avatarUrl.value = authStore.user?.avatarUrl ?? '';
 
-    initScheduleDraft();
-    syncLocationStateFromAddress();
+    if (!savedScheduleDraft.value || !scheduleChanged.value) {
+      initScheduleDraft();
+      savedScheduleDraft.value = JSON.stringify(weeklyScheduleDraft.value);
+    }
+    if (!savedLocationDraft.value || !locationChanged.value) {
+      syncLocationStateFromAddress();
+      savedLocationDraft.value = locationDraftKey();
+    }
   } catch (err) {
     loadError.value = userFacingError(err, 'Không thể tải hồ sơ. Vui lòng thử lại.');
   }
@@ -823,8 +797,19 @@ const loadAll = async () => {
 
 onMounted(loadAll);
 
+const savedInfoDraft = ref('');
+const savedScheduleDraft = ref('');
+const savedLocationDraft = ref('');
+const infoDraftKey = () => JSON.stringify([fullName.value, phoneNumber.value, bio.value, yearsExperience.value]);
+const locationDraftKey = () => JSON.stringify([locationLine1.value, locationWard.value, locationDistrict.value, locationProvince.value, locationLat.value, locationLng.value, locationRadiusKm.value]);
+const infoChanged = computed(() => infoDraftKey() !== savedInfoDraft.value);
+const scheduleChanged = computed(() => JSON.stringify(weeklyScheduleDraft.value) !== savedScheduleDraft.value);
+const locationChanged = computed(() => locationDraftKey() !== savedLocationDraft.value || serviceAreasChanged.value);
+
 // ----------------- Actions -----------------
 const handleSaveProfileInfo = async () => {
+  if (isSavingInfo.value) return;
+  const submittedDraft = infoDraftKey();
   isSavingInfo.value = true;
   try {
     const [updatedUser, updatedProfile] = await Promise.all([
@@ -846,6 +831,7 @@ const handleSaveProfileInfo = async () => {
       });
     }
     await authStore.fetchProfile();
+    savedInfoDraft.value = submittedDraft;
     showFeedback('Đã lưu thay đổi.');
   } catch (err) {
     showFeedback(userFacingError(err, 'Không thể lưu hồ sơ. Vui lòng thử lại.'), 'error');
@@ -864,11 +850,11 @@ const openAvatarModal = () => {
     <!-- Save feedback -->
     <Transition
       enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0 translate-y-2"
-      enter-to-class="opacity-100 translate-y-0"
+      enter-from-class="opacity-0 -translate-y-2 scale-95"
+      enter-to-class="opacity-100 translate-y-0 scale-100"
       leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100 translate-y-0"
-      leave-to-class="opacity-0 translate-y-2"
+      leave-from-class="opacity-100 translate-y-0 scale-100"
+      leave-to-class="opacity-0 -translate-y-2 scale-95"
     >
       <div
         v-if="saveFeedback"
@@ -915,15 +901,15 @@ const openAvatarModal = () => {
 
     <template v-else-if="technicianProfile">
       <!-- Identity -->
-      <section class="p-5 sm:p-6 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-4 sm:gap-5">
-        <div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0">
+      <section class="animate-slide-up p-5 sm:p-6 rounded-2xl bg-white border border-ink-200/80 shadow-xs flex items-center gap-4 sm:gap-5">
+        <div class="relative w-14 h-14 sm:w-16 sm:h-16 shrink-0">
           <div class="w-full h-full rounded-2xl overflow-hidden border border-ink-200 bg-ink-100 text-ink-500 flex items-center justify-center">
             <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" alt="Ảnh đại diện" />
             <span v-else class="text-2xl font-bold">{{ authStore.user?.fullName?.charAt(0) ?? 'T' }}</span>
           </div>
           <button
             type="button"
-            class="absolute -bottom-2 -right-2 w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-700 hover:bg-ink-50 shadow-sm flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            class="absolute -bottom-2 -right-2 w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-700 hover:bg-ink-50 active:scale-95 shadow-sm flex items-center justify-center transition-[background-color,transform] duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             aria-label="Đổi ảnh đại diện"
             title="Đổi ảnh đại diện"
             @click="openAvatarModal"
@@ -984,44 +970,28 @@ const openAvatarModal = () => {
         </div>
       </section>
 
-      <!-- Tabs with sliding active pill -->
-      <div
-        ref="profileTabListRef"
-        class="relative bg-ink-100 rounded-full p-1.5 flex items-center gap-1 overflow-x-auto select-none scrollbar-none"
-        role="tablist"
-      >
-        <!-- Sliding active background pill -->
-        <div
-          class="pointer-events-none absolute top-0 left-0 rounded-full bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-          :style="profileIndicatorStyle"
-          aria-hidden="true"
-        />
-
-        <button
-          v-for="t in profileTabs"
-          :key="t.key"
-          :ref="(el) => { profileTabRefs[t.key] = el as HTMLElement }"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === t.key"
-          class="relative z-10 flex-1 shrink-0 min-w-max h-10 px-4 rounded-full text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-          :class="activeTab === t.key ? 'font-bold text-ink-900' : 'font-medium text-ink-600 hover:text-ink-900'"
-          @click="activeTab = t.key"
-        >
-          <span>{{ t.label }}</span>
-          <span
-            v-if="t.key === 'services' && technicianProfile.skills.length > 0"
-            class="px-2 py-0.5 rounded-full text-xs font-num font-semibold transition-colors"
-            :class="activeTab === t.key ? 'bg-ink-100 text-ink-900' : 'bg-white/80 text-ink-600'"
-          >
-            {{ technicianProfile.skills.length }}
-          </span>
-        </button>
-      </div>
+      <div class="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8 items-start">
+        <nav class="lg:sticky lg:top-24" aria-label="Các mục hồ sơ">
+          <label for="profile-section" class="block lg:hidden text-sm font-medium text-ink-700 mb-2">Mục hồ sơ</label>
+          <select id="profile-section" v-model="activeTab" class="lg:hidden w-full h-11 rounded-xl border border-ink-300 bg-white px-3 text-sm focus-visible:outline-brand-600">
+            <option v-for="t in profileTabs" :key="t.key" :value="t.key">{{ t.label }}</option>
+          </select>
+          <div role="tablist" aria-label="Các mục hồ sơ" aria-orientation="vertical" class="hidden lg:flex lg:flex-col gap-1">
+            <button v-for="t in profileTabs" :id="'profile-tab-' + t.key" :key="t.key"
+              :ref="(el) => { profileTabRefs[t.key] = el as HTMLElement }"
+              type="button" role="tab" :aria-selected="activeTab === t.key" :aria-controls="'profile-panel-' + t.key" :tabindex="activeTab === t.key ? 0 : -1"
+              class="min-h-11 px-3.5 py-2.5 rounded-xl text-sm text-left font-medium border transition-[background-color,color,border-color,box-shadow] duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              :class="activeTab === t.key ? 'bg-white border-ink-200/90 text-brand-700 font-semibold shadow-xs' : 'border-transparent text-ink-600 hover:bg-white/70 hover:text-ink-900'"
+              @click="activeTab = t.key" @keydown="onTabKeydown($event, t.key)">
+              {{ t.label }}
+            </button>
+          </div>
+        </nav>
+        <div :id="'profile-panel-' + activeTab" role="tabpanel" :aria-label="profileTabs.find(t => t.key === activeTab)?.label" tabindex="0" class="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 rounded-xl">
 
       <!-- TAB: Thông tin -->
-      <div v-if="activeTab === 'info'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div class="lg:col-span-2 space-y-6">
+      <div v-if="activeTab === 'info'" class="animate-slide-up space-y-6">
+        <div class="space-y-6">
           <!-- Identity check status: only when something is left to do -->
           <div
             v-if="kycVerification?.status === 'REJECTED'"
@@ -1127,7 +1097,8 @@ const openAvatarModal = () => {
               </div>
             </div>
 
-            <div class="flex justify-end pt-4 border-t border-ink-100">
+            <div class="profile-save flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 bg-white py-3" :class="{ 'profile-save-dirty': infoChanged }">
+              <p class="text-sm text-ink-600" role="status">{{ infoChanged ? 'Có thay đổi chưa lưu' : 'Không có thay đổi chưa lưu' }}</p>
               <FhButton variant="primary" size="md" :loading="isSavingInfo" @click="handleSaveProfileInfo">
                 Lưu thay đổi
               </FhButton>
@@ -1135,12 +1106,17 @@ const openAvatarModal = () => {
           </section>
         </div>
 
-        <div class="space-y-6">
+        <div class="grid gap-5 xl:grid-cols-2 items-start">
           <!-- Profile completeness: one list, each row goes where it is fixed -->
           <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
-            <div class="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
-              <h3 class="text-base font-semibold text-ink-900">Hoàn thiện hồ sơ</h3>
-              <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ profileCompleteness.score }}%</span>
+            <div class="px-5 pt-5 pb-4 space-y-2.5">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-base font-semibold text-ink-900">Hoàn thiện hồ sơ</h3>
+                <span class="font-num font-bold text-brand-700 whitespace-nowrap">{{ profileCompleteness.score }}%</span>
+              </div>
+              <div class="h-1.5 w-full rounded-full bg-ink-100 overflow-hidden" aria-hidden="true">
+                <div class="h-full rounded-full bg-brand-600 transition-[width] duration-500 ease-out" :style="{ width: `${profileCompleteness.score}%` }" />
+              </div>
             </div>
             <ul class="divide-y divide-ink-100 border-t border-ink-100">
               <li v-for="item in profileCompleteness.items" :key="item.label">
@@ -1160,14 +1136,14 @@ const openAvatarModal = () => {
             </ul>
           </section>
           <ReputationCard role="technician" />
-          <ChangePasswordCard />
+          <ChangePasswordCard class="xl:col-span-2" />
         </div>
       </div>
 
       <!-- TAB: Dịch vụ và giá công -->
-      <div v-if="activeTab === 'services'" class="space-y-4">
+      <div v-if="activeTab === 'services'" class="animate-slide-up space-y-4">
         <form
-          class="p-4 sm:p-5 bg-white rounded-2xl border border-ink-200/80 shadow-xs flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
+          class="p-4 sm:p-5 bg-white rounded-2xl border border-ink-200/80 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
           data-testid="default-warranty"
           @submit.prevent="handleSaveDefaultWarranty"
         >
@@ -1246,7 +1222,7 @@ const openAvatarModal = () => {
           Không tìm thấy dịch vụ phù hợp.
         </div>
 
-        <ul v-else class="bg-white rounded-2xl border border-ink-200/80 shadow-xs divide-y divide-ink-100">
+        <ul v-else class="bg-white rounded-2xl border border-ink-200/80 divide-y divide-ink-100">
           <li v-for="service in filteredServices" :key="service.id" class="p-4 sm:p-5 space-y-4">
             <div class="flex items-center gap-3">
               <label class="relative inline-flex items-center cursor-pointer shrink-0 p-2 -m-2">
@@ -1257,7 +1233,7 @@ const openAvatarModal = () => {
                   :aria-label="`Nhận làm ${service.name}`"
                 />
                 <span
-                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"
+                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-150 peer-checked:after:translate-x-5 peer-checked:after:border-white"
                 ></span>
               </label>
 
@@ -1302,7 +1278,8 @@ const openAvatarModal = () => {
               </FhButton>
             </div>
 
-            <div v-if="skillDrafts[service.id]?.enabled" class="sm:pl-14 space-y-3">
+            <Transition name="fh-fade-slide">
+              <div v-if="skillDrafts[service.id]?.enabled" class="sm:pl-14 space-y-3">
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                 <div>
                   <label :for="`tp-price-${service.id}`" class="block font-medium text-ink-700 mb-1">Giá công (₫)</label>
@@ -1376,19 +1353,17 @@ const openAvatarModal = () => {
               <p v-if="rejectionReasons[service.id]" class="text-sm text-danger-700 text-pretty">
                 Lý do từ chối: {{ rejectionReasons[service.id] }}
               </p>
-            </div>
+              </div>
+            </Transition>
           </li>
         </ul>
       </div>
 
       <!-- TAB: Lịch làm việc -->
-      <div v-if="activeTab === 'schedule'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <TechnicianWeekCalendar
-          class="lg:col-span-3"
-          :schedule="weeklyScheduleDraft"
-          :saved-schedule="uniqueSchedule"
-          :time-off="timeOffList"
-        />
+      <div v-if="activeTab === 'schedule'" class="animate-slide-up space-y-6">
+        <TechnicianWeekCalendar :schedule="weeklyScheduleDraft" :saved-schedule="uniqueSchedule" :time-off="timeOffList" />
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-lg font-semibold text-ink-900">Lịch làm việc hằng tuần</h2>
@@ -1419,7 +1394,7 @@ const openAvatarModal = () => {
               <label class="flex items-center gap-3 cursor-pointer min-h-10">
                 <input v-model="slot.enabled" type="checkbox" class="sr-only peer" :aria-label="`Làm việc ${DAY_NAMES[day]}`" />
                 <span
-                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative shrink-0 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"
+                  class="w-11 h-6 bg-ink-200 rounded-full peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 relative shrink-0 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-ink-300 after:rounded-full after:h-5 after:w-5 after:transition-transform motion-reduce:after:transition-none peer-checked:after:translate-x-5 peer-checked:after:border-white"
                 ></span>
                 <span class="w-20 text-sm font-semibold whitespace-nowrap" :class="slot.enabled ? 'text-ink-900' : 'text-ink-500'">{{ DAY_NAMES[day] }}</span>
               </label>
@@ -1445,14 +1420,15 @@ const openAvatarModal = () => {
             </li>
           </ul>
 
-          <div class="flex justify-end">
+          <div class="profile-save flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 bg-white py-3" :class="{ 'profile-save-dirty': scheduleChanged }">
+              <p class="text-sm text-ink-600" role="status">{{ scheduleChanged ? 'Có thay đổi chưa lưu' : 'Không có thay đổi chưa lưu' }}</p>
             <FhButton variant="primary" size="md" :loading="savingSchedule" @click="handleSaveSchedule">
               Lưu lịch làm việc
             </FhButton>
           </div>
         </section>
 
-        <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
+        <section class="bg-white rounded-2xl border border-ink-200/80 p-5 sm:p-6 space-y-4">
           <h3 class="text-base font-semibold text-ink-900">Ngày nghỉ</h3>
 
           <div class="space-y-3 text-sm">
@@ -1520,10 +1496,11 @@ const openAvatarModal = () => {
             </li>
           </ul>
         </section>
+        </div>
       </div>
 
       <!-- TAB: Khu vực nhận việc -->
-      <section v-if="activeTab === 'location'" class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
+      <section v-if="activeTab === 'location'" class="animate-slide-up bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
         <h2 class="text-lg font-semibold text-ink-900">Khu vực nhận việc</h2>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -1580,6 +1557,18 @@ const openAvatarModal = () => {
               <span>1 km</span>
               <span>40 km</span>
             </div>
+            <div class="flex flex-wrap gap-1.5 pt-1" role="group" aria-label="Chọn nhanh bán kính">
+              <button
+                v-for="km in [5, 10, 20, 30]"
+                :key="km"
+                type="button"
+                class="h-7 px-2.5 rounded-lg border text-xs font-medium font-num transition-[background-color,border-color,color,transform] duration-150 active:scale-95 cursor-pointer"
+                :class="locationRadiusKm === km ? 'border-brand-600 bg-brand-50 text-brand-700 font-semibold' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
+                @click="locationRadiusKm = km"
+              >
+                {{ km }} km
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1596,7 +1585,7 @@ const openAvatarModal = () => {
               @marker-move="onLocationMarkerMove"
             />
           </div>
-          <p v-if="locationNotice" class="text-sm text-red-600" role="alert" data-testid="location-notice">{{ locationNotice }}</p>
+          <p v-if="locationNotice" class="text-sm text-danger-700 font-medium" role="alert" data-testid="location-notice">{{ locationNotice }}</p>
         </div>
 
         <div class="pt-5 border-t border-ink-100">
@@ -1609,7 +1598,8 @@ const openAvatarModal = () => {
           />
         </div>
 
-        <div class="flex justify-end pt-4 border-t border-ink-100">
+        <div class="profile-save flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 bg-white py-3" :class="{ 'profile-save-dirty': locationChanged }">
+              <p class="text-sm text-ink-600" role="status">{{ locationChanged ? 'Có thay đổi chưa lưu' : 'Không có thay đổi chưa lưu' }}</p>
           <FhButton variant="primary" size="md" :loading="savingLocation" @click="handleSaveLocation">
             Lưu khu vực
           </FhButton>
@@ -1617,7 +1607,7 @@ const openAvatarModal = () => {
       </section>
 
       <!-- TAB: Đánh giá -->
-      <div v-else-if="activeTab === 'reviews'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div v-else-if="activeTab === 'reviews'" class="animate-slide-up grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-5">
           <div class="text-center space-y-1">
             <template v-if="hasRating(technicianProfile.averageRating, technicianProfile.ratingCount)">
@@ -1645,7 +1635,7 @@ const openAvatarModal = () => {
               </span>
               <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
                 <div
-                  class="h-full rounded-full"
+                  class="h-full rounded-full transition-[width] duration-500 ease-out"
                   :class="star >= 3 ? 'bg-warning-400' : 'bg-danger-400'"
                   :style="{ width: `${starDistribution.percentages[star]}%` }"
                 ></div>
@@ -1657,7 +1647,7 @@ const openAvatarModal = () => {
           </div>
         </section>
 
-        <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 shadow-xs p-5 sm:p-6 space-y-4">
+        <section class="lg:col-span-2 bg-white rounded-2xl border border-ink-200/80 p-5 sm:p-6 space-y-4">
           <h3 class="text-base font-semibold text-ink-900">
             Nhận xét <span class="font-num text-ink-500 font-normal">({{ reviewsList.length }})</span>
           </h3>
@@ -1667,7 +1657,7 @@ const openAvatarModal = () => {
           <p v-else-if="reviewsList.length === 0" class="py-8 text-center text-sm text-ink-500">Chưa có nhận xét nào.</p>
 
           <ul v-else class="divide-y divide-ink-100">
-            <li v-for="r in reviewsList" :key="r.id" class="py-4 first:pt-0 last:pb-0 space-y-2">
+            <li v-for="(r, idx) in reviewsList" :key="r.id" class="animate-slide-up py-4 first:pt-0 last:pb-0 space-y-2" :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }">
               <div class="flex items-start gap-3">
                 <div class="w-9 h-9 rounded-full bg-ink-100 text-ink-600 font-semibold text-sm flex items-center justify-center shrink-0">
                   {{ (r.customerName || 'K').charAt(0) }}
@@ -1705,6 +1695,8 @@ const openAvatarModal = () => {
           </ul>
         </section>
       </div>
+        </div>
+      </div>
     </template>
 
     <!-- Confirm Delete Time Off Dialog -->
@@ -1720,3 +1712,20 @@ const openAvatarModal = () => {
     <AvatarDialog :open="showAvatarModal" @close="showAvatarModal = false" @saved="(url) => (avatarUrl = url)" />
   </div>
 </template>
+
+<style scoped>
+.profile-save-dirty {
+  position: sticky;
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 10;
+  border-radius: 0.875rem;
+  border: 1px solid var(--color-brand-200, #bfdbfe);
+  background-color: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  padding-inline: 1rem;
+  box-shadow: var(--shadow-e2);
+}
+@media (min-width: 1024px) {
+  .profile-save-dirty { bottom: 1rem; }
+}
+</style>

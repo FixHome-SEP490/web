@@ -353,83 +353,86 @@ watch(
             </div>
           </div>
 
-          <!-- Conversation Item Card -->
-          <button
-            v-for="conv in filteredConversations"
-            :key="conv.id"
-            type="button"
-            class="w-full p-3 rounded-2xl flex items-start gap-3 text-left transition-all relative border"
-            :class="[
-              chatStore.activeConversationId === conv.id
-                ? 'bg-white border-brand-300 shadow-xs ring-1 ring-brand-200'
-                : 'bg-white/60 hover:bg-white border-transparent hover:border-ink-200/80'
-            ]"
-            @click="selectConversation(conv.id)"
-          >
-            <!-- Avatar with Role Badge & Online Dot -->
-            <div class="relative shrink-0">
-              <div class="w-11 h-11 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden border border-brand-200/90 shadow-2xs">
-                <img
-                  v-if="conv.counterpart?.avatarUrl"
-                  :src="conv.counterpart.avatarUrl"
-                  :alt="conv.counterpart.fullName"
-                  class="w-full h-full object-cover"
-                />
-                <span v-else>{{ conv.counterpart?.fullName?.charAt(0) || 'U' }}</span>
-              </div>
+          <!-- Loaded Conversations List -->
+          <div v-else class="space-y-1" data-testid="conversations-list">
+            <button
+              v-for="(conv, index) in filteredConversations"
+              :key="conv.id"
+              type="button"
+              class="animate-slide-up w-full p-3 rounded-2xl flex items-start gap-3 text-left transition-[background-color,border-color,box-shadow] duration-150 relative border"
+              :style="{ animationDelay: `${Math.min(index, 7) * 35}ms` }"
+              :class="[
+                chatStore.activeConversationId === conv.id
+                  ? 'bg-white border-brand-300 shadow-xs ring-1 ring-brand-200'
+                  : 'bg-white/60 hover:bg-white border-transparent hover:border-ink-200/80'
+              ]"
+              @click="selectConversation(conv.id)"
+            >
+              <!-- Avatar with Role Badge & Online Dot -->
+              <div class="relative shrink-0">
+                <div class="w-11 h-11 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden border border-brand-200/90 shadow-2xs">
+                  <img
+                    v-if="conv.counterpart?.avatarUrl"
+                    :src="conv.counterpart.avatarUrl"
+                    :alt="conv.counterpart.fullName"
+                    class="w-full h-full object-cover"
+                  />
+                  <span v-else>{{ conv.counterpart?.fullName?.charAt(0) || 'U' }}</span>
+                </div>
 
-              <!-- Role icon badge at avatar corner -->
-              <span
-                class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] border-2 border-white shadow-2xs"
-                :class="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN' ? 'bg-brand-600 text-white' : 'bg-ink-600 text-white'"
-                :title="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN' ? 'Kỹ thuật viên' : 'Khách hàng'"
-              >
-                <Wrench v-if="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN'" :size="9" />
-                <User v-else :size="9" />
-              </span>
-            </div>
-
-            <!-- Conversation Details -->
-            <div class="flex-1 min-w-0">
-              <!-- Name & Time -->
-              <div class="flex items-center justify-between gap-1">
-                <h3
-                  class="text-xs sm:text-sm font-bold truncate"
-                  :class="chatStore.activeConversationId === conv.id ? 'text-brand-900' : 'text-ink-900'"
-                >
-                  {{ conv.counterpart?.fullName || 'Người dùng' }}
-                </h3>
-                <span class="text-[11px] text-ink-400 font-num shrink-0">
-                  {{ formatTime(conv.lastMessageAt) }}
-                </span>
-              </div>
-
-              <!-- Service chip / label -->
-              <!-- Service and order code: several threads with one person about one service are told apart (PO 18/10/2026). -->
-              <div v-if="conv.serviceName || conv.orderCode" class="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-xs" data-testid="conversation-order">
-                <span v-if="conv.serviceName" class="font-medium text-brand-600 truncate">{{ conv.serviceName }}</span>
-                <span v-if="conv.orderCode" class="shrink-0 text-ink-500 font-num">{{ conv.orderCode }}</span>
-              </div>
-
-              <!-- Last Message Preview & Unread Pill -->
-              <div class="flex items-center justify-between gap-2 mt-1">
-                <p
-                  class="text-xs truncate flex-1"
-                  :class="conv.unreadCount > 0 ? 'font-semibold text-ink-900' : 'text-ink-500'"
-                >
-                  {{ conv.lastMessagePreview || 'Bắt đầu cuộc trò chuyện' }}
-                </p>
-
-                <!-- Unread Badge -->
+                <!-- Role icon badge at avatar corner -->
                 <span
-                  v-if="conv.unreadCount > 0"
-                  class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none shrink-0 shadow-2xs"
+                  class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] border-2 border-white shadow-2xs"
+                  :class="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN' ? 'bg-brand-600 text-white' : 'bg-ink-600 text-white'"
+                  :title="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN' ? 'Kỹ thuật viên' : 'Khách hàng'"
                 >
-                  {{ conv.unreadCount }}
+                  <Wrench v-if="conv.counterpart?.role?.toUpperCase() === 'TECHNICIAN'" :size="9" />
+                  <User v-else :size="9" />
                 </span>
               </div>
-            </div>
-          </button>
+
+              <!-- Conversation Details -->
+              <div class="flex-1 min-w-0">
+                <!-- Name & Time -->
+                <div class="flex items-center justify-between gap-1">
+                  <h3
+                    class="text-xs sm:text-sm font-bold truncate"
+                    :class="chatStore.activeConversationId === conv.id ? 'text-brand-900' : 'text-ink-900'"
+                  >
+                    {{ conv.counterpart?.fullName || 'Người dùng' }}
+                  </h3>
+                  <span class="text-[11px] text-ink-400 font-num shrink-0">
+                    {{ formatTime(conv.lastMessageAt) }}
+                  </span>
+                </div>
+
+                <!-- Service chip / label -->
+                <!-- Service and order code: several threads with one person about one service are told apart (PO 18/10/2026). -->
+                <div v-if="conv.serviceName || conv.orderCode" class="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-xs" data-testid="conversation-order">
+                  <span v-if="conv.serviceName" class="font-medium text-brand-600 truncate">{{ conv.serviceName }}</span>
+                  <span v-if="conv.orderCode" class="shrink-0 text-ink-500 font-num">{{ conv.orderCode }}</span>
+                </div>
+
+                <!-- Last Message Preview & Unread Pill -->
+                <div class="flex items-center justify-between gap-2 mt-1">
+                  <p
+                    class="text-xs truncate flex-1"
+                    :class="conv.unreadCount > 0 ? 'font-semibold text-ink-900' : 'text-ink-500'"
+                  >
+                    {{ conv.lastMessagePreview || 'Bắt đầu cuộc trò chuyện' }}
+                  </p>
+
+                  <!-- Unread Badge -->
+                  <span
+                    v-if="conv.unreadCount > 0"
+                    class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-brand-600 text-white font-num leading-none shrink-0 shadow-2xs"
+                  >
+                    {{ conv.unreadCount }}
+                  </span>
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
       </aside>
 

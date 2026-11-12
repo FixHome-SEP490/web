@@ -185,11 +185,6 @@ const handleLogout = async () => {
   window.location.href = '/login';
 };
 
-const userShortName = computed(() => {
-  const parts = authStore.user?.fullName?.trim().split(/\s+/) || [];
-  return parts.length > 0 ? parts[parts.length - 1] : 'Thợ';
-});
-
 const unread = computed(() => (chatStore.totalUnreadCount > 99 ? '99+' : String(chatStore.totalUnreadCount)));
 
 /** Rejected profiles are blocked until fixed (red); pending ones only wait (yellow). */
@@ -277,44 +272,26 @@ const tabItems: TabNavItem[] = [
     />
 
     <div class="flex-1 min-w-0 min-h-screen flex flex-col">
-      <header class="sticky top-0 z-20 bg-white border-b border-ink-200">
+      <header class="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
         <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 max-w-360 mx-auto">
           <!-- Logo only when the sidebar is hidden (narrow screens) -->
-          <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0" aria-label="FixHome - Trang chủ">
-            <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg" />
+          <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0 group" aria-label="FixHome - Trang chủ">
+            <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg transition-transform group-hover:scale-105" />
             <span class="text-lg font-bold tracking-tight whitespace-nowrap hidden sm:inline"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
           </router-link>
 
           <!-- Current Page Title on wide screens -->
-          <div class="hidden lg:flex items-center gap-3">
-            <h1 v-if="pageTitle" class="text-lg font-semibold text-ink-900 tracking-tight">{{ pageTitle }}</h1>
+          <div class="hidden lg:flex items-center gap-3 min-w-0 flex-1">
+            <h1 v-if="pageTitle" class="text-lg font-semibold text-ink-900 tracking-tight truncate">{{ pageTitle }}</h1>
           </div>
 
-          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-            <!-- Messages live in the sidebar on wide screens -->
-            <router-link
-              to="/tech/messages"
-              class="lg:hidden relative w-10 h-10 rounded-xl text-ink-600 hover:bg-ink-100 flex items-center justify-center transition-colors"
-              aria-label="Tin nhắn với khách hàng"
-              active-class="bg-brand-50 text-brand-700"
-            >
-              <MessageSquare :size="20" :stroke-width="1.75" />
-              <span
-                v-if="chatStore.totalUnreadCount > 0"
-                class="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-danger-600 text-white text-[10px] font-semibold font-num inline-flex items-center justify-center"
-              >
-                {{ unread }}
-              </span>
-            </router-link>
-
-            <NotificationBellDropdown />
-
+          <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <button
               type="button"
-              class="h-9 px-3 rounded-full border flex items-center gap-2 text-sm font-medium whitespace-nowrap transition-colors"
+              class="h-9 px-3.5 rounded-full border flex items-center gap-2 text-sm font-medium whitespace-nowrap transition-[background-color,border-color,transform] active:scale-[0.98]"
               :class="
                 isAvailable
-                  ? 'bg-success-50 border-success-200 text-success-700 hover:bg-success-100'
+                  ? 'bg-success-50 border-success-200/90 text-success-700 hover:bg-success-100/80'
                   : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
               "
               :disabled="togglingAvailability"
@@ -326,11 +303,33 @@ const tabItems: TabNavItem[] = [
               <span class="hidden min-[360px]:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
             </button>
 
-            <div class="relative" @keydown.esc="avatarMenuOpen = false">
+            <span class="h-5 w-px bg-ink-200 mx-0.5" aria-hidden="true" />
+
+            <div class="flex items-center gap-1.5">
+              <!-- Messages live in the sidebar on wide screens -->
+              <router-link
+                to="/tech/messages"
+                class="lg:hidden relative w-10 h-10 rounded-full text-ink-600 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                aria-label="Tin nhắn với khách hàng"
+                active-class="bg-brand-50 text-brand-700"
+              >
+                <MessageSquare :size="19" :stroke-width="1.9" />
+                <span
+                  v-if="chatStore.totalUnreadCount > 0"
+                  class="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center ring-2 ring-white shadow-xs leading-none"
+                >
+                  {{ unread }}
+                </span>
+              </router-link>
+
+              <NotificationBellDropdown />
+
+              <div class="relative" @keydown.esc="avatarMenuOpen = false">
               <button
                 type="button"
-                class="group flex items-center gap-2 rounded-full p-0.5 xl:pr-2.5 transition-colors hover:bg-ink-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
+                class="group flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-ink-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
                 aria-label="Tài khoản"
+                aria-haspopup="menu"
                 :aria-expanded="avatarMenuOpen"
                 @click="avatarMenuOpen = !avatarMenuOpen"
               >
@@ -339,7 +338,6 @@ const tabItems: TabNavItem[] = [
                   :avatar-url="authStore.user?.avatarUrl"
                   :open="avatarMenuOpen"
                 />
-                <span class="hidden xl:inline text-sm font-medium text-ink-800 max-w-32 truncate">{{ userShortName }}</span>
               </button>
 
               <div v-if="avatarMenuOpen" class="fixed inset-0 z-40" @click="avatarMenuOpen = false" />
@@ -397,6 +395,7 @@ const tabItems: TabNavItem[] = [
                   </div>
                 </div>
               </Transition>
+            </div>
             </div>
           </div>
         </div>

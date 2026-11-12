@@ -72,20 +72,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <audio ref="remoteAudio" autoplay class="hidden" />
 
     <Transition
-      enter-active-class="transition duration-150 ease-out"
+      enter-active-class="transition duration-150 ease-out motion-reduce:transition-none"
       enter-from-class="opacity-0"
-      leave-active-class="transition duration-150 ease-in"
+      leave-active-class="transition duration-150 ease-in motion-reduce:transition-none"
       leave-to-class="opacity-0"
     >
       <div
         v-if="callStore.isActive"
-        class="fixed inset-0 z-[100] flex items-center justify-center bg-ink-900/60 backdrop-blur-sm px-4"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/60 backdrop-blur-sm px-4"
         role="dialog"
         aria-modal="true"
         :aria-label="callStore.status === 'incoming' ? 'Cuộc gọi đến' : 'Cuộc gọi thoại'"
       >
         <div
-          class="w-full max-w-xs bg-white rounded-lg shadow-e3 px-6 py-8 flex flex-col items-center text-center"
+          class="w-full max-w-xs bg-white rounded-[var(--radius-lg)] shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06] px-6 py-8 flex flex-col items-center text-center"
         >
           <!-- Who is on the line -->
           <div
