@@ -268,7 +268,8 @@ const openAddService = () => {
 const openEditService = (svc: ServiceItem) => {
   isEditingService.value = true;
   // W-7: the API returns prices as decimal strings ("150000.00"); the PATCH must send numbers.
-  const money = (value: unknown) => (value === null || value === undefined || value === '' ? value : Number(value));
+  // An empty price (fixedPrice null on an inspection service) is left out: the API rejects null.
+  const money = (value: unknown) => (value === null || value === undefined || value === '' ? undefined : Number(value));
   serviceForm.value = {
     ...svc,
     basePrice: money(svc.basePrice) as number,
