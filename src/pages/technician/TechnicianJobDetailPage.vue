@@ -82,6 +82,8 @@ import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { chatSocketService, type NotificationNewEvent } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { useQuotationPartsSourcing } from '../../composables/useQuotationPartsSourcing';
+import QuotationPartsSourcingNote from '../../components/QuotationPartsSourcingNote.vue';
 import { technicianApprovedParts, technicianPreRepairLabel } from '../../utils/technician-workflow';
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
 import { partsCompletionBlockers } from '../../utils/parts-completion';
@@ -398,6 +400,8 @@ const retryQuoteStock = async () => {
 // Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
 const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
+// F3 (TECH 66): the customer cannot approve a quote whose FixHome parts no warehouse holds; show the way out.
+const { sourcing: quoteSourcing, checking: quoteSourcingChecking, refresh: refreshQuoteSourcing } = useQuotationPartsSourcing(() => job.value?.quotation);
 const quoteEditorDismissed = ref(false);
 
 // Additional cost (chi phí phát sinh)
@@ -3098,6 +3102,10 @@ const toggleMore = async () => {
         >
           Gửi lại báo giá khác
         </button>
+        <QuotationPartsSourcingNote
+          v-if="currentStepNumber === 3 && !skipsQuote && quotationSubmitted && !quotationRejected && !showQuotationForm"
+          class="mt-2" :sourcing="quoteSourcing" audience="technician" :checking="quoteSourcingChecking" @recheck="refreshQuoteSourcing"
+        />
 
         <!-- Display-only historical gross; actual payment remains server-authoritative. -->
         <section
