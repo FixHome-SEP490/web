@@ -215,6 +215,33 @@ describe('AI booking form', () => {
     }));
   }, 10000);
 
+  it('shows on the confirm step what the technician reads: the whole account without the "sai rồi" (BUG 23)', async () => {
+    analyze
+      .mockResolvedValueOnce(reply({ recommendedServices: [fix] }))
+      .mockResolvedValueOnce(reply({
+        recommendedServices: [fix],
+        customerDisagreed: { kind: 'fault', rejected: ['AC_LOW_REFRIGERANT'], rejectedVi: ['Thiếu gas'], correctionVi: 'sai rồi, máy vẫn mát nhưng chảy nước', restVi: 'máy vẫn mát nhưng chảy nước' },
+      }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    await wrapper.get('[data-testid="ai-input"]').setValue('sai rồi, máy vẫn mát nhưng chảy nước');
+    await wrapper.get('[data-testid="ai-send"]').trigger('click');
+    await pause();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="ai-continue"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('button[data-testid^="session-2"]').trigger('click');
+    await wrapper.get('[data-testid="step2-next"]').trigger('click');
+    await flushPromises();
+    const shown = wrapper.get('[data-testid="confirm-description"]').text();
+    expect(shown).toBe('Máy lạnh kêu lạch cạch, không mát. máy vẫn mát nhưng chảy nước');
+    expect(shown).not.toContain('sai rồi');
+    await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
+    await flushPromises();
+    expect(createBooking.mock.calls[0][0].description).toBe(shown);
+  }, 10000);
+
   it('lets the customer change the service only after the diagnosis', async () => {
     analyze
       .mockResolvedValueOnce(reply({ recommendedServices: [fix] }))
