@@ -10,6 +10,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQueryClient } from '@tanstack/vue-query';
 import { queryKeys } from '../../lib/query-keys';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
@@ -578,7 +579,7 @@ async function saveReschedule() {
     await visitGroupsApi.reschedule(groupId, chosenSession.value);
     if (disposed || groupId !== visitId.value) return;
     rescheduleOpen.value = false;
-    message.value = { type: 'success', text: 'Đã đổi lịch hẹn cho cả lượt sửa.' };
+    toast.success('Đã đổi lịch hẹn cho cả lượt sửa.');
     await load();
   } catch (err) {
     if (disposed || groupId !== visitId.value) return;
@@ -598,7 +599,7 @@ async function confirmCancel() {
     await visitGroupsApi.cancel(groupId, 'Khách huỷ lượt sửa');
     if (disposed || groupId !== visitId.value) return;
     cancelOpen.value = false;
-    message.value = { type: 'success', text: 'Đã huỷ lượt sửa.' };
+    toast.success('Đã huỷ lượt sửa.');
     await load();
   } catch (err) {
     if (disposed || groupId !== visitId.value) return;
@@ -920,17 +921,17 @@ async function answerCash(agreed: boolean) {
 
 <template>
   <div class="mx-auto min-w-0 max-w-3xl space-y-6 pb-16" data-testid="customer-visit">
-    <FhBackLink class="min-h-11" label="Đơn của tôi" @click="router.push('/app/orders')" />
+    <FhBackLink class="min-h-11 animate-slide-up" label="Đơn của tôi" @click="router.push('/app/orders')" />
 
-    <FhSkeleton v-if="loading" class="h-40 rounded-2xl" />
-    <div v-else-if="loadError && !visit" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
+    <FhSkeleton v-if="loading" class="h-40 rounded-2xl animate-slide-up-delay-1" />
+    <div v-else-if="loadError && !visit" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800 animate-slide-up-delay-1">
       {{ loadError }}
       <FhButton variant="secondary" size="md" class="ml-2" @click="load">Thử lại</FhButton>
     </div>
 
     <template v-else-if="visit">
       <div v-if="loadError" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ loadError }} Hiện dữ liệu đã đọc trước đó; thao tác cần xác minh lại. <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></div>
-      <header class="space-y-4">
+      <header class="space-y-4 animate-slide-up-delay-1">
         <div class="space-y-1">
           <h1 class="text-2xl leading-8 font-bold tracking-tight text-ink-900 sm:text-[28px] sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
           <p class="text-sm text-ink-600">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
@@ -983,7 +984,7 @@ async function answerCash(agreed: boolean) {
         :class="message.type === 'success' ? 'border-success-200 bg-success-50 text-success-800' : 'border-danger-200 bg-danger-50 text-danger-800'"
       >{{ message.text }}</p>
 
-      <section class="space-y-3" data-testid="visit-device-list">
+      <section class="space-y-3 animate-slide-up-delay-2" data-testid="visit-device-list">
         <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
         <div v-if="interruptedDevices.length" class="border-b border-ink-200 pb-2 text-sm text-ink-700" data-testid="visit-interrupted">
           <StoppedDevicesRebookPicker :group-id="visitId" :customer-id="auth.user?.id" :revalidation="rebookVerificationVersion" :devices="interruptedDevices" :disabled="checkoutLoading || !!checkoutError || !!loadError" />

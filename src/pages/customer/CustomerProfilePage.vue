@@ -5,11 +5,15 @@ import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import { computed, ref, onMounted, watch } from 'vue';
-import { MapPin, Plus, Trash2, Check, Pencil, Camera, X, ShieldCheck } from 'lucide-vue-next';
+import {
+  MapPin, Plus, Camera, X, ShieldCheck,
+  LocateFixed, AlertCircle, Navigation
+} from 'lucide-vue-next';
 import {
   FhButton,
   FhConfirmDialog,
   FhSkeleton,
+  FhEmptyState,
   MapTilerMap,
   type MapMarker,
 } from '../../components';
@@ -25,6 +29,12 @@ import { queryKeys } from '../../lib/query-keys';
 import { formatDayKey } from '../../utils/formatters';
 
 const authStore = useAuthStore();
+
+const LABEL_PRESETS = ['Nhà riêng', 'Văn phòng', 'Nhà bố mẹ', 'Căn hộ'];
+const setAddressLabel = (preset: string) => {
+  addressForm.value.label = preset;
+  labelError.value = '';
+};
 
 // After the identity check is approved (PO 14/10/2026) the name and date of
 // birth are the ones on the citizen ID card: shown with a note, not editable
@@ -45,7 +55,6 @@ const fullName = ref('');
 const phoneNumber = ref('');
 const avatarUrl = ref('');
 const isSaving = ref(false);
-const saveSuccess = ref(false);
 // Shown under the form instead of a browser alert (PO 12/10/2026), with the real reason.
 const profileError = ref('');
 
@@ -299,6 +308,9 @@ const locateAddress = () => {
 };
 
 onMounted(async () => {
+  if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
   if (authStore.user) {
     fullName.value = authStore.user.fullName;
     phoneNumber.value = authStore.user.phoneNumber ?? '';
@@ -327,7 +339,6 @@ const handleSaveProfile = async () => {
   profileError.value = (locked ? '' : validateFullName(fullName.value)) || validatePhoneNumber(phoneNumber.value);
   if (profileError.value) return;
   isSaving.value = true;
-  saveSuccess.value = false;
   try {
     const updated = await profileApi.updateMe({
       // A verified name is never sent: it can no longer change.
@@ -341,12 +352,9 @@ const handleSaveProfile = async () => {
         role: authStore.user.role,
       });
     }
-    saveSuccess.value = true;
     await authStore.fetchProfile();
-    setTimeout(() => {
-      saveSuccess.value = false;  
-      showEditProfileModal.value = false;
-    }, 1500);
+    showEditProfileModal.value = false;
+    toast.success('Đã cập nhật thông tin cá nhân.');
   } catch (err) {
     profileError.value = userFacingError(err, 'Không thể cập nhật hồ sơ. Vui lòng thử lại.');
   } finally {
@@ -362,7 +370,6 @@ const openEditProfileModal = () => {
   fullName.value = authStore.user?.fullName || '';
   phoneNumber.value = authStore.user?.phoneNumber || '';
   showEditProfileModal.value = true;
-  saveSuccess.value = false;
   profileError.value = '';
 };
 
@@ -404,6 +411,7 @@ const handleAddAddress = async () => {
       isDefault: false,
     };
     await loadAddresses();
+    toast.success('Đã thêm địa chỉ mới.');
   } catch (err) {
     // Shown inside the form, next to what the person has to fix.
     addressError.value = userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.');
@@ -459,6 +467,7 @@ const handleSaveAddress = async () => {
     addresses.value = addresses.value.map(addr => addr.id === original.id ? updated : addr);
     closeAddressModalAfterSave();
     await loadAddresses();
+    toast.success('Đã cập nhật địa chỉ.');
   } catch (err) {
     addressError.value = userFacingError(err, 'Không thể lưu địa chỉ. Vui lòng thử lại.');
   } finally {
@@ -487,65 +496,108 @@ const confirmDelete = async () => {
   showDeleteConfirm.value = false;
   addressToDelete.value = null;
 };
+
+const handleSetDefaultAddress = async (addr: UserAddress) => {
+  if (addr.isDefault || savingAddress.value) return;
+  savingAddress.value = true;
+  try {
+    await profileApi.updateAddress(addr.id, {
+      label: normalizeAddressText(addr.label ?? 'Địa chỉ'),
+      isDefault: true,
+    });
+    toast.success(`Đã đặt "${addr.label || 'Địa chỉ'}" làm địa chỉ mặc định.`);
+    await loadAddresses();
+  } catch (err) {
+    toast.error(userFacingError(err, 'Không thể đặt làm mặc định.'));
+  } finally {
+    savingAddress.value = false;
+  }
+};
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto pb-10 space-y-6">
-    <!-- Who you are -->
-    <section class="flex items-center gap-4">
-      <div class="relative w-16 h-16 shrink-0">
-        <div class="w-full h-full rounded-full bg-brand-100 text-brand-700 font-bold text-2xl overflow-hidden flex items-center justify-center">
-          <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover" />
-          <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
+  <div class="w-full space-y-6 pb-12">
+    <!-- Who you are - Hero Profile Card -->
+    <section class="bg-white rounded-2xl border border-ink-200/80 p-6 sm:p-7 shadow-xs animate-slide-up-hero">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+        <div class="flex items-center gap-4 sm:gap-5">
+          <!-- Avatar with camera button -->
+          <div class="relative w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-ink-900 text-white font-semibold text-2xl flex items-center justify-center shrink-0 ring-1 ring-ink-200/80">
+            <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover rounded-full" />
+            <span v-else>{{ authStore.user?.fullName?.charAt(0) ?? 'U' }}</span>
+            <button
+              type="button"
+              class="absolute bottom-0 right-0 w-7 h-7 bg-white text-ink-600 hover:text-ink-900 rounded-full flex items-center justify-center border border-ink-200 shadow-2xs transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+              title="Đổi ảnh đại diện"
+              aria-label="Đổi ảnh đại diện"
+              @click="openAvatarModal"
+            >
+              <Camera :size="13" />
+            </button>
+          </div>
+
+          <!-- Name & Contact -->
+          <div class="space-y-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight truncate">
+                {{ authStore.user?.fullName || 'Người dùng' }}
+              </h1>
+              <ShieldCheck v-if="identityVerified" :size="20" class="text-emerald-600 shrink-0" title="Tài khoản đã xác thực" />
+            </div>
+            <p class="text-sm text-ink-500 font-normal">
+              {{ authStore.user?.email }}
+              <span v-if="authStore.user?.phoneNumber" class="text-ink-300 mx-1.5">·</span>
+              <span v-if="authStore.user?.phoneNumber" class="font-num">{{ authStore.user?.phoneNumber }}</span>
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          class="absolute -bottom-1 -right-1 w-8 h-8 bg-white hover:bg-ink-100 text-ink-700 rounded-full flex items-center justify-center border border-ink-200 shadow-sm transition-colors"
-          title="Đổi ảnh đại diện"
-          aria-label="Đổi ảnh đại diện"
-          @click="openAvatarModal"
-        >
-          <Camera :size="16" />
-        </button>
-      </div>
-      <div class="min-w-0">
-        <h1 class="text-2xl font-bold text-ink-900 tracking-tight text-balance">{{ authStore.user?.fullName || 'Người dùng' }}</h1>
-        <p class="text-sm text-ink-500 truncate">{{ authStore.user?.email }}</p>
       </div>
     </section>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 items-start animate-slide-up-content">
       <div class="space-y-6">
         <!-- Personal details -->
-        <section class="bg-white rounded-2xl border border-ink-200 p-5">
-          <div class="flex items-center justify-between gap-3 mb-3">
-            <h2 class="text-lg font-semibold text-ink-900">Thông tin cá nhân</h2>
-            <FhButton variant="secondary" size="sm" @click="openEditProfileModal">
-              <Pencil :size="14" /> Sửa
-            </FhButton>
+        <section class="bg-white rounded-2xl border border-ink-200/80 p-5 sm:p-6 shadow-xs">
+          <div class="flex items-center justify-between pb-3.5 mb-2 border-b border-ink-100">
+            <h2 class="text-base font-bold text-ink-900">Thông tin cá nhân</h2>
+            <button
+              type="button"
+              class="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
+              @click="openEditProfileModal"
+            >
+              Sửa
+            </button>
           </div>
-          <dl class="divide-y divide-ink-100 text-sm">
-            <div class="flex items-center justify-between gap-3 py-2.5">
-              <dt class="text-ink-500 shrink-0">Họ và tên</dt>
-              <dd class="min-w-0 text-right">
-                <span class="block font-medium text-ink-900" data-testid="profile-name">{{ authStore.user?.fullName }}</span>
-                <span v-if="identityVerified" class="inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap" data-testid="profile-name-verified"><ShieldCheck :size="12" aria-hidden="true" /> Đã xác minh theo CCCD</span>
+
+          <dl class="divide-y divide-ink-100/80 text-sm">
+            <div class="py-3 flex items-center justify-between gap-4">
+              <dt class="text-xs font-medium text-ink-500 shrink-0">Họ và tên</dt>
+              <dd class="text-right min-w-0">
+                <span class="font-semibold text-ink-900" data-testid="profile-name">{{ authStore.user?.fullName }}</span>
+                <span v-if="identityVerified" class="block text-[11px] text-emerald-600 font-medium" data-testid="profile-name-verified">
+                  Đã xác minh theo CCCD
+                </span>
               </dd>
             </div>
-            <div v-if="verifiedBirthDate" class="flex items-center justify-between gap-3 py-2.5" data-testid="profile-dob">
-              <dt class="text-ink-500 shrink-0">Ngày sinh</dt>
-              <dd class="min-w-0 text-right">
-                <span class="block font-medium text-ink-900 font-num whitespace-nowrap">{{ formatDayKey(verifiedBirthDate) }}</span>
-                <span class="inline-flex items-center gap-1 text-xs text-success-700 whitespace-nowrap"><ShieldCheck :size="12" aria-hidden="true" /> Đã xác minh theo CCCD</span>
+
+            <div v-if="verifiedBirthDate" class="py-3 flex items-center justify-between gap-4" data-testid="profile-dob">
+              <dt class="text-xs font-medium text-ink-500 shrink-0">Ngày sinh</dt>
+              <dd class="text-right min-w-0">
+                <span class="font-semibold text-ink-900 font-num">{{ formatDayKey(verifiedBirthDate) }}</span>
+                <span class="block text-[11px] text-emerald-600 font-medium">
+                  Đã xác minh theo CCCD
+                </span>
               </dd>
             </div>
-            <div class="flex items-center justify-between gap-3 py-2.5">
-              <dt class="text-ink-500">Số điện thoại</dt>
-              <dd class="font-medium text-ink-900 font-num whitespace-nowrap">{{ authStore.user?.phoneNumber || 'Chưa có' }}</dd>
+
+            <div class="py-3 flex items-center justify-between gap-4">
+              <dt class="text-xs font-medium text-ink-500 shrink-0">Số điện thoại</dt>
+              <dd class="font-semibold text-ink-900 font-num text-right">{{ authStore.user?.phoneNumber || 'Chưa có' }}</dd>
             </div>
-            <div class="flex items-center justify-between gap-3 py-2.5">
-              <dt class="text-ink-500 shrink-0">Email</dt>
-              <dd class="font-medium text-ink-900 text-right break-all">{{ authStore.user?.email }}</dd>
+
+            <div class="py-3 flex items-center justify-between gap-4">
+              <dt class="text-xs font-medium text-ink-500 shrink-0">Email</dt>
+              <dd class="font-semibold text-ink-900 text-right truncate max-w-[200px]">{{ authStore.user?.email }}</dd>
             </div>
           </dl>
         </section>
@@ -554,66 +606,98 @@ const confirmDelete = async () => {
       </div>
 
       <!-- Address book -->
-      <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
-        <div class="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-          <h2 class="text-lg font-semibold text-ink-900">Sổ địa chỉ</h2>
-          <FhButton variant="secondary" size="sm" data-testid="add-saved-address" @click="openAddAddress">
-            <Plus :size="16" /> Thêm địa chỉ
+      <section class="bg-white rounded-2xl border border-ink-200/80 shadow-xs overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-5 border-b border-ink-100">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base sm:text-lg font-bold text-ink-900">Sổ địa chỉ</h2>
+            <span class="text-xs font-medium text-ink-400 font-num">({{ addresses.length }})</span>
+          </div>
+          <FhButton variant="primary" size="sm" data-testid="add-saved-address" @click="openAddAddress">
+            <Plus :size="15" /> Thêm địa chỉ
           </FhButton>
         </div>
 
-        <div v-if="loadingAddresses && addresses.length === 0" class="px-5 pb-5 space-y-4" aria-busy="true" aria-label="Đang tải địa chỉ">
-          <div v-for="i in 2" :key="i" class="space-y-2">
-            <FhSkeleton width="30%" height="16px" />
-            <FhSkeleton width="70%" height="14px" />
+        <div v-if="loadingAddresses && addresses.length === 0" class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true" aria-label="Đang tải địa chỉ">
+          <div v-for="i in 4" :key="i" class="p-4 rounded-xl border border-ink-100 space-y-2">
+            <FhSkeleton width="30%" height="18px" />
+            <FhSkeleton width="75%" height="16px" />
+            <FhSkeleton width="50%" height="14px" />
           </div>
         </div>
 
-        <div v-else-if="addressesFailed" class="px-5 pb-5 flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm text-ink-700">Chưa tải được sổ địa chỉ, vui lòng thử lại.</p>
+        <div v-else-if="addressesFailed" class="p-6 flex flex-wrap items-center justify-between gap-3 bg-danger-50/40 rounded-xl m-4 border border-danger-100">
+          <p class="text-sm text-danger-800">Chưa tải được sổ địa chỉ, vui lòng thử lại.</p>
           <FhButton variant="secondary" size="sm" @click="loadAddresses">Thử lại</FhButton>
         </div>
 
-        <p v-else-if="addresses.length === 0" class="px-5 pb-6 text-sm text-ink-500 text-pretty">
-          Chưa có địa chỉ nào. Thêm nhà riêng hoặc văn phòng để đặt thợ nhanh hơn.
-        </p>
+        <div v-else-if="addresses.length === 0" class="py-10">
+          <FhEmptyState
+            title="Chưa có địa chỉ nào"
+            description="Lưu địa chỉ giúp đặt lịch kỹ thuật viên FixHome nhanh chóng hơn."
+            action-text="Thêm địa chỉ ngay"
+            :illustration="'/images/ui/empty-state-search-service.png'"
+            @action="openAddAddress"
+          />
+        </div>
 
-        <ul v-else class="divide-y divide-ink-100 border-t border-ink-100">
-          <li v-for="addr in addresses" :key="addr.id" class="px-5 py-4 flex items-start gap-3">
-            <MapPin :size="18" class="text-ink-500 shrink-0 mt-0.5" />
-            <div class="min-w-0 flex-1 space-y-0.5">
-              <p class="flex items-center gap-2">
-                <span class="font-semibold text-sm text-ink-900">{{ addr.label || 'Địa chỉ' }}</span>
-                <span v-if="addr.isDefault" class="inline-flex items-center h-5 px-1.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 whitespace-nowrap">
-                  Mặc định
-                </span>
-              </p>
-              <p class="text-sm text-ink-800 text-pretty">{{ tidyAddressText(addr.line1) }}</p>
-              <p class="text-sm text-ink-500 text-pretty">{{ addr.ward ? addr.ward + ', ' : '' }}{{ addr.district }}, {{ addr.province }}</p>
+        <div v-else class="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <article
+            v-for="addr in addresses"
+            :key="addr.id"
+            class="rounded-xl border p-4 sm:p-5 flex flex-col justify-between transition-all duration-150 bg-white"
+            :class="addr.isDefault ? 'border-brand-500/50 ring-1 ring-brand-500/20 shadow-xs' : 'border-ink-200/80 hover:border-ink-300'"
+          >
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="font-bold text-sm text-ink-900 truncate">{{ addr.label || 'Địa chỉ' }}</span>
+                  <span v-if="addr.isDefault" class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200/60 whitespace-nowrap">
+                    Mặc định
+                  </span>
+                </div>
+
+                <div class="flex items-center gap-2 text-xs font-medium shrink-0">
+                  <button
+                    type="button"
+                    :data-testid="`edit-saved-address-${addr.id}`"
+                    class="text-ink-500 hover:text-ink-900 cursor-pointer transition-colors"
+                    @click="openEditAddress(addr)"
+                  >
+                    Sửa
+                  </button>
+                  <span class="text-ink-300">·</span>
+                  <button
+                    type="button"
+                    class="text-ink-400 hover:text-danger-600 cursor-pointer transition-colors"
+                    @click="triggerDeleteAddress(addr.id)"
+                  >
+                    Xoá
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p class="text-sm font-semibold text-ink-900 leading-snug">
+                  {{ tidyAddressText(addr.line1) }}
+                </p>
+                <p class="text-xs text-ink-500 mt-1">
+                  {{ [addr.ward, addr.district, addr.province].filter(Boolean).join(', ') }}
+                </p>
+              </div>
             </div>
-            <div class="flex items-center gap-1 shrink-0">
+
+            <div v-if="!addr.isDefault" class="pt-3 mt-3 border-t border-ink-100 flex items-center justify-end">
               <button
                 type="button"
-                :data-testid="`edit-saved-address-${addr.id}`"
-                class="w-9 h-9 flex items-center justify-center text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-xl"
-                title="Sửa địa chỉ"
-                aria-label="Sửa địa chỉ"
-                @click="openEditAddress(addr)"
+                class="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
+                :disabled="savingAddress"
+                @click="handleSetDefaultAddress(addr)"
               >
-                <Pencil :size="16" />
-              </button>
-              <button
-                type="button"
-                class="w-9 h-9 flex items-center justify-center text-ink-500 hover:text-danger-600 hover:bg-danger-50 rounded-xl"
-                title="Xoá địa chỉ"
-                aria-label="Xoá địa chỉ"
-                @click="triggerDeleteAddress(addr.id)"
-              >
-                <Trash2 :size="16" />
+                Đặt làm mặc định
               </button>
             </div>
-          </li>
-        </ul>
+          </article>
+        </div>
       </section>
     </div>
 
@@ -621,181 +705,273 @@ const confirmDelete = async () => {
 
     <!-- Edit Profile Modal -->
     <Transition
-      enter-active-class="transition duration-200 ease-out"
+      enter-active-class="transition-opacity duration-200 ease-out"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
+      leave-active-class="transition-opacity duration-150 ease-in"
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
       <div
         v-if="showEditProfileModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+        @click.self="showEditProfileModal = false"
       >
-      <div class="bg-white rounded-md max-w-sm w-full p-6 shadow-xl space-y-5">
-        <h3 class="text-lg font-bold text-ink-900">
-          Chỉnh sửa thông tin
-        </h3>
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-5 border border-ink-100 animate-modal-in">
+          <div class="flex items-center justify-between pb-2 border-b border-ink-100">
+            <h3 class="text-lg font-bold text-ink-900">
+              Chỉnh sửa thông tin
+            </h3>
+            <button
+              type="button"
+              class="w-8 h-8 rounded-full flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors cursor-pointer"
+              aria-label="Đóng"
+              @click="showEditProfileModal = false"
+            >
+              <X :size="18" />
+            </button>
+          </div>
 
-        <div class="space-y-4 text-sm">
-          <div v-if="identityVerified" data-testid="profile-fullname-locked">
-            <p class="block font-semibold text-ink-700 mb-1.5">Họ và tên</p>
-            <p class="h-10 px-3 flex items-center bg-ink-50 border border-ink-200 rounded-sm text-ink-700">{{ authStore.user?.fullName }}</p>
-            <p class="mt-1 text-xs text-ink-500 text-pretty">Đã xác minh theo CCCD nên không đổi được.</p>
+          <div class="space-y-4 text-sm">
+            <div v-if="identityVerified" data-testid="profile-fullname-locked">
+              <label class="block font-semibold text-ink-700 mb-1.5">Họ và tên</label>
+              <div class="h-10 px-3.5 flex items-center justify-between bg-ink-50 border border-ink-200 rounded-xl text-ink-800 font-medium">
+                <span>{{ authStore.user?.fullName }}</span>
+                <ShieldCheck :size="16" class="text-emerald-600 shrink-0" />
+              </div>
+              <p class="mt-1 text-xs text-ink-500 text-pretty">Đã xác minh theo CCCD nên không đổi được.</p>
+            </div>
+            <div v-else>
+              <label class="block font-semibold text-ink-700 mb-1.5">Họ và tên</label>
+              <input
+                v-model="fullName"
+                type="text"
+                data-testid="profile-fullname"
+                class="w-full h-10 px-3.5 bg-white border border-ink-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 text-ink-900 transition-all"
+                placeholder="Nhập họ và tên đầy đủ"
+              />
+            </div>
+            
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1.5">Số điện thoại</label>
+              <input
+                v-model="phoneNumber"
+                type="text"
+                data-testid="profile-phone"
+                class="w-full h-10 px-3.5 bg-white border border-ink-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 font-num text-ink-900 transition-all"
+                placeholder="0912345678"
+              />
+            </div>
+            
+            <p v-if="profileError" role="alert" class="text-xs text-danger-600 font-medium flex items-center gap-1" data-testid="profile-error">
+              <AlertCircle :size="14" class="shrink-0" /> {{ profileError }}
+            </p>
           </div>
-          <div v-else>
-            <label class="block font-semibold text-ink-700 mb-1.5">Họ và tên</label>
-            <input v-model="fullName" type="text" data-testid="profile-fullname" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600" />
-          </div>
-          
-          <div>
-            <label class="block font-semibold text-ink-700 mb-1.5">Số điện thoại</label>
-            <input v-model="phoneNumber" type="text" data-testid="profile-phone" class="w-full h-10 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600 font-num" placeholder="0912345678" />
-          </div>
-          
-          <p v-if="profileError" role="alert" class="text-xs text-danger-600" data-testid="profile-error">{{ profileError }}</p>
 
-          <div v-if="saveSuccess" class="bg-success-50 text-success-700 text-xs px-3 py-2 rounded border border-success-200 flex items-center gap-1.5">
-            <Check :size="14" /> Cập nhật thành công!
+          <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
+            <FhButton variant="ghost" size="sm" @click="showEditProfileModal = false">
+              Huỷ bỏ
+            </FhButton>
+            <FhButton variant="primary" size="sm" :loading="isSaving" data-testid="profile-save" @click="handleSaveProfile">
+              Lưu thay đổi
+            </FhButton>
           </div>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-3 border-t border-ink-100">
-          <FhButton variant="ghost" size="sm" @click="showEditProfileModal = false">
-            Huỷ bỏ
-          </FhButton>
-          <FhButton variant="primary" size="sm" :loading="isSaving" data-testid="profile-save" @click="handleSaveProfile">
-            Lưu thay đổi
-          </FhButton>
         </div>
       </div>
-    </div>
     </Transition>
 
     <AvatarDialog :open="showAvatarModal" @close="showAvatarModal = false" @saved="(url) => (avatarUrl = url)" />
 
     <!-- Add Address Modal -->
     <Transition
-      enter-active-class="transition duration-200 ease-out"
+      enter-active-class="transition-opacity duration-200 ease-out"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
+      leave-active-class="transition-opacity duration-150 ease-in"
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
       <div
         v-if="showAddressModal"
         data-testid="saved-address-modal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
+        @click.self="closeAddressModal"
       >
-      <div class="bg-white rounded-md max-w-md w-full shadow-xl flex flex-col max-h-[90vh]">
-        <div class="flex items-center justify-between px-6 pt-6 shrink-0">
-          <h3 class="text-lg font-bold text-ink-900">
-            {{ editingAddressId ? 'Sửa địa chỉ đã lưu' : 'Thêm địa chỉ' }}
-          </h3>
-          <button
-            type="button"
-            aria-label="Đóng"
-            class="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100"
-            @click="closeAddressModal"
-          >
-            <X :size="18" />
-          </button>
-        </div>
-
-        <div class="space-y-4 text-xs px-6 py-5 overflow-y-auto flex-1 min-h-0">
-          <div>
-            <label class="block font-semibold text-ink-700 mb-1">Tên nhãn gợi nhớ</label>
-            <input
-              v-model="addressForm.label" data-testid="saved-address-label"
-              type="text"
-              class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-              placeholder="Nhà riêng, Văn phòng, Nhà bố mẹ..."
-              :aria-invalid="labelError ? 'true' : undefined"
-            />
-            <p v-if="labelError" data-testid="saved-address-label-error" role="alert" class="mt-1 text-xs text-danger-700">{{ labelError }}</p>
-          </div>
-
-          <div class="space-y-2">
-            <label class="block font-semibold text-ink-700 mb-1">Địa chỉ (số nhà, tên đường...) *</label>
-            <div class="relative">
-              <input
-                v-model="addressForm.line1" data-testid="saved-address-line1"
-                type="text"
-                placeholder="Tìm địa chỉ, ví dụ: Số 25 Ngõ 12 Đội Cấn"
-                class="w-full h-9 px-3 bg-white border border-ink-200 rounded-sm focus:outline-none focus:border-brand-600"
-                :aria-invalid="line1Error ? 'true' : undefined"
-                @input="onAddressSearchInput"
-              />
-              <ul
-                v-if="addressSuggestions.length"
-                class="absolute z-10 mt-1 w-full bg-white border border-ink-200 rounded-sm shadow-lg max-h-48 overflow-auto"
-              >
-                <li
-                  v-for="s in addressSuggestions"
-                  :key="s.placeId"
-                  class="px-3 py-2 text-xs hover:bg-ink-50 cursor-pointer"
-                  @click="selectAddressSuggestion(s)"
-                >
-                  {{ s.description }}
-                </li>
-              </ul>
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl flex flex-col max-h-[92vh] border border-ink-100 overflow-hidden animate-modal-in">
+          <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-ink-100 shrink-0">
+            <div>
+              <h3 class="text-lg font-bold text-ink-900">
+                {{ editingAddressId ? 'Sửa địa chỉ đã lưu' : 'Thêm địa chỉ mới' }}
+              </h3>
+              <p class="text-xs text-ink-500 mt-0.5">Xác định vị trí chính xác để kỹ thuật viên phục vụ tận nhà</p>
             </div>
-            <p v-if="line1Error" data-testid="saved-address-line1-error" role="alert" class="text-xs text-danger-700">{{ line1Error }}</p>
-            <p v-if="addressForm.ward || addressForm.province" class="text-xs text-ink-500 flex items-center gap-1">
-              <MapPin :size="12" class="shrink-0" />
-              <span>{{ [addressForm.ward, addressForm.province].filter(Boolean).join(', ') }}</span>
-            </p>
-          </div>
-
-          <div class="space-y-2">
-            <p class="text-xs text-ink-600">Hoặc chọn vị trí chính xác trên bản đồ (cần để đặt lịch và xác nhận thợ đến nơi)</p>
-            <FhButton variant="ghost" size="sm" @click="locateAddress">Dùng vị trí hiện tại khi đang ở địa chỉ này</FhButton>
-            <MapTilerMap
-              ref="mapRef"
-              :center="mapCenter"
-              :markers="addressMarkers"
-              click-to-move="picker"
-              height-class="h-56"
-              @marker-move="onMapMarkerMove"
-            />
-            <div class="grid grid-cols-2 gap-2">
-              <input v-model.number="addressLat" data-testid="saved-address-lat" @input="invalidateEditLocation" aria-label="Vĩ độ" placeholder="Vĩ độ" type="number" min="-90" max="90" step="any" class="border p-2 rounded" />
-              <input v-model.number="addressLng" data-testid="saved-address-lng" @input="invalidateEditLocation" aria-label="Kinh độ" placeholder="Kinh độ" type="number" min="-180" max="180" step="any" class="border p-2 rounded" />
-            </div>
-            <p v-if="locationError" data-testid="saved-address-location-error" role="alert" class="text-xs text-danger-700">{{ locationError }}</p>
-            <FhButton
-              variant="ghost"
-              size="sm"
-              :disabled="searchingByCoords"
-              :loading="searchingByCoords"
-              @click="searchByCoordinates" data-testid="verify-saved-address-coordinates"
+            <button
+              type="button"
+              aria-label="Đóng"
+              class="w-8 h-8 rounded-full flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors cursor-pointer"
+              @click="closeAddressModal"
             >
-              Tìm theo toạ độ này
+              <X :size="18" />
+            </button>
+          </div>
+
+          <div class="space-y-4 text-xs px-6 py-5 overflow-y-auto flex-1 min-h-0">
+            <!-- Label selection with quick chips -->
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1.5">Tên gợi nhớ</label>
+              <div class="flex flex-wrap gap-1.5 mb-2">
+                <button
+                  v-for="preset in LABEL_PRESETS"
+                  :key="preset"
+                  type="button"
+                  class="px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                  :class="addressForm.label === preset ? 'bg-brand-50 text-brand-700 border border-brand-200 font-semibold' : 'bg-ink-50 text-ink-600 hover:bg-ink-100 border border-ink-200/60'"
+                  @click="setAddressLabel(preset)"
+                >
+                  {{ preset }}
+                </button>
+              </div>
+              <input
+                v-model="addressForm.label"
+                data-testid="saved-address-label"
+                type="text"
+                class="w-full h-10 px-3.5 bg-white border border-ink-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 text-sm transition-all"
+                placeholder="Ví dụ: Nhà riêng, Văn phòng, Nhà bố mẹ..."
+                :aria-invalid="labelError ? 'true' : undefined"
+              />
+              <p v-if="labelError" data-testid="saved-address-label-error" role="alert" class="mt-1 text-xs text-danger-700 font-medium">{{ labelError }}</p>
+            </div>
+
+            <!-- Address search and autocomplete -->
+            <div class="space-y-2">
+              <label class="block font-semibold text-ink-700 mb-1">Địa chỉ cụ thể (số nhà, tên đường...) *</label>
+              <div class="relative">
+                <input
+                  v-model="addressForm.line1"
+                  data-testid="saved-address-line1"
+                  type="text"
+                  placeholder="Tìm kiếm địa chỉ, ví dụ: 25 Đội Cấn hoặc Landmark 81"
+                  class="w-full h-10 px-3.5 bg-white border border-ink-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 text-sm transition-all"
+                  :aria-invalid="line1Error ? 'true' : undefined"
+                  @input="onAddressSearchInput"
+                />
+                <ul
+                  v-if="addressSuggestions.length"
+                  class="absolute z-20 mt-1.5 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-48 overflow-auto divide-y divide-ink-100"
+                >
+                  <li
+                    v-for="s in addressSuggestions"
+                    :key="s.placeId"
+                    class="px-3.5 py-2.5 text-xs hover:bg-brand-50/70 hover:text-brand-900 cursor-pointer flex items-center gap-2 transition-colors"
+                    @click="selectAddressSuggestion(s)"
+                  >
+                    <MapPin :size="14" class="text-brand-500 shrink-0" />
+                    <span class="truncate">{{ s.description }}</span>
+                  </li>
+                </ul>
+              </div>
+              <p v-if="line1Error" data-testid="saved-address-line1-error" role="alert" class="text-xs text-danger-700 font-medium">{{ line1Error }}</p>
+              <div v-if="addressForm.ward || addressForm.province" class="text-xs text-ink-600 flex items-center gap-1.5 bg-ink-50 px-3 py-1.5 rounded-lg border border-ink-200/60">
+                <MapPin :size="13" class="text-brand-600 shrink-0" />
+                <span class="font-medium">{{ [addressForm.ward, addressForm.district, addressForm.province].filter(Boolean).join(', ') }}</span>
+              </div>
+            </div>
+
+            <!-- Interactive Map & Coordinates -->
+            <div class="space-y-2.5 pt-1">
+              <div class="flex items-center justify-between gap-2">
+                <label class="block font-semibold text-ink-700">Định vị trên bản đồ</label>
+                <button
+                  type="button"
+                  class="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                  @click="locateAddress"
+                >
+                  <LocateFixed :size="13" /> Dùng vị trí hiện tại
+                </button>
+              </div>
+
+              <div class="rounded-xl overflow-hidden border border-ink-200 shadow-2xs">
+                <MapTilerMap
+                  ref="mapRef"
+                  :center="mapCenter"
+                  :markers="addressMarkers"
+                  click-to-move="picker"
+                  height-class="h-56"
+                  @marker-move="onMapMarkerMove"
+                />
+              </div>
+
+              <!-- Coordinates section with quick verify -->
+              <div class="rounded-xl border border-ink-200/80 bg-ink-50/60 p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-ink-700 flex items-center gap-1">
+                    <Navigation :size="12" class="text-ink-500" /> Toạ độ GPS (Vĩ độ / Kinh độ)
+                  </span>
+                  <button
+                    type="button"
+                    class="text-xs font-semibold text-brand-600 hover:text-brand-700 cursor-pointer disabled:opacity-50"
+                    :disabled="searchingByCoords"
+                    @click="searchByCoordinates"
+                    data-testid="verify-saved-address-coordinates"
+                  >
+                    {{ searchingByCoords ? 'Đang tìm...' : 'Tìm vị trí toạ độ' }}
+                  </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <input
+                    v-model.number="addressLat"
+                    data-testid="saved-address-lat"
+                    @input="invalidateEditLocation"
+                    aria-label="Vĩ độ"
+                    placeholder="Vĩ độ (Lat)"
+                    type="number"
+                    min="-90"
+                    max="90"
+                    step="any"
+                    class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500 font-num"
+                  />
+                  <input
+                    v-model.number="addressLng"
+                    data-testid="saved-address-lng"
+                    @input="invalidateEditLocation"
+                    aria-label="Kinh độ"
+                    placeholder="Kinh độ (Lng)"
+                    type="number"
+                    min="-180"
+                    max="180"
+                    step="any"
+                    class="h-9 px-3 text-xs bg-white border border-ink-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500 font-num"
+                  />
+                </div>
+                <p v-if="locationError" data-testid="saved-address-location-error" role="alert" class="text-xs text-danger-700 font-medium">{{ locationError }}</p>
+              </div>
+            </div>
+
+            <!-- Set as Default -->
+            <label class="flex items-center gap-2.5 cursor-pointer pt-1 select-none">
+              <input
+                v-model="addressForm.isDefault"
+                data-testid="saved-address-default"
+                type="checkbox"
+                class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 cursor-pointer"
+              />
+              <span class="text-xs text-ink-800 font-medium">Đặt làm địa chỉ mặc định khi tạo đơn</span>
+            </label>
+          </div>
+
+          <p v-if="addressError" data-testid="saved-address-error" role="alert" class="px-6 py-2 text-xs text-danger-700 font-medium bg-danger-50 border-t border-danger-100">{{ addressError }}</p>
+          <p v-if="editingAddressId" class="px-6 py-1.5 text-xs text-ink-500 bg-ink-50/50">Sửa địa chỉ đã lưu không làm thay đổi địa chỉ của các đơn đã tạo trước đây.</p>
+          
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-ink-100 shrink-0 bg-white">
+            <FhButton variant="ghost" size="sm" data-testid="cancel-saved-address" :disabled="savingAddress" @click="closeAddressModal">
+              Huỷ bỏ
+            </FhButton>
+            <FhButton variant="primary" size="sm" data-testid="save-saved-address" :loading="savingAddress" @click="handleSaveAddress">
+              {{ editingAddressId ? 'Lưu thay đổi' : 'Lưu địa chỉ' }}
             </FhButton>
           </div>
-          <label class="flex items-center gap-2 cursor-pointer pt-1">
-            <input
-              v-model="addressForm.isDefault" data-testid="saved-address-default"
-              type="checkbox"
-              class="rounded text-brand-600 focus:ring-brand-500"
-            />
-            <span class="text-xs text-ink-700 font-medium">Đặt làm địa chỉ mặc định khi tạo đơn</span>
-          </label>
-        </div>
-
-        <p v-if="addressError" data-testid="saved-address-error" role="alert" class="px-6 py-2 text-xs text-danger-700">{{ addressError }}</p>
-        <p v-if="editingAddressId" class="px-6 text-xs text-ink-500">Sửa địa chỉ đã lưu không làm thay đổi địa chỉ của các đơn đã tạo trước đây.</p>
-        <div class="flex justify-end gap-3 px-6 py-4 border-t border-ink-100 shrink-0">
-          <FhButton variant="ghost" size="sm" data-testid="cancel-saved-address" :disabled="savingAddress" @click="closeAddressModal">
-            Huỷ bỏ
-          </FhButton>
-          <FhButton variant="primary" size="sm" data-testid="save-saved-address" :loading="savingAddress" @click="handleSaveAddress">
-            {{ editingAddressId ? 'Lưu thay đổi' : 'Lưu địa chỉ' }}
-          </FhButton>
         </div>
       </div>
-    </div>
     </Transition>
 
     <!-- Confirm Delete Modal -->
@@ -810,3 +986,48 @@ const confirmDelete = async () => {
     />
   </div>
 </template>
+
+<style scoped>
+@keyframes slideUpEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up-hero {
+  animation: slideUpEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-up-content {
+  animation: slideUpEntrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+@keyframes modalIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up-hero,
+  .animate-slide-up-content,
+  .animate-modal-in {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+</style>

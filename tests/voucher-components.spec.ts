@@ -174,4 +174,23 @@ describe('voucher components', () => {
     expect(wrapper.emitted('setCampaignStatus')).toEqual([['general-1', false]]);
     expect(wrapper.emitted('updateCampaign')).toBeUndefined();
   });
+
+  it('keeps VoucherOfferCard scannable by hiding unconfirmed quota filler and showing FhStatusPill for used vouchers', () => {
+    const claimed: VoucherOffer = {
+      ...generalOffer,
+      id: 'wallet-used-1',
+      ownerCustomerId: 'customer-1',
+      walletStatus: 'USED',
+      remainingSuccessfulRedemptions: null,
+      successfulRedemptionLimit: null,
+      eligibility: { eligible: false, reasons: ['Ưu đãi này không còn lượt sử dụng.'] },
+    };
+    const wrapper = mount(VoucherOfferCard, {
+      props: { offer: claimed, customerId: 'customer-1', actionLabel: 'Đã sử dụng' },
+    });
+    expect(wrapper.text()).toContain('Đã sử dụng');
+    expect(wrapper.text()).not.toContain('Số lượt còn lại chưa được xác nhận');
+    expect(wrapper.text()).not.toContain('Đang bật');
+    wrapper.unmount();
+  });
 });

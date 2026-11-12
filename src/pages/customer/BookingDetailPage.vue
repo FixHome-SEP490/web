@@ -2,6 +2,7 @@
 // src/pages/customer/BookingDetailPage.vue
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import { Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
 import { deviceFactsText, readableScope } from '../../components/booking/booking-price';
@@ -212,7 +213,7 @@ const confirmBookingCancel = async () => {
     applyBookingState(result);
     stopMatchingPoll();
     finishBookingCancel();
-    cancelNotice.value = 'Yêu cầu đã được huỷ.';
+    toast.success('Yêu cầu đã được huỷ.');
   } catch {
     // Network failure or an Accept race: never assume the cancellation succeeded.
     // Re-read the owner-checked Booking before offering any retry or an SO link.
@@ -221,7 +222,7 @@ const confirmBookingCancel = async () => {
       applyBookingState(fresh);
       if (fresh.status === 'CANCELLED') {
         finishBookingCancel();
-        cancelNotice.value = 'Yêu cầu đã được huỷ theo trạng thái mới nhất.';
+        toast.success('Yêu cầu đã được huỷ theo trạng thái mới nhất.');
         return;
       }
       if (!canCancelBooking.value) {
@@ -561,7 +562,7 @@ const confirmMatchingExtension = async () => {
 <template>
   <div class="max-w-2xl mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-3 animate-slide-up">
       <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
       <div v-if="booking && canCancelBooking" class="relative">
@@ -597,7 +598,7 @@ const confirmMatchingExtension = async () => {
     </div>
 
     <!-- Loading State Skeleton -->
-    <section v-if="loading" class="bg-white rounded-3xl border border-ink-200/90 p-6 sm:p-7 space-y-5 shadow-xs" aria-busy="true" aria-label="Đang tải yêu cầu">
+    <section v-if="loading" class="bg-white rounded-3xl border border-ink-200/90 p-6 sm:p-7 space-y-5 shadow-xs animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải yêu cầu">
       <div class="flex justify-between items-center">
         <FhSkeleton width="55%" height="28px" />
         <FhSkeleton width="100px" height="24px" rounded="full" />
@@ -611,7 +612,7 @@ const confirmMatchingExtension = async () => {
     <!-- Load Error State -->
     <div
       v-else-if="loadError"
-      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs"
+      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs animate-slide-up-delay-1"
       role="alert"
     >
       <div class="w-12 h-12 rounded-full bg-danger-50 text-danger-600 flex items-center justify-center">
@@ -623,7 +624,7 @@ const confirmMatchingExtension = async () => {
 
     <!-- Authoritative Booking Detail Card -->
     <template v-else-if="booking">
-      <section class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-6">
+      <section class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-6 animate-slide-up-delay-1">
         <!-- Service Title and Status Header -->
         <div class="space-y-3">
           <div class="flex flex-wrap items-start justify-between gap-3">
@@ -719,21 +720,26 @@ const confirmMatchingExtension = async () => {
         </div>
 
         <!-- Status / Flow notices -->
-        <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ cancelNotice }}
-        </p>
-        <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ extensionNotice }}
-        </p>
-        <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-3.5 text-sm font-medium text-danger-800 animate-in fade-in">
-          {{ extensionError }}
-        </p>
-        <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ scheduleNotice }}
-        </p>
-        <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ rebookedNotice }}
-        </p>
+        <div
+          v-if="cancelNotice || extensionNotice || extensionError || scheduleNotice || rebookedNotice"
+          class="space-y-2"
+        >
+          <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-sm font-medium text-warning-900">
+            {{ cancelNotice }}
+          </p>
+          <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ extensionNotice }}
+          </p>
+          <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-sm font-medium text-danger-800">
+            {{ extensionError }}
+          </p>
+          <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ scheduleNotice }}
+          </p>
+          <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ rebookedNotice }}
+          </p>
+        </div>
 
         <!-- Primary Action Blocks -->
         <!-- Case 1: Service Order Created -->
@@ -832,7 +838,7 @@ const confirmMatchingExtension = async () => {
       </section>
 
       <!-- Reschedule & Request Editing Section -->
-      <section v-if="canReschedule" class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-5">
+      <section v-if="canReschedule" class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-5 animate-slide-up-delay-2">
         <h2 class="text-base sm:text-lg font-bold text-ink-900">Điều chỉnh yêu cầu</h2>
 
         <div v-if="editable" class="space-y-1.5">

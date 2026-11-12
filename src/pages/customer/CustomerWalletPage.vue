@@ -114,7 +114,7 @@ async function topUp() {
 <template>
   <div class="w-full space-y-6 pb-16">
     <!-- Header -->
-    <div>
+    <div class="animate-slide-up">
       <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
         <Wallet :size="28" class="text-brand-600 shrink-0" />
         <span>Ví của tôi</span>
@@ -131,7 +131,7 @@ async function topUp() {
         role="status"
         data-testid="topup-result"
         :aria-busy="loading || refreshing"
-        class="rounded-2xl border border-brand-200 bg-brand-50/90 p-4 text-sm text-brand-800 flex flex-col sm:flex-row sm:items-start gap-3 shadow-xs"
+        class="rounded-2xl border border-brand-200 bg-brand-50/90 p-4 text-sm text-brand-800 flex flex-col sm:flex-row sm:items-start gap-3 shadow-xs animate-slide-up"
       >
         <div class="flex items-start gap-3 min-w-0 flex-1">
           <RefreshCw :size="20" class="text-brand-600 shrink-0 mt-0.5" :class="{ 'animate-spin': loading || refreshing }" aria-hidden="true" />
@@ -154,7 +154,7 @@ async function topUp() {
     </Transition>
 
     <!-- Balance and top-up: one surface -->
-    <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden">
+    <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden animate-slide-up-delay-1">
       <div class="p-5 space-y-1">
         <p class="text-sm text-ink-500">Số dư</p>
         <p class="text-3xl font-bold text-ink-900 font-num whitespace-nowrap" data-testid="wallet-balance">
@@ -260,7 +260,7 @@ async function topUp() {
     </Transition>
 
     <!-- History Section -->
-    <section class="rounded-3xl border border-ink-200/90 bg-white p-6 sm:p-8 space-y-4 shadow-xs">
+    <section class="rounded-3xl border border-ink-200/90 bg-white p-6 sm:p-8 space-y-4 shadow-xs animate-slide-up-delay-2">
       <div class="flex items-center justify-between gap-3">
         <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
           <RefreshCw :size="18" class="text-brand-600" />

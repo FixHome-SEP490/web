@@ -13,7 +13,6 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  ChevronDown,
   MessageSquare,
   Wallet,
   Loader2,
@@ -24,6 +23,7 @@ import {
 
 import { ChatFloatingWidget, AppSidebar } from '../components';
 import type { SidebarNavGroup } from '../components';
+import AccountAvatarBadge from '../components/account/AccountAvatarBadge.vue';
 import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -185,10 +185,6 @@ const handleLogout = async () => {
   window.location.href = '/login';
 };
 
-const userInitial = computed(() => {
-  return authStore.user?.fullName?.charAt(0)?.toUpperCase() || 'T';
-});
-
 const userShortName = computed(() => {
   const parts = authStore.user?.fullName?.trim().split(/\s+/) || [];
   return parts.length > 0 ? parts[parts.length - 1] : 'Thợ';
@@ -333,58 +329,74 @@ const tabItems: TabNavItem[] = [
             <div class="relative" @keydown.esc="avatarMenuOpen = false">
               <button
                 type="button"
-                class="flex items-center gap-2 p-1 sm:pr-2 rounded-full hover:bg-ink-100 transition-colors"
+                class="group flex items-center gap-2 rounded-full p-0.5 xl:pr-2.5 transition-colors hover:bg-ink-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
                 aria-label="Tài khoản"
                 :aria-expanded="avatarMenuOpen"
                 @click="avatarMenuOpen = !avatarMenuOpen"
               >
-                <span class="w-8 h-8 rounded-full bg-brand-50 text-brand-700 border border-brand-100 font-semibold flex items-center justify-center text-sm overflow-hidden shrink-0">
-                  <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
-                  <span v-else>{{ userInitial }}</span>
-                </span>
+                <AccountAvatarBadge
+                  :name="authStore.user?.fullName"
+                  :avatar-url="authStore.user?.avatarUrl"
+                  :open="avatarMenuOpen"
+                />
                 <span class="hidden xl:inline text-sm font-medium text-ink-800 max-w-32 truncate">{{ userShortName }}</span>
-                <ChevronDown :size="16" class="text-ink-400 hidden sm:block" />
               </button>
 
               <div v-if="avatarMenuOpen" class="fixed inset-0 z-40" @click="avatarMenuOpen = false" />
 
-              <div
-                v-if="avatarMenuOpen"
-                class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100 text-sm"
-                @click="avatarMenuOpen = false"
+              <Transition
+                enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+                enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+                enter-to-class="opacity-100 scale-100 translate-y-0"
+                leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+                leave-from-class="opacity-100 scale-100 translate-y-0"
+                leave-to-class="opacity-0 scale-95 -translate-y-1.5"
               >
-                <div class="px-4 py-2.5">
-                  <p class="font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
-                  <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
-                </div>
+                <div
+                  v-if="avatarMenuOpen"
+                  class="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06] py-1.5 z-50 divide-y divide-ink-100 text-sm"
+                  @click="avatarMenuOpen = false"
+                >
+                  <div class="flex items-center gap-3 px-4 py-3">
+                    <AccountAvatarBadge
+                      :name="authStore.user?.fullName"
+                      :avatar-url="authStore.user?.avatarUrl"
+                      :show-chevron="false"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <p class="font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
+                      <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
+                    </div>
+                  </div>
 
-                <!-- Only what the bottom tab bar lacks below lg; the sidebar has everything on wide screens. -->
-                <div class="py-1 text-ink-700 lg:hidden">
-                  <router-link to="/tech/wallet" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <Wallet :size="16" class="text-ink-500" />
-                    Ví của tôi
-                  </router-link>
-                  <router-link to="/tech/warranty" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <ShieldCheck :size="16" class="text-ink-500" />
-                    Bảo hành
-                  </router-link>
-                  <router-link to="/tech/kyc" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <BadgeCheck :size="16" class="text-ink-500" />
-                    Xác minh danh tính
-                  </router-link>
-                </div>
+                  <!-- Only what the bottom tab bar lacks below lg; the sidebar has everything on wide screens. -->
+                  <div class="py-1.5 text-ink-700 lg:hidden">
+                    <router-link to="/tech/wallet" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <Wallet :size="16" class="text-ink-500" />
+                      Ví của tôi
+                    </router-link>
+                    <router-link to="/tech/warranty" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <ShieldCheck :size="16" class="text-ink-500" />
+                      Bảo hành
+                    </router-link>
+                    <router-link to="/tech/kyc" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <BadgeCheck :size="16" class="text-ink-500" />
+                      Xác minh danh tính
+                    </router-link>
+                  </div>
 
-                <div class="py-1">
-                  <button
-                    type="button"
-                    class="flex items-center gap-3 px-4 py-2.5 text-danger-600 hover:bg-danger-50 w-full text-left"
-                    @click="handleLogout"
-                  >
-                    <LogOut :size="16" />
-                    Đăng xuất
-                  </button>
+                  <div class="pt-1.5 pb-0.5">
+                    <button
+                      type="button"
+                      class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 font-medium text-danger-600 hover:bg-danger-50 w-[calc(100%-0.75rem)] text-left"
+                      @click="handleLogout"
+                    >
+                      <LogOut :size="16" />
+                      Đăng xuất
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </Transition>
             </div>
           </div>
         </div>

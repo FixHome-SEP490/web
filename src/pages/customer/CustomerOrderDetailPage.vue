@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/auth';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import {
   AlertCircle,
   AlertTriangle,
@@ -662,7 +663,7 @@ const handleRejectQuotation = async () => {
     if (!order.value?.quotation?.id) throw new Error('Không có báo giá để từ chối.');
     await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
     await loadOrder();
-    actionMessage.value = { type: 'success', text: 'Đã từ chối báo giá của kỹ thuật viên.' };
+    toast.success('Đã từ chối báo giá của kỹ thuật viên.');
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa từ chối được báo giá. Vui lòng thử lại.') };
   } finally {
@@ -673,16 +674,18 @@ const handleRejectQuotation = async () => {
 const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'APPROVE' | 'REJECT') => {
   if (oldFinanceReview.value || acDecidingId.value) return;
   acDecidingId.value = cost.id;
+  actionMessage.value = null;
   try {
     const updated = await ordersApi.decideAdditionalCost(cost.id, action);
     const idx = additionalCosts.value.findIndex((c) => c.id === cost.id);
     if (idx !== -1) additionalCosts.value[idx] = updated;
     // Totals change with the decision: read the order again in the background.
     void cache.refresh(affectedBy.orderChange);
-    actionMessage.value = {
-      type: 'success',
-      text: action === 'APPROVE' ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.' : 'Đã từ chối chi phí phát sinh.',
-    };
+    toast.success(
+      action === 'APPROVE'
+        ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.'
+        : 'Đã từ chối chi phí phát sinh.',
+    );
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa gửi được lựa chọn. Vui lòng thử lại.') };
   } finally {
@@ -1000,7 +1003,7 @@ const confirmCancel = async () => {
     }
     void cache.refresh(affectedBy.orderChange);
     showCancelModal.value = false;
-    actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu huỷ đơn thành công.' };
+    toast.success('Đã gửi yêu cầu huỷ đơn thành công.');
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa huỷ được đơn. Vui lòng thử lại.') };
   } finally {
@@ -1022,10 +1025,7 @@ const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
   warrantyClaims.value = [claim, ...warrantyClaims.value];
   void cache.refresh(affectedBy.warrantyChange);
   showWarrantyClaimModal.value = false;
-  actionMessage.value = {
-    type: 'success',
-    text: 'Đã gửi yêu cầu bảo hành. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.',
-  };
+  toast.success('Đã gửi yêu cầu bảo hành. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.');
 };
 const onWarrantyClaimUpdated = (claim: WarrantyClaimView) => {
   warrantyClaims.value = warrantyClaims.value.map((existing) => (existing.id === claim.id ? claim : existing));
@@ -1042,10 +1042,7 @@ const handleReviewSubmitted = (review: Review) => {
     delete nextQuery.review;
     router.replace({ query: nextQuery });
   }
-  actionMessage.value = {
-    type: 'success',
-    text: 'Cảm ơn bạn đã đánh giá kỹ thuật viên! Đánh giá đã được ghi nhận thành công.',
-  };
+  toast.success('Cảm ơn bạn đã đánh giá kỹ thuật viên! Đánh giá đã được ghi nhận thành công.');
 };
 
 // Actions at the top of the page (PO 10/10/2026): one visible secondary action for the
@@ -1152,7 +1149,7 @@ const parsedReview = computed(() => {
       <span class="whitespace-nowrap font-semibold text-brand-700">Xem lượt sửa</span>
     </router-link>
     <!-- Back, one visible action for this state, rare ones in the "⋯" menu -->
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-3 animate-slide-up">
       <button
         type="button"
         class="whitespace-nowrap inline-flex items-center gap-1.5 h-9 text-sm font-medium text-ink-600 hover:text-ink-900 transition-colors"
@@ -1236,7 +1233,7 @@ const parsedReview = computed(() => {
     </div>
 
     <!-- Loading: the shape of the page -->
-    <div v-if="loading" class="space-y-6" aria-busy="true" aria-label="Đang tải đơn">
+    <div v-if="loading" class="space-y-6 animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải đơn">
       <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
         <FhSkeleton width="55%" height="26px" />
         <FhSkeleton width="30%" height="16px" />
@@ -1252,7 +1249,7 @@ const parsedReview = computed(() => {
     <!-- Could not load -->
     <section
       v-else-if="loadFailed"
-      class="rounded-2xl bg-white border border-ink-200 p-6 flex flex-col items-center text-center gap-3"
+      class="rounded-2xl bg-white border border-ink-200 p-6 flex flex-col items-center text-center gap-3 animate-slide-up-delay-1"
       data-testid="order-load-error"
     >
       <p class="text-sm text-ink-700">Chưa tải được đơn, vui lòng thử lại.</p>
@@ -1264,7 +1261,7 @@ const parsedReview = computed(() => {
         v-if="awaitingTechnician"
         role="status"
         data-testid="order-awaiting-technician"
-        class="rounded-2xl bg-white border border-brand-200 p-4 sm:p-5 flex flex-wrap items-center gap-3"
+        class="rounded-2xl bg-white border border-brand-200 p-4 sm:p-5 flex flex-wrap items-center gap-3 animate-slide-up-delay-1"
       >
         <div class="min-w-0 flex-[1_1_18rem]">
           <p class="font-semibold text-ink-900">{{ newTechnicianInvited ? 'Đang chờ thợ mới nhận đơn' : 'Thợ không kịp tới buổi hẹn' }}</p>
@@ -1277,7 +1274,7 @@ const parsedReview = computed(() => {
         >Chọn thợ khác</FhButton>
       </section>
       <!-- 1. Summary: what, where, when, who -->
-      <section class="order-0 rounded-2xl bg-white border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5">
+      <section class="order-0 rounded-2xl bg-white border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
             <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
@@ -1369,7 +1366,7 @@ const parsedReview = computed(() => {
       <section
         v-if="showPayAfterCompletion"
         data-testid="pay-after-completion"
-        class="order-1 rounded-2xl bg-white border border-success-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        class="order-1 rounded-2xl bg-white border border-success-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up-delay-2"
       >
         <div class="min-w-0 space-y-1">
           <h2 class="text-base font-semibold text-ink-900 flex items-center gap-2">
@@ -1580,7 +1577,7 @@ const parsedReview = computed(() => {
       </section>
 
       <!-- 4. Progress -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs animate-slide-up-delay-2">
         <button
           type="button"
           class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
@@ -1617,7 +1614,7 @@ const parsedReview = computed(() => {
       </section>
 
       <!-- 5. Photos from the technician -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs animate-slide-up-delay-2">
         <div class="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"

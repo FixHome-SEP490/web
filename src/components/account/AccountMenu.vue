@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vu
 import { useRoute } from 'vue-router';
 import {
   Bell,
-  ChevronDown,
   ClipboardList,
   History,
   LayoutGrid,
@@ -13,6 +12,7 @@ import {
   Wallet,
   TicketPercent,
 } from 'lucide-vue-next';
+import AccountAvatarBadge from './AccountAvatarBadge.vue';
 import { useAuthStore } from '../../stores/auth';
 import {
   accountMenuLinks,
@@ -46,7 +46,6 @@ const icons: Record<AccountMenuIcon, Component> = {
 const links = computed(() => accountMenuLinks(authStore.userRole, props.context));
 // On a phone the header has no room for the role button, so it moves in here.
 const narrowAction = computed(() => (props.context === 'public' ? roleHeaderAction(authStore.userRole) : null));
-const initial = computed(() => authStore.user?.fullName?.charAt(0)?.toUpperCase() || 'U');
 
 function close() {
   open.value = false;
@@ -77,72 +76,89 @@ onUnmounted(() => {
   <div ref="root" class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 p-1 rounded-full hover:bg-ink-100 transition-colors"
+      class="group flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-ink-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
       aria-label="Tài khoản"
       aria-haspopup="menu"
       :aria-expanded="open"
       data-testid="account-menu-trigger"
       @click="open = !open"
     >
-      <span class="w-8 h-8 rounded-full bg-brand-50 text-brand-700 font-semibold flex items-center justify-center text-sm border border-brand-100 overflow-hidden">
-        <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
-        <span v-else>{{ initial }}</span>
-      </span>
-      <ChevronDown :size="16" class="text-ink-400 hidden sm:block" aria-hidden="true" />
+      <AccountAvatarBadge
+        :name="authStore.user?.fullName"
+        :avatar-url="authStore.user?.avatarUrl"
+        :open="open"
+      />
     </button>
 
-    <div
-      v-if="open"
-      class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100"
-      data-testid="account-menu"
+    <Transition
+      enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+      enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+      enter-to-class="opacity-100 scale-100 translate-y-0"
+      leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+      leave-from-class="opacity-100 scale-100 translate-y-0"
+      leave-to-class="opacity-0 scale-95 -translate-y-1.5"
     >
-      <div class="px-4 py-2.5">
-        <p class="text-sm font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Người dùng' }}</p>
-        <p class="text-xs text-ink-500 truncate">{{ authStore.user?.email }}</p>
-        <span
-          v-if="context === 'public'"
-          class="inline-block mt-1.5 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-50 text-brand-700 border border-brand-100 whitespace-nowrap"
-        >
-          {{ roleLabel(authStore.userRole) }}
-        </span>
-      </div>
+      <div
+        v-if="open"
+        class="absolute right-0 mt-2 w-64 rounded-2xl bg-white py-1.5 shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06] z-50 divide-y divide-ink-100"
+        data-testid="account-menu"
+      >
+        <div class="flex items-center gap-3 px-4 py-3">
+          <AccountAvatarBadge
+            :name="authStore.user?.fullName"
+            :avatar-url="authStore.user?.avatarUrl"
+            :show-chevron="false"
+          />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Người dùng' }}</p>
+            <p class="text-xs text-ink-500 truncate">{{ authStore.user?.email }}</p>
+            <span
+              v-if="context === 'public'"
+              class="inline-block mt-1.5 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-50 text-brand-700 whitespace-nowrap"
+            >
+              {{ roleLabel(authStore.userRole) }}
+            </span>
+          </div>
+        </div>
 
-      <div class="py-1 text-sm text-ink-700">
-        <router-link
-          v-if="narrowAction"
-          :to="narrowAction.to"
-          class="flex sm:hidden items-center gap-3 px-4 py-2.5 whitespace-nowrap hover:bg-ink-50"
-          data-testid="menu-role-action"
-          @click="close"
-        >
-          <LayoutGrid :size="16" class="text-ink-500" aria-hidden="true" />
-          {{ narrowAction.label }}
-        </router-link>
-        <router-link
-          v-for="link in links"
-          :key="link.testId"
-          :to="link.to"
-          class="items-center gap-3 px-4 py-2.5 whitespace-nowrap hover:bg-ink-50"
-          :class="link.hiddenOnWide ? 'flex lg:hidden' : 'flex'"
-          :data-testid="link.testId"
-          @click="close"
-        >
-          <component :is="icons[link.icon]" :size="16" class="text-ink-500" aria-hidden="true" />
-          {{ link.label }}
-        </router-link>
-      </div>
+        <div class="py-1.5 text-sm text-ink-700">
+          <router-link
+            v-if="narrowAction"
+            :to="narrowAction.to"
+            class="mx-1.5 flex sm:hidden items-center gap-3 rounded-xl px-3 py-2 whitespace-nowrap transition-colors hover:bg-ink-50 hover:text-ink-950"
+            data-testid="menu-role-action"
+            @click="close"
+          >
+            <LayoutGrid :size="16" class="text-ink-500 shrink-0" aria-hidden="true" />
+            {{ narrowAction.label }}
+          </router-link>
+          <router-link
+            v-for="link in links"
+            :key="link.testId"
+            :to="link.to"
+            class="mx-1.5 items-center gap-3 rounded-xl px-3 py-2 whitespace-nowrap transition-colors hover:bg-ink-50 hover:text-ink-950"
+            active-class="bg-brand-50/70 text-brand-700 font-medium"
+            :class="link.hiddenOnWide ? 'flex lg:hidden' : 'flex'"
+            :data-testid="link.testId"
+            @click="close"
+          >
+            <component :is="icons[link.icon]" :size="16" class="text-ink-500 shrink-0" aria-hidden="true" />
+            {{ link.label }}
+          </router-link>
+        </div>
 
-      <div class="py-1">
-        <button
-          type="button"
-          class="flex items-center gap-3 px-4 py-2.5 text-sm text-danger-600 hover:bg-danger-50 w-full text-left whitespace-nowrap"
-          data-testid="menu-logout"
-          @click="logout"
-        >
-          <LogOut :size="16" aria-hidden="true" />
-          Đăng xuất
-        </button>
+        <div class="pt-1.5 pb-0.5">
+          <button
+            type="button"
+            class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-danger-600 transition-colors hover:bg-danger-50 w-[calc(100%-0.75rem)] text-left whitespace-nowrap"
+            data-testid="menu-logout"
+            @click="logout"
+          >
+            <LogOut :size="16" class="shrink-0" aria-hidden="true" />
+            Đăng xuất
+          </button>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>

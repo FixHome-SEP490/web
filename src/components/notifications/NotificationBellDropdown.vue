@@ -4,25 +4,17 @@ import { useRouter } from 'vue-router';
 import {
   Bell,
   CheckCheck,
-  Wrench,
-  Shield,
-  Sparkles,
   ExternalLink,
   Clock,
   Inbox,
-  DollarSign,
-  CheckCircle2,
-  XCircle,
-  Truck,
-  Package,
-  AlertTriangle,
   ArrowRight,
 } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import NotificationSemanticIcon from './NotificationSemanticIcon.vue';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { resolveCustomerNotificationPath, resolvePartRequestServiceOrderId, getNotificationCategory, type NotificationItem } from '../../api/notifications.api';
-import { vnDateString } from '../../utils/vn-time';
+import { vnRelativeTime } from '../../utils/vn-time';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -95,22 +87,6 @@ const displayedNotifications = computed(() => {
 const effectiveUnreadCount = computed(() => {
   return Math.max(notifStore.unreadCount, notifStore.unreadNotifications.length);
 });
-
-const formatTimeAgo = (dateStr: string): string => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diffSec < 60) return 'Vừa xong';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} phút trước`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} giờ trước`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} ngày trước`;
-  return vnDateString(date, { day: '2-digit', month: '2-digit' });
-};
 
 const handleItemClick = async (item: NotificationItem) => {
   if (!item.isRead) {
@@ -247,15 +223,15 @@ const handleViewAll = () => {
       type="button"
       id="fixhome-global-bell-btn"
       ref="bellRef"
-      class="relative flex h-11 w-11 items-center justify-center rounded-xl text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-      :class="{ 'bg-ink-100 text-brand-600': isOpen }"
+      class="relative flex h-10 w-10 items-center justify-center rounded-full text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+      :class="{ 'bg-brand-50 text-brand-700': isOpen }"
       title="Thông báo hệ thống"
       :aria-label="effectiveUnreadCount ? `Thông báo, ${effectiveUnreadCount} chưa đọc` : 'Thông báo'"
       :aria-expanded="isOpen"
       :aria-controls="isOpen ? 'fixhome-notifications-panel' : undefined"
       @click="toggleDropdown"
     >
-      <Bell :size="20" class="transition-transform group-hover:scale-105" />
+      <Bell :size="19" :stroke-width="1.9" class="transition-transform group-hover:scale-105" />
 
       <!-- Unread Badge with Ping Animation -->
       <span
@@ -282,7 +258,7 @@ const handleViewAll = () => {
         id="fixhome-notifications-panel"
         role="region"
         aria-label="Thông báo"
-        class="fixed inset-x-4 top-16 z-50 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-white text-ink-900 shadow-(--shadow-e3) sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96"
+        class="fixed inset-x-4 top-16 z-50 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-2xl bg-white text-ink-900 shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06] sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96"
       >
         <!-- Header -->
         <div class="p-3.5 px-4 bg-white border-b border-ink-100 flex items-center justify-between">
@@ -359,25 +335,8 @@ const handleViewAll = () => {
               :class="{ 'bg-brand-50/25': !item.isRead }"
               @click="handleItemClick(item)"
             >
-              <!-- Dynamic Icon Avatar Based on Notification Category / Severity -->
-              <div class="shrink-0 mt-0.5">
-                <div
-                  class="w-8 h-8 rounded-xl flex items-center justify-center border shadow-2xs transition-transform group-hover:scale-105"
-                  :class="[getNotificationCategory(item).iconBgClass, getNotificationCategory(item).iconColorClass]"
-                >
-                  <DollarSign v-if="getNotificationCategory(item).iconName === 'dollar'" :size="15" />
-                  <CheckCircle2 v-else-if="getNotificationCategory(item).iconName === 'check'" :size="15" />
-                  <XCircle v-else-if="getNotificationCategory(item).iconName === 'x'" :size="15" />
-                  <Truck v-else-if="getNotificationCategory(item).iconName === 'truck'" :size="15" />
-                  <Package v-else-if="getNotificationCategory(item).iconName === 'package'" :size="15" />
-                  <Clock v-else-if="getNotificationCategory(item).iconName === 'clock'" :size="15" />
-                  <Sparkles v-else-if="getNotificationCategory(item).iconName === 'sparkles'" :size="15" />
-                  <Shield v-else-if="getNotificationCategory(item).iconName === 'shield'" :size="15" />
-                  <Wrench v-else-if="getNotificationCategory(item).iconName === 'wrench'" :size="15" />
-                  <AlertTriangle v-else-if="getNotificationCategory(item).iconName === 'alert'" :size="15" />
-                  <Bell v-else :size="15" />
-                </div>
-              </div>
+              <!-- Semantic Notification Icon -->
+              <NotificationSemanticIcon :item="item" size="sm" dim-when-read class="mt-0.5 transition-transform group-hover:scale-105" />
 
               <!-- Content -->
               <div class="flex-1 min-w-0 space-y-1">
@@ -412,7 +371,7 @@ const handleViewAll = () => {
                 <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs text-ink-600">
                   <span class="flex items-center gap-1">
                     <Clock :size="12" />
-                    {{ formatTimeAgo(item.createdAt) }}
+                    {{ vnRelativeTime(item.createdAt) }}
                   </span>
 
                   <span

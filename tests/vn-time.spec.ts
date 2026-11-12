@@ -3,9 +3,11 @@ import {
   addDaysToKey,
   isSameVnDay,
   vnDateString,
+  vnDayGroup,
   vnDayKey,
   vnKeyAndClockToDate,
   vnParts,
+  vnRelativeTime,
   vnTimeString,
   weekdayOfKey,
 } from '../src/utils/vn-time';
@@ -59,5 +61,21 @@ describe('Vietnam time on the web', () => {
 
   it('edits a stored start in Vietnam day and clock', () => {
     expect(scheduleFieldsOf('2026-10-01T18:30:00Z')).toEqual({ day: '2026-10-02', time: '01:30' });
+  });
+
+  it('formats Vietnamese relative timestamps and groups days by the Vietnam calendar', () => {
+    const now = new Date('2026-10-02T03:00:00Z'); // 10:00 on 02/10 in Vietnam
+    expect(vnRelativeTime('2026-10-02T02:59:30Z', now)).toBe('Vừa xong');
+    expect(vnRelativeTime('2026-10-02T02:45:00Z', now)).toBe('15 phút trước');
+    expect(vnRelativeTime('2026-10-02T01:00:00Z', now)).toBe('2 giờ trước');
+    expect(vnRelativeTime('2026-09-30T03:00:00Z', now)).toBe('2 ngày trước');
+    expect(vnRelativeTime('2026-09-10T03:00:00Z', now)).toMatch(/^10\D0?9$/);
+    expect(vnRelativeTime('2025-09-10T03:00:00Z', now)).toMatch(/^10\D0?9\D2025$/);
+
+    // 2026-10-01T17:05:00Z is 00:05 on 02/10 in Vietnam -> Hôm nay
+    expect(vnDayGroup('2026-10-01T17:05:00Z', now)).toBe('Hôm nay');
+    // 2026-10-01T16:55:00Z is 23:55 on 01/10 in Vietnam -> Hôm qua
+    expect(vnDayGroup('2026-10-01T16:55:00Z', now)).toBe('Hôm qua');
+    expect(vnDayGroup('2026-09-30T16:55:00Z', now)).toBe('Trước đó');
   });
 });

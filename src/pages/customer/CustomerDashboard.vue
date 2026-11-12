@@ -68,7 +68,7 @@ const quickChips = [
   { id: 'ac', title: 'Vệ sinh máy lạnh', image: '/images/air-conditioner.png', icon: Snowflake, query: 'vệ sinh điều hòa' },
   { id: 'washing', title: 'Sửa máy giặt', image: '/images/washing-machine.png', icon: Wrench, query: 'sửa máy giặt' },
   { id: 'fridge', title: 'Sửa tủ lạnh', image: '/images/refrigerator.png', icon: Snowflake, query: 'sửa tủ lạnh' },
-  { id: 'plumbing', title: 'Điện nước', image: '/images/water-pipeline.png', icon: Droplets, query: 'điện nước' },
+  { id: 'plumbing', title: 'Sửa rò rỉ', image: '/images/water-pipeline.png', icon: Droplets, query: 'sửa rò rỉ' },
   { id: 'fan', title: 'Sửa quạt điện', icon: Zap, query: 'sửa quạt điện' },
 ];
 
@@ -140,9 +140,9 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 </script>
 
 <template>
-  <div class="space-y-6 pb-6">
+  <div class="w-full space-y-5 pb-12">
     <!-- Greeting and the address the technician comes to -->
-    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight min-w-0 text-balance">
         Xin chào, {{ authStore.user?.fullName || 'bạn' }}
       </h1>
@@ -163,7 +163,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     <Transition name="fh-fade-slide">
       <section
         v-if="activeOrder"
-        class="rounded-2xl bg-white border border-brand-200/90 shadow-2xs p-5 space-y-4 relative overflow-hidden transition-all duration-200 hover:border-brand-300 hover:shadow-(--shadow-e2)"
+        class="rounded-2xl bg-white border border-brand-200/90 shadow-2xs p-5 space-y-4 relative overflow-hidden transition-all duration-200 hover:border-brand-300 hover:shadow-(--shadow-e2) animate-slide-up"
         data-testid="dashboard-active-order"
       >
         <div class="flex items-center justify-between gap-3 pb-3 border-b border-ink-100">
@@ -231,7 +231,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </Transition>
 
     <!-- The one emphasis block of the page: search what needs fixing -->
-    <section class="relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-xs">
+    <section class="relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-xs animate-slide-up-delay-1">
       <div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div class="max-w-2xl space-y-4 flex-1">
           <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-balance">Cần sửa gì hôm nay?</h2>
@@ -291,7 +291,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- Orders: counts and the latest three, one surface -->
-    <section v-if="loading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4" aria-busy="true" aria-label="Đang tải đơn">
+    <section v-if="loading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4 animate-slide-up-delay-2" aria-busy="true" aria-label="Đang tải đơn">
       <FhSkeleton width="40%" height="22px" />
       <div class="grid grid-cols-3 gap-4">
         <FhSkeleton height="48px" />
@@ -303,14 +303,14 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 
     <section
       v-else-if="ordersFailed"
-      class="rounded-2xl bg-white border border-ink-200 p-5 flex flex-wrap items-center justify-between gap-3"
+      class="rounded-2xl bg-white border border-ink-200 p-5 flex flex-wrap items-center justify-between gap-3 animate-slide-up-delay-2"
       data-testid="dashboard-orders-error"
     >
       <p class="text-sm text-ink-700">Chưa tải được đơn của bạn, vui lòng thử lại.</p>
       <FhButton variant="secondary" size="sm" @click="load">Thử lại</FhButton>
     </section>
 
-    <section v-else-if="orders.length > 0" class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs">
+    <section v-else-if="orders.length > 0" class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs animate-slide-up-delay-2">
       <div class="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
         <h2 class="text-lg font-semibold text-ink-900">Đơn gần đây</h2>
         <router-link to="/app/orders" class="text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap">
@@ -355,7 +355,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
 
     <section
       v-else-if="orders.length === 0"
-      class="rounded-2xl bg-white border border-ink-200/90 p-5 sm:p-6 shadow-2xs overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-5"
+      class="rounded-2xl bg-white border border-ink-200/90 p-5 sm:p-6 shadow-2xs overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-5 animate-slide-up-delay-2"
     >
       <div class="flex items-center gap-4 sm:gap-5 min-w-0 flex-1">
         <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
@@ -385,7 +385,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- Services from the catalogue -->
-    <section v-if="servicesLoading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4" aria-busy="true" aria-label="Đang tải dịch vụ">
+    <section v-if="servicesLoading" class="rounded-2xl bg-white border border-ink-200 p-5 space-y-4 animate-slide-up-delay-2" aria-busy="true" aria-label="Đang tải dịch vụ">
       <FhSkeleton width="30%" height="22px" />
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FhSkeleton height="44px" :count="3" />
@@ -393,7 +393,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </div>
     </section>
 
-    <section v-else-if="popularServices.length > 0" class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs">
+    <section v-else-if="popularServices.length > 0" class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-2xs animate-slide-up-delay-2">
       <div class="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-ink-100">
         <h2 class="text-lg font-semibold text-ink-900">Dịch vụ</h2>
         <router-link to="/services" class="text-sm font-medium text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 whitespace-nowrap">
@@ -435,7 +435,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
     </section>
 
     <!-- What FixHome promises, one line each -->
-    <section class="rounded-2xl bg-white border border-ink-200 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ink-100 shadow-2xs">
+    <section class="rounded-2xl bg-white border border-ink-200 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ink-100 shadow-2xs animate-slide-up-delay-2">
       <div v-for="promise in promises" :key="promise.title" class="p-4 sm:p-5 flex items-start gap-3">
         <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 mt-0.5">
           <component :is="promise.icon" :size="18" :stroke-width="1.75" />
