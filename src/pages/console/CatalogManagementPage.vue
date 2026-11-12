@@ -11,6 +11,7 @@ import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
+import ServicePriceVariantsPanel from '../../components/console/ServicePriceVariantsPanel.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
 import {
   catalogApi,
@@ -581,6 +582,7 @@ const handleConfirm = async () => {
             Mô tả công việc
             <textarea v-model="serviceForm.description" rows="2" :class="consoleTextarea"></textarea>
           </label>
+          <ServicePriceVariantsPanel v-if="isEditingService && serviceForm.id" :service-id="serviceForm.id" />
         </div>
 
         <p v-if="formError" class="text-sm text-danger-600" role="alert">{{ formError }}</p>
