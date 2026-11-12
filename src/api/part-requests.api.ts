@@ -628,6 +628,18 @@ export const partRequestsApi = {
   },
 
   /**
+   * Service Manager: the part-return rows of several orders in one read (one page of the
+   * part-request list); every asked order is a key, empty when it has none.
+   */
+  async getReturnsByOrderIds(orderIds: string[]): Promise<Record<string, PartCustodyReturnRecord[]>> {
+    const res = await apiClient.get<{ data: Record<string, PartCustodyReturnRecord[]> }>(
+      '/part-returns/by-orders',
+      { params: { orderIds: orderIds.join(',') } },
+    );
+    return res.data.data || {};
+  },
+
+  /**
    * P1: manager queue of technician declarations waiting for the physical
    * check at the counter; oldest first.
    */

@@ -3,7 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 enableAutoUnmount(afterEach);
 
 const { api, auth, socket, resync } = vi.hoisted(() => ({
-  api: { getByOrderId: vi.fn(), getReturnsByOrderId: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getAll: vi.fn(), getWarehouseTasks: vi.fn(), acceptReturn: vi.fn(), updateItemUsage: vi.fn() },
+  api: { getByOrderId: vi.fn(), getReturnsByOrderId: vi.fn(), getReturnsByOrderIds: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getAll: vi.fn(), getWarehouseTasks: vi.fn(), acceptReturn: vi.fn(), updateItemUsage: vi.fn() },
   auth: { hasRole: vi.fn(() => true) },
   socket: new Set<{ onNotificationNew?: (event: { type: string }) => void }>(),
   resync: new Set<() => void>(),
@@ -58,6 +58,7 @@ beforeEach(() => {
   api.getAll.mockResolvedValue({ data: [request()], total: 21 });
   api.getWarehouseTasks.mockImplementation((params) => api.getAll(params));
   api.getReturnsByOrderId.mockResolvedValue([ledger()]);
+  api.getReturnsByOrderIds.mockImplementation(async (ids: string[]) => Object.fromEntries(ids.map(id => [id, id === 'so-1' ? [ledger()] : []])));
   api.getPendingReturns.mockResolvedValue([ledger()]);
   api.getLegacyManualReview.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
 });
@@ -126,7 +127,7 @@ describe('Partial usage and physical return truth', () => {
 
 describe('Manager custody projection and refresh', () => {
   it.each([{ accepted: 0, pending: 1 }, { accepted: 1, pending: 0 }])('shows actual used and returns in manager rows/detail after accepted=$accepted', async ({ accepted, pending }) => {
-    api.getReturnsByOrderId.mockResolvedValue([ledger({ managerAcceptedQty: accepted, outstandingQty: pending })]);
+    api.getReturnsByOrderIds.mockResolvedValue({ 'so-1': [ledger({ managerAcceptedQty: accepted, outstandingQty: pending })] });
     api.getPendingReturns.mockResolvedValue(pending ? [ledger()] : []);
     const w = mountManager(); await flushPromises();
     const row = w.get('[data-testid="manager-part-item-pr-1"]');
@@ -169,62 +170,57 @@ describe('Manager custody projection and refresh', () => {
   it('deduplicates ledger reads by order on the current server page and keeps the server count', async () => {
     api.getAll.mockResolvedValue({ data: [request('pr-1'), request('pr-2')], total: 121 });
     const w = mountManager(); await flushPromises();
-    expect(api.getReturnsByOrderId.mock.calls).toEqual([['so-1']]);
+    expect(api.getReturnsByOrderIds.mock.calls).toEqual([[['so-1']]]);
+    expect(api.getReturnsByOrderId).not.toHaveBeenCalled();
     expect(text(w)).toContain('121');
     w.unmount();
   });
 
   it('keeps unavailable ledger data explicit instead of turning enum USED into two used units', async () => {
-    api.getReturnsByOrderId.mockRejectedValue(new Error('offline'));
+    api.getReturnsByOrderIds.mockRejectedValue(new Error('offline'));
     const w = mountManager(); await flushPromises();
     expect(text(w.get('[data-testid="manager-part-item-pr-1"]'))).toContain('Chưa tải được số thực dùng');
     expect(text(w.get('[data-testid="manager-part-item-pr-1"]'))).not.toContain('Dùng 2');
     w.unmount();
   });
 
-  it('bounds reads to twenty visible orders and three concurrent calls', async () => {
-    const pending = deferred<ReturnType<typeof ledger>[]>();
+  it('reads the twenty visible orders of the page in one call', async () => {
     api.getAll.mockResolvedValue({ data: Array.from({ length: 25 }, (_, i) => request(`pr-${i}`, `so-${i}`)), total: 121 });
-    api.getReturnsByOrderId.mockReturnValue(pending.promise);
     const w = mountManager(); await flushPromises();
-    expect(api.getReturnsByOrderId).toHaveBeenCalledTimes(3);
-    pending.resolve([]); await flushPromises();
-    expect(api.getReturnsByOrderId).toHaveBeenCalledTimes(20);
-    expect(api.getReturnsByOrderId).not.toHaveBeenCalledWith('so-20');
+    expect(api.getReturnsByOrderIds).toHaveBeenCalledTimes(1);
+    expect(api.getReturnsByOrderIds.mock.calls[0][0]).toEqual(Array.from({ length: 20 }, (_, i) => `so-${i}`));
     w.unmount();
   });
 
   it('does not mix an old order ledger into the newly selected server page', async () => {
-    const first = deferred<ReturnType<typeof ledger>[]>();
+    const first = deferred<Record<string, ReturnType<typeof ledger>[]>>();
     api.getAll.mockResolvedValueOnce({ data: [request()], total: 21 })
       .mockResolvedValue({ data: [request('pr-2', 'so-2')], total: 21 });
-    api.getReturnsByOrderId.mockReturnValueOnce(first.promise).mockResolvedValue([ledger({ partRequestId: 'pr-2', partRequestItemId: 'item-pr-2', usedQty: 0 })]);
+    api.getReturnsByOrderIds.mockReturnValueOnce(first.promise).mockResolvedValue({ 'so-2': [ledger({ partRequestId: 'pr-2', partRequestItemId: 'item-pr-2', usedQty: 0 })] });
     const w = mountManager(); await flushPromises();
     await w.get('[data-testid="pagination-next"]').trigger('click'); await flushPromises();
-    first.resolve([ledger()]); await flushPromises();
+    first.resolve({ 'so-1': [ledger()] }); await flushPromises();
     expect(text(w.get('[data-testid="manager-part-item-pr-2"]'))).toContain('Cấp 2 · Dùng 0');
     expect(w.find('[data-testid="manager-part-item-pr-1"]').exists()).toBe(false);
     expect(api.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, pageSize: 20 }));
     w.unmount();
   });
 
-  it('keeps the concurrency limit across page changes while old reads are still pending', async () => {
-    const first = deferred<ReturnType<typeof ledger>[]>();
+  it('a late read of the old page does not overwrite the new page', async () => {
+    const first = deferred<Record<string, ReturnType<typeof ledger>[]>>();
     api.getAll.mockResolvedValueOnce({ data: [request('a', 'a'), request('b', 'b'), request('c', 'c')], total: 21 })
       .mockResolvedValue({ data: [request('d', 'd'), request('e', 'e'), request('f', 'f')], total: 21 });
-    api.getReturnsByOrderId.mockReturnValueOnce(first.promise).mockReturnValueOnce(first.promise).mockReturnValueOnce(first.promise).mockResolvedValue([]);
+    api.getReturnsByOrderIds.mockReturnValueOnce(first.promise).mockResolvedValue({ d: [], e: [], f: [] });
     const w = mountManager(); await flushPromises();
-    expect(api.getReturnsByOrderId).toHaveBeenCalledTimes(3);
     await w.get('[data-testid="pagination-next"]').trigger('click'); await flushPromises();
-    expect(api.getReturnsByOrderId).toHaveBeenCalledTimes(3);
-    first.resolve([]); await flushPromises();
-    expect(api.getReturnsByOrderId).toHaveBeenCalledTimes(6);
+    expect(api.getReturnsByOrderIds.mock.calls.map(([ids]) => ids)).toEqual([['a', 'b', 'c'], ['d', 'e', 'f']]);
+    first.resolve({ a: [ledger()], b: [], c: [] }); await flushPromises();
     expect(text(w.get('[data-testid="manager-part-item-d"]'))).toContain('Chưa có số lượng thực dùng chi tiết');
     w.unmount();
   });
 
   it('keeps a missing ledger honest in the manager detail', async () => {
-    api.getReturnsByOrderId.mockResolvedValue([]);
+    api.getReturnsByOrderIds.mockResolvedValue({});
     const w = mountManager(); await flushPromises();
     await w.get('[data-testid="part-request-detail-pr-1"]').trigger('click');
     const item = w.get('[data-testid="manager-part-detail-item-pr-1"]');
@@ -239,6 +235,7 @@ describe('Manager custody projection and refresh', () => {
     const w = mountManager(); await flushPromises();
     expect(api.getPendingReturns).not.toHaveBeenCalled();
     expect(api.getReturnsByOrderId).not.toHaveBeenCalled();
+    expect(api.getReturnsByOrderIds).not.toHaveBeenCalled();
     w.unmount();
   });
 

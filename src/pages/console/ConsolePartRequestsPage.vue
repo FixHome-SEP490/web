@@ -86,13 +86,9 @@ const loadReturnsWaiting = async () => {
 type CustodyRead = { rows: PartCustodyReturnRecord[]; state: 'loading' | 'ready' | 'error' | 'unavailable' };
 const custodyByOrder = ref<Record<string, CustodyRead>>({});
 let custodyReadVersion = 0;
-let activeCustodyReads = 0;
-const custodyReadWaiters: Array<() => void> = [];
-/** Only the current server page, one read per order, at most three concurrent reads. */
+/** Only the current server page, all its orders in one read (it was one read per order, 12/11/2026). */
 async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
   const version = ++custodyReadVersion;
-  // Release obsolete queued reads; the in-flight cap also spans page changes.
-  custodyReadWaiters.splice(0).forEach(resolve => resolve());
   custodyByOrder.value = {};
   if (!canOperate.value) return;
   const ids = [...new Set(rows.slice(0, pageSize)
@@ -100,27 +96,14 @@ async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
     .map(row => row.serviceOrderId).filter(Boolean))];
   custodyByOrder.value = Object.fromEntries(ids.map(id => [id, { rows: [], state: 'loading' as const }]));
   const current = () => version === custodyReadVersion && pageVersion === loadVersion && canOperate.value;
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(3, ids.length) }, async () => {
-    while (next < ids.length && current()) {
-      const id = ids[next++];
-      while (activeCustodyReads >= 3) {
-        await new Promise<void>(resolve => custodyReadWaiters.push(resolve));
-        if (!current()) return;
-      }
-      if (!current()) return;
-      ++activeCustodyReads;
-      try {
-        const records = await partRequestsApi.getReturnsByOrderId(id);
-        if (current()) custodyByOrder.value[id] = { rows: records, state: 'ready' };
-      } catch (err) {
-        if (current()) custodyByOrder.value[id] = { rows: [], state: isPartReturnsUnavailableError(err) ? 'unavailable' : 'error' };
-      } finally {
-        --activeCustodyReads;
-        custodyReadWaiters.shift()?.();
-      }
-    }
-  }));
+  if (!ids.length) return;
+  try {
+    const byOrder = await partRequestsApi.getReturnsByOrderIds(ids);
+    if (current()) for (const id of ids) custodyByOrder.value[id] = { rows: byOrder[id] ?? [], state: 'ready' };
+  } catch (err) {
+    const state = isPartReturnsUnavailableError(err) ? 'unavailable' as const : 'error' as const;
+    if (current()) for (const id of ids) custodyByOrder.value[id] = { rows: [], state };
+  }
 }
 function custodyFor(request: PartRequest, itemId: string) {
   return custodyByOrder.value[request.serviceOrderId]?.rows.find(row => row.partRequestId === request.id && row.partRequestItemId === itemId);
@@ -296,7 +279,6 @@ const refreshData = async () => { await Promise.all([loadData(), loadReturnsWait
 watch(canOperate, () => { custodyByOrder.value = {}; void refreshData(); });
 onUnmounted(() => {
   ++loadVersion; ++custodyReadVersion; ++returnsWaitingVersion;
-  custodyReadWaiters.splice(0).forEach(resolve => resolve());
 });
 
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {

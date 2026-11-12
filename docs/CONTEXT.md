@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 02:52 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/warehouse-qr-closed-request
+> Cập nhật lần cuối: 2026-11-12 12:38 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: perf/order-detail-parallel
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
 - 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
 - 2026-11-12 00:51 (UTC+7) | ToanAltF4 | perf/web-duplicate-reads | Tối ưu tốc độ: thanh bên của thợ đếm việc đang làm bằng 1 request nhỏ (statuses, pageSize=1) thay vì tải cả danh sách đơn; danh sách hội thoại và số thông báo chưa đọc gộp các lần gọi trùng khi mở trang (coalesce).
 - 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
 - 2026-11-04 12:10 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Trang yêu cầu linh kiện của SM thêm loại Bảo hành và bước kiểm tra linh kiện hỏng trước khi chuẩn bị xong.
 - 2026-11-04 11:25 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Console bảo hành: xét từ chối hoặc không đến, đóng không khắc phục được kèm hoàn tiền, lý do đổi kết luận, chọn linh kiện khi lỗi do công, ảnh đơn gốc; thợ thấy lý do từ chối nào được kiểm tra.
-- 2026-11-03 10:16 (UTC+7) | foxonworld | foxonworld/fixhome-ui-w1-04-how-it-works-preview-20261103 | Tích hợp W1.04 trên dev sau W1.03: hợp nhất trạng thái và 40 nhật ký mới nhất của cả hai màn, giữ nguyên nội dung UX/giá đã review; test lại trước PR/CI/DEV.
