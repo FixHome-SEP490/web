@@ -120,7 +120,9 @@ function unwrapService(payload: unknown, message: string): ServiceItem {
 const writableCategory = ['name', 'slug', 'iconKey', 'sortOrder', 'description', 'isActive'];
 const writableService = ['categoryId', 'name', 'slug', 'description', 'basePrice', 'minPrice', 'maxPrice', 'estimatedMinutes', 'pricingMode', 'unit', 'fixedPrice', 'scopeDescription', 'isActive'];
 function writablePayload(dto: object, keys: string[]) {
-  return Object.fromEntries(Object.entries(dto).filter(([key, value]) => keys.includes(key) && value !== undefined)
+  const prices = ['basePrice', 'minPrice', 'maxPrice', 'fixedPrice'];
+  return Object.fromEntries(Object.entries(dto).filter(([key, value]) => keys.includes(key) && value !== undefined
+    && !(prices.includes(key) && (value === null || value === '')))
     .map(([key, value]) => [key, key === 'description' && value === null ? '' : value]));
 }
 
