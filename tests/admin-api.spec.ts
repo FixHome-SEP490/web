@@ -105,7 +105,7 @@ describe('Admin API adapters', () => {
     const result = await adminVerificationsApi.getVerifications({ status: 'VERIFIED' });
 
     expect(apiClientMock.get).toHaveBeenCalledWith('/admin/technician-verifications', {
-      params: { status: 'approved' },
+      params: { status: 'verified' },
     });
     expect(result.data[0]?.status).toBe('VERIFIED');
   });

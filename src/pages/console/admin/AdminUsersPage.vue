@@ -176,6 +176,33 @@ const getInitial = (name: string, email: string) => {
   return 'A';
 };
 
+// ADMIN 3: one account's details, read fresh from the server.
+const detailUser = ref<AdminUserRecord | null>(null);
+const detailOpen = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+let latestDetail = 0;
+async function openDetail(row: AdminUserRecord) {
+  const requestId = ++latestDetail;
+  detailOpen.value = true;
+  detailUser.value = row;
+  detailError.value = '';
+  detailLoading.value = true;
+  try {
+    const fresh = await adminUsersApi.getUser(row.id);
+    if (requestId === latestDetail) detailUser.value = fresh;
+  } catch (reason) {
+    if (requestId === latestDetail) detailError.value = getErrorMessage(reason, 'Chưa tải được thông tin mới nhất của tài khoản.');
+  } finally {
+    if (requestId === latestDetail) detailLoading.value = false;
+  }
+}
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '—';
+  const p = vnParts(value);
+  return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ${String(p.day).padStart(2, '0')}/${String(p.month).padStart(2, '0')}/${p.year}`;
+};
+
 // Tạo tài khoản Kỹ thuật viên (chỉ Admin/SM mới onboard được, tech không tự đăng ký)
 const showCreateTechModal = ref(false);
 const createTechForm = ref({ email: '', fullName: '', phoneNumber: '' });
@@ -196,13 +223,18 @@ async function handleCreateTechnician() {
     createTechError.value = 'Nhập họ tên và email.';
     return;
   }
+  const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '');
+  if (phone && !/^0[35789]\d{8}$/.test(phone)) {
+    createTechError.value = 'Số điện thoại phải là số di động Việt Nam 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09.';
+    return;
+  }
   createTechLoading.value = true;
   createTechError.value = '';
   try {
     const { user, tempPassword } = await adminUsersApi.createTechnician({
       email: createTechForm.value.email.trim(),
       fullName: createTechForm.value.fullName.trim(),
-      phoneNumber: createTechForm.value.phoneNumber.trim() || undefined,
+      phoneNumber: phone || undefined,
     });
     createdTech.value = { email: user.email, fullName: user.fullName, tempPassword };
     void loadUsers();
@@ -231,16 +263,17 @@ async function handleCreateTechnician() {
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo email hoặc tên" label="Tìm người dùng" />
       <select v-model="roleFilter" :class="consoleField" aria-label="Vai trò">
         <option value="ALL">Tất cả vai trò</option>
-        <option value="ADMIN">Quản trị viên</option>
-        <option value="SERVICE_MANAGER">Quản lý dịch vụ</option>
-        <option value="TECHNICIAN">Kỹ thuật viên</option>
-        <option value="CUSTOMER">Khách hàng</option>
+        <option value="admin">Quản trị viên</option>
+        <option value="service_manager">Quản lý dịch vụ</option>
+        <option value="technician">Kỹ thuật viên</option>
+        <option value="customer">Khách hàng</option>
       </select>
       <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
         <option value="ALL">Tất cả trạng thái</option>
         <option value="active">Đang hoạt động</option>
         <option value="pending_verification">Chưa xác minh</option>
         <option value="suspended">Tạm khoá</option>
+        <option value="locked">Đã khoá</option>
       </select>
     </div>
 
@@ -262,7 +295,7 @@ async function handleCreateTechnician() {
             <span v-else aria-hidden="true">{{ getInitial(row.fullName, row.email) }}</span>
           </div>
           <div class="min-w-0">
-            <div class="truncate font-medium text-ink-900">{{ row.fullName || row.email.split('@')[0] }}</div>
+            <button type="button" class="block max-w-full truncate text-left font-medium text-ink-900 hover:text-brand-700 hover:underline" @click="openDetail(row)">{{ row.fullName || row.email.split('@')[0] }}</button>
             <div class="max-w-48 truncate text-xs text-ink-500 xl:hidden" :title="row.email">{{ row.email }}</div>
           </div>
         </div>
@@ -283,8 +316,9 @@ async function handleCreateTechnician() {
         <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.createdAt)) }}</span>
       </template>
       <template #cell-active="{ row }">
-        <ConsoleMoreMenu v-if="canToggleStatus(row.status)" label="Thao tác với tài khoản">
-          <ConsoleMenuItem :danger="row.status !== 'locked'" @click="userToToggle = row; showStatusModal = true">
+        <ConsoleMoreMenu label="Thao tác với tài khoản">
+          <ConsoleMenuItem @click="openDetail(row)">Xem chi tiết</ConsoleMenuItem>
+          <ConsoleMenuItem v-if="canToggleStatus(row.status)" :danger="row.status !== 'locked'" @click="userToToggle = row; showStatusModal = true">
             {{ row.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}
           </ConsoleMenuItem>
         </ConsoleMoreMenu>
@@ -304,6 +338,44 @@ async function handleCreateTechnician() {
       @confirm="confirmStatusChange"
       @cancel="showStatusModal = false"
     />
+
+    <div
+      v-if="detailOpen && detailUser"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-detail-title"
+      data-testid="user-detail"
+      @click.self="detailOpen = false"
+      @keydown.esc="detailOpen = false"
+    >
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div class="flex items-center gap-3">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-lg font-semibold text-brand-700">
+            <img v-if="detailUser.avatarUrl" :src="detailUser.avatarUrl" alt="" class="h-full w-full object-cover" />
+            <span v-else aria-hidden="true">{{ getInitial(detailUser.fullName, detailUser.email) }}</span>
+          </div>
+          <div class="min-w-0">
+            <h3 id="user-detail-title" class="truncate text-lg font-semibold text-ink-900">{{ detailUser.fullName }}</h3>
+            <p class="truncate text-sm text-ink-500">{{ displayRole(detailUser.role) }}</p>
+          </div>
+        </div>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Email</dt><dd class="break-all text-right text-ink-900">{{ detailUser.email }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Số điện thoại</dt><dd class="text-right font-num text-ink-900">{{ detailUser.phoneNumber || '—' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-right text-ink-900">{{ statusLabel(detailUser.status) }}</dd></div>
+          <div v-if="detailUser.bookingSuspendedUntil" class="flex justify-between gap-3"><dt class="text-ink-500">Tạm khoá đặt lịch đến</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.bookingSuspendedUntil) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Ngày tạo</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.createdAt) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật gần nhất</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.updatedAt) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Mã tài khoản</dt><dd class="break-all text-right font-num text-xs text-ink-600">{{ detailUser.id }}</dd></div>
+        </dl>
+        <p v-if="detailLoading" class="text-sm text-ink-500" role="status">Đang tải thông tin mới nhất…</p>
+        <p v-if="detailError" class="text-sm text-danger-600" role="alert">{{ detailError }}</p>
+        <div class="flex justify-end">
+          <FhButton variant="secondary" size="sm" @click="detailOpen = false">Đóng</FhButton>
+        </div>
+      </div>
+    </div>
 
     <!-- Create a technician account -->
     <div

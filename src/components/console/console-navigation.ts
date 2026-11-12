@@ -19,7 +19,6 @@ import {
   Sliders,
   Star,
   UserCheck,
-  UserPlus,
   UserSearch,
   Users,
   Wallet,
@@ -47,7 +46,6 @@ const item = (label: string, path: string, icon: Component): ConsoleNavItem => (
 
 const overview = item('Tổng quan', '/console', LayoutDashboard);
 const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
-const bookings = item('Gán thợ', '/console/bookings', UserPlus);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
 const support = item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
@@ -63,7 +61,7 @@ const warehouses = item('Kho linh kiện', '/console/warehouses', Warehouse);
 export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
     return [
-      { group: 'Vận hành', items: [overview, orders, bookings, warehouses, partRequests, partReturns, payouts, serviceAreas] },
+      { group: 'Vận hành', items: [overview, orders, warehouses, partRequests, partReturns, payouts, serviceAreas] },
       {
         group: 'Hỗ trợ',
         items: [
@@ -79,7 +77,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
     return [
       {
         group: 'Vận hành',
-        items: [overview, orders, bookings, warehouses, partRequests, support, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
+        items: [overview, orders, warehouses, partRequests, support, warranty, item('Trợ lý AI', '/console/admin/ai-quality', Bot)],
       },
       {
         group: 'Kỹ thuật viên',

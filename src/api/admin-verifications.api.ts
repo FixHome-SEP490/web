@@ -94,7 +94,8 @@ function normalizeStatus(value: unknown): VerificationStatus {
 }
 
 function toBackendStatus(status: VerificationStatus): BackendVerificationStatus {
-  if (status === 'VERIFIED') return 'approved';
+  // W-8: the server's VerificationStatus is pending | verified | rejected.
+  if (status === 'VERIFIED') return 'verified';
   return status.toLowerCase() as BackendVerificationStatus;
 }
 

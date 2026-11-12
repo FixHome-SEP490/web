@@ -48,11 +48,11 @@ interface AttentionRow {
 const attention = computed<AttentionRow[]>(() => {
   if (!ops.value) return [];
   return [
-    { key: 'matching', label: 'Yêu cầu chờ ghép thợ', count: ops.value.matchingBookings, to: '/console/bookings' },
+    { key: 'matching', label: 'Yêu cầu đang chờ thợ nhận', count: ops.value.matchingBookings, to: null },
     {
       key: 'replacements',
       testId: 'ops-replacements',
-      label: 'Cần thay đổi thợ',
+      label: 'Yêu cầu dừng sửa cần xử lý',
       count: ops.value.openReplacementCases ?? 0,
       to: isServiceManager.value ? '/console/support?caseType=technician_replacement&status=open' : null,
     },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { foldForSearch } from '../../utils/formatters';
 import { ref, onBeforeUnmount, onMounted, computed, watch } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhMoney, FhConfirmDialog } from '../../components';
@@ -176,9 +177,9 @@ const tabs = computed(() => [
 
 const filteredCategories = computed(() => {
   if (!searchQuery.value) return categories.value;
-  const q = searchQuery.value.toLowerCase();
+  const q = foldForSearch(searchQuery.value.trim());
   return categories.value.filter(
-    (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+    (c) => foldForSearch(c.name).includes(q) || foldForSearch(c.code).includes(q),
   );
 });
 const categoryPage = computed(() => slicePage(filteredCategories.value, page.value, PAGE_SIZE));
@@ -266,7 +267,15 @@ const openAddService = () => {
 
 const openEditService = (svc: ServiceItem) => {
   isEditingService.value = true;
-  serviceForm.value = { ...svc };
+  // W-7: the API returns prices as decimal strings ("150000.00"); the PATCH must send numbers.
+  const money = (value: unknown) => (value === null || value === undefined || value === '' ? value : Number(value));
+  serviceForm.value = {
+    ...svc,
+    basePrice: money(svc.basePrice) as number,
+    minPrice: money(svc.minPrice) as number,
+    maxPrice: money(svc.maxPrice) as number,
+    fixedPrice: money(svc.fixedPrice) as number,
+  };
   formError.value = '';
   showServiceModal.value = true;
 };

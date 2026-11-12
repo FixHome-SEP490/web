@@ -40,6 +40,8 @@ export interface PartRequest {
   status: PartRequestStatus;
   reason?: string | null;
   shippingFee: number;
+  /** W3 paid delivery progress (latest warehouse delivery event); null off that path. */
+  w3DeliveryStage?: string | null;
   /** Optional read-only delivery snapshot; absent fields remain LEGACY. */
   shippingPolicyVersion?: string | null;
   customerShippingShare?: number | null;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayPartRequestStatus, isW3Delivery } from '../../utils/w3-delivery-stage';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
@@ -616,8 +617,8 @@ const getUsageBadgeClass = (status: string) => {
       </template>
 
       <template #cell-status="{ row }">
-        <span class="inline-block whitespace-nowrap rounded border px-2 py-0.5 text-xs font-medium" :class="getStatusBadgeClass(row.status)">
-          {{ getStatusLabel(row.status) }}
+        <span class="inline-block whitespace-nowrap rounded border px-2 py-0.5 text-xs font-medium" :class="getStatusBadgeClass(displayPartRequestStatus(row))">
+          {{ getStatusLabel(displayPartRequestStatus(row)) }}
         </span>
       </template>
 
@@ -643,7 +644,7 @@ const getUsageBadgeClass = (status: string) => {
             @click="prepareWarehouseQr(row)"
           >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
           <FhButton
-            v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && !isW3Delivery(row) && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -818,7 +819,7 @@ const getUsageBadgeClass = (status: string) => {
             </dd>
           </div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hình thức</dt><dd class="text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(detailModalRequest.status) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-ink-900">{{ getStatusLabel(displayPartRequestStatus(detailModalRequest)) }}</dd></div>
           <div class="list-none"><ShippingShareBreakdown :snapshot="detailModalRequest" role="manager" :fulfillment-method="detailModalRequest.fulfillmentMethod" /></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hoàn tất</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</dd></div>

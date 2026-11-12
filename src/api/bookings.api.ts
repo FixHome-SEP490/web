@@ -514,7 +514,7 @@ export const bookingsApi = {
     return { serviceOrderId: id || null };
   },
 
-  // ── SM/Admin: gán thợ thủ công ──
+  // ── SM/Admin: staff board (read only; FixHome never assigns a technician) ──
 
   /**
    * Staff board, one page. `overdue` splits on whether the appointment has
@@ -532,12 +532,4 @@ export const bookingsApi = {
     return readPage(res.data, { page, pageSize }, normalizeBooking);
   },
 
-  async assignTechnicianToBooking(bookingId: string, technicianId: string, reason: string): Promise<void> {
-    await apiClient.post(`/bookings/${bookingId}/assign`, { technicianId, reason });
-  },
-
-  /** Service Manager: give the order to another technician after the one on site reported "Cần thay đổi thợ". */
-  async replaceTechnicianAfterReport(orderId: string, technicianId: string, reason: string): Promise<void> {
-    await apiClient.post(`/service-orders/${orderId}/replace-technician`, { technicianId, reason });
-  },
 };

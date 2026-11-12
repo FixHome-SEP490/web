@@ -62,6 +62,8 @@ export interface WarehousePage<T> {
 export interface WarehousePageQuery {
   limit?: number;
   offset?: number;
+  /** Stock of one SKU only (W-11), whatever page it sits on. */
+  partId?: string;
 }
 
 export interface StockAdjustmentPayload {

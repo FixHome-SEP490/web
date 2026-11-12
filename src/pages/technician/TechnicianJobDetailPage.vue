@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
@@ -2079,6 +2080,13 @@ function costLineLabel(item: { type: string; description: string; quantity: numb
 }
 const quotationStatusLabel = computed(() => ({ approved: 'Khách đã duyệt', accepted: 'Khách đã duyệt', sent: 'Chờ khách duyệt', pending: 'Chờ khách duyệt', rejected: 'Khách từ chối', superseded: 'Đã thay bằng bản mới', draft: 'Bản nháp' } as Record<string, string>)[String(job.value?.quotation?.status ?? '').toLowerCase()] ?? '');
 const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
+// W-17: a paid W3 delivery puts the shipping fee on the invoice, split customer / technician.
+const invoiceShipping = computed(() => {
+  const fee = Number(jobInvoice.value?.shippingFee ?? 0);
+  if (!jobInvoice.value || !Number.isFinite(fee) || fee <= 0) return null;
+  const share = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+  return { fee, customer: share(jobInvoice.value.customerShippingShare), technician: share(jobInvoice.value.technicianShippingShare) };
+});
 const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
   : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
 const proposedParts = computed(() => [
@@ -2882,6 +2890,10 @@ const toggleMore = async () => {
         <dl class="flex flex-wrap gap-x-6 gap-y-2">
           <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
           <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
+          <template v-if="invoiceShipping">
+            <div><dt class="text-ink-600">Phí giao (khách trả)</dt><dd><FhMoney :amount="invoiceShipping.customer ?? invoiceShipping.fee" /></dd></div>
+            <div v-if="invoiceShipping.technician"><dt class="text-ink-600">Phí giao (bạn chịu)</dt><dd><FhMoney :amount="invoiceShipping.technician" /></dd></div>
+          </template>
           <div><dt class="text-ink-600">{{ jobInvoice ? 'Tổng hóa đơn' : 'Tổng báo giá' }}</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
         </dl>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
@@ -2921,7 +2933,7 @@ const toggleMore = async () => {
           <h3 class="font-medium text-ink-800">Đã cấp và thực tế đã dùng</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="request in receivedRequests" :key="request.id">
-              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
+              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' } as Record<string, string>)[displayPartRequestStatus(request)] }}
               <ul class="pl-3"><li v-for="item in request.items" :key="item.id">
                 {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
                 <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>

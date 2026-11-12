@@ -7,6 +7,7 @@ import {
   FhStatusPill,
   FhMoney,
   FhTimeline,
+  FhButton,
   BookingMediaViewer,
   type TimelineStep,
 } from '../../components';
@@ -21,6 +22,9 @@ import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/cons
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { useAuthStore } from '../../stores/auth';
 import { vnDateTimeString } from '../../utils/vn-time';
+import { ordersApi } from '../../api/orders.api';
+import { consoleTextarea } from '../../components/console/console-ui';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const route = useRoute();
 const router = useRouter();
@@ -100,6 +104,42 @@ onUnmounted(() => {
   bookingForMedia.value = null;
 });
 
+// W-13 (PO 12/11/2026): the manager may cancel an order before repair starts, with a reason.
+// The server decides (POST /service-orders/:id/cancel): a staff cancellation costs nobody points;
+// an order under repair is closed through its support case instead.
+const canCancel = computed(() => isServiceManager.value
+  && ['accepted', 'en_route'].includes(String(order.value?.status ?? '').toLowerCase()));
+const cancelOpen = ref(false);
+const cancelReason = ref('');
+const cancelBusy = ref(false);
+const cancelError = ref('');
+const cancelDone = ref('');
+function openCancel() {
+  cancelReason.value = '';
+  cancelError.value = '';
+  cancelOpen.value = true;
+}
+async function submitCancel() {
+  if (cancelBusy.value || !order.value) return;
+  const reason = cancelReason.value.trim();
+  if (reason.length < 10 || reason.length > 2000) {
+    cancelError.value = reason.length > 2000 ? 'Lý do không được vượt quá 2.000 ký tự.' : 'Ghi lý do huỷ, tối thiểu 10 ký tự.';
+    return;
+  }
+  cancelBusy.value = true;
+  cancelError.value = '';
+  try {
+    await ordersApi.cancelOrder(order.value.id, reason);
+    cancelOpen.value = false;
+    cancelDone.value = 'Đã huỷ đơn. Khách hàng và kỹ thuật viên đã được báo.';
+    await loadOrder(order.value.id);
+  } catch (reasonError) {
+    cancelError.value = userFacingError(reasonError, 'Chưa huỷ được đơn. Đơn có thể đã đổi trạng thái, hãy tải lại trang.');
+  } finally {
+    cancelBusy.value = false;
+  }
+}
+
 // Render only the timeline entries actually returned by the Backend API.
 // No locally invented states or progression — an empty timeline is shown honestly.
 const paymentTone = computed(() => {
@@ -141,7 +181,7 @@ const timelineSteps = computed<TimelineStep[]>(() => {
 </script>
 
 <template>
-  <!-- Trang chỉ đọc: chuyển trạng thái, đổi thợ hay huỷ đơn đi qua Yêu cầu hỗ trợ hoặc Huỷ đơn. -->
+  <!-- Quản lý xem đơn; huỷ được khi đơn chưa bắt đầu sửa, đơn đang sửa xử lý qua Yêu cầu hỗ trợ. -->
   <div class="mx-auto max-w-5xl space-y-6 pb-12">
     <div v-if="loading" class="space-y-4" aria-busy="true">
       <FhSkeleton height="14px" width="120px" />
@@ -171,13 +211,29 @@ const timelineSteps = computed<TimelineStep[]>(() => {
           <ConsoleMoreMenu>
             <ConsoleMenuItem @click="router.push('/console/support')">Mở yêu cầu hỗ trợ</ConsoleMenuItem>
             <ConsoleMenuItem @click="router.push('/console/cancellations')">Xem huỷ đơn</ConsoleMenuItem>
+            <ConsoleMenuItem v-if="canCancel" danger data-testid="order-cancel-open" @click="openCancel">Huỷ đơn</ConsoleMenuItem>
           </ConsoleMoreMenu>
         </template>
       </ConsolePageHeader>
 
       <div class="space-y-2 text-sm">
-        <p class="text-ink-600">Trang chỉ đọc. Trạng thái lịch sử của đơn chưa xác nhận việc đã dừng hay hủy; xem yêu cầu hỗ trợ và đối soát riêng.</p>
+        <p v-if="cancelDone" role="status" class="text-success-800">{{ cancelDone }}</p>
+        <p class="text-ink-600">Trạng thái lịch sử của đơn chưa xác nhận việc đã dừng hay hủy; xem yêu cầu hỗ trợ và đối soát riêng.</p>
         <router-link :to="{ path: '/console/support', query: { serviceOrderId: order.id } }" class="inline-flex min-h-11 items-center font-medium text-brand-700 underline" data-testid="order-support-link">Yêu cầu hỗ trợ của đơn này</router-link>
+      </div>
+      <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="cancelBusy || (cancelOpen = false)">
+        <section class="w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="order-cancel-title" data-testid="order-cancel-dialog">
+          <h2 id="order-cancel-title" class="text-lg font-semibold text-ink-900">Huỷ đơn {{ order.code }}</h2>
+          <p class="text-sm text-ink-700">Đơn sẽ kết thúc, kỹ thuật viên rời đơn. Huỷ bởi quản lý không trừ điểm uy tín của khách hay thợ.</p>
+          <label class="flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do huỷ (10–2.000 ký tự)
+            <textarea v-model="cancelReason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="order-cancel-reason" />
+          </label>
+          <p v-if="cancelError" class="text-sm text-danger-700" role="alert">{{ cancelError }}</p>
+          <div class="flex justify-end gap-2">
+            <FhButton variant="ghost" size="md" :disabled="cancelBusy" @click="cancelOpen = false">Quay lại</FhButton>
+            <FhButton variant="danger" size="md" :loading="cancelBusy" :disabled="cancelBusy" data-testid="order-cancel-confirm" @click="submitCancel">Huỷ đơn</FhButton>
+          </div>
+        </section>
       </div>
       <GroupStopIncidentsPanel :key="`group:${order.id}`" :order-id="order.id" :group-id="order.visitGroupId ?? null" />
       <StoppedWorkFinancePanel :key="order.id" :order-id="order.id" />

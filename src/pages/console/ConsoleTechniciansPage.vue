@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { foldForSearch } from '../../utils/formatters';
 import { computed, onMounted, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhSkeleton, FhStatusPill } from '../../components';
@@ -121,7 +122,7 @@ const filteredVerifications = computed(() => {
       ...verification.documents.map((document) => document.fileName),
     ]
       .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query));
+      .some((value) => foldForSearch(value).includes(foldForSearch(query)));
   });
 });
 

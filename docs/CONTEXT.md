@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 18:58 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/sheet-trace-1211
+> Cập nhật lần cuối: 2026-11-12 23:13 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-console-bugs-1211
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -597,6 +597,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-12 23:13 (UTC+7) | ToanAltF4 | fix/web-console-bugs-1211 | Sửa lỗi console 12/11: Người dùng (lọc vai trò, Đã khoá, xem chi tiết, SĐT thợ), sửa dịch vụ gửi giá dạng số, lọc xác minh/ví, điều chỉnh tồn (lỗi 4xx mở lại form, tồn SKU ở trang khác), khối W3 theo userRole, tiến trình W3 có phí, dòng phí giao trên hoá đơn thợ, chữ trang chính sách W3, SM huỷ đơn, gỡ trang Gán thợ và Đổi thợ trực tiếp (PO: nền tảng không gán thợ), trang Cấu hình chỉ hiện tham số đang áp dụng
 - 2026-11-12 18:58 (UTC+7) | ToanAltF4 | fix/sheet-trace-1211 | SM 46 mã kho: lỗi vẽ QR không thành báo lỗi, mất phản hồi thì đọc lại trạng thái, có nút sao chép mã; hàng đợi hoàn trả đọc warehouseAllocated từ server, bỏ N+1 warehouse-allocation
 - 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
@@ -636,4 +637,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
 - 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
 - 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
-- 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
