@@ -61,6 +61,8 @@ const isAvailable = ref(true);
 const togglingAvailability = ref(false);
 const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
+/** Jobs being worked on; the server leaves out orders the technician no longer holds. */
+const ACTIVE_JOB_STATUSES = ['accepted', 'en_route', 'under_repair'] as const;
 
 // The badge, the switch and the banners read the same cached data as the pages:
 // one request serves both. Invitations follow the server live (PO 18/10/2026);
@@ -71,10 +73,9 @@ const refreshInvitationCount = () => invitationsQuery.refetch();
 
 async function countActiveJobs() {
   try {
-    const jobs = await ordersApi.getTechnicianJobs();
-    activeJobs.value = jobs.filter((j) =>
-      ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'IN_PROGRESS'].includes(String(j.status).toUpperCase()),
-    ).length;
+    // Only the count is shown: the server counts the jobs being worked on, one order comes back.
+    const page = await ordersApi.getTechnicianJobsPage(1, 1, { statuses: ACTIVE_JOB_STATUSES });
+    activeJobs.value = page.total;
   } catch {
     // ignore
   }

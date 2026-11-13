@@ -122,6 +122,18 @@ describe('faulty part inspection on the manager page', () => {
     expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
   });
 
+  it.each(['cancelled', 'completed'])('offers no warehouse code on a %s request, so the manager cannot hit the server refusal', async (status) => {
+    const request = warranty({ id: `pr-${status}`, requestType: 'pre_repair', status });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'handed_over', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [{ ...request, warehouseAllocation: allocation }], total: 1 });
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.findAll('button').some((button) => ['Cấp lại mã nhận', 'Chuẩn bị mã kho'].includes(button.text()))).toBe(false);
+    expect(api.prepareWarehouseQr).not.toHaveBeenCalled();
+  });
+
   it('keeps Admin on the existing global part request list', async () => {
     auth.hasRole.mockReturnValue(false);
     api.getAll.mockResolvedValue({ data: [], total: 0 });
@@ -182,5 +194,87 @@ describe('FaultyPartInspectionModal', () => {
     const wrapper = mountModal(warranty({ faultyInspectionResult: 'installation', faultyInspectionNote: 'Đấu sai cực dây nguồn.' }) as never);
     expect((wrapper.get('input[value="installation"]').element as HTMLInputElement).checked).toBe(true);
     expect((wrapper.get('#faulty-note').element as HTMLTextAreaElement).value).toBe('Đấu sai cực dây nguồn.');
+  });
+});
+
+describe('warehouse handover on the manager page (BUG DETECTOR 83, 84, 85, 89, 90)', () => {
+  const pickupRow = (allocation: Record<string, unknown> | undefined) => ({
+    ...warranty({ id: 'pr-h', requestType: 'quotation', status: 'ready',
+      items: [{ id: 'i-h', partRequestId: 'pr-h', partSource: 'fixhome', partNameSnapshot: 'Tụ quạt 2uF', quantity: 2, unitPriceSnapshot: 50000, usageStatus: 'pending' }] }),
+    ...(allocation === undefined ? {} : { warehouseAllocation: allocation }),
+  });
+  const ready = { partRequestId: 'pr-h', mode: 'warehouse', status: 'ready', warehouseId: 'wh-1', warehouseName: 'Kho Quận 1', responsibleUserId: 'sm-1' };
+  // jsdom has no canvas; the page's QR drawing is replaced so the flow can be clicked through.
+  let draw: { mockRejectedValueOnce: (error: Error) => unknown; mockRestore: () => void };
+  beforeEach(async () => {
+    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
+    draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==') as never;
+  });
+  afterEach(() => draw.mockRestore());
+  const openDialog = async () => {
+    api.getWarehouseTasks.mockResolvedValue({ data: [pickupRow(ready)], total: 1, statusCounts: { ready: 1 } });
+    api.prepareWarehouseQr.mockResolvedValue({ allocation: ready, qrToken: 'pickup-1' });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
+    await flushPromises();
+    return wrapper;
+  };
+  const confirm = async (wrapper: ReturnType<typeof mount>) => {
+    await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
+    await flushPromises();
+  };
+
+  it('uses the allocation sent with the queue and the server status totals', async () => {
+    api.getWarehouseTasks.mockResolvedValue({ data: [pickupRow(ready)], total: 31, statusCounts: { requested: 12, ready: 7, completed: 9 } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    expect(api.getWarehouseAllocation).not.toHaveBeenCalled();
+    const tiles = text(wrapper);
+    expect(tiles).toMatch(/Chờ chuẩn bị\s*12/);
+    expect(tiles).toMatch(/Sẵn sàng\s*7/);
+    expect(tiles).toMatch(/Hoàn tất\s*9/);
+  });
+
+  it('shows what is handed over in a plain, not destructive, dialog', async () => {
+    const wrapper = await openDialog();
+    const summary = wrapper.get('[data-testid="handover-summary"]').text().replace(/\s+/g, ' ');
+    expect(summary).toContain('PR-PR-H');
+    expect(summary).toContain('Kho Quận 1');
+    expect(summary).toContain('Tụ quạt 2uF');
+    expect(summary).toContain('x 2');
+    const confirmButton = wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!;
+    expect(confirmButton.classes().join(' ')).not.toMatch(/danger/);
+  });
+
+  it('reports a saved handover as done even when drawing the QR fails', async () => {
+    const wrapper = await openDialog();
+    draw.mockRejectedValueOnce(new Error('canvas unavailable'));
+    api.confirmWarehouseHandover.mockResolvedValue({ allocation: { ...ready, status: 'handed_over' }, qrToken: 'receipt-1' });
+    await confirm(wrapper);
+    expect(text(wrapper)).toContain('Đã xác nhận bàn giao thực tế');
+    expect(text(wrapper)).not.toContain('Chưa xác nhận được bàn giao');
+    expect(text(wrapper)).toContain('receipt-1');
+    expect(wrapper.text()).not.toContain('Xác nhận đã giao linh kiện cho kỹ thuật viên?');
+  });
+
+  it('after a lost answer, reads the warehouse back and says the parts are already handed over', async () => {
+    const wrapper = await openDialog();
+    api.confirmWarehouseHandover.mockRejectedValue(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+    api.getWarehouseAllocation.mockResolvedValue({ ...ready, status: 'handed_over' });
+    await confirm(wrapper);
+    expect(api.getWarehouseAllocation).toHaveBeenCalledWith('pr-h');
+    expect(text(wrapper)).toContain('Kho đã ghi nhận bàn giao trước đó');
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Xác nhận đã giao trực tiếp')).toBe(false);
+  });
+
+  it('after a refusal with nothing handed over, says the stock was not issued', async () => {
+    const wrapper = await openDialog();
+    api.confirmWarehouseHandover.mockRejectedValue(new Error('409'));
+    api.getWarehouseAllocation.mockResolvedValue(ready);
+    await confirm(wrapper);
+    expect(text(wrapper)).toContain('Linh kiện chưa được xuất kho');
   });
 });

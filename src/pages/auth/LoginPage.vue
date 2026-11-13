@@ -6,6 +6,7 @@ import { Eye, EyeOff } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 import { extractApiErrorMessage } from '../../utils/input-validation';
+import { usableLoginRedirect } from '../../utils/login-redirect';
 
 const router = useRouter();
 const route = useRoute();
@@ -20,7 +21,7 @@ import { technicianOnboardingApi } from '../../api/technician-onboarding.api';
 
 /** Đăng nhập bằng mật khẩu hay bằng Google thì chặng sau đều giống nhau. */
 const goAfterLogin = async (user: { fullName?: string; role?: string }) => {
-  const redirect = (route.query.redirect as string) || '';
+  const redirect = usableLoginRedirect(router, route.query.redirect, user.role);
   if (redirect) {
     router.push(redirect);
     return;

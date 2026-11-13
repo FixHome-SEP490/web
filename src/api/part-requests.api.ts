@@ -31,6 +31,8 @@ export interface PartRequestItem {
 
 export interface PartRequest {
   id: string;
+  /** Sent with the manager's warehouse queue so the list needs no call per row (BUG DETECTOR 90). */
+  warehouseAllocation?: WarehouseAllocation | null;
   serviceOrderId: string;
   technicianId: string;
   requestType: PartRequestType;
@@ -87,6 +89,13 @@ export interface WarehouseAllocation {
   handedOverAt?: string | null;
   receivedAt?: string | null;
 }
+/** One page of the list; statusCounts covers every status over the same filters (BUG DETECTOR 89). */
+export interface PartRequestPage {
+  data: PartRequest[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+}
+
 export interface WarehouseAllocationCommandPayload { idempotencyKey: string }
 export interface WarehouseQrResponse { allocation: WarehouseAllocation; qrToken: string | null }
 
@@ -266,7 +275,8 @@ const LEGACY_MAX_PAGE_SIZE = 100;
 const LEGACY_MAX_ISSUED_QTY = 1_000_000;
 const LEGACY_DEFAULT_PAGE_SIZE = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PART_REQUEST_TYPES: readonly PartRequestType[] = ['pre_repair', 'additional', 'quotation'];
+// Every type the Backend lists; a warranty line without custody is also verified by hand (BUG DETECTOR 92).
+const PART_REQUEST_TYPES: readonly PartRequestType[] = ['pre_repair', 'additional', 'quotation', 'warranty'];
 const PART_REQUEST_STATUSES: readonly PartRequestStatus[] = [
   'requested',
   'ready',
@@ -505,29 +515,31 @@ export const partRequestsApi = {
    */
   async getAll(
     params?: QueryPartRequestsParams,
-  ): Promise<{ data: PartRequest[]; total: number }> {
+  ): Promise<PartRequestPage> {
     const res = await apiClient.get<{
       data: PartRequest[];
-      meta: { total: number };
+      meta: { total: number; statusCounts?: Record<string, number> };
     }>('/part-requests', { params });
     return {
       data: res.data.data || [],
       total: res.data.meta?.total || 0,
+      statusCounts: res.data.meta?.statusCounts ?? null,
     };
   },
 
   /** SM: list requests assigned to the manager's warehouses by Backend ownership scope. */
   async getWarehouseTasks(
     params?: QueryPartRequestsParams,
-  ): Promise<{ data: PartRequest[]; total: number }> {
+  ): Promise<PartRequestPage> {
     const res = await apiClient.get<{
       success: true;
       data: PartRequest[];
-      meta: { total: number };
+      meta: { total: number; statusCounts?: Record<string, number> };
     }>('/part-requests/warehouse-tasks', { params });
     return {
       data: res.data.data,
       total: res.data.meta.total,
+      statusCounts: res.data.meta.statusCounts ?? null,
     };
   },
 
@@ -613,6 +625,18 @@ export const partRequestsApi = {
       `/service-orders/${orderId}/part-returns`,
     );
     return res.data.data || [];
+  },
+
+  /**
+   * Service Manager: the part-return rows of several orders in one read (one page of the
+   * part-request list); every asked order is a key, empty when it has none.
+   */
+  async getReturnsByOrderIds(orderIds: string[]): Promise<Record<string, PartCustodyReturnRecord[]>> {
+    const res = await apiClient.get<{ data: Record<string, PartCustodyReturnRecord[]> }>(
+      '/part-returns/by-orders',
+      { params: { orderIds: orderIds.join(',') } },
+    );
+    return res.data.data || {};
   },
 
   /**

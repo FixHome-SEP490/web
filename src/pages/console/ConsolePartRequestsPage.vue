@@ -31,7 +31,7 @@ import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeSt
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
-import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction } from '../../utils/warehouse-fulfillment';
+import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction, warehouseQrOpen } from '../../utils/warehouse-fulfillment';
 
 const auth = useAuthStore();
 const canOperate = computed(() => auth.hasRole('SERVICE_MANAGER'));
@@ -86,13 +86,9 @@ const loadReturnsWaiting = async () => {
 type CustodyRead = { rows: PartCustodyReturnRecord[]; state: 'loading' | 'ready' | 'error' | 'unavailable' };
 const custodyByOrder = ref<Record<string, CustodyRead>>({});
 let custodyReadVersion = 0;
-let activeCustodyReads = 0;
-const custodyReadWaiters: Array<() => void> = [];
-/** Only the current server page, one read per order, at most three concurrent reads. */
+/** Only the current server page, all its orders in one read (it was one read per order, 12/11/2026). */
 async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
   const version = ++custodyReadVersion;
-  // Release obsolete queued reads; the in-flight cap also spans page changes.
-  custodyReadWaiters.splice(0).forEach(resolve => resolve());
   custodyByOrder.value = {};
   if (!canOperate.value) return;
   const ids = [...new Set(rows.slice(0, pageSize)
@@ -100,27 +96,14 @@ async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
     .map(row => row.serviceOrderId).filter(Boolean))];
   custodyByOrder.value = Object.fromEntries(ids.map(id => [id, { rows: [], state: 'loading' as const }]));
   const current = () => version === custodyReadVersion && pageVersion === loadVersion && canOperate.value;
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(3, ids.length) }, async () => {
-    while (next < ids.length && current()) {
-      const id = ids[next++];
-      while (activeCustodyReads >= 3) {
-        await new Promise<void>(resolve => custodyReadWaiters.push(resolve));
-        if (!current()) return;
-      }
-      if (!current()) return;
-      ++activeCustodyReads;
-      try {
-        const records = await partRequestsApi.getReturnsByOrderId(id);
-        if (current()) custodyByOrder.value[id] = { rows: records, state: 'ready' };
-      } catch (err) {
-        if (current()) custodyByOrder.value[id] = { rows: [], state: isPartReturnsUnavailableError(err) ? 'unavailable' : 'error' };
-      } finally {
-        --activeCustodyReads;
-        custodyReadWaiters.shift()?.();
-      }
-    }
-  }));
+  if (!ids.length) return;
+  try {
+    const byOrder = await partRequestsApi.getReturnsByOrderIds(ids);
+    if (current()) for (const id of ids) custodyByOrder.value[id] = { rows: byOrder[id] ?? [], state: 'ready' };
+  } catch (err) {
+    const state = isPartReturnsUnavailableError(err) ? 'unavailable' as const : 'error' as const;
+    if (current()) for (const id of ids) custodyByOrder.value[id] = { rows: [], state };
+  }
 }
 function custodyFor(request: PartRequest, itemId: string) {
   return custodyByOrder.value[request.serviceOrderId]?.rows.find(row => row.partRequestId === request.id && row.partRequestItemId === itemId);
@@ -175,6 +158,7 @@ const loadData = async () => {
     if (version !== loadVersion) return;
     requests.value = res.data;
     totalCount.value = res.total;
+    serverStatusCounts.value = res.statusCounts;
     await loadWarehouseAllocations(res.data, version);
     void loadVisibleCustody(res.data, version);
   } catch {
@@ -190,8 +174,12 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
   const pickups = rows.filter((row) => row.fulfillmentMethod === 'pickup');
   allocations.value = {};
   allocationErrors.value = {};
-  for (const row of pickups) allocationLoading.value[row.id] = true;
-  await Promise.all(pickups.map(async (row) => {
+  // BUG DETECTOR 90: the manager's queue already carries each row's allocation; only rows
+  // without one (the admin's global list) are read one by one.
+  for (const row of pickups) if (row.warehouseAllocation) allocations.value[row.id] = row.warehouseAllocation;
+  const missing = pickups.filter((row) => row.warehouseAllocation === undefined);
+  for (const row of missing) allocationLoading.value[row.id] = true;
+  await Promise.all(missing.map(async (row) => {
     try {
       const allocation = await partRequestsApi.getWarehouseAllocation(row.id);
       if (version === loadVersion) allocations.value[row.id] = allocation;
@@ -205,11 +193,14 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
 
 const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
 const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
-const canPreparePickupQr = (allocation: WarehouseAllocation | null) => canOperate.value && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
+// A closed request (cancelled, completed) or a warranty one has no warehouse code to prepare or reissue: the server refuses it.
+const canPreparePickupQr = (request: PartRequest) => {
+  const allocation = allocationFor(request);
+  return canOperate.value && warehouseQrOpen(request.status, request.requestType) && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
+};
 
 async function prepareWarehouseQr(request: PartRequest) {
-  const allocation = allocationFor(request);
-  if (!canPreparePickupQr(allocation) || actionLoading.value) return;
+  if (!canPreparePickupQr(request) || actionLoading.value) return;
   actionLoading.value = true;
   try {
     const result = await partRequestsApi.prepareWarehouseQr(request.id, { idempotencyKey: crypto.randomUUID() });
@@ -237,22 +228,44 @@ async function confirmPhysicalHandover(request: PartRequest) {
     return;
   }
   actionLoading.value = true;
+  let result: Awaited<ReturnType<typeof partRequestsApi.confirmWarehouseHandover>>;
   try {
-    const result = await partRequestsApi.confirmWarehouseHandover(request.id, { qrToken: pickup, idempotencyKey: crypto.randomUUID() });
-    allocations.value[request.id] = result.allocation;
-    warehouseTokens.value[request.id] = { pickup: null, receipt: result.qrToken };
-    if (result.qrToken) warehouseQrImages.value[request.id] = { pickup: '', receipt: await QRCode.toDataURL(result.qrToken, { width: 220 }) };
-    handoverTarget.value = null;
-    if (!result.qrToken) showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên.');
-    else showToast('success', 'Đã xác nhận bàn giao thực tế; tồn kho đã được xuất. Đưa mã nhận hàng riêng cho kỹ thuật viên.');
+    result = await partRequestsApi.confirmWarehouseHandover(request.id, { qrToken: pickup, idempotencyKey: crypto.randomUUID() });
   } catch (error) {
-    // The dialog covers the inline error cell, so close it and surface the reason.
-    const message = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.');
-    allocationErrors.value[request.id] = message;
     handoverTarget.value = null;
-    showToast('error', message);
+    // BUG DETECTOR 84: a refusal or a lost answer does not say what really happened. Read the
+    // warehouse state back so the manager is told whether the parts are already handed over.
+    const actual = await partRequestsApi.getWarehouseAllocation(request.id).catch(() => null);
+    if (actual) allocations.value[request.id] = actual;
+    if (actual?.status === 'handed_over' || actual?.status === 'received') {
+      warehouseTokens.value[request.id] = { pickup: null, receipt: null };
+      allocationErrors.value[request.id] = '';
+      showToast('success', 'Kho đã ghi nhận bàn giao trước đó. Bấm "Cấp lại mã nhận" để lấy mã nhận hàng cho kỹ thuật viên; không bấm giao lại.');
+    } else {
+      const message = userFacingError(error, 'Chưa xác nhận được bàn giao thực tế.');
+      allocationErrors.value[request.id] = message;
+      showToast('error', `${message} Linh kiện chưa được xuất kho; kiểm tra mã lấy hàng rồi thử lại.`);
+    }
+    actionLoading.value = false;
+    return;
   }
-  finally { actionLoading.value = false; }
+  // BUG DETECTOR 85: the handover is saved once the server answers. Drawing the QR is only
+  // display and must never turn a done handover into a reported failure.
+  allocations.value[request.id] = result.allocation;
+  warehouseTokens.value[request.id] = { pickup: null, receipt: result.qrToken };
+  handoverTarget.value = null;
+  actionLoading.value = false;
+  if (!result.qrToken) {
+    showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên. Bấm "Cấp lại mã nhận" để lấy mã mới.');
+    return;
+  }
+  showToast('success', 'Đã xác nhận bàn giao thực tế; tồn kho đã được xuất. Đưa mã nhận hàng riêng cho kỹ thuật viên.');
+  try {
+    warehouseQrImages.value[request.id] = { pickup: '', receipt: await QRCode.toDataURL(result.qrToken, { width: 220 }) };
+  } catch {
+    // The code is shown as text under the box either way; the technician can type it.
+    warehouseQrImages.value[request.id] = { pickup: '', receipt: '' };
+  }
 }
 
 onMounted(() => {
@@ -266,7 +279,6 @@ const refreshData = async () => { await Promise.all([loadData(), loadReturnsWait
 watch(canOperate, () => { custodyByOrder.value = {}; void refreshData(); });
 onUnmounted(() => {
   ++loadVersion; ++custodyReadVersion; ++returnsWaitingVersion;
-  custodyReadWaiters.splice(0).forEach(resolve => resolve());
 });
 
 watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_value, _old, onCleanup) => {
@@ -276,9 +288,12 @@ watch([statusFilter, typeFilter, fulfillmentFilter, dateFilter, searchQuery], (_
 });
 const setPage = (next: number) => { page.value = next; void loadData(); };
 
+// BUG DETECTOR 89: totals over every request matching the filters, from the server, not the 20 rows on screen.
+const serverStatusCounts = ref<Record<string, number> | null>(null);
 const stats = computed(() => {
   const reqs = requests.value;
-  const count = (status: string) => reqs.filter((r) => r.status.toLowerCase() === status).length;
+  const counts = serverStatusCounts.value;
+  const count = (status: string) => counts ? (counts[status] ?? 0) : reqs.filter((r) => r.status.toLowerCase() === status).length;
   return [
     { key: 'requested', label: 'Chờ chuẩn bị', value: count('requested') },
     { key: 'ready', label: 'Sẵn sàng', value: count('ready') },
@@ -591,21 +606,21 @@ const getUsageBadgeClass = (status: string) => {
             @click="handoverTarget = row"
           >Xác nhận đã giao trực tiếp</FhButton>
           <FhButton
-            v-else-if="canPreparePickupQr(allocationFor(row))"
+            v-else-if="canPreparePickupQr(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="prepareWarehouseQr(row)"
           >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
           <FhButton
-            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
+            v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
             @click="handleMarkReady(row)"
           >Chuẩn bị xong</FhButton>
           <FhButton
-            v-else-if="!canPreparePickupQr(allocationFor(row)) && canOperate && canDeliver(row)"
+            v-else-if="!canPreparePickupQr(row) && canOperate && canDeliver(row)"
             variant="primary"
             size="sm"
             :disabled="actionLoading"
@@ -655,19 +670,26 @@ const getUsageBadgeClass = (status: string) => {
         <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
         <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
 
-        <FhButton v-if="canPreparePickupQr(allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+        <FhButton v-if="canPreparePickupQr(row)" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
         <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-brand-200 bg-brand-50 p-3">
           <img :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 bg-white p-1" />
           <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><FhButton v-if="canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div>
         </div>
         <div v-if="warehouseTokens[row.id]?.receipt && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-md border border-success-200 bg-success-50 p-3">
-          <img :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 bg-white p-1" />
+          <img v-if="warehouseQrImages[row.id]?.receipt" :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 bg-white p-1" />
           <div class="min-w-0 flex-1 space-y-1"><p class="text-sm font-semibold text-success-800">Đưa mã nhận hàng riêng này cho kỹ thuật viên (hiệu lực 48 giờ).</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.receipt }}</p></div>
         </div>
       </template>
     </section>
 
-    <FhConfirmDialog :open="Boolean(handoverTarget)" title="Xác nhận đã giao linh kiện trực tiếp?" consequence="Chỉ xác nhận sau khi đã giao đủ toàn bộ linh kiện tại kho. Backend sẽ xuất tồn một lần và tạo mã nhận riêng cho kỹ thuật viên." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && confirmPhysicalHandover(handoverTarget)" @cancel="handoverTarget = null" />
+    <!-- BUG DETECTOR 83: a handover is not a deletion; plain colours and what exactly is handed over. -->
+    <FhConfirmDialog :open="Boolean(handoverTarget)" :danger="false" title="Xác nhận đã giao linh kiện cho kỹ thuật viên?" consequence="Chỉ bấm khi kỹ thuật viên đã cầm đủ các linh kiện dưới đây. Kho sẽ trừ tồn và tạo mã nhận hàng cho kỹ thuật viên." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && confirmPhysicalHandover(handoverTarget)" @cancel="handoverTarget = null">
+      <dl v-if="handoverTarget" class="space-y-1 text-sm text-ink-800" data-testid="handover-summary">
+        <div><dt class="inline text-ink-600">Yêu cầu: </dt><dd class="inline font-num font-medium">{{ requestCode(handoverTarget) }}</dd></div>
+        <div v-if="allocationFor(handoverTarget)?.warehouseName"><dt class="inline text-ink-600">Kho: </dt><dd class="inline">{{ allocationFor(handoverTarget)?.warehouseName }}</dd></div>
+        <div><dt class="text-ink-600">Linh kiện:</dt><dd><ul class="mt-0.5 space-y-0.5"><li v-for="item in handoverTarget.items" :key="item.id" class="flex justify-between gap-3"><span>{{ item.partNameSnapshot }}</span><span class="font-num whitespace-nowrap">x {{ item.quantity }}</span></li></ul></dd></div>
+      </dl>
+    </FhConfirmDialog>
 
     <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="setPage" />
 
