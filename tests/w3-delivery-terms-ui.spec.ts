@@ -37,7 +37,10 @@ describe('W3 conditional delivery terms panel', () => {
     const text = wrapper.text().replace(/\s+/g, ' ');
     expect(text).toContain('Khách hàng chịu (70%)71 ₫');
     expect(text).toContain('Kỹ thuật viên chịu (30%)30 ₫');
-    expect(text).toContain('Tổng điều khoản đã ghi nhận101 ₫');
+    expect(text).toContain('Số lượt giao đã có điều khoản1');
+    expect(text).toContain('Tổng phí giao các lượt101 ₫');
+    expect(text).toContain('Tổng phần khách hàng71 ₫');
+    expect(text).toContain('Tổng phần kỹ thuật viên30 ₫');
     expect(wrapper.text()).toContain('Điều khoản trước hóa đơn');
     expect(wrapper.text()).toContain('Khoản phí này chưa được thanh toán');
     expect(wrapper.text()).not.toMatch(/đã thanh toán|đã chi trả|đã xuất kho/i);
