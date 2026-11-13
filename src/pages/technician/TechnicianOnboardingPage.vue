@@ -1191,7 +1191,7 @@ const handleLogout = async () => {
         <div class="bg-white rounded-2xl p-4 sm:p-5 border border-ink-200 grid grid-cols-5 gap-2 sm:gap-4">
           <div v-for="i in 5" :key="i" class="flex justify-center"><FhSkeleton width="44px" height="44px" rounded="lg" /></div>
         </div>
-        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 space-y-5">
+        <div class="bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 space-y-5">
           <FhSkeleton width="260px" height="22px" />
           <FhSkeleton height="44px" :count="4" rounded="md" />
         </div>
@@ -1200,7 +1200,7 @@ const handleLogout = async () => {
       <!-- Approved State Screen -->
       <div
         v-else-if="isApproved"
-        class="bg-white rounded-3xl p-8 sm:p-12 border border-success-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
+        class="animate-slide-up bg-white rounded-2xl p-6 sm:p-10 border border-success-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
         <div class="mx-auto max-w-[140px] flex items-center justify-center">
           <img
@@ -1269,7 +1269,7 @@ const handleLogout = async () => {
       <!-- Pending / Submitted Screen -->
       <div
         v-else-if="isSubmitted && !isReviewing"
-        class="bg-white rounded-3xl p-8 sm:p-12 border border-warning-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
+        class="animate-slide-up bg-white rounded-2xl p-6 sm:p-10 border border-warning-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
         <div class="mx-auto max-w-[140px] flex items-center justify-center">
           <img
@@ -1321,7 +1321,7 @@ const handleLogout = async () => {
       <!-- Rejected Screen -->
       <div
         v-else-if="isRejected && !isReviewing"
-        class="bg-white rounded-3xl p-8 sm:p-12 border border-danger-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
+        class="animate-slide-up bg-white rounded-2xl p-6 sm:p-10 border border-danger-200 shadow-sm text-center max-w-2xl mx-auto space-y-6 my-8"
       >
         <div class="w-20 h-20 rounded-full bg-danger-100 text-danger-600 flex items-center justify-center mx-auto shadow-inner">
           <AlertCircle :size="42" />
@@ -1342,7 +1342,7 @@ const handleLogout = async () => {
       </div>
 
       <!-- Active Wizard Form -->
-      <div v-else class="space-y-8">
+      <div v-else class="animate-slide-up space-y-8">
         <!-- Reviewing / Editing Banner -->
         <div
           v-if="isReviewing"
@@ -1377,7 +1377,7 @@ const handleLogout = async () => {
         </h1>
 
         <!-- 5-Step Stepper Progress Bar -->
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-ink-200 shadow-2xs">
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-ink-200/90 shadow-2xs space-y-3">
           <div class="grid grid-cols-5 gap-2 sm:gap-4 relative">
             <div
               v-for="step in STEPS"
@@ -1386,30 +1386,42 @@ const handleLogout = async () => {
               @click="(isReviewing || isRejected || currentStep >= step.id) ? (currentStep = step.id) : null"
             >
               <div
-                class="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all font-bold text-xs sm:text-sm mb-1.5 shadow-2xs"
+                class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-[background-color,color,transform,box-shadow] duration-200 font-bold text-xs sm:text-sm mb-1.5"
                 :class="[
                   currentStep === step.id
-                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 font-bold scale-105'
+                    ? 'bg-brand-600 text-white ring-4 ring-brand-100 scale-105'
                     : currentStep > step.id || (isReviewing && currentStep !== step.id)
-                    ? 'bg-success-500 text-white'
+                    ? 'bg-success-50 text-success-700 border border-success-200'
                     : 'bg-ink-100 text-ink-400 group-hover:bg-ink-200'
                 ]"
               >
-                <Check v-if="currentStep > step.id || (isReviewing && currentStep !== step.id)" :size="18" />
-                <component v-else :is="step.icon" :size="18" />
+                <Check v-if="currentStep > step.id || (isReviewing && currentStep !== step.id)" :size="17" />
+                <component v-else :is="step.icon" :size="17" />
               </div>
               <span
-                class="hidden sm:block text-xs font-bold transition-colors line-clamp-1"
-                :class="currentStep === step.id ? 'text-brand-700' : 'text-ink-600'"
+                class="hidden sm:block text-xs font-semibold transition-colors line-clamp-1"
+                :class="currentStep === step.id ? 'text-brand-700 font-bold' : 'text-ink-600'"
               >
                 {{ step.title }}
               </span>
             </div>
           </div>
+
+          <div class="space-y-1.5">
+            <div class="h-1.5 w-full rounded-full bg-ink-100 overflow-hidden" aria-hidden="true">
+              <div
+                class="h-full rounded-full bg-brand-600 transition-[width] duration-300 ease-out motion-reduce:transition-none"
+                :style="{ width: `${Math.max(10, ((currentStep - 1) / 4) * 100)}%` }"
+              />
+            </div>
+            <p class="sm:hidden text-center text-xs font-semibold text-brand-700">
+              Bước {{ currentStep }}/5 · {{ STEPS.find((st) => st.id === currentStep)?.title }}
+            </p>
+          </div>
         </div>
 
         <!-- STEP 1: Personal Info -->
-        <div v-if="currentStep === 1" class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 shadow-sm space-y-6">
+        <div v-if="currentStep === 1" class="animate-slide-up bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 shadow-sm space-y-6">
           <div class="border-b border-ink-100 pb-4">
             <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
               <User :size="20" class="text-brand-600" />
@@ -1500,7 +1512,7 @@ const handleLogout = async () => {
         </div>
 
         <!-- STEP 2: eKYC Documents -->
-        <div v-if="currentStep === 2" class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 shadow-sm space-y-6">
+        <div v-if="currentStep === 2" class="animate-slide-up bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 shadow-sm space-y-6">
           <div class="border-b border-ink-100 pb-4">
             <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
               <ShieldCheck :size="20" class="text-brand-600" />
@@ -1511,7 +1523,7 @@ const handleLogout = async () => {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Front CCCD Slot -->
             <div
-              class="flex flex-col rounded-2xl border-2 border-dashed border-ink-200 p-4 bg-ink-50/50 hover:bg-ink-50 transition-all text-center relative group"
+              class="flex flex-col rounded-2xl border border-dashed border-ink-300 p-4 bg-ink-25/80 hover:bg-brand-50/25 transition-[background-color,border-color] duration-150 text-center relative group"
               :class="!slots[0].previewUrl ? 'cursor-pointer hover:border-brand-400' : ''"
               @click="!slots[0].previewUrl ? triggerFileInput('front') : null"
             >
@@ -1534,7 +1546,7 @@ const handleLogout = async () => {
                 </div>
               </div>
               <div v-else class="flex flex-col items-center justify-center py-8">
-                <div class="w-12 h-12 rounded-2xl bg-white border border-ink-200 shadow-2xs flex items-center justify-center text-brand-600 mb-3 group-hover:scale-105 transition-transform">
+                <div class="text-brand-600 mb-2.5 group-hover:scale-105 transition-transform">
                   <CreditCard :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">CCCD – Mặt trước</strong>
@@ -1544,7 +1556,7 @@ const handleLogout = async () => {
 
             <!-- Back CCCD Slot -->
             <div
-              class="flex flex-col rounded-2xl border-2 border-dashed border-ink-200 p-4 bg-ink-50/50 hover:bg-ink-50 transition-all text-center relative group"
+              class="flex flex-col rounded-2xl border border-dashed border-ink-300 p-4 bg-ink-25/80 hover:bg-brand-50/25 transition-[background-color,border-color] duration-150 text-center relative group"
               :class="!slots[1].previewUrl ? 'cursor-pointer hover:border-brand-400' : ''"
               @click="!slots[1].previewUrl ? triggerFileInput('back') : null"
             >
@@ -1567,7 +1579,7 @@ const handleLogout = async () => {
                 </div>
               </div>
               <div v-else class="flex flex-col items-center justify-center py-8">
-                <div class="w-12 h-12 rounded-2xl bg-white border border-ink-200 shadow-2xs flex items-center justify-center text-brand-600 mb-3 group-hover:scale-105 transition-transform">
+                <div class="text-brand-600 mb-2.5 group-hover:scale-105 transition-transform">
                   <CreditCard :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">CCCD – Mặt sau</strong>
@@ -1577,7 +1589,7 @@ const handleLogout = async () => {
 
             <!-- Face Photo Slot -->
             <div
-              class="flex flex-col rounded-2xl border-2 border-dashed border-ink-200 p-4 bg-ink-50/50 hover:bg-ink-50 transition-all text-center relative group"
+              class="flex flex-col rounded-2xl border border-dashed border-ink-300 p-4 bg-ink-25/80 hover:bg-brand-50/25 transition-[background-color,border-color] duration-150 text-center relative group"
               :class="!slots[2].previewUrl ? 'cursor-pointer hover:border-brand-400' : ''"
               @click="!slots[2].previewUrl ? triggerFileInput('face') : null"
             >
@@ -1605,7 +1617,7 @@ const handleLogout = async () => {
                 </div>
               </div>
               <div v-else class="flex flex-col items-center justify-center py-6">
-                <div class="w-12 h-12 rounded-2xl bg-white border border-ink-200 shadow-2xs flex items-center justify-center text-brand-600 mb-2">
+                <div class="text-brand-600 mb-2">
                   <Camera :size="22" />
                 </div>
                 <strong class="text-xs font-bold text-ink-800">Ảnh chân dung khuôn mặt</strong>
@@ -1662,7 +1674,7 @@ const handleLogout = async () => {
         </div>
 
         <!-- STEP 3: Specialized Skills -->
-        <div v-if="currentStep === 3" class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 shadow-sm space-y-6">
+        <div v-if="currentStep === 3" class="animate-slide-up bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 shadow-sm space-y-6">
           <div class="border-b border-ink-100 pb-4">
             <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
               <Wrench :size="20" class="text-brand-600" />
@@ -1694,8 +1706,8 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <!-- Services Grid by Category -->
-          <div class="space-y-5 max-h-[380px] overflow-y-auto pr-2 border border-ink-100 rounded-2xl p-4 bg-ink-50/50">
+          <!-- Services Grid by Category (open, no nested scroll trap) -->
+          <div class="space-y-5 pt-2 border-t border-ink-100">
             <div v-for="group in groupedServices" :key="group.category.id" class="space-y-2">
               <h4 class="text-xs font-bold text-ink-500 flex items-center gap-1.5">
                 <span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
@@ -1707,7 +1719,7 @@ const handleLogout = async () => {
                   :key="svc.id"
                   @click="toggleService(svc.id)"
                   :class="[
-                    'p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2',
+                    'p-3 rounded-xl border text-xs cursor-pointer transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:scale-[0.98] flex items-start justify-between gap-2',
                     selectedServiceIds.includes(svc.id)
                       ? 'bg-brand-50 border-brand-500 text-brand-900 font-bold shadow-2xs'
                       : 'bg-white border-ink-200 hover:border-brand-200 text-ink-700'
@@ -1760,7 +1772,7 @@ const handleLogout = async () => {
         </div>
 
         <!-- STEP 4: Address & Service Areas -->
-        <div v-if="currentStep === 4" class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 shadow-sm space-y-6">
+        <div v-if="currentStep === 4" class="animate-slide-up bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 shadow-sm space-y-6">
           <!-- Step Header -->
           <div class="border-b border-ink-100 pb-4">
             <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
@@ -1852,7 +1864,7 @@ const handleLogout = async () => {
             </div>
 
             <!-- Mode 2: Cascading Administrative Selectors (Tỉnh -> Quận -> Phường -> Số nhà) -->
-            <div v-else class="space-y-2.5 bg-ink-50/70 rounded-2xl p-4 border border-ink-200">
+            <div v-else class="space-y-2.5 rounded-2xl bg-ink-50/60 p-4 border border-ink-200/80">
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <!-- Tỉnh / Thành phố -->
                 <div>
@@ -1922,33 +1934,21 @@ const handleLogout = async () => {
               </div>
             </div>
 
-            <!-- Detected Location Confirmation Card -->
-            <div
+            <!-- Detected Location inline pill -->
+            <p
               v-if="detectedProvinceName || (selectedLat && selectedLng) || fullAddress"
-              class="p-3.5 rounded-2xl bg-brand-50/50 border border-brand-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+              class="flex flex-wrap items-center gap-2 text-xs text-ink-600 pt-1"
             >
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
-                  <span class="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-100/70 px-2 py-0.5 rounded-md">
-                    <CheckCircle2 :size="12" /> Đã xác định vị trí
-                  </span>
-                  <span v-if="detectedProvinceName" class="font-semibold text-brand-900">
-                    {{ detectedProvinceName }}
-                  </span>
-                  <span v-if="detectedDistrictName" class="font-semibold text-ink-700">
-                    · {{ detectedDistrictName }}
-                  </span>
-                </div>
-                <p class="text-sm text-ink-600 truncate max-w-xl">
-                  {{ fullAddress || 'Chưa có thông tin địa chỉ cụ thể' }}
-                </p>
-              </div>
-
-            </div>
+              <span class="whitespace-nowrap inline-flex items-center gap-1 font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded-md border border-success-200/80">
+                <CheckCircle2 :size="12" /> Đã xác định vị trí
+              </span>
+              <span v-if="detectedProvinceName" class="font-semibold text-ink-800">{{ detectedProvinceName }}</span>
+              <span v-if="detectedDistrictName">· {{ detectedDistrictName }}</span>
+            </p>
           </div>
 
           <!-- Section 2: Service Radius Slider & Presets -->
-          <div class="space-y-3 bg-ink-50/80 rounded-2xl p-4 sm:p-5 border border-ink-200">
+          <div class="space-y-3 pt-5 border-t border-ink-100">
             <div class="flex items-center justify-between">
               <span class="font-bold text-sm text-ink-800">Bán kính nhận việc</span>
               <div class="text-right">
@@ -1993,10 +1993,11 @@ const handleLogout = async () => {
           </div>
 
           <!-- Section 3: Smart Radius Recommendation Action Banner -->
-          <div
-            v-if="inRadiusDistricts.length > 0"
-            class="rounded-2xl p-4 bg-warning-50 border border-warning-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-          >
+          <Transition name="fh-fade-slide">
+            <div
+              v-if="inRadiusDistricts.length > 0"
+              class="rounded-2xl p-4 bg-warning-50 border border-warning-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-xl bg-warning-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
                 <Zap :size="18" />
@@ -2013,15 +2014,16 @@ const handleLogout = async () => {
             <button
               type="button"
               @click="autoSelectDistrictsWithinRadius(true)"
-              class="h-10 px-4 rounded-xl bg-warning-500 hover:bg-warning-600 text-white text-sm font-bold whitespace-nowrap shadow-xs transition-colors shrink-0 flex items-center justify-center gap-1.5 self-start sm:self-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-9 px-3.5 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs sm:text-sm font-semibold whitespace-nowrap transition-[background-color,transform] duration-150 shrink-0 flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <Zap :size="14" />
               <span>Chọn cả {{ inRadiusDistricts.length }} quận</span>
             </button>
           </div>
+          </Transition>
 
           <!-- Section 4: District Selection Grid with Distance Indicators -->
-          <div class="space-y-4">
+          <div class="space-y-4 pt-5 border-t border-ink-100">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-ink-100 pb-3">
               <div>
                 <div class="flex items-center gap-2 flex-wrap">
@@ -2051,7 +2053,7 @@ const handleLogout = async () => {
                   type="button"
                   @click="districtFilterTab = 'all'"
                   :class="[
-                    'px-2.5 py-1 rounded-lg transition-all',
+                    'px-2.5 py-1 rounded-lg transition-[background-color,color,box-shadow] duration-150',
                     districtFilterTab === 'all'
                       ? 'bg-white text-brand-700 font-bold shadow-2xs'
                       : 'text-ink-600 hover:text-ink-900'
@@ -2063,7 +2065,7 @@ const handleLogout = async () => {
                   type="button"
                   @click="districtFilterTab = 'in_radius'"
                   :class="[
-                    'px-2.5 py-1 rounded-lg transition-all flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg transition-[background-color,color,box-shadow] duration-150 flex items-center gap-1',
                     districtFilterTab === 'in_radius'
                       ? 'bg-white text-brand-700 font-bold shadow-2xs'
                       : 'text-ink-600 hover:text-ink-900'
@@ -2076,7 +2078,7 @@ const handleLogout = async () => {
                   type="button"
                   @click="districtFilterTab = 'selected'"
                   :class="[
-                    'px-2.5 py-1 rounded-lg transition-all',
+                    'px-2.5 py-1 rounded-lg transition-[background-color,color,box-shadow] duration-150',
                     districtFilterTab === 'selected'
                       ? 'bg-white text-brand-700 font-bold shadow-2xs'
                       : 'text-ink-600 hover:text-ink-900'
@@ -2109,8 +2111,8 @@ const handleLogout = async () => {
               </div>
             </div>
 
-            <!-- Districts Grid with Distance Tags -->
-            <div class="border border-ink-200 rounded-2xl p-3.5 bg-ink-50/50 max-h-80 overflow-y-auto">
+            <!-- Districts Grid with Distance Tags (flattened surface) -->
+            <div class="pt-1">
               <div v-if="displayedDistricts.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 <div
                   v-for="dist in displayedDistricts"
@@ -2192,7 +2194,7 @@ const handleLogout = async () => {
         </div>
 
         <!-- STEP 5: Review & Submit -->
-        <div v-if="currentStep === 5" class="bg-white rounded-3xl p-6 sm:p-8 border border-ink-200 shadow-sm space-y-6">
+        <div v-if="currentStep === 5" class="animate-slide-up bg-white rounded-2xl p-5 sm:p-7 border border-ink-200 shadow-sm space-y-6">
           <div class="border-b border-ink-100 pb-4">
             <h3 class="text-lg font-bold text-ink-900 flex items-center gap-2">
               <FileCheck2 :size="20" class="text-brand-600" />
@@ -2200,64 +2202,86 @@ const handleLogout = async () => {
             </h3>
           </div>
 
-          <!-- Bento Grid Preview -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Box 1: Info -->
-            <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2">
-              <div class="flex items-center justify-between text-xs font-bold text-ink-700 border-b border-ink-200/60 pb-2">
-                <span class="flex items-center gap-1.5"><User :size="14" class="text-brand-600" /> Thông tin cá nhân</span>
-                <button type="button" @click="currentStep = 1" class="text-brand-600 hover:underline">Sửa</button>
+          <!-- Unified Summary Surface (flat, no nested box clutter) -->
+          <div class="rounded-2xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden bg-white">
+            <!-- Row 1: Info -->
+            <div class="p-4 sm:p-5 space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  <User :size="15" class="text-brand-600" /> Thông tin cá nhân
+                </span>
+                <button type="button" @click="currentStep = 1" class="min-h-8 px-2.5 rounded-lg text-xs font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                  Sửa
+                </button>
               </div>
-              <div class="text-xs space-y-1 text-ink-600">
-                <p>Họ tên: <strong class="text-ink-900">{{ fullName }}</strong></p>
-                <p>Ngày sinh: <strong class="text-ink-900">{{ dateOfBirth }}</strong></p>
-                <p>Giới tính: <strong class="text-ink-900">{{ gender === 'male' ? 'Nam' : gender === 'female' ? 'Nữ' : 'Khác' }}</strong></p>
-                <p>Số CCCD: <strong class="text-ink-900 font-mono">{{ citizenIdNumber }}</strong></p>
-                <p>Số ĐT: <strong class="text-ink-900 font-mono">{{ phoneNumber || 'Chưa cập nhật' }}</strong></p>
+              <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs sm:text-sm text-ink-600">
+                <div>Họ tên: <strong class="text-ink-900">{{ fullName }}</strong></div>
+                <div>Ngày sinh: <strong class="text-ink-900 font-num">{{ dateOfBirth }}</strong></div>
+                <div>Giới tính: <strong class="text-ink-900">{{ gender === 'male' ? 'Nam' : gender === 'female' ? 'Nữ' : 'Khác' }}</strong></div>
+                <div>Số CCCD: <strong class="text-ink-900 font-mono">{{ citizenIdNumber }}</strong></div>
+                <div class="sm:col-span-2">Số ĐT: <strong class="text-ink-900 font-mono">{{ phoneNumber || 'Chưa cập nhật' }}</strong></div>
+              </dl>
+            </div>
+
+            <!-- Row 2: KYC -->
+            <div class="p-4 sm:p-5 space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  <ShieldCheck :size="15" class="text-brand-600" /> Giấy tờ xác minh
+                </span>
+                <button type="button" @click="currentStep = 2" class="min-h-8 px-2.5 rounded-lg text-xs font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                  Sửa
+                </button>
+              </div>
+              <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs sm:text-sm text-success-700 font-medium">
+                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Mặt trước CCCD: Đã sẵn sàng</span>
+                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Mặt sau CCCD: Đã sẵn sàng</span>
+                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Ảnh chân dung khuôn mặt: Đã sẵn sàng</span>
               </div>
             </div>
 
-            <!-- Box 2: KYC -->
-            <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2">
-              <div class="flex items-center justify-between text-xs font-bold text-ink-700 border-b border-ink-200/60 pb-2">
-                <span class="flex items-center gap-1.5"><ShieldCheck :size="14" class="text-brand-600" /> Giấy tờ xác minh</span>
-                <button type="button" @click="currentStep = 2" class="text-brand-600 hover:underline">Sửa</button>
+            <!-- Row 3: Skills -->
+            <div class="p-4 sm:p-5 space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  <Wrench :size="15" class="text-brand-600" /> Chuyên môn & Kinh nghiệm
+                </span>
+                <button type="button" @click="currentStep = 3" class="min-h-8 px-2.5 rounded-lg text-xs font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                  Sửa
+                </button>
               </div>
-              <div class="text-xs space-y-1 text-success-600 font-semibold">
-                <p class="flex items-center gap-1.5"><CheckCircle2 :size="13" /> Mặt trước CCCD: Đã sẵn sàng</p>
-                <p class="flex items-center gap-1.5"><CheckCircle2 :size="13" /> Mặt sau CCCD: Đã sẵn sàng</p>
-                <p class="flex items-center gap-1.5"><CheckCircle2 :size="13" /> Ảnh chân dung khuôn mặt: Đã sẵn sàng</p>
-              </div>
-            </div>
-
-            <!-- Box 3: Skills -->
-            <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2">
-              <div class="flex items-center justify-between text-xs font-bold text-ink-700 border-b border-ink-200/60 pb-2">
-                <span class="flex items-center gap-1.5"><Wrench :size="14" class="text-brand-600" /> Chuyên môn & Kinh nghiệm</span>
-                <button type="button" @click="currentStep = 3" class="text-brand-600 hover:underline">Sửa</button>
-              </div>
-              <div class="text-xs space-y-1 text-ink-600">
-                <p>Kinh nghiệm: <strong class="text-ink-900">{{ yearsExperience }} năm</strong></p>
-                <p>Số kỹ năng đã đăng ký: <strong class="text-brand-700 font-bold">{{ selectedServiceIds.length }} dịch vụ</strong></p>
-                <p v-if="bio" class="text-xs text-ink-500 line-clamp-2">{{ bio }}</p>
+              <div class="text-xs sm:text-sm space-y-1 text-ink-600">
+                <p>
+                  Kinh nghiệm: <strong class="text-ink-900 font-num">{{ yearsExperience }} năm</strong>
+                  <span class="mx-2 text-ink-300">·</span>
+                  Kỹ năng đã đăng ký: <strong class="text-brand-700 font-semibold font-num">{{ selectedServiceIds.length }} dịch vụ</strong>
+                </p>
+                <p v-if="bio" class="text-xs text-ink-500 line-clamp-2 text-pretty">{{ bio }}</p>
               </div>
             </div>
 
-            <!-- Box 4: Address -->
-            <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 space-y-2">
-              <div class="flex items-center justify-between text-xs font-bold text-ink-700 border-b border-ink-200/60 pb-2">
-                <span class="flex items-center gap-1.5"><MapPin :size="14" class="text-brand-600" /> Địa chỉ & Khu vực</span>
-                <button type="button" @click="currentStep = 4" class="text-brand-600 hover:underline">Sửa</button>
+            <!-- Row 4: Address -->
+            <div class="p-4 sm:p-5 space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  <MapPin :size="15" class="text-brand-600" /> Địa chỉ & Khu vực
+                </span>
+                <button type="button" @click="currentStep = 4" class="min-h-8 px-2.5 rounded-lg text-xs font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                  Sửa
+                </button>
               </div>
-              <div class="text-xs space-y-1 text-ink-600">
-                <p class="truncate">Địa chỉ thợ: <strong class="text-ink-900">{{ fullAddress }}</strong></p>
-                <p>Bán kính phục vụ: <strong class="text-ink-900">{{ serviceRadiusKm }} km</strong></p>
-                <p>Số quận/huyện tiếp nhận: <strong class="text-brand-700 font-bold">{{ selectedAreaKeys.length }} khu vực</strong></p>
-                <div v-if="selectedAreaLabels.length > 0" class="flex flex-wrap gap-1 pt-1 max-h-24 overflow-y-auto">
+              <div class="text-xs sm:text-sm space-y-1.5 text-ink-600">
+                <p class="text-pretty">Địa chỉ thợ: <strong class="text-ink-900">{{ fullAddress }}</strong></p>
+                <p>
+                  Bán kính phục vụ: <strong class="text-ink-900 font-num">{{ serviceRadiusKm }} km</strong>
+                  <span class="mx-2 text-ink-300">·</span>
+                  Quận/huyện tiếp nhận: <strong class="text-brand-700 font-semibold font-num">{{ selectedAreaKeys.length }} khu vực</strong>
+                </p>
+                <div v-if="selectedAreaLabels.length > 0" class="flex flex-wrap gap-1.5 pt-1">
                   <span
                     v-for="(area, idx) in selectedAreaLabels"
                     :key="idx"
-                    class="whitespace-nowrap px-2 py-0.5 rounded-md bg-white border border-ink-200 text-xs text-ink-700 font-medium"
+                    class="whitespace-nowrap px-2 py-0.5 rounded-md bg-ink-50 border border-ink-200/80 text-xs text-ink-700 font-medium"
                   >
                     {{ area.districtName }}
                   </span>
@@ -2267,7 +2291,7 @@ const handleLogout = async () => {
           </div>
 
           <!-- Commitment notice -->
-          <p class="p-4 rounded-2xl bg-ink-50 border border-ink-200 text-sm text-ink-700 leading-relaxed text-pretty">
+          <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
             Khi gửi hồ sơ, tôi cam kết thông tin và tài liệu cung cấp là chính xác, tuân thủ quy chế bảo hành, bảng giá niêm yết và quy tắc ứng xử với khách hàng.
           </p>
 
@@ -2301,11 +2325,12 @@ const handleLogout = async () => {
     </main>
 
     <!-- Camera Modal for Live Face Photo -->
-    <div
-      v-if="showCameraModal"
-      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
-    >
-      <div class="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl space-y-4 p-5 text-center">
+    <Transition name="fh-modal">
+      <div
+        v-if="showCameraModal"
+        class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
+      >
+        <div class="fh-modal-panel bg-white rounded-2xl overflow-hidden max-w-md w-full shadow-2xl overscroll-contain space-y-4 p-5 text-center">
         <div class="flex items-center justify-between border-b border-ink-100 pb-3">
           <h3 class="text-sm font-bold text-ink-900">Chụp ảnh chân dung khuôn mặt</h3>
           <button type="button" aria-label="Đóng" @click="closeCamera" class="w-10 h-10 -mr-2 rounded-xl flex items-center justify-center text-ink-400 hover:text-ink-600 hover:bg-ink-100">
@@ -2341,6 +2366,7 @@ const handleLogout = async () => {
         </div>
       </div>
     </div>
+    </Transition>
     <RoleChatDock />
   </div>
 </template>

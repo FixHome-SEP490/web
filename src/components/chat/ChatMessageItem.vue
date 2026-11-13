@@ -72,7 +72,7 @@ function confirmDelete() {
     <!-- Counterpart Avatar (only if not me) -->
     <div
       v-if="!isMe"
-      class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex-shrink-0 flex items-center justify-center font-bold text-xs self-end overflow-hidden border border-brand-200"
+      class="w-7 h-7 rounded-full bg-brand-50 text-brand-700 flex-shrink-0 flex items-center justify-center font-semibold text-xs self-end overflow-hidden ring-1 ring-brand-200/80"
     >
       <img
         v-if="counterpartAvatar"
@@ -91,12 +91,13 @@ function confirmDelete() {
       <!-- Action menu for my message -->
       <div
         v-if="isMe && !message.isDeleted && !isEditing"
-        class="absolute -left-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center z-10"
+        class="absolute -left-8 top-1 transition-opacity flex items-center z-10"
+        :class="showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'"
       >
         <div class="relative">
           <button
             type="button"
-            class="p-1 rounded-full text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors"
+            class="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-ink-800 hover:bg-ink-100 transition-colors"
             @click="showMenu = !showMenu"
             title="Thao tác"
           >
@@ -104,35 +105,44 @@ function confirmDelete() {
           </button>
 
           <!-- Dropdown menu -->
-          <div
-            v-if="showMenu"
-            class="absolute right-0 bottom-full mb-1 w-28 bg-white rounded-md border border-ink-200 shadow-md py-1 z-20 text-xs text-ink-700 divide-y divide-ink-100"
-            @click.stop
+          <Transition
+            enter-active-class="transition ease-out duration-120 motion-reduce:transition-none"
+            enter-from-class="opacity-0 scale-95"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-95"
           >
-            <button
-              type="button"
-              class="w-full px-2.5 py-1.5 flex items-center gap-1.5 hover:bg-ink-50 text-left font-medium"
-              @click="startEdit"
+            <div
+              v-if="showMenu"
+              class="absolute right-0 bottom-full mb-1.5 w-32 bg-white rounded-xl ring-1 ring-ink-900/[0.06] shadow-(--shadow-e2) p-1 z-20 text-xs text-ink-700 space-y-0.5"
+              @click.stop
             >
-              <Edit2 :size="12" />
-              <span>Chỉnh sửa</span>
-            </button>
-            <button
-              type="button"
-              class="w-full px-2.5 py-1.5 flex items-center gap-1.5 hover:bg-danger-50 text-danger-600 text-left font-medium"
-              @click="confirmDelete"
-            >
-              <Trash2 :size="12" />
-              <span>Gỡ tin nhắn</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                class="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-ink-50 text-left font-medium transition-colors"
+                @click="startEdit"
+              >
+                <Edit2 :size="12" />
+                <span>Chỉnh sửa</span>
+              </button>
+              <button
+                type="button"
+                class="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-danger-50 text-danger-600 text-left font-medium transition-colors"
+                @click="confirmDelete"
+              >
+                <Trash2 :size="12" />
+                <span>Gỡ tin nhắn</span>
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
 
       <!-- Editing Mode Box -->
       <div
         v-if="isEditing"
-        class="w-full min-w-[220px] bg-white border border-brand-300 rounded-xl p-2 shadow-xs"
+        class="w-full min-w-[220px] bg-white border border-brand-300 rounded-2xl p-2.5 ring-2 ring-brand-500/15"
       >
         <textarea
           ref="editInputRef"
@@ -142,17 +152,17 @@ function confirmDelete() {
           @keydown.enter.exact.prevent="submitEdit"
           @keydown.esc="cancelEdit"
         ></textarea>
-        <div class="flex items-center justify-end gap-1 mt-1 pt-1 border-t border-ink-100">
+        <div class="flex items-center justify-end gap-1.5 mt-1.5 pt-1.5 border-t border-ink-100">
           <button
             type="button"
-            class="px-2 py-1 text-xs rounded text-ink-600 hover:bg-ink-100"
+            class="px-2.5 py-1 text-xs font-medium rounded-lg text-ink-600 hover:bg-ink-100 transition-colors"
             @click="cancelEdit"
           >
             Huỷ
           </button>
           <button
             type="button"
-            class="px-2 py-1 text-xs rounded bg-brand-600 text-white hover:bg-brand-700 font-medium"
+            class="px-2.5 py-1 text-xs rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium transition-colors"
             @click="submitEdit"
           >
             Lưu
@@ -174,10 +184,10 @@ function confirmDelete() {
         class="px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap rounded-2xl"
         :class="[
           message.isDeleted
-            ? 'bg-ink-100 text-ink-400 italic text-xs py-1.5'
+            ? 'bg-ink-100/75 text-ink-500 italic text-xs py-1.5 px-3'
             : isMe
-              ? 'bg-brand-600 text-white rounded-br-xs shadow-xs'
-              : 'bg-ink-100 text-ink-900 rounded-bl-xs'
+              ? 'bg-brand-600 text-white rounded-br-sm'
+              : 'bg-white text-ink-900 ring-1 ring-ink-200/80 shadow-2xs rounded-bl-sm'
         ]"
       >
         <span v-if="message.isDeleted">
@@ -190,8 +200,8 @@ function confirmDelete() {
 
       <!-- Timestamp & Metadata -->
       <div
-        class="flex items-center gap-1 mt-0.5 text-xs"
-        :class="isMe ? 'text-ink-500 justify-end' : 'text-ink-500 justify-start ml-1'"
+        class="flex items-center gap-1 mt-1 text-[11px] text-ink-400"
+        :class="isMe ? 'justify-end' : 'justify-start ml-1'"
       >
         <span v-if="message.isAutomated && !message.isDeleted" data-testid="message-automated" class="whitespace-nowrap">Tin nhắn tự động ·</span>
         <span v-if="message.editedAt && !message.isDeleted" class="italic">

@@ -39,20 +39,20 @@ export interface UnreadCountResponse {
 }
 
 /**
- * Icon tone follows severity only, so the list stays calm: red for something
- * that went wrong, yellow for something that needs the reader, brand blue for
- * good news and grey for everything else.
+ * Icon tone follows the four `.fh-app` semantic tones so urgency reads at a glance:
+ * red = error/alert, yellow = needs reader attention, green = success/completed,
+ * blue = active update / general information.
  */
 function toneOf(severity: NotificationSeverity): Pick<NotificationCategoryMeta, 'iconBgClass' | 'iconColorClass'> {
   switch (severity) {
     case 'error':
-      return { iconBgClass: 'bg-danger-50 border-danger-100', iconColorClass: 'text-danger-600' };
+      return { iconBgClass: 'bg-danger-50', iconColorClass: 'text-danger-600' };
     case 'warning':
-      return { iconBgClass: 'bg-warning-50 border-warning-100', iconColorClass: 'text-warning-700' };
+      return { iconBgClass: 'bg-warning-50', iconColorClass: 'text-warning-700' };
     case 'success':
-      return { iconBgClass: 'bg-brand-50 border-brand-100', iconColorClass: 'text-brand-600' };
+      return { iconBgClass: 'bg-success-50', iconColorClass: 'text-success-600' };
     default:
-      return { iconBgClass: 'bg-ink-100 border-ink-200', iconColorClass: 'text-ink-600' };
+      return { iconBgClass: 'bg-brand-50', iconColorClass: 'text-brand-600' };
   }
 }
 

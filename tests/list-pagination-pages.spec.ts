@@ -249,4 +249,30 @@ describe('Customer notifications', () => {
     expect(error.text()).toContain('Thử lại');
     expect(wrapper.text()).not.toContain('500');
   });
+
+  it('groups notifications by Today, Yesterday, and Earlier while distinguishing unread state', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-02T05:00:00Z')); // 12:00 on 02/10 in Vietnam
+    try {
+      mockGet.mockResolvedValueOnce({
+        data: {
+          data: [
+            { id: 't1', title: 'Tin hôm nay', message: 'Nội dung mới', isRead: false, type: 'TECHNICIAN_EN_ROUTE', createdAt: '2026-10-02T04:55:00Z' },
+            { id: 'y1', title: 'Tin hôm qua', message: 'Nội dung hôm qua', isRead: true, type: 'ORDER_COMPLETED', createdAt: '2026-10-01T05:00:00Z' },
+            { id: 'o1', title: 'Tin cũ hơn', message: 'Nội dung cũ', isRead: true, type: 'ADMIN_NOTICE', createdAt: '2026-01-10T08:00:00Z' },
+          ],
+          meta: { page: 1, limit: 20, total: 3 },
+        },
+      });
+      const wrapper = mount(CustomerNotificationsPage, { global: { stubs } });
+      await flushPromises();
+      const headings = wrapper.findAll('section h2').map((h) => h.text());
+      expect(headings).toEqual(['Hôm nay', 'Hôm qua', 'Trước đó']);
+      expect(wrapper.get('[data-testid="notification-t1"]').find('[aria-label="Chưa đọc"]').exists()).toBe(true);
+      expect(wrapper.get('[data-testid="notification-y1"]').find('[aria-label="Chưa đọc"]').exists()).toBe(false);
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

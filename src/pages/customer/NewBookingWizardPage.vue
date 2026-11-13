@@ -1399,7 +1399,7 @@ function uuidForDraftSubmit(): string {
 async function saveBookingDraft() {
   if (draftBusy.value || loading.value || uploadingPhoto.value || pendingDraftSubmit.value) return;
   if (editingSavedDeviceKey.value) {
-    draftNotice.value = 'Hãy lưu hoặc hủy sửa thiết bị trước khi lưu bản nháp.';
+    toast.warning('Hãy lưu hoặc hủy sửa thiết bị trước khi lưu bản nháp.');
     return;
   }
   if (currentBookingDraft.value && !restoredServerDraft.value && hasBookingInput()
@@ -1412,7 +1412,7 @@ async function saveBookingDraft() {
     currentBookingDraft.value = saved;
     restoredServerDraft.value = true;
     draftPromptVisible.value = false;
-    draftNotice.value = `Đã lưu bản nháp. Bản nháp hết hạn ${formatDraftExpiry(saved.expiresAt)}.`;
+    toast.success(`Đã lưu bản nháp. Bản nháp hết hạn ${formatDraftExpiry(saved.expiresAt)}.`);
   } catch (error: unknown) {
     const status = (error as { response?: { status?: number } })?.response?.status;
     draftNotice.value = status === 409
@@ -1427,13 +1427,14 @@ async function discardBookingDraft() {
   if (!currentBookingDraft.value || draftBusy.value || pendingDraftSubmit.value) return;
   if (!window.confirm('Bỏ bản nháp đã lưu? Thông tin này sẽ không còn dùng để tiếp tục đặt lịch.')) return;
   draftBusy.value = true;
+  draftNotice.value = '';
   try {
     const result = await bookingDraftsApi.discard();
     if (result.deleted) {
       currentBookingDraft.value = null;
       draftPromptVisible.value = false;
       restoredServerDraft.value = false;
-      draftNotice.value = 'Đã bỏ bản nháp.';
+      toast.success('Đã bỏ bản nháp.');
     }
   } catch (error: unknown) {
     draftNotice.value = userFacingError(error, 'Chưa bỏ được bản nháp. Vui lòng thử lại.');
@@ -2393,7 +2394,7 @@ async function createAndFindTech() {
   >
     <!-- Stepper. On a phone (PO 18/10/2026) four labels do not fit and were cut after the second:
          there it is "Bước 2/4" with the step's name and a progress bar; wider screens show every step. -->
-    <div class="bg-white rounded-2xl sm:rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-[var(--shadow-e1)]" data-testid="booking-stepper">
+    <div class="bg-white rounded-2xl sm:rounded-full border border-ink-200/90 py-3 sm:py-3.5 px-4 sm:px-8 shadow-[var(--shadow-e1)] animate-slide-up" data-testid="booking-stepper">
       <div class="sm:hidden space-y-2" data-testid="booking-stepper-compact">
         <p class="flex items-baseline justify-between gap-3 text-sm">
           <span class="font-semibold text-ink-900 truncate">{{ stepItems[stepIndex]?.label }}</span>
@@ -2427,7 +2428,7 @@ async function createAndFindTech() {
       </div>
     </div>
 
-    <div v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry" class="flex flex-wrap items-center justify-between gap-2">
+    <div v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry" class="flex flex-wrap items-center justify-between gap-2 animate-slide-up-delay-1">
       <p v-if="currentBookingDraft" class="text-xs text-ink-600" data-testid="booking-draft-expiry">
         Bản nháp hết hạn {{ formatDraftExpiry(currentBookingDraft.expiresAt) }}
       </p>

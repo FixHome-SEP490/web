@@ -169,18 +169,18 @@ async function submit() {
   <Transition name="fh-modal">
     <div
       v-if="open && claim && mode"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-900/50 backdrop-blur-xs sm:p-4"
       @keydown.esc="close"
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="warranty-action-title"
-        class="fh-modal-panel bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+        class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-(--shadow-e3) max-h-[90dvh] overflow-y-auto overscroll-contain"
       >
       <div class="flex items-center justify-between">
         <h3 id="warranty-action-title" class="text-base font-bold text-ink-900">{{ title }}</h3>
-        <button type="button" class="p-1 rounded-full hover:bg-ink-100" aria-label="Đóng" @click="close">
+        <button type="button" class="w-9 h-9 -mr-1.5 rounded-xl text-ink-500 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center transition-colors" aria-label="Đóng" @click="close">
           <X :size="18" />
         </button>
       </div>

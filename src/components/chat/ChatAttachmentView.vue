@@ -114,8 +114,8 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="relative overflow-hidden rounded-2xl border bg-ink-50 w-60 max-w-full"
-    :class="[isMe ? 'border-brand-200 rounded-br-xs' : 'border-ink-200 rounded-bl-xs', upload?.state === 'failed' ? 'border-danger-300' : '']"
+    class="relative overflow-hidden rounded-2xl ring-1 bg-ink-50 w-60 max-w-full shadow-2xs"
+    :class="[isMe ? 'ring-brand-200 rounded-br-sm' : 'ring-ink-200/80 rounded-bl-sm', upload?.state === 'failed' ? 'ring-danger-300' : '']"
     data-testid="chat-attachment"
     :data-upload="upload?.state"
   >

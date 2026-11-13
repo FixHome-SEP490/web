@@ -91,7 +91,7 @@ onUnmounted(() => {
     <header
       ref="header"
       class="public-header sticky top-0 z-40 min-w-0 border-b transition-all duration-300"
-      :class="isScrolled ? 'border-ink-200/80 bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200 bg-white'"
+      :class="isScrolled ? 'border-transparent bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200 bg-white'"
     >
       <div
         class="public-container flex items-center justify-between gap-4 transition-all duration-300"
@@ -118,6 +118,7 @@ onUnmounted(() => {
                 <span>{{ headerAction.label }}</span>
               </FhButton>
             </div>
+            <span v-if="headerAction" class="hidden sm:block h-5 w-px bg-ink-200" aria-hidden="true" />
             <AccountMenu context="public" @logout="logout" />
           </template>
           <template v-else>

@@ -66,7 +66,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
       <template v-for="device in devices" :key="device.bookingId">
         <div
           v-if="device.serviceOrderId === activeOrderId"
-          class="visit-device min-w-0 rounded-xl border-2 border-brand-600 bg-brand-50 p-3 shadow-xs transition-all duration-150"
+          class="visit-device min-w-0 rounded-xl border-2 border-brand-600 bg-brand-50 p-3 shadow-xs transition-[background-color,border-color,box-shadow] duration-150"
           aria-current="page"
           role="group"
           :aria-label="`Máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
@@ -85,7 +85,7 @@ function toneClass(tone: TechnicianVisitDeviceStatus['tone']) {
         <router-link
           v-else-if="device.serviceOrderId"
           :to="`/tech/jobs/${device.serviceOrderId}`"
-          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-white p-3 transition-all duration-150 motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          class="visit-device min-w-0 rounded-xl border border-ink-200 bg-white p-3 transition-[background-color,border-color,box-shadow,transform] duration-150 motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           :aria-label="`Mở máy ${device.sequence}: ${deviceLabel(device)}, ${statusFor(device).label}${statusFor(device).custodyLabel ? `, ${statusFor(device).custodyLabel}` : ''}`"
           :data-testid="`tech-visit-device-${device.sequence}`"
         >

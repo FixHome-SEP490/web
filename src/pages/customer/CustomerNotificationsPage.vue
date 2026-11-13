@@ -2,32 +2,20 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  Bell,
   CheckCheck,
-  Wrench,
-  Shield,
-  Sparkles,
-  Clock,
   Search,
   ChevronRight,
-  DollarSign,
-  CheckCircle2,
-  XCircle,
-  Truck,
-  Package,
-  AlertTriangle,
   X,
-  UserCheck,
-  Building2,
 } from 'lucide-vue-next';
-import { FhButton, FhPagination, FhSkeleton } from '../../components';
+import { FhButton, FhEmptyState, FhPagination, FhSkeleton, ConsoleTabs } from '../../components';
+import NotificationSemanticIcon from '../../components/notifications/NotificationSemanticIcon.vue';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { resolveCustomerNotificationPath, getNotificationCategory, notificationsApi, type NotificationItem } from '../../api/notifications.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { toast } from 'vue-sonner';
-import { vnDateTimeString } from '../../utils/vn-time';
+import { vnDateTimeString, vnDayGroup, vnRelativeTime, type VnDayGroup } from '../../utils/vn-time';
 
 type Category = 'ALL' | 'TECHNICIAN' | 'SERVICE_MANAGER' | 'ADMIN';
 
@@ -58,26 +46,12 @@ const {
   },
 });
 
-const categories: { key: Category; label: string; icon: unknown }[] = [
-  { key: 'ALL', label: 'Tất cả', icon: Bell },
-  { key: 'TECHNICIAN', label: 'Kỹ thuật viên', icon: UserCheck },
-  { key: 'SERVICE_MANAGER', label: 'Quản lý dịch vụ', icon: Building2 },
-  { key: 'ADMIN', label: 'FixHome', icon: Sparkles },
+const categories: { key: Category; label: string; testId: string }[] = [
+  { key: 'ALL', label: 'Tất cả', testId: 'notifications-filter-ALL' },
+  { key: 'TECHNICIAN', label: 'Kỹ thuật viên', testId: 'notifications-filter-TECHNICIAN' },
+  { key: 'SERVICE_MANAGER', label: 'Quản lý dịch vụ', testId: 'notifications-filter-SERVICE_MANAGER' },
+  { key: 'ADMIN', label: 'FixHome', testId: 'notifications-filter-ADMIN' },
 ];
-
-const iconFor = {
-  dollar: DollarSign,
-  check: CheckCircle2,
-  x: XCircle,
-  truck: Truck,
-  package: Package,
-  clock: Clock,
-  sparkles: Sparkles,
-  shield: Shield,
-  wrench: Wrench,
-  alert: AlertTriangle,
-  bell: Bell,
-} as const;
 
 onMounted(() => {
   void notifStore.fetchUnreadCount();
@@ -93,6 +67,21 @@ const filteredNotifications = computed(() => {
     if (q && !item.title?.toLowerCase().includes(q) && !item.message?.toLowerCase().includes(q)) return false;
     return true;
   });
+});
+
+const DAY_GROUP_ORDER: VnDayGroup[] = ['Hôm nay', 'Hôm qua', 'Trước đó'];
+
+const groupedNotifications = computed(() => {
+  const buckets = new Map<VnDayGroup, NotificationItem[]>();
+  for (const item of filteredNotifications.value) {
+    const label = vnDayGroup(item.createdAt);
+    const list = buckets.get(label);
+    if (list) list.push(item);
+    else buckets.set(label, [item]);
+  }
+  return DAY_GROUP_ORDER
+    .filter((label) => buckets.has(label))
+    .map((label) => ({ label, items: buckets.get(label)! }));
 });
 
 const handleItemClick = async (item: NotificationItem) => {
@@ -129,13 +118,12 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 </script>
 
 <template>
-  <div class="w-full space-y-6 pb-16">
-    <!-- Header banner -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div class="w-full space-y-5 pb-16">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 animate-slide-up">
       <div>
-        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
-          <Bell :size="28" class="text-brand-600 shrink-0" />
-          <span>Thông báo</span>
+        <h1 class="text-2xl sm:text-[28px] font-bold text-ink-900 tracking-tight">
+          Thông báo
         </h1>
         <p class="text-sm text-ink-500 mt-1">
           Cập nhật tiến độ đơn hàng, phản hồi từ kỹ thuật viên và thông báo từ hệ thống.
@@ -155,61 +143,58 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
       </FhButton>
     </div>
 
-    <!-- Search & Filters Surface -->
-    <div class="bg-white rounded-3xl border border-ink-200/90 p-4 sm:p-5 space-y-4 shadow-xs">
-      <!-- Search input -->
-      <div class="relative">
-        <Search :size="18" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
-        <input
-          v-model="searchQuery"
-          type="search"
-          aria-label="Tìm thông báo"
-          placeholder="Tìm theo nội dung thông báo..."
-          class="w-full h-11.5 pl-10.5 pr-10 text-sm bg-ink-50/70 border border-ink-200/90 rounded-2xl focus:outline-none focus:border-brand-600 focus:bg-white focus:ring-2 focus:ring-brand-500/15 transition-all text-ink-900 placeholder:text-ink-400"
-        />
-        <button
-          v-if="searchQuery"
-          type="button"
-          class="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-ink-600 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-          aria-label="Xóa tìm kiếm"
-          @click="searchQuery = ''"
-        >
-          <X :size="16" />
-        </button>
-      </div>
+    <!-- Search & Filters -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 animate-slide-up-delay-1">
+      <ConsoleTabs
+        v-model="selectedCategory"
+        variant="pill"
+        class="self-start lg:self-auto"
+        :tabs="categories"
+        aria-label="Lọc theo nguồn thông báo"
+      />
 
-      <!-- Categories & Unread filter row -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-        <!-- Category pills -->
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs sm:text-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
+        <div class="relative flex-1 sm:w-64 lg:w-72">
+          <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            aria-label="Tìm thông báo"
+            placeholder="Tìm theo nội dung thông báo..."
+            class="w-full h-10 pl-9.5 pr-9 text-sm bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 transition-colors text-ink-900 placeholder:text-ink-400"
+          />
           <button
-            v-for="cat in categories"
-            :key="cat.key"
+            v-if="searchQuery"
             type="button"
-            :data-testid="`notifications-filter-${cat.key}`"
-            :aria-pressed="selectedCategory === cat.key"
-            class="h-11 px-3.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 font-medium transition-all shrink-0 whitespace-nowrap flex items-center gap-1.5 cursor-pointer select-none"
-            :class="selectedCategory === cat.key
-              ? 'bg-brand-600 text-white shadow-2xs font-semibold'
-              : 'bg-ink-100/70 text-ink-600 hover:bg-ink-100 hover:text-ink-900'"
-            @click="selectedCategory = cat.key"
+            class="absolute right-0 top-1/2 flex h-10 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-ink-500 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            aria-label="Xóa tìm kiếm"
+            @click="searchQuery = ''"
           >
-            <component :is="cat.icon" :size="15" />
-            <span>{{ cat.label }}</span>
+            <X :size="15" />
           </button>
         </div>
 
-        <!-- Only unread toggle -->
         <label
-          class="inline-flex min-h-11 items-center gap-2 text-xs sm:text-sm font-medium text-ink-700 cursor-pointer select-none shrink-0 self-start sm:self-auto px-3 py-1.5 rounded-xl border transition-colors"
-          :class="onlyUnread ? 'bg-brand-50 border-brand-300 text-brand-700 font-semibold' : 'bg-white border-ink-200/90 hover:bg-ink-50'"
+          class="inline-flex h-10 items-center gap-2 text-xs sm:text-sm font-medium cursor-pointer select-none shrink-0 self-start sm:self-auto px-3.5 rounded-xl border transition-colors focus-within:ring-2 focus-within:ring-brand-600 focus-within:ring-offset-1"
+          :class="onlyUnread ? 'bg-brand-50 border-brand-200 text-brand-700 font-semibold' : 'bg-white border-ink-200 text-ink-700 hover:bg-ink-50'"
         >
           <input
             v-model="onlyUnread"
             type="checkbox"
-            class="rounded border-ink-300 text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+            class="sr-only"
           />
-          <span>Chưa đọc ({{ notifStore.unreadCount }})</span>
+          <span
+            class="h-2 w-2 rounded-full transition-colors"
+            :class="onlyUnread ? 'bg-brand-600' : 'bg-ink-300'"
+            aria-hidden="true"
+          />
+          <span>Chưa đọc</span>
+          <span
+            class="px-1.5 py-0.5 rounded-full text-[11px] font-num leading-none"
+            :class="onlyUnread ? 'bg-brand-100 text-brand-800' : 'bg-ink-100 text-ink-600'"
+          >
+            {{ notifStore.unreadCount }}
+          </span>
         </label>
       </div>
     </div>
@@ -217,131 +202,131 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
     <!-- Skeleton Loading -->
     <ul
       v-if="loading"
-      class="bg-white rounded-3xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs"
+      class="bg-white rounded-[var(--radius-md)] border border-ink-200 divide-y divide-ink-100 overflow-hidden animate-slide-up-delay-2"
       aria-busy="true"
       aria-label="Đang tải thông báo"
     >
-      <li v-for="i in 4" :key="i" class="p-5 flex items-start gap-4">
+      <li v-for="i in 4" :key="i" class="px-4 py-4 sm:px-5 flex items-start gap-3.5 sm:gap-4">
         <FhSkeleton width="44px" height="44px" rounded="lg" class="shrink-0" />
-        <div class="flex-1 space-y-2">
-          <div class="flex justify-between items-center">
-            <FhSkeleton width="45%" height="18px" />
-            <FhSkeleton width="70px" height="14px" />
+        <div class="flex-1 space-y-2 pt-0.5">
+          <div class="flex justify-between items-center gap-3">
+            <FhSkeleton width="45%" height="16px" />
+            <FhSkeleton width="72px" height="14px" />
           </div>
-          <FhSkeleton width="85%" height="14px" />
-          <FhSkeleton width="30%" height="12px" />
+          <FhSkeleton width="88%" height="14px" />
+          <FhSkeleton width="28%" height="12px" />
         </div>
       </li>
     </ul>
 
-    <!-- Empty State -->
+    <!-- Error State -->
     <div
       v-else-if="error"
       role="alert"
-      class="p-6 bg-white rounded-2xl border border-ink-200 flex flex-col items-center text-center gap-3"
+      class="p-6 bg-white rounded-[var(--radius-md)] border border-ink-200 flex flex-col items-center text-center gap-3 animate-slide-up-delay-2"
       data-testid="notifications-load-error"
     >
       <p class="text-sm text-ink-700">Chưa tải được thông báo, vui lòng thử lại.</p>
       <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton>
     </div>
 
+    <!-- Empty State -->
     <div
       v-else-if="filteredNotifications.length === 0"
       data-testid="notifications-empty"
-      class="py-14 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
+      class="bg-white rounded-[var(--radius-md)] border border-ink-200 animate-slide-up-delay-2"
     >
-      <div class="mx-auto mb-2 max-w-[140px] flex items-center justify-center">
-        <img
-          :src="'/images/ui/empty-state-search-service.png'"
-          alt=""
-          class="w-full h-auto max-h-32 object-contain drop-shadow-sm select-none pointer-events-none"
-          loading="lazy"
-        />
-      </div>
-      <p class="text-base sm:text-lg font-semibold text-ink-900">
-        {{ hasFilter ? (total > PAGE_SIZE ? 'Trang này không có thông báo phù hợp.' : 'Không có thông báo nào phù hợp.') : 'Bạn chưa có thông báo nào.' }}
-      </p>
-      <p class="text-sm text-ink-500 max-w-sm mx-auto">
-        {{ hasFilter ? 'Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục để tìm thông báo.' : 'Các thông báo mới về đơn sửa chữa và tài khoản sẽ hiển thị ở đây.' }}
-      </p>
-      <div v-if="hasFilter" class="pt-2">
-        <FhButton variant="secondary" size="md" @click="clearFilters">Xóa bộ lọc</FhButton>
-      </div>
+      <FhEmptyState
+        :title="hasFilter ? (total > PAGE_SIZE ? 'Trang này không có thông báo phù hợp.' : 'Không có thông báo nào phù hợp.') : 'Bạn chưa có thông báo nào.'"
+        :description="hasFilter ? 'Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục để tìm thông báo.' : 'Các thông báo mới về đơn sửa chữa và tài khoản sẽ hiển thị ở đây.'"
+        :action-text="hasFilter ? 'Xóa bộ lọc' : ''"
+        illustration="/images/ui/empty-state-search-service.png"
+        @action="clearFilters"
+      />
     </div>
 
-    <!-- Notifications List -->
-    <ul
+    <!-- Grouped Notifications Feed -->
+    <div
       v-else
-      class="bg-white rounded-3xl border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs transition-opacity"
+      class="space-y-4 transition-opacity animate-slide-up-delay-2"
       :class="{ 'opacity-60': changingPage }"
       :aria-busy="changingPage"
     >
-      <li v-for="item in filteredNotifications" :key="item.id">
-        <button
-          type="button"
-          class="group flex min-h-11 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:gap-4 sm:p-5"
-          :class="{ 'bg-brand-50/40': !item.isRead }"
-          :data-testid="`notification-${item.id}`"
-          @click="handleItemClick(item)"
-        >
-          <!-- Category Icon -->
-          <span
-            class="w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-            :class="[getNotificationCategory(item).iconBgClass, getNotificationCategory(item).iconColorClass]"
-          >
-            <component :is="iconFor[getNotificationCategory(item).iconName] ?? Bell" :size="20" />
-          </span>
+      <section v-for="group in groupedNotifications" :key="group.label" class="space-y-2">
+        <h2 class="px-1 text-xs font-semibold text-ink-500">
+          {{ group.label }}
+        </h2>
 
-          <!-- Main Content -->
-          <div class="flex-1 min-w-0 space-y-1.5">
-            <div class="flex items-start justify-between gap-3">
-              <span
-                class="break-words text-sm text-ink-900 group-hover:text-brand-600 transition-colors"
-                :class="item.isRead ? 'font-medium' : 'font-bold text-brand-900'"
-              >
-                {{ item.title }}
-              </span>
-              <span
-                v-if="!item.isRead"
-                class="w-2.5 h-2.5 mt-1 rounded-full bg-brand-600 shrink-0 shadow-2xs"
-                aria-label="Chưa đọc"
-              />
-            </div>
+        <ul class="bg-white rounded-[var(--radius-md)] border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+          <li v-for="item in group.items" :key="item.id">
+            <button
+              type="button"
+              class="group flex min-h-11 w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:gap-4 sm:px-5 sm:py-4"
+              :class="item.isRead ? 'bg-white hover:bg-ink-50/80' : 'bg-brand-50/35 hover:bg-brand-50/60'"
+              :data-testid="`notification-${item.id}`"
+              @click="handleItemClick(item)"
+            >
+              <NotificationSemanticIcon :item="item" size="md" dim-when-read class="mt-0.5" />
 
-            <p class="break-words text-sm text-ink-600 leading-relaxed text-pretty">
-              {{ item.message }}
-            </p>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-3">
+                  <span
+                    class="break-words text-sm leading-snug group-hover:text-brand-700 transition-colors"
+                    :class="item.isRead ? 'font-medium text-ink-700' : 'font-semibold text-ink-950'"
+                  >
+                    {{ item.title }}
+                  </span>
 
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-ink-600">
-              <span class="font-medium text-ink-600 px-2 py-0.5 rounded-md bg-ink-100/70">
-                {{ getNotificationCategory(item).label }}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span class="font-num whitespace-nowrap flex items-center gap-1">
-                <Clock :size="12" class="text-ink-400" />
-                {{ formatFullDate(item.createdAt) }}
-              </span>
-            </div>
-            <span v-if="item.referenceId" class="inline-flex min-h-6 items-center text-xs font-medium text-brand-700">
-              {{ item.type?.toUpperCase() === 'PART_REQUEST_READY' ? 'Xem máy và linh kiện' : 'Xem chi tiết' }}
-            </span>
-          </div>
+                  <div class="flex items-center gap-2 shrink-0 pt-0.5">
+                    <time
+                      :datetime="item.createdAt"
+                      :title="formatFullDate(item.createdAt)"
+                      class="text-xs font-num whitespace-nowrap"
+                      :class="item.isRead ? 'text-ink-400' : 'font-medium text-brand-700'"
+                    >
+                      {{ vnRelativeTime(item.createdAt) }}
+                    </time>
+                    <span
+                      v-if="!item.isRead"
+                      class="w-2 h-2 rounded-full bg-brand-600 shrink-0"
+                      aria-label="Chưa đọc"
+                    />
+                  </div>
+                </div>
 
-          <!-- Navigation Arrow -->
-          <ChevronRight
-            v-if="item.referenceId"
-            :size="18"
-            class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 self-center hidden sm:block"
-          />
-        </button>
-      </li>
-    </ul>
+                <p
+                  class="mt-1 break-words text-[13px] sm:text-sm leading-relaxed text-pretty"
+                  :class="item.isRead ? 'text-ink-500' : 'text-ink-700'"
+                >
+                  {{ item.message }}
+                </p>
+
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span class="text-ink-400 font-medium">
+                    {{ getNotificationCategory(item).label }}
+                  </span>
+
+                  <span
+                    v-if="item.referenceId"
+                    class="inline-flex items-center gap-0.5 font-semibold text-brand-600 group-hover:text-brand-700 transition-colors"
+                  >
+                    <span>{{ item.type?.toUpperCase() === 'PART_REQUEST_READY' ? 'Xem máy và linh kiện' : 'Xem chi tiết' }}</span>
+                    <ChevronRight :size="14" class="group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
+              </div>
+            </button>
+          </li>
+        </ul>
+      </section>
+    </div>
 
     <FhPagination
       v-if="!loading && !error"
       v-model:page="page"
       :page-size="PAGE_SIZE"
       :total="total"
+      class="animate-slide-up-delay-2"
       @prefetch="prefetch"
     />
   </div>

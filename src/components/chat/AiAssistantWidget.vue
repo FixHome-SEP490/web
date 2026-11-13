@@ -108,30 +108,30 @@ function goToVisit() {
   <div v-if="!hiddenHere">
     <!-- AI Assistant Modal Popup (Anchored at bottom, located to the left of the round FAB icons - same position and alignment as Message modal) -->
     <transition
-      enter-active-class="transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-bottom sm:origin-bottom-right"
+      enter-active-class="transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-bottom sm:origin-bottom-right motion-reduce:transition-none"
       enter-from-class="opacity-0 translate-y-8 scale-90 sm:scale-95"
       enter-to-class="opacity-100 translate-y-0 scale-100"
-      leave-active-class="transition duration-200 ease-[cubic-bezier(0.4,0,1,1)] transform-gpu origin-bottom sm:origin-bottom-right"
+      leave-active-class="transition duration-200 ease-[cubic-bezier(0.4,0,1,1)] transform-gpu origin-bottom sm:origin-bottom-right motion-reduce:transition-none"
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-6 scale-90 sm:scale-95"
     >
       <div
         v-if="isOpen"
-        class="fixed z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] bottom-[var(--fh-dock,0px)] right-2 left-2 sm:left-auto sm:right-22 md:right-24 sm:bottom-0 w-auto sm:w-[380px] md:w-[400px] bg-white rounded-2xl sm:rounded-b-none sm:rounded-t-2xl border border-ink-200 sm:border-b-0 shadow-2xl flex flex-col overflow-hidden"
+        class="fixed z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none bottom-[var(--fh-dock,0px)] right-2 left-2 sm:left-auto sm:right-22 md:right-24 sm:bottom-0 w-auto sm:w-[380px] md:w-[400px] bg-white rounded-2xl sm:rounded-b-none sm:rounded-t-2xl ring-1 ring-ink-900/[0.08] shadow-(--shadow-e3) flex flex-col overflow-hidden"
         :class="[
           isAiMinimized
-            ? 'h-[57px] shadow-lg'
+            ? 'h-[57px]'
             : 'h-[520px] max-h-[calc(100dvh_-_var(--fh-dock,0px)_-_1rem)] sm:max-h-[calc(100dvh_-_2rem)]'
         ]"
       >
         <!-- Header -->
         <div
-          class="px-3.5 py-2.5 border-b border-ink-100 bg-white flex items-center justify-between gap-2 flex-shrink-0 transition-colors"
+          class="px-4 py-3 border-b border-ink-100 bg-white/95 backdrop-blur-sm flex items-center justify-between gap-2 flex-shrink-0 transition-colors"
           :class="isAiMinimized ? 'cursor-pointer hover:bg-ink-50 select-none' : ''"
           @click="isAiMinimized ? (isAiMinimized = false) : null"
         >
-          <div class="flex items-center gap-2 min-w-0">
-            <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-brand-50 ring-1 ring-brand-200/80 flex items-center justify-center flex-shrink-0">
               <Bot :size="17" class="text-brand-700" />
             </div>
             <div class="min-w-0">
@@ -146,21 +146,21 @@ function goToVisit() {
             </div>
           </div>
 
-          <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+          <div class="flex items-center gap-0.5 flex-shrink-0">
             <button
               v-if="!isAiMinimized"
               type="button"
-              class="p-1.5 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              class="w-8 h-8 flex items-center justify-center rounded-full text-ink-500 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               :disabled="turnCount === 0 && !isThinking"
               title="Bắt đầu phiên mới"
               aria-label="Bắt đầu phiên mới"
               @click.stop="startOver"
             >
-              <RotateCcw :size="16" />
+              <RotateCcw :size="15" />
             </button>
             <button
               type="button"
-              class="p-1.5 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors"
+              class="w-8 h-8 flex items-center justify-center rounded-full text-ink-500 hover:text-ink-900 hover:bg-ink-100 transition-colors"
               :title="isAiMinimized ? 'Mở rộng trợ lý AI' : 'Thu gọn trợ lý AI'"
               :aria-label="isAiMinimized ? 'Mở rộng trợ lý AI' : 'Thu gọn trợ lý AI'"
               @click.stop="isAiMinimized = !isAiMinimized"
@@ -170,22 +170,22 @@ function goToVisit() {
             </button>
             <button
               type="button"
-              class="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+              class="w-8 h-8 flex items-center justify-center rounded-full text-ink-500 hover:text-danger-600 hover:bg-danger-50 transition-colors"
               title="Đóng trợ lý AI"
               aria-label="Đóng trợ lý AI"
               @click.stop="toggle"
             >
-              <X :size="17" />
+              <X :size="16" />
             </button>
           </div>
         </div>
 
         <!-- Body with transition -->
         <transition
-          enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
           enter-from-class="opacity-0 -translate-y-2"
           enter-to-class="opacity-100 translate-y-0"
-          leave-active-class="transition-all duration-200 ease-in"
+          leave-active-class="transition-all duration-200 ease-in motion-reduce:transition-none"
           leave-from-class="opacity-100 translate-y-0"
           leave-to-class="opacity-0 -translate-y-2"
         >
@@ -194,12 +194,12 @@ function goToVisit() {
               <!-- Pinned booking. Stays put; replaced when the assistant changes it. -->
               <template #pinned>
                 <transition
-                  enter-active-class="transition duration-200 ease-out"
+                  enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"
                   enter-from-class="opacity-0 translate-y-1"
-                  leave-active-class="transition duration-100 ease-in"
+                  leave-active-class="transition duration-100 ease-in motion-reduce:transition-none"
                   leave-to-class="opacity-0"
                 >
-                <div v-if="showVisit" data-testid="ai-visit-bar" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-if="showVisit" data-testid="ai-visit-bar" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50/80 border-t border-brand-100 flex-shrink-0">
                   <div class="flex-1 min-w-0">
                     <p class="text-xs font-semibold text-brand-700">Dịch vụ sẽ đặt cho {{ pinnedDevices.length }} thiết bị</p>
                     <ul class="text-sm text-ink-900" data-testid="ai-visit-bar-services">
@@ -214,14 +214,14 @@ function goToVisit() {
                   <button
                     type="button"
                     data-testid="ai-book-visit"
-                    class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 whitespace-nowrap"
+                    class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors whitespace-nowrap"
                     @click="goToVisit"
                   >
                     <CalendarPlus :size="14" />
                     Đặt {{ pinnedDevices.length }} thiết bị
                   </button>
                 </div>
-                <div v-else-if="showBooking && pinnedService" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-else-if="showBooking && pinnedService" class="flex items-center gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50/80 border-t border-brand-100 flex-shrink-0">
                   <div class="flex-1 min-w-0">
                     <p class="text-xs font-semibold text-brand-700">Dịch vụ đang chọn</p>
                     <p class="text-sm font-bold text-ink-900 truncate">{{ pinnedService.nameVi }}</p>
@@ -230,19 +230,19 @@ function goToVisit() {
                   <button
                     type="button"
                     data-testid="ai-book-technician"
-                    class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 whitespace-nowrap"
+                    class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors whitespace-nowrap"
                     @click="goToBooking"
                   >
                     <CalendarPlus :size="14" />
                     Đặt thợ
                   </button>
                 </div>
-                <div v-else-if="showManualBooking" data-testid="ai-manual-booking-bar" class="flex items-center justify-between gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50 border-t border-brand-100 flex-shrink-0">
+                <div v-else-if="showManualBooking" data-testid="ai-manual-booking-bar" class="flex items-center justify-between gap-3 pl-3.5 pr-14 sm:pr-3.5 py-2.5 bg-brand-50/80 border-t border-brand-100 flex-shrink-0">
                   <p class="text-xs font-semibold text-brand-700">Tiếp tục đặt lịch bằng cách chọn dịch vụ</p>
                   <button
                     type="button"
                     data-testid="ai-book-manual"
-                    class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 whitespace-nowrap"
+                    class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors whitespace-nowrap"
                     @click="goToManualBooking"
                   >
                     <CalendarPlus :size="14" />
@@ -260,22 +260,22 @@ function goToVisit() {
     <!-- Floating Action Button for AI (always fixed above the chat FAB) -->
     <div
       class="fixed right-4 sm:right-5 z-40"
-      :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_3.25rem)] sm:bottom-[calc(var(--fh-dock,1.25rem)_+_4rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
+      :class="stackedAboveChat ? 'bottom-[calc(var(--fh-dock,1.25rem)_+_3.25rem)] sm:bottom-[calc(var(--fh-dock,1.25rem)_+_3.75rem)]' : 'bottom-[var(--fh-dock,1.25rem)]'"
     >
       <button
         type="button"
-        class="w-11 h-11 sm:w-13 sm:h-13 rounded-full border flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
+        class="w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none hover:scale-105 active:scale-95 cursor-pointer shadow-(--shadow-e2) hover:shadow-(--shadow-e3)"
         :class="[
           isOpen
-            ? 'bg-brand-50 border-brand-400 text-brand-700 ring-4 ring-brand-100 shadow-xl'
-            : 'bg-white border-ink-200 text-brand-600 shadow-(--shadow-e2) hover:bg-brand-50'
+            ? 'bg-brand-50 ring-2 ring-brand-500 text-brand-700'
+            : 'bg-white ring-1 ring-ink-900/[0.08] text-brand-600 hover:bg-brand-50 hover:text-brand-700'
         ]"
         :aria-label="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
         :title="isOpen ? 'Đóng trợ lý AI' : 'Hỏi trợ lý AI'"
         @click="toggle"
       >
-        <X v-if="isOpen" :size="24" />
-        <Bot v-else :size="22" />
+        <X v-if="isOpen" :size="21" />
+        <Bot v-else :size="21" />
       </button>
     </div>
   </div>

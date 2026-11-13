@@ -87,12 +87,12 @@ const save = async () => {
 
 <template>
   <Transition
-    enter-active-class="transition duration-200 ease-out"
-    enter-from-class="opacity-0 scale-95"
-    enter-to-class="opacity-100 scale-100"
-    leave-active-class="transition duration-150 ease-in"
-    leave-from-class="opacity-100 scale-100"
-    leave-to-class="opacity-0 scale-95"
+    enter-active-class="transition-opacity duration-200 ease-out"
+    enter-from-class="opacity-0"
+    enter-to-class="opacity-100"
+    leave-active-class="transition-opacity duration-150 ease-in"
+    leave-from-class="opacity-100"
+    leave-to-class="opacity-0"
   >
     <div
       v-if="open"
@@ -104,7 +104,7 @@ const save = async () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="avatar-dialog-title"
-        class="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl space-y-5"
+        class="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl space-y-5 animate-modal-in"
         data-testid="avatar-dialog"
       >
         <div class="flex items-center justify-between gap-3">
@@ -160,3 +160,27 @@ const save = async () => {
     </div>
   </Transition>
 </template>
+
+<style scoped>
+@keyframes modalIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-in {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+</style>

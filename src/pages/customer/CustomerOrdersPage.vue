@@ -7,7 +7,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  MapPin,
   ChevronRight,
   Search,
   MessageSquare,
@@ -592,9 +591,9 @@ async function confirmCancel() {
 
 <template>
   <div class="w-full space-y-5 pb-12">
-    <h1 class="text-2xl font-bold tracking-tight text-ink-900">Đơn của tôi</h1>
+    <h1 class="text-2xl font-bold tracking-tight text-ink-900 animate-slide-up">Đơn của tôi</h1>
 
-    <div class="relative">
+    <div class="relative animate-slide-up-delay-1">
       <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
       <input
         v-model="searchQuery"
@@ -618,13 +617,13 @@ async function confirmCancel() {
     <div
       v-if="listView !== 'visits'"
       ref="tabListRef"
-      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 select-none scrollbar-none"
+      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 select-none scrollbar-none animate-slide-up-delay-1"
       role="tablist"
       aria-label="Lọc đơn sửa chữa"
     >
       <!-- Sliding active background pill -->
       <div
-        class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-[transform,width,height,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
         :style="indicatorStyle"
         aria-hidden="true"
       />
@@ -651,7 +650,7 @@ async function confirmCancel() {
     </div>
 
     <!-- Partial or full error banners -->
-    <div v-if="!loading && hasError" class="space-y-2">
+    <div v-if="!loading && hasError" class="space-y-2 animate-slide-up-delay-2">
       <div
         v-if="ordersError"
         data-testid="orders-error-banner"
@@ -700,7 +699,7 @@ async function confirmCancel() {
       v-if="loading"
       role="status"
       aria-label="Đang tải dữ liệu"
-      class="space-y-2 rounded-2xl border border-ink-200 bg-white p-5"
+      class="space-y-2 rounded-2xl border border-ink-200 bg-white p-5 animate-slide-up-delay-2"
     >
       <div v-for="i in 3" :key="i" class="space-y-2 py-2">
         <div class="flex items-center justify-between">
@@ -715,7 +714,7 @@ async function confirmCancel() {
     <div
       v-else-if="!hasError && !visitGroupsError && !loadingOrders && !loadingBookings && !loadingVisitGroups && ordersTotal === 0 && bookingsTotal === 0 && visitGroupsTotal === 0"
       data-testid="history-empty-state"
-      class="space-y-3 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center"
+      class="space-y-3 rounded-2xl border border-ink-200 bg-white px-6 py-12 text-center animate-slide-up-delay-2"
     >
       <div class="mx-auto mb-3 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
         <img
@@ -738,15 +737,15 @@ async function confirmCancel() {
       </div>
     </div>
 
-    <div v-else class="space-y-3">
-      <!-- Repair orders or booking requests: one list at a time -->
-      <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn danh sách">
+    <div v-else class="space-y-4 animate-slide-up-delay-2">
+      <!-- Repair orders or booking requests: segmented pill switcher -->
+      <div class="inline-flex w-full sm:w-auto max-w-full gap-1 overflow-x-auto scrollbar-none rounded-xl bg-ink-100/85 p-1" role="group" aria-label="Chọn danh sách">
         <button
           v-for="choice in listChoices"
           :key="choice.key"
           type="button"
-          class="flex h-11 min-w-[6rem] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:gap-2 sm:px-3 sm:text-sm"
-          :class="listView === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
+          class="flex h-9 min-w-[5.5rem] flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-3.5 sm:text-sm cursor-pointer"
+          :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
           :aria-pressed="listView === choice.key"
           :aria-label="choice.label"
           :data-testid="`list-switch-${choice.key}`"
@@ -756,15 +755,15 @@ async function confirmCancel() {
           <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
           <span
             v-if="!choice.loading"
-            class="shrink-0 rounded-full px-2 py-0.5 font-num text-xs transition-colors"
-            :class="listView === choice.key ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-600'"
+            class="shrink-0 rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none transition-colors"
+            :class="listView === choice.key ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
           >{{ choice.count }}</span>
         </button>
       </div>
 
       <Transition name="fh-fade-slide" mode="out-in">
       <!-- One server-paged parent row per multi-device visit. -->
-      <section v-if="listView === 'visits'" key="visits" class="space-y-2" data-testid="visit-groups-section">
+      <section v-if="listView === 'visits'" key="visits" class="space-y-3" data-testid="visit-groups-section">
         <div
           v-if="visitGroupsError"
           role="alert"
@@ -773,32 +772,43 @@ async function confirmCancel() {
           <span>{{ visitGroupsError }}</span>
           <button type="button" class="h-9 shrink-0 rounded-lg px-2 font-semibold hover:bg-danger-100" :disabled="loadingVisitGroups" @click="retryVisitGroups">Thử lại</button>
         </div>
-        <div v-if="loadingVisitGroups" class="space-y-3 rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lượt sửa nhiều thiết bị">
+        <div v-if="loadingVisitGroups" class="space-y-3 rounded-2xl border border-ink-200/80 bg-white p-5" aria-busy="true" aria-label="Đang tải lượt sửa nhiều thiết bị">
           <FhSkeleton width="55%" height="18px" />
           <FhSkeleton width="75%" height="14px" />
           <FhSkeleton width="45%" height="14px" />
         </div>
-        <p v-else-if="!visitGroupsError && visitGroupsTotal === 0" data-testid="visit-groups-empty" class="rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center text-sm text-ink-500">
+        <p v-else-if="!visitGroupsError && visitGroupsTotal === 0" data-testid="visit-groups-empty" class="rounded-2xl border border-ink-200/80 bg-white px-5 py-8 text-center text-sm text-ink-500">
           Chưa có lượt sửa nhiều thiết bị.
         </p>
-        <ul v-else-if="visitGroups.length" class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200 bg-white transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
-          <li v-for="group in visitGroups" :key="group.id" :data-testid="`visit-group-card-${group.id}`" class="space-y-3 px-4 py-4 sm:px-5">
+        <ul v-else-if="visitGroups.length" class="space-y-3 transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
+          <li
+            v-for="(group, idx) in visitGroups"
+            :key="group.id"
+            :data-testid="`visit-group-card-${group.id}`"
+            class="animate-slide-up rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 space-y-3.5 shadow-2xs transition-[border-color,box-shadow] duration-200 hover:border-brand-300/80 hover:shadow-sm"
+            :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
+          >
             <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="min-w-0">
-                <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
-                <p class="mt-1 text-xs text-ink-500 font-num">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
+              <div class="min-w-0 space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span :class="`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
+                    {{ visitGroupStatus(group).label }}
+                  </span>
+                  <span :data-testid="`visit-group-time-${group.id}`" class="text-xs text-ink-500 font-num">
+                    Tạo {{ vnDateString(group.createdAt) }} · Hẹn <span class="font-medium text-ink-700">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span>
+                  </span>
+                </div>
+                <h2 class="text-base font-bold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
               </div>
-              <span :class="`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
-                {{ visitGroupStatus(group).label }}
-              </span>
             </div>
-            <p :data-testid="`visit-group-time-${group.id}`" class="text-sm text-ink-600">
-              <span class="font-medium text-ink-700">Lịch hẹn:</span>
-              <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span>
-            </p>
-            <ul class="space-y-2" aria-label="Thiết bị trong lượt sửa">
-              <li v-for="item in group.items" :key="item.itemId" :data-testid="`visit-group-device-${group.id}-${item.sequence}`" class="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-ink-50 px-3 py-2 text-sm">
-                <span class="min-w-0 flex-1 text-ink-800">
+            <ul class="grid gap-2 sm:grid-cols-2" aria-label="Thiết bị trong lượt sửa">
+              <li
+                v-for="item in group.items"
+                :key="item.itemId"
+                :data-testid="`visit-group-device-${group.id}-${item.sequence}`"
+                class="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-ink-50/80 px-3 py-2 text-sm"
+              >
+                <span class="min-w-0 flex-1 truncate text-ink-800">
                   <span class="font-medium">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
                   <span v-if="item.serviceName" class="text-ink-500"> · {{ item.serviceName }}</span>
                 </span>
@@ -807,9 +817,9 @@ async function confirmCancel() {
                 </span>
               </li>
             </ul>
-            <div class="flex justify-end border-t border-ink-100 pt-3">
-              <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-                Xem lượt sửa <ChevronRight :size="16" aria-hidden="true" />
+            <div class="flex justify-end border-t border-ink-100 pt-2.5">
+              <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-9 items-center gap-1 rounded-xl px-3 text-xs sm:text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                Xem lượt sửa <ChevronRight :size="15" aria-hidden="true" />
               </router-link>
             </div>
           </li>
@@ -822,7 +832,7 @@ async function confirmCancel() {
           <!-- Bulk actions toolbar -->
           <div
             v-if="!loadingBookings && cancellableBookings.length > 0"
-            class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5 shadow-2xs transition-colors"
+            class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-ink-200/80 bg-white px-4 py-2.5 transition-colors"
             data-testid="requests-bulk-bar"
           >
             <div class="flex items-center gap-3">
@@ -863,9 +873,9 @@ async function confirmCancel() {
             </div>
           </div>
 
-          <div class="space-y-2">
-            <div v-if="loadingBookings" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải yêu cầu">
-              <div v-for="i in 2" :key="i" class="px-5 py-4 space-y-2">
+          <div class="space-y-3">
+            <div v-if="loadingBookings" class="space-y-3" aria-busy="true" aria-label="Đang tải yêu cầu">
+              <div v-for="i in 2" :key="i" class="rounded-2xl bg-white border border-ink-200/80 p-4 sm:p-5 space-y-2">
                 <FhSkeleton width="50%" height="18px" />
                 <FhSkeleton width="30%" height="14px" />
               </div>
@@ -873,7 +883,7 @@ async function confirmCancel() {
 
             <div
               v-else-if="bookingsTotal === 0"
-              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200/80 bg-white px-5 py-10 text-center"
             >
               <img
                 :src="'/images/ui/empty-state-search-service.png'"
@@ -887,90 +897,87 @@ async function confirmCancel() {
 
             <ul
               v-else
-              class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200 bg-white transition-opacity"
+              class="space-y-3 transition-opacity"
               :class="{ 'opacity-60': changingBookingsPage }"
               :aria-busy="changingBookingsPage"
             >
               <li
-                v-for="booking in bookings"
+                v-for="(booking, idx) in bookings"
                 :key="booking.id"
                 :data-testid="`booking-card-${booking.id}`"
                 role="link"
                 tabindex="0"
-                class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-ink-50 focus-visible:bg-ink-50 focus-visible:outline-none sm:px-5"
-                :class="{ 'bg-brand-50/25': selectedBookingIds.includes(booking.id) }"
+                class="animate-slide-up group rounded-2xl border bg-white p-4 sm:p-5 shadow-2xs transition-[border-color,box-shadow,background-color] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
+                :class="selectedBookingIds.includes(booking.id)
+                  ? 'border-brand-500/70 bg-brand-50/20'
+                  : 'border-ink-200/85 hover:border-brand-300/80 hover:shadow-sm'"
                 @click="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.enter="router.push(`/app/bookings/${booking.id}`)"
                 @keydown.space.prevent="router.push(`/app/bookings/${booking.id}`)"
               >
-                <!-- Selection checkbox on the left -->
-                <div
-                  v-if="canCancel(booking)"
-                  class="flex shrink-0 items-center pr-1"
-                  @click.stop
-                >
-                  <input
-                    type="checkbox"
-                    :checked="selectedBookingIds.includes(booking.id)"
-                    :data-testid="`select-booking-${booking.id}`"
-                    :aria-label="`Chọn yêu cầu ${booking.serviceName}`"
-                    class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-                    @change="toggleSelectBooking(booking.id)"
-                  />
-                </div>
-                <div
-                  v-else
-                  class="flex shrink-0 items-center pr-1 opacity-25 cursor-not-allowed"
-                  title="Yêu cầu này đã huỷ, không thể chọn"
-                  @click.stop
-                >
-                  <input
-                    type="checkbox"
-                    disabled
-                    class="h-4 w-4 rounded border-ink-200 cursor-not-allowed"
-                  />
-                </div>
-
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
-                    <div class="flex items-center gap-2 min-w-0">
-                      <h3 class="font-semibold text-ink-900 truncate">{{ booking.serviceName }}</h3>
-                      <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-1.5 py-0.5 text-xs text-ink-700 font-num">
-                        x{{ booking.quantity }}
-                      </span>
-                    </div>
-                    <FhStatusPill
-                      :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
-                      :label="pendingLabel(booking)"
+                <div class="flex items-start gap-3">
+                  <!-- Selection checkbox only when cancellable -->
+                  <div
+                    v-if="canCancel(booking)"
+                    class="flex shrink-0 items-center pt-1"
+                    @click.stop
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="selectedBookingIds.includes(booking.id)"
+                      :data-testid="`select-booking-${booking.id}`"
+                      :aria-label="`Chọn yêu cầu ${booking.serviceName}`"
+                      class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                      @change="toggleSelectBooking(booking.id)"
                     />
                   </div>
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-500">
-                    <span class="font-num shrink-0">{{ vnDateString(booking.createdAt) }}</span>
-                    <template v-if="booking.preferredAt">
-                      <span aria-hidden="true">·</span>
-                      <span class="flex items-center gap-1 font-num text-ink-600">
-                        <Clock :size="13" class="shrink-0 text-ink-400" />
-                        <span>Hẹn: {{ vnDateTimeString(booking.preferredAt) }}</span>
+
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <FhStatusPill
+                          :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
+                          :label="pendingLabel(booking)"
+                        />
+                        <span class="font-num text-xs text-ink-500 shrink-0">Đặt {{ vnDateString(booking.createdAt) }}</span>
+                      </div>
+                      <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
+                        ×{{ booking.quantity }}
                       </span>
-                    </template>
-                    <template v-if="booking.addressSummary">
-                      <span aria-hidden="true">·</span>
-                      <p class="flex min-w-0 items-center gap-1">
-                        <MapPin :size="14" class="shrink-0 text-ink-400" />
-                        <span class="truncate" :title="booking.addressSummary">{{ booking.addressSummary }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                      <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
+                        {{ booking.serviceName }}
+                      </h3>
+                      <ChevronRight :size="17" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] shrink-0 hidden sm:block" />
+                    </div>
+
+                    <div v-if="booking.preferredAt || booking.addressSummary" class="rounded-xl bg-ink-50/75 px-3 py-2 space-y-0.5 text-xs sm:text-sm">
+                      <p v-if="booking.preferredAt" class="font-num font-medium text-ink-800">
+                        <span class="text-ink-400 font-normal">Lịch hẹn:</span> {{ vnDateTimeString(booking.preferredAt) }}
                       </p>
-                    </template>
+                      <p v-if="booking.addressSummary" class="text-ink-600 truncate" :title="booking.addressSummary">
+                        <span class="text-ink-400">Địa chỉ:</span> {{ booking.addressSummary }}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
+
+                <!-- Quiet bottom actions row -->
+                <div
+                  v-if="canCancel(booking) || booking.status === 'CANCELLED'"
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-end gap-2.5"
+                >
                   <button
                     v-if="canCancel(booking)"
                     type="button"
-                    class="rounded-lg px-2.5 py-1 text-xs font-semibold text-danger-700 hover:bg-danger-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                    class="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium text-ink-500 hover:bg-danger-50 hover:text-danger-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 cursor-pointer"
                     :data-testid="`cancel-booking-btn-${booking.id}`"
                     @click.stop="openSingleCancel(booking)"
                   >
-                    Huỷ
+                    Huỷ yêu cầu
                   </button>
                   <FhButton
                     v-if="booking.status === 'CANCELLED'"
@@ -981,7 +988,6 @@ async function confirmCancel() {
                   >
                     Đặt lại
                   </FhButton>
-                  <ChevronRight :size="18" class="text-ink-400" />
                 </div>
               </li>
             </ul>
@@ -1020,7 +1026,7 @@ async function confirmCancel() {
               </div>
               <button
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition-all duration-150"
+                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-700 active:scale-[0.96] transition-[background-color,transform] duration-150"
                 @click="chosenList = 'requests'"
               >
                 <span>Xem yêu cầu</span>
@@ -1029,9 +1035,9 @@ async function confirmCancel() {
             </div>
           </Transition>
 
-          <div class="space-y-2">
-            <div v-if="loadingOrders" class="rounded-2xl bg-white border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải đơn">
-              <div v-for="i in 3" :key="i" class="px-5 py-4 space-y-2">
+          <div class="space-y-3">
+            <div v-if="loadingOrders" class="space-y-3" aria-busy="true" aria-label="Đang tải đơn">
+              <div v-for="i in 3" :key="i" class="rounded-2xl bg-white border border-ink-200/80 p-4 sm:p-5 space-y-2">
                 <FhSkeleton width="55%" height="18px" />
                 <FhSkeleton width="35%" height="14px" />
               </div>
@@ -1039,7 +1045,7 @@ async function confirmCancel() {
 
             <div
               v-else-if="ordersTotal === 0"
-              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center"
+              class="flex flex-col items-center justify-center rounded-2xl border border-ink-200/80 bg-white px-5 py-10 text-center"
             >
               <img
                 :src="'/images/ui/empty-state-search-service.png'"
@@ -1053,65 +1059,89 @@ async function confirmCancel() {
 
             <ul
               v-else
-              class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200 bg-white transition-opacity"
+              class="space-y-3 transition-opacity"
               :class="{ 'opacity-60': changingOrdersPage }"
               :aria-busy="changingOrdersPage"
             >
               <li
-                v-for="order in orders"
+                v-for="(order, idx) in orders"
                 :key="order.id"
                 :data-testid="`order-card-${order.id}`"
                 role="link"
                 tabindex="0"
-                class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-ink-50 focus-visible:bg-ink-50 focus-visible:outline-none sm:px-5"
+                class="animate-slide-up group rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs transition-[border-color,box-shadow] duration-200 cursor-pointer hover:border-brand-300/80 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
                 @click="router.push(`/app/orders/${order.id}`)"
                 @keydown.enter="router.push(`/app/orders/${order.id}`)"
                 @keydown.space.prevent="router.push(`/app/orders/${order.id}`)"
               >
-                <div class="min-w-0 flex-1 space-y-1.5">
-                  <div class="flex flex-col items-start gap-1.5 sm:flex-row sm:justify-between sm:gap-3">
-                    <h3 class="font-semibold text-ink-900">{{ order.serviceName }}</h3>
-                    <FhStatusPill
-                      :status="orderPill(order).status"
-                      :label="orderPill(order).label"
-                    />
-                  </div>
-                  <p class="truncate font-num text-sm text-ink-500">{{ order.code || order.id.slice(0, 8) }} · {{ vnDateString(order.createdAt) }}</p>
-                  <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                    <p class="min-w-0 truncate text-sm text-ink-600">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <FhStatusPill
+                        :status="orderPill(order).status"
+                        :label="orderPill(order).label"
+                      />
+                      <span class="font-num text-xs font-medium text-ink-500 whitespace-nowrap">#{{ order.code || order.id.slice(0, 8) }}</span>
+                      <span class="text-ink-300" aria-hidden="true">·</span>
+                      <span class="font-num text-xs text-ink-500 whitespace-nowrap">{{ vnDateString(order.createdAt) }}</span>
+                    </div>
+
+                    <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty leading-snug">
+                      {{ order.serviceName }}
+                    </h3>
+
+                    <div class="flex items-center gap-2.5 rounded-xl bg-ink-50/75 px-3 py-2 text-xs sm:text-sm">
                       <template v-if="order.technician">
-                        {{ order.technician.fullName }}
-                        <span v-if="formatRating(order.technician.averageRating)" class="whitespace-nowrap text-ink-500"> · <span class="text-warning-600">★</span> {{ formatRating(order.technician.averageRating) }}</span>
+                        <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white">
+                          {{ order.technician.fullName.charAt(0) }}
+                        </span>
+                        <span class="min-w-0 truncate font-medium text-ink-800">{{ order.technician.fullName }}</span>
+                        <span v-if="formatRating(order.technician.averageRating)" class="text-ink-500 whitespace-nowrap font-num">★ {{ formatRating(order.technician.averageRating) }}</span>
                       </template>
-                      <span v-else-if="awaitingReplacement(order)" class="text-ink-500">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
+                      <span v-else-if="awaitingReplacement(order)" class="text-ink-600">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
                       <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
-                    </p>
-                    <span v-if="Number(order.grandTotal) > 0" class="shrink-0 whitespace-nowrap font-num text-sm font-semibold text-ink-900">
+                    </div>
+                  </div>
+
+                  <div class="flex flex-col items-end gap-1 shrink-0 pt-0.5">
+                    <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-base sm:text-[17px] font-bold text-ink-900">
                       <FhMoney :amount="order.grandTotal" />
                     </span>
+                    <span v-else class="text-xs font-medium text-ink-400 whitespace-nowrap">Chờ báo giá</span>
                   </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
-                  <button
-                    v-if="order.technician"
-                    type="button"
-                    class="flex h-9 w-9 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-100"
-                    aria-label="Nhắn tin với kỹ thuật viên"
-                    title="Nhắn tin với kỹ thuật viên"
-                    @click="(e) => handleChat(order, e)"
-                  >
-                    <MessageSquare :size="16" class="text-ink-500" />
-                  </button>
-                  <FhButton
-                    v-if="canRebookOrder(order)"
-                    variant="secondary"
-                    size="sm"
-                    :data-testid="`rebook-order-${order.id}`"
-                    @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
-                  >
-                    Đặt lại thợ
-                  </FhButton>
-                  <ChevronRight :size="18" class="text-ink-400" />
+
+                <!-- Actions bar -->
+                <div
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-between gap-2.5"
+                >
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="order.technician"
+                      type="button"
+                      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-600 cursor-pointer"
+                      aria-label="Nhắn tin với kỹ thuật viên"
+                      title="Nhắn tin với kỹ thuật viên"
+                      @click="(e) => handleChat(order, e)"
+                    >
+                      <MessageSquare :size="14" />
+                      <span>Nhắn tin</span>
+                    </button>
+                    <FhButton
+                      v-if="canRebookOrder(order)"
+                      variant="secondary"
+                      size="sm"
+                      :data-testid="`rebook-order-${order.id}`"
+                      @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
+                    >
+                      Đặt lại thợ
+                    </FhButton>
+                  </div>
+                  <span class="ml-auto inline-flex items-center gap-0.5 text-xs font-semibold text-ink-400 group-hover:text-brand-600 transition-colors">
+                    <span>Chi tiết</span>
+                    <ChevronRight :size="15" />
+                  </span>
                 </div>
               </li>
             </ul>

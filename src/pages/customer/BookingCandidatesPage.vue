@@ -242,7 +242,7 @@ const selectedTechs = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6 pb-28">
+  <div class="w-full space-y-5 pb-16">
     <!-- Rebook notice when former tech is busy -->
     <div
       v-if="rebookedChoose"
@@ -266,7 +266,7 @@ const selectedTechs = computed(() => {
     </div>
 
     <!-- Top Navigation & Header -->
-    <div class="space-y-3">
+    <div class="space-y-3 animate-slide-up">
       <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
       <FhBackLink :label="isVisit ? 'Lượt sửa của bạn' : 'Yêu cầu của bạn'" @click="router.push(backTarget)" />
 
@@ -289,7 +289,7 @@ const selectedTechs = computed(() => {
     </div>
 
     <!-- Customer-ranked invitations policy callout -->
-    <div class="rounded-2xl border border-ink-200/80 bg-ink-50/70 p-4 text-ink-700 text-xs sm:text-sm shadow-2xs">
+    <div class="rounded-2xl border border-ink-200/80 bg-ink-50/70 p-4 text-ink-700 text-xs sm:text-sm shadow-2xs animate-slide-up-delay-1">
       <div class="flex items-start gap-3.5">
         <div class="w-8 h-8 rounded-xl bg-white border border-ink-200/90 text-brand-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
           <Info :size="16" aria-hidden="true" />
@@ -319,7 +319,7 @@ const selectedTechs = computed(() => {
       v-if="loading"
       role="status"
       aria-label="Đang tải danh sách kỹ thuật viên"
-      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 shadow-xs"
+      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 shadow-xs animate-slide-up-delay-2"
     >
       <div v-for="i in 3" :key="i" class="p-5 sm:p-6 flex items-center gap-4">
         <span class="w-14 shrink-0"><FhSkeleton height="56px" rounded="full" /></span>
@@ -334,7 +334,7 @@ const selectedTechs = computed(() => {
     <!-- Candidate List Load Error -->
     <div
       v-else-if="loadError"
-      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs"
+      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs animate-slide-up-delay-2"
       role="alert"
     >
       <div class="w-12 h-12 rounded-full bg-danger-50 text-danger-600 flex items-center justify-center">
@@ -347,6 +347,7 @@ const selectedTechs = computed(() => {
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
+      class="animate-slide-up-delay-2"
       illustration="/images/ui/booking-technician-match.png"
       :title="emptyState.title"
       :description="emptyState.description"
@@ -360,7 +361,7 @@ const selectedTechs = computed(() => {
     </FhEmptyState>
 
     <!-- Candidates Section -->
-    <div v-else class="space-y-3">
+    <div v-else class="space-y-3 animate-slide-up-delay-2">
       <!-- Filter / Sort Toolbar (Only when multiple candidates) -->
       <div v-if="candidates.length > 1" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
         <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">

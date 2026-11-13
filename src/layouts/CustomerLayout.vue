@@ -18,6 +18,7 @@ import {
   ClipboardList,
   ShieldCheck,
   Bot,
+  LayoutGrid,
   TicketPercent,
 } from 'lucide-vue-next';
 import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
@@ -260,10 +261,12 @@ const navItems = [
   { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },
 ];
 
-const compactDesktopNavActive = computed(() => {
+const activeNavItem = computed(() => {
   const currentPath = router.currentRoute.value?.path || '';
-  return navItems.some((item) => item.exact ? currentPath === item.to : currentPath.startsWith(item.to));
+  return navItems.find((item) => (item.exact ? currentPath === item.to : currentPath.startsWith(item.to))) ?? null;
 });
+
+const compactDesktopNavActive = computed(() => Boolean(activeNavItem.value));
 
 const tabItems = [
   { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
@@ -289,7 +292,7 @@ const handleLogout = async () => {
     class="min-h-screen flex flex-col bg-ink-50 text-ink-900"
     :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
-    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/90 shadow-2xs">
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
       <!-- The desktop nav collapses before the booking actions and account controls compete for width. -->
       <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         <div class="flex items-center gap-6 min-w-0">
@@ -307,7 +310,7 @@ const handleLogout = async () => {
           >
             <!-- Sliding active indicator bar -->
             <div
-              class="pointer-events-none absolute bottom-0 left-0 h-[3px] bg-brand-600 rounded-t-sm transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              class="pointer-events-none absolute bottom-0 left-0 h-[2.5px] bg-brand-600 rounded-t-full transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
               :style="navIndicatorStyle"
               aria-hidden="true"
             />
@@ -319,11 +322,11 @@ const handleLogout = async () => {
               :to="item.to"
               @mouseenter="prefetchRoute(item.to)"
               @focus="prefetchRoute(item.to)"
-              class="h-9 px-3 rounded-xl inline-flex items-center gap-2 whitespace-nowrap hover:bg-ink-100 hover:text-ink-900 transition-colors"
-              :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
-              :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
+              class="h-10 px-3 rounded-lg inline-flex items-center gap-2 whitespace-nowrap hover:bg-ink-50 hover:text-ink-950 transition-colors"
+              :active-class="item.exact ? '' : 'text-brand-700 font-semibold'"
+              :exact-active-class="item.exact ? 'text-brand-700 font-semibold' : ''"
             >
-              <component :is="item.icon" :size="17" :stroke-width="1.8" class="hidden 2xl:block shrink-0" />
+              <component :is="item.icon" :size="16" :stroke-width="1.8" class="shrink-0" />
               <span>{{ item.label }}</span>
               <span
                 v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
@@ -343,8 +346,10 @@ const handleLogout = async () => {
             <button
               ref="compactDesktopOverflowButtonRef"
               type="button"
-              class="h-9 px-3 rounded-xl inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              :class="compactDesktopNavActive ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'"
+              class="h-9 px-3.5 rounded-full border inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              :class="compactDesktopNavActive
+                ? 'border-brand-200 bg-brand-50/75 text-brand-700 font-semibold'
+                : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50 hover:text-ink-950'"
               :aria-label="desktopOverflowOpen ? 'Đóng điều hướng thêm' : 'Mở điều hướng thêm'"
               aria-controls="customer-desktop-nav-overflow"
               :aria-expanded="desktopOverflowOpen"
@@ -352,43 +357,63 @@ const handleLogout = async () => {
               @click="desktopOverflowOpen = !desktopOverflowOpen"
               @keydown="onDesktopOverflowTriggerKeydown"
             >
-              <span>Thêm</span>
-              <ChevronDown :size="16" :class="desktopOverflowOpen ? 'rotate-180' : ''" aria-hidden="true" />
+              <component :is="activeNavItem?.icon ?? LayoutGrid" :size="16" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
+              <span>{{ activeNavItem?.label ?? 'Điều hướng' }}</span>
+              <span
+                v-if="chatStore.totalUnreadCount > 0 && activeNavItem?.to !== '/app/messages'"
+                class="h-1.5 w-1.5 rounded-full bg-danger-600 shrink-0"
+                aria-hidden="true"
+              />
+              <ChevronDown
+                :size="15"
+                class="shrink-0 transition-transform duration-200 motion-reduce:transition-none"
+                :class="desktopOverflowOpen ? 'rotate-180' : ''"
+                aria-hidden="true"
+              />
             </button>
-            <div
-              v-show="desktopOverflowOpen"
-              id="customer-desktop-nav-overflow"
-              ref="compactDesktopOverflowPanelRef"
-              class="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-xl border border-ink-200 bg-white py-1 text-sm text-ink-700 shadow-(--shadow-e3)"
-              data-testid="customer-desktop-nav-overflow"
+            <Transition
+              enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+              enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+              leave-from-class="opacity-100 scale-100 translate-y-0"
+              leave-to-class="opacity-0 scale-95 -translate-y-1.5"
             >
-              <template v-if="desktopOverflowOpen">
-                <router-link
-                  v-for="item in navItems"
-                  :key="item.to"
-                  :to="item.to"
-                  class="flex h-10 items-center gap-3 px-3 whitespace-nowrap hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600"
-                  :active-class="item.exact ? '' : 'bg-brand-50 text-brand-700 font-semibold'"
-                  :exact-active-class="item.exact ? 'bg-brand-50 text-brand-700 font-semibold' : ''"
-                  @mouseenter="prefetchRoute(item.to)"
-                  @focus="prefetchRoute(item.to)"
-                  @click="closeDesktopOverflow()"
-                >
-                  <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
-                  <span>{{ item.label }}</span>
-                  <span
-                    v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
-                    class="ml-auto min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center leading-none shadow-2xs"
+              <div
+                v-show="desktopOverflowOpen"
+                id="customer-desktop-nav-overflow"
+                ref="compactDesktopOverflowPanelRef"
+                class="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-2xl bg-white p-1.5 text-sm text-ink-700 shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06]"
+                data-testid="customer-desktop-nav-overflow"
+              >
+                <template v-if="desktopOverflowOpen">
+                  <router-link
+                    v-for="item in navItems"
+                    :key="item.to"
+                    :to="item.to"
+                    class="flex h-10 items-center gap-3 rounded-xl px-3 whitespace-nowrap transition-colors hover:bg-ink-50 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600"
+                    :active-class="item.exact ? '' : 'bg-brand-50/75 text-brand-700 font-semibold'"
+                    :exact-active-class="item.exact ? 'bg-brand-50/75 text-brand-700 font-semibold' : ''"
+                    @mouseenter="prefetchRoute(item.to)"
+                    @focus="prefetchRoute(item.to)"
+                    @click="closeDesktopOverflow()"
                   >
-                    {{ unread }}
-                  </span>
-                </router-link>
-              </template>
-            </div>
+                    <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
+                    <span>{{ item.label }}</span>
+                    <span
+                      v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
+                      class="ml-auto min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center leading-none shadow-2xs"
+                    >
+                      {{ unread }}
+                    </span>
+                  </router-link>
+                </template>
+              </div>
+            </Transition>
           </nav>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
           <FhButton
             variant="primary"
             size="sm"
@@ -410,13 +435,16 @@ const handleLogout = async () => {
             data-testid="header-ai-booking"
             @click="router.push('/app/bookings/ai')"
           >
-            <Bot :size="16" />
+            <Bot :size="16" class="text-brand-600" />
             <span class="hidden sm:inline lg:hidden xl:inline whitespace-nowrap">Chẩn đoán bằng AI</span>
           </FhButton>
 
-          <NotificationBellDropdown />
+          <span class="hidden sm:block h-5 w-px bg-ink-200 mx-0.5" aria-hidden="true" />
 
-          <AccountMenu context="customer-app" @logout="handleLogout" />
+          <div class="flex items-center gap-1.5">
+            <NotificationBellDropdown />
+            <AccountMenu context="customer-app" @logout="handleLogout" />
+          </div>
         </div>
       </div>
     </header>

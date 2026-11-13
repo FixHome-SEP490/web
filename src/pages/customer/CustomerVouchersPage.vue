@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import FhButton from '../../components/FhButton.vue';
+import { toast } from 'vue-sonner';
+import { FhButton, FhCard } from '../../components';
 import CustomerVoucherWorkspace from '../../components/vouchers/CustomerVoucherWorkspace.vue';
 import { filterCustomerVoucherOffers, generalOffer, voucherAdapter, type VoucherOffer } from '../../components/vouchers/voucher-model';
 import { useAuthStore } from '../../stores/auth.store';
@@ -87,6 +88,7 @@ watch(customerId, () => {
   sessionSequence++;
   busy.value = false;
   feedback.value = '';
+  feedbackError.value = false;
   void load();
   void loadGeneral();
 }, { immediate: true, flush: 'sync' });
@@ -97,6 +99,7 @@ async function claimCode(code: string) {
   const session = sessionSequence;
   busy.value = true;
   feedback.value = '';
+  feedbackError.value = false;
   try {
     const claim = await voucherAdapter.claimGeneralVoucher(code);
     if (session !== sessionSequence) return;
@@ -104,8 +107,7 @@ async function claimCode(code: string) {
       await returnToCheckout(claim.id, true);
       return;
     }
-    feedbackError.value = false;
-    feedback.value = 'Đã lưu mã ưu đãi vào ví.';
+    toast.success('Đã lưu mã ưu đãi vào ví.');
     await Promise.all([load(), loadGeneral()]);
   } catch (error) {
     if (session !== sessionSequence) return;
@@ -121,16 +123,17 @@ async function claimCode(code: string) {
 
 <template>
   <div :key="customerId ?? 'guest'" lang="vi" class="w-full space-y-5 pb-12" data-testid="customer-vouchers-page">
-    <header>
-      <p class="text-sm font-medium text-brand-700">FixHome · Khách hàng</p>
-      <h1 class="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
-      <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-600">Ưu đãi chung đã lưu và voucher dành riêng cho bạn, trong cùng một ví.</p>
+    <header class="animate-slide-up">
+      <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
+      <p class="mt-1 text-sm text-ink-500">Ưu đãi chung đã lưu và voucher dành riêng cho bạn, trong cùng một ví.</p>
     </header>
 
     <Transition name="fh-fade-slide">
-      <section
+      <FhCard
         v-if="returnTarget"
-        class="rounded-[var(--radius-md)] border border-brand-200 bg-brand-50 p-4 sm:p-5"
+        as="section"
+        padding="sm"
+        class="rounded-[var(--radius-md)]! border-brand-200! bg-brand-50! shadow-none! animate-slide-up-delay-1"
         data-testid="voucher-return-to-checkout"
         aria-labelledby="voucher-return-heading"
       >
@@ -146,10 +149,11 @@ async function claimCode(code: string) {
           </li>
         </ul>
         <p v-else class="mt-3 text-sm text-ink-700" role="status">Ví chưa có voucher đang dùng được. Bạn có thể lưu một ưu đãi chung bên dưới rồi quay lại lượt thanh toán.</p>
-      </section>
+      </FhCard>
     </Transition>
 
     <CustomerVoucherWorkspace
+      class="animate-slide-up-delay-1"
       :state="state"
       :offers="[...offers, ...generalOffers]"
       :customer-id="customerId"

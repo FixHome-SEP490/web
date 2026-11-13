@@ -52,10 +52,20 @@ watch(() => props.orderId, () => { void load(); });
 </script>
 
 <template>
-  <section class="space-y-2 rounded-xl border border-ink-200 bg-white p-4 text-sm" data-testid="tech-private-note">
-    <h2 class="font-semibold text-ink-900">Ghi chú riêng</h2>
-    <p class="text-xs text-ink-500">Chỉ bạn thấy, đồng bộ với ứng dụng điện thoại.</p>
-    <textarea v-model="note" rows="3" maxlength="2000" :disabled="loading" :class="consoleTextarea" aria-label="Ghi chú riêng của bạn" />
+  <section class="space-y-3 rounded-2xl border border-ink-200/90 bg-white p-5 text-sm shadow-2xs" data-testid="tech-private-note">
+    <div class="space-y-0.5">
+      <h2 class="text-base font-semibold text-ink-900">Ghi chú riêng</h2>
+      <p class="text-xs text-ink-500">Chỉ bạn thấy, đồng bộ với ứng dụng điện thoại.</p>
+    </div>
+    <textarea
+      v-model="note"
+      rows="3"
+      maxlength="2000"
+      placeholder="Thêm ghi chú riêng cho đơn này…"
+      :disabled="loading"
+      :class="consoleTextarea"
+      aria-label="Ghi chú riêng của bạn"
+    />
     <div class="flex items-center justify-between gap-2">
       <span class="text-xs text-ink-500 font-num">{{ note.length }}/2.000</span>
       <FhButton variant="secondary" size="sm" :loading="saving" :disabled="loading || saving || note.trim() === saved" @click="save">Lưu ghi chú</FhButton>

@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/auth';
 import VoucherCheckoutChooser from '../../components/vouchers/VoucherCheckoutChooser.vue';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import {
   AlertCircle,
   AlertTriangle,
@@ -671,7 +672,7 @@ const handleRejectQuotation = async () => {
     if (!order.value?.quotation?.id) throw new Error('Không có báo giá để từ chối.');
     await ordersApi.rejectQuotation(order.value.quotation.id, 'Khách từ chối báo giá');
     await loadOrder();
-    actionMessage.value = { type: 'success', text: 'Đã từ chối báo giá của kỹ thuật viên.' };
+    toast.success('Đã từ chối báo giá của kỹ thuật viên.');
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa từ chối được báo giá. Vui lòng thử lại.') };
   } finally {
@@ -682,16 +683,18 @@ const handleRejectQuotation = async () => {
 const handleDecideAdditionalCost = async (cost: AdditionalCostRecord, action: 'APPROVE' | 'REJECT') => {
   if (oldFinanceReview.value || acDecidingId.value) return;
   acDecidingId.value = cost.id;
+  actionMessage.value = null;
   try {
     const updated = await ordersApi.decideAdditionalCost(cost.id, action);
     const idx = additionalCosts.value.findIndex((c) => c.id === cost.id);
     if (idx !== -1) additionalCosts.value[idx] = updated;
     // Totals change with the decision: read the order again in the background.
     void cache.refresh(affectedBy.orderChange);
-    actionMessage.value = {
-      type: 'success',
-      text: action === 'APPROVE' ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.' : 'Đã từ chối chi phí phát sinh.',
-    };
+    toast.success(
+      action === 'APPROVE'
+        ? 'Đã đồng ý chi phí phát sinh. Thợ sẽ tiếp tục xử lý phần việc mới.'
+        : 'Đã từ chối chi phí phát sinh.',
+    );
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa gửi được lựa chọn. Vui lòng thử lại.') };
   } finally {
@@ -1009,7 +1012,7 @@ const confirmCancel = async () => {
     }
     void cache.refresh(affectedBy.orderChange);
     showCancelModal.value = false;
-    actionMessage.value = { type: 'success', text: 'Đã gửi yêu cầu huỷ đơn thành công.' };
+    toast.success('Đã gửi yêu cầu huỷ đơn thành công.');
   } catch (err) {
     actionMessage.value = { type: 'error', text: userFacingError(err, 'Chưa huỷ được đơn. Vui lòng thử lại.') };
   } finally {
@@ -1031,10 +1034,7 @@ const onWarrantyClaimSubmitted = (claim: WarrantyClaimView) => {
   warrantyClaims.value = [claim, ...warrantyClaims.value];
   void cache.refresh(affectedBy.warrantyChange);
   showWarrantyClaimModal.value = false;
-  actionMessage.value = {
-    type: 'success',
-    text: 'Đã gửi yêu cầu bảo hành. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.',
-  };
+  toast.success('Đã gửi yêu cầu bảo hành. Kỹ thuật viên phụ trách sẽ liên hệ với bạn sớm.');
 };
 const onWarrantyClaimUpdated = (claim: WarrantyClaimView) => {
   warrantyClaims.value = warrantyClaims.value.map((existing) => (existing.id === claim.id ? claim : existing));
@@ -1051,10 +1051,7 @@ const handleReviewSubmitted = (review: Review) => {
     delete nextQuery.review;
     router.replace({ query: nextQuery });
   }
-  actionMessage.value = {
-    type: 'success',
-    text: 'Cảm ơn bạn đã đánh giá kỹ thuật viên! Đánh giá đã được ghi nhận thành công.',
-  };
+  toast.success('Cảm ơn bạn đã đánh giá kỹ thuật viên! Đánh giá đã được ghi nhận thành công.');
 };
 
 // Actions at the top of the page (PO 10/10/2026): one visible secondary action for the
@@ -1144,7 +1141,7 @@ const parsedReview = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6 pb-12">
+  <div class="w-full space-y-5 pb-12">
     <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>
     <p v-if="voucherAttemptPending" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-reservation-pending">Kết quả giữ voucher chưa rõ. Hãy mở voucher và kiểm tra lại yêu cầu cũ trước khi thanh toán; chưa thể trả bằng ví, VNPay hoặc tiền mặt.</p>
     <section v-if="voucherReconciliationRequired && !isPaid && !showPaymentModal" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
@@ -1161,7 +1158,7 @@ const parsedReview = computed(() => {
       <span class="whitespace-nowrap font-semibold text-brand-700">Xem lượt sửa</span>
     </router-link>
     <!-- Back, one visible action for this state, rare ones in the "⋯" menu -->
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-3 animate-slide-up">
       <button
         type="button"
         class="whitespace-nowrap inline-flex items-center gap-1.5 h-9 text-sm font-medium text-ink-600 hover:text-ink-900 transition-colors"
@@ -1245,7 +1242,7 @@ const parsedReview = computed(() => {
     </div>
 
     <!-- Loading: the shape of the page -->
-    <div v-if="loading" class="space-y-6" aria-busy="true" aria-label="Đang tải đơn">
+    <div v-if="loading" class="space-y-6 animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải đơn">
       <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
         <FhSkeleton width="55%" height="26px" />
         <FhSkeleton width="30%" height="16px" />
@@ -1261,19 +1258,19 @@ const parsedReview = computed(() => {
     <!-- Could not load -->
     <section
       v-else-if="loadFailed"
-      class="rounded-2xl bg-white border border-ink-200 p-6 flex flex-col items-center text-center gap-3"
+      class="rounded-2xl bg-white border border-ink-200 p-6 flex flex-col items-center text-center gap-3 animate-slide-up-delay-1"
       data-testid="order-load-error"
     >
       <p class="text-sm text-ink-700">Chưa tải được đơn, vui lòng thử lại.</p>
       <FhButton variant="secondary" size="sm" @click="loadOrder()">Thử lại</FhButton>
     </section>
 
-    <div v-else-if="order" class="flex flex-col gap-6">
+    <div v-else-if="order" class="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)] lg:items-start">
       <section
         v-if="awaitingTechnician"
         role="status"
         data-testid="order-awaiting-technician"
-        class="rounded-2xl bg-white border border-brand-200 p-4 sm:p-5 flex flex-wrap items-center gap-3"
+        class="order-0 lg:col-start-1 rounded-2xl bg-brand-50/70 border border-brand-200/70 p-4 sm:p-5 flex flex-wrap items-center gap-3 animate-slide-up-delay-1"
       >
         <div class="min-w-0 flex-[1_1_18rem]">
           <p class="font-semibold text-ink-900">{{ newTechnicianInvited ? 'Đang chờ thợ mới nhận đơn' : 'Thợ không kịp tới buổi hẹn' }}</p>
@@ -1286,11 +1283,11 @@ const parsedReview = computed(() => {
         >Chọn thợ khác</FhButton>
       </section>
       <!-- 1. Summary: what, where, when, who -->
-      <section class="order-0 rounded-2xl bg-white border border-ink-200 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5">
+      <section class="order-0 lg:col-start-1 rounded-2xl bg-white border border-ink-200/75 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
             <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
-            <p class="text-sm text-ink-500 font-num mt-1">{{ order.code }}</p>
+            <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
@@ -1302,7 +1299,7 @@ const parsedReview = computed(() => {
           </div>
         </div>
 
-        <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2 text-sm">
+        <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2.5 text-sm">
           <dt class="text-ink-500">Lịch hẹn</dt>
           <dd class="font-medium text-ink-900 font-num whitespace-nowrap">{{ vnDateTimeString(order.scheduledAt) }}</dd>
           <dt class="text-ink-500">Địa chỉ</dt>
@@ -1323,7 +1320,7 @@ const parsedReview = computed(() => {
 
         <div
           v-if="order.technician"
-          class="pt-4 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         >
           <div class="flex items-center gap-3 min-w-0">
             <div class="w-11 h-11 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-base shrink-0">
@@ -1378,7 +1375,7 @@ const parsedReview = computed(() => {
       <section
         v-if="showPayAfterCompletion"
         data-testid="pay-after-completion"
-        class="order-1 rounded-2xl bg-white border border-success-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        class="order-1 lg:col-start-1 rounded-2xl bg-success-50/50 border border-success-200/80 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs animate-slide-up-delay-2"
       >
         <div class="min-w-0 space-y-1">
           <h2 class="text-base font-semibold text-ink-900 flex items-center gap-2">
@@ -1400,17 +1397,17 @@ const parsedReview = computed(() => {
         </div>
       </section>
 
-      <p v-if="billing.mismatch" data-testid="billing-mismatch" role="alert" class="order-1 rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+      <p v-if="billing.mismatch" data-testid="billing-mismatch" role="alert" class="order-1 lg:col-start-1 rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
         Hóa đơn chưa khớp với báo giá đã duyệt. Thanh toán đang bị khóa; vui lòng liên hệ FixHome để đối chiếu linh kiện đã dùng hoặc hoàn trả.
       </p>
 
-      <p v-if="invoice && !financialReadReady" role="alert" class="order-1 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
+      <p v-if="invoice && !financialReadReady" role="alert" class="order-1 lg:col-start-1 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
         Chưa tải đủ thông tin đối chiếu thanh toán. <button type="button" class="font-semibold underline" @click="loadOrder(true)">Thử lại</button>
       </p>
       <!-- Cash: the customer confirms what they paid -->
       <section
         v-if="cashSettlement && cashSettlement.status === 'pending_confirmation'"
-        class="order-1 rounded-2xl bg-white border border-brand-200 p-5 sm:p-6 space-y-4 shadow-xs"
+        class="order-1 lg:col-start-1 rounded-2xl bg-white border border-brand-200/80 p-5 sm:p-6 space-y-4 shadow-2xs"
         data-testid="cash-confirmation"
       >
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1475,7 +1472,7 @@ const parsedReview = computed(() => {
       <!-- Additional costs waiting for the customer -->
       <section
         v-if="pendingAdditionalCosts.length > 0"
-        class="order-1 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4"
+        class="order-1 lg:col-start-1 rounded-2xl bg-white border border-ink-200/80 p-5 sm:p-6 space-y-4 shadow-2xs"
         data-testid="pending-additional-costs"
       >
         <h2 class="text-base font-semibold text-ink-900">Chi phí phát sinh chờ bạn duyệt</h2>
@@ -1545,7 +1542,7 @@ const parsedReview = computed(() => {
       <!-- 3. Review -->
       <section
         v-if="reviewPending"
-        class="order-2 rounded-2xl bg-white border border-ink-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        class="order-2 lg:col-start-1 rounded-2xl bg-white border border-ink-200/80 shadow-2xs p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         data-testid="review-prompt"
       >
         <p class="text-base font-semibold text-ink-900 flex items-center gap-2">
@@ -1559,7 +1556,7 @@ const parsedReview = computed(() => {
 
       <section
         v-else-if="isCompleted && existingReview"
-        class="order-2 rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-3 text-sm"
+        class="order-2 lg:col-start-1 rounded-2xl bg-white border border-ink-200/80 shadow-2xs p-5 sm:p-6 space-y-3 text-sm"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-base font-semibold text-ink-900">Đánh giá của bạn</h2>
@@ -1588,11 +1585,13 @@ const parsedReview = computed(() => {
         <p v-if="parsedReview.text" class="text-ink-800 text-pretty">{{ parsedReview.text }}</p>
       </section>
 
+      <!-- 4 & 5. Progress + Photos unified on one clean surface -->
+      <div class="order-3 lg:col-start-1 rounded-2xl bg-white border border-ink-200/80 overflow-hidden shadow-2xs divide-y divide-ink-100 animate-slide-up-delay-2">
       <!-- 4. Progress -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+      <section>
         <button
           type="button"
-          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
           :aria-expanded="isTimelineExpanded"
           @click="isTimelineExpanded = !isTimelineExpanded"
         >
@@ -1616,8 +1615,8 @@ const parsedReview = computed(() => {
           class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
           :class="isTimelineExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
         >
-          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
-            <div class="pt-4">
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0">
+            <div class="pt-1">
               <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
               <p v-else class="text-sm text-ink-500">Chưa có cập nhật.</p>
             </div>
@@ -1626,11 +1625,11 @@ const parsedReview = computed(() => {
       </section>
 
       <!-- 5. Photos from the technician -->
-      <section class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs">
+      <section>
         <div class="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
-            class="flex items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"
+            class="flex items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg cursor-pointer"
             :aria-expanded="isPhotosExpanded"
             @click="isPhotosExpanded = !isPhotosExpanded"
           >
@@ -1658,8 +1657,8 @@ const parsedReview = computed(() => {
               type="button"
               role="tab"
               :aria-selected="evidenceFilter === tab.key"
-              class="h-8 px-3 rounded-full text-xs sm:text-sm font-medium transition-colors shrink-0 whitespace-nowrap"
-              :class="evidenceFilter === tab.key ? 'bg-brand-600 text-white shadow-xs' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50'"
+              class="h-8 px-3 rounded-full text-xs sm:text-sm font-medium transition-colors shrink-0 whitespace-nowrap cursor-pointer"
+              :class="evidenceFilter === tab.key ? 'bg-brand-600 text-white shadow-2xs' : 'bg-ink-100/80 text-ink-600 hover:bg-ink-200/70'"
               @click="evidenceFilter = (tab.key as 'ALL' | 'BEFORE' | 'AFTER' | 'ADDITIONAL')"
             >
               {{ tab.label }}
@@ -1671,8 +1670,8 @@ const parsedReview = computed(() => {
           class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
           :class="isPhotosExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'"
         >
-          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
-            <div class="pt-4">
+          <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0">
+            <div class="pt-1">
               <p v-if="filteredEvidences.length === 0" class="text-sm text-ink-500 text-pretty">
                 <template v-if="workStopped">Công việc đã dừng. Ảnh cũ được giữ để đối chiếu.</template>
                 <template v-else-if="order.status === 'EN_ROUTE' || order.status === 'ACCEPTED'">Kỹ thuật viên sẽ chụp ảnh khi tới nơi.</template>
@@ -1685,7 +1684,7 @@ const parsedReview = computed(() => {
                   v-for="ev in filteredEvidences"
                   :key="ev.id"
                   type="button"
-                  class="text-left rounded-xl border border-ink-200 bg-white overflow-hidden hover:border-ink-300 hover:shadow-xs transition-all flex flex-col group"
+                  class="text-left rounded-xl bg-ink-50/75 overflow-hidden hover:shadow-xs transition-[box-shadow,transform] duration-200 flex flex-col group cursor-pointer"
                   :aria-label="`Phóng to ảnh ${evidenceTypeLabel(ev.type).toLowerCase()}`"
                   @click="openLightbox(ev)"
                 >
@@ -1705,8 +1704,9 @@ const parsedReview = computed(() => {
           </div>
         </div>
       </section>
+      </div>
 
-      <div v-if="deliveryPhysicalRequests.length" class="order-3 space-y-3" data-testid="customer-delivery-requests">
+      <div v-if="deliveryPhysicalRequests.length" class="order-3 lg:col-start-1 space-y-3" data-testid="customer-delivery-requests">
         <DeliveryPhysicalPreview
           v-for="request in deliveryPhysicalRequests"
           :key="request.id"
@@ -1737,10 +1737,10 @@ const parsedReview = computed(() => {
         />
       </div>
 
-      <!-- 6. Costs: one list, lines grouped, one total -->
+      <!-- 6. Costs: sticky right column on desktop, clean grouped surfaces -->
       <section
-        class="rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs text-sm"
-        :class="canDecideQuotation ? 'order-1 ring-1 ring-brand-200' : 'order-3'"
+        class="rounded-2xl bg-white border border-ink-200/80 overflow-hidden shadow-2xs text-sm lg:col-start-2 lg:row-start-1 lg:row-span-6 lg:sticky lg:top-4"
+        :class="canDecideQuotation ? 'order-1 lg:order-none ring-1 ring-brand-300/80' : 'order-3 lg:order-none'"
         data-testid="order-costs"
       >
         <button
@@ -1792,12 +1792,12 @@ const parsedReview = computed(() => {
               </p>
 
               <template v-else>
-                <div class="space-y-1">
+                <div class="rounded-xl bg-ink-50/75 p-3.5 space-y-1">
                   <div class="flex items-center justify-between gap-3 text-ink-500">
                     <h3 class="font-medium">Tiền công</h3>
                     <span class="font-num whitespace-nowrap">Tổng công: <FhMoney v-if="(shownLaborTotal) !== null" :amount="shownLaborTotal" /><span v-else>Chưa xác định</span></span>
                   </div>
-                  <ul class="divide-y divide-ink-100">
+                  <ul class="divide-y divide-ink-200/60">
                     <template v-if="laborItems.length > 0">
                       <li v-for="item in laborItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
                         <span class="min-w-0 text-ink-900">
@@ -1823,12 +1823,12 @@ const parsedReview = computed(() => {
                   </ul>
                 </div>
 
-                <div class="space-y-1">
+                <div class="rounded-xl bg-ink-50/75 p-3.5 space-y-1">
                   <div class="flex items-center justify-between gap-3 text-ink-500">
                     <h3 class="font-medium">Linh kiện</h3>
                     <span class="font-num whitespace-nowrap">Tổng linh kiện: <FhMoney v-if="(shownPartsTotal) !== null" :amount="shownPartsTotal" /><span v-else>Chưa xác định</span></span>
                   </div>
-                  <ul v-if="partsItems.length > 0" class="divide-y divide-ink-100">
+                  <ul v-if="partsItems.length > 0" class="divide-y divide-ink-200/60">
                     <li v-for="item in partsItems" :key="item.description" class="flex items-start justify-between gap-3 py-2.5">
                       <span class="min-w-0 text-ink-900">
                         {{ item.description }}
@@ -1931,7 +1931,7 @@ const parsedReview = computed(() => {
       <!-- 7. Warranty of this order -->
       <section
         v-if="isCompleted && orderWarranties.length > 0"
-        class="order-3 rounded-2xl bg-white border border-ink-200 overflow-hidden shadow-xs text-sm"
+        class="order-3 lg:col-start-1 rounded-2xl bg-white border border-ink-200/80 overflow-hidden shadow-2xs text-sm"
       >
         <button
           type="button"
@@ -2015,7 +2015,7 @@ const parsedReview = computed(() => {
       </section>
 
       <!-- 8. Complaint about this order (every status) -->
-      <div class="order-3">
+      <div class="order-3 lg:col-start-1 space-y-3">
         <CustomerContinuationPanel
           v-if="order.status === 'EN_ROUTE' || order.status === 'UNDER_REPAIR'"
           :key="`${order.id}:${order.visitGroupId ?? ''}`"

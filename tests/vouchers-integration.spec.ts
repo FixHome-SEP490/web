@@ -2,12 +2,15 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { reactive } from 'vue';
 import { routeLocationKey, routerKey } from 'vue-router';
+import { toast } from 'vue-sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../src/api/client';
 import CustomerVouchersPage from '../src/pages/customer/CustomerVouchersPage.vue';
 import ConsoleVouchersPage from '../src/pages/console/ConsoleVouchersPage.vue';
 import { useAuthStore } from '../src/stores/auth.store';
 import { UserRole } from '../src/types';
+
+vi.mock('vue-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock('../src/api/client', () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
@@ -87,11 +90,11 @@ describe('authenticated voucher pages', () => {
     await button.trigger('click');
     await button.trigger('click');
     expect(apiClient.post).toHaveBeenCalledExactlyOnceWith('/vouchers/claim', { code: 'FIXHOME15' });
-    expect(wrapper.text()).not.toContain('Đã lưu mã ưu đãi vào ví.');
+    expect(toast.success).not.toHaveBeenCalled();
     expect(button.attributes('disabled')).toBeDefined();
     resolve(response(claim));
     await flushPromises();
-    expect(wrapper.text()).toContain('Đã lưu mã ưu đãi vào ví.');
+    expect(toast.success).toHaveBeenCalledWith('Đã lưu mã ưu đãi vào ví.');
     wrapper.unmount();
   });
 

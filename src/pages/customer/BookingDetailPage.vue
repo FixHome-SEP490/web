@@ -2,7 +2,8 @@
 // src/pages/customer/BookingDetailPage.vue
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Calendar as CalendarIcon, CheckCircle2, MoreHorizontal } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import { Calendar as CalendarIcon, CheckCircle2, MapPin, MoreHorizontal } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
 import { deviceFactsText, readableScope } from '../../components/booking/booking-price';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
@@ -212,7 +213,7 @@ const confirmBookingCancel = async () => {
     applyBookingState(result);
     stopMatchingPoll();
     finishBookingCancel();
-    cancelNotice.value = 'Yêu cầu đã được huỷ.';
+    toast.success('Yêu cầu đã được huỷ.');
   } catch {
     // Network failure or an Accept race: never assume the cancellation succeeded.
     // Re-read the owner-checked Booking before offering any retry or an SO link.
@@ -221,7 +222,7 @@ const confirmBookingCancel = async () => {
       applyBookingState(fresh);
       if (fresh.status === 'CANCELLED') {
         finishBookingCancel();
-        cancelNotice.value = 'Yêu cầu đã được huỷ theo trạng thái mới nhất.';
+        toast.success('Yêu cầu đã được huỷ theo trạng thái mới nhất.');
         return;
       }
       if (!canCancelBooking.value) {
@@ -561,7 +562,7 @@ const confirmMatchingExtension = async () => {
 <template>
   <div class="max-w-2xl mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-3 animate-slide-up">
       <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
       <div v-if="booking && canCancelBooking" class="relative">
@@ -576,28 +577,37 @@ const confirmMatchingExtension = async () => {
           <MoreHorizontal :size="18" />
         </button>
         <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
-        <div
-          v-show="moreOpen"
-          role="menu"
-          class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm animate-in fade-in zoom-in-95 duration-150"
-          @keydown.esc="moreOpen = false"
+        <Transition
+          enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+          enter-from-class="opacity-0 scale-95 -translate-y-1"
+          enter-to-class="opacity-100 scale-100 translate-y-0"
+          leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+          leave-from-class="opacity-100 scale-100 translate-y-0"
+          leave-to-class="opacity-0 scale-95 -translate-y-1"
         >
-          <button
-            data-testid="booking-start-cancel"
-            type="button"
-            role="menuitem"
-            class="w-full text-left px-4 py-2.5 text-danger-600 hover:bg-danger-50 whitespace-nowrap disabled:opacity-50 transition-colors font-medium"
-            :disabled="saving || checkingOrderLink || cancelling || showExtensionModal || extending"
-            @click="moreOpen = false; openBookingCancel()"
+          <div
+            v-show="moreOpen"
+            role="menu"
+            class="absolute right-0 mt-2 w-60 origin-top-right bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+            @keydown.esc="moreOpen = false"
           >
-            Huỷ yêu cầu đặt lịch
-          </button>
-        </div>
+            <button
+              data-testid="booking-start-cancel"
+              type="button"
+              role="menuitem"
+              class="w-full text-left px-4 py-2.5 text-danger-600 hover:bg-danger-50 whitespace-nowrap disabled:opacity-50 transition-colors font-medium cursor-pointer"
+              :disabled="saving || checkingOrderLink || cancelling || showExtensionModal || extending"
+              @click="moreOpen = false; openBookingCancel()"
+            >
+              Huỷ yêu cầu đặt lịch
+            </button>
+          </div>
+        </Transition>
       </div>
     </div>
 
     <!-- Loading State Skeleton -->
-    <section v-if="loading" class="bg-white rounded-3xl border border-ink-200/90 p-6 sm:p-7 space-y-5 shadow-xs" aria-busy="true" aria-label="Đang tải yêu cầu">
+    <section v-if="loading" class="bg-white rounded-2xl border border-ink-200/85 p-5 sm:p-6 space-y-5 shadow-2xs animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải yêu cầu">
       <div class="flex justify-between items-center">
         <FhSkeleton width="55%" height="28px" />
         <FhSkeleton width="100px" height="24px" rounded="full" />
@@ -611,7 +621,7 @@ const confirmMatchingExtension = async () => {
     <!-- Load Error State -->
     <div
       v-else-if="loadError"
-      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs"
+      class="bg-white rounded-2xl border border-ink-200/85 p-8 flex flex-col items-center text-center gap-3 shadow-2xs animate-slide-up-delay-1"
       role="alert"
     >
       <div class="w-12 h-12 rounded-full bg-danger-50 text-danger-600 flex items-center justify-center">
@@ -623,132 +633,108 @@ const confirmMatchingExtension = async () => {
 
     <!-- Authoritative Booking Detail Card -->
     <template v-else-if="booking">
-      <section class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-6">
+      <section class="bg-white rounded-2xl border border-ink-200/85 shadow-2xs p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
         <!-- Service Title and Status Header -->
-        <div class="space-y-3">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance min-w-0">
-              {{ booking.serviceName }}
-            </h1>
-            <span
-              class="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-semibold whitespace-nowrap shadow-2xs"
-              :class="booking.status === 'CANCELLED'
-                ? 'bg-ink-100 text-ink-600 border border-ink-200'
-                : booking.status === 'MATCHED'
-                  ? 'bg-success-50 text-success-700 border border-success-200'
-                  : 'bg-warning-50 text-warning-800 border border-warning-200'"
-            >
-              <span
-                class="w-2 h-2 rounded-full"
-                :class="booking.status === 'CANCELLED'
-                  ? 'bg-ink-400'
-                  : booking.status === 'MATCHED'
-                    ? 'bg-success-500'
-                    : 'bg-warning-500 animate-pulse'"
-              ></span>
-              {{ statusLabel(booking.status) }}
-            </span>
-          </div>
-
-          <!-- Matching Live Radar Animation banner when waiting for tech -->
-          <div
-            v-if="booking.status === 'MATCHING' && !serviceOrderId"
-            class="p-4 rounded-2xl bg-gradient-to-r from-brand-50/70 to-warning-50/60 border border-brand-200/60 flex items-center gap-3.5 text-xs sm:text-sm text-ink-700 shadow-2xs"
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance min-w-0">
+            {{ booking.serviceName }}
+          </h1>
+          <span
+            class="inline-flex items-center h-7 px-3 rounded-full text-xs font-semibold whitespace-nowrap"
+            :class="booking.status === 'CANCELLED'
+              ? 'bg-ink-100 text-ink-600'
+              : booking.status === 'MATCHED'
+                ? 'bg-success-50 text-success-700'
+                : 'bg-warning-50 text-warning-800'"
           >
-            <div class="relative flex items-center justify-center shrink-0 w-8 h-8">
-              <span class="relative inline-flex rounded-full h-4 w-4 bg-brand-600"></span>
-            </div>
-            <div class="leading-relaxed">
-              <strong class="font-semibold text-ink-900">Đang chờ thợ xác nhận tiếp nhận đơn.</strong>
-              FixHome đã gửi thông báo đến kỹ thuật viên bạn chọn và sẽ cập nhật ngay khi thợ xác nhận.
-            </div>
-          </div>
+            {{ statusLabel(booking.status) }}
+          </span>
         </div>
 
-        <!-- Booking Key Info (Schedule & Address) -->
-        <div class="p-4 sm:p-5 rounded-2xl bg-ink-50/70 border border-ink-100 space-y-3 text-sm">
-          <div class="flex items-start gap-3">
-            <div class="w-8 h-8 rounded-xl bg-white text-ink-600 flex items-center justify-center shrink-0 shadow-2xs border border-ink-200/60">
-              <CalendarIcon :size="16" />
-            </div>
+        <!-- Unified Booking Key Info & Request Summary -->
+        <div class="rounded-xl bg-ink-50/80 p-4 space-y-3 text-sm">
+          <div class="flex items-start gap-2.5">
+            <CalendarIcon :size="16" class="shrink-0 mt-0.5 text-ink-400" />
             <div class="min-w-0 flex-1">
-              <span class="text-xs text-ink-500 font-medium">Lịch hẹn</span>
+              <span class="text-xs text-ink-500">Lịch hẹn</span>
               <p class="font-semibold text-ink-900 mt-0.5" data-testid="booking-current-session">
                 {{ currentSchedule }}
               </p>
             </div>
           </div>
 
-          <div class="flex items-start gap-3 pt-2 border-t border-ink-200/60">
-            <div class="w-8 h-8 rounded-xl bg-white text-ink-600 flex items-center justify-center shrink-0 shadow-2xs border border-ink-200/60">
-              <span class="text-xs font-bold">📍</span>
-            </div>
+          <div class="flex items-start gap-2.5 pt-2.5 border-t border-ink-200/60">
+            <MapPin :size="16" class="shrink-0 mt-0.5 text-ink-400" />
             <div class="min-w-0 flex-1">
-              <span class="text-xs text-ink-500 font-medium">Địa chỉ phục vụ</span>
+              <span class="text-xs text-ink-500">Địa chỉ phục vụ</span>
               <p class="text-ink-800 text-pretty mt-0.5 font-medium">
                 {{ booking.addressSummary }}
               </p>
             </div>
           </div>
+
+          <dl
+            v-if="requestDevice || requestPrice"
+            class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 pt-2.5 border-t border-ink-200/60 text-sm"
+            data-testid="booking-request-summary"
+          >
+            <template v-if="requestDevice">
+              <dt class="text-ink-500">Thiết bị</dt>
+              <dd class="font-medium text-ink-900" data-testid="booking-request-device">{{ requestDevice }}</dd>
+            </template>
+            <template v-if="requestPrice">
+              <dt class="text-ink-500">Tiền công</dt>
+              <dd class="text-ink-900" data-testid="booking-request-price">
+                <span v-if="requestPrice.kind === 'firm'" class="font-semibold font-num"><FhMoney :amount="requestPrice.amount" /></span>
+                <span v-else-if="requestPrice.kind === 'range'" class="font-semibold font-num"><FhMoney :amount="requestPrice.min" /> – <FhMoney :amount="requestPrice.max" /></span>
+                <span v-else>Thợ báo giá tại nhà</span>
+                <span class="block text-xs text-ink-500">{{ requestPrice.kind === 'firm' ? 'Chưa gồm linh kiện, vật tư' : 'Thợ báo giá để bạn duyệt trước khi sửa' }}</span>
+              </dd>
+            </template>
+          </dl>
         </div>
 
-        <!-- What was asked for: device, labour price, the customer's words. -->
-        <dl
-          v-if="requestDevice || requestPrice"
-          class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 rounded-2xl border border-ink-200 p-4 text-sm sm:p-5"
-          data-testid="booking-request-summary"
-        >
-          <template v-if="requestDevice">
-            <dt class="text-ink-500">Thiết bị</dt>
-            <dd class="font-medium text-ink-900" data-testid="booking-request-device">{{ requestDevice }}</dd>
-          </template>
-          <template v-if="requestPrice">
-            <dt class="text-ink-500">Tiền công</dt>
-            <dd class="text-ink-900" data-testid="booking-request-price">
-              <span v-if="requestPrice.kind === 'firm'" class="font-semibold font-num"><FhMoney :amount="requestPrice.amount" /></span>
-              <span v-else-if="requestPrice.kind === 'range'" class="font-semibold font-num"><FhMoney :amount="requestPrice.min" /> – <FhMoney :amount="requestPrice.max" /></span>
-              <span v-else>Thợ báo giá tại nhà</span>
-              <span class="block text-xs text-ink-500">{{ requestPrice.kind === 'firm' ? 'Chưa gồm linh kiện, vật tư' : 'Thợ báo giá để bạn duyệt trước khi sửa' }}</span>
-            </dd>
-          </template>
-        </dl>
-
         <!-- Customer note if present -->
-        <div v-if="booking.customerNote" class="rounded-2xl border border-warning-200/80 bg-warning-50/70 p-3.5 text-xs sm:text-sm text-warning-900 text-pretty flex items-start gap-2.5">
-          <span>Ghi chú cho thợ: {{ booking.customerNote }}</span>
+        <div v-if="booking.customerNote" class="rounded-xl border border-warning-200/80 bg-warning-50/70 px-3.5 py-2.5 text-xs sm:text-sm text-warning-900 text-pretty">
+          Ghi chú cho thợ: {{ booking.customerNote }}
         </div>
 
         <!-- Status / Flow notices -->
-        <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ cancelNotice }}
-        </p>
-        <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ extensionNotice }}
-        </p>
-        <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-3.5 text-sm font-medium text-danger-800 animate-in fade-in">
-          {{ extensionError }}
-        </p>
-        <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ scheduleNotice }}
-        </p>
-        <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-2xl border border-success-200 bg-success-50 p-3.5 text-sm font-medium text-success-800 animate-in fade-in">
-          {{ rebookedNotice }}
-        </p>
+        <div
+          v-if="cancelNotice || extensionNotice || extensionError || scheduleNotice || rebookedNotice"
+          class="space-y-2"
+        >
+          <p v-if="cancelNotice" data-testid="booking-cancel-notice" role="status" class="rounded-xl border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-sm font-medium text-warning-900">
+            {{ cancelNotice }}
+          </p>
+          <p v-if="extensionNotice" data-testid="matching-extension-notice" role="status" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ extensionNotice }}
+          </p>
+          <p v-if="extensionError" data-testid="matching-extension-error" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-sm font-medium text-danger-800">
+            {{ extensionError }}
+          </p>
+          <p v-if="scheduleNotice" role="status" data-testid="booking-schedule-notice" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ scheduleNotice }}
+          </p>
+          <p v-if="rebookedNotice" role="status" data-testid="booking-rebooked-notice" class="rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-sm font-medium text-success-800">
+            {{ rebookedNotice }}
+          </p>
+        </div>
 
         <!-- Primary Action Blocks -->
         <!-- Case 1: Service Order Created -->
-        <div v-if="serviceOrderId" class="pt-5 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-200/60">
+        <div v-if="serviceOrderId" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-success-50/60 p-4 rounded-xl border border-success-200/80">
           <div>
-            <p class="font-bold text-emerald-900 text-sm">Kỹ thuật viên đã nhận đơn!</p>
-            <p class="text-xs sm:text-sm text-emerald-700 mt-0.5">Đơn sửa chữa đã được khởi tạo, bạn có thể theo dõi tiến độ sửa ngay.</p>
+            <p class="font-semibold text-ink-900 text-sm">Kỹ thuật viên đã nhận đơn!</p>
+            <p class="text-xs sm:text-sm text-ink-600 mt-0.5">Đơn sửa chữa đã được khởi tạo, bạn có thể theo dõi tiến độ sửa ngay.</p>
           </div>
-          <FhButton data-testid="booking-open-service-order" variant="primary" size="md" class="shrink-0 shadow-xs" @click="openServiceOrder">
+          <FhButton data-testid="booking-open-service-order" variant="primary" size="md" class="shrink-0" @click="openServiceOrder">
             Mở đơn sửa chữa
           </FhButton>
         </div>
 
         <!-- Case 2: Shortlist Needed -->
-        <div v-else-if="canChooseTechnicians" class="pt-5 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-200/60">
+        <div v-else-if="canChooseTechnicians" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-warning-50/60 p-4 rounded-xl border border-warning-200/80">
           <p class="text-xs sm:text-sm text-ink-700 text-pretty min-w-0 flex-1 leading-relaxed">
             Chọn 2 kỹ thuật viên theo thứ tự ưu tiên để gửi lại lời mời cho buổi này.
           </p>
@@ -756,7 +742,7 @@ const confirmMatchingExtension = async () => {
             data-testid="booking-choose-technicians"
             variant="primary"
             size="md"
-            class="shrink-0 shadow-xs"
+            class="shrink-0"
             :disabled="saving || cancelling || checkingOrderLink || showCancelModal || showExtensionModal || extending"
             @click="chooseTechnicians"
           >
@@ -764,38 +750,57 @@ const confirmMatchingExtension = async () => {
           </FhButton>
         </div>
 
-        <!-- Case 3: Matching in progress -->
-        <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="pt-5 border-t border-ink-100 space-y-3">
-          <div class="p-4 sm:p-5 rounded-2xl bg-brand-50/50 border border-brand-100 flex flex-col sm:flex-row items-center gap-4">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
-              <img
-                :src="'/images/ui/booking-technician-match.png'"
-                alt="Đang kết nối thợ"
-                class="w-full h-full object-contain drop-shadow-sm select-none pointer-events-none"
-                loading="lazy"
-              />
+        <!-- Case 3: Matching in progress (single unified panel, including extension option when eligible) -->
+        <div v-else-if="['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" class="space-y-2.5">
+          <div class="rounded-xl bg-ink-50/90 border border-ink-200/80 overflow-hidden">
+            <div class="p-4 flex flex-col sm:flex-row items-center gap-4">
+              <div class="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center">
+                <img
+                  :src="'/images/ui/booking-technician-match.png'"
+                  alt="Đang kết nối thợ"
+                  class="w-full h-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="flex-1 min-w-0 text-center sm:text-left space-y-1">
+                <h4 class="text-sm sm:text-base font-semibold text-ink-900">
+                  {{ booking.status === 'MATCHING' ? 'Đang chờ thợ xác nhận tiếp nhận đơn' : 'Đang kết nối kỹ thuật viên phù hợp' }}
+                </h4>
+                <p class="text-xs sm:text-sm text-ink-600 leading-relaxed">
+                  FixHome sẽ cập nhật ngay khi kỹ thuật viên xác nhận và kích hoạt đơn sửa chữa tại đây.
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="booking-refresh-order-link"
+                class="h-9 px-3.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-xs sm:text-sm font-semibold text-brand-700 whitespace-nowrap disabled:opacity-50 transition-colors cursor-pointer"
+                :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
+                @click="refreshOrderLink"
+              >
+                {{ checkingOrderLink ? 'Đang kiểm tra…' : 'Kiểm tra lại' }}
+              </button>
             </div>
-            <div class="flex-1 min-w-0 text-center sm:text-left space-y-1">
-              <h4 class="text-sm sm:text-base font-bold text-ink-900">Đang kết nối kỹ thuật viên phù hợp</h4>
-              <p class="text-xs sm:text-sm text-ink-600 leading-relaxed">
-                Khi kỹ thuật viên nhận việc, đơn sửa chữa sẽ được kích hoạt ngay và hiển thị tại đây.
+            <div v-if="canExtendMatching" data-testid="matching-extension-card" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t border-ink-200/70 bg-white/60">
+              <p class="text-xs sm:text-sm text-ink-700 text-pretty min-w-0 flex-1 leading-relaxed">
+                Lời mời đang chờ hết hạn lúc <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ formatServerDate(currentInvitationExpiry) }}</span>. Bạn có thể gia hạn 1 lần.
               </p>
+              <FhButton
+                data-testid="booking-start-matching-extension"
+                variant="secondary"
+                size="sm"
+                class="shrink-0"
+                :disabled="saving || cancelling || checkingOrderLink || showExtensionModal || extending"
+                @click="openMatchingExtension"
+              >
+                {{ extending ? 'Đang gửi…' : 'Gia hạn chờ thợ' }}
+              </FhButton>
             </div>
-            <button
-              type="button"
-              data-testid="booking-refresh-order-link"
-              class="h-9 px-3.5 rounded-xl border border-brand-200 bg-white hover:bg-brand-50 text-xs sm:text-sm font-semibold text-brand-700 hover:text-brand-800 whitespace-nowrap shadow-2xs disabled:opacity-50 transition-colors"
-              :disabled="checkingOrderLink || saving || cancelling || showExtensionModal || extending"
-              @click="refreshOrderLink"
-            >
-              {{ checkingOrderLink ? 'Đang kiểm tra…' : 'Kiểm tra lại' }}
-            </button>
           </div>
           <p v-if="orderLinkError" data-testid="booking-link-error" role="alert" class="text-xs sm:text-sm text-danger-700 font-medium">{{ orderLinkError }}</p>
         </div>
 
-        <!-- Case 4: Can extend matching window -->
-        <div v-if="canExtendMatching" data-testid="matching-extension-card" class="pt-4 border-t border-ink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200/60">
+        <!-- Case 4: Fallback if extension window eligible outside Case 3 -->
+        <div v-if="canExtendMatching && !['SUBMITTED', 'MATCHING', 'MATCHED'].includes(booking.status)" data-testid="matching-extension-card" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-ink-50/80 border border-ink-200/80">
           <p class="text-xs sm:text-sm text-ink-700 text-pretty min-w-0 flex-1 leading-relaxed">
             Lời mời đang chờ hết hạn lúc <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ formatServerDate(currentInvitationExpiry) }}</span>. Bạn có thể gia hạn 1 lần.
           </p>
@@ -803,7 +808,7 @@ const confirmMatchingExtension = async () => {
             data-testid="booking-start-matching-extension"
             variant="secondary"
             size="sm"
-            class="shrink-0 shadow-2xs"
+            class="shrink-0"
             :disabled="saving || cancelling || checkingOrderLink || showExtensionModal || extending"
             @click="openMatchingExtension"
           >
@@ -812,17 +817,15 @@ const confirmMatchingExtension = async () => {
         </div>
 
         <!-- Case 5: Cancelled Rebook action -->
-        <div v-if="booking.status === 'CANCELLED' && booking.serviceOrderId" class="pt-4 border-t border-ink-100">
+        <div v-if="booking.status === 'CANCELLED' && booking.serviceOrderId" class="pt-3 border-t border-ink-100">
           <CustomerCancelledRebookAction :booking-id="booking.id" :order-id="booking.serviceOrderId" :status="booking.status" @legacy="showRebook = true" />
         </div>
       </section>
 
       <!-- Attached Photos Viewer -->
-      <!-- "Mô tả" (PO 21/10/2026): the customer's own words, then their photos, in one card like the
-           others. Nothing written and nothing sent: no card, never a line made up from the service name. -->
       <section
         v-if="booking.description?.trim() || bookingMedia.length"
-        class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-4"
+        class="bg-white rounded-2xl border border-ink-200/85 shadow-2xs p-5 sm:p-6 space-y-4"
         aria-labelledby="booking-description-title"
         data-testid="booking-description-card"
       >
@@ -832,7 +835,7 @@ const confirmMatchingExtension = async () => {
       </section>
 
       <!-- Reschedule & Request Editing Section -->
-      <section v-if="canReschedule" class="bg-white rounded-3xl border border-ink-200/90 shadow-xs p-6 sm:p-7 space-y-5">
+      <section v-if="canReschedule" class="bg-white rounded-2xl border border-ink-200/85 shadow-2xs p-5 sm:p-6 space-y-5 animate-slide-up-delay-2">
         <h2 class="text-base sm:text-lg font-bold text-ink-900">Điều chỉnh yêu cầu</h2>
 
         <div v-if="editable" class="space-y-1.5">
@@ -841,7 +844,7 @@ const confirmMatchingExtension = async () => {
             id="booking-description"
             v-model="description"
             rows="3"
-            class="w-full p-3.5 bg-white border border-ink-200 rounded-xl text-base sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20 transition-all leading-relaxed"
+            class="w-full p-3.5 bg-white border border-ink-200 rounded-xl text-base sm:text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] leading-relaxed"
             placeholder="Mô tả chi tiết tình trạng để thợ nắm rõ"
           ></textarea>
         </div>

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
-import { FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
+import { ConsoleTabs, FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
 } from '../../components/technician/TechnicianWarrantyActionModal.vue';
@@ -135,7 +135,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <div class="flex items-center justify-between gap-3">
+    <div class="animate-slide-up flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
         <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
@@ -143,14 +143,16 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
       </FhButton>
     </div>
 
-    <p
-      v-if="notice"
-      :role="notice.type === 'success' ? 'status' : 'alert'"
-      class="p-3.5 rounded-xl text-sm border"
-      :class="notice.type === 'success' ? 'bg-success-50 border-success-200 text-success-800' : 'bg-danger-50 border-danger-200 text-danger-700'"
-    >
-      {{ notice.text }}
-    </p>
+    <Transition name="fh-fade-slide">
+      <p
+        v-if="notice"
+        :role="notice.type === 'success' ? 'status' : 'alert'"
+        class="p-3.5 rounded-xl text-sm border"
+        :class="notice.type === 'success' ? 'bg-success-50 border-success-200 text-success-800' : 'bg-danger-50 border-danger-200 text-danger-700'"
+      >
+        {{ notice.text }}
+      </p>
+    </Transition>
 
     <div v-if="loading" class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100" aria-busy="true" aria-label="Đang tải yêu cầu bảo hành">
       <div v-for="i in 2" :key="i" class="p-5 sm:p-6 space-y-3">
@@ -178,38 +180,31 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
     />
 
     <template v-else>
-      <!-- Filter pills, same look as the jobs page -->
-      <div class="bg-ink-100 rounded-full p-1.5 flex items-center gap-1 overflow-x-auto select-none text-sm font-semibold" role="tablist" aria-label="Lọc yêu cầu bảo hành">
-        <button
-          v-for="tab in tabs"
-          :key="tab.key"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === tab.key"
-          :data-testid="`warranty-tab-${tab.key}`"
-          class="h-10 px-4 rounded-full transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer"
-          :class="[focusRing, activeTab === tab.key ? 'bg-white shadow-xs font-bold text-ink-900' : 'font-medium text-ink-600 hover:text-ink-900']"
-          @click="activeTab = tab.key"
-        >
-          <span>{{ tab.label }}</span>
-          <span
-            v-if="tab.key === 'all' || tab.count > 0"
-            class="min-w-5 h-5 px-1.5 rounded-full text-xs font-num inline-flex items-center justify-center"
-            :class="activeTab === tab.key ? 'bg-ink-100 text-ink-900' : 'bg-white/80 text-ink-600'"
-          >{{ tab.count }}</span>
-        </button>
-      </div>
+      <!-- Filter pills with sliding active pill -->
+      <ConsoleTabs
+        v-model="activeTab"
+        variant="pill"
+        aria-label="Lọc yêu cầu bảo hành"
+        class="animate-slide-up-delay-1"
+        :tabs="tabs.map((tab) => ({
+          key: tab.key,
+          label: tab.label,
+          count: tab.key === 'all' || tab.count > 0 ? tab.count : null,
+          testId: `warranty-tab-${tab.key}`,
+        }))"
+      />
 
-      <p v-if="!rows.length" class="text-center py-10 px-6 bg-white rounded-2xl border border-ink-200 text-sm text-ink-500">
+      <p v-if="!rows.length" class="animate-slide-up-delay-2 text-center py-10 px-6 bg-white rounded-2xl border border-ink-200 text-sm text-ink-500">
         Không có yêu cầu bảo hành ở mục này.
       </p>
 
       <!-- One surface, one row per claim -->
-      <ul v-else class="bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden">
+      <ul v-else class="animate-slide-up-delay-2 bg-white rounded-2xl border border-ink-200 divide-y divide-ink-100 overflow-hidden shadow-2xs">
         <li
-          v-for="claim in rows"
+          v-for="(claim, idx) in rows"
           :key="claim.id"
-          class="p-5 sm:p-6 hover:bg-ink-25 transition-colors cursor-pointer text-sm"
+          class="animate-slide-up p-5 sm:p-6 hover:bg-ink-25/80 transition-colors cursor-pointer text-sm"
+          :style="{ animationDelay: `${Math.min(idx, 5) * 35}ms` }"
           :data-testid="`warranty-claim-${claim.id}`"
           @click="openDetail(claim)"
         >
@@ -217,7 +212,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
             <div class="flex-1 min-w-0 space-y-3">
               <div class="space-y-1.5">
                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <span class="font-num text-ink-500 whitespace-nowrap">#{{ claim.order.code }}</span>
+                  <span class="font-num font-semibold text-ink-600 whitespace-nowrap">#{{ claim.order.code }}</span>
                   <span
                     class="inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] text-xs font-medium whitespace-nowrap"
                     :class="warrantyClaimToneClasses[meta(claim).tone]"
@@ -238,8 +233,8 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                   <span class="text-pretty">{{ claim.order.addressSummary }}</span>
                 </p>
               </div>
-              <!-- What the customer reported, set apart from the address above -->
-              <div class="border-l-2 border-ink-200 pl-3">
+              <!-- What the customer reported, set apart cleanly without thick left border -->
+              <div class="rounded-xl bg-ink-50/80 border border-ink-200/70 px-3.5 py-2.5">
                 <p class="text-xs font-medium text-ink-500">Khách mô tả</p>
                 <p class="mt-0.5 line-clamp-2 text-ink-800 text-pretty">{{ claim.description }}</p>
               </div>
