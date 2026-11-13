@@ -32,6 +32,14 @@ describe('partsCompletionBlockers', () => {
     expect(partsCompletionBlockers(quote(1), [cost], [request('pre_repair', 1), own('received')], new Map([['pre_repair-item', 1], ['additional-item', 1]]))).toEqual([]);
   });
 
+  it('treats a W3 delivery the technician received as received, then asks for its usage (13/11)', () => {
+    const cost = { id: 'cost', items: [line(1)] };
+    const w3 = (stage: string, usage = 'used') => request('additional', 1, { additionalCostId: 'cost', status: stage === 'TECHNICIAN_RECEIVED' ? 'received' : 'requested', receivedAt: null, w3DeliveryStage: stage }, usage);
+    expect(partsCompletionBlockers(quote(1), [cost], [request('pre_repair', 1), w3('DISPATCH_RECORDED')], new Map([['pre_repair-item', 1]]))).toEqual([ADDITIONAL_NOT_RECEIVED]);
+    expect(partsCompletionBlockers(quote(1), [cost], [request('pre_repair', 1), w3('TECHNICIAN_RECEIVED', 'pending')], new Map([['pre_repair-item', 1]]))).toEqual([ADDITIONAL_NOT_RECORDED]);
+    expect(partsCompletionBlockers(quote(1), [cost], [request('pre_repair', 1), w3('TECHNICIAN_RECEIVED')], new Map([['pre_repair-item', 1], ['additional-item', 1]]))).toEqual([]);
+  });
+
   it('flags units that no approval covers', () => {
     expect(partsCompletionBlockers(quote(1), [], [request('pre_repair', 1)], new Map([['pre_repair-item', 1]]))).toEqual([]);
     expect(partsCompletionBlockers(null, [], [request('pre_repair', 1)], new Map([['pre_repair-item', 1]]))).toEqual([PARTS_MISMATCH]);

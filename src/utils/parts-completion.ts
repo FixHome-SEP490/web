@@ -62,7 +62,10 @@ export function partsCompletionBlockers(
     for (const line of lines) if (line.partCatalogId) add(approved, line.partCatalogId, line.quantity);
     const own = requests.filter((request) => request.requestType === 'additional' && request.additionalCostId === cost.id && request.status !== 'cancelled');
     if (own.length) {
-      if (own.some((request) => !settled(request) || !request.receivedAt)) {
+      // A W3 delivery request keeps status 'requested' and no receivedAt by design; the technician
+      // has it once its W3 stage is TECHNICIAN_RECEIVED (found 13/11: completion stayed blocked).
+      const w3Received = (request: PartRequest) => request.w3DeliveryStage === 'TECHNICIAN_RECEIVED';
+      if (own.some((request) => !w3Received(request) && (!settled(request) || !request.receivedAt))) {
         // Still on its way: the QR handover is what is missing, not a quantity.
         blockers.push(ADDITIONAL_NOT_RECEIVED);
         continue;
