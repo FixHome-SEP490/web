@@ -34,6 +34,18 @@ describe('W3 delivery operations panel', () => {
     wrapper.unmount();
   });
 
+  it('shows a delivered request as done, not as changed source data (13/11)', async () => {
+    signIn(UserRole.CUSTOMER, 'owner-a');
+    vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection({ invalidated: true,
+      customerConsented: true, technicianConsented: true,
+      physical: { status: 'TECHNICIAN_RECEIVED', reason: null, warehouseId: null, responsibleUserId: null, quantities: [], version: 4, courierReference: null, evidence: [] } }) as never);
+    const wrapper = mount(DeliveryOperationsPanel, { props });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="delivery-operations-done"]').text()).toContain('Đã giao xong');
+    expect(wrapper.text()).not.toContain('Dữ liệu nguồn đã thay đổi');
+    wrapper.unmount();
+  });
+
   it('offers customer consent only for the exact zero-fee quote from a real delivery request', async () => {
     signIn(UserRole.CUSTOMER, 'owner-a');
     vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection());
