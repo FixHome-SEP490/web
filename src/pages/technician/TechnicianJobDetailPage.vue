@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
+import TechnicianPrivateNote from '../../components/technician/TechnicianPrivateNote.vue';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import TechnicianJobStepper from '../../components/technician/TechnicianJobStepper.vue';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
@@ -83,6 +85,8 @@ import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { chatSocketService, type NotificationNewEvent } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { useQuotationPartsSourcing } from '../../composables/useQuotationPartsSourcing';
+import QuotationPartsSourcingNote from '../../components/QuotationPartsSourcingNote.vue';
 import { technicianApprovedParts, technicianPreRepairLabel } from '../../utils/technician-workflow';
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
 import { partsCompletionBlockers } from '../../utils/parts-completion';
@@ -399,6 +403,8 @@ const retryQuoteStock = async () => {
 // Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
 const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
+// F3 (TECH 66): the customer cannot approve a quote whose FixHome parts no warehouse holds; show the way out.
+const { sourcing: quoteSourcing, checking: quoteSourcingChecking, refresh: refreshQuoteSourcing } = useQuotationPartsSourcing(() => job.value?.quotation);
 const quoteEditorDismissed = ref(false);
 
 // Additional cost (chi phí phát sinh)
@@ -2076,6 +2082,13 @@ function costLineLabel(item: { type: string; description: string; quantity: numb
 }
 const quotationStatusLabel = computed(() => ({ approved: 'Khách đã duyệt', accepted: 'Khách đã duyệt', sent: 'Chờ khách duyệt', pending: 'Chờ khách duyệt', rejected: 'Khách từ chối', superseded: 'Đã thay bằng bản mới', draft: 'Bản nháp' } as Record<string, string>)[String(job.value?.quotation?.status ?? '').toLowerCase()] ?? '');
 const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
+// W-17: a paid W3 delivery puts the shipping fee on the invoice, split customer / technician.
+const invoiceShipping = computed(() => {
+  const fee = Number(jobInvoice.value?.shippingFee ?? 0);
+  if (!jobInvoice.value || !Number.isFinite(fee) || fee <= 0) return null;
+  const share = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+  return { fee, customer: share(jobInvoice.value.customerShippingShare), technician: share(jobInvoice.value.technicianShippingShare) };
+});
 const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
   : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
 const proposedParts = computed(() => [
@@ -2898,7 +2911,8 @@ const toggleMore = async () => {
       </section>
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
-      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 order-2 min-w-0 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-2xl border border-ink-200/90 bg-white p-5 text-sm space-y-3.5 shadow-2xs">
+      <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-4 space-y-4">
+      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 rounded-2xl border border-ink-200/90 bg-white p-5 text-sm space-y-3.5 shadow-2xs">
         <div class="flex items-center justify-between gap-2">
           <h2 class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
         </div>
@@ -2926,6 +2940,16 @@ const toggleMore = async () => {
                 <span v-else class="font-normal text-ink-500">Chưa xác định</span>
               </dd>
             </div>
+            <template v-if="invoiceShipping">
+              <div class="min-w-0">
+                <dt class="text-ink-500">Phí giao (khách trả)</dt>
+                <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900"><FhMoney :amount="invoiceShipping.customer ?? invoiceShipping.fee" /></dd>
+              </div>
+              <div v-if="invoiceShipping.technician" class="min-w-0">
+                <dt class="text-ink-500">Phí giao (bạn chịu)</dt>
+                <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900"><FhMoney :amount="invoiceShipping.technician" /></dd>
+              </div>
+            </template>
           </dl>
         </div>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
@@ -2965,7 +2989,7 @@ const toggleMore = async () => {
           <h3 class="font-medium text-ink-800">Đã cấp và thực tế đã dùng</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="request in receivedRequests" :key="request.id">
-              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
+              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' } as Record<string, string>)[displayPartRequestStatus(request)] }}
               <ul class="pl-3"><li v-for="item in request.items" :key="item.id">
                 {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
                 <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>
@@ -2986,11 +3010,13 @@ const toggleMore = async () => {
         </div>
         </details>
       </section>
+      <TechnicianPrivateNote :order-id="jobIdRef" class="animate-slide-up-delay-1" />
+      </aside>
 
       <!-- Result of the last action -->
       <div
         v-if="actionMessage"
-        class="px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
+        class="lg:col-start-1 px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
         :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-700 border-danger-200'"
         :role="actionMessage.type === 'success' ? 'status' : 'alert'"
       >
@@ -3003,7 +3029,7 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
+      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="lg:col-start-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
         <p class="font-semibold">{{ !partsReturnsKnown ? 'Chưa xác nhận được tình trạng hoàn trả linh kiện.' : returnsToDeclare > 0 ? `Còn ${returnsToDeclare} linh kiện cần trả kho` : `${returnsAwaitingManager} linh kiện đã khai, chờ Quản lý Dịch vụ xác nhận` }}</p>
         <p v-if="partsReturnsKnown && returnsToDeclare > 0 && returnsAwaitingManager > 0">{{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế.</p>
         <p v-else-if="!partsReturnsKnown && pendingPartsReturns > 0">Đã ghi nhận {{ pendingPartsReturns }} linh kiện còn nghĩa vụ trả kho.</p>
@@ -3149,6 +3175,10 @@ const toggleMore = async () => {
         >
           Gửi lại báo giá khác
         </button>
+        <QuotationPartsSourcingNote
+          v-if="currentStepNumber === 3 && !skipsQuote && quotationSubmitted && !quotationRejected && !showQuotationForm"
+          class="mt-3" :sourcing="quoteSourcing" audience="technician" :checking="quoteSourcingChecking" @recheck="refreshQuoteSourcing"
+        />
 
         <!-- Display-only historical gross; actual payment remains server-authoritative. -->
         <section
@@ -3903,14 +3933,16 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- Reports already sent; the form opens from the "Thêm" menu -->
-      <OrderComplaintPanel
-        ref="complaintPanel"
-        :order-id="job.id"
-        :order-status="workStopped ? 'CANCELLED' : job.status"
-        :completed-at="job.completedAt"
-        role="technician"
-        inline
-      />
+      <div class="order-5 lg:col-start-1">
+        <OrderComplaintPanel
+          ref="complaintPanel"
+          :order-id="job.id"
+          :order-status="workStopped ? 'CANCELLED' : job.status"
+          :completed-at="job.completedAt"
+          role="technician"
+          inline
+        />
+      </div>
       </div>
     </template>
 

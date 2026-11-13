@@ -45,42 +45,22 @@ describe('Replacement panel for the Service Manager', () => {
     replacementOptions.mockResolvedValue(options());
   });
 
-  it('loads authoritative preflight and never offers the current technician', async () => {
+  it('never offers to pick or swap a technician, even when the server would allow it (PO 12/11/2026)', async () => {
     const wrapper = await mountPanel();
     expect(replacementOptions).toHaveBeenCalledWith('case-1');
-    expect(getCandidates).toHaveBeenCalledWith('booking-1');
-    expect(wrapper.find('[data-testid="replacement-candidate-tech-old"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="replacement-candidate-tech-new"]').text()).toContain('Thợ Mới');
+    expect(getCandidates).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="replacement-action-DIRECT_REASSIGN_SOLO"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid^="replacement-candidate-"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Đổi thợ');
     expect(wrapper.text()).toContain('Hóa đơn: Không');
-    wrapper.unmount();
-  });
-
-  it('requires the candidate, reason, and explicit confirmation before one atomic command', async () => {
-    resolveInterruption.mockResolvedValue(commandResult);
-    const wrapper = await mountPanel();
-    await wrapper.get('[data-testid="replacement-action-DIRECT_REASSIGN_SOLO"]').trigger('click');
-    expect(wrapper.find('[data-testid="replacement-confirm-dialog"]').exists()).toBe(false);
-    await wrapper.get('[data-testid="replacement-candidate-tech-new"] input').setValue(true);
-    await wrapper.get('[data-testid="replacement-reason"]').setValue('Máy công nghiệp, cần thợ có kinh nghiệm');
-    await wrapper.get('[data-testid="replacement-action-DIRECT_REASSIGN_SOLO"]').trigger('click');
-    expect(wrapper.get('[data-testid="replacement-confirm-dialog"]').text()).toContain('thợ mới cần check-in');
-    expect(resolveInterruption).not.toHaveBeenCalled();
-    await wrapper.get('[data-testid="replacement-confirm"]').trigger('click');
-    await flushPromises();
-    expect(resolveInterruption).toHaveBeenCalledWith('case-1', expect.objectContaining({
-      expectedCaseVersion: 2, action: 'DIRECT_REASSIGN_SOLO', technicianId: 'tech-new',
-      reason: 'Máy công nghiệp, cần thợ có kinh nghiệm', commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
-    }));
-    expect(wrapper.emitted('done')?.[0]?.[0]).toContain('đã được cập nhật');
     wrapper.unmount();
   });
 
   it('retries an unknown command with the exact same idempotency key and body', async () => {
     resolveInterruption.mockRejectedValueOnce(new Error('network unavailable')).mockResolvedValueOnce(commandResult);
     const wrapper = await mountPanel();
-    await wrapper.get('[data-testid="replacement-candidate-tech-new"] input').setValue(true);
-    await wrapper.get('[data-testid="replacement-reason"]').setValue('Máy công nghiệp, cần thợ có kinh nghiệm');
-    await wrapper.get('[data-testid="replacement-action-DIRECT_REASSIGN_SOLO"]').trigger('click');
+    await wrapper.get('[data-testid="replacement-reason"]').setValue('Khách muốn đặt lại lịch khác');
+    await wrapper.get('[data-testid="replacement-action-CLOSE_FOR_REBOOK"]').trigger('click');
     await wrapper.get('[data-testid="replacement-confirm"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toContain('Chưa xác nhận');
@@ -88,6 +68,7 @@ describe('Replacement panel for the Service Manager', () => {
     await flushPromises();
     expect(resolveInterruption).toHaveBeenCalledTimes(2);
     expect(resolveInterruption.mock.calls[1]).toEqual(resolveInterruption.mock.calls[0]);
+    expect(resolveInterruption.mock.calls[0][1]).not.toHaveProperty('technicianId');
     wrapper.unmount();
   });
 
@@ -103,7 +84,7 @@ describe('Replacement panel for the Service Manager', () => {
     wrapper.unmount();
   });
 
-  it('shows server preflight blockers without offering direct reassignment', async () => {
+  it('shows server preflight blockers', async () => {
     replacementOptions.mockResolvedValueOnce(options({
       flags: { approvedQuote: true, invoice: true, payment: false, voucher: false, parts: true, incompleteSiblings: true },
       actions: {

@@ -23,6 +23,11 @@ const reasonLabels = {
   SHIPPING_APPROVAL_SOURCE_UNVERIFIED: 'Chưa xác minh được phê duyệt phí giao. Cần quản lý dịch vụ hỗ trợ.',
 } as const;
 const steps = ['Giữ linh kiện tại kho', 'Xuất linh kiện cho đơn vị giao hàng', 'Giao linh kiện', 'Xác nhận kỹ thuật viên nhận'];
+// W-16: on the paid path the server reports the recorded step; each step up to it is done.
+const STEP_REACHED: Record<string, number> = { RESERVED: 1, ISSUED_TO_COURIER: 2, DISPATCH_RECORDED: 3, TECHNICIAN_RECEIVED: 4 };
+const progress = computed(() => preview.value?.progress ?? null);
+const reached = computed(() => STEP_REACHED[progress.value?.status ?? ''] ?? 0);
+const money = (value: number | null) => (value === null ? 'Chưa xác định' : `${value.toLocaleString('vi-VN')} ₫`);
 async function load() {
   const current = ++generation;
   preview.value = null;
@@ -61,13 +66,25 @@ onUnmounted(() => { generation++; });
       </template>
       <p v-else-if="state === 'unavailable'">Chưa có thông tin giao linh kiện khả dụng. Vui lòng kiểm tra lại sau.</p>
       <p v-else-if="state === 'forbidden'">Bạn không có quyền xem nội dung này.</p>
+      <template v-else-if="preview && progress">
+        <p class="font-medium text-ink-900">{{ reached >= 4 ? 'Kỹ thuật viên đã nhận linh kiện' : reached > 0 ? 'Đang giao linh kiện' : 'Đã thoả thuận phí giao' }}</p>
+      </template>
       <template v-else-if="preview">
         <p class="font-medium text-ink-900">{{ preview.eligibility === 'PENDING_ASSISTANCE' ? 'Cần hỗ trợ' : 'Chưa đủ điều kiện' }}</p>
         <p class="mt-1">{{ reasonLabels[preview.reason] }}</p>
       </template>
     </div>
     <p v-if="state === 'error'" role="alert" class="text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện. Vui lòng thử lại.</p>
-    <template v-if="state === 'ready' && preview">
+    <template v-if="state === 'ready' && preview && progress">
+      <dl class="grid gap-3 sm:grid-cols-2">
+        <div><dt class="font-medium text-ink-900">Phí giao thực tế</dt><dd class="font-num">{{ money(progress.actualShippingFee) }}</dd></div>
+        <div><dt class="font-medium text-ink-900">Khách trả / Kỹ thuật viên chịu</dt><dd class="font-num">{{ money(progress.customerShippingShare) }} / {{ money(progress.technicianShippingShare) }}</dd></div>
+      </dl>
+      <ul class="space-y-1" aria-label="Các bước giao nhận">
+        <li v-for="(step, index) in steps" :key="step">{{ step }}: <span class="font-medium">{{ index < reached ? 'Đã xong' : 'Chưa tới' }}</span></li>
+      </ul>
+    </template>
+    <template v-else-if="state === 'ready' && preview">
       <p>Thông tin chỉ để tham khảo tại thời điểm kiểm tra, chưa xác nhận giao nhận hoặc phê duyệt chi phí.</p>
       <dl class="grid gap-3 sm:grid-cols-2">
         <div><dt class="font-medium text-ink-900">Chứng từ giao nhận</dt><dd>{{ preview.evidence === 'NOT_RECORDED' ? 'Chưa ghi nhận' : 'Đã ghi nhận, chưa được xác minh độc lập' }}</dd></div>

@@ -36,7 +36,7 @@ describe('Manager overview: what needs the manager', () => {
     getOperational.mockResolvedValue(ops({ openReplacementCases: 3, noDepartureCancellations7d: 2 }));
     const w = await mountPage();
     const replacements = w.get('[data-testid="ops-replacements"]');
-    expect(replacements.text()).toContain('Cần thay đổi thợ');
+    expect(replacements.text()).toContain('Yêu cầu dừng sửa cần xử lý');
     expect(replacements.text()).toContain('3');
     expect(w.findAllComponents(RouterLinkStub).map((l) => l.props('to'))).toEqual(
       expect.arrayContaining(['/console/support?caseType=technician_replacement&status=open', '/console/cancellations']),
@@ -55,9 +55,10 @@ describe('Manager overview: what needs the manager', () => {
     getOperational.mockResolvedValue(ops({ matchingBookings: 4 }));
     const w = await mountPage();
     const attention = w.get('[data-testid="ops-attention"]');
-    expect(attention.text()).toContain('Yêu cầu chờ ghép thợ');
+    expect(attention.text()).toContain('Yêu cầu đang chờ thợ nhận');
     const links = w.findAllComponents(RouterLinkStub).map((l) => l.props('to'));
-    expect(links.filter((to) => to === '/console/bookings')).toHaveLength(1);
+    // PO 12/11/2026: no manual assignment page any more, so the count links nowhere.
+    expect(links).not.toContain('/console/bookings');
     expect(w.text()).not.toContain('Kanban');
   });
 

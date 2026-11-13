@@ -296,7 +296,7 @@ function handleHeaderClick() {
               v-if="!isMinimized"
               class="inline-flex items-center gap-0.5 px-2 py-0.5 text-[10.5px] font-medium rounded-full bg-ink-100/80 text-ink-600 leading-none flex-shrink-0"
             >
-              <Wrench v-if="conversation?.counterpart?.role === 'TECHNICIAN'" :size="10" />
+              <Wrench v-if="conversation?.counterpart?.role?.toUpperCase() === 'TECHNICIAN'" :size="10" />
               <UserCheck v-else :size="10" />
               {{ counterpartRoleLabel }}
             </span>

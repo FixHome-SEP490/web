@@ -27,7 +27,7 @@ const isCurrentParty = computed(() => props.audience === 'customer'
   : props.audience === 'technician' ? props.technicianId === auth.user?.id : false);
 const contextValid = computed(() => isDeliveryPhysicalRequestId(props.requestId) && props.requestType === 'additional'
   && props.fulfillmentMethod === 'delivery' && typeof props.shippingFee === 'number' && Number.isSafeInteger(props.shippingFee)
-  && props.shippingFee > 0 && auth.user?.role === role[props.audience] && !!auth.user.id
+  && props.shippingFee > 0 && auth.userRole === role[props.audience] && !!auth.user?.id
   && (props.audience === 'manager' || isCurrentParty.value));
 const state = computed(() => data.value?.state ?? null);
 const currentShare = computed(() => props.audience === 'customer' ? state.value?.quote.customerShippingShare

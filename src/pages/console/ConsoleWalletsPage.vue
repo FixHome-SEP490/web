@@ -166,7 +166,7 @@ const loadWallets = async () => {
       page: walletsPage.value,
       limit: 15,
       search: walletSearch.value.trim() || undefined,
-      status: walletEligibilityFilter.value === 'ALL' ? undefined : walletEligibilityFilter.value,
+      eligible: walletEligibilityFilter.value === 'ALL' ? undefined : walletEligibilityFilter.value === 'ELIGIBLE',
     });
     wallets.value = res.data;
     walletsTotal.value = res.meta.total;

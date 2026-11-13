@@ -120,7 +120,9 @@ function unwrapService(payload: unknown, message: string): ServiceItem {
 const writableCategory = ['name', 'slug', 'iconKey', 'sortOrder', 'description', 'isActive'];
 const writableService = ['categoryId', 'name', 'slug', 'description', 'basePrice', 'minPrice', 'maxPrice', 'estimatedMinutes', 'pricingMode', 'unit', 'fixedPrice', 'scopeDescription', 'isActive'];
 function writablePayload(dto: object, keys: string[]) {
-  return Object.fromEntries(Object.entries(dto).filter(([key, value]) => keys.includes(key) && value !== undefined)
+  const prices = ['basePrice', 'minPrice', 'maxPrice', 'fixedPrice'];
+  return Object.fromEntries(Object.entries(dto).filter(([key, value]) => keys.includes(key) && value !== undefined
+    && !(prices.includes(key) && (value === null || value === '')))
     .map(([key, value]) => [key, key === 'description' && value === null ? '' : value]));
 }
 
@@ -199,5 +201,32 @@ export const catalogApi = {
   async toggleServiceStatus(id: string, isActive: boolean): Promise<ServiceItem> {
     const res = await apiClient.patch<unknown>(`/admin/services/${id}/status`, { isActive });
     return unwrapService(res.data, 'Backend returned an invalid service response.');
+  },
+};
+
+/** ADMIN 47: a Catalog V3 price tier of a service. The code is fixed; price, scope and availability are edited. */
+export interface ServicePriceVariant {
+  id: string;
+  serviceId: string;
+  variantCode: string;
+  deviceAttributes: Record<string, unknown>;
+  fixedLaborPriceVnd: number;
+  includedScope: string;
+  excludedScope: string | null;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export const priceVariantsApi = {
+  async list(serviceId: string): Promise<ServicePriceVariant[]> {
+    const res = await apiClient.get<{ data?: ServicePriceVariant[] } | ServicePriceVariant[]>(`/admin/services/${serviceId}/price-variants`);
+    const body = res.data as { data?: ServicePriceVariant[] } | ServicePriceVariant[];
+    return Array.isArray(body) ? body : body.data ?? [];
+  },
+  async update(serviceId: string, variantId: string,
+    patch: Partial<Pick<ServicePriceVariant, 'fixedLaborPriceVnd' | 'includedScope' | 'excludedScope' | 'isActive'>>): Promise<ServicePriceVariant> {
+    const res = await apiClient.patch<{ data?: ServicePriceVariant } | ServicePriceVariant>(`/admin/services/${serviceId}/price-variants/${variantId}`, patch);
+    const body = res.data as { data?: ServicePriceVariant } | ServicePriceVariant;
+    return 'data' in body && body.data ? body.data : body as ServicePriceVariant;
   },
 };

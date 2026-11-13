@@ -70,7 +70,7 @@ describe('Notification bell role-safe references', () => {
     ['SERVICE_MANAGER', 'PART_RETURN_DECLARED', 'PART_REQUEST', 'part-1', '/console/part-returns'],
     ['ADMIN', 'PART_RETURN_DECLARED', 'PART_REQUEST', 'part-1', '/console/part-requests'],
     ['SERVICE_MANAGER', 'PART_REQUEST_READY', 'PART_REQUEST', 'part-1', '/console/part-requests'],
-    ['ADMIN', 'BOOKING_CREATED', 'BOOKING', 'booking-1', '/console/bookings'],
+    ['ADMIN', 'BOOKING_CREATED', 'BOOKING', 'booking-1', '/console/orders'],
     ['SERVICE_MANAGER', 'ORDER_CANCELLED', 'SERVICE_ORDER', 'order-1', '/console/cancellations'],
     ['ADMIN', 'ORDER_CANCELLED', 'SERVICE_ORDER', 'order-1', '/console/orders/order-1'],
     ['ADMIN', 'ORDER_COMPLETED', 'SERVICE_ORDER', 'order-1', '/console/orders/order-1'],

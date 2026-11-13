@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 23:30 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
+> Cập nhật lần cuối: 2026-11-13 10:28 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -545,7 +545,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
-- Đợt 12/11/2026: Toàn bộ các màn đã redesign UI/UX ngày 12/11 (Thợ, Khách hàng, Landing/Services; đã gỡ `TechnicianEarningsChart.vue`) pass kiểm tra unit test + typecheck + lint, nhưng giao diện render trực tiếp trên trình duyệt thật CHƯA KIỂM CHỨNG.
+- Đợt 12–13/11/2026: Các màn redesign UI/UX (Thợ, Khách hàng, Landing/Services) cùng tích hợp mới từ dev (#247: `invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote` trên `TechnicianJobDetailPage`) đã qua kiểm tra unit test + typecheck + lint, nhưng giao diện render trực tiếp trên trình duyệt thật CHƯA KIỂM CHỨNG.
 
 - W3 DELIVERY phí dương và 0 ₫, bằng chứng/đồng thuận, physical handoff và frozen invoice snapshot đã merge/deploy DEV trong ngày 07/11. Đợt sửa W1–W3 auditfix xử lý đổi đơn A→B (remount và hủy subscription cũ) và hiển thị tổng chia 70/30 từ từng shipment làm tròn riêng, không tính lại trên tổng. Focused Web RED→GREEN 22/22, typecheck/lint PASS; PR/DEV deploy của đợt sửa đang chờ. UAT đăng nhập do owner tự kiểm tra, CHƯA KIỂM CHỨNG.
 - W3 Admin lifecycle Web source nối API mới trong Backend worktree đang phát triển. Chỉ cấu hình vận hành; `ACTIVE` không mở Finance 70/30, không payout, không legal/ledger approval. Cần Lead review source/schema và phối hợp release Backend trước runtime QA; migration/DB/JWT/DEV/browser: NOT VERIFIED. Khi Backend chỉ là bản cũ (lifecycle GET 404), Web giữ legacy DRAFT; 503 hoặc schema sai đóng action lifecycle.
@@ -612,8 +612,14 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-13 10:28 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (#247) vào LacVy: tích hợp giao diện chi tiết việc thợ (`invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote`) theo layout mới và hợp nhất nhật ký context; đã kiểm tra `typecheck`, `lint`, trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-13 00:37 (UTC+7) | ToanAltF4 | feat/price-variants-tech-note-1211 | ADMIN 47 sửa mức giá theo thiết bị trong hộp Sửa dịch vụ; TECH 42 ghi chú riêng của thợ trên trang việc (lưu server)
+- 2026-11-12 23:54 (UTC+7) | ToanAltF4 | fix/web-console-followup-1211 | Sửa dịch vụ: bỏ giá rỗng (fixedPrice null) khỏi payload, API từ chối null (W-7 lần 2)
 - 2026-11-12 23:30 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX hàng loạt cho Thợ (Jobs/JobDetail/Stepper/Warranty/Onboarding/Profile; bỏ `TechnicianEarningsChart.vue`), Khách (Orders/OrderDetail/BookingDetail/CustomerVisit + skeleton/Dashboard) và Công khai (Services/LandingServices); `typecheck`, `lint` và test liên quan PASS, trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-12 23:13 (UTC+7) | ToanAltF4 | fix/web-console-bugs-1211 | Sửa lỗi console 12/11: Người dùng (lọc vai trò, Đã khoá, xem chi tiết, SĐT thợ), sửa dịch vụ gửi giá dạng số, lọc xác minh/ví, điều chỉnh tồn (lỗi 4xx mở lại form, tồn SKU ở trang khác), khối W3 theo userRole, tiến trình W3 có phí, dòng phí giao trên hoá đơn thợ, chữ trang chính sách W3, SM huỷ đơn, gỡ trang Gán thợ và Đổi thợ trực tiếp (PO: nền tảng không gán thợ), trang Cấu hình chỉ hiện tham số đang áp dụng
 - 2026-11-12 19:29 (UTC+7) | Lạc Vỹ | LacVy | Dashboard ưu tiên công việc; hồ sơ đổi điều hướng, báo bản nháp chưa lưu và thu gọn lịch xem trước; chưa xác minh giao diện trình duyệt.
+- 2026-11-12 18:58 (UTC+7) | ToanAltF4 | fix/sheet-trace-1211 | SM 46 mã kho: lỗi vẽ QR không thành báo lỗi, mất phản hồi thì đọc lại trạng thái, có nút sao chép mã; hàng đợi hoàn trả đọc warehouseAllocated từ server, bỏ N+1 warehouse-allocation
+- 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
 - 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
@@ -646,9 +652,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-06 02:40 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Thợ chọn linh kiện hỏng khi đề xuất, nộp linh kiện hỏng sau khi nhận linh kiện thay trong hạn, SM kiểm tra sau khi thợ nộp và chỉ một lần
 - 2026-11-06 02:07 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Admin W3 history chỉ đọc, status/blocker, trang revision cũ hơn và loại phản hồi cũ khi đổi actor; focused 51/51, full 2510/2510, lint/typecheck/build PASS, review Orca độc lập không có finding; DEV/migration/Finance NOT VERIFIED.
 - 2026-11-06 00:24 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm physical preview GET chỉ đọc cho Customer/Technician trên DELIVERY request thật, schema fail-closed và chống phản hồi cũ; 56 test mới, full 2502/2502 và lint/typecheck/build PASS, review độc lập không còn finding; DEV/release chưa xác minh.
-- 2026-11-05 19:51 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Admin W3 DRAFT/preview fail-closed, source review và mock QA 360/768/1440; rút nhãn menu theo design system không nới test, full Web 2446/2446 PASS, focused 65/65 và lint/typecheck/build PASS; không kích hoạt tài chính.
-- 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
-- 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
-- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
-- 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
-- 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.

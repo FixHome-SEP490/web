@@ -52,10 +52,10 @@ const sourceEligible = computed(() => props.requestType === 'additional'
   && typeof props.shippingFee === 'number' && Number.isSafeInteger(props.shippingFee) && props.shippingFee >= 0);
 const panelContextValid = computed(() => isDeliveryPhysicalRequestId(props.requestId)
   && props.fulfillmentMethod === 'delivery' && sourceEligible.value
-  && auth.user?.role === roleForAudience[props.audience]
-  && !!auth.user.id && props.sourceOwnerId === auth.user.id
+  && auth.userRole === roleForAudience[props.audience]
+  && !!auth.user?.id && props.sourceOwnerId === auth.user?.id
   || (isDeliveryPhysicalRequestId(props.requestId) && props.fulfillmentMethod === 'delivery' && sourceEligible.value
-    && props.audience === 'manager' && auth.user?.role === UserRole.SERVICE_MANAGER && !!auth.user.id));
+    && props.audience === 'manager' && auth.userRole === UserRole.SERVICE_MANAGER && !!auth.user?.id));
 const ownActiveWarehouses = computed(() => managerWarehouses.value.filter(warehouse => warehouse.status === 'active'
   && warehouse.responsibleUserId === auth.user?.id && isDeliveryPhysicalRequestId(warehouse.id)));
 const selectedWarehouse = computed(() => ownActiveWarehouses.value.find(warehouse => warehouse.id === selectedWarehouseId.value) ?? null);

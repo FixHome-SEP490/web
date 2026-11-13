@@ -2,8 +2,6 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { FhButton, FhCard, FhSkeleton } from '..';
 import { CONSOLE_LOAD_ERROR, consoleTextarea } from './console-ui';
-import { bookingsApi, type TechnicianCandidate } from '../../api/bookings.api';
-import { ordersApi } from '../../api/orders.api';
 import {
   supportCasesApi,
   type InterruptionAction,
@@ -15,12 +13,11 @@ import {
 const props = defineProps<{ supportCase: SupportCaseDetail }>();
 const emit = defineEmits<{ (e: 'done', message: string): void }>();
 
-const candidates = ref<TechnicianCandidate[]>([]);
+// PO 12/11/2026: FixHome is a platform; managers never pick or swap a technician. A stop/replace
+// request ends with "close for rebook" (the customer books again and technicians accept) or a rejection.
 const options = ref<ReplacementOptions | null>(null);
 const loading = ref(true);
-const candidateError = ref(false);
 const loadError = ref(false);
-const chosen = ref('');
 const reason = ref('');
 const busy = ref(false);
 const error = ref('');
@@ -30,7 +27,6 @@ const needsPreflight = ref(false);
 const confirmOpen = ref(false);
 let loadGeneration = 0;
 
-const direct = computed(() => options.value?.actions.DIRECT_REASSIGN_SOLO);
 const closeForRebook = computed(() => options.value?.actions.CLOSE_FOR_REBOOK);
 const reject = computed(() => options.value?.actions.REJECT_REQUEST);
 const reasonMessages: Record<string, string> = {
@@ -46,41 +42,17 @@ const reasonMessages: Record<string, string> = {
 };
 const explainReasons = (reasons: string[]) => reasons.map(code => reasonMessages[code] ?? 'Cần tải lại điều kiện xử lý từ máy chủ.');
 
-async function bookingIdOf(): Promise<string> {
-  const directId = props.supportCase.bookingId || props.supportCase.booking?.id;
-  if (directId) return directId;
-  if (!props.supportCase.serviceOrderId) return '';
-  return (await ordersApi.getOrder(props.supportCase.serviceOrderId)).bookingId ?? '';
-}
-
 async function load() {
   const request = ++loadGeneration;
   loading.value = true;
   loadError.value = false;
-  candidateError.value = false;
   error.value = '';
   options.value = null;
-  candidates.value = [];
-  chosen.value = '';
   try {
     const result = await supportCasesApi.replacementOptions(props.supportCase.id);
     if (request !== loadGeneration || result.caseId !== props.supportCase.id
       || result.serviceOrderId !== props.supportCase.serviceOrderId) return;
     options.value = result;
-    if (result.actions.DIRECT_REASSIGN_SOLO.allowed) {
-      try {
-        const bookingId = await bookingIdOf();
-        if (!bookingId) throw new Error('Booking unavailable');
-        const list = await bookingsApi.getCandidates(bookingId);
-        if (request !== loadGeneration) return;
-        candidates.value = list.filter(candidate => candidate.id !== props.supportCase.technicianId);
-        if (pendingCommand.value?.action === 'DIRECT_REASSIGN_SOLO' && candidates.value.some(candidate => candidate.id === pendingCommand.value?.technicianId)) {
-          chosen.value = pendingCommand.value.technicianId!;
-        }
-      } catch {
-        if (request === loadGeneration) candidateError.value = true;
-      }
-    }
     if (needsPreflight.value && result.caseVersion !== pendingCommand.value?.expectedCaseVersion) {
       pendingCommand.value = null;
       pendingAction.value = null;
@@ -100,14 +72,10 @@ function confirm(action: InterruptionAction) {
     error.value = 'Đang có lệnh chưa xác nhận. Hãy thử lại đúng lệnh hoặc tải lại trạng thái trước.';
     return;
   }
-  if (!options.value?.actions[action].allowed) return;
+  if (action === 'DIRECT_REASSIGN_SOLO' || !options.value?.actions[action].allowed) return;
   const text = reason.value.trim();
   if (text.length < 10 || text.length > 2000) {
     error.value = text.length > 2000 ? 'Lý do không được vượt quá 2.000 ký tự.' : 'Ghi lý do, tối thiểu 10 ký tự.';
-    return;
-  }
-  if (action === 'DIRECT_REASSIGN_SOLO' && (!chosen.value || !candidates.value.some(candidate => candidate.id === chosen.value))) {
-    error.value = 'Chọn kỹ thuật viên đủ điều kiện theo danh sách máy chủ.';
     return;
   }
   pendingAction.value = action;
@@ -116,7 +84,6 @@ function confirm(action: InterruptionAction) {
 
 const confirmationText = computed(() => {
   switch (pendingAction.value) {
-    case 'DIRECT_REASSIGN_SOLO': return 'Thợ hiện tại sẽ rời đơn. Đơn trở về trạng thái chờ thợ mới; thợ mới cần check-in và thực hiện báo giá riêng. Không chuyển báo giá, thanh toán, ưu đãi hoặc linh kiện.';
     case 'CLOSE_FOR_REBOOK': return 'Đơn cũ sẽ kết thúc theo kết quả gián đoạn. Không chuyển báo giá, thanh toán, ưu đãi hoặc linh kiện sang đơn mới; khách cần chọn lịch và xác nhận giá mới.';
     case 'REJECT_REQUEST': return 'Yêu cầu sẽ bị từ chối. Đơn vẫn giữ nguyên với kỹ thuật viên hiện tại và được bỏ giữ hoàn tất.';
     default: return '';
@@ -138,7 +105,6 @@ async function runCommand() {
       expectedCaseVersion: options.value.caseVersion,
       action,
       reason: text,
-      ...(action === 'DIRECT_REASSIGN_SOLO' ? { technicianId: chosen.value } : {}),
     };
   }
   busy.value = true;
@@ -148,10 +114,7 @@ async function runCommand() {
     if (result.case.id !== props.supportCase.id || result.order.id !== options.value.serviceOrderId) {
       throw new Error('Backend returned a result for another case or order.');
     }
-    const technicianName = candidates.value.find(candidate => candidate.id === pendingCommand.value?.technicianId)?.fullName;
-    const message = action === 'DIRECT_REASSIGN_SOLO'
-      ? `Kết quả đã được cập nhật: đơn chuyển sang ${result.order.status}; ${technicianName ?? 'thợ mới'} cần check-in.`
-      : action === 'CLOSE_FOR_REBOOK'
+    const message = action === 'CLOSE_FOR_REBOOK'
         ? `Kết quả đã được cập nhật: đơn chuyển sang ${result.order.status}; khách cần xác nhận lịch và giá mới.`
         : `Kết quả đã được cập nhật: yêu cầu ${result.case.status === 'rejected' ? 'bị từ chối' : 'đã xử lý'}, đơn giữ trạng thái ${result.order.status}.`;
     pendingCommand.value = null;
@@ -195,7 +158,7 @@ onMounted(load);
 </script>
 
 <template>
-  <FhCard title="Đổi thợ hoặc xử lý yêu cầu" data-testid="replacement-panel">
+  <FhCard title="Xử lý yêu cầu" data-testid="replacement-panel">
     <p class="mb-4 text-sm text-ink-600 text-pretty">Mỗi quyết định được máy chủ kiểm tra và ghi nhận cùng với trạng thái đơn. Tiền, ưu đãi, báo giá và linh kiện không được chuyển sang thợ khác.</p>
     <p v-if="supportCase.reasonClass" class="mb-4 text-sm text-ink-600 text-pretty">Đây là xử lý vận hành của đơn, tách biệt với kết luận trách nhiệm và điểm uy tín của kỹ thuật viên.</p>
     <FhSkeleton v-if="loading" height="40px" :count="3" />
@@ -210,29 +173,12 @@ onMounted(load);
         <p>Thiết bị chưa xong trong lượt: <strong>{{ options.flags.incompleteSiblings ? 'Có' : 'Không' }}</strong></p>
       </div>
 
-      <div v-if="direct?.allowed" class="space-y-2">
-        <p class="text-sm font-semibold text-ink-900">Có thể đổi thợ trực tiếp</p>
-        <p v-if="candidateError" class="text-sm text-danger-700" role="alert">{{ CONSOLE_LOAD_ERROR }} <button type="button" class="ml-1 font-medium text-brand-700 hover:underline" @click="load">Thử lại</button></p>
-        <p v-else-if="candidates.length === 0" class="text-sm text-ink-600">Chưa có thợ khác đủ điều kiện theo dữ liệu hiện tại.</p>
-        <div v-else class="max-h-64 space-y-2 overflow-y-auto pr-1" role="radiogroup" aria-label="Thợ nhận đơn">
-          <label v-for="candidate in candidates" :key="candidate.id" class="flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm" :class="chosen === candidate.id ? 'border-brand-600 bg-brand-50' : 'border-ink-200 hover:border-ink-300'" :data-testid="`replacement-candidate-${candidate.id}`">
-            <span class="flex min-w-0 items-center gap-2"><input v-model="chosen" type="radio" :value="candidate.id" /><span class="truncate font-semibold text-ink-900">{{ candidate.fullName }}</span></span>
-            <span class="shrink-0 whitespace-nowrap text-xs text-ink-500"><template v-if="typeof candidate.distanceKm === 'number'">{{ candidate.distanceKm.toFixed(1) }}&nbsp;km</template><template v-if="typeof candidate.completedOrdersCount === 'number'"> · {{ candidate.completedOrdersCount }} đơn đã làm</template></span>
-          </label>
-        </div>
-      </div>
-      <div v-else class="space-y-1 text-sm text-warning-800" data-testid="replacement-direct-blocked">
-        <p class="font-semibold">Chưa thể đổi thợ trực tiếp</p>
-        <ul class="list-inside list-disc"><li v-for="message in explainReasons(direct?.reasons ?? [])" :key="message">{{ message }}</li></ul>
-      </div>
-
-      <div v-if="!closeForRebook?.allowed" class="mt-3 space-y-1 text-sm text-ink-600" data-testid="replacement-close-blocked">
+      <div v-if="!closeForRebook?.allowed" class="space-y-1 text-sm text-ink-600" data-testid="replacement-close-blocked">
         <p class="font-medium">Chưa thể kết thúc đơn để đặt lại</p>
         <ul class="list-inside list-disc"><li v-for="message in explainReasons(closeForRebook?.reasons ?? [])" :key="message">{{ message }}</li></ul>
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2">
-        <FhButton v-if="direct?.allowed && candidates.length" size="md" :disabled="busy || !!pendingCommand" data-testid="replacement-action-DIRECT_REASSIGN_SOLO" @click="confirm('DIRECT_REASSIGN_SOLO')">Đổi thợ trực tiếp</FhButton>
         <FhButton v-if="closeForRebook?.allowed" variant="secondary" size="md" :disabled="busy || !!pendingCommand" data-testid="replacement-action-CLOSE_FOR_REBOOK" @click="confirm('CLOSE_FOR_REBOOK')">Kết thúc đơn để khách đặt lại</FhButton>
         <FhButton v-if="reject?.allowed" variant="secondary" size="md" :disabled="busy || !!pendingCommand" data-testid="replacement-action-REJECT_REQUEST" @click="confirm('REJECT_REQUEST')">Từ chối yêu cầu</FhButton>
         <FhButton variant="ghost" size="md" :disabled="busy" data-testid="replacement-options-retry" @click="load">Tải lại điều kiện</FhButton>

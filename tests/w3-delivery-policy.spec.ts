@@ -251,7 +251,7 @@ describe('W3 Admin UI and actor boundary', () => {
     await vi.waitFor(() => expect(wrapper.find('[data-testid="lifecycle-preview-receipt"]').exists()).toBe(true));
     await wrapper.get('[data-testid="lifecycle-activate-confirm"]').setValue(true);
     await wrapper.get('[data-testid="activate-lifecycle"]').trigger('click'); await flushPromises();
-    expect(wrapper.text()).toContain('Tài chính 70/30 vẫn bị khóa');
+    expect(wrapper.text()).toContain('Phí giao 70/30 thu trên hóa đơn khi phiếu đủ thỏa thuận hai bên và chứng từ');
     expect(wrapper.text()).not.toContain('Finance 70/30 remains blocked');
     wrapper.unmount();
   });
@@ -266,7 +266,7 @@ describe('W3 Admin UI and actor boundary', () => {
     expect(wrapper.find('[data-testid="draft-form"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="legacy-lifecycle-locked"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="lifecycle-history"]').text()).toContain('ACTIVE');
-    expect(wrapper.text()).toContain('Tài chính 70/30 vẫn bị khóa');
+    expect(wrapper.text()).toContain('Phí giao 70/30 thu trên hóa đơn khi phiếu đủ thỏa thuận hai bên và chứng từ');
     expect(wrapper.text()).not.toContain('Finance 70/30 remains blocked');
     wrapper.unmount();
   });

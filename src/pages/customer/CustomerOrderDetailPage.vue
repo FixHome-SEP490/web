@@ -51,6 +51,9 @@ import type { VoucherCheckoutPreview } from '../../api/vouchers.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { pendingPaymentCashNotice } from '../../utils/pending-payment-cash-notice';
 import { canDecideOfficialQuotation } from '../../utils/quotation-decision';
+import { isPartsSourceUnavailable } from '../../utils/parts-sourcing';
+import { useQuotationPartsSourcing } from '../../composables/useQuotationPartsSourcing';
+import QuotationPartsSourcingNote from '../../components/QuotationPartsSourcingNote.vue';
 import { reviewsApi, type Review } from '../../api/reviews.api';
 import { useChatStore } from '../../stores/chat.store';
 import OrderComplaintPanel from '../../components/customer/OrderComplaintPanel.vue';
@@ -298,6 +301,9 @@ const closeLightbox = () => {
 };
 
 const canDecideQuotation = computed(() => !oldFinanceReview.value && canDecideOfficialQuotation(order.value));
+// F3 (CUSTOMER 72): parts no warehouse holds keep the quote from being approved; say so before the click.
+const { sourcing: quoteSourcing, checking: quoteSourcingChecking, refresh: refreshQuoteSourcing } = useQuotationPartsSourcing(() => order.value?.quotation);
+const quotePartsUnavailable = computed(() => quoteSourcing.value?.status === 'unavailable');
 
 // Additional Cost (Chi phí phát sinh)
 const additionalCosts = ref<AdditionalCostRecord[]>([]);
@@ -626,7 +632,14 @@ const handleApproveQuotation = async () => {
     failure = error;
   }
   try {
-    await confirmQuotationApproval(quotationId, false, failure);
+    if (isPartsSourceUnavailable(failure)) {
+      // A definite refusal: nothing was approved, the quote is still waiting. Show why and the missing parts.
+      quotationCheckId.value = null;
+      quotationFeedback.value = { type: 'error', text: userFacingError(failure, 'Chưa có kho FixHome nào đủ linh kiện nên chưa duyệt được báo giá.') };
+      await refreshQuoteSourcing();
+    } else {
+      await confirmQuotationApproval(quotationId, false, failure);
+    }
   } finally {
     actionLoading.value = false;
     quotationPending.value = false;
@@ -1894,6 +1907,7 @@ const parsedReview = computed(() => {
           v-if="canDecideQuotation || quotationFeedback || quotationPending || quotationCheckId"
           class="border-t border-brand-100 bg-brand-50/50 p-4 sm:p-5 space-y-3"
         >
+          <QuotationPartsSourcingNote v-if="canDecideQuotation" :sourcing="quoteSourcing" audience="customer" :checking="quoteSourcingChecking" @recheck="refreshQuoteSourcing" />
           <div v-if="canDecideQuotation" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="space-y-0.5">
               <p class="text-sm font-semibold text-brand-900">Xác nhận báo giá dịch vụ</p>
@@ -1903,7 +1917,7 @@ const parsedReview = computed(() => {
               <FhButton variant="secondary" size="md" :disabled="actionLoading || !!quotationCheckId" @click="handleRejectQuotation">
                 Từ chối báo giá
               </FhButton>
-              <FhButton variant="primary" size="md" :disabled="actionLoading || !!quotationCheckId" :loading="quotationPending" @click="handleApproveQuotation">
+              <FhButton variant="primary" size="md" :disabled="actionLoading || !!quotationCheckId || quotePartsUnavailable" :loading="quotationPending" data-testid="quotation-approve" @click="handleApproveQuotation">
                 Duyệt báo giá
               </FhButton>
             </div>

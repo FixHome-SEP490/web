@@ -161,7 +161,7 @@ const handleItemClick = async (item: NotificationItem) => {
       return;
     }
     if (refType.includes('BOOKING')) {
-      router.push('/console/bookings');
+      router.push('/console/orders');
       return;
     }
     if (refType === 'VISIT_GROUP' || refType === 'CONVERSATION') {
