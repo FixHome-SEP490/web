@@ -25,3 +25,18 @@ describe('console search without Vietnamese marks (W-2)', () => {
     expect(foldForSearch(null)).toBe('');
   });
 });
+
+describe('W3 delivery received on the order pages (13/11)', () => {
+  it('reads a received W3 request as received and lets completion pass the receipt check', async () => {
+    const { vi } = await import('vitest');
+    const client = (await import('../src/api/client')).default;
+    const spy = vi.spyOn(client, 'get').mockResolvedValue({ data: { data: [
+      { id: 'r1', status: 'requested', w3DeliveryStage: 'TECHNICIAN_RECEIVED', requestType: 'additional', items: [] },
+      { id: 'r2', status: 'requested', w3DeliveryStage: 'DISPATCH_RECORDED', requestType: 'additional', items: [] },
+    ] } } as never);
+    const { partRequestsApi } = await import('../src/api/part-requests.api');
+    const rows = await partRequestsApi.getByOrderId('o1');
+    expect(rows.map((r) => r.status)).toEqual(['received', 'requested']);
+    spy.mockRestore();
+  });
+});

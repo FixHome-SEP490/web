@@ -471,7 +471,10 @@ export const partRequestsApi = {
     const res = await apiClient.get<{ data: PartRequest[] }>(
       `/service-orders/${orderId}/part-requests`,
     );
-    return res.data.data || [];
+    // A W3 delivery the technician has received stays 'requested' in storage; the backend reads it
+    // as received for completion, so the order pages do the same (usage, completion, labels).
+    return (res.data.data || []).map((request) => request.status === 'requested' && request.w3DeliveryStage === 'TECHNICIAN_RECEIVED'
+      ? { ...request, status: 'received' as PartRequest['status'] } : request);
   },
 
   /**

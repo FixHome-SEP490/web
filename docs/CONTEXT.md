@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-13 11:26 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/voucher-limit-w3-zero
+> Cập nhật lần cuối: 2026-11-13 15:20 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/w3-receipt-blocker
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -612,6 +612,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-13 15:20 (UTC+7) | ToanAltF4 | fix/w3-receipt-blocker | Phiếu W3 thợ đã nhận đọc như đã nhận ở trang đơn: thợ ghi nhận dùng và gửi hoàn thành được (trước đó kẹt 'cần nhận bằng QR')
 - 2026-11-13 11:26 (UTC+7) | ToanAltF4 | fix/voucher-limit-w3-zero | BUG 62: chiến dịch voucher có ô Số lần mỗi khách được dùng (1-100); W3 0đ: phiếu thợ đã nhận hiện Đã giao xong thay vì cảnh báo dữ liệu nguồn
 - 2026-11-13 10:28 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (#247) vào LacVy: tích hợp giao diện chi tiết việc thợ (`invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote`) theo layout mới và hợp nhất nhật ký context; đã kiểm tra `typecheck`, `lint`, trình duyệt CHƯA KIỂM CHỨNG.
 - 2026-11-13 00:37 (UTC+7) | ToanAltF4 | feat/price-variants-tech-note-1211 | ADMIN 47 sửa mức giá theo thiết bị trong hộp Sửa dịch vụ; TECH 42 ghi chú riêng của thợ trên trang việc (lưu server)
@@ -651,4 +652,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-06 09:54 (UTC+7) | foxonworld | foxonworld/fixhome-w3-ops-web-20261106 | Sửa nhận ảnh chứng cứ Technician dùng `physical.warehouseId` từ Backend, không dùng kho SM; thêm test RED→GREEN, focused 32/32 PASS, typecheck/lint/build PASS; Backend PR #197 và migrations `0004–0008` đã deploy DEV, Web operational chưa PR/UAT.
 - 2026-11-06 03:02 (UTC+7) | foxonworld | foxonworld/fixhome-w3-ops-web-20261106 | Hoàn thiện bootstrap đề xuất SM bằng kho active tự phụ trách và ảnh QUOTE, retry cùng command/payload; focused 127/127, full 2567/2567, lint/typecheck/build PASS; runtime chưa xác minh.
 - 2026-11-06 02:40 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Thợ chọn linh kiện hỏng khi đề xuất, nộp linh kiện hỏng sau khi nhận linh kiện thay trong hạn, SM kiểm tra sau khi thợ nộp và chỉ một lần
-- 2026-11-06 02:07 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Admin W3 history chỉ đọc, status/blocker, trang revision cũ hơn và loại phản hồi cũ khi đổi actor; focused 51/51, full 2510/2510, lint/typecheck/build PASS, review Orca độc lập không có finding; DEV/migration/Finance NOT VERIFIED.
