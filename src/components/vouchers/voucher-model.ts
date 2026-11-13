@@ -98,7 +98,7 @@ export function campaignOffer(campaign: VoucherCampaign): VoucherOffer {
     startsAt: campaign.startsAt, expiresAt: campaign.endsAt,
     redeemed: campaign.redeemed, successfulRedemptionLimit: campaign.quota,
     // Holds are not exposed. quota - redeemed is NOT remaining availability.
-    remainingSuccessfulRedemptions: null, perCustomerLimit: campaign.kind === 'GENERAL' ? 1 : null,
+    remainingSuccessfulRedemptions: null, perCustomerLimit: campaign.kind === 'GENERAL' ? campaign.perCustomerLimit ?? 1 : null,
     eligibility: { eligible: false, reasons: [] },
   };
 }
@@ -144,6 +144,7 @@ function campaignTerms(draft: VoucherCampaignDraft): CreateVoucherCampaign {
     startsAt: `${draft.startsOn}${draft.startsOn.includes('T') ? ':00' : 'T00:00:00'}+07:00`,
     endsAt: `${draft.endsOn}${draft.endsOn.includes('T') ? ':00' : 'T23:59:59'}+07:00`,
     quota: draft.successfulRedemptionLimit,
+    perCustomerLimit: draft.kind === 'PERSONAL' ? 1 : draft.perCustomerLimit,
   };
 }
 
@@ -295,7 +296,8 @@ export function validateVoucherCampaignDraft(draft: VoucherCampaignDraft): strin
   if (!Number.isSafeInteger(draft.successfulRedemptionLimit) || draft.successfulRedemptionLimit < 1 || draft.successfulRedemptionLimit > 2147483647) {
     errors.push('Hạn mức chiến dịch phải là số nguyên dương không quá 2.147.483.647.');
   }
-  if (!Number.isSafeInteger(draft.perCustomerLimit) || draft.perCustomerLimit !== 1) errors.push('Ưu đãi chung chỉ được sử dụng một lần cho mỗi khách.');
+  // BUG 62: the admin chooses once (1) or several times, up to 100, per customer.
+  if (!Number.isSafeInteger(draft.perCustomerLimit) || draft.perCustomerLimit < 1 || draft.perCustomerLimit > 100) errors.push('Số lần mỗi khách được dùng phải từ 1 đến 100.');
   if (!draft.scope.includes('LABOR') || !draft.scope.includes('PARTS')) {
     errors.push('Voucher phải áp dụng cho cả tiền công và linh kiện.');
   }

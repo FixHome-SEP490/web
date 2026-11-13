@@ -406,7 +406,10 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
       <p class="text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
     </div>
     <template v-else-if="readStatus === 'ready' && readState">
-      <p v-if="readState.invalidated" class="text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
+      <!-- Once the technician has the parts the order moves on, so the server reports the terms as
+           no longer current; that is the end of the delivery, not a change to review (13/11). -->
+      <p v-if="physical?.status === 'TECHNICIAN_RECEIVED'" class="text-sm text-success-700" role="status" data-testid="delivery-operations-done">Đã giao xong: kỹ thuật viên đã nhận linh kiện.</p>
+      <p v-else-if="readState.invalidated" class="text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
       <template v-else-if="requiresReload">
         <p class="text-sm text-warning-800" role="alert">{{ message }}</p>
         <FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
