@@ -16,10 +16,15 @@ describe('compact booking session picker', () => {
     expect(columns.classes()).toContain('grid-cols-3');
     const buttons = columns.findAll('button');
     expect(buttons).toHaveLength(3);
-    for (const [index, icon] of ['sunrise', 'sun', 'moon'].entries()) {
-      expect(buttons[index]!.find(`.lucide-${icon}`).exists()).toBe(true);
+    for (const button of buttons) {
+      expect(button.find('.lucide-clock').exists()).toBe(true);
     }
     expect(buttons[0]!.text()).toContain('08:00–12:00');
+    expect(buttons[0]!.text()).not.toContain('Sáng');
+    expect(buttons[1]!.text()).toContain('13:00–18:00');
+    expect(buttons[1]!.text()).not.toContain('Chiều');
+    expect(buttons[2]!.text()).toContain('18:00–23:00');
+    expect(buttons[2]!.text()).not.toContain('Tối');
     expect(buttons[1]!.attributes('disabled')).toBeDefined();
     expect(buttons[1]!.attributes('aria-label')).toContain('Buổi này đã kín');
     await buttons[1]!.trigger('click');

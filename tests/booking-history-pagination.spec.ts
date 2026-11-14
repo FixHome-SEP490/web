@@ -374,6 +374,13 @@ describe('CustomerOrdersPage: one list at a time', () => {
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['b1']);
   });
 
+  it('defaults to repair orders even when multi-device visits exist', async () => {
+    serve({ accepted: [makeOrder({ id: 'o1', bookingId: 'x1' })] }, {}, [makeVisit('v1')], 1);
+    const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
+    expect(cardIds(wrapper, 'order-card-')).toEqual(['o1']);
+  });
+
   it('shows paged visit parents with device outcomes and one shared visit time', async () => {
     serve({}, {}, Array.from({ length: 11 }, (_, i) => makeVisit(`v${i + 1}`)), 11);
     const wrapper = await mountPage();

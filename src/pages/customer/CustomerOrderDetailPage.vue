@@ -12,7 +12,6 @@ import {
   Banknote,
   CheckCircle2,
   ChevronDown,
-  Map as MapIcon,
   MessageSquare,
   MoreHorizontal,
   Phone,
@@ -62,6 +61,8 @@ import CustomerContinuationPanel from '../../components/customer/CustomerContinu
 import CustomerCancelledRebookAction from '../../components/customer/CustomerCancelledRebookAction.vue';
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
+import LiveArrivalCard from '../../components/customer/LiveArrivalCard.vue';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
 import { toTimelineSteps } from '../../utils/order-timeline';
@@ -352,6 +353,14 @@ const trackingMarkers = computed<MapMarker[]>(() => {
   if (order.value?.technicianLocation) markers.push({ id: 'technician', lat: order.value.technicianLocation.lat, lng: order.value.technicianLocation.lng, color: '#2563eb' });
   return markers;
 });
+
+const showLiveArrival = computed(() =>
+  !workStopped.value
+  && !awaitingTechnician.value
+  && !!order.value
+  && ['EN_ROUTE', 'en_route'].includes(String(order.value.status))
+  && !order.value.arrivalVerified,
+);
 
 // PO 18/10/2026: the technician's position arrives live over the socket and
 // moves the marker directly; the order is read every 15 s only while the socket
@@ -1282,14 +1291,34 @@ const parsedReview = computed(() => {
           @click="router.push(`/app/bookings/${order.bookingId}/candidates?released=1`)"
         >Chọn thợ khác</FhButton>
       </section>
+      <LiveArrivalCard
+        v-if="showLiveArrival"
+        class="order-0 lg:col-start-1"
+        :order="order"
+        :markers="trackingMarkers"
+        @expand="showTrackingModal = true"
+        @chat="handleChatWithTech"
+      />
       <!-- 1. Summary: what, where, when, who -->
       <section class="order-0 lg:col-start-1 rounded-2xl bg-white border border-ink-200/75 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
-            <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
+          <div class="flex items-start gap-3.5 min-w-0 flex-1">
+            <div
+              class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+            >
+              <img
+                :src="getServiceArtworkUrl({ name: order.serviceName })"
+                :alt="order.serviceName"
+                class="w-full h-full object-contain select-none pointer-events-none"
+                loading="lazy"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
+              <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
+            </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
             <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
             <FhStatusPill
               v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
@@ -1319,7 +1348,7 @@ const parsedReview = computed(() => {
         </dl>
 
         <div
-          v-if="order.technician"
+          v-if="order.technician && !showLiveArrival"
           class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         >
           <div class="flex items-center gap-3 min-w-0">
@@ -1343,16 +1372,6 @@ const parsedReview = computed(() => {
           </div>
 
           <div class="flex items-center gap-2 shrink-0">
-            <button
-              v-if="!workStopped && (order.status === 'EN_ROUTE' || order.status === 'en_route') && !order.arrivalVerified"
-              type="button"
-              class="w-9 h-9 rounded-xl bg-white border border-ink-200 text-ink-600 hover:bg-ink-50 transition-colors flex items-center justify-center"
-              title="Xem vị trí kỹ thuật viên"
-              aria-label="Xem vị trí kỹ thuật viên"
-              @click="showTrackingModal = true"
-            >
-              <MapIcon :size="16" />
-            </button>
             <a
               v-if="order.technician.phoneNumber"
               :href="`tel:${order.technician.phoneNumber}`"

@@ -10,12 +10,12 @@ export type BookingSlot = typeof BOOKING_SLOTS[number];
 export type BookingMode = 'scheduled' | 'urgent';
 
 export const SLOT_LABELS: Record<BookingSlot, string> = {
-  morning: 'Buổi sáng (8:00 - 12:00)',
-  afternoon: 'Buổi chiều (13:00 - 18:00)',
-  evening: 'Buổi tối (18:00 - 23:00)',
+  morning: '08:00 - 12:00',
+  afternoon: '13:00 - 18:00',
+  evening: '18:00 - 23:00',
 };
 
-/** "Buổi sáng (8:00 - 12:00), 12/10/2026", "Tới ngay", or the plain start time for older bookings. */
+/** "08:00 - 12:00, 12/10/2026", "Tới ngay", or the plain start time for older bookings. */
 export function sessionLabel(input: { bookingMode?: string | null; slot?: string | null; start?: string | Date | null }): string {
   if (input.bookingMode === 'urgent') return 'Tới ngay';
   const start = input.start ? new Date(input.start) : null;
@@ -33,7 +33,11 @@ export interface SessionOption {
   reason: string | null;
 }
 
-export const SLOT_SHORT: Record<BookingSlot, string> = { morning: 'Sáng 8:00 - 12:00', afternoon: 'Chiều 13:00 - 18:00', evening: 'Tối 18:00 - 23:00' };
+export const SLOT_SHORT: Record<BookingSlot, string> = {
+  morning: '08:00 - 12:00',
+  afternoon: '13:00 - 18:00',
+  evening: '18:00 - 23:00',
+};
 // Morning/afternoon close at their start as before; evening stays open until 23:00.
 const SLOT_CUTOFF_HOUR: Record<BookingSlot, number> = { morning: 8, afternoon: 13, evening: 23 };
 

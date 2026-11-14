@@ -16,6 +16,7 @@ import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { isOpenClaim } from '../../utils/warranty-claim';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { vnDateString } from '../../utils/vn-time';
 
 const PAGE_SIZE = 10;
@@ -359,48 +360,66 @@ onUnmounted(() => {
         :data-testid="`warranty-order-${order.orderId}`"
       >
         <div class="space-y-4 flex-1 flex flex-col">
-          <!-- Header: Service Title + Hero Status + Unified Metadata Strip -->
-          <div class="space-y-1.5">
-            <div class="flex items-start justify-between gap-3">
-              <router-link
-                :to="`/app/orders/${order.orderId}`"
-                class="min-w-0 group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                :title="`Xem đơn ${order.orderCode}`"
-              >
-                <h2 class="font-bold text-base sm:text-[17px] leading-snug text-ink-900 group-hover:text-brand-600 transition-colors text-pretty line-clamp-2">
-                  {{ order.serviceName }}
-                </h2>
-              </router-link>
+          <!-- Header: Service Artwork + Service Title + Status + Metadata Strip -->
+          <div class="flex items-start gap-3.5">
+            <router-link
+              :to="`/app/orders/${order.orderId}`"
+              class="w-14 h-14 rounded-[10px] bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              :title="`Xem đơn ${order.orderCode}`"
+            >
+              <img
+                :src="getServiceArtworkUrl({ name: order.serviceName })"
+                :alt="order.serviceName"
+                class="w-full h-full object-contain select-none pointer-events-none group-hover:scale-105 motion-reduce:group-hover:scale-100 transition-transform duration-150 ease-out"
+                loading="lazy"
+              />
+            </router-link>
 
-              <!-- Primary Status Badge -->
-              <FhStatusPill
-                v-if="hasOpenClaim(order)"
-                status="PENDING_APPROVAL"
-                label="Đang xử lý"
-                pulse
-              />
-              <FhStatusPill
-                v-else-if="order.hasActiveCoverage"
-                status="ACTIVE"
-                :label="`Còn ${getDaysRemaining(order.maxExpiresAt)} ngày`"
-              />
-              <FhStatusPill
-                v-else
-                status="CANCELLED"
-                label="Hết hạn"
-              />
-            </div>
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <div class="flex items-start justify-between gap-2.5">
+                <router-link
+                  :to="`/app/orders/${order.orderId}`"
+                  class="min-w-0 flex-1 group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                  :title="`Xem đơn ${order.orderCode}`"
+                >
+                  <h2 class="font-bold text-base sm:text-[17px] leading-snug text-ink-900 group-hover:text-brand-600 transition-colors text-pretty line-clamp-2">
+                    {{ order.serviceName }}
+                  </h2>
+                </router-link>
 
-            <!-- Flat Metadata Line -->
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500 font-num">
-              <router-link
-                :to="`/app/orders/${order.orderId}`"
-                class="font-medium text-ink-700 hover:text-brand-600 transition-colors"
-              >
-                #{{ order.orderCode }}
-              </router-link>
-              <span aria-hidden="true">·</span>
-              <span>{{ formatDate(order.minStartsAt) }} – {{ formatDate(order.maxExpiresAt) }}</span>
+                <!-- Primary Status Badge -->
+                <FhStatusPill
+                  v-if="hasOpenClaim(order)"
+                  status="PENDING_APPROVAL"
+                  label="Đang xử lý"
+                  pulse
+                  class="shrink-0"
+                />
+                <FhStatusPill
+                  v-else-if="order.hasActiveCoverage"
+                  status="ACTIVE"
+                  :label="`Còn ${getDaysRemaining(order.maxExpiresAt)} ngày`"
+                  class="shrink-0"
+                />
+                <FhStatusPill
+                  v-else
+                  status="CANCELLED"
+                  label="Hết hạn"
+                  class="shrink-0"
+                />
+              </div>
+
+              <!-- Flat Metadata Line -->
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500 font-num">
+                <router-link
+                  :to="`/app/orders/${order.orderId}`"
+                  class="font-medium text-ink-700 hover:text-brand-600 transition-colors"
+                >
+                  #{{ order.orderCode }}
+                </router-link>
+                <span aria-hidden="true">·</span>
+                <span>{{ formatDate(order.minStartsAt) }} – {{ formatDate(order.maxExpiresAt) }}</span>
+              </div>
             </div>
           </div>
 

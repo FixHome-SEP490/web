@@ -4,9 +4,9 @@ import { jobBlocks, visibleHourRange } from '../src/utils/week-calendar';
 
 describe('booking sessions on the technician pages', () => {
   it('names the session, urgent bookings and older bookings', () => {
-    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'morning', start: '2026-10-12T01:00:00Z' })).toBe('Buổi sáng (8:00 - 12:00), 12/10/2026');
-    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'afternoon', start: '2026-10-12T06:00:00Z' })).toContain('Buổi chiều (13:00 - 18:00)');
-    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'evening', start: '2026-10-12T11:00:00Z' })).toBe('Buổi tối (18:00 - 23:00), 12/10/2026');
+    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'morning', start: '2026-10-12T01:00:00Z' })).toBe('08:00 - 12:00, 12/10/2026');
+    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'afternoon', start: '2026-10-12T06:00:00Z' })).toContain('13:00 - 18:00');
+    expect(sessionLabel({ bookingMode: 'scheduled', slot: 'evening', start: '2026-10-12T11:00:00Z' })).toBe('18:00 - 23:00, 12/10/2026');
     expect(sessionLabel({ bookingMode: 'urgent', start: '2026-10-12T06:00:00Z' })).toBe('Tới ngay');
     expect(sessionLabel({ start: null })).toBe('Chưa có lịch hẹn');
   });
