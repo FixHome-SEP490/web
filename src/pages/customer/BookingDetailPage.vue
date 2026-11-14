@@ -560,7 +560,7 @@ const confirmMatchingExtension = async () => {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto space-y-6 pb-16">
+  <div class="w-full mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
     <div class="flex items-center justify-between gap-3 animate-slide-up">
       <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />

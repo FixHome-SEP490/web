@@ -80,7 +80,7 @@ describe('Reschedule by session (mock HTTP only)', () => {
 
   it('shows the session the booking is for', async () => {
     await render(booking({ customerNote: 'Gọi trước khi tới' }));
-    expect(wrapper.get('[data-testid="booking-current-session"]').text()).toContain('Buổi sáng (8:00 - 12:00), 02/01/2030');
+    expect(wrapper.get('[data-testid="booking-current-session"]').text()).toContain('08:00 - 12:00, 02/01/2030');
     expect(wrapper.text()).toContain('Ghi chú cho thợ: Gọi trước khi tới');
   });
 
@@ -96,7 +96,7 @@ describe('Reschedule by session (mock HTTP only)', () => {
 
   it('preserves an evening booking when saving only its description', async () => {
     await render(booking({ slot: 'evening', preferredAt: '2030-01-02T11:00:00Z', preferredEndAt: '2030-01-02T16:00:00Z' }));
-    expect(wrapper.get('[data-testid="booking-current-session"]').text()).toContain('Buổi tối (18:00 - 23:00)');
+    expect(wrapper.get('[data-testid="booking-current-session"]').text()).toContain('18:00 - 23:00');
     await wrapper.get('textarea').setValue('Evening description');
     await save()!.trigger('click');
     await flushPromises();

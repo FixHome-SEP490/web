@@ -78,7 +78,7 @@ describe('WEB technician invitation preview (PO 18/10/2026)', () => {
     expect(wrapper.get('[data-testid="invitation-distance"]').text()).toBe('Cách bạn khoảng 3-5 km');
     expect(wrapper.get('[data-testid="invitation-description"]').text()).toBe('Vòi rửa chén rỉ nước dưới chân');
     // The session the technician commits to by accepting (PO 08/10/2026).
-    expect(wrapper.get('[data-testid="invitation-session"]').text()).toContain('Buổi sáng (8:00 - 12:00)');
+    expect(wrapper.get('[data-testid="invitation-session"]').text()).toContain('08:00 - 12:00');
     expect(wrapper.text()).not.toContain('PRIVATE_');
 
     await wrapper.get('button.w-full').trigger('click');

@@ -36,6 +36,7 @@ import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch, useQue
 import { useChatStore } from '../../stores/chat.store';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const PAGE_SIZE = 10;
@@ -933,25 +934,38 @@ async function confirmCancel() {
                     />
                   </div>
 
-                  <div class="min-w-0 flex-1 space-y-2">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex flex-wrap items-center gap-2 min-w-0">
-                        <FhStatusPill
-                          :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
-                          :label="pendingLabel(booking)"
-                        />
-                        <span class="font-num text-xs text-ink-500 shrink-0">Đặt {{ vnDateString(booking.createdAt) }}</span>
-                      </div>
-                      <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
-                        ×{{ booking.quantity }}
-                      </span>
-                    </div>
+                  <div
+                    class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+                  >
+                    <img
+                      :src="getServiceArtworkUrl({ name: booking.serviceName })"
+                      :alt="booking.serviceName"
+                      class="w-full h-full object-contain select-none pointer-events-none group-hover:scale-105 motion-reduce:group-hover:scale-100 transition-transform duration-150 ease-out"
+                      loading="lazy"
+                    />
+                  </div>
 
-                    <div class="flex items-center justify-between gap-2">
-                      <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
-                        {{ booking.serviceName }}
-                      </h3>
-                      <ChevronRight :size="17" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] shrink-0 hidden sm:block" />
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div class="min-w-0 flex-1 space-y-0.5">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
+                            {{ booking.serviceName }}
+                          </h3>
+                          <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
+                            ×{{ booking.quantity }}
+                          </span>
+                        </div>
+                        <p class="flex items-center gap-1.5 font-num text-xs text-ink-500">
+                          <Clock :size="13" class="text-ink-400 shrink-0" />
+                          <span>Đặt {{ vnDateString(booking.createdAt) }}</span>
+                        </p>
+                      </div>
+                      <FhStatusPill
+                        :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
+                        :label="pendingLabel(booking)"
+                        class="shrink-0"
+                      />
                     </div>
 
                     <div v-if="booking.preferredAt || booking.addressSummary" class="rounded-xl bg-ink-50/75 px-3 py-2 space-y-0.5 text-xs sm:text-sm">
@@ -1075,21 +1089,39 @@ async function confirmCancel() {
                 @keydown.enter="router.push(`/app/orders/${order.id}`)"
                 @keydown.space.prevent="router.push(`/app/orders/${order.id}`)"
               >
-                <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start gap-3.5">
+                  <div
+                    class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+                  >
+                    <img
+                      :src="getServiceArtworkUrl({ name: order.serviceName })"
+                      :alt="order.serviceName"
+                      class="w-full h-full object-contain select-none pointer-events-none group-hover:scale-105 motion-reduce:group-hover:scale-100 transition-transform duration-150 ease-out"
+                      loading="lazy"
+                    />
+                  </div>
+
                   <div class="min-w-0 flex-1 space-y-2">
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div class="flex items-start justify-between gap-2.5">
+                      <div class="min-w-0 flex-1 space-y-0.5">
+                        <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty leading-snug">
+                          {{ order.serviceName }}
+                        </h3>
+                        <p class="font-num text-xs font-medium text-ink-500 whitespace-nowrap truncate">
+                          #{{ order.code || order.id.slice(0, 8) }}
+                        </p>
+                        <p class="flex items-center gap-1.5 font-num text-xs text-ink-500 whitespace-nowrap">
+                          <Clock :size="13" class="text-ink-400 shrink-0" />
+                          <span>{{ vnDateString(order.createdAt) }}</span>
+                        </p>
+                      </div>
+
                       <FhStatusPill
                         :status="orderPill(order).status"
                         :label="orderPill(order).label"
+                        class="shrink-0"
                       />
-                      <span class="font-num text-xs font-medium text-ink-500 whitespace-nowrap">#{{ order.code || order.id.slice(0, 8) }}</span>
-                      <span class="text-ink-300" aria-hidden="true">·</span>
-                      <span class="font-num text-xs text-ink-500 whitespace-nowrap">{{ vnDateString(order.createdAt) }}</span>
                     </div>
-
-                    <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty leading-snug">
-                      {{ order.serviceName }}
-                    </h3>
 
                     <div class="flex items-center gap-2.5 rounded-xl bg-ink-50/75 px-3 py-2 text-xs sm:text-sm">
                       <template v-if="order.technician">
@@ -1103,24 +1135,24 @@ async function confirmCancel() {
                       <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
                     </div>
                   </div>
+                </div>
 
-                  <div class="flex flex-col items-end gap-1 shrink-0 pt-0.5">
-                    <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-base sm:text-[17px] font-bold text-ink-900">
+                <!-- Price + Actions bar -->
+                <div
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex flex-wrap items-center justify-between gap-2.5"
+                >
+                  <div class="shrink-0">
+                    <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-base sm:text-[17px] font-bold text-brand-600">
                       <FhMoney :amount="order.grandTotal" />
                     </span>
                     <span v-else class="text-xs font-medium text-ink-400 whitespace-nowrap">Chờ báo giá</span>
                   </div>
-                </div>
 
-                <!-- Actions bar -->
-                <div
-                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-between gap-2.5"
-                >
-                  <div class="flex items-center gap-2">
+                  <div class="flex flex-wrap items-center gap-2 ml-auto">
                     <button
                       v-if="order.technician"
                       type="button"
-                      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-600 cursor-pointer"
+                      class="inline-flex h-8 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-600 cursor-pointer"
                       aria-label="Nhắn tin với kỹ thuật viên"
                       title="Nhắn tin với kỹ thuật viên"
                       @click="(e) => handleChat(order, e)"
@@ -1135,13 +1167,13 @@ async function confirmCancel() {
                       :data-testid="`rebook-order-${order.id}`"
                       @click.stop="rebookFor = { bookingId: order.bookingId, serviceName: order.serviceName }"
                     >
-                      Đặt lại thợ
+                      Đặt lại
                     </FhButton>
+                    <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-600 group-hover:text-brand-700 transition-colors pl-1">
+                      <span>Chi tiết</span>
+                      <ChevronRight :size="15" />
+                    </span>
                   </div>
-                  <span class="ml-auto inline-flex items-center gap-0.5 text-xs font-semibold text-ink-400 group-hover:text-brand-600 transition-colors">
-                    <span>Chi tiết</span>
-                    <ChevronRight :size="15" />
-                  </span>
                 </div>
               </li>
             </ul>

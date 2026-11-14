@@ -110,7 +110,7 @@ onBeforeUnmount(() => { generation++; });
 </script>
 
 <template>
-  <section class="mx-auto w-full max-w-3xl space-y-5 pb-8" data-testid="interruption-rebook-form" :aria-busy="loading || busy">
+  <section class="w-full space-y-5 pb-8" data-testid="interruption-rebook-form" :aria-busy="loading || busy">
     <header>
       <p class="text-sm text-ink-600">Đơn sửa trước vẫn được lưu trong hồ sơ</p>
       <h1 class="mt-1 text-xl font-semibold text-ink-900 sm:text-2xl">Đặt lịch mới</h1>

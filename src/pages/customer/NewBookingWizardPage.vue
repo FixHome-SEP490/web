@@ -335,8 +335,8 @@ const customerNote = ref('');
 const sessions = ref(upcomingSessions(14));
 
 const formattedScheduleDisplay = computed(() => {
-  if (bookingMode.value === 'urgent') return 'Tới ngay (thợ gần bạn nhất đang rảnh)';
-  if (!selectedSession.value) return 'Chưa chọn buổi';
+  if (bookingMode.value === 'urgent') return 'Tới ngay (kỹ thuật viên gần bạn nhất đang rảnh)';
+  if (!selectedSession.value) return 'Chưa chọn khung giờ';
   return `${sessionDayLabel(selectedSession.value.date)} • ${SLOT_SHORT[selectedSession.value.slot]}`;
 });
 
@@ -344,9 +344,9 @@ const formattedScheduleDisplay = computed(() => {
 function scheduleForBooking(): { mode: BookingMode; date?: string; slot?: BookingSlot } | { error: string } {
   if (bookingMode.value === 'urgent') return { mode: 'urgent' };
   const chosen = selectedSession.value;
-  if (!chosen) return { error: 'Vui lòng chọn ngày và buổi (sáng, chiều hoặc tối).' };
+  if (!chosen) return { error: 'Vui lòng chọn ngày và khung giờ (08:00–12:00, 13:00–18:00 hoặc 18:00–23:00).' };
   if (!isSessionUpcoming(chosen.date, chosen.slot)) {
-    return { error: 'Buổi bạn chọn đã hết thời gian nhận đặt lịch. Vui lòng chọn buổi khác.' };
+    return { error: 'Khung giờ bạn chọn đã hết thời gian nhận đặt lịch. Vui lòng chọn khung giờ khác.' };
   }
   return { mode: 'scheduled', date: chosen.date, slot: chosen.slot };
 }

@@ -53,7 +53,7 @@ describe('Rebook dialog', () => {
     rebook.mockResolvedValue({ booking: { id: 'evening-booking' }, previousTechnicianInvited: true });
     const wrapper = await mountDialog();
     const evening = wrapper.get('[data-testid="session-2030-01-03-evening"]');
-    expect(evening.attributes('aria-label')).toBe('Tối 18:00 - 23:00');
+    expect(evening.attributes('aria-label')).toBe('18:00 - 23:00');
     expect(evening.text()).toContain('18:00–23:00');
     await evening.trigger('click');
     await confirm(wrapper).trigger('click');
@@ -67,7 +67,7 @@ describe('Rebook dialog', () => {
     expect(availableSessions).toHaveBeenCalledWith('old-booking', true);
     await confirm(wrapper).trigger('click');
     expect(rebook).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Vui lòng chọn ngày và buổi');
+    expect(wrapper.text()).toContain('Vui lòng chọn ngày và khung giờ');
   });
 
   it('invites the same technician when free and opens the new booking', async () => {
