@@ -178,7 +178,7 @@ const steps = [
         <button
           type="button"
           class="absolute right-3 top-3 z-10 inline-flex h-9 items-center gap-1.5 rounded-full bg-white/95 backdrop-blur-xs border border-ink-200/90 px-3 text-xs font-semibold text-ink-700 shadow-xs hover:border-brand-300 hover:text-brand-600 active:scale-[0.96] motion-reduce:active:scale-100 transition-[border-color,color,transform] duration-150 ease-out cursor-pointer"
-          aria-label="Mở rộng bản đồ theo dõi"
+          aria-label="Xem vị trí kỹ thuật viên"
           data-testid="arrival-expand-map"
           @click="emit('expand')"
         >
